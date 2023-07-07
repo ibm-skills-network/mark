@@ -1,9 +1,12 @@
-import { VersioningType } from "@nestjs/common";
+import { ValidationPipe, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import * as cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
+import { AuthModule } from "./auth/auth.module";
+import { JwtGlobalAuthGuard } from "./auth/jwt/jwt.global.auth.guard";
 import { winstonOptions } from "./logger/config";
 
 async function bootstrap() {
@@ -21,6 +24,9 @@ async function bootstrap() {
   });
 
   app.use(helmet());
+  app.use(cookieParser());
+  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalGuards(app.select(AuthModule).get(JwtGlobalAuthGuard));
 
   // TODO(user): customize the title, description, etc.
   const config = new DocumentBuilder()
