@@ -1,0 +1,25 @@
+name: Build and Release Image
+on:
+  push:
+    branches:
+    - main
+    tags:
+    - '**'
+  pull_request:
+    branches:
+    - main
+  schedule:
+  - cron: 0 5 * * *
+  workflow_dispatch:
+    inputs:
+      suffix:
+        description: Custom suffix for tag
+        required: false
+  repository_dispatch:
+jobs:
+  build:
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network-labs/mark
+      docker_target: patched
+    secrets: inherit
