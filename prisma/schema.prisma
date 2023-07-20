@@ -20,13 +20,42 @@ enum AssignmentDisplayOrder {
   RANDOM
 }
 
+enum QuestionType {
+  TEXT
+  SINGLE_CORRECT
+  MULTIPLE_CORRECT
+  TRUE_FALSE
+  URL
+  UPLOAD
+}
+
+enum ScoringType {
+  SINGLE_CRITERIA
+  MULTIPLE_CRITERIA
+  LOSS_PER_MISTAKE
+  AI_GRADED
+}
+
 model Assignment {
   id            Int                  @id @default(autoincrement())
-  name          String
-  type          AssignmentType
-  numRetries    Int
-  numAttempts   Int
-  allotedTime   String
-  passingGrade  Int
-  displayOrder  AssignmentDisplayOrder
+  name          String?
+  type          AssignmentType?
+  numRetries    Int?
+  numAttempts   Int?
+  allotedTime   Int?
+  passingGrade  Int?
+  displayOrder  AssignmentDisplayOrder?
+  questions     Question[]
+}
+
+model Question {
+  id           Int         @id @default(autoincrement())
+  totalPoints  Int
+  type         QuestionType
+  question     String
+  scoring      Json?
+  choices      Json?
+  answer       Boolean?
+  assignmentId Int
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
 }

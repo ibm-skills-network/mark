@@ -1,32 +1,32 @@
 import { AssignmentDisplayOrder, AssignmentType } from "@prisma/client";
 import { IsEnum, IsInt, IsOptional, IsString } from "class-validator";
 
-export class UpdateAssignmentRequestDto {
+export class CreateUpdateAssignmentRequestDto {
   @IsOptional()
   @IsString()
-  name?: string;
+  name: string | null;
 
   @IsOptional()
   @IsEnum(AssignmentType)
-  type?: AssignmentType;
+  type: AssignmentType | null;
 
   @IsOptional()
   @IsInt()
-  numRetries?: number;
+  numRetries: number | null;
 
   @IsOptional()
   @IsInt()
-  numAttempts?: number;
-
-  @IsOptional()
-  @IsString()
-  allotedTime?: string;
+  numAttempts: number | null;
 
   @IsOptional()
   @IsInt()
-  passingGrade?: number;
+  allotedTime: number | null;
+
+  @IsOptional()
+  @IsInt()
+  passingGrade: number | null;
 
   @IsOptional()
   @IsEnum(AssignmentDisplayOrder)
-  displayOrder?: AssignmentDisplayOrder;
+  displayOrder: AssignmentDisplayOrder | null;
 }

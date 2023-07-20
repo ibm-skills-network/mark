@@ -4,7 +4,11 @@
 
 ## Usage
 
-<!-- TODO(user): fill this part out. Explain what the purpose of this repo is. Include a diagram if possible. A picture is worth a thousand words. -->
+### Start Postgress database locally for development
+
+```
+docker run --name my_postgres -e POSTGRES_PASSWORD=mysecretpassword -e POSTGRES_USER=myuser -e POSTGRES_DB=mydatabase -p 5432:5432 -d postgres //pragma: allowlist secret
+```
 
 ## Contributing
 

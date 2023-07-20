@@ -1,19 +1,16 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma.service";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
-import { CreateAssignmentRequestDto } from "./dto/create.assignment.request.dto";
+import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
 import { GetAssignmentResponseDto } from "./dto/get.assignment.response.dto";
-import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 
 @Injectable()
 export class AssignmentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    createAssignmentDto: CreateAssignmentRequestDto
-  ): Promise<BaseAssignmentResponseDto> {
+  async create(): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.create({
-      data: createAssignmentDto,
+      data: {},
     });
 
     return {
@@ -25,6 +22,7 @@ export class AssignmentService {
   async findOne(id: number): Promise<GetAssignmentResponseDto> {
     const result = await this.prisma.assignment.findUnique({
       where: { id },
+      include: { questions: true },
     });
 
     if (!result) {
@@ -37,9 +35,27 @@ export class AssignmentService {
     };
   }
 
+  async replace(
+    id: number,
+    updateAssignmentDto: CreateUpdateAssignmentRequestDto
+  ): Promise<BaseAssignmentResponseDto> {
+    const result = await this.prisma.assignment.update({
+      where: { id },
+      data: {
+        ...this.createEmptyDto(),
+        ...updateAssignmentDto,
+      },
+    });
+
+    return {
+      id: result.id,
+      success: true,
+    };
+  }
+
   async update(
     id: number,
-    updateAssignmentDto: UpdateAssignmentRequestDto
+    updateAssignmentDto: CreateUpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -61,5 +77,19 @@ export class AssignmentService {
       id: result.id,
       success: true,
     };
+  }
+
+  private createEmptyDto(): CreateUpdateAssignmentRequestDto {
+    /* eslint-disable unicorn/no-null */
+    return {
+      name: null,
+      type: null,
+      numRetries: null,
+      numAttempts: null,
+      allotedTime: null,
+      passingGrade: null,
+      displayOrder: null,
+    };
+    /* eslint-enable unicorn/no-null */
   }
 }
