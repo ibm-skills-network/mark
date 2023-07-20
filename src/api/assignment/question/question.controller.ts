@@ -92,7 +92,7 @@ export class QuestionController {
   gradeQuestion(
     @Param("id") id: number,
     @Body() gradeExerciseRequestDto: GradeQuestionRequestDto
-  ): Promise<GradeQuestionResponseDto[]> {
+  ): Promise<GradeQuestionResponseDto> {
     return this.questionService.gradeQuestion(
       Number(id),
       gradeExerciseRequestDto

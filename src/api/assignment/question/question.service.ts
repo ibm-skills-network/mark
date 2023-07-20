@@ -4,9 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, QuestionType } from "@prisma/client";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
+import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import {
@@ -16,6 +17,7 @@ import {
 import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
 import { GradeQuestionRequestDto } from "./dto/grade.question.request.dto";
 import { GradeQuestionResponseDto } from "./dto/grade.question.response.dto";
+import { GradingHelper } from "./helper/grading.helper";
 
 @Injectable()
 export class QuestionService {
@@ -132,18 +134,60 @@ export class QuestionService {
   async gradeQuestion(
     id: number,
     gradeQuestionRequestDto: GradeQuestionRequestDto
-  ): Promise<GradeQuestionResponseDto[]> {
+  ): Promise<GradeQuestionResponseDto> {
     const question = await this.findOne(id);
-    const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
-      question.question,
-      gradeQuestionRequestDto.learnerResponse,
-      question.totalPoints,
-      question.scoring?.type ?? "",
-      question.scoring?.criteria ?? {}
-    );
-    return this.llmService.gradeTextBasedQuestion(
-      textBasedQuestionEvaluateModel
-    );
+
+    // Grade Text Based Questions
+    if (
+      question.type === QuestionType.TEXT ||
+      question.type === QuestionType.UPLOAD ||
+      question.type === QuestionType.URL
+    ) {
+      const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
+        question.question,
+        gradeQuestionRequestDto.learnerResponse,
+        question.totalPoints,
+        question.scoring?.type ?? "",
+        question.scoring?.criteria ?? {}
+      );
+
+      const models = await this.llmService.gradeTextBasedQuestion(
+        textBasedQuestionEvaluateModel
+      );
+
+      // map from model to DTO
+      const dto = new GradeQuestionResponseDto();
+      dto.totalPointsEarned = models.reduce(
+        (sum, model) => sum + model.points,
+        0
+      );
+      dto.feedback = models.map((element) =>
+        GradingHelper.toTextBasedFeedbackDto(element)
+      );
+      return dto;
+    }
+    //Grade Choice Based Questions
+    else {
+      const choiceBasedQuestionEvaluateModel =
+        new ChoiceBasedQuestionEvaluateModel(
+          question.question,
+          question.choices ?? {},
+          gradeQuestionRequestDto.learnerChoices,
+          question.totalPoints,
+          question.scoring?.type,
+          question.scoring?.criteria ?? undefined
+        );
+
+      const model = await this.llmService.gradeChoiceBasedQuestion(
+        choiceBasedQuestionEvaluateModel
+      );
+
+      // map from model to DTO
+      const dto = new GradeQuestionResponseDto();
+      dto.totalPointsEarned = model.points;
+      dto.feedback = model.feedback;
+      return dto;
+    }
   }
 
   private async applyGuardRails(

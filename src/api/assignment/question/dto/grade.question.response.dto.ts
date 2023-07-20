@@ -1,6 +1,12 @@
-import { IsInt, IsNotEmpty, IsString } from "class-validator";
+import {
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  ValidateNested,
+} from "class-validator";
 
-export class GradeQuestionResponseDto {
+export class TextBasedFeedbackDto {
   @IsNotEmpty()
   @IsString()
   criteria: string;
@@ -12,4 +18,24 @@ export class GradeQuestionResponseDto {
   @IsNotEmpty()
   @IsString()
   feedback: string;
+}
+
+export class ChoiceBasedFeedbackDto {
+  @IsNotEmpty()
+  @IsString()
+  choice: string;
+
+  @IsNotEmpty()
+  @IsString()
+  feedback: string;
+}
+
+export class GradeQuestionResponseDto {
+  @IsNotEmpty()
+  @IsInt()
+  totalPointsEarned: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  feedback: ChoiceBasedFeedbackDto[] | TextBasedFeedbackDto[];
 }
