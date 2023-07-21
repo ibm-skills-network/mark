@@ -21,6 +21,7 @@ import {
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { AssignmentService } from "./assignment.service";
+import { ASSIGNMENT_SCHEMA_URL } from "./constants";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
 import { GetAssignmentResponseDto } from "./dto/get.assignment.response.dto";
@@ -61,7 +62,10 @@ export class AssignmentController {
   @Version("1")
   @ApiOperation({ summary: "Update assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiBody({ type: CreateUpdateAssignmentRequestDto })
+  @ApiBody({
+    type: CreateUpdateAssignmentRequestDto,
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   updateAssignment(
     @Param("id") id: number,
@@ -77,7 +81,10 @@ export class AssignmentController {
   @Version("1")
   @ApiOperation({ summary: "Replace assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiBody({ type: CreateUpdateAssignmentRequestDto })
+  @ApiBody({
+    type: CreateUpdateAssignmentRequestDto,
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   replaceAssignment(
     @Param("id") id: number,

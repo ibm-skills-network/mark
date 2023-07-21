@@ -14,6 +14,7 @@ import {
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { ASSIGNMENT_SCHEMA_URL } from "../constants";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
@@ -38,7 +39,10 @@ export class QuestionController {
   @Post()
   @Version("1")
   @ApiOperation({ summary: "Create a question" })
-  @ApiBody({ type: CreateUpdateQuestionRequestDto })
+  @ApiBody({
+    type: CreateUpdateQuestionRequestDto,
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
   @ApiResponse({ status: 201, type: BaseQuestionResponseDto })
   createQuestion(
     @Param("assignmentId") assignmentId: number,
@@ -61,7 +65,10 @@ export class QuestionController {
   @Patch(":id")
   @Version("1")
   @ApiOperation({ summary: "Update a question" })
-  @ApiBody({ type: CreateUpdateQuestionRequestDto })
+  @ApiBody({
+    type: CreateUpdateQuestionRequestDto,
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
   updateQuestion(
     @Param("assignmentId") assignmentId: number,
@@ -78,7 +85,10 @@ export class QuestionController {
   @Put(":id")
   @Version("1")
   @ApiOperation({ summary: "Replace a question" })
-  @ApiBody({ type: CreateUpdateQuestionRequestDto })
+  @ApiBody({
+    type: CreateUpdateQuestionRequestDto,
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
   replaceQuestion(
     @Param("assignmentId") assignmentId: number,

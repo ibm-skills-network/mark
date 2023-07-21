@@ -36,7 +36,7 @@ export class Scoring {
 
   @ApiPropertyOptional({
     description:
-      'The scoring criteria. (Not required only if type is "AI_GRADED"',
+      'The scoring criteria. (Not required only if type is "AI_GRADED").',
     type: Object,
     additionalProperties: true,
   })
