@@ -11,6 +11,7 @@ import {
   Put,
   Version,
 } from "@nestjs/common";
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
@@ -20,6 +21,9 @@ import { GradeQuestionRequestDto } from "./dto/grade.question.request.dto";
 import { GradeQuestionResponseDto } from "./dto/grade.question.response.dto";
 import { QuestionService } from "./question.service";
 
+@ApiTags(
+  "Questions (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
+)
 @Injectable()
 @Controller("assignments/:assignmentId/questions")
 export class QuestionController {
@@ -31,10 +35,11 @@ export class QuestionController {
     this.logger = parentLogger.child({ context: QuestionController.name });
   }
 
-  //CRUD operations
-
   @Post()
   @Version("1")
+  @ApiOperation({ summary: "Create a question" })
+  @ApiBody({ type: CreateUpdateQuestionRequestDto })
+  @ApiResponse({ status: 201, type: BaseQuestionResponseDto })
   createQuestion(
     @Param("assignmentId") assignmentId: number,
     @Body() createQuestionRequestDto: CreateUpdateQuestionRequestDto
@@ -47,17 +52,22 @@ export class QuestionController {
 
   @Get(":id")
   @Version("1")
+  @ApiOperation({ summary: "Get a question" })
+  @ApiResponse({ status: 200, type: GetQuestionResponseDto })
   getQuestion(@Param("id") id: number): Promise<GetQuestionResponseDto> {
     return this.questionService.findOne(Number(id));
   }
 
   @Patch(":id")
   @Version("1")
+  @ApiOperation({ summary: "Update a question" })
+  @ApiBody({ type: CreateUpdateQuestionRequestDto })
+  @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
   updateQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
     @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto
-  ) {
+  ): Promise<BaseQuestionResponseDto> {
     return this.questionService.update(
       Number(assignmentId),
       Number(id),
@@ -67,11 +77,14 @@ export class QuestionController {
 
   @Put(":id")
   @Version("1")
-  repalceQuestion(
+  @ApiOperation({ summary: "Replace a question" })
+  @ApiBody({ type: CreateUpdateQuestionRequestDto })
+  @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
+  replaceQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
     @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto
-  ) {
+  ): Promise<BaseQuestionResponseDto> {
     return this.questionService.replace(
       Number(assignmentId),
       Number(id),
@@ -81,14 +94,17 @@ export class QuestionController {
 
   @Delete(":id")
   @Version("1")
-  deleteQuestion(@Param("id") id: number) {
+  @ApiOperation({ summary: "Delete a question" })
+  @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
+  deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {
     return this.questionService.remove(Number(id));
   }
 
-  // Grading operations
-
   @Post(":id/grade")
   @Version("1")
+  @ApiOperation({ summary: "Grade a question" })
+  @ApiBody({ type: GradeQuestionRequestDto })
+  @ApiResponse({ status: 200, type: GradeQuestionResponseDto })
   gradeQuestion(
     @Param("id") id: number,
     @Body() gradeExerciseRequestDto: GradeQuestionRequestDto
