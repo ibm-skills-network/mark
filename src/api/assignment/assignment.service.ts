@@ -79,6 +79,46 @@ export class AssignmentService {
     };
   }
 
+  async clone(id: number): Promise<BaseAssignmentResponseDto> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: id },
+      include: { questions: true },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+    }
+
+    // Prepare data for new assignment (excluding id)
+    const newAssignmentData = {
+      ...assignment,
+      id: undefined,
+      questions: {
+        createMany: {
+          data: assignment.questions.map((question) => ({
+            ...question,
+            id: undefined,
+            assignment: undefined,
+            assignmentId: undefined,
+            scoring: question.scoring ? { set: question.scoring } : undefined,
+            choices: question.choices ? { set: question.choices } : undefined,
+          })),
+        },
+      },
+    };
+
+    // Create new assignment and questions in a single transaction
+    const newAssignment = await this.prisma.assignment.create({
+      data: newAssignmentData,
+      include: { questions: true },
+    });
+
+    return {
+      id: newAssignment.id,
+      success: true,
+    };
+  }
+
   private createEmptyDto(): CreateUpdateAssignmentRequestDto {
     /* eslint-disable unicorn/no-null */
     return {

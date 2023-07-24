@@ -106,4 +106,13 @@ export class AssignmentController {
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.remove(Number(id));
   }
+
+  @Post(":id/clone")
+  @Version("1")
+  @ApiOperation({ summary: "Clone an assignment" })
+  @ApiParam({ name: "id", required: true })
+  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  cloneAssignment(@Param("id") id: number): Promise<BaseAssignmentResponseDto> {
+    return this.assignmentService.clone(Number(id));
+  }
 }

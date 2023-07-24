@@ -155,7 +155,7 @@ export class QuestionService {
         textBasedQuestionEvaluateModel
       );
 
-      // map from model to DTO
+      // map from model to response DTO
       const dto = new GradeQuestionResponseDto();
       dto.totalPointsEarned = models.reduce(
         (sum, model) => sum + model.points,
@@ -166,6 +166,7 @@ export class QuestionService {
       );
       return dto;
     }
+
     //Grade Choice Based Questions
     else {
       const choiceBasedQuestionEvaluateModel =
@@ -182,7 +183,7 @@ export class QuestionService {
         choiceBasedQuestionEvaluateModel
       );
 
-      // map from model to DTO
+      // map from model to respons DTO
       const dto = new GradeQuestionResponseDto();
       dto.totalPointsEarned = model.points;
       dto.feedback = model.feedback;
