@@ -9,7 +9,6 @@ import {
   Patch,
   Post,
   Put,
-  Version,
 } from "@nestjs/common";
 import {
   ApiBody,
@@ -30,7 +29,10 @@ import { GetAssignmentResponseDto } from "./dto/get.assignment.response.dto";
   "Assignments (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
 )
 @Injectable()
-@Controller("assignments")
+@Controller({
+  path: "assignments",
+  version: "1",
+})
 export class AssignmentController {
   private logger;
   constructor(
@@ -41,7 +43,6 @@ export class AssignmentController {
   }
 
   @Post()
-  @Version("1")
   @ApiOperation({ summary: "Create assignment" })
   @ApiBody({ type: CreateUpdateAssignmentRequestDto })
   @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
@@ -50,7 +51,6 @@ export class AssignmentController {
   }
 
   @Get(":id")
-  @Version("1")
   @ApiOperation({ summary: "Get assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: GetAssignmentResponseDto })
@@ -59,7 +59,6 @@ export class AssignmentController {
   }
 
   @Patch(":id")
-  @Version("1")
   @ApiOperation({ summary: "Update assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
@@ -78,7 +77,6 @@ export class AssignmentController {
   }
 
   @Put(":id")
-  @Version("1")
   @ApiOperation({ summary: "Replace assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
@@ -97,7 +95,6 @@ export class AssignmentController {
   }
 
   @Delete(":id")
-  @Version("1")
   @ApiOperation({ summary: "Delete assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
@@ -108,7 +105,6 @@ export class AssignmentController {
   }
 
   @Post(":id/clone")
-  @Version("1")
   @ApiOperation({ summary: "Clone an assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })

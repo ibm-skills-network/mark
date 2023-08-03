@@ -124,7 +124,6 @@ export class AssignmentService {
     return {
       name: null,
       type: null,
-      numRetries: null,
       numAttempts: null,
       allotedTime: null,
       passingGrade: null,

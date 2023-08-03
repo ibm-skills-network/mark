@@ -55,6 +55,14 @@ export class CreateUpdateQuestionRequestDto {
   totalPoints: number;
 
   @ApiProperty({
+    description: "The number of retries allowed for the assignment.",
+    type: Number,
+    required: false,
+  })
+  @IsInt()
+  numRetries: number;
+
+  @ApiProperty({
     description: "Type of the question.",
     enum: QuestionType,
     required: true,

@@ -9,7 +9,6 @@ import {
   Patch,
   Post,
   Put,
-  Version,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -26,7 +25,10 @@ import { QuestionService } from "./question.service";
   "Questions (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
 )
 @Injectable()
-@Controller("assignments/:assignmentId/questions")
+@Controller({
+  path: "assignments/:assignmentId/questions",
+  version: "1",
+})
 export class QuestionController {
   private logger;
   constructor(
@@ -37,7 +39,6 @@ export class QuestionController {
   }
 
   @Post()
-  @Version("1")
   @ApiOperation({ summary: "Create a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -55,7 +56,6 @@ export class QuestionController {
   }
 
   @Get(":id")
-  @Version("1")
   @ApiOperation({ summary: "Get a question" })
   @ApiResponse({ status: 200, type: GetQuestionResponseDto })
   getQuestion(@Param("id") id: number): Promise<GetQuestionResponseDto> {
@@ -63,7 +63,6 @@ export class QuestionController {
   }
 
   @Patch(":id")
-  @Version("1")
   @ApiOperation({ summary: "Update a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -83,7 +82,6 @@ export class QuestionController {
   }
 
   @Put(":id")
-  @Version("1")
   @ApiOperation({ summary: "Replace a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -103,7 +101,6 @@ export class QuestionController {
   }
 
   @Delete(":id")
-  @Version("1")
   @ApiOperation({ summary: "Delete a question" })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {
@@ -111,7 +108,6 @@ export class QuestionController {
   }
 
   @Post(":id/grade")
-  @Version("1")
   @ApiOperation({ summary: "Grade a question" })
   @ApiBody({ type: GradeQuestionRequestDto })
   @ApiResponse({ status: 200, type: GradeQuestionResponseDto })

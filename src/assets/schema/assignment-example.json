@@ -1,0 +1,120 @@
+{
+  "name": "Mathematics Quiz",
+  "type": "AI_GRADED",
+  "numAttempts": 5,
+  "allotedTime": 60,
+  "passingGrade": 70,
+  "displayOrder": "RANDOM",
+  "exercises": [
+    {
+      "totalPoints": 5,
+      "numRetries": 2,
+      "type": "text",
+      "question": "What is 2+2?",
+      "scoring": {
+        "type": "MULTIPLE_CRITERIA",
+        "criteria": {
+          "introduction": {
+            "10": "The learner gets the correct answer",
+            "5": "The learner is within 1 of the correct answer",
+            "0": "The learner gets the wrong answer"
+          },
+          "conclusion": {
+            "10": "The learner gets the correct answer",
+            "5": "The learner is within 1 of the correct answer",
+            "0": "The learner gets the wrong answer"
+          },
+          "creativity": {
+            "10": "The learner shows creativity in the response",
+            "5": "The learner shows some creativity in the response",
+            "0": "The learner does not show creativity in the response"
+          }
+        }
+      }
+    },
+    {
+      "totalPoints": 4,
+      "numRetries": 3,
+      "type": "text",
+      "question": "Who is known as the Father of Mathematics?",
+      "scoring": {
+        "type": "SINGLE_CRITERIA",
+        "criteria": {
+          "4": "The learner gives a detailed and correct answer",
+          "2": "The learner gives a correct but not detailed answer",
+          "0": "The learner gives an incorrect answer"
+        }
+      }
+    },
+    {
+      "totalPoints": 4,
+      "numRetries": 2,
+      "type": "single_correct",
+      "question": "What is the square root of 64?",
+      "choices": {
+        "6": false,
+        "8": true,
+        "10": false
+      },
+      "scoring": {
+        "type": "LOSS_PER_MISTAKE",
+        "criteria": {
+          "loss_per_mistake": 1
+        }
+      }
+    },
+    {
+      "totalPoints": 4,
+      "type": "multiple_correct",
+      "numRetries": 0,
+      "question": "Which of the following are prime numbers?",
+      "choices": {
+        "4": false,
+        "7": true,
+        "13": true,
+        "15": false
+      },
+      "scoring": {
+        "type": "LOSS_PER_MISTAKE",
+        "criteria": {
+          "loss_per_mistake": 1
+        }
+      }
+    },
+    {
+      "totalPoints": 4,
+      "type": "true_false",
+      "numRetries": 0,
+      "question": "Is 0 an even number?",
+      "answer": true
+    },
+    {
+      "totalPoints": 5,
+      "numRetries": 1,
+      "type": "url",
+      "question": "Please provide a URL to your project repository.",
+      "scoring": {
+        "type": "SINGLE_CRITERIA",
+        "criteria": {
+          "5": "URL points to a valid repository",
+          "3": "URL points to a repository, but it's not fully accessible",
+          "0": "URL does not point to a valid repository"
+        }
+      }
+    },
+    {
+      "totalPoints": 7,
+      "numRetries": 1,
+      "type": "upload",
+      "question": "Upload a document summarizing your project findings.",
+      "scoring": {
+        "type": "SINGLE_CRITERIA",
+        "criteria": {
+          "7": "Document is comprehensive and well-structured",
+          "5": "Document provides some useful information but lacks depth or structure",
+          "2": "Document does not provide sufficient information"
+        }
+      }
+    }
+  ]
+}

@@ -10,16 +10,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// This enum represents the types of assignments
+// AI_GRADED: The assignment is graded by an AI
+// MANUAL: The assignment is manually graded by a human
 enum AssignmentType {
   AI_GRADED
   MANUAL
 }
 
+// This enum defines the order in which assignments are displayed
+// DEFINED: The assignments are displayed in a predefined order
+// RANDOM: The assignments are displayed in a random order
 enum AssignmentDisplayOrder {
   DEFINED
   RANDOM
 }
 
+// This enum represents the types of questions that can be part of an assignment
+// TEXT: The question requires a text response
+// SINGLE_CORRECT: The question has multiple choices, only one of which is correct
+// MULTIPLE_CORRECT: The question has multiple choices, more than one of which can be correct
+// TRUE_FALSE: The question requires a True/False response
+// URL: The question requires a URL response
+// UPLOAD: The question requires the upload of a file as a response
 enum QuestionType {
   TEXT
   SINGLE_CORRECT
@@ -29,6 +42,11 @@ enum QuestionType {
   UPLOAD
 }
 
+// This enum represents the ways in which an assignment can be scored
+// SINGLE_CRITERIA: The assignment is scored based on a single criteria
+// MULTIPLE_CRITERIA: The assignment is scored based on multiple criteria
+// LOSS_PER_MISTAKE: Points are deducted for each mistake in the assignment
+// AI_GRADED: The assignment is graded by an AI
 enum ScoringType {
   SINGLE_CRITERIA
   MULTIPLE_CRITERIA
@@ -36,11 +54,19 @@ enum ScoringType {
   AI_GRADED
 }
 
+// The Assignment model represents a particular assignment
+// id: Unique identifier for the assignment
+// name: Name of the assignment
+// type: Type of assignment
+// numAttempts: Max number of times a learner can attempt the assignment
+// allotedTime: Time allotted to complete the assignment in minutes
+// passingGrade: The minimum grade required to pass the assignment
+// displayOrder: The order in which the assignment is displayed
+// questions: The list of questions in the assignment
 model Assignment {
   id            Int                  @id @default(autoincrement())
   name          String?
   type          AssignmentType?
-  numRetries    Int?
   numAttempts   Int?
   allotedTime   Int?
   passingGrade  Int?
@@ -48,9 +74,21 @@ model Assignment {
   questions     Question[]
 }
 
+// The Question model represents a question in an assignment
+// id: Unique identifier for the question
+// totalPoints: Total points that can be scored for the question
+// numRetries: Max number of times a student can retry a question
+// type: Type of question
+// question: The text of the question
+// scoring: Scoring details for the question, stored as JSON
+// choices: Possible choices for the question, stored as JSON
+// answer: The correct answer for the question (used for auto grading)
+// assignmentId: The ID of the assignment to which the question belongs
+// assignment: The assignment to which the question belongs
 model Question {
   id           Int         @id @default(autoincrement())
   totalPoints  Int
+  numRetries   Int
   type         QuestionType
   question     String
   scoring      Json?

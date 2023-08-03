@@ -22,15 +22,6 @@ export class CreateUpdateAssignmentRequestDto {
   type: AssignmentType | null;
 
   @ApiProperty({
-    description: "The number of retries allowed for the assignment.",
-    type: Number,
-    required: false,
-  })
-  @IsOptional()
-  @IsInt()
-  numRetries: number | null;
-
-  @ApiProperty({
     description: "The number of attempts made on the assignment.",
     type: Number,
     required: false,
