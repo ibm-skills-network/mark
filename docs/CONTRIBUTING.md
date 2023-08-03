@@ -53,13 +53,19 @@ yarn test
 
 ## Run the Application
 
+# Run primsa migrations (only required once)
+```bash
+source dev.env
+npx prisma migrate dev
+```
+
 ```bash
 yarn dev
 ```
 
 ## View API Documentation
 
-With the application running, you can view API documentation by visiting [localhost:3000](http://localhost:3000)
+With the application running, you can view API documentation by visiting [localhost:3000/api](http://localhost:3000/api)
 
 ## Secrets
 
