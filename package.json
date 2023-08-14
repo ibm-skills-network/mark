@@ -34,7 +34,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.0.1",
     "@nestjs/terminus": "^10.0.0",
-    "@prisma/client": "^5.0.0",
+    "@prisma/client": "^5.1.1",
     "@types/cookie-parser": "^1.4.3",
     "@types/passport-jwt": "^3.0.8",
     "class-transformer": "^0.5.1",

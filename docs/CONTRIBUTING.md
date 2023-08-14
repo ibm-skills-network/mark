@@ -54,9 +54,16 @@ yarn test
 ## Run the Application
 
 # Run primsa migrations (only required once)
+
 ```bash
 source dev.env
 npx prisma migrate dev
+```
+
+# Generate prisma client models (only required once)
+
+```bash
+npx prisma generate
 ```
 
 ```bash
