@@ -5,9 +5,17 @@ import { AssignmentController } from "./assignment.controller";
 import { AssignmentService } from "./assignment.service";
 import { QuestionController } from "./question/question.controller";
 import { QuestionService } from "./question/question.service";
+import { SubmissionController } from "./submission/submission.controller";
+import { SubmissionService } from "./submission/submission.service";
 
 @Module({
-  controllers: [AssignmentController, QuestionController],
-  providers: [AssignmentService, PrismaService, QuestionService, LlmService],
+  controllers: [AssignmentController, QuestionController, SubmissionController],
+  providers: [
+    AssignmentService,
+    PrismaService,
+    QuestionService,
+    LlmService,
+    SubmissionService,
+  ],
 })
 export class AssignmentModule {}

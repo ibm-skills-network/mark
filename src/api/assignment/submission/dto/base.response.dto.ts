@@ -1,15 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-export class BaseQuestionResponseDto {
+export class BaseResponseDto {
   @ApiProperty({
-    description: "The ID of the question.",
-    type: Number,
-    required: true,
-  })
-  id: number;
-
-  @ApiProperty({
-    description: "The success status of the question.",
+    description: "The success status of the operation performed.",
     type: Boolean,
     required: true,
   })

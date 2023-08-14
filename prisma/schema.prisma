@@ -97,3 +97,43 @@ model Question {
   assignmentId Int
   assignment   Assignment @relation(fields: [assignmentId], references: [id])
 }
+
+// This enum defines the possible states of an assignment submission
+// SUBMITTED: The assignment was submitted by the student
+// EXPIRED: The deadline for the assignment has passed
+// IN_PROGRESS: The student is currently working on the assignment
+enum AssignmentSubmissionState {
+  SUBMITTED
+  EXPIRED
+  IN_PROGRESS
+}
+
+// This model represents an assignment submission by a leaner
+// id: Unique identifier for the assignment submission
+// assignmentId: The ID of the assignment that has been submitted
+// questionResponses: The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
+// state: The current state of the assignment (e.g., submitted, expired, in progress)
+model AssignmentSubmission {
+  id                 Int                                    @id @default(autoincrement())
+  assignmentId       Int
+  questionResponses  QuestionResponse[]
+  state              AssignmentSubmissionState
+}
+
+// This model represents a student's response to a question
+// id: Unique identifier for the question response
+// assignmentSubmissionId: The ID of the assignment submission that includes this response
+// assignmentSubmission: The assignment submission that includes this response
+// questionId: The ID of the question to which the student is responding
+// learnerResponse: The student's response to the question
+// points: The points earned by the student for this response
+// feedback: Feedback on the student's response, stored as JSON
+model QuestionResponse {
+  id                     Int                                @id @default(autoincrement())
+  assignmentSubmissionId Int
+  assignmentSubmission   AssignmentSubmission               @relation(fields: [assignmentSubmissionId], references: [id])
+  questionId             Int
+  learnerResponse        String
+  points                 Int
+  feedback               Json
+}

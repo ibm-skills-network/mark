@@ -38,5 +38,28 @@ CREATE TABLE "Question" (
     CONSTRAINT "Question_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "AssignmentSubmission" (
+    "id" SERIAL NOT NULL,
+    "assignmentId" INTEGER NOT NULL,
+
+    CONSTRAINT "AssignmentSubmission_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "QuestionResponse" (
+    "id" SERIAL NOT NULL,
+    "assignmentSubmissionId" INTEGER NOT NULL,
+    "questionId" INTEGER NOT NULL,
+    "learnerResponse" TEXT NOT NULL,
+    "points" INTEGER NOT NULL,
+    "feedback" JSONB NOT NULL,
+
+    CONSTRAINT "QuestionResponse_pkey" PRIMARY KEY ("id")
+);
+
 -- AddForeignKey
 ALTER TABLE "Question" ADD CONSTRAINT "Question_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "QuestionResponse" ADD CONSTRAINT "QuestionResponse_assignmentSubmissionId_fkey" FOREIGN KEY ("assignmentSubmissionId") REFERENCES "AssignmentSubmission"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

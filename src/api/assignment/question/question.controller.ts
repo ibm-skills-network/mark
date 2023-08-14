@@ -17,8 +17,6 @@ import { ASSIGNMENT_SCHEMA_URL } from "../constants";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
-import { GradeQuestionRequestDto } from "./dto/grade.question.request.dto";
-import { GradeQuestionResponseDto } from "./dto/grade.question.response.dto";
 import { QuestionService } from "./question.service";
 
 @ApiTags(
@@ -105,19 +103,5 @@ export class QuestionController {
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {
     return this.questionService.remove(Number(id));
-  }
-
-  @Post(":id/grade")
-  @ApiOperation({ summary: "Grade a question" })
-  @ApiBody({ type: GradeQuestionRequestDto })
-  @ApiResponse({ status: 200, type: GradeQuestionResponseDto })
-  gradeQuestion(
-    @Param("id") id: number,
-    @Body() gradeExerciseRequestDto: GradeQuestionRequestDto
-  ): Promise<GradeQuestionResponseDto> {
-    return this.questionService.gradeQuestion(
-      Number(id),
-      gradeExerciseRequestDto
-    );
   }
 }

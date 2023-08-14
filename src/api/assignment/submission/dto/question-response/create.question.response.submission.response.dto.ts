@@ -1,0 +1,67 @@
+import { ApiProperty } from "@nestjs/swagger";
+import { BaseResponseDto } from "../base.response.dto";
+
+export class TextBasedFeedbackDto {
+  @ApiProperty({
+    description:
+      "The criteria on the basis of which the points and feedback are given.",
+    type: String,
+    required: true,
+  })
+  criteria: string;
+
+  @ApiProperty({
+    description: "The points earned for the above criteria.",
+    type: Number,
+    required: true,
+  })
+  points: number;
+
+  @ApiProperty({
+    description: "The feedback earned for the above criteria.",
+    type: String,
+    required: true,
+  })
+  feedback: string;
+}
+
+export class ChoiceBasedFeedbackDto {
+  @ApiProperty({
+    description: "The choice selected by the learner.",
+    type: String,
+    required: true,
+  })
+  choice: string;
+
+  @ApiProperty({
+    description: "The feedback for selecting the above choice.",
+    type: String,
+    required: true,
+  })
+  feedback: string;
+}
+
+export class CreateQuestionResponseSubmissionResponseDto extends BaseResponseDto {
+  @ApiProperty({
+    description: "The unqiue id of the question response.",
+    type: Number,
+    required: true,
+  })
+  id: number;
+
+  @ApiProperty({
+    description: "The total points earned.",
+    type: Number,
+    required: true,
+  })
+  totalPoints: number;
+
+  @ApiProperty({
+    description:
+      "The feedback received after evaluating the question response of the learner.",
+    type: [ChoiceBasedFeedbackDto, TextBasedFeedbackDto],
+    isArray: true,
+    required: true,
+  })
+  feedback: ChoiceBasedFeedbackDto[] | TextBasedFeedbackDto[];
+}

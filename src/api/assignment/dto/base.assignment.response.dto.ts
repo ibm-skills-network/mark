@@ -1,11 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import {
-  IsBoolean,
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-} from "class-validator";
 
 export class BaseAssignmentResponseDto {
   @ApiProperty({
@@ -13,8 +6,6 @@ export class BaseAssignmentResponseDto {
     type: Number,
     required: true,
   })
-  @IsNotEmpty()
-  @IsInt()
   id: number;
 
   @ApiProperty({
@@ -22,12 +13,8 @@ export class BaseAssignmentResponseDto {
     type: Boolean,
     required: true,
   })
-  @IsNotEmpty()
-  @IsBoolean()
   success: boolean;
 
   @ApiPropertyOptional({ description: "Optional error message.", type: String })
-  @IsOptional()
-  @IsString()
   error?: string;
 }

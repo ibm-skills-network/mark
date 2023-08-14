@@ -4,6 +4,20 @@ import { CreateUpdateQuestionRequestDto } from "./create.update.question.request
 
 export class GetQuestionResponseDto extends CreateUpdateQuestionRequestDto {
   @ApiProperty({
+    description: "The ID of the question.",
+    type: Number,
+    required: true,
+  })
+  id: number;
+
+  @ApiProperty({
+    description: "The ID of the assignment it belongs to.",
+    type: Number,
+    required: true,
+  })
+  assignmentID: number;
+
+  @ApiProperty({
     description: "The success status of the request.",
     type: Boolean,
     required: true,

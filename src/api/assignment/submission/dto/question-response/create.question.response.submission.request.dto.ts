@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { IsArray, IsNotEmpty, IsString, ValidateIf } from "class-validator";
 
-export class GradeQuestionRequestDto {
+export class CreateQuestionResponseSubmissionRequestDto {
   @ApiPropertyOptional({ description: "The learner response.", type: String })
   @IsString()
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
