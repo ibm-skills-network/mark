@@ -2,9 +2,14 @@ import { ExecutionContext, Injectable, SetMetadata } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { AuthGuard } from "@nestjs/passport";
 import { Request } from "express";
+import { User, UserRole } from "../interfaces/user.interface";
 
 export const IS_PUBLIC_KEY = "isPublic";
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
+interface RequestWithUser extends Request {
+  user: User;
+}
 
 @Injectable()
 export class MockJwtAuthGuard extends AuthGuard("jwt") {
@@ -14,10 +19,14 @@ export class MockJwtAuthGuard extends AuthGuard("jwt") {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   canActivate(context: ExecutionContext) {
-    const request: Request = context.switchToHttp().getRequest();
+    const request: RequestWithUser = context.switchToHttp().getRequest();
 
     // Here you can modify the request object to include a temporary user. You can customize this part.
-    request.user = {};
+    request.user = {
+      username: "dev-user",
+      role: UserRole.ADMIN,
+      groupID: 1,
+    };
 
     return true;
   }

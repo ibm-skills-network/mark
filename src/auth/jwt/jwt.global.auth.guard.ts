@@ -4,6 +4,8 @@ import { AuthGuard } from "@nestjs/passport";
 
 export const IS_PUBLIC_KEY = "isPublic";
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+export const IS_ADMIN_KEY = "isAdmin";
+export const Admin = () => SetMetadata(IS_ADMIN_KEY, true);
 
 @Injectable()
 export class JwtGlobalAuthGuard extends AuthGuard("jwt") {
@@ -17,6 +19,13 @@ export class JwtGlobalAuthGuard extends AuthGuard("jwt") {
       context.getClass(),
     ]);
     if (isPublic) {
+      return true;
+    }
+    const isAdmin = this.reflector.getAllAndOverride<boolean>(IS_ADMIN_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isAdmin) {
       return true;
     }
     return super.canActivate(context);

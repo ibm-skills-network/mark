@@ -41,6 +41,7 @@
     "class-validator": "^0.14.0",
     "cookie-parser": "^1.4.6",
     "helmet": "^7.0.0",
+    "jsonwebtoken": "^9.0.1",
     "langchain": "^0.0.106",
     "nest-winston": "^1.9.2",
     "passport": "^0.6.0",
