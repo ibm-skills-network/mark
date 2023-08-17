@@ -8,7 +8,10 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { z } from "zod";
 import { ChoiceBasedQuestionEvaluateModel } from "./model/choice.based.question.evaluate.model";
-import { ChoiceBasedQuestionResponseModel } from "./model/choice.based.question.response.model";
+import {
+  ChoiceBasedFeedback,
+  ChoiceBasedQuestionResponseModel,
+} from "./model/choice.based.question.response.model";
 import { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
 import { TextBasedQuestionResponseModel } from "./model/text.based.question.response.model";
 import {
@@ -86,7 +89,10 @@ export class LlmService {
     const input = await prompt.format({});
     const response = await this.llm.call(input);
 
-    const choiceBasedFeedback = await parser.parse(response);
+    const choiceBasedFeedback = (await parser.parse(
+      response
+    )) as ChoiceBasedFeedback[];
+
     return new ChoiceBasedQuestionResponseModel(
       pointsEarned,
       choiceBasedFeedback
@@ -151,7 +157,9 @@ export class LlmService {
     const input = await prompt.format({});
     const response = await this.llm.call(input);
 
-    const textBasedQuestionResponseModel = await parser.parse(response);
+    const textBasedQuestionResponseModel = (await parser.parse(
+      response
+    )) as TextBasedQuestionResponseModel[];
 
     return textBasedQuestionResponseModel;
   }
