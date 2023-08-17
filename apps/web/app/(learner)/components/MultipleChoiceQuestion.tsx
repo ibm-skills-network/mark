@@ -7,16 +7,21 @@ import InfoLine from './InfoLine';
 interface Props {
   questionText: string;
   options: string[];
+  correctOption: string;
   points: number;
   onAnswerSelected?: (selectedOption: string) => void;
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  const { questionText, options, points, onAnswerSelected } = props;
+  const { questionText, options, correctOption, points, onAnswerSelected } = props;
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
   const handleOptionClick = (option: string) => {
     setSelectedOption(option);
+    const correct = option === correctOption;
+    setIsCorrect(correct);
+
     if (onAnswerSelected) {
       onAnswerSelected(option);
     }
@@ -30,13 +35,18 @@ function MultipleChoiceQuestion(props: Props) {
         {options.map((option, index) => (
           <button
             key={index}
-            className={`block w-full text-left p-2 mb-2 border rounded ${selectedOption === option ? 'bg-blue-100' : ''} text-black`} 
+            className={`block w-full text-left p-2 mb-2 border rounded ${selectedOption === option ? (isCorrect ? 'bg-green-100 text-black' : 'bg-red-100 text-black') : 'text-black'}`}
             onClick={() => handleOptionClick(option)}
           >
             {option}
           </button>
         ))}
       </div>
+      {selectedOption && (
+        <p className={`text-${isCorrect ? 'green' : 'red'}-600`}>
+          {isCorrect ? "Correct! In this scenario, the project manager is improving the communication between the script and production teams." : "Incorrect choice. Please try again."}
+        </p>
+      )}
       <div className="flex justify-between mt-4">
         <Button text="Previous Question" />
         <Button text="Next Question" />
