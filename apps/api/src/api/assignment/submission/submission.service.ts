@@ -1,13 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import {
-  AssignmentSubmissionState,
-  Prisma,
-  QuestionType,
-} from "@prisma/client";
+import { Prisma, QuestionType } from "@prisma/client";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
 import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
+import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
 import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
 import { GetAssignmentSubmissionResponseDto } from "./dto/assignment-submission/get.assignment.submission.response.dto";
@@ -20,16 +17,32 @@ export class SubmissionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
-    private readonly questionService: QuestionService
+    private readonly questionService: QuestionService,
+    private readonly assignmentService: AssignmentService
   ) {}
 
   async createAssignmentSubmission(
     assignmentID: number
   ): Promise<BaseAssignmentSubmissionResponseDto> {
+    // Get assignment's allotedTime to calculate expiry for the submission
+    const assignment = await this.assignmentService.findOne(assignmentID);
+
+    // eslint-disable-next-line unicorn/no-null
+    let submissionExpiry = null;
+    if (assignment.allotedTime) {
+      const currentDate = new Date();
+      submissionExpiry = new Date(
+        currentDate.getTime() + assignment.allotedTime * 60 * 1000
+      );
+    }
+
     const result = await this.prisma.assignmentSubmission.create({
       data: {
-        state: AssignmentSubmissionState.IN_PROGRESS,
+        expiry: submissionExpiry,
+        submitted: false,
         assignmentId: assignmentID,
+        // eslint-disable-next-line unicorn/no-null
+        grade: null,
       },
     });
 
@@ -66,7 +79,7 @@ export class SubmissionService {
   ): Promise<CreateQuestionResponseSubmissionResponseDto> {
     const question = await this.questionService.findOne(questionID);
 
-    // Check if the questionID specified actually belongs to the assignment specified and
+    //TODO: Check if the questionID specified actually belongs to the assignment specified
 
     const responseDto = new CreateQuestionResponseSubmissionResponseDto();
     let learnerResponse;

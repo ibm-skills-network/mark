@@ -1,27 +1,21 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AssignmentSubmissionState, QuestionResponse } from "@prisma/client";
+import { QuestionResponse } from "@prisma/client";
 import { BaseResponseDto } from "../base.response.dto";
 
 export class GetAssignmentSubmissionResponseDto extends BaseResponseDto {
   @ApiProperty({
     description: "The unique ID of the AssignmentSubmission",
+    type: Number,
     example: 1,
   })
   id: number;
 
   @ApiProperty({
     description: "The ID of the assignment that this submission corresponds to",
+    type: Number,
     example: 2,
   })
   assignmentId: number;
-
-  @ApiProperty({
-    description: "The current state of the assignment",
-    enum: AssignmentSubmissionState,
-    enumName: "AssignmentSubmissionState",
-    example: AssignmentSubmissionState.IN_PROGRESS,
-  })
-  state: AssignmentSubmissionState;
 
   @ApiProperty({
     description:
@@ -29,4 +23,29 @@ export class GetAssignmentSubmissionResponseDto extends BaseResponseDto {
     isArray: true,
   })
   questionResponses: QuestionResponse[];
+
+  @ApiProperty({
+    description: "Represents if the learner has submitted this or not",
+    type: Boolean,
+    example: false,
+  })
+  submitted: boolean;
+
+  @ApiProperty({
+    description:
+      "The overall LTI grade value (from 0.0 - 1.0) that the learner earned for this submission",
+    type: Number,
+    example: 0.8,
+    required: false,
+  })
+  grade: number | null;
+
+  @ApiProperty({
+    description:
+      "The DateTime at which the submission window ends (can no longer submit it)",
+    type: Date,
+    example: "2023-12-31T23:59:59Z",
+    required: false,
+  })
+  expiry: Date | null;
 }
