@@ -98,26 +98,21 @@ model Question {
   assignment   Assignment @relation(fields: [assignmentId], references: [id])
 }
 
-// This enum defines the possible states of an assignment submission
-// SUBMITTED: The assignment was submitted by the student
-// EXPIRED: The deadline for the assignment has passed
-// IN_PROGRESS: The student is currently working on the assignment
-enum AssignmentSubmissionState {
-  SUBMITTED
-  EXPIRED
-  IN_PROGRESS
-}
 
-// This model represents an assignment submission by a leaner
+// This model represents an assignment submission by a learner
 // id: Unique identifier for the assignment submission
 // assignmentId: The ID of the assignment that has been submitted
 // questionResponses: The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
-// state: The current state of the assignment (e.g., submitted, expired, in progress)
+// submitted: Boolean value representing if the submission is submitted by the learner or not
+// grade: The overall LTI grade value (from 0.0 - 1.0) that the learner earned 
+// expiry: The DateTime at which the submission window ends (can no longer submit it)
 model AssignmentSubmission {
   id                 Int                                    @id @default(autoincrement())
   assignmentId       Int
   questionResponses  QuestionResponse[]
-  state              AssignmentSubmissionState
+  submitted          Boolean
+  grade              Float?
+  expiry             DateTime?              
 }
 
 // This model represents a student's response to a question

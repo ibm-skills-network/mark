@@ -4,8 +4,16 @@ export enum UserRole {
   AUTHOR = "author",
 }
 
-export interface User {
+export interface ClientUser {
   username: string;
   role: UserRole;
-  groupID: number;
+  assignmentID: number;
+}
+
+export interface User extends ClientUser {
+  groupID: string;
+}
+
+export interface UserRequest extends Request {
+  user: User;
 }

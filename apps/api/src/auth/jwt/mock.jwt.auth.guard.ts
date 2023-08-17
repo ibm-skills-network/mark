@@ -21,11 +21,12 @@ export class MockJwtAuthGuard extends AuthGuard("jwt") {
   canActivate(context: ExecutionContext) {
     const request: RequestWithUser = context.switchToHttp().getRequest();
 
-    // Here you can modify the request object to include a temporary user. You can customize this part.
+    // Here you can modify the request object to include a temporary user. You can customize this part whenever testing locally.
     request.user = {
       username: "dev-user",
-      role: UserRole.ADMIN,
-      groupID: 1,
+      role: UserRole.AUTHOR,
+      groupID: "test-group-id",
+      assignmentID: 1,
     };
 
     return true;

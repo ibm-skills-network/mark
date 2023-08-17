@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Req } from "@nestjs/common";
+import { ClientUser, UserRequest } from "../auth/interfaces/user.interface";
 import { ApiService } from "./api.service";
 
 @Controller({
@@ -28,5 +29,15 @@ export class ApiController {
     const formattedJson = JSON.stringify(JSON.parse(fileContent), undefined, 2);
     return `<pre>${formattedJson}</pre>`;
     /* eslint-enable unicorn/prefer-module */
+  }
+
+  @Get("user")
+  getUser(@Req() request: UserRequest): ClientUser {
+    const user = request.user;
+    return {
+      username: user.username,
+      role: user.role,
+      assignmentID: user.assignmentID,
+    };
   }
 }

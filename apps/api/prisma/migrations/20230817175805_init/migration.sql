@@ -10,9 +10,6 @@ CREATE TYPE "QuestionType" AS ENUM ('TEXT', 'SINGLE_CORRECT', 'MULTIPLE_CORRECT'
 -- CreateEnum
 CREATE TYPE "ScoringType" AS ENUM ('SINGLE_CRITERIA', 'MULTIPLE_CRITERIA', 'LOSS_PER_MISTAKE', 'AI_GRADED');
 
--- CreateEnum
-CREATE TYPE "AssignmentSubmissionState" AS ENUM ('SUBMITTED', 'EXPIRED', 'IN_PROGRESS');
-
 -- CreateTable
 CREATE TABLE "Assignment" (
     "id" SERIAL NOT NULL,
@@ -45,7 +42,9 @@ CREATE TABLE "Question" (
 CREATE TABLE "AssignmentSubmission" (
     "id" SERIAL NOT NULL,
     "assignmentId" INTEGER NOT NULL,
-    "state" "AssignmentSubmissionState" NOT NULL,
+    "submitted" BOOLEAN NOT NULL,
+    "grade" DOUBLE PRECISION,
+    "expiry" TIMESTAMP(3),
 
     CONSTRAINT "AssignmentSubmission_pkey" PRIMARY KEY ("id")
 );

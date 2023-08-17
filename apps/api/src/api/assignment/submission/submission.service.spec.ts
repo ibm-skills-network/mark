@@ -3,6 +3,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
+import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
 import { SubmissionService } from "./submission.service";
 
@@ -16,6 +17,7 @@ describe("SubmissionService", () => {
         PrismaService,
         LlmService,
         QuestionService,
+        AssignmentService,
         {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: {

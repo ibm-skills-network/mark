@@ -1,6 +1,4 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AssignmentSubmissionState } from "@prisma/client";
-import { IsEnum } from "class-validator";
 
 export class CreateUpdateAnswerSubmissionRequestDto {
   @ApiProperty({
@@ -10,10 +8,9 @@ export class CreateUpdateAnswerSubmissionRequestDto {
   assignmentId: number;
 
   @ApiProperty({
-    description: "The state of the AssignmentSubmission",
-    enum: AssignmentSubmissionState,
-    example: AssignmentSubmissionState.IN_PROGRESS,
+    description: "Represents if the learner has submitted this or not",
+    type: Boolean,
+    example: false,
   })
-  @IsEnum(AssignmentSubmissionState)
-  state: AssignmentSubmissionState;
+  submitted: boolean;
 }
