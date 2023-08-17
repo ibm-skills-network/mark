@@ -1,0 +1,7 @@
+{
+  "trailingComma": "none",
+  "importOrderParserPlugins": [
+    "typescript",
+    "decorators-legacy"
+  ]
+}

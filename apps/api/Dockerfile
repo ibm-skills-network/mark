@@ -9,7 +9,7 @@ ENV NODE_ENV build
 
 WORKDIR $DIR
 COPY package.json yarn.lock tsconfig*.json ./
-
+# pragma: allowlist nextline secret
 RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc \
   && yarn install --ignore-scripts --frozen-lockfile \
   && rm -f .npmrc
