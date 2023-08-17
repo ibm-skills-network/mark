@@ -48,9 +48,12 @@ module.exports = {
     "@typescript-eslint/no-misused-promises": [
       "error",
       {
-        "checksVoidReturn": false
-      }
+        checksVoidReturn: false,
+      },
     ],
+    "@typescript-eslint/no-empty-interface": ["warn"],
+    "no-empty-pattern": ["warn"],
+
     // "unicorn/prevent-abbreviations": [
     //   "error",
     //   {
