@@ -19,7 +19,7 @@ function LongFormQuestion(props: Props) {
       <Title text={`Question 1: Points out of ${points} (${(points / 40) * 100}%)`} />
       <p className="mb-4 text-gray-700">{questionText}</p>
       <Title text="Start writing your answer here." level="3" />
-      <textarea className="w-full p-2 mb-4 border rounded" placeholder="Type your answer here..." value={answer} onChange={(e) => setAnswer(e.target.value)} />
+      <textarea className="w-full p-2 mb-4 border rounded text-black" placeholder="Type your answer here..." value={answer} onChange={(e) => setAnswer(e.target.value)} />
       <p className="text-gray-600">Max {maxWords} words</p>
       <div className="flex justify-between mt-4">
         <Button text="Back to Instructions" />
