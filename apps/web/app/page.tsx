@@ -1,7 +1,7 @@
 import AuthorLayout from "./(author)/components/AuthorLayout";
 import LearnerLayout from "./(learner)/components/LearnerLayout";
 
-async function getUser() {
+function getUser() {
   // const res = await fetch("/api/user");
   // The return value is *not* serialized
   // You can return Date, Map, Set, etc.
@@ -16,7 +16,7 @@ async function getUser() {
 }
 
 export default async function Home() {
-  const { user } = await getUser();
+  const { user } = getUser();
 
   return (
     <main className="flex flex-col items-center justify-between min-h-screen">
