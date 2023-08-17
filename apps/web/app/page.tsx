@@ -7,7 +7,7 @@ function getUser() {
   return { user: "learner" } as { user: "author" | "learner" };
 }
 
-export default async function Home() {
+export default function Home() {
   const { user } = getUser();
 
   return (
