@@ -1,18 +1,10 @@
 import AuthorLayout from "./(author)/components/AuthorLayout";
 import LearnerLayout from "./(learner)/components/LearnerLayout";
+import IntroductionPage from "./(learner)/components/IntroductionPage";
 
 function getUser() {
-  // const res = await fetch("/api/user");
-  // The return value is *not* serialized
-  // You can return Date, Map, Set, etc.
-
-  // if (!res.ok) {
-  // This will activate the closest `error.js` Error Boundary
-  // throw new Error("Failed to fetch data");
-  // }
-
-  // return res.json();
-  return { user: "author" } as { user: "author" | "learner" };
+  // Your code here...
+  return { user: "learner" } as { user: "author" | "learner" };
 }
 
 export default async function Home() {
@@ -20,7 +12,15 @@ export default async function Home() {
 
   return (
     <main className="flex flex-col items-center justify-between min-h-screen">
-      {user === "author" ? <AuthorLayout /> : <LearnerLayout />}
+      {user === "author" ? (
+        <AuthorLayout>
+          <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
+        </AuthorLayout>
+      ) : (
+        <LearnerLayout>
+          <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
+        </LearnerLayout>
+      )}
     </main>
   );
 }
