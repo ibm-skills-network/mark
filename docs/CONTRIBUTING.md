@@ -56,6 +56,7 @@ yarn test
 # Run primsa migrations (only required once)
 
 ```bash
+cd apps/api
 source dev.env
 npx prisma migrate dev
 ```
