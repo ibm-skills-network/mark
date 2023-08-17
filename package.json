@@ -4,24 +4,26 @@
     "apps/*",
     "packages/*"
   ],
+  "packageManager": "yarn@1.22.19",
+  "engines": {
+    "node": ">=18.15.0",
+    "npm": ">=7.0.0"
+  },
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
+    "format": "prettier --ignore-unknown --write .",
+    "format:staged": "prettier --ignore-unknown --write \"**/*.{ts,tsx,md}\"",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky install",
     "secrets:audit": "detect-secrets audit .secrets.baseline",
     "secrets:check": "scripts/detect-secrets.sh",
     "secrets:check:staged": "scripts/detect-secrets-staged.sh",
-    "secrets:setup": "detect-secrets scan --update .secrets.baseline"
+    "secrets:setup": "detect-secrets scan --update .secrets.baseline",
+    "test": "turbo run test"
   },
   "devDependencies": {
     "prettier": "^2.5.1",
     "turbo": "latest"
-  },
-  "engines": {
-    "npm": ">=7.0.0",
-    "node": ">=18.15.0"
-  },
-  "packageManager": "yarn@1.22.19"
+  }
 }
