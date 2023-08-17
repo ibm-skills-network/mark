@@ -1,5 +1,5 @@
-import AuthorView from "./(author)/components/AuthorView";
-import LearnerView from "./(learner)/components/LearnerView";
+import AuthorLayout from "./(author)/components/AuthorLayout";
+import LearnerLayout from "./(learner)/components/LearnerLayout";
 
 async function getUser() {
   // const res = await fetch("/api/user");
@@ -20,7 +20,7 @@ export default async function Home() {
 
   return (
     <main className="flex flex-col items-center justify-between min-h-screen">
-      {user === "author" ? <AuthorView /> : <LearnerView />}
+      {user === "author" ? <AuthorLayout /> : <LearnerLayout />}
     </main>
   );
 }
