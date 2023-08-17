@@ -1,5 +1,6 @@
 {
   "*": ["yarn secrets:check:staged", "yarn format:staged"],
+  "*.ts": ["yarn test:staged", "yarn lint:staged"],
   "Dockerfile": ["hadolint"],
   "*.{sh,zsh,bash}": ["shellcheck"]
 }
