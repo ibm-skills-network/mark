@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useEffect } from "react";
+
 interface QuestionStatus {
   status: "correct" | "incorrect" | "partiallyCorrect" | "unanswered";
 }
@@ -7,10 +8,11 @@ interface QuestionStatus {
 interface Props {
   questions: QuestionStatus[];
   timeLimit: number; // Time limit in seconds
+  setCurrentIndex: (index: number) => void;
 }
 
 function Overview(props: Props) {
-  const { questions, timeLimit } = props;
+  const { questions, timeLimit, setCurrentIndex } = props;
   const [secondsRemaining, setSecondsRemaining] = useState<number>(timeLimit);
 
   // Timer logic to decrement the seconds remaining
@@ -31,7 +33,8 @@ function Overview(props: Props) {
         {questions.map((question, index) => (
           <div
             key={index}
-            className={`p-2 mb-2 border rounded-lg text-center ${
+            onClick={() => setCurrentIndex(index)} // Redirect to the clicked question
+            className={`p-2 mb-2 border rounded-lg text-center cursor-pointer ${
               question.status === "correct"
                 ? "bg-green-100"
                 : question.status === "incorrect"

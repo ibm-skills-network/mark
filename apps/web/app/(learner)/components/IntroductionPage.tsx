@@ -1,22 +1,23 @@
 import React from "react";
 import Button from "./Button";
-import InfoLine from "./InfoLine";
 import Title from "./Title";
+import InfoLine from "./InfoLine";
 
 interface Props {
   attemptsAllowed?: number;
   timeLimit?: number;
   outOf?: number;
+  onBegin?: () => void;
 }
 
 function IntroductionPage(props: Props) {
-  const { attemptsAllowed = 1, timeLimit = 50, outOf = 40 } = props;
+  const { attemptsAllowed = 1, timeLimit = 50, outOf = 40, onBegin } = props;
 
   return (
     <div className="bg-white p-8 rounded-lg shadow-md introduction-container">
       <div className="flex justify-between items-center mb-4">
         <Title text="Introduction to Project Management" />
-        <Button text="Begin the Assignment" />
+        <Button text="Begin the Assignment" onClick={onBegin} />
       </div>
       <div className="flex justify-between text-gray-600">
         <InfoLine text={`Attempts Allowed: ${attemptsAllowed}`} />

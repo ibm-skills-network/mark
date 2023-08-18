@@ -1,58 +1,44 @@
-"use client"
+"use client";
 import React, { useState } from "react";
-import Button from "./Button"; // Import the Button component
-import IntroductionPage from "./IntroductionPage";
+import Button from "./Button";
 import LongFormQuestion from "./LongFormQuestion";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import Overview from "./Overview";
-import { questionsData, QuestionData } from './questions';
+import { questionsData, QuestionData } from "./questions";
 
-interface Props {}
-
-interface QuestionStatus {
-  status: "correct" | "incorrect" | "partiallyCorrect" | "unanswered";
-}
-
-function LearnerLayout(props: Props) {
-  const timeLimit = 50 * 60; // 50 minutes
-
-  const [questions, setQuestions] = useState<QuestionStatus[]>(
-    Array(questionsData.length).fill({ status: "unanswered" })
-  );
+function LearnerLayout() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [questionStatuses, setQuestionStatuses] = useState<Array<"correct" | "incorrect" | "partiallyCorrect" | "unanswered">>(
+    questionsData.map(() => "unanswered")
+  );
 
-  const updateQuestionStatus = (index: number, status: "correct" | "incorrect" | "partiallyCorrect" | "unanswered") => {
-    setQuestions(prevQuestions => {
-      const updatedQuestions = [...prevQuestions];
-      updatedQuestions[index].status = status;
-      return updatedQuestions;
+  const updateStatus = (status: "correct" | "incorrect" | "partiallyCorrect") => {
+    setQuestionStatuses((prevStatuses) => {
+      const updatedStatuses = [...prevStatuses];
+      updatedStatuses[currentIndex] = status;
+      return updatedStatuses;
     });
   };
 
   const renderQuestion = (question: QuestionData, index: number) => {
-    switch (question.type) {
-      case 'longForm':
-        return <LongFormQuestion
-                  questionText={question.questionText}
-                  instructions={question.instructions}
-                  points={question.points}
-                  onAnswered={(status) => updateQuestionStatus(index, status)}
-                />;
-      case 'multipleChoice':
-        return <MultipleChoiceQuestion
-                  correctOptions={question.correctOptions}
-                  questionText={question.questionText}
-                  options={question.options}
-                  points={question.points}
-                  onAnswerSelected={(status) => updateQuestionStatus(index, status)}
-                />;
+    const questionNumber = index + 1;
+
+    if (question.type === "longForm") {
+      return <LongFormQuestion {...question} questionNumber={questionNumber} />;
+    } else {
+      return (
+        <MultipleChoiceQuestion
+          {...question}
+          questionNumber={questionNumber}
+          onAnswerSelected={updateStatus}
+        />
+      );
     }
   };
 
   return (
     <div className="flex">
       <div className="w-3/4">
-        <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
         {renderQuestion(questionsData[currentIndex], currentIndex)}
         <div className="flex justify-between mt-4">
           <Button
@@ -68,11 +54,10 @@ function LearnerLayout(props: Props) {
         </div>
       </div>
       <div className="w-1/4">
-        <Overview questions={questions} timeLimit={timeLimit} />
+        <Overview questions={questionStatuses.map((status) => ({ status }))} timeLimit={3600} setCurrentIndex={setCurrentIndex} />
       </div>
     </div>
   );
 }
 
 export default LearnerLayout;
-
