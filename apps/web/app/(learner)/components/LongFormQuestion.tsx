@@ -26,6 +26,7 @@
  * assignments, and various educational applications. It is designed for ease of integration with overview components
  * and provides flexibility for various use cases.
  */
+
 "use client"
 import React, { useState } from "react";
 import Button from "./Button";
@@ -51,7 +52,6 @@ function LongFormQuestion(props: Props) {
       <MarkdownEditor value={answer} onChange={setAnswer} />
       <p className="text-gray-600">Max {maxWords} words</p>
       <div className="flex justify-between mt-4">
-        <Button text="Back to Instructions" />
         <Button text="Submit Question" />
       </div>
     </div>

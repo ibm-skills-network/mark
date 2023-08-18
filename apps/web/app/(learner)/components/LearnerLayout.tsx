@@ -1,42 +1,26 @@
 "use client"
 import React, { useState } from "react";
+import Button from "./Button"; // Import the Button component
 import IntroductionPage from "./IntroductionPage";
 import LongFormQuestion from "./LongFormQuestion";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
-import Overview from "./Overview"; // Import the Overview component
+import Overview from "./Overview";
+import { questionsData, QuestionData } from './questions';
 
 interface Props {}
 
-/**
- * The main layout for the learner's interface including questions and overview
- * @param {Props} props - Properties passed to the component (none in this case)
- */
+interface QuestionStatus {
+  status: "correct" | "incorrect" | "partiallyCorrect" | "unanswered";
+}
+
 function LearnerLayout(props: Props) {
-  const {} = props;
-  
-  // Long form question data
-  const questionText1 =
-    "Describe the key elements of a project charter and explain why it is considered a critical document in project management. How does a project charter contribute to project success?";
-  const instructions = "Start writing your answer here.";
-  const points1 = 10;
-
-  // Multiple-choice question data
-  const questionText2 = "Choose the correct option.";
-  const options = ["Option 1", "Option 2", "Option 3", "Option 4"];
-  const points2 = 5;
-  const correctOptions = ["Option 1", "Option 2"]
-
-  // Questions' statuses
-  const [questions, setQuestions] = useState([
-    { status: 'unanswered' },
-    { status: 'unanswered' },
-    // Add more questions as needed
-  ]);
-
-  // Time limit for the Overview component (in seconds)
   const timeLimit = 50 * 60; // 50 minutes
 
-  // Handler function to update the status of a question
+  const [questions, setQuestions] = useState<QuestionStatus[]>(
+    Array(questionsData.length).fill({ status: "unanswered" })
+  );
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+
   const updateQuestionStatus = (index: number, status: "correct" | "incorrect" | "partiallyCorrect" | "unanswered") => {
     setQuestions(prevQuestions => {
       const updatedQuestions = [...prevQuestions];
@@ -45,23 +29,43 @@ function LearnerLayout(props: Props) {
     });
   };
 
+  const renderQuestion = (question: QuestionData, index: number) => {
+    switch (question.type) {
+      case 'longForm':
+        return <LongFormQuestion
+                  questionText={question.questionText}
+                  instructions={question.instructions}
+                  points={question.points}
+                  onAnswered={(status) => updateQuestionStatus(index, status)}
+                />;
+      case 'multipleChoice':
+        return <MultipleChoiceQuestion
+                  correctOptions={question.correctOptions}
+                  questionText={question.questionText}
+                  options={question.options}
+                  points={question.points}
+                  onAnswerSelected={(status) => updateQuestionStatus(index, status)}
+                />;
+    }
+  };
+
   return (
     <div className="flex">
       <div className="w-3/4">
         <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
-        <LongFormQuestion
-          questionText={questionText1}
-          instructions={instructions}
-          points={points1}
-          onAnswered={(status) => updateQuestionStatus(0, status)}
-        />
-        <MultipleChoiceQuestion
-          correctOptions={correctOptions}
-          questionText={questionText2}
-          options={options}
-          points={points2}
-          onAnswerSelected={(status) => updateQuestionStatus(1, status)}
-        />
+        {renderQuestion(questionsData[currentIndex], currentIndex)}
+        <div className="flex justify-between mt-4">
+          <Button
+            text="Previous"
+            onClick={() => setCurrentIndex(currentIndex - 1)}
+            disabled={currentIndex === 0}
+          />
+          <Button
+            text="Next"
+            onClick={() => setCurrentIndex(currentIndex + 1)}
+            disabled={currentIndex === questionsData.length - 1}
+          />
+        </div>
       </div>
       <div className="w-1/4">
         <Overview questions={questions} timeLimit={timeLimit} />
@@ -71,3 +75,4 @@ function LearnerLayout(props: Props) {
 }
 
 export default LearnerLayout;
+

@@ -148,10 +148,6 @@ function MultipleChoiceQuestion(props: Props) {
       </div>
       <Button text="Submit" onClick={handleSubmit} />
       {renderFeedbackMessage()}
-      <div className="flex justify-between mt-4">
-        <Button text="Previous Question" />
-        <Button text="Next Question" />
-      </div>
     </div>
   );
 }
