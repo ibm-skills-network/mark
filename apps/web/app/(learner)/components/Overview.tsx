@@ -1,6 +1,5 @@
 "use client"
 import React, { useState, useEffect } from "react";
-
 interface QuestionStatus {
   status: "correct" | "incorrect" | "partiallyCorrect" | "unanswered";
 }
@@ -14,6 +13,7 @@ function Overview(props: Props) {
   const { questions, timeLimit } = props;
   const [secondsRemaining, setSecondsRemaining] = useState<number>(timeLimit);
 
+  // Timer logic to decrement the seconds remaining
   useEffect(() => {
     const timer = setInterval(() => {
       if (secondsRemaining > 0) {
@@ -41,6 +41,7 @@ function Overview(props: Props) {
                 : "bg-gray-100"
             }`}
           >
+            Question {index + 1}: {" "}
             {question.status === "correct" && "✓"}
             {question.status === "incorrect" && "✗"}
             {question.status === "partiallyCorrect" && "✓✗"}
