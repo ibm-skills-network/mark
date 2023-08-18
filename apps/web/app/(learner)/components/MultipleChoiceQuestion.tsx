@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
@@ -39,7 +41,7 @@ function MultipleChoiceQuestion(props: Props) {
   };
 
   return (
-    <div className="bg-white p-8 rounded-lg shadow-md question-container">
+    <div className="p-8 bg-white rounded-lg shadow-md question-container">
       <Title
         text={`Question: Points out of ${points} (${(points / 40) * 100}%)`}
       />
@@ -62,7 +64,9 @@ function MultipleChoiceQuestion(props: Props) {
       <Button text="Submit" onClick={handleSubmit} />
       {isCorrect !== null && (
         <p className={`text-${isCorrect ? "green" : "red"}-600`}>
-          {isCorrect ? "Correct! Well done." : "Incorrect choice. Please try again."}
+          {isCorrect
+            ? "Correct! Well done."
+            : "Incorrect choice. Please try again."}
         </p>
       )}
       <div className="flex justify-between mt-4">

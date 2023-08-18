@@ -1,7 +1,9 @@
 import { BASE_API_ROUTES } from "@config/constants";
 import type { User } from "@config/types";
+import AuthorHeader from "./(author)/components/AuthorHeader";
 import AuthorLayout from "./(author)/components/AuthorLayout";
 import IntroductionPage from "./(learner)/components/IntroductionPage";
+import LearnerHeader from "./(learner)/components/LearnerHeader";
 import LearnerLayout from "./(learner)/components/LearnerLayout";
 
 // async function getUser<T>() {
@@ -19,14 +21,21 @@ export default function Home() {
   const role = "author";
 
   return (
-    <main className="flex flex-col items-center justify-between min-h-screen">
-      {role !== "author" ? (
-        <AuthorLayout />
+    <>
+      {role === "author" ? (
+        <AuthorHeader />
       ) : (
-        <LearnerLayout>
-          <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
-        </LearnerLayout>
+        <LearnerHeader attemptsAllowed={1} timeLimit={50} outOf={40} />
       )}
-    </main>
+      <main className="flex flex-col items-center justify-between min-h-screen">
+        {role !== "author" ? (
+          <AuthorLayout />
+        ) : (
+          <LearnerLayout>
+            <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
+          </LearnerLayout>
+        )}
+      </main>
+    </>
   );
 }
