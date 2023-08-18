@@ -18,7 +18,7 @@ import LearnerLayout from "./(learner)/components/LearnerLayout";
 
 export default function Home() {
   // const { role } = await getUser<User>();
-  const role = "learner";
+  const role = "author";
 
   return (
     <>
