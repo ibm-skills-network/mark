@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
@@ -8,30 +6,30 @@ import Title from "./Title";
 interface Props {
   questionText: string;
   options: string[];
-  correctOption: string | string[]; // Allow for either a single string or an array of strings (for multiple correct)
+  correctOptions: string[]; // Accepting only an array of correct answers
   points: number;
-  onAnswerSelected?: (selectedOption: string[]) => void; // Updated to accept an array
+  onAnswerSelected?: (selectedOptions: string[]) => void;
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  const { questionText, options, correctOption, points, onAnswerSelected } =
+  const { questionText, options, correctOptions, points, onAnswerSelected } =
     props;
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]); // Store selected options
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
   const handleOptionClick = (option: string) => {
     const alreadySelected = selectedOptions.includes(option);
     const newSelectedOptions = alreadySelected
-      ? selectedOptions.filter(opt => opt !== option) // Remove the option if already selected
-      : [...selectedOptions, option]; // Add the clicked option to the selected options array
+      ? selectedOptions.filter((opt) => opt !== option)
+      : [...selectedOptions, option];
 
     setSelectedOptions(newSelectedOptions);
   };
 
   const handleSubmit = () => {
-    const correct = Array.isArray(correctOption)
-      ? selectedOptions.every(opt => correctOption.includes(opt)) && selectedOptions.length === correctOption.length
-      : selectedOptions.includes(correctOption);
+    const correct =
+      selectedOptions.every((opt) => correctOptions.includes(opt)) &&
+      selectedOptions.length === correctOptions.length;
 
     setIsCorrect(correct);
 
@@ -43,7 +41,7 @@ function MultipleChoiceQuestion(props: Props) {
   return (
     <div className="bg-white p-8 rounded-lg shadow-md question-container">
       <Title
-        text={`Question 2: Points out of ${points} (${(points / 40) * 100}%)`}
+        text={`Question: Points out of ${points} (${(points / 40) * 100}%)`}
       />
       <InfoLine text={questionText} />
       <div className="mb-4">
@@ -51,10 +49,8 @@ function MultipleChoiceQuestion(props: Props) {
           <button
             key={index}
             className={`block w-full text-left p-2 mb-2 border rounded ${
-              selectedOption === option
-                ? isCorrect
-                  ? "bg-green-100 text-black"
-                  : "bg-red-100 text-black"
+              selectedOptions.includes(option)
+                ? "bg-blue-100 text-black"
                 : "text-black"
             }`}
             onClick={() => handleOptionClick(option)}
@@ -65,7 +61,7 @@ function MultipleChoiceQuestion(props: Props) {
       </div>
       <Button text="Submit" onClick={handleSubmit} />
       {isCorrect !== null && (
-        <p className={`text-${isCorrect ? 'green' : 'red'}-600`}>
+        <p className={`text-${isCorrect ? "green" : "red"}-600`}>
           {isCorrect ? "Correct! Well done." : "Incorrect choice. Please try again."}
         </p>
       )}
