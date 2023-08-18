@@ -15,17 +15,16 @@
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write \"**/*.{ts,tsx,md}\"",
     "lint": "turbo run lint",
-    "lint:staged": "turbo run lint:staged --",
+    "lint:fixall": "turbo run lint:fixall",
     "prepare": "husky install",
     "secrets:audit": "detect-secrets audit .secrets.baseline",
     "secrets:check": "scripts/detect-secrets.sh",
     "secrets:check:staged": "scripts/detect-secrets-staged.sh",
     "secrets:setup": "detect-secrets scan --update .secrets.baseline",
-    "test": "turbo run test",
-    "test:staged": "turbo run test:staged --"
+    "test": "turbo run test"
   },
   "devDependencies": {
-    "prettier": "^2.5.1",
+    "prettier": "^2.8.8",
     "turbo": "latest"
   }
 }

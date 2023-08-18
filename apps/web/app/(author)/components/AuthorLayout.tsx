@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import TextBox from "./textbox";
 
 interface Props {}
@@ -14,4 +14,3 @@ function AuthorLayout(props: Props) {
 }
 
 export default AuthorLayout;
-

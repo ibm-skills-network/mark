@@ -1,8 +1,9 @@
-"use client"
-import React, { useState } from 'react';
-import Button from './Button';
-import Title from './Title';
-import InfoLine from './InfoLine';
+"use client";
+
+import React, { useState } from "react";
+import Button from "./Button";
+import InfoLine from "./InfoLine";
+import Title from "./Title";
 
 interface Props {
   questionText: string;
@@ -13,8 +14,9 @@ interface Props {
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  const { questionText, options, correctOption, points, onAnswerSelected } = props;
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const { questionText, options, correctOption, points, onAnswerSelected } =
+    props;
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
   const handleOptionClick = (option: string) => {
@@ -40,13 +42,21 @@ function MultipleChoiceQuestion(props: Props) {
 
   return (
     <div className="bg-white p-8 rounded-lg shadow-md question-container">
-      <Title text={`Question 2: Points out of ${points} (${(points / 40) * 100}%)`} />
+      <Title
+        text={`Question 2: Points out of ${points} (${(points / 40) * 100}%)`}
+      />
       <InfoLine text={questionText} />
       <div className="mb-4">
         {options.map((option, index) => (
           <button
             key={index}
-            className={`block w-full text-left p-2 mb-2 border rounded ${selectedOptions.includes(option) ? 'bg-blue-100 text-black' : 'text-black'}`}
+            className={`block w-full text-left p-2 mb-2 border rounded ${
+              selectedOption === option
+                ? isCorrect
+                  ? "bg-green-100 text-black"
+                  : "bg-red-100 text-black"
+                : "text-black"
+            }`}
             onClick={() => handleOptionClick(option)}
           >
             {option}

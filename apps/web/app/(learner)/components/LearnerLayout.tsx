@@ -1,13 +1,14 @@
-import React from 'react';
+import React from "react";
 import IntroductionPage from "./IntroductionPage";
-import LongFormQuestion from './LongFormQuestion';
-import MultipleChoiceQuestion from './MultipleChoiceQuestion'; // Import the new component
+import LongFormQuestion from "./LongFormQuestion";
+import MultipleChoiceQuestion from "./MultipleChoiceQuestion"; // Import the new component
 
 interface Props {}
 
 function LearnerLayout(props: Props) {
   const {} = props;
-  const questionText1 = "Describe the key elements of a project charter and explain why it is considered a critical document in project management. How does a project charter contribute to project success?";
+  const questionText1 =
+    "Describe the key elements of a project charter and explain why it is considered a critical document in project management. How does a project charter contribute to project success?";
   const instructions = "Start writing your answer here.";
   const points1 = 10;
 
@@ -18,11 +19,7 @@ function LearnerLayout(props: Props) {
 
   return (
     <div className="">
-      <IntroductionPage
-        attemptsAllowed={1}
-        timeLimit={50}
-        outOf={40}
-      />
+      <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
       <LongFormQuestion
         questionText={questionText1}
         instructions={instructions}

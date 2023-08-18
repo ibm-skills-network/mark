@@ -1,22 +1,24 @@
-"use client"
-import React, { useState, useEffect, useRef } from 'react';
+"use client";
+
+import React, { useEffect, useRef, useState } from "react";
 
 interface Props {}
 
 enum QuestionType {
-  SingleCorrect = 'single_correct',
-  MultipleCorrect = 'multiple_correct',
-  WrittenQuestion = 'written_question',
+  SingleCorrect = "single_correct",
+  MultipleCorrect = "multiple_correct",
+  WrittenQuestion = "written_question",
 }
 
 function TextBox(props: Props) {
-  const [inputText, setInputText] = useState('');
-  const [displayText, setDisplayText] = useState('');
+  const [inputText, setInputText] = useState("");
+  const [displayText, setDisplayText] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedQuestionType, setSelectedQuestionType] = useState<QuestionType | null>(null);
+  const [selectedQuestionType, setSelectedQuestionType] =
+    useState<QuestionType | null>(null);
   const [options, setOptions] = useState<string[]>([]);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [writtenQuestionText, setWrittenQuestionText] = useState('');
+  const [writtenQuestionText, setWrittenQuestionText] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,10 +28,10 @@ function TextBox(props: Props) {
       }
     };
 
-    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener("mousedown", handleOutsideClick);
 
     return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, []);
 
@@ -50,7 +52,7 @@ function TextBox(props: Props) {
     setIsMenuOpen(false);
     setOptions([]);
     setSelectedOptions([]);
-    setWrittenQuestionText('');
+    setWrittenQuestionText("");
   };
 
   const handleOptionChange = (index: number, value: string) => {
@@ -61,25 +63,32 @@ function TextBox(props: Props) {
 
   const handleOptionToggle = (option: string) => {
     if (selectedOptions.includes(option)) {
-      setSelectedOptions(selectedOptions.filter((selectedOption) => selectedOption !== option));
+      setSelectedOptions(
+        selectedOptions.filter((selectedOption) => selectedOption !== option)
+      );
     } else {
       setSelectedOptions([...selectedOptions, option]);
     }
   };
 
-  const handleWrittenQuestionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleWrittenQuestionChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     setWrittenQuestionText(event.target.value);
   };
 
   return (
-    <div className="flex flex-col items-center mt-8" style={{ width: '67.5625rem', height: '31.5rem' }}>
+    <div
+      className="flex flex-col items-center mt-8"
+      style={{ width: "67.5625rem", height: "31.5rem" }}
+    >
       <input
         type="text"
         className="border p-2 rounded-md text-black"
         placeholder="Enter text here"
         value={inputText}
         onChange={handleInputChange}
-        style={{ width: '59.15rem', height: '8.6875rem' }}
+        style={{ width: "59.15rem", height: "8.6875rem" }}
       />
       <button
         className="mt-2 bg-blue-500 text-white p-2 rounded-md"
@@ -103,27 +112,46 @@ function TextBox(props: Props) {
         {isMenuOpen && (
           <div className="absolute top-10 right-0 bg-white border rounded-md shadow-md">
             <button
-              className={`block w-full text-left p-2 ${selectedQuestionType === QuestionType.SingleCorrect ? 'bg-gray-200 text-black' : 'text-black'}`}
-              onClick={() => handleQuestionTypeSelect(QuestionType.SingleCorrect)}
+              className={`block w-full text-left p-2 ${
+                selectedQuestionType === QuestionType.SingleCorrect
+                  ? "bg-gray-200 text-black"
+                  : "text-black"
+              }`}
+              onClick={() =>
+                handleQuestionTypeSelect(QuestionType.SingleCorrect)
+              }
             >
               Single Correct
             </button>
             <button
-              className={`block w-full text-left p-2 ${selectedQuestionType === QuestionType.MultipleCorrect ? 'bg-gray-200 text-black' : 'text-black'}`}
-              onClick={() => handleQuestionTypeSelect(QuestionType.MultipleCorrect)}
+              className={`block w-full text-left p-2 ${
+                selectedQuestionType === QuestionType.MultipleCorrect
+                  ? "bg-gray-200 text-black"
+                  : "text-black"
+              }`}
+              onClick={() =>
+                handleQuestionTypeSelect(QuestionType.MultipleCorrect)
+              }
             >
               Multiple Correct
             </button>
             <button
-              className={`block w-full text-left p-2 ${selectedQuestionType === QuestionType.WrittenQuestion ? 'bg-gray-200 text-black' : 'text-black'}`}
-              onClick={() => handleQuestionTypeSelect(QuestionType.WrittenQuestion)}
+              className={`block w-full text-left p-2 ${
+                selectedQuestionType === QuestionType.WrittenQuestion
+                  ? "bg-gray-200 text-black"
+                  : "text-black"
+              }`}
+              onClick={() =>
+                handleQuestionTypeSelect(QuestionType.WrittenQuestion)
+              }
             >
               Written Question
             </button>
           </div>
         )}
       </div>
-      {selectedQuestionType === QuestionType.SingleCorrect || selectedQuestionType === QuestionType.MultipleCorrect ? (
+      {selectedQuestionType === QuestionType.SingleCorrect ||
+      selectedQuestionType === QuestionType.MultipleCorrect ? (
         <div className="mt-4">
           <p>Options:</p>
           {options.map((option, index) => (
@@ -149,7 +177,9 @@ function TextBox(props: Props) {
                 className="border ml-2 p-2 rounded-md text-black"
                 placeholder={`Option ${index + 1}`}
                 value={option}
-                onChange={(event) => handleOptionChange(index, event.target.value)}
+                onChange={(event) =>
+                  handleOptionChange(index, event.target.value)
+                }
               />
               <button
                 className="ml-2 text-red-600"
@@ -165,7 +195,7 @@ function TextBox(props: Props) {
           ))}
           <button
             className="bg-blue-500 text-white p-2 rounded-md mt-2"
-            onClick={() => setOptions([...options, ''])}
+            onClick={() => setOptions([...options, ""])}
           >
             Add Option
           </button>

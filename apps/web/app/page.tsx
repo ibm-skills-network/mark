@@ -1,21 +1,26 @@
+import { BASE_API_ROUTES } from "../config/constants";
+import type { User } from "../config/types";
 import AuthorLayout from "./(author)/components/AuthorLayout";
-import LearnerLayout from "./(learner)/components/LearnerLayout";
 import IntroductionPage from "./(learner)/components/IntroductionPage";
+import LearnerLayout from "./(learner)/components/LearnerLayout";
 
-function getUser() {
-  // Your code here...
-  return { user: "author" } as { user: "author" | "learner" };
+async function getUser<T>() {
+  const res = await fetch(BASE_API_ROUTES.user);
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch user data");
+  }
+
+  return res.json() as Promise<T>;
 }
 
-export default function Home() {
-  const { user } = getUser();
+export default async function Home() {
+  const { role } = await getUser<User>();
 
   return (
     <main className="flex flex-col items-center justify-between min-h-screen">
-      {user === "author" ? (
-        <AuthorLayout>
-          <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
-        </AuthorLayout>
+      {role === "author" ? (
+        <AuthorLayout />
       ) : (
         <LearnerLayout>
           <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />

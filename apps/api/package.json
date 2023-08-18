@@ -12,6 +12,8 @@
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write",
     "lint": "eslint .",
+    "lint:fix": "eslint --fix",
+    "lint:fixall": "eslint --fix .",
     "lint:staged": "eslint",
     "start": "op run --env-file=./dev.env -- nest start",
     "start:debug": "yarn start --debug --watch",

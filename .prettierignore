@@ -1,5 +1,11 @@
 # Ignore artifacts:
 dist
+.next
+out
+build
+.turbo
 coverage
 ./husky/_/
 **/.github/workflows/*
+**/.vscode/*
+**/node_modules/*

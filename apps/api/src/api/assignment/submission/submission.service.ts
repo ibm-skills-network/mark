@@ -35,8 +35,7 @@ export class SubmissionService {
       UserRole.LEARNER
     );
 
-    // eslint-disable-next-line unicorn/no-null
-    let submissionExpiry: Date | null = null;
+    let submissionExpiry: Date | undefined;
     if (assignment.allotedTime) {
       const currentDate = new Date();
       submissionExpiry = new Date(
@@ -49,8 +48,7 @@ export class SubmissionService {
         expiry: submissionExpiry,
         submitted: false,
         assignmentId: assignmentID,
-        // eslint-disable-next-line unicorn/no-null
-        grade: null,
+        grade: undefined,
       },
     });
 

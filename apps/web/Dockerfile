@@ -17,7 +17,6 @@ FROM icr.io/skills-network/node:18 AS builder
 # COPY --from=builder /app/turbo.json ./turbo.json
 # RUN yarn install --frozen-lockfile
 
-
 # FROM icr.io/skills-network/node:18 AS sourcer
 # RUN apk update
 # WORKDIR /app
