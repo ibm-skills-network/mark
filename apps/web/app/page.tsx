@@ -4,7 +4,7 @@ import IntroductionPage from "./(learner)/components/IntroductionPage";
 
 function getUser() {
   // Your code here...
-  return { user: "learner" } as { user: "author" | "learner" };
+  return { user: "author" } as { user: "author" | "learner" };
 }
 
 export default function Home() {
