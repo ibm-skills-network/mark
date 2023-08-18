@@ -1,3 +1,21 @@
+/**
+ * MultipleChoiceQuestion Component
+ *
+ * A React component that renders a multiple-choice question, enabling the user
+ * to select one or multiple correct answers from a set of options. The selected
+ * options are marked, and the user receives feedback on the correctness of their
+ * selection upon submission. The component also calculates the points earned
+ * based on the correct selections.
+ *
+ * Props:
+ * - questionText: string - The text of the question to be displayed.
+ * - options: string[] - An array containing the text for all available options.
+ * - correctOptions: string[] - An array containing the text for the correct options only.
+ * - points: number - Unused in this code. Can be removed or adapted for other purposes.
+ * - onAnswerSelected?: (selectedOptions: string[]) => void - Optional callback function that receives the selected options when the user submits their answer.
+ * 
+ */
+
 "use client"
 import React, { useState } from "react";
 import Button from "./Button";
@@ -7,7 +25,7 @@ import Title from "./Title";
 interface Props {
   questionText: string;
   options: string[];
-  correctOptions: string[]; // Accepting only an array of correct answers
+  correctOptions: string[];
   points: number;
   onAnswerSelected?: (selectedOptions: string[]) => void;
 }
