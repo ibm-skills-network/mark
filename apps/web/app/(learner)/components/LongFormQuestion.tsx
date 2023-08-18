@@ -26,10 +26,11 @@
  * assignments, and various educational applications. It is designed for ease of integration with overview components
  * and provides flexibility for various use cases.
  */
-"use client";
+"use client"
 import React, { useState } from "react";
 import Button from "./Button";
 import Title from "./Title";
+import MarkdownEditor from "../../MarkDownEditor";
 
 interface Props {
   questionText: string;
@@ -47,12 +48,7 @@ function LongFormQuestion(props: Props) {
       <Title text={`Question: Points out of ${points} (${(points / 40) * 100}%)`} />
       <p className="mb-4 text-gray-700">{questionText}</p>
       <p className="mb-4 text-gray-700">{instructions}</p>
-      <textarea
-        className="w-full p-2 mb-4 border rounded text-black"
-        placeholder="Type your answer here..."
-        value={answer}
-        onChange={(e) => setAnswer(e.target.value)}
-      />
+      <MarkdownEditor value={answer} onChange={setAnswer} />
       <p className="text-gray-600">Max {maxWords} words</p>
       <div className="flex justify-between mt-4">
         <Button text="Back to Instructions" />
@@ -63,3 +59,4 @@ function LongFormQuestion(props: Props) {
 }
 
 export default LongFormQuestion;
+
