@@ -18,6 +18,7 @@ function TextBox() {
   const [selectedOptionsMultipleAnswers, setSelectedOptionsMultipleAnswers] = useState<string[]>([]);
   const [writtenQuestionText, setWrittenQuestionText] = useState('');
   const [questions, setQuestions] = useState<Array<JSX.Element>>([]);
+  const [jsonData, setJsonData] = useState<any>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,6 +34,22 @@ function TextBox() {
       document.removeEventListener('mousedown', handleOutsideClick);
     };
   }, []);
+
+
+  const generateJsonData = () => {
+    const data = {
+      inputText,
+      displayText,
+      questionType: selectedQuestionType,
+      optionsSingleCorrect,
+      selectedOptionSingleCorrect,
+      optionsMultipleAnswers,
+      selectedOptionsMultipleAnswers,
+      writtenQuestionText,
+    };
+
+    setJsonData(data);
+  };
 
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,6 +106,20 @@ function TextBox() {
 
   return (
     <div className="mt-8 pl-2" style={{ width: '67.5625rem', height: '31.5rem' }}>
+      <button
+        className="bg-blue-500 text-white p-2 rounded-md ml-2"
+        onClick={generateJsonData}
+      >
+        Convert to JSON
+      </button>
+      {jsonData && (
+        <div className="mt-4">
+          <p>Generated JSON Data:</p>
+          <pre className="bg-gray-100 p-2 rounded-md text-black overflow-auto">
+            {JSON.stringify(jsonData, null, 2)}
+          </pre>
+        </div>
+      )}
       <div className="text-xl text-black font-inter text-1rem leading-1.25rem mr-2">Question:</div>
       <input
         type="text"
