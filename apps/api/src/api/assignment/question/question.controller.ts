@@ -13,6 +13,8 @@ import {
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { UserRole } from "../../..//auth/interfaces/user.interface";
+import { Roles } from "../../../auth/role/roles.global.guard";
 import { ASSIGNMENT_SCHEMA_URL } from "../constants";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
@@ -37,6 +39,7 @@ export class QuestionController {
   }
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Create a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -54,6 +57,7 @@ export class QuestionController {
   }
 
   @Get(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Get a question" })
   @ApiResponse({ status: 200, type: GetQuestionResponseDto })
   getQuestion(@Param("id") id: number): Promise<GetQuestionResponseDto> {
@@ -61,6 +65,7 @@ export class QuestionController {
   }
 
   @Patch(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Update a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -80,6 +85,7 @@ export class QuestionController {
   }
 
   @Put(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Replace a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -99,6 +105,7 @@ export class QuestionController {
   }
 
   @Delete(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Delete a question" })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {

@@ -1,6 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, OmitType } from "@nestjs/swagger";
 import { Question } from "@prisma/client";
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { CreateUpdateAssignmentRequestDto } from "./create.update.assignment.request.dto";
 
 export class GetAssignmentResponseDto extends CreateUpdateAssignmentRequestDto {
@@ -15,8 +14,6 @@ export class GetAssignmentResponseDto extends CreateUpdateAssignmentRequestDto {
     type: Boolean,
     required: true,
   })
-  @IsNotEmpty()
-  @IsBoolean()
   success: boolean;
 
   @ApiProperty({
@@ -24,7 +21,10 @@ export class GetAssignmentResponseDto extends CreateUpdateAssignmentRequestDto {
     type: String,
     required: false,
   })
-  @IsOptional()
-  @IsString()
   error?: string;
 }
+
+export class LearnerGetAssignmentResponseDto extends OmitType(
+  GetAssignmentResponseDto,
+  ["questions", "displayOrder"] as const
+) {}

@@ -1,8 +1,12 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { UserRole } from "../../auth/interfaces/user.interface";
 import { PrismaService } from "../../prisma.service";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
-import { GetAssignmentResponseDto } from "./dto/get.assignment.response.dto";
+import {
+  GetAssignmentResponseDto,
+  LearnerGetAssignmentResponseDto,
+} from "./dto/get.assignment.response.dto";
 
 @Injectable()
 export class AssignmentService {
@@ -19,20 +23,34 @@ export class AssignmentService {
     };
   }
 
-  async findOne(id: number): Promise<GetAssignmentResponseDto> {
+  async findOne(
+    id: number,
+    userRole: UserRole
+  ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
+    const includeQuestions = userRole !== UserRole.LEARNER;
+
     const result = await this.prisma.assignment.findUnique({
       where: { id },
-      include: { questions: true },
+      include: { questions: includeQuestions },
     });
 
     if (!result) {
       throw new NotFoundException(`Assignment with ID ${id} not found.`);
     }
 
+    if (userRole === UserRole.LEARNER) {
+      delete result["displayOrder"];
+      return {
+        ...result,
+        success: true,
+      } as LearnerGetAssignmentResponseDto;
+    }
+
+    // In case of Admin or Author, you might want to include the displayOrder and questions
     return {
       ...result,
       success: true,
-    };
+    } as GetAssignmentResponseDto;
   }
 
   async replace(
