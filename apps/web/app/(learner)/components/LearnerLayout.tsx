@@ -1,7 +1,8 @@
 import React from "react";
 import IntroductionPage from "./IntroductionPage";
 import LongFormQuestion from "./LongFormQuestion";
-import MultipleChoiceQuestion from "./MultipleChoiceQuestion"; // Import the new component
+import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
+import Overview from "./Overview"; // Import the Overview component
 
 interface Props {}
 
@@ -18,20 +19,35 @@ function LearnerLayout(props: Props) {
   const points2 = 5;
   const correctOptions = ["Option 1", "Option 2"]
 
+  // Define the questions' statuses for the Overview component
+  const questions = [
+    { text: questionText1, status: 'unanswered' },
+    { text: questionText2, status: 'unanswered' },
+    // Add more questions as needed
+  ];
+
+  // Define the time limit for the Overview component (in seconds)
+  const timeLimit = 50 * 60; // 50 minutes
+
   return (
-    <div className="">
-      <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
-      <LongFormQuestion
-        questionText={questionText1}
-        instructions={instructions}
-        points={points1}
-      />
-      <MultipleChoiceQuestion // Add the new component
-        correctOptions={correctOptions}
-        questionText={questionText2}
-        options={options}
-        points={points2}
-      />
+    <div className="flex">
+      <div className="w-3/4">
+        <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
+        <LongFormQuestion
+          questionText={questionText1}
+          instructions={instructions}
+          points={points1}
+        />
+        <MultipleChoiceQuestion
+          correctOptions={correctOptions}
+          questionText={questionText2}
+          options={options}
+          points={points2}
+        />
+      </div>
+      <div className="w-1/4">
+        <Overview questions={questions} timeLimit={timeLimit} /> {/* Include the Overview component */}
+      </div>
     </div>
   );
 }
