@@ -123,20 +123,19 @@ function TextBox(props: Props) {
           </div>
         )}
       </div>
-      {(selectedQuestionType === QuestionType.SingleCorrect || selectedQuestionType === QuestionType.MultipleCorrect) && (
+      {selectedQuestionType === QuestionType.SingleCorrect || selectedQuestionType === QuestionType.MultipleCorrect ? (
         <div className="mt-4">
           <p>Options:</p>
           {options.map((option, index) => (
             <div key={index} className="flex items-center">
-              {selectedQuestionType === QuestionType.MultipleCorrect && (
+              {selectedQuestionType === QuestionType.MultipleCorrect ? (
                 <input
                   type="checkbox"
                   value={option}
                   checked={selectedOptions.includes(option)}
                   onChange={() => handleOptionToggle(option)}
                 />
-              )}
-              {selectedQuestionType === QuestionType.SingleCorrect && (
+              ) : (
                 <input
                   type="radio"
                   name="singleCorrectOption"
@@ -152,6 +151,16 @@ function TextBox(props: Props) {
                 value={option}
                 onChange={(event) => handleOptionChange(index, event.target.value)}
               />
+              <button
+                className="ml-2 text-red-600"
+                onClick={() => {
+                  const updatedOptions = [...options];
+                  updatedOptions.splice(index, 1);
+                  setOptions(updatedOptions);
+                }}
+              >
+                X
+              </button>
             </div>
           ))}
           <button
@@ -161,7 +170,7 @@ function TextBox(props: Props) {
             Add Option
           </button>
         </div>
-      )}
+      ) : null}
       {selectedQuestionType === QuestionType.WrittenQuestion && (
         <div className="mt-4">
           <p>Written Question:</p>
