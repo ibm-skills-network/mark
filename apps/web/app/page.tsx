@@ -18,7 +18,7 @@ import LearnerLayout from "./(learner)/components/LearnerLayout";
 
 export default function Home() {
   // const { role } = await getUser<User>();
-  const role = "author";
+  const role = "learner";
 
   return (
     <>
@@ -28,7 +28,7 @@ export default function Home() {
         <LearnerHeader attemptsAllowed={1} timeLimit={50} outOf={40} />
       )}
       <main className="flex flex-col items-center justify-between min-h-screen">
-        {role !== "author" ? (
+        {role === "author" ? (
           <AuthorLayout />
         ) : (
           <LearnerLayout>

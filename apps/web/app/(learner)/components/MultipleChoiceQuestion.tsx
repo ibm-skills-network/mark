@@ -39,12 +39,9 @@ function MultipleChoiceQuestion(props: Props) {
       onAnswerSelected(selectedOptions);
     }
   };
-
   return (
     <div className="p-8 bg-white rounded-lg shadow-md question-container">
-      <Title
-        text={`Question: Points out of ${points} (${(points / 40) * 100}%)`}
-      />
+      <Title text={`Question: Points out of ${points} (${(points / 40) * 100}%)`} />
       <InfoLine text={questionText} />
       <div className="mb-4">
         {options.map((option, index) => (
@@ -52,7 +49,11 @@ function MultipleChoiceQuestion(props: Props) {
             key={index}
             className={`block w-full text-left p-2 mb-2 border rounded ${
               selectedOptions.includes(option)
-                ? "bg-blue-100 text-black"
+                ? isCorrect === null
+                  ? "bg-blue-100 text-black"
+                  : correctOptions.includes(option)
+                  ? "bg-green-100 text-black"
+                  : "bg-red-100 text-black"
                 : "text-black"
             }`}
             onClick={() => handleOptionClick(option)}
@@ -63,10 +64,8 @@ function MultipleChoiceQuestion(props: Props) {
       </div>
       <Button text="Submit" onClick={handleSubmit} />
       {isCorrect !== null && (
-        <p className={`text-${isCorrect ? "green" : "red"}-600`}>
-          {isCorrect
-            ? "Correct! Well done."
-            : "Incorrect choice. Please try again."}
+          <p className={isCorrect ? "text-green-600" : "text-red-600"}>
+          {isCorrect ? "Correct! Well done." : "Incorrect choice. Please try again."}
         </p>
       )}
       <div className="flex justify-between mt-4">
@@ -74,7 +73,7 @@ function MultipleChoiceQuestion(props: Props) {
         <Button text="Next Question" />
       </div>
     </div>
-  );
+  );  
 }
 
 export default MultipleChoiceQuestion;

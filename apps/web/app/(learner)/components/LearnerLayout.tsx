@@ -16,6 +16,7 @@ function LearnerLayout(props: Props) {
   const questionText2 = "Choose the correct option.";
   const options = ["Option 1", "Option 2", "Option 3", "Option 4"];
   const points2 = 5;
+  const correctOptions = ["Option 1", "Option 2"]
 
   return (
     <div className="">
@@ -26,6 +27,7 @@ function LearnerLayout(props: Props) {
         points={points1}
       />
       <MultipleChoiceQuestion // Add the new component
+        correctOptions={correctOptions}
         questionText={questionText2}
         options={options}
         points={points2}
