@@ -76,6 +76,12 @@ function TextBox() {
     });
   };
 
+  const handleOptionChangeMultipleAnswers = (index: number, value: string) => {
+    const updatedOptions = [...optionsMultipleAnswers];
+    updatedOptions[index] = value;
+    setOptionsMultipleAnswers(updatedOptions);
+  };
+
   const handleWrittenQuestionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setWrittenQuestionText(event.target.value);
   };
