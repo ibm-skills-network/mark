@@ -7,23 +7,34 @@ import InfoLine from './InfoLine';
 interface Props {
   questionText: string;
   options: string[];
-  correctOption: string;
+  correctOption: string | string[]; // Allow for either a single string or an array of strings (for multiple correct)
   points: number;
-  onAnswerSelected?: (selectedOption: string) => void;
+  onAnswerSelected?: (selectedOption: string[]) => void; // Updated to accept an array
 }
 
 function MultipleChoiceQuestion(props: Props) {
   const { questionText, options, correctOption, points, onAnswerSelected } = props;
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
   const handleOptionClick = (option: string) => {
-    setSelectedOption(option);
-    const correct = option === correctOption;
+    const alreadySelected = selectedOptions.includes(option);
+    const newSelectedOptions = alreadySelected
+      ? selectedOptions.filter(opt => opt !== option) // Remove the option if already selected
+      : [...selectedOptions, option]; // Add the clicked option to the selected options array
+
+    setSelectedOptions(newSelectedOptions);
+  };
+
+  const handleSubmit = () => {
+    const correct = Array.isArray(correctOption)
+      ? selectedOptions.every(opt => correctOption.includes(opt)) && selectedOptions.length === correctOption.length
+      : selectedOptions.includes(correctOption);
+
     setIsCorrect(correct);
 
     if (onAnswerSelected) {
-      onAnswerSelected(option);
+      onAnswerSelected(selectedOptions);
     }
   };
 
@@ -35,16 +46,17 @@ function MultipleChoiceQuestion(props: Props) {
         {options.map((option, index) => (
           <button
             key={index}
-            className={`block w-full text-left p-2 mb-2 border rounded ${selectedOption === option ? (isCorrect ? 'bg-green-100 text-black' : 'bg-red-100 text-black') : 'text-black'}`}
+            className={`block w-full text-left p-2 mb-2 border rounded ${selectedOptions.includes(option) ? 'bg-blue-100 text-black' : 'text-black'}`}
             onClick={() => handleOptionClick(option)}
           >
             {option}
           </button>
         ))}
       </div>
-      {selectedOption && (
+      <Button text="Submit" onClick={handleSubmit} />
+      {isCorrect !== null && (
         <p className={`text-${isCorrect ? 'green' : 'red'}-600`}>
-          {isCorrect ? "Correct! In this scenario, the project manager is improving the communication between the script and production teams." : "Incorrect choice. Please try again."}
+          {isCorrect ? "Correct! Well done." : "Incorrect choice. Please try again."}
         </p>
       )}
       <div className="flex justify-between mt-4">
