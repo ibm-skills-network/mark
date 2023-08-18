@@ -1,5 +1,5 @@
 import React from "react";
-import TextBox from "./textbox";
+import TextBox from "./TextBox";
 
 interface Props {}
 

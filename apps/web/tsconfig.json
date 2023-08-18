@@ -5,7 +5,15 @@
       {
         "name": "next"
       }
-    ]
+    ],
+    "jsx": "preserve",
+    "paths": {
+      "@/*": ["./*"],
+      "@components/*": ["components/*"],
+      "@config/*": ["config/*"],
+      "@lib/*": ["lib/*"]
+    },
+    "baseUrl": "./"
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
