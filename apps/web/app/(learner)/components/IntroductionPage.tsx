@@ -1,7 +1,7 @@
-import React from 'react';
-import Title from './Title';
-import InfoLine from './InfoLine';
-import Button from './Button';
+import React from "react";
+import Button from "./Button";
+import InfoLine from "./InfoLine";
+import Title from "./Title";
 
 interface Props {
   attemptsAllowed?: number;

@@ -6,15 +6,12 @@
       "outputs": [".next/**", "!.next/cache/**"]
     },
     "lint": {},
-    "lint:staged": {},
+    "lint:fixall": {},
     "dev": {
       "cache": false
     },
     "test": {
       "outputs": ["coverage/**"],
-      "dependsOn": []
-    },
-    "test:staged": {
       "dependsOn": []
     }
   }

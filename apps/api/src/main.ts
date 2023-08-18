@@ -35,13 +35,13 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("api", app, document, {
-    customSiteTitle: "API Docs",
+    customSiteTitle: "Mark API Docs",
     customCss: ".swagger-ui .topbar .topbar-wrapper { display: none; }",
   });
 
   // Starts listening for shutdown hooks
   app.enableShutdownHooks();
 
-  await app.listen(3000);
+  await app.listen(4000);
 }
 void bootstrap();

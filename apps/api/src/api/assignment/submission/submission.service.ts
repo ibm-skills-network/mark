@@ -27,8 +27,7 @@ export class SubmissionService {
     // Get assignment's allotedTime to calculate expiry for the submission
     const assignment = await this.assignmentService.findOne(assignmentID);
 
-    // eslint-disable-next-line unicorn/no-null
-    let submissionExpiry = null;
+    let submissionExpiry: Date | undefined;
     if (assignment.allotedTime) {
       const currentDate = new Date();
       submissionExpiry = new Date(
@@ -41,8 +40,7 @@ export class SubmissionService {
         expiry: submissionExpiry,
         submitted: false,
         assignmentId: assignmentID,
-        // eslint-disable-next-line unicorn/no-null
-        grade: null,
+        grade: undefined,
       },
     });
 
