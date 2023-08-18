@@ -7,6 +7,7 @@ import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtGlobalAuthGuard } from "./auth/jwt/jwt.global.auth.guard";
+import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { winstonOptions } from "./logger/config";
 
 async function bootstrap() {
@@ -25,8 +26,13 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
-  app.useGlobalPipes(new ValidationPipe());
-  app.useGlobalGuards(app.select(AuthModule).get(JwtGlobalAuthGuard));
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })
+  );
+  app.useGlobalGuards(
+    app.select(AuthModule).get(JwtGlobalAuthGuard),
+    app.select(AuthModule).get(RolesGlobalGuard)
+  );
 
   // TODO(user): customize the title, description, etc.
   const config = new DocumentBuilder()

@@ -9,21 +9,29 @@ import {
   Patch,
   Post,
   Put,
+  Req,
 } from "@nestjs/common";
 import {
   ApiBody,
+  ApiExtraModels,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
+  refs,
 } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { UserRequest, UserRole } from "../../auth/interfaces/user.interface";
+import { Roles } from "../../auth/role/roles.global.guard";
 import { AssignmentService } from "./assignment.service";
 import { ASSIGNMENT_SCHEMA_URL } from "./constants";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
-import { GetAssignmentResponseDto } from "./dto/get.assignment.response.dto";
+import {
+  GetAssignmentResponseDto,
+  LearnerGetAssignmentResponseDto,
+} from "./dto/get.assignment.response.dto";
 
 @ApiTags(
   "Assignments (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
@@ -43,6 +51,7 @@ export class AssignmentController {
   }
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Create assignment" })
   @ApiBody({ type: CreateUpdateAssignmentRequestDto })
   @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
@@ -51,14 +60,28 @@ export class AssignmentController {
   }
 
   @Get(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR, UserRole.LEARNER)
   @ApiOperation({ summary: "Get assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiResponse({ status: 200, type: GetAssignmentResponseDto })
-  getAssignment(@Param("id") id: number): Promise<GetAssignmentResponseDto> {
-    return this.assignmentService.findOne(Number(id));
+  @ApiExtraModels(GetAssignmentResponseDto, LearnerGetAssignmentResponseDto)
+  @ApiResponse({
+    status: 200,
+    schema: {
+      anyOf: refs(GetAssignmentResponseDto, LearnerGetAssignmentResponseDto),
+    },
+    description:
+      "The response structure varies based on the role of the user requesting the assignment i.e. learner/author/admin (see schema).",
+  })
+  async getAssignment(
+    @Param("id") id: number,
+    @Req() request: UserRequest
+  ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
+    const userRole = request.user.role;
+    return this.assignmentService.findOne(Number(id), userRole);
   }
 
   @Patch(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Update assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
@@ -77,6 +100,7 @@ export class AssignmentController {
   }
 
   @Put(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Replace assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
@@ -95,6 +119,7 @@ export class AssignmentController {
   }
 
   @Delete(":id")
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
   @ApiOperation({ summary: "Delete assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
@@ -105,6 +130,7 @@ export class AssignmentController {
   }
 
   @Post(":id/clone")
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Clone an assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })

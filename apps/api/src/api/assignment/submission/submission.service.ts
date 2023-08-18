@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, QuestionType } from "@prisma/client";
+import { QuestionType } from "@prisma/client";
+import { UserRole } from "../../../auth/interfaces/user.interface";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
 import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.question.evaluate.model";
@@ -8,6 +9,10 @@ import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
 import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
 import { GetAssignmentSubmissionResponseDto } from "./dto/assignment-submission/get.assignment.submission.response.dto";
+import {
+  AdminUpdateAnswerSubmissionRequestDto,
+  LearnerUpdateAnswerSubmissionRequestDto,
+} from "./dto/assignment-submission/update.assignment.submission.request.dto";
 import { CreateQuestionResponseSubmissionRequestDto } from "./dto/question-response/create.question.response.submission.request.dto";
 import { CreateQuestionResponseSubmissionResponseDto } from "./dto/question-response/create.question.response.submission.response.dto";
 import { GradingHelper } from "./helper/grading.helper";
@@ -25,10 +30,13 @@ export class SubmissionService {
     assignmentID: number
   ): Promise<BaseAssignmentSubmissionResponseDto> {
     // Get assignment's allotedTime to calculate expiry for the submission
-    const assignment = await this.assignmentService.findOne(assignmentID);
+    const assignment = await this.assignmentService.findOne(
+      assignmentID,
+      UserRole.LEARNER
+    );
 
     // eslint-disable-next-line unicorn/no-null
-    let submissionExpiry = null;
+    let submissionExpiry: Date | null = null;
     if (assignment.allotedTime) {
       const currentDate = new Date();
       submissionExpiry = new Date(
@@ -44,6 +52,24 @@ export class SubmissionService {
         // eslint-disable-next-line unicorn/no-null
         grade: null,
       },
+    });
+
+    return {
+      id: result.id,
+      success: true,
+    };
+  }
+
+  async updateAssignmentSubmission(
+    assignmentSubmissionID: number,
+    assignmentID: number,
+    updateAssignmentSubmissionDto:
+      | LearnerUpdateAnswerSubmissionRequestDto
+      | AdminUpdateAnswerSubmissionRequestDto
+  ): Promise<BaseAssignmentSubmissionResponseDto> {
+    const result = await this.prisma.assignmentSubmission.update({
+      data: updateAssignmentSubmissionDto,
+      where: { id: assignmentSubmissionID },
     });
 
     return {

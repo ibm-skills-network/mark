@@ -5,6 +5,7 @@ import { JwtConfigService } from "./jwt/jwt.config.service";
 import { JwtGlobalAuthGuard } from "./jwt/jwt.global.auth.guard";
 import { JwtStrategy } from "./jwt/jwt.strategy";
 import { MockJwtAuthGuard } from "./jwt/mock.jwt.auth.guard";
+import { RolesGlobalGuard } from "./role/roles.global.guard";
 
 @Module({
   imports: [
@@ -25,6 +26,10 @@ import { MockJwtAuthGuard } from "./jwt/mock.jwt.auth.guard";
           : JwtGlobalAuthGuard,
     },
     JwtConfigService,
+    {
+      provide: RolesGlobalGuard,
+      useClass: RolesGlobalGuard,
+    },
   ],
 })
 export class AuthModule {}

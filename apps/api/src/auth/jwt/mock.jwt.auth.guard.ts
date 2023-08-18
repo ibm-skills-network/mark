@@ -24,7 +24,7 @@ export class MockJwtAuthGuard extends AuthGuard("jwt") {
     // Here you can modify the request object to include a temporary user. You can customize this part whenever testing locally.
     request.user = {
       username: "dev-user",
-      role: UserRole.AUTHOR,
+      role: UserRole.LEARNER,
       groupID: "test-group-id",
       assignmentID: 1,
     };
