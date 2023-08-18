@@ -17,6 +17,7 @@ function TextBox() {
   const [optionsMultipleAnswers, setOptionsMultipleAnswers] = useState<string[]>([]);
   const [selectedOptionsMultipleAnswers, setSelectedOptionsMultipleAnswers] = useState<string[]>([]);
   const [writtenQuestionText, setWrittenQuestionText] = useState('');
+  const [questions, setQuestions] = useState<Array<JSX.Element>>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

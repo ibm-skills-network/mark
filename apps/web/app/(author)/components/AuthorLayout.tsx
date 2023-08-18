@@ -1,16 +1,21 @@
-import React from "react";
-import TextBox from "./textBox";
+import DynamicTextBoxContainer from './DynamicTextBoxContainer';
+import TextBox from "./TextBox";
+
 
 interface Props {}
 
+
 function AuthorLayout(props: Props) {
-  const {} = props;
 
   return (
-    <div className="bg-white">
-      <TextBox />
+    <div className="bg-white flex flex-col min-h-screen">
+      <div className="flex-grow">
+        <TextBox />
+      </div>
+      <div className="mt-auto">
+        <DynamicTextBoxContainer />
+      </div>
     </div>
   );
 }
-
 export default AuthorLayout;
