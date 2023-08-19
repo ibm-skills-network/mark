@@ -8,8 +8,8 @@ export class AdminService {
   constructor(private jwtConfigService: JwtConfigService) {}
 
   createAdminToken(createTokenRequestDto: CreateTokenRequestDto) {
-    const { username, role, groupID } = createTokenRequestDto;
+    const { userID, role, groupID, assignmentID } = createTokenRequestDto;
     const { secret, signOptions } = this.jwtConfigService.jwtConstants;
-    return sign({ username, role, groupID }, secret, signOptions);
+    return sign({ userID, role, groupID, assignmentID }, secret, signOptions);
   }
 }

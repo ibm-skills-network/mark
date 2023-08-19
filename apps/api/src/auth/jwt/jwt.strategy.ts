@@ -33,7 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validate(payload: IJwtPayload): User {
     return {
-      username: payload.username,
+      userID: payload.userID,
       role: payload.role,
       groupID: payload.groupID,
       assignmentID: payload.assignmentID,

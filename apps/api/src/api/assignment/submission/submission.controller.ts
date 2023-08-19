@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
   Injectable,
@@ -9,6 +10,7 @@ import {
   Patch,
   Post,
   Req,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiBody,
@@ -29,16 +31,15 @@ import {
 import { Roles } from "../../../auth/role/roles.global.guard";
 import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
 import {
-  AdminCreateAnswerSubmissionRequestDto,
-  LearnerCreateAnswerSubmissionRequestDto,
-} from "./dto/assignment-submission/create.assignment.submission.request.dto copy";
+  AdminCreateUpdateAssignmentSubmissionRequestDto,
+  LearnerUpdateAssignmentSubmissionRequestDto,
+} from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
 import { GetAssignmentSubmissionResponseDto } from "./dto/assignment-submission/get.assignment.submission.response.dto";
-import {
-  AdminUpdateAnswerSubmissionRequestDto,
-  LearnerUpdateAnswerSubmissionRequestDto,
-} from "./dto/assignment-submission/update.assignment.submission.request.dto";
+import { UpdateAssignmentSubmissionResponseDto } from "./dto/assignment-submission/update.assignment.submission.response.dto";
 import { CreateQuestionResponseSubmissionRequestDto } from "./dto/question-response/create.question.response.submission.request.dto";
 import { CreateQuestionResponseSubmissionResponseDto } from "./dto/question-response/create.question.response.submission.response.dto";
+import { GetAssignmentSubmissionQuestionResponseDto } from "./dto/question/get.assignment.submission.questions.response.dto";
+import { AssignmentSubmissionAccessControlGuard } from "./guards/assignment.submission.access.control.guard";
 import { SubmissionService } from "./submission.service";
 
 @ApiTags(
@@ -58,71 +59,80 @@ export class SubmissionController {
     this.logger = parentLogger.child({ context: SubmissionController.name });
   }
 
-  //CRUD operations for assignment submissions responses
-
   @Post()
   @Roles(UserRole.LEARNER, UserRole.ADMIN)
-  @ApiOperation({ summary: "Create an assignment submission" })
-  @ApiBody({
-    schema: {
-      anyOf: refs(
-        LearnerCreateAnswerSubmissionRequestDto,
-        AdminCreateAnswerSubmissionRequestDto
-      ),
-    },
+  @UseGuards(AssignmentSubmissionAccessControlGuard)
+  @ApiOperation({
+    summary:
+      "Create an assignment submission (can accept a body only if the role is admin)",
   })
+  @ApiBody({ type: AdminCreateUpdateAssignmentSubmissionRequestDto })
   @ApiResponse({ status: 201, type: BaseAssignmentSubmissionResponseDto })
   createAssignmentSubmission(
-    @Param("assignmentId") assignmentId: number
+    @Param("assignmentId") assignmentId: number,
+    @Req() request: UserRequest,
+    @Body()
+    adminCreateUpdateAssignmentSubmissionRequestDto?: AdminCreateUpdateAssignmentSubmissionRequestDto
   ): Promise<BaseAssignmentSubmissionResponseDto> {
+    // if the user role is learner then dont accept any body
+    if (
+      request.user.role === UserRole.LEARNER &&
+      Object.keys(adminCreateUpdateAssignmentSubmissionRequestDto).length > 0
+    ) {
+      throw new ForbiddenException();
+    }
     return this.submissionService.createAssignmentSubmission(
-      Number(assignmentId)
+      Number(assignmentId),
+      request.user,
+      adminCreateUpdateAssignmentSubmissionRequestDto
     );
   }
 
-  @Get(":id")
+  @Get(":submissionId")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR, UserRole.ADMIN)
+  @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({ summary: "Get an assignment submission" })
   @ApiResponse({ status: 200, type: GetAssignmentSubmissionResponseDto })
   getAssignmentSubmission(
-    @Param("id") assignmentSubmissionID: number
+    @Param("submissionId") assignmentSubmissionID: number
   ): Promise<GetAssignmentSubmissionResponseDto> {
     return this.submissionService.getAssignmentSubmission(
       Number(assignmentSubmissionID)
     );
   }
 
-  @Patch(":id")
+  @Patch(":submissionId")
   @Roles(UserRole.LEARNER, UserRole.ADMIN)
+  @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({ summary: "Update an assignment submission" })
   @ApiExtraModels(
-    LearnerUpdateAnswerSubmissionRequestDto,
-    AdminUpdateAnswerSubmissionRequestDto
+    LearnerUpdateAssignmentSubmissionRequestDto,
+    AdminCreateUpdateAssignmentSubmissionRequestDto
   )
   @ApiBody({
     schema: {
       anyOf: refs(
-        LearnerUpdateAnswerSubmissionRequestDto,
-        AdminUpdateAnswerSubmissionRequestDto
+        LearnerUpdateAssignmentSubmissionRequestDto,
+        AdminCreateUpdateAssignmentSubmissionRequestDto
       ),
     },
   })
   @ApiResponse({ status: 201, type: BaseAssignmentSubmissionResponseDto })
   async updateAssignmentSubmission(
-    @Param("id") assignmentSubmissionID: number,
+    @Param("submissionId") assignmentSubmissionID: number,
     @Param("assignmentId") assignmentId: number,
     @Body()
     updateAssignmentSubmissionDto:
-      | LearnerUpdateAnswerSubmissionRequestDto
-      | AdminUpdateAnswerSubmissionRequestDto,
+      | LearnerUpdateAssignmentSubmissionRequestDto
+      | AdminCreateUpdateAssignmentSubmissionRequestDto,
     @Req() request: UserRequest
-  ): Promise<BaseAssignmentSubmissionResponseDto> {
+  ): Promise<UpdateAssignmentSubmissionResponseDto> {
     const userRole = request.user.role;
 
     if (userRole === UserRole.LEARNER) {
       // Validate against Learner DTO
       const learnerUpdateSubmissionDto = plainToInstance(
-        LearnerUpdateAnswerSubmissionRequestDto,
+        LearnerUpdateAssignmentSubmissionRequestDto,
         updateAssignmentSubmissionDto
       );
       await this.validateDto(learnerUpdateSubmissionDto);
@@ -130,6 +140,7 @@ export class SubmissionController {
       return this.submissionService.updateAssignmentSubmission(
         Number(assignmentSubmissionID),
         Number(assignmentId),
+        userRole,
         learnerUpdateSubmissionDto
       );
     }
@@ -137,7 +148,7 @@ export class SubmissionController {
     if (userRole === UserRole.ADMIN) {
       // Validate against Admin DTO
       const adminUpdateSubmissionDto = plainToInstance(
-        AdminUpdateAnswerSubmissionRequestDto,
+        AdminCreateUpdateAssignmentSubmissionRequestDto,
         updateAssignmentSubmissionDto
       );
       await this.validateDto(adminUpdateSubmissionDto);
@@ -145,15 +156,31 @@ export class SubmissionController {
       return this.submissionService.updateAssignmentSubmission(
         Number(assignmentSubmissionID),
         Number(assignmentId),
+        userRole,
         adminUpdateSubmissionDto
       );
     }
   }
 
-  //CRUD operations for question responses
+  @Get(":submissionId/questions/")
+  @Roles(UserRole.LEARNER, UserRole.ADMIN)
+  @UseGuards(AssignmentSubmissionAccessControlGuard)
+  @ApiOperation({ summary: "Get questions for an assignment submission." })
+  @ApiResponse({
+    status: 200,
+    type: [GetAssignmentSubmissionQuestionResponseDto],
+  })
+  getAssignmentSubmissionQuestions(
+    @Param("assignmentId") assignmentID: number
+  ): Promise<GetAssignmentSubmissionQuestionResponseDto[]> {
+    return this.submissionService.getAssignmentSubmissionQuestions(
+      Number(assignmentID)
+    );
+  }
 
   @Post(":submissionId/questions/:questionId/responses")
   @Roles(UserRole.LEARNER, UserRole.ADMIN)
+  @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({
     summary: "Create a question response for a question in an assignment",
   })

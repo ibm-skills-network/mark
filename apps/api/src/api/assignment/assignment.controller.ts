@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Req,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiBody,
@@ -32,6 +33,7 @@ import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
+import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 
 @ApiTags(
   "Assignments (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
@@ -55,12 +57,15 @@ export class AssignmentController {
   @ApiOperation({ summary: "Create assignment" })
   @ApiBody({ type: CreateUpdateAssignmentRequestDto })
   @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
-  createAssignment(): Promise<BaseAssignmentResponseDto> {
-    return this.assignmentService.create();
+  createAssignment(
+    @Req() request: UserRequest
+  ): Promise<BaseAssignmentResponseDto> {
+    return this.assignmentService.create(request.user);
   }
 
   @Get(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR, UserRole.LEARNER)
+  @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Get assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiExtraModels(GetAssignmentResponseDto, LearnerGetAssignmentResponseDto)
@@ -76,12 +81,12 @@ export class AssignmentController {
     @Param("id") id: number,
     @Req() request: UserRequest
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    const userRole = request.user.role;
-    return this.assignmentService.findOne(Number(id), userRole);
+    return this.assignmentService.findOne(Number(id), request.user);
   }
 
   @Patch(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Update assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
@@ -101,6 +106,7 @@ export class AssignmentController {
 
   @Put(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Replace assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
@@ -120,6 +126,7 @@ export class AssignmentController {
 
   @Delete(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Delete assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
@@ -134,7 +141,10 @@ export class AssignmentController {
   @ApiOperation({ summary: "Clone an assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
-  cloneAssignment(@Param("id") id: number): Promise<BaseAssignmentResponseDto> {
-    return this.assignmentService.clone(Number(id));
+  cloneAssignment(
+    @Param("id") id: number,
+    @Req() request: UserRequest
+  ): Promise<BaseAssignmentResponseDto> {
+    return this.assignmentService.clone(Number(id), request.user);
   }
 }

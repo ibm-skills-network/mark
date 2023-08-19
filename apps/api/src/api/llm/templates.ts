@@ -34,3 +34,20 @@ Remember that your feedback should be constructive, aimed to guide the learner i
 
 {format_instructions}
 `;
+
+export const feedbackTrueFalseBasedQuestionLlmTemplate = `As an experienced grader with over a decade of expertise, your task is to provide constructive feedback on a true false choice-based question.
+
+The question is "{exercise_question}". 
+
+The learner selected this choice: {learner_choice}.
+
+The correct answer is: {answer}.
+
+Based on this information, assess the learner's choice and provide feedback:
+
+Your analysis should guide the learner in understanding their selection, whether it was correct or incorrect, and what they could potentially learn from it.
+
+Remember that your feedback should be constructive, aimed to guide the learner in understanding their mistakes and learning from them. The ultimate objective is to support the learner in making better choices in future attempts. Use a first person perspective as if you are speaking to the learner directly as a grader.
+
+{format_instructions}
+`;

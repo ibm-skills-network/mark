@@ -11,6 +11,19 @@ CREATE TYPE "QuestionType" AS ENUM ('TEXT', 'SINGLE_CORRECT', 'MULTIPLE_CORRECT'
 CREATE TYPE "ScoringType" AS ENUM ('SINGLE_CRITERIA', 'MULTIPLE_CRITERIA', 'LOSS_PER_MISTAKE', 'AI_GRADED');
 
 -- CreateTable
+CREATE TABLE "Group" (
+    "id" TEXT NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "AssignmentGroup" (
+    "assignmentId" INTEGER NOT NULL,
+    "groupId" TEXT NOT NULL,
+
+    CONSTRAINT "AssignmentGroup_pkey" PRIMARY KEY ("assignmentId","groupId")
+);
+
+-- CreateTable
 CREATE TABLE "Assignment" (
     "id" SERIAL NOT NULL,
     "name" TEXT,
@@ -42,6 +55,7 @@ CREATE TABLE "Question" (
 CREATE TABLE "AssignmentSubmission" (
     "id" SERIAL NOT NULL,
     "assignmentId" INTEGER NOT NULL,
+    "userId" TEXT NOT NULL,
     "submitted" BOOLEAN NOT NULL,
     "grade" DOUBLE PRECISION,
     "expiry" TIMESTAMP(3),
@@ -60,6 +74,15 @@ CREATE TABLE "QuestionResponse" (
 
     CONSTRAINT "QuestionResponse_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Group_id_key" ON "Group"("id");
+
+-- AddForeignKey
+ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Question" ADD CONSTRAINT "Question_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

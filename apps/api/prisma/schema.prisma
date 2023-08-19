@@ -54,6 +54,30 @@ enum ScoringType {
   AI_GRADED
 }
 
+// The Group model represents a particular group of users (having the same groupID)
+// id: Unique identifier for the group
+// name: Name of the group
+// assignments: The list of assignments associated with this group
+model Group {
+  id          String         @unique
+  assignments AssignmentGroup[]
+}
+
+// The AssignmentGroup model represents the many-to-many relationship
+// between Assignments and Groups
+// id: Unique identifier for the relationship
+// assignmentId: The ID of the associated assignment
+// groupId: The ID of the associated group
+// assignment: The associated Assignment model
+// group: The associated Group model
+model AssignmentGroup {
+  assignment       Assignment     @relation(fields: [assignmentId], references: [id])
+  assignmentId     Int
+  group            Group @relation(fields: [groupId], references: [id])
+  groupId          String
+  @@id([assignmentId, groupId])
+}
+
 // The Assignment model represents a particular assignment
 // id: Unique identifier for the assignment
 // name: Name of the assignment
@@ -64,14 +88,15 @@ enum ScoringType {
 // displayOrder: The order in which the assignment is displayed
 // questions: The list of questions in the assignment
 model Assignment {
-  id            Int                  @id @default(autoincrement())
-  name          String?
-  type          AssignmentType?
-  numAttempts   Int?
-  allotedTime   Int?
-  passingGrade  Int?
-  displayOrder  AssignmentDisplayOrder?
-  questions     Question[]
+  id              Int                     @id @default(autoincrement())
+  name            String?
+  type            AssignmentType?
+  numAttempts     Int?
+  allotedTime     Int?
+  passingGrade    Int?
+  displayOrder    AssignmentDisplayOrder?
+  questions       Question[]
+  groups          AssignmentGroup[]
 }
 
 // The Question model represents a question in an assignment
@@ -86,7 +111,7 @@ model Assignment {
 // assignmentId: The ID of the assignment to which the question belongs
 // assignment: The assignment to which the question belongs
 model Question {
-  id           Int         @id @default(autoincrement())
+  id           Int          @id @default(autoincrement())
   totalPoints  Int
   numRetries   Int
   type         QuestionType
@@ -95,9 +120,8 @@ model Question {
   choices      Json?
   answer       Boolean?
   assignmentId Int
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  assignment   Assignment   @relation(fields: [assignmentId], references: [id])
 }
-
 
 // This model represents an assignment submission by a learner
 // id: Unique identifier for the assignment submission
@@ -105,14 +129,16 @@ model Question {
 // questionResponses: The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
 // submitted: Boolean value representing if the submission is submitted by the learner or not
 // grade: The overall LTI grade value (from 0.0 - 1.0) that the learner earned 
+// userId: The id of the user who created this submission
 // expiry: The DateTime at which the submission window ends (can no longer submit it)
 model AssignmentSubmission {
-  id                 Int                                    @id @default(autoincrement())
-  assignmentId       Int
-  questionResponses  QuestionResponse[]
-  submitted          Boolean
-  grade              Float?
-  expiry             DateTime?              
+  id                Int                @id @default(autoincrement())
+  assignmentId      Int
+  userId            String
+  questionResponses QuestionResponse[]
+  submitted         Boolean
+  grade             Float?
+  expiry            DateTime?
 }
 
 // This model represents a student's response to a question
@@ -124,9 +150,9 @@ model AssignmentSubmission {
 // points: The points earned by the student for this response
 // feedback: Feedback on the student's response, stored as JSON
 model QuestionResponse {
-  id                     Int                                @id @default(autoincrement())
+  id                     Int                  @id @default(autoincrement())
   assignmentSubmissionId Int
-  assignmentSubmission   AssignmentSubmission               @relation(fields: [assignmentSubmissionId], references: [id])
+  assignmentSubmission   AssignmentSubmission @relation(fields: [assignmentSubmissionId], references: [id])
   questionId             Int
   learnerResponse        String
   points                 Int

@@ -1,5 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
+  Equals,
   IsBoolean,
   IsDate,
   IsDefined,
@@ -7,22 +8,15 @@ import {
   IsOptional,
 } from "class-validator";
 
-export class AdminCreateAnswerSubmissionRequestDto {
-  @ApiProperty({
-    description: "The ID of the assignment that this submission corresponds to",
-    example: 2,
-  })
-  @IsNumber()
-  @IsDefined()
-  assignmentId: number;
-
+export class AdminCreateUpdateAssignmentSubmissionRequestDto {
   @ApiProperty({
     description: "Represents if the learner has submitted this or not",
     type: Boolean,
     example: false,
+    required: false,
   })
   @IsBoolean()
-  @IsDefined()
+  @IsOptional()
   submitted: boolean;
 
   @ApiProperty({
@@ -39,20 +33,23 @@ export class AdminCreateAnswerSubmissionRequestDto {
   @ApiProperty({
     description:
       "The DateTime at which the submission window ends (can no longer submit it)",
-    type: Boolean,
+    type: Date,
     example: false,
+    required: false,
   })
   @IsDate()
   @IsOptional()
   expiry: Date | null;
 }
 
-export class LearnerCreateAnswerSubmissionRequestDto {
+export class LearnerUpdateAssignmentSubmissionRequestDto {
   @ApiProperty({
-    description: "The ID of the assignment that this submission corresponds to",
-    example: 2,
+    description: "Represents if the learner has submitted this or not",
+    type: Boolean,
+    example: true,
   })
-  @IsNumber()
+  @IsBoolean()
   @IsDefined()
-  assignmentId: number;
+  @Equals(true, { message: "submitted must be true" })
+  submitted: boolean;
 }

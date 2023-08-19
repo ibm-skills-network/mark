@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { UserRole } from "../../auth/interfaces/user.interface";
+import { User, UserRole } from "../../auth/interfaces/user.interface";
 import { PrismaService } from "../../prisma.service";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
@@ -12,22 +12,42 @@ import {
 export class AssignmentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(): Promise<BaseAssignmentResponseDto> {
-    const result = await this.prisma.assignment.create({
-      data: {},
+  async create(user: User): Promise<BaseAssignmentResponseDto> {
+    // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupID
+    // or by creating a new Group with that groupID
+    const assignment = await this.prisma.assignment.create({
+      data: {
+        groups: {
+          create: [
+            {
+              group: {
+                connectOrCreate: {
+                  where: {
+                    id: user.groupID,
+                  },
+                  create: {
+                    id: user.groupID,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
     });
 
+    // Return the response
     return {
-      id: result.id,
+      id: assignment.id,
       success: true,
     };
   }
 
   async findOne(
     id: number,
-    userRole: UserRole
+    user: User
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    const includeQuestions = userRole !== UserRole.LEARNER;
+    const includeQuestions = user.role !== UserRole.LEARNER;
 
     const result = await this.prisma.assignment.findUnique({
       where: { id },
@@ -38,7 +58,7 @@ export class AssignmentService {
       throw new NotFoundException(`Assignment with ID ${id} not found.`);
     }
 
-    if (userRole === UserRole.LEARNER) {
+    if (user.role === UserRole.LEARNER) {
       delete result["displayOrder"];
       return {
         ...result,
@@ -97,7 +117,7 @@ export class AssignmentService {
     };
   }
 
-  async clone(id: number): Promise<BaseAssignmentResponseDto> {
+  async clone(id: number, user: User): Promise<BaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: id },
       include: { questions: true },
@@ -123,12 +143,28 @@ export class AssignmentService {
           })),
         },
       },
+      groups: {
+        create: [
+          {
+            group: {
+              connectOrCreate: {
+                where: {
+                  id: user.groupID,
+                },
+                create: {
+                  id: user.groupID,
+                },
+              },
+            },
+          },
+        ],
+      },
     };
 
     // Create new assignment and questions in a single transaction
     const newAssignment = await this.prisma.assignment.create({
       data: newAssignmentData,
-      include: { questions: true },
+      include: { questions: true, groups: true },
     });
 
     return {
@@ -137,7 +173,10 @@ export class AssignmentService {
     };
   }
 
+  // private methods
+
   private createEmptyDto(): CreateUpdateAssignmentRequestDto {
+    // Not including groupID as that should remain same to reflect correct ownership
     /* eslint-disable unicorn/no-null */
     return {
       name: null,

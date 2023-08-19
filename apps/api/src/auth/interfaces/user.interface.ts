@@ -1,3 +1,5 @@
+import { Request } from "express";
+
 export enum UserRole {
   ADMIN = "admin",
   LEARNER = "learner",
@@ -5,7 +7,7 @@ export enum UserRole {
 }
 
 export interface ClientUser {
-  username: string;
+  userID: string;
   role: UserRole;
   assignmentID: number;
 }

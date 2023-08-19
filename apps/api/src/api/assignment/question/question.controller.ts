@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Put,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -19,6 +20,7 @@ import { ASSIGNMENT_SCHEMA_URL } from "../constants";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
+import { AssignmentQuestionAccessControlGuard } from "./guards/assignment.question.access.control.guard";
 import { QuestionService } from "./question.service";
 
 @ApiTags(
@@ -40,6 +42,7 @@ export class QuestionController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Create a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -58,6 +61,7 @@ export class QuestionController {
 
   @Get(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Get a question" })
   @ApiResponse({ status: 200, type: GetQuestionResponseDto })
   getQuestion(@Param("id") id: number): Promise<GetQuestionResponseDto> {
@@ -66,6 +70,7 @@ export class QuestionController {
 
   @Patch(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Update a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -86,6 +91,7 @@ export class QuestionController {
 
   @Put(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Replace a question" })
   @ApiBody({
     type: CreateUpdateQuestionRequestDto,
@@ -106,6 +112,7 @@ export class QuestionController {
 
   @Delete(":id")
   @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Delete a question" })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {

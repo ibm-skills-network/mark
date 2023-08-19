@@ -14,8 +14,14 @@ import {
 } from "./model/choice.based.question.response.model";
 import { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
 import { TextBasedQuestionResponseModel } from "./model/text.based.question.response.model";
+import { TrueFalseBasedQuestionEvaluateModel } from "./model/true.false.based.question.evaluate.model";
+import {
+  TrueFalseBasedQuestionResponseModel,
+  TrueFalseChoiceBasedFeedback,
+} from "./model/true.false.based.question.response.model";
 import {
   feedbackChoiceBasedQuestionLlmTemplate,
+  feedbackTrueFalseBasedQuestionLlmTemplate,
   gradeTextBasedQuestionLlmTemplate,
 } from "./templates";
 
@@ -39,6 +45,60 @@ export class LlmService {
     return (
       guardRailsResponse !==
       "Text was found that violates OpenAI's content policy."
+    );
+  }
+  async gradeTrueFalseBasedQuestion(
+    trueFalseBasedQuestionEvaluateModel: TrueFalseBasedQuestionEvaluateModel
+  ): Promise<TrueFalseBasedQuestionResponseModel> {
+    const { question, answer, learnerChoice, totalPoints } =
+      trueFalseBasedQuestionEvaluateModel;
+
+    let pointsEarned = 0;
+
+    if (learnerChoice === answer) {
+      pointsEarned = totalPoints;
+    }
+
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.array(
+        z
+          .object({
+            choice: z
+              .boolean()
+              .describe(
+                "The choice selected by the learner (can be either true or false)"
+              ),
+            feedback: z
+              .string()
+              .describe("Feedback provided for the learner's choice"),
+          })
+          .describe("Feedback for each choice made by the learner")
+      )
+    );
+
+    const formatInstructions = parser.getFormatInstructions();
+
+    const prompt = new PromptTemplate({
+      template: feedbackTrueFalseBasedQuestionLlmTemplate,
+      inputVariables: [],
+      partialVariables: {
+        exercise_question: question,
+        learner_choice: JSON.stringify(learnerChoice),
+        answer: JSON.stringify(answer),
+        format_instructions: formatInstructions,
+      },
+    });
+
+    const input = await prompt.format({});
+    const response = await this.llm.call(input);
+
+    const trueFalseChoiceBasedFeedback = (await parser.parse(
+      response
+    )) as TrueFalseChoiceBasedFeedback[];
+
+    return new TrueFalseBasedQuestionResponseModel(
+      pointsEarned,
+      trueFalseChoiceBasedFeedback
     );
   }
 

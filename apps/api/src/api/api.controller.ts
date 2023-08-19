@@ -21,6 +21,7 @@ export class ApiController {
     const filePath = path.join(
       __dirname,
       "..",
+      "..",
       "assets",
       "schema",
       "assignment-example.json"
@@ -35,7 +36,7 @@ export class ApiController {
   getUser(@Req() request: UserRequest): ClientUser {
     const user = request.user;
     return {
-      username: user.username,
+      userID: user.userID,
       role: user.role,
       assignmentID: user.assignmentID,
     };
