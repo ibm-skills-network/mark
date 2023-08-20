@@ -18,12 +18,15 @@ import {
   AdminCreateUpdateAssignmentSubmissionRequestDto,
   LearnerUpdateAssignmentSubmissionRequestDto,
 } from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
-import { GetAssignmentSubmissionResponseDto } from "./dto/assignment-submission/get.assignment.submission.response.dto";
+import {
+  AssignmentSubmissionResponseDto,
+  GetAssignmentSubmissionResponseDto,
+} from "./dto/assignment-submission/get.assignment.submission.response.dto";
 import { UpdateAssignmentSubmissionResponseDto } from "./dto/assignment-submission/update.assignment.submission.response.dto";
 import { CreateQuestionResponseSubmissionRequestDto } from "./dto/question-response/create.question.response.submission.request.dto";
 import { CreateQuestionResponseSubmissionResponseDto } from "./dto/question-response/create.question.response.submission.response.dto";
 import { GetAssignmentSubmissionQuestionResponseDto } from "./dto/question/get.assignment.submission.questions.response.dto";
-import { GradingHelper } from "./helper/grading.helper";
+import { SubmissionHelper } from "./helper/submission.helper";
 
 @Injectable()
 export class SubmissionService {
@@ -33,6 +36,38 @@ export class SubmissionService {
     private readonly questionService: QuestionService,
     private readonly assignmentService: AssignmentService
   ) {}
+
+  async listAssignmentSubmissions(
+    assignmentID: number,
+    user: User
+  ): Promise<AssignmentSubmissionResponseDto[]> {
+    // list all assignment submissions if admin
+    let results: AssignmentSubmissionResponseDto[];
+    if (user.role === UserRole.ADMIN) {
+      results = await this.prisma.assignmentSubmission.findMany({
+        where: { assignmentId: assignmentID },
+      });
+    } else if (user.role === UserRole.AUTHOR) {
+      // Check if the provided assignmentID is associated with that groupId
+      const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
+        where: {
+          groupId: user.groupID,
+          assignmentId: assignmentID,
+        },
+      });
+
+      results = assignmentGroup
+        ? await this.prisma.assignmentSubmission.findMany({
+            where: { assignmentId: assignmentID },
+          })
+        : [];
+    } else {
+      results = await this.prisma.assignmentSubmission.findMany({
+        where: { assignmentId: assignmentID, userId: user.userID },
+      });
+    }
+    return results;
+  }
 
   async createAssignmentSubmission(
     assignmentID: number,
@@ -90,7 +125,6 @@ export class SubmissionService {
 
     return {
       id: result.id,
-      success: true,
     };
   }
 
@@ -112,7 +146,6 @@ export class SubmissionService {
         id: result.id,
         grade: result.grade,
         submitted: result.submitted,
-        success: true,
       };
     }
 
@@ -190,7 +223,6 @@ export class SubmissionService {
       id: result.id,
       grade: result.grade,
       submitted: result.submitted,
-      success: true,
     };
   }
 
@@ -208,10 +240,7 @@ export class SubmissionService {
       );
     }
 
-    return {
-      ...result,
-      success: true,
-    };
+    return result;
   }
 
   async getAssignmentSubmissionQuestions(
@@ -232,12 +261,6 @@ export class SubmissionService {
       success: true,
     }));
   }
-
-  // async listAssignmentSubmissions(userRole:UserRole): Promise<GetAssignmentSubmissionResponseDto>{
-  //   if(userRole===UserRole.ADMIN){
-
-  //   }
-  // }
 
   async createQuestionResponse(
     assignmentSubmissionID: number,
@@ -268,15 +291,14 @@ export class SubmissionService {
       question.type === QuestionType.UPLOAD ||
       question.type === QuestionType.URL
     ) {
-      if (!createQuestionResponseSubmissionRequestDto.learnerResponse) {
-        throw new BadRequestException(
-          "Expected a text-based response (learnerResponse), but did not receive one."
-        );
-      }
+      learnerResponse = await SubmissionHelper.validateAndGetTextResponse(
+        question.type,
+        createQuestionResponseSubmissionRequestDto
+      );
 
       const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
         question.question,
-        createQuestionResponseSubmissionRequestDto.learnerResponse,
+        learnerResponse as string,
         question.totalPoints,
         question.scoring?.type ?? "",
         question.scoring?.criteria ?? {}
@@ -292,10 +314,8 @@ export class SubmissionService {
         0
       );
       responseDto.feedback = models.map((element) =>
-        GradingHelper.toTextBasedFeedbackDto(element)
+        SubmissionHelper.toTextBasedFeedbackDto(element)
       );
-      learnerResponse =
-        createQuestionResponseSubmissionRequestDto.learnerResponse;
     }
 
     // Grade True False Questions
@@ -368,7 +388,6 @@ export class SubmissionService {
     });
 
     responseDto.id = result.id;
-    responseDto.success = true;
     return responseDto;
   }
 

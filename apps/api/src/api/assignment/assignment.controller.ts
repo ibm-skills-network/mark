@@ -27,9 +27,11 @@ import { UserRequest, UserRole } from "../../auth/interfaces/user.interface";
 import { Roles } from "../../auth/role/roles.global.guard";
 import { AssignmentService } from "./assignment.service";
 import { ASSIGNMENT_SCHEMA_URL } from "./constants";
+import { AddAssignmentToGroupResponseDto } from "./dto/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
 import {
+  AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
@@ -82,6 +84,21 @@ export class AssignmentController {
     @Req() request: UserRequest
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     return this.assignmentService.findOne(Number(id), request.user);
+  }
+
+  @Get()
+  @Roles(UserRole.ADMIN, UserRole.AUTHOR, UserRole.LEARNER)
+  @ApiOperation({ summary: "List Assignments" })
+  @ApiResponse({
+    status: 200,
+    type: [AssignmentResponseDto],
+    description:
+      "List assignments scoped to the user's role (doest include questions to avoid potentially large queries).",
+  })
+  async listAssignments(
+    @Req() request: UserRequest
+  ): Promise<AssignmentResponseDto[]> {
+    return this.assignmentService.list(request.user);
   }
 
   @Patch(":id")
@@ -146,5 +163,20 @@ export class AssignmentController {
     @Req() request: UserRequest
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.clone(Number(id), request.user);
+  }
+
+  @Post(":id/groups/:groupId")
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "Associate an assignment with a group" })
+  @ApiParam({ name: "id", required: true })
+  @ApiResponse({ status: 200, type: AddAssignmentToGroupResponseDto })
+  addAssignmentToGroup(
+    @Param("id") assignmentID: number,
+    @Param("groupId") groupID: string
+  ): Promise<AddAssignmentToGroupResponseDto> {
+    return this.assignmentService.addAssignmentToGroup(
+      Number(assignmentID),
+      groupID
+    );
   }
 }

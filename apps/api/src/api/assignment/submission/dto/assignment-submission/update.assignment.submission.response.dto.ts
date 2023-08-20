@@ -1,7 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { BaseResponseDto } from "../base.response.dto";
 
-export class UpdateAssignmentSubmissionResponseDto extends BaseResponseDto {
+export class UpdateAssignmentSubmissionResponseDto {
   @ApiProperty({
     description: "The unique ID of the AssignmentSubmission",
     type: Number,

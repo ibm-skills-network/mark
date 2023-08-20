@@ -10,8 +10,11 @@ import {
   Patch,
   Post,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiBody,
   ApiExtraModels,
@@ -34,7 +37,10 @@ import {
   AdminCreateUpdateAssignmentSubmissionRequestDto,
   LearnerUpdateAssignmentSubmissionRequestDto,
 } from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
-import { GetAssignmentSubmissionResponseDto } from "./dto/assignment-submission/get.assignment.submission.response.dto";
+import {
+  AssignmentSubmissionResponseDto,
+  GetAssignmentSubmissionResponseDto,
+} from "./dto/assignment-submission/get.assignment.submission.response.dto";
 import { UpdateAssignmentSubmissionResponseDto } from "./dto/assignment-submission/update.assignment.submission.response.dto";
 import { CreateQuestionResponseSubmissionRequestDto } from "./dto/question-response/create.question.response.submission.request.dto";
 import { CreateQuestionResponseSubmissionResponseDto } from "./dto/question-response/create.question.response.submission.response.dto";
@@ -64,7 +70,7 @@ export class SubmissionController {
   @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({
     summary:
-      "Create an assignment submission (can accept a body only if the role is admin)",
+      "Create an assignment submission for an assignment (can accept a body only if the role is admin)",
   })
   @ApiBody({ type: AdminCreateUpdateAssignmentSubmissionRequestDto })
   @ApiResponse({ status: 201, type: BaseAssignmentSubmissionResponseDto })
@@ -88,10 +94,25 @@ export class SubmissionController {
     );
   }
 
+  @Get()
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR, UserRole.ADMIN)
+  @UseGuards(AssignmentSubmissionAccessControlGuard)
+  @ApiOperation({ summary: "List assignment submissions for an assignment." })
+  @ApiResponse({ status: 200, type: [AssignmentSubmissionResponseDto] })
+  listAssignmentSubmissions(
+    @Param("assignmentId") assignmentId: number,
+    @Req() request: UserRequest
+  ): Promise<AssignmentSubmissionResponseDto[]> {
+    return this.submissionService.listAssignmentSubmissions(
+      Number(assignmentId),
+      request.user
+    );
+  }
+
   @Get(":submissionId")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
-  @ApiOperation({ summary: "Get an assignment submission" })
+  @ApiOperation({ summary: "Get an assignment submission for an assignment." })
   @ApiResponse({ status: 200, type: GetAssignmentSubmissionResponseDto })
   getAssignmentSubmission(
     @Param("submissionId") assignmentSubmissionID: number
@@ -104,7 +125,9 @@ export class SubmissionController {
   @Patch(":submissionId")
   @Roles(UserRole.LEARNER, UserRole.ADMIN)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
-  @ApiOperation({ summary: "Update an assignment submission" })
+  @ApiOperation({
+    summary: "Update an assignment submission for an assignment.",
+  })
   @ApiExtraModels(
     LearnerUpdateAssignmentSubmissionRequestDto,
     AdminCreateUpdateAssignmentSubmissionRequestDto
@@ -181,8 +204,9 @@ export class SubmissionController {
   @Post(":submissionId/questions/:questionId/responses")
   @Roles(UserRole.LEARNER, UserRole.ADMIN)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
+  @UseInterceptors(FileInterceptor("learnerFileResponse"))
   @ApiOperation({
-    summary: "Create a question response for a question in an assignment",
+    summary: "Create a question response for a question in an assignment.",
   })
   @ApiBody({ type: CreateQuestionResponseSubmissionRequestDto })
   @ApiResponse({
@@ -193,9 +217,13 @@ export class SubmissionController {
     @Param("assignmentId") assignmentID: number,
     @Param("submissionId") assignmentSubmissionID: number,
     @Param("questionId") questionID: number,
+    @UploadedFile() file: Express.Multer.File,
     @Body()
     createQuestionResponseSubmissionRequestDto: CreateQuestionResponseSubmissionRequestDto
   ): Promise<CreateQuestionResponseSubmissionResponseDto> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    createQuestionResponseSubmissionRequestDto.learnerFileResponse = file;
+
     return this.submissionService.createQuestionResponse(
       Number(assignmentSubmissionID),
       Number(questionID),

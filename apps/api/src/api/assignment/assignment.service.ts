@@ -1,9 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { User, UserRole } from "../../auth/interfaces/user.interface";
 import { PrismaService } from "../../prisma.service";
+import { AddAssignmentToGroupResponseDto } from "./dto/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
 import {
+  AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
@@ -71,6 +77,29 @@ export class AssignmentService {
       ...result,
       success: true,
     } as GetAssignmentResponseDto;
+  }
+
+  async list(user: User): Promise<AssignmentResponseDto[]> {
+    // list all assignments if admin
+    if (user.role == UserRole.ADMIN) {
+      const results = await this.prisma.assignment.findMany();
+      return results;
+    }
+
+    const results = await this.prisma.assignmentGroup.findMany({
+      where: { groupId: user.groupID },
+      include: {
+        assignment: true,
+      },
+    });
+
+    if (!results) {
+      throw new NotFoundException(`Group with ID ${user.groupID} not found.`);
+    }
+
+    return results.map((result) => ({
+      ...result.assignment,
+    }));
   }
 
   async replace(
@@ -169,6 +198,64 @@ export class AssignmentService {
 
     return {
       id: newAssignment.id,
+      success: true,
+    };
+  }
+
+  async addAssignmentToGroup(
+    assignmentID: number,
+    groupID: string
+  ): Promise<AddAssignmentToGroupResponseDto> {
+    // check if the assignment exists
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentID },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with ID ${assignmentID} not found.`
+      );
+    }
+
+    const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
+      where: {
+        assignmentId: assignmentID,
+        groupId: groupID,
+      },
+    });
+
+    if (assignmentGroup) {
+      throw new BadRequestException(
+        `Assignment with id '${assignmentID}' is already added to the group having id '${groupID}'`
+      );
+    }
+
+    // Now, connect the assignment to the group or create the group if it doesn't exist
+    await this.prisma.assignment.update({
+      where: { id: assignmentID },
+      data: {
+        groups: {
+          create: [
+            {
+              group: {
+                connectOrCreate: {
+                  where: {
+                    id: groupID,
+                  },
+                  create: {
+                    id: groupID,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    return {
+      assignmentID: assignmentID,
+      groupID: groupID,
       success: true,
     };
   }
