@@ -1,8 +1,6 @@
 import {
-  BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
   Inject,
   Injectable,
@@ -15,16 +13,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import {
-  ApiBody,
-  ApiExtraModels,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-  refs,
-} from "@nestjs/swagger";
-import { plainToInstance } from "class-transformer";
-import { validateOrReject, ValidationError } from "class-validator";
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -32,11 +21,13 @@ import {
   UserRole,
 } from "../../..//auth/interfaces/user.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
-import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
 import {
-  AdminCreateUpdateAssignmentSubmissionRequestDto,
-  LearnerUpdateAssignmentSubmissionRequestDto,
-} from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
+  MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+  MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
+  SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+} from "./api-exceptions/exceptions";
+import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
+import { LearnerUpdateAssignmentSubmissionRequestDto } from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
 import {
   AssignmentSubmissionResponseDto,
   GetAssignmentSubmissionResponseDto,
@@ -66,39 +57,34 @@ export class SubmissionController {
   }
 
   @Post()
-  @Roles(UserRole.LEARNER, UserRole.ADMIN)
+  @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({
-    summary:
-      "Create an assignment submission for an assignment (can accept a body only if the role is admin)",
+    summary: "Create an assignment submission for an assignment.",
   })
-  @ApiBody({ type: AdminCreateUpdateAssignmentSubmissionRequestDto })
   @ApiResponse({ status: 201, type: BaseAssignmentSubmissionResponseDto })
+  @ApiResponse({
+    status: 422,
+    type: String,
+    description: MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+  })
+  @ApiResponse({ status: 403 })
   createAssignmentSubmission(
     @Param("assignmentId") assignmentId: number,
-    @Req() request: UserRequest,
-    @Body()
-    adminCreateUpdateAssignmentSubmissionRequestDto?: AdminCreateUpdateAssignmentSubmissionRequestDto
+    @Req() request: UserRequest
   ): Promise<BaseAssignmentSubmissionResponseDto> {
-    // if the user role is learner then dont accept any body
-    if (
-      request.user.role === UserRole.LEARNER &&
-      Object.keys(adminCreateUpdateAssignmentSubmissionRequestDto).length > 0
-    ) {
-      throw new ForbiddenException();
-    }
     return this.submissionService.createAssignmentSubmission(
       Number(assignmentId),
-      request.user,
-      adminCreateUpdateAssignmentSubmissionRequestDto
+      request.user
     );
   }
 
   @Get()
-  @Roles(UserRole.LEARNER, UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({ summary: "List assignment submissions for an assignment." })
   @ApiResponse({ status: 200, type: [AssignmentSubmissionResponseDto] })
+  @ApiResponse({ status: 403 })
   listAssignmentSubmissions(
     @Param("assignmentId") assignmentId: number,
     @Req() request: UserRequest
@@ -110,10 +96,11 @@ export class SubmissionController {
   }
 
   @Get(":submissionId")
-  @Roles(UserRole.LEARNER, UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({ summary: "Get an assignment submission for an assignment." })
   @ApiResponse({ status: 200, type: GetAssignmentSubmissionResponseDto })
+  @ApiResponse({ status: 403 })
   getAssignmentSubmission(
     @Param("submissionId") assignmentSubmissionID: number
   ): Promise<GetAssignmentSubmissionResponseDto> {
@@ -123,76 +110,44 @@ export class SubmissionController {
   }
 
   @Patch(":submissionId")
-  @Roles(UserRole.LEARNER, UserRole.ADMIN)
+  @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({
     summary: "Update an assignment submission for an assignment.",
   })
-  @ApiExtraModels(
-    LearnerUpdateAssignmentSubmissionRequestDto,
-    AdminCreateUpdateAssignmentSubmissionRequestDto
-  )
   @ApiBody({
-    schema: {
-      anyOf: refs(
-        LearnerUpdateAssignmentSubmissionRequestDto,
-        AdminCreateUpdateAssignmentSubmissionRequestDto
-      ),
-    },
+    type: LearnerUpdateAssignmentSubmissionRequestDto,
+    required: true,
   })
   @ApiResponse({ status: 201, type: BaseAssignmentSubmissionResponseDto })
+  @ApiResponse({
+    status: 422,
+    type: String,
+    description: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+  })
+  @ApiResponse({ status: 403 })
   async updateAssignmentSubmission(
     @Param("submissionId") assignmentSubmissionID: number,
     @Param("assignmentId") assignmentId: number,
     @Body()
-    updateAssignmentSubmissionDto:
-      | LearnerUpdateAssignmentSubmissionRequestDto
-      | AdminCreateUpdateAssignmentSubmissionRequestDto,
-    @Req() request: UserRequest
+    learnerUpdateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
-    const userRole = request.user.role;
-
-    if (userRole === UserRole.LEARNER) {
-      // Validate against Learner DTO
-      const learnerUpdateSubmissionDto = plainToInstance(
-        LearnerUpdateAssignmentSubmissionRequestDto,
-        updateAssignmentSubmissionDto
-      );
-      await this.validateDto(learnerUpdateSubmissionDto);
-
-      return this.submissionService.updateAssignmentSubmission(
-        Number(assignmentSubmissionID),
-        Number(assignmentId),
-        userRole,
-        learnerUpdateSubmissionDto
-      );
-    }
-
-    if (userRole === UserRole.ADMIN) {
-      // Validate against Admin DTO
-      const adminUpdateSubmissionDto = plainToInstance(
-        AdminCreateUpdateAssignmentSubmissionRequestDto,
-        updateAssignmentSubmissionDto
-      );
-      await this.validateDto(adminUpdateSubmissionDto);
-
-      return this.submissionService.updateAssignmentSubmission(
-        Number(assignmentSubmissionID),
-        Number(assignmentId),
-        userRole,
-        adminUpdateSubmissionDto
-      );
-    }
+    return this.submissionService.updateAssignmentSubmission(
+      Number(assignmentSubmissionID),
+      Number(assignmentId),
+      learnerUpdateAssignmentSubmissionDto
+    );
   }
 
   @Get(":submissionId/questions/")
-  @Roles(UserRole.LEARNER, UserRole.ADMIN)
+  @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
   @ApiOperation({ summary: "Get questions for an assignment submission." })
   @ApiResponse({
     status: 200,
     type: [GetAssignmentSubmissionQuestionResponseDto],
   })
+  @ApiResponse({ status: 403 })
   getAssignmentSubmissionQuestions(
     @Param("assignmentId") assignmentID: number
   ): Promise<GetAssignmentSubmissionQuestionResponseDto[]> {
@@ -202,7 +157,7 @@ export class SubmissionController {
   }
 
   @Post(":submissionId/questions/:questionId/responses")
-  @Roles(UserRole.LEARNER, UserRole.ADMIN)
+  @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentSubmissionAccessControlGuard)
   @UseInterceptors(FileInterceptor("learnerFileResponse"))
   @ApiOperation({
@@ -213,8 +168,13 @@ export class SubmissionController {
     status: 200,
     type: CreateQuestionResponseSubmissionResponseDto,
   })
+  @ApiResponse({
+    status: 422,
+    type: String,
+    description: MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
+  })
+  @ApiResponse({ status: 403 })
   createQuestionResponse(
-    @Param("assignmentId") assignmentID: number,
     @Param("submissionId") assignmentSubmissionID: number,
     @Param("questionId") questionID: number,
     @UploadedFile() file: Express.Multer.File,
@@ -229,24 +189,5 @@ export class SubmissionController {
       Number(questionID),
       createQuestionResponseSubmissionRequestDto
     );
-  }
-
-  // Helper methods
-  private async validateDto(dto: object): Promise<void> {
-    console.log(dto);
-    try {
-      await validateOrReject(dto, {
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      });
-      // eslint-disable-next-line unicorn/catch-error-name
-    } catch (errors) {
-      const errorMessages = (errors as ValidationError[]).map(
-        (error: ValidationError) =>
-          Object.values(error.constraints ?? {}).join(", ")
-      );
-
-      throw new BadRequestException(errorMessages);
-    }
   }
 }

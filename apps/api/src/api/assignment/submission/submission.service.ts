@@ -13,11 +13,13 @@ import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.q
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
-import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
 import {
-  AdminCreateUpdateAssignmentSubmissionRequestDto,
-  LearnerUpdateAssignmentSubmissionRequestDto,
-} from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
+  MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+  MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
+  SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+} from "./api-exceptions/exceptions";
+import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
+import { LearnerUpdateAssignmentSubmissionRequestDto } from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
 import {
   AssignmentSubmissionResponseDto,
   GetAssignmentSubmissionResponseDto,
@@ -41,41 +43,21 @@ export class SubmissionService {
     assignmentID: number,
     user: User
   ): Promise<AssignmentSubmissionResponseDto[]> {
-    // list all assignment submissions if admin
-    let results: AssignmentSubmissionResponseDto[];
-    if (user.role === UserRole.ADMIN) {
-      results = await this.prisma.assignmentSubmission.findMany({
-        where: { assignmentId: assignmentID },
-      });
-    } else if (user.role === UserRole.AUTHOR) {
-      // Check if the provided assignmentID is associated with that groupId
-      const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
-        where: {
-          groupId: user.groupID,
-          assignmentId: assignmentID,
-        },
-      });
-
-      results = assignmentGroup
-        ? await this.prisma.assignmentSubmission.findMany({
-            where: { assignmentId: assignmentID },
-          })
-        : [];
-    } else {
-      results = await this.prisma.assignmentSubmission.findMany({
-        where: { assignmentId: assignmentID, userId: user.userID },
-      });
-    }
+    //correct ownership permissions already taken care of through AssignmentSubmissionAccessControlGuard
+    const results = await (user.role === UserRole.AUTHOR
+      ? this.prisma.assignmentSubmission.findMany({
+          where: { assignmentId: assignmentID },
+        })
+      : this.prisma.assignmentSubmission.findMany({
+          where: { assignmentId: assignmentID, userId: user.userID },
+        }));
     return results;
   }
 
   async createAssignmentSubmission(
     assignmentID: number,
-    user: User,
-    adminCreateUpdateAssignmentSubmissionRequestDto?: AdminCreateUpdateAssignmentSubmissionRequestDto
+    user: User
   ): Promise<BaseAssignmentSubmissionResponseDto> {
-    const userRole = user.role;
-
     // Get assignment's allotedTime to calculate expiry for the submission and check for numAttempts
     const assignment = await this.assignmentService.findOne(assignmentID, user);
 
@@ -88,7 +70,7 @@ export class SubmissionService {
 
       if (submissionCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
-          "Maximum number of attempts reached for this assignment"
+          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
         );
       }
     }
@@ -102,63 +84,40 @@ export class SubmissionService {
       );
     }
 
-    let submissionData = {
-      expiry: submissionExpiry,
-      submitted: false,
-      assignmentId: assignmentID,
-      // eslint-disable-next-line unicorn/no-null
-      grade: null,
-      userId: user.userID,
-    };
-
-    if (userRole === UserRole.ADMIN) {
-      // Merge the default properties with the provided Admin DTO
-      submissionData = {
-        ...submissionData,
-        ...adminCreateUpdateAssignmentSubmissionRequestDto,
-      };
-    }
-
     const result = await this.prisma.assignmentSubmission.create({
-      data: submissionData,
+      data: {
+        expiry: submissionExpiry,
+        submitted: false,
+        assignmentId: assignmentID,
+        // eslint-disable-next-line unicorn/no-null
+        grade: null,
+        userId: user.userID,
+      },
     });
 
     return {
       id: result.id,
+      success: true,
     };
   }
 
   async updateAssignmentSubmission(
     assignmentSubmissionID: number,
     assignmentID: number,
-    userRole: UserRole,
-    updateAssignmentSubmissionDto:
-      | LearnerUpdateAssignmentSubmissionRequestDto
-      | AdminCreateUpdateAssignmentSubmissionRequestDto
+    updateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
-    if (userRole === UserRole.ADMIN) {
-      const result = await this.prisma.assignmentSubmission.update({
-        data: updateAssignmentSubmissionDto,
-        where: { id: assignmentSubmissionID },
-      });
-
-      return {
-        id: result.id,
-        grade: result.grade,
-        submitted: result.submitted,
-      };
-    }
-
     const assignmentSubmission =
       await this.prisma.assignmentSubmission.findUnique({
         where: { id: assignmentSubmissionID },
       });
 
     if (new Date() > assignmentSubmission.expiry) {
-      throw new BadRequestException("The submission deadline has passed.");
+      throw new UnprocessableEntityException(
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
+      );
     }
 
-    // If the role is learner, we only allow submitted to be true, then means now calculate grade and sent back to lms
+    // Calculate grade and sent back to lms
     let grade = 0;
 
     const assignment = await this.prisma.assignment.findUnique({
@@ -223,6 +182,7 @@ export class SubmissionService {
       id: result.id,
       grade: result.grade,
       submitted: result.submitted,
+      success: true,
     };
   }
 
@@ -278,7 +238,7 @@ export class SubmissionService {
 
       if (retryCount >= question.numRetries) {
         throw new UnprocessableEntityException(
-          "Maximum number of retries attempted for this question."
+          MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE
         );
       }
     }

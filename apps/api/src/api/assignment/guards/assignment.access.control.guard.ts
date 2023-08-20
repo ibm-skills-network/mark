@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { UserRequest, UserRole } from "../../../auth/interfaces/user.interface";
+import { UserRequest } from "../../../auth/interfaces/user.interface";
 import { PrismaService } from "../../../prisma.service";
 
 @Injectable()
@@ -14,12 +14,7 @@ export class AssignmentAccessControlGuard implements CanActivate {
     const { id } = params;
     const assingmentID = Number(id);
 
-    // allow all actions for admin
-    if (user.role === UserRole.ADMIN) {
-      return true;
-    }
-
-    // Check if the logged-in user's groupId is associated with this assignment
+    // Check if the logged-in user's (can be either learner or author) groupId is associated with this assignment
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {
         assignmentId: assingmentID,

@@ -1,15 +1,142 @@
-import { Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { sign } from "jsonwebtoken";
 import { JwtConfigService } from "../../auth/jwt/jwt.config.service";
+import { PrismaService } from "../../prisma.service";
+import { AddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
+import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
 import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
 @Injectable()
 export class AdminService {
-  constructor(private jwtConfigService: JwtConfigService) {}
+  constructor(
+    private jwtConfigService: JwtConfigService,
+    private readonly prisma: PrismaService
+  ) {}
 
-  createAdminToken(createTokenRequestDto: CreateTokenRequestDto) {
+  createJWTToken(createTokenRequestDto: CreateTokenRequestDto) {
     const { userID, role, groupID, assignmentID } = createTokenRequestDto;
     const { secret, signOptions } = this.jwtConfigService.jwtConstants;
     return sign({ userID, role, groupID, assignmentID }, secret, signOptions);
+  }
+
+  async cloneAssignment(
+    id: number,
+    groupID: string
+  ): Promise<BaseAssignmentResponseDto> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: id },
+      include: { questions: true },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+    }
+
+    // Prepare data for new assignment (excluding id)
+    const newAssignmentData = {
+      ...assignment,
+      id: undefined,
+      questions: {
+        createMany: {
+          data: assignment.questions.map((question) => ({
+            ...question,
+            id: undefined,
+            assignment: undefined,
+            assignmentId: undefined,
+            scoring: question.scoring ? { set: question.scoring } : undefined,
+            choices: question.choices ? { set: question.choices } : undefined,
+          })),
+        },
+      },
+      groups: {
+        create: [
+          {
+            group: {
+              connectOrCreate: {
+                where: {
+                  id: groupID,
+                },
+                create: {
+                  id: groupID,
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    // Create new assignment and questions in a single transaction
+    const newAssignment = await this.prisma.assignment.create({
+      data: newAssignmentData,
+      include: { questions: true, groups: true },
+    });
+
+    return {
+      id: newAssignment.id,
+      success: true,
+    };
+  }
+
+  async addAssignmentToGroup(
+    assignmentID: number,
+    groupID: string
+  ): Promise<AddAssignmentToGroupResponseDto> {
+    // check if the assignment exists
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentID },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with ID ${assignmentID} not found.`
+      );
+    }
+
+    const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
+      where: {
+        assignmentId: assignmentID,
+        groupId: groupID,
+      },
+    });
+
+    if (assignmentGroup) {
+      throw new BadRequestException(
+        `Assignment with id '${assignmentID}' is already added to the group having id '${groupID}'`
+      );
+    }
+
+    // Now, connect the assignment to the group or create the group if it doesn't exist
+    await this.prisma.assignment.update({
+      where: { id: assignmentID },
+      data: {
+        groups: {
+          create: [
+            {
+              group: {
+                connectOrCreate: {
+                  where: {
+                    id: groupID,
+                  },
+                  create: {
+                    id: groupID,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    return {
+      assignmentID: assignmentID,
+      groupID: groupID,
+      success: true,
+    };
   }
 }

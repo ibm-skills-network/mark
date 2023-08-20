@@ -21,7 +21,6 @@ export class JwtAdminStrategy extends PassportStrategy(Strategy, "jwt-admin") {
   }
 
   validate(payload: IJwtPayload, done: VerifiedCallback) {
-    console.log("payload", payload);
     if (payload.admin) {
       done(undefined, payload);
     } else {

@@ -3,25 +3,41 @@ import { IsDefined, IsEnum, IsNotEmpty, IsString } from "class-validator";
 import { UserRole } from "../../../auth/interfaces/user.interface";
 
 export class CreateTokenRequestDto {
-  @ApiProperty()
+  @ApiProperty({
+    type: "string",
+    required: true,
+    description: "The unique identifier for the user.",
+  })
   @IsDefined()
   @IsString()
   @IsNotEmpty()
   userID: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    enum: UserRole,
+    required: true,
+    description: "The role of the user.",
+  })
   @IsDefined()
   @IsEnum(UserRole)
   @IsNotEmpty()
   role: UserRole;
 
-  @ApiProperty()
+  @ApiProperty({
+    type: "string",
+    required: true,
+    description: "The unique identifier for the group.",
+  })
   @IsDefined()
   @IsNotEmpty()
   @IsString()
   groupID: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    type: "number",
+    required: true,
+    description: "The unique identifier for the assignment.",
+  })
   @IsDefined()
   @IsNotEmpty()
   assignmentID: number;

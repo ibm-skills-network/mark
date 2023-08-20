@@ -41,7 +41,7 @@ export class QuestionController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Create a question" })
   @ApiBody({
@@ -49,6 +49,7 @@ export class QuestionController {
     description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
   })
   @ApiResponse({ status: 201, type: BaseQuestionResponseDto })
+  @ApiResponse({ status: 403 })
   createQuestion(
     @Param("assignmentId") assignmentId: number,
     @Body() createQuestionRequestDto: CreateUpdateQuestionRequestDto
@@ -60,16 +61,17 @@ export class QuestionController {
   }
 
   @Get(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Get a question" })
   @ApiResponse({ status: 200, type: GetQuestionResponseDto })
+  @ApiResponse({ status: 403 })
   getQuestion(@Param("id") id: number): Promise<GetQuestionResponseDto> {
     return this.questionService.findOne(Number(id));
   }
 
   @Patch(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Update a question" })
   @ApiBody({
@@ -77,6 +79,7 @@ export class QuestionController {
     description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
   })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
+  @ApiResponse({ status: 403 })
   updateQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
@@ -90,7 +93,7 @@ export class QuestionController {
   }
 
   @Put(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Replace a question" })
   @ApiBody({
@@ -98,6 +101,7 @@ export class QuestionController {
     description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
   })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
+  @ApiResponse({ status: 403 })
   replaceQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
@@ -111,10 +115,11 @@ export class QuestionController {
   }
 
   @Delete(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentQuestionAccessControlGuard)
   @ApiOperation({ summary: "Delete a question" })
   @ApiResponse({ status: 200, type: BaseQuestionResponseDto })
+  @ApiResponse({ status: 403 })
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {
     return this.questionService.remove(Number(id));
   }
