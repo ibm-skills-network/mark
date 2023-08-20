@@ -1,6 +1,6 @@
 "use client"
 import React, { useState } from 'react';
-import TextBox from './TextBox'; // Import the TextBox component
+import TextBox from './textBox'; // Adjust the casing to match the actual file name
 
 function DynamicTextBoxContainer() {
   const [textBoxes, setTextBoxes] = useState<number[]>([]); // Track the number of TextBox components
@@ -20,7 +20,7 @@ function DynamicTextBoxContainer() {
       </button>
 
       {/* Render each TextBox component */}
-      {textBoxes.map((timestamp, index) => (
+      {textBoxes.map((timestamp) => (
         <div key={timestamp} className="relative">
           {/* Delete question button */}
           <button

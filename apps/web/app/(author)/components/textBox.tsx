@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useEffect, useRef } from 'react';
+import checkmark from './checkmark.svg';
 
 enum QuestionType {
   SingleCorrect = 'single_correct',
@@ -121,8 +122,14 @@ function TextBox() {
         </div>
       )}
       <div className="text-xl text-black font-inter text-1rem leading-1.25rem mr-2">Question:</div>
-      <textarea className="w-full p-2 mb-4 border rounded text-black" placeholder="Type your answer here..." value={inputText} onChange={(e) => handleInputChange} />
-
+      <input
+        type="text"
+        className="border p-2 rounded-md text-black"
+        placeholder="Enter question here"
+        value={inputText}
+        onChange={handleInputChange}
+        style={{ width: '59.15rem', height: '8.6875rem' }}
+      />
       <div className="mt-2">
         <button
           className="bg-blue-500 text-white p-2 rounded-md"
@@ -148,6 +155,12 @@ function TextBox() {
             height: '3.5rem',
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <svg width="23" height="24" viewBox="0 0 23 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="11.5" cy="12" r="10.75" stroke="#6B7280" stroke-width="1.5"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M15.5572 9.06597C15.6048 9.10206 15.6448 9.14717 15.6749 9.19872C15.705 9.25027 15.7247 9.30725 15.7327 9.36639C15.7408 9.42554 15.7371 9.48569 15.7218 9.5434C15.7066 9.60111 15.6801 9.65525 15.6438 9.70272L10.7954 16.0582C10.7561 16.1097 10.7062 16.1522 10.6491 16.1828C10.592 16.2134 10.5289 16.2315 10.4642 16.2358C10.3995 16.2401 10.3347 16.2305 10.274 16.2077C10.2133 16.1849 10.1582 16.1494 10.1124 16.1036L7.38518 13.3798C7.30489 13.2938 7.26118 13.1799 7.26325 13.0623C7.26533 12.9447 7.31304 12.8325 7.39631 12.7493C7.47959 12.6662 7.59195 12.6185 7.7097 12.6164C7.82746 12.6144 7.94143 12.658 8.02759 12.7382L10.3876 15.0946L14.9208 9.15252C14.9938 9.05686 15.1018 8.99401 15.2211 8.97779C15.3404 8.96156 15.4613 8.99327 15.5572 9.06597Z" fill="#6B7280" stroke="#6B7280"/>
+          </svg>
+          <span style={{ marginLeft: '10px' }}>
           {selectedQuestionType
             ? selectedQuestionType === QuestionType.SingleCorrect
               ? 'Single Correct'
@@ -155,6 +168,8 @@ function TextBox() {
               ? 'Multiple Answers'
               : 'Written Question'
             : 'Select Question Type'}
+          </span>
+          </div>
         </button>
 
         {isMenuOpen && (
