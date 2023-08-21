@@ -148,7 +148,7 @@ function TextBox() {
       <div className="mt-4 relative" ref={menuRef}>
         <div className="flex items-start gap-0.75rem">
         <button
-          className="bg-blue-500 border text-white p-2 rounded-md"
+          className="bg-white border text-black p-2 rounded-md"
           onClick={handleMenuToggle}
           style={{
             width: '19.125rem',
