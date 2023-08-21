@@ -124,7 +124,7 @@ function TextBox() {
   
 
   return (
-    <div className="flex flex-col mt-8 pl-2 border border-gray-300 rounded-md p-4" style={{ maxWidth: '67.5625rem', maxHeight: '33.5rem' }}>
+    <div className="flex flex-col mt-8 pl-2 border border-gray-300 rounded-md p-4" style={{  maxWidth: '100.5625rem', maxHeight: '50.5rem' }}>
       {/* <button
         className="bg-blue-500 text-white p-2 rounded-md ml-2"
         onClick={generateJsonData}
