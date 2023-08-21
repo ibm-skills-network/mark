@@ -1,6 +1,5 @@
 "use client"
 import React, { useState, useEffect, useRef } from 'react';
-import checkmark from './checkmark.svg';
 
 enum QuestionType {
   SingleCorrect = 'single_correct',
@@ -106,13 +105,13 @@ function TextBox() {
   };
 
   return (
-    <div className="mt-8 pl-2 border border-gray-300 rounded-md p-4" style={{ width: '67.5625rem', height: '31.5rem' }}>
-      <button
+    <div className="mt-8 pl-2 border border-gray-300 rounded-md p-4" style={{ width: '67.5625rem', height: '33.5rem' }}>
+      {/* <button
         className="bg-blue-500 text-white p-2 rounded-md ml-2"
         onClick={generateJsonData}
       >
         Convert to JSON
-      </button>
+      </button> */}
       {jsonData && (
         <div className="mt-4">
           <p>Generated JSON Data:</p>
@@ -121,16 +120,16 @@ function TextBox() {
           </pre>
         </div>
       )}
-      <div className="text-xl text-black font-inter text-1rem leading-1.25rem mr-2">Question:</div>
+      <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2">Question:</div>
       <input
         type="text"
         className="border p-2 rounded-md text-black"
         placeholder="Enter question here"
         value={inputText}
         onChange={handleInputChange}
-        style={{ width: '59.15rem', height: '8.6875rem' }}
+        style={{ width: '59.125rem', height: '8.6875rem' }}
       />
-      <div className="mt-2">
+      {/* <div className="mt-2">
         <button
           className="bg-blue-500 text-white p-2 rounded-md"
           onClick={handleDisplayText}
@@ -143,8 +142,9 @@ function TextBox() {
           <p>Displayed Text:</p>
           <p className="bg-gray-100 p-2 rounded-md text-black">{displayText}</p>
         </div>
-      )}
-      <div className="text-xl text-black font-inter text-1rem leading-1.25rem mr-2">Question type:</div>
+      )} */}
+      <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2 h-4">Question type:</div>
+
       <div className="mt-4 relative" ref={menuRef}>
         <div className="flex items-start gap-0.75rem">
         <button
@@ -226,6 +226,9 @@ function TextBox() {
                 placeholder={`Option ${index + 1}`}
                 value={option}
                 onChange={(event) => handleOptionChangeSingleCorrect(index, event.target.value)}
+                style={{
+                  height: '2.125rem',
+                }}
               />
               <button
                 className="ml-2 text-red-600"
@@ -240,11 +243,15 @@ function TextBox() {
             </div>
           ))}
           <button
-            className="bg-blue-500 text-white p-2 rounded-md mt-2"
+            className="flex items-center bg-white text-black p-2 rounded-md mt-2 space-x-1"
             onClick={() => setOptionsSingleCorrect([...optionsSingleCorrect, ''])}
           >
-            Add Option
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="21" viewBox="0 0 20 21" fill="none">
+              <path d="M11.3438 7.34375C11.3438 7.11997 11.2549 6.90536 11.0966 6.74713C10.9384 6.58889 10.7238 6.5 10.5 6.5C10.2762 6.5 10.0616 6.58889 9.90338 6.74713C9.74515 6.90536 9.65625 7.11997 9.65625 7.34375V10.1562H6.84375C6.61997 10.1562 6.40536 10.2451 6.24713 10.4034C6.08889 10.5616 6 10.7762 6 11C6 11.2238 6.08889 11.4384 6.24713 11.5966C6.40536 11.7549 6.61997 11.8438 6.84375 11.8438H9.65625V14.6562C9.65625 14.88 9.74515 15.0946 9.90338 15.2529C10.0616 15.4111 10.2762 15.5 10.5 15.5C10.7238 15.5 10.9384 15.4111 11.0966 15.2529C11.2549 15.0946 11.3438 14.88 11.3438 14.6562V11.8438H14.1562C14.38 11.8438 14.5946 11.7549 14.7529 11.5966C14.9111 11.4384 15 11.2238 15 11C15 10.7762 14.9111 10.5616 14.7529 10.4034C14.5946 10.2451 14.38 10.1562 14.1562 10.1562H11.3438V7.34375Z" fill="#1D4ED8"/>
+            </svg>
+            <span>Add Option</span>
           </button>
+
         </div>
       ) : null}
       {selectedQuestionType === QuestionType.MultipleAnswers ? (
@@ -290,14 +297,20 @@ function TextBox() {
           </button>
         </div>
       ) : null}
+      
       {selectedQuestionType === QuestionType.WrittenQuestion && (
         <div className="mt-4">
           <p>Written Question:</p>
-          <textarea className="w-full p-2 mb-4 border rounded text-black" placeholder="Type your answer here..." value={writtenQuestionText} onChange={(e) => handleWrittenQuestionChange} />
+          <input
+            type="text"
+            className="border p-2 rounded-md text-black"
+            placeholder="Enter your question"
+            value={writtenQuestionText}
+            onChange={handleWrittenQuestionChange}
+          />
         </div>
       )}
     </div>
-  );
-}
+)}
 
 export default TextBox;
