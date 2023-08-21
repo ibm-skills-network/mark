@@ -1,38 +1,61 @@
-import React from 'react';
-import IntroductionPage from "./IntroductionPage";
-import LongFormQuestion from './LongFormQuestion';
-import MultipleChoiceQuestion from './MultipleChoiceQuestion'; // Import the new component
+"use client";
+import React, { useState } from "react";
+import Button from "./Button";
+import LongFormQuestion from "./LongFormQuestion";
+import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
+import Overview from "./Overview";
+import { questionsData, QuestionData } from "./questions";
 
-interface Props {}
+function LearnerLayout() {
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [questionStatuses, setQuestionStatuses] = useState<Array<"correct" | "incorrect" | "partiallyCorrect" | "unanswered">>(
+    questionsData.map(() => "unanswered")
+  );
 
-function LearnerLayout(props: Props) {
-  const {} = props;
-  const questionText1 = "Describe the key elements of a project charter and explain why it is considered a critical document in project management. How does a project charter contribute to project success?";
-  const instructions = "Start writing your answer here.";
-  const points1 = 10;
+  const updateStatus = (status: "correct" | "incorrect" | "partiallyCorrect") => {
+    setQuestionStatuses((prevStatuses) => {
+      const updatedStatuses = [...prevStatuses];
+      updatedStatuses[currentIndex] = status;
+      return updatedStatuses;
+    });
+  };
 
-  // Define question text and options for the multiple-choice question
-  const questionText2 = "Choose the correct option.";
-  const options = ["Option 1", "Option 2", "Option 3", "Option 4"];
-  const points2 = 5;
+  const renderQuestion = (question: QuestionData, index: number) => {
+    const questionNumber = index + 1;
+
+    if (question.type === "longForm") {
+      return <LongFormQuestion {...question} questionNumber={questionNumber} />;
+    } else {
+      return (
+        <MultipleChoiceQuestion
+          {...question}
+          questionNumber={questionNumber}
+          onAnswerSelected={updateStatus}
+        />
+      );
+    }
+  };
 
   return (
-    <div className="">
-      <IntroductionPage
-        attemptsAllowed={1}
-        timeLimit={50}
-        outOf={40}
-      />
-      <LongFormQuestion
-        questionText={questionText1}
-        instructions={instructions}
-        points={points1}
-      />
-      <MultipleChoiceQuestion // Add the new component
-        questionText={questionText2}
-        options={options}
-        points={points2}
-      />
+    <div className="flex">
+      <div className="w-3/4">
+        {renderQuestion(questionsData[currentIndex], currentIndex)}
+        <div className="flex justify-between mt-4">
+          <Button
+            text="Previous"
+            onClick={() => setCurrentIndex(currentIndex - 1)}
+            disabled={currentIndex === 0}
+          />
+          <Button
+            text="Next"
+            onClick={() => setCurrentIndex(currentIndex + 1)}
+            disabled={currentIndex === questionsData.length - 1}
+          />
+        </div>
+      </div>
+      <div className="w-1/4">
+        <Overview questions={questionStatuses.map((status) => ({ status }))} timeLimit={3600} setCurrentIndex={setCurrentIndex} />
+      </div>
     </div>
   );
 }
