@@ -1,7 +1,8 @@
 import React from 'react';
 import IntroductionPage from "./IntroductionPage";
 import LongFormQuestion from './LongFormQuestion';
-import MultipleChoiceQuestion from './MultipleChoiceQuestion'; // Import the new component
+import MultipleChoiceQuestion from './MultipleChoiceQuestion';
+import LearnerHeader from './LearnerHeader';
 
 interface Props {}
 
@@ -18,6 +19,7 @@ function LearnerLayout(props: Props) {
 
   return (
     <div className="">
+      <LearnerHeader/>
       <IntroductionPage
         attemptsAllowed={1}
         timeLimit={50}
