@@ -1,6 +1,8 @@
+import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -14,6 +16,7 @@ import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.quest
 import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
 import {
+  GRADE_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
@@ -36,7 +39,8 @@ export class SubmissionService {
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
     private readonly questionService: QuestionService,
-    private readonly assignmentService: AssignmentService
+    private readonly assignmentService: AssignmentService,
+    private readonly httpService: HttpService
   ) {}
 
   async listAssignmentSubmissions(
@@ -104,7 +108,8 @@ export class SubmissionService {
   async updateAssignmentSubmission(
     assignmentSubmissionID: number,
     assignmentID: number,
-    updateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto
+    updateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto,
+    authCookie: string
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
     const assignmentSubmission =
       await this.prisma.assignmentSubmission.findUnique({
@@ -155,6 +160,25 @@ export class SubmissionService {
 
     grade = totalPointsEarned / totalPossiblePoints;
 
+    // Send the grade to LTI gateway
+    const ltiGatewayResponse = await this.httpService
+      .post(
+        process.env.GRADING_LTI_GATEWAY_URL,
+        { score: grade },
+        {
+          headers: {
+            Cookie: `authentication=${authCookie}`,
+          },
+        }
+      )
+      .toPromise();
+
+    // Checking if the request was successful
+    if (ltiGatewayResponse.status !== 200) {
+      // Handle the error according to your needs
+      throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
+    }
+
     // Update AssignmentSubmission with the calculated grade
     const result = await this.prisma.assignmentSubmission.update({
       data: {
@@ -163,20 +187,6 @@ export class SubmissionService {
       },
       where: { id: assignmentSubmissionID },
     });
-
-    // Send the grade to LTI gateway
-    // const ltiGatewayResponse = await this.httpService
-    //   .post('/lti-gateway/submit-grade', {
-    //     userId: result.userId,
-    //     grade,
-    //   })
-    //   .toPromise();
-
-    // // Checking if the request was successful
-    // if (ltiGatewayResponse.status !== 200) {
-    //   // Handle the error according to your needs
-    //   throw new Error('Failed to submit grade to LTI Gateway');
-    // }
 
     return {
       id: result.id,

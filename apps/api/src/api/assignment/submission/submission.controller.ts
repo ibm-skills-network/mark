@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Request } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../../..//auth/interfaces/user.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
 import {
+  GRADE_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
@@ -125,17 +127,26 @@ export class SubmissionController {
     type: String,
     description: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
   })
+  @ApiResponse({
+    status: 500,
+    type: String,
+    description: GRADE_SUBMISSION_EXCEPTION,
+  })
   @ApiResponse({ status: 403 })
   async updateAssignmentSubmission(
     @Param("submissionId") assignmentSubmissionID: number,
     @Param("assignmentId") assignmentId: number,
     @Body()
-    learnerUpdateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto
+    learnerUpdateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto,
+    @Req() request: Request
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const authCookie: string = request?.cookies?.authentication;
     return this.submissionService.updateAssignmentSubmission(
       Number(assignmentSubmissionID),
       Number(assignmentId),
-      learnerUpdateAssignmentSubmissionDto
+      learnerUpdateAssignmentSubmissionDto,
+      authCookie
     );
   }
 

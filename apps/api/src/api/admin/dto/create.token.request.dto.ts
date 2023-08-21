@@ -1,10 +1,17 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsDefined, IsEnum, IsNotEmpty, IsString } from "class-validator";
+import {
+  IsDefined,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from "class-validator";
 import { UserRole } from "../../../auth/interfaces/user.interface";
 
 export class CreateTokenRequestDto {
   @ApiProperty({
-    type: "string",
+    type: String,
     required: true,
     description: "The unique identifier for the user.",
   })
@@ -24,7 +31,7 @@ export class CreateTokenRequestDto {
   role: UserRole;
 
   @ApiProperty({
-    type: "string",
+    type: String,
     required: true,
     description: "The unique identifier for the group.",
   })
@@ -34,11 +41,54 @@ export class CreateTokenRequestDto {
   groupID: string;
 
   @ApiProperty({
-    type: "number",
+    type: Number,
     required: true,
     description: "The unique identifier for the assignment.",
   })
   @IsDefined()
+  @IsNumber()
   @IsNotEmpty()
   assignmentID: number;
+
+  // Grading related fields
+
+  @ApiProperty({
+    type: String,
+    required: true,
+    description: "The callback url for sending grades back to.",
+  })
+  @IsDefined()
+  @IsNotEmpty()
+  @IsString()
+  lis_outcome_service_url: string;
+
+  @ApiProperty({
+    type: String,
+    required: true,
+    description: "Extra field required for grading.",
+  })
+  @IsDefined()
+  @IsNotEmpty()
+  @IsString()
+  oauth_consumer_key: string;
+
+  @ApiProperty({
+    type: String,
+    required: true,
+    description: "Extra field required for grading.",
+  })
+  @IsDefined()
+  @IsNotEmpty()
+  @IsString()
+  lis_result_sourcedid: string;
+
+  @ApiProperty({
+    type: String,
+    required: true,
+    description: "Extra field required for grading.",
+  })
+  @IsDefined()
+  @IsNotEmpty()
+  @IsString()
+  toolServiceName: string;
 }

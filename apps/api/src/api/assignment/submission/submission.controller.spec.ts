@@ -1,3 +1,4 @@
+import { HttpModule } from "@nestjs/axios";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -27,6 +28,7 @@ describe("SubmissionController", () => {
           } as Partial<Logger>, // Partial<Logger> makes Logger optional, so that it's not necessary to implement every method of Logger.
         },
       ],
+      imports: [HttpModule],
     }).compile();
 
     controller = module.get<SubmissionController>(SubmissionController);
