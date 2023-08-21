@@ -20,6 +20,9 @@ function TextBox() {
   const [questions, setQuestions] = useState<Array<JSX.Element>>([]);
   const [jsonData, setJsonData] = useState<any>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isTableMode, setIsTableMode] = useState(false); 
+  const [optionsWrittenQuestion, setOptionsWrittenQuestion] = useState<string[]>([]);
+
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -104,8 +107,24 @@ function TextBox() {
     setWrittenQuestionText(event.target.value);
   };
 
+  const handleOptionChangeWrittenQuestion = (index: number, value: string) => {
+    const updatedOptions = [...optionsWrittenQuestion];
+    updatedOptions[index] = value;
+    setOptionsWrittenQuestion(updatedOptions);
+  };
+  
+  const handleAddOptionWrittenQuestion = () => {
+    setOptionsWrittenQuestion([...optionsWrittenQuestion, '']);
+  };
+  
+  const handleRemoveOptionWrittenQuestion = (index: number) => {
+    const updatedOptions = optionsWrittenQuestion.filter((_, i) => i !== index);
+    setOptionsWrittenQuestion(updatedOptions);
+  };
+  
+
   return (
-    <div className="mt-8 pl-2 border border-gray-300 rounded-md p-4" style={{ width: '67.5625rem', height: '33.5rem' }}>
+    <div className="flex flex-col mt-8 pl-2 border border-gray-300 rounded-md p-4" style={{ maxWidth: '67.5625rem', maxHeight: '33.5rem' }}>
       {/* <button
         className="bg-blue-500 text-white p-2 rounded-md ml-2"
         onClick={generateJsonData}
@@ -300,14 +319,30 @@ function TextBox() {
       
       {selectedQuestionType === QuestionType.WrittenQuestion && (
         <div className="mt-4">
-          <p>Written Question:</p>
-          <input
-            type="text"
-            className="border p-2 rounded-md text-black"
-            placeholder="Enter your question"
-            value={writtenQuestionText}
-            onChange={handleWrittenQuestionChange}
-          />
+          <p>Options:</p>
+          {optionsWrittenQuestion.map((option, index) => (
+            <div key={index} className="flex items-center">
+              <input
+                type="text"
+                className="border ml-2 p-2 rounded-md text-black"
+                placeholder={`Option ${index + 1}`}
+                value={option}
+                onChange={(event) => handleOptionChangeWrittenQuestion(index, event.target.value)}
+              />
+              <button
+                className="ml-2 text-red-600"
+                onClick={() => handleRemoveOptionWrittenQuestion(index)}
+              >
+                X
+              </button>
+            </div>
+          ))}
+          <button
+            className="bg-blue-500 text-white p-2 rounded-md mt-2"
+            onClick={handleAddOptionWrittenQuestion}
+          >
+            Add Option
+          </button>
         </div>
       )}
     </div>
