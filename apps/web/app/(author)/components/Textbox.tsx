@@ -161,11 +161,9 @@ function TextBox() {
       }}
     >
       <div
-        className={`flex flex-col mt-8 pl-2 border ${
-          isActive
-            ? "border-l-20 border-blue-700"
-            : "border-l-20 border-gray-700"
-        } rounded-md p-4`}
+        className={`flex flex-col mt-8 bg-white transition border-l-8 rounded-md p-10 ${
+          isActive ? "border-blue-700" : "border-white"
+        }`}
         style={{
           minWidth: "62.5625rem",
           minHeight: "25.5rem",

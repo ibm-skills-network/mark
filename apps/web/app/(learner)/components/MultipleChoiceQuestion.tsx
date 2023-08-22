@@ -150,7 +150,7 @@ function MultipleChoiceQuestion(props: Props) {
 
   return (
     <div
-      className="p-8 bg-white rounded-lg shadow-md question-container"
+      className="p-8 rounded-lg shadow-md question-container"
       style={{ height: "500px", overflowY: "auto" }}
     >
       <Title

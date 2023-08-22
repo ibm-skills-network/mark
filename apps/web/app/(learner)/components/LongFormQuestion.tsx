@@ -54,7 +54,7 @@ function LongFormQuestion(props: Props) {
 
   return (
     <div
-      className="bg-white p-8 rounded-lg shadow-md question-container"
+      className="p-8 rounded-lg shadow-md question-container"
       style={{ height: "500px", overflowY: "auto" }}
     >
       <Title

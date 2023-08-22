@@ -7,7 +7,7 @@ function AuthorHeader(props: Props) {
   const {} = props;
 
   return (
-    <header className="border-b border-gray-300 w-full px-6 py-6">
+    <header className="border-b border-gray-300 w-full px-6 py-6 bg-white">
       <div className="flex">
         <div className="flex flex-col justify-center mr-4">
           <SNIcon />
