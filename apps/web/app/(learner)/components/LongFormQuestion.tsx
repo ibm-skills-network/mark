@@ -30,9 +30,9 @@
 "use client";
 
 import MarkdownEditor from "@components/MarkDownEditor";
+import Title from "@components/Title";
 import React, { useState } from "react";
 import Button from "./Button";
-import Title from "./Title";
 
 interface Props {
   questionText: string;

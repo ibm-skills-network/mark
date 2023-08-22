@@ -1,6 +1,6 @@
-import SNIcon from "../../SNIcon";
+import SNIcon from "@components/SNIcon";
+import Title from "@components/Title";
 import Breadcrumbs from "./Breadcrumbs";
-import Title from "./Title";
 
 interface Props {}
 
@@ -8,7 +8,7 @@ function LearnerHeader(props: Props) {
   const {} = props;
 
   return (
-    <div className="border-2 border-gray-400 w-full p-4">
+    <header className="border-2 border-gray-400 w-full p-4">
       <div className="flex">
         <div className="flex flex-col justify-center mr-4">
           <SNIcon />
@@ -20,7 +20,7 @@ function LearnerHeader(props: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </header>
   );
 }
 
