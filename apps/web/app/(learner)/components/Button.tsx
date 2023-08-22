@@ -3,7 +3,7 @@ import React from "react";
 interface Props {
   text: string;
   onClick?: () => void;
-  disabled?: boolean; 
+  disabled?: boolean;
 }
 
 function Button(props: Props) {

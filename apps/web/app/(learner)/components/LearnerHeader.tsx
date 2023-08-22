@@ -1,6 +1,7 @@
+import SNIcon from "../../SNIcon";
 import Breadcrumbs from "./Breadcrumbs";
 import Title from "./Title";
-import SNIcon from '../../SNIcon';
+
 interface Props {}
 
 function LearnerHeader(props: Props) {

@@ -1,5 +1,5 @@
 // PageComponent.tsx
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 function PageComponent({ children }) {
   const [currentPage, setCurrentPage] = useState(1);

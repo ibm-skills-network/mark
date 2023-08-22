@@ -1,11 +1,9 @@
-import { type FC } from "react";
-
 interface Props {}
 
-const Loading: FC<Props> = (props) => {
+function Loading(props: Props) {
   const {} = props;
 
   return <div className="">Loading...</div>;
-};
+}
 
 export default Loading;

@@ -1,9 +1,7 @@
-"use client"
-import React, { useState, useEffect } from "react";
+"use client";
 
-interface QuestionStatus {
-  status: "correct" | "incorrect" | "partiallyCorrect" | "unanswered";
-}
+import { QuestionStatus } from "@config/types";
+import React, { useEffect, useState } from "react";
 
 interface Props {
   questions: QuestionStatus[];
@@ -44,8 +42,7 @@ function Overview(props: Props) {
                 : "bg-gray-100"
             }`}
           >
-            Question {index + 1}: {" "}
-            {question.status === "correct" && "✓"}
+            Question {index + 1}: {question.status === "correct" && "✓"}
             {question.status === "incorrect" && "✗"}
             {question.status === "partiallyCorrect" && "✓✗"}
             {question.status === "unanswered" && "Unanswered"}

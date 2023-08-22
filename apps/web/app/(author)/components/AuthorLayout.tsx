@@ -1,8 +1,8 @@
 // AuthorLayout.tsx
-import DynamicTextBoxContainer from './DynamicTextBoxContainer';
-import TextBox from './TextBox';
-import PageComponent from './PageComponent';
-import AuthorIntroduction from './AuthorIntroduction';
+import AuthorIntroduction from "./AuthorIntroduction";
+import DynamicTextBoxContainer from "./DynamicTextBoxContainer";
+import PageComponent from "./PageComponent";
+import TextBox from "./TextBox";
 
 interface Props {}
 

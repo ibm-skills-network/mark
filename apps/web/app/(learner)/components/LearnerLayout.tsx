@@ -1,18 +1,22 @@
 "use client";
+"use client";
+
 import React, { useState } from "react";
 import Button from "./Button";
 import LongFormQuestion from "./LongFormQuestion";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import Overview from "./Overview";
-import { questionsData, QuestionData } from "./questions";
+import { QuestionData, questionsData } from "./questions";
 
 function LearnerLayout() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [questionStatuses, setQuestionStatuses] = useState<Array<"correct" | "incorrect" | "partiallyCorrect" | "unanswered">>(
-    questionsData.map(() => "unanswered")
-  );
+  const [questionStatuses, setQuestionStatuses] = useState<
+    Array<"correct" | "incorrect" | "partiallyCorrect" | "unanswered">
+  >(questionsData.map(() => "unanswered"));
 
-  const updateStatus = (status: "correct" | "incorrect" | "partiallyCorrect") => {
+  const updateStatus = (
+    status: "correct" | "incorrect" | "partiallyCorrect"
+  ) => {
     setQuestionStatuses((prevStatuses) => {
       const updatedStatuses = [...prevStatuses];
       updatedStatuses[currentIndex] = status;
@@ -54,7 +58,11 @@ function LearnerLayout() {
         </div>
       </div>
       <div className="w-1/4">
-        <Overview questions={questionStatuses.map((status) => ({ status }))} timeLimit={3600} setCurrentIndex={setCurrentIndex} />
+        <Overview
+          questions={questionStatuses.map((status) => ({ status }))}
+          timeLimit={3600}
+          setCurrentIndex={setCurrentIndex}
+        />
       </div>
     </div>
   );

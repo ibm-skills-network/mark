@@ -1,7 +1,8 @@
 // AuthorIntroduction.tsx
-"use client"
-import React, { useState } from 'react';
-import MarkdownEditor from '../../MarkDownEditor';
+"use client";
+
+import React, { useState } from "react";
+import MarkdownEditor from "../../MarkDownEditor";
 
 const AuthorIntroduction = () => {
   const [markdownContent, setMarkdownContent] = useState("");
@@ -13,7 +14,7 @@ const AuthorIntroduction = () => {
   return (
     <div>
       <MarkdownEditor
-        style={{ height: '200px' }}
+        style={{ height: "200px" }}
         value={markdownContent}
         onChange={handleMarkdownChange}
       />

@@ -27,11 +27,12 @@
  * and provides flexibility for various use cases.
  */
 
-"use client"
+"use client";
+
 import React, { useState } from "react";
+import MarkdownEditor from "../../MarkDownEditor";
 import Button from "./Button";
 import Title from "./Title";
-import MarkdownEditor from "../../MarkDownEditor";
 
 interface Props {
   questionText: string;
@@ -42,12 +43,25 @@ interface Props {
 }
 
 function LongFormQuestion(props: Props) {
-  const { questionText, instructions, maxWords = 800, points, questionNumber } = props;
+  const {
+    questionText,
+    instructions,
+    maxWords = 800,
+    points,
+    questionNumber,
+  } = props;
   const [answer, setAnswer] = useState<string>("");
 
   return (
-    <div className="bg-white p-8 rounded-lg shadow-md question-container" style={{ height: "500px", overflowY: "auto" }}>
-      <Title text={`Question ${questionNumber}: Points out of ${points} (${(points / 40) * 100}%)`} />
+    <div
+      className="bg-white p-8 rounded-lg shadow-md question-container"
+      style={{ height: "500px", overflowY: "auto" }}
+    >
+      <Title
+        text={`Question ${questionNumber}: Points out of ${points} (${
+          (points / 40) * 100
+        }%)`}
+      />
       <p className="mb-4 text-gray-700">{questionText}</p>
       <p className="mb-4 text-gray-700">{instructions}</p>
       <MarkdownEditor value={answer} onChange={setAnswer} />

@@ -1,4 +1,5 @@
-"use client"
+"use client";
+
 import React, { useState } from "react";
 import AuthorHeader from "./(author)/components/AuthorHeader";
 import AuthorLayout from "./(author)/components/AuthorLayout";
@@ -16,16 +17,18 @@ export default function Home() {
 
   return (
     <>
-      {role === "author" ? (
-        <AuthorHeader />
-      ) : (
-        <LearnerHeader />
-      )}
+      {role === "author" ? <AuthorHeader /> : <LearnerHeader />}
       <main className="flex flex-col items-center justify-between min-h-screen p-4 m-4">
         {role === "author" ? (
           <AuthorLayout />
         ) : showIntroduction ? (
-          <IntroductionPage className="p-24 m-24" attemptsAllowed={1} timeLimit={50} outOf={40} onBegin={beginAssignment} />
+          <IntroductionPage
+            className="p-24 m-24"
+            attemptsAllowed={1}
+            timeLimit={50}
+            outOf={40}
+            onBegin={beginAssignment}
+          />
         ) : (
           <LearnerLayout />
         )}
