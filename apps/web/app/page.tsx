@@ -8,7 +8,7 @@ import LearnerHeader from "./(learner)/components/LearnerHeader";
 import LearnerLayout from "./(learner)/components/LearnerLayout";
 
 export default function Home() {
-  const role = "author";
+  const role = "learner";
   const [showIntroduction, setShowIntroduction] = useState(true);
 
   const beginAssignment = () => {
