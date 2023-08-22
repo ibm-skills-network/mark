@@ -1,5 +1,5 @@
-import React from "react";
 import MarkdownIt from "markdown-it";
+import React from "react";
 import MdEditor from "react-markdown-editor-lite";
 import "react-markdown-editor-lite/lib/index.css";
 
@@ -24,6 +24,7 @@ function MarkdownEditor(props: Props) {
         style={{ height: "400px", ...style }} // Merge the passed style with the default height
         renderHTML={(text) => mdParser.render(text)}
         onChange={handleEditorChange as any}
+        view={{ menu: true, md: true, html: false }}
       />
     </div>
   );

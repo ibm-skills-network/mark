@@ -6,6 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "lint:fixall": "next lint --fix .",
+    "lint:staged": "eslint",
     "start": "next start"
   },
   "dependencies": {
@@ -23,7 +26,6 @@
     "@types/react": "18.2.20",
     "@types/react-dom": "18.2.7",
     "autoprefixer": "10.4.15",
-    "config": "*",
     "eslint": "^8.44.0",
     "eslint-config-next": "13.4.16",
     "eslint-config-prettier": "^8.8.0",
@@ -34,6 +36,8 @@
     "eslint-plugin-react": "^7.33.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.1",
+    "eslint-plugin-simple-import-sort": "^10.0.0",
+    "eslint-plugin-unused-imports": "^3.0.0",
     "postcss": "8.4.28",
     "tailwindcss": "3.3.3",
     "tsconfig": "*",

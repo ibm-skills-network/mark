@@ -1,7 +1,7 @@
 import React from "react";
 import Button from "./Button";
 
-interface Props {
+interface Props extends React.HTMLAttributes<HTMLDivElement> {
   title?: string;
   attemptsAllowed?: number;
   timeLimit?: number;
@@ -16,10 +16,15 @@ function IntroductionPage(props: Props) {
     timeLimit = 50,
     outOf = 40,
     onBegin,
+    className,
   } = props;
 
   return (
-    <div className="bg-white p-8 rounded-lg shadow-md introduction-container">
+    <div
+      className={
+        "bg-white p-8 rounded-lg shadow-md introduction-container " + className
+      }
+    >
       <div className="border-2 p-4 flex justify-between items-center mb-4">
         <div>
           <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
