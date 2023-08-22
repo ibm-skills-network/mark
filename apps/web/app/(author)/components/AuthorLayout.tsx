@@ -2,6 +2,7 @@
 import DynamicTextBoxContainer from './DynamicTextBoxContainer';
 import TextBox from './TextBox';
 import PageComponent from './PageComponent';
+import AuthorIntroduction from './AuthorIntroduction';
 
 interface Props {}
 
@@ -10,6 +11,7 @@ function AuthorLayout(props: Props) {
     <PageComponent>
       {(currentPage) => (
         <div>
+          {currentPage === 1 && <AuthorIntroduction />}
           {currentPage === 2 ? (
             <div>
               <div className="mt-0">
