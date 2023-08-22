@@ -1,5 +1,5 @@
 // PageComponent.tsx
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 function PageComponent({ children }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -15,7 +15,7 @@ function PageComponent({ children }) {
           <button
             onClick={() => handlePageChange(1)}
             className="text-blue-700 font-bold mr-2"
-            style={{ lineHeight: '1.5rem', textAlign: 'left' }}
+            style={{ lineHeight: "1.5rem", textAlign: "left" }}
           >
             Step: <span className="font-normal">1</span>
             <br />
@@ -24,7 +24,7 @@ function PageComponent({ children }) {
           <button
             onClick={() => handlePageChange(2)}
             className="text-blue-700 font-bold mr-2"
-            style={{ lineHeight: '1.5rem', textAlign: 'left' }}
+            style={{ lineHeight: "1.5rem", textAlign: "left" }}
           >
             Step: <span className="font-normal">2</span>
             <br />
@@ -33,7 +33,7 @@ function PageComponent({ children }) {
           <button
             onClick={() => handlePageChange(3)}
             className="text-blue-700 font-bold"
-            style={{ lineHeight: '1.5rem', textAlign: 'left' }}
+            style={{ lineHeight: "1.5rem", textAlign: "left" }}
           >
             Step: <span className="font-normal">3</span>
             <br />
