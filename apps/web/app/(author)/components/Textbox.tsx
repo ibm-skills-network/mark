@@ -1,7 +1,7 @@
 "use client";
 
+import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useEffect, useRef, useState } from "react";
-import MarkdownEditor from "../../../components/MarkDownEditor";
 
 enum QuestionType {
   SingleCorrect = "single_correct",

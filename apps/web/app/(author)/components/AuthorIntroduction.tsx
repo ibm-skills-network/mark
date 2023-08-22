@@ -1,8 +1,8 @@
 // AuthorIntroduction.tsx
 "use client";
 
+import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useState } from "react";
-import MarkdownEditor from "../../../components/MarkDownEditor";
 
 const AuthorIntroduction = () => {
   const [markdownContent, setMarkdownContent] = useState("");
