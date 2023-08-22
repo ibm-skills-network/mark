@@ -44,8 +44,6 @@
  * provides a solid foundation for diverse use cases.
  */
 "use client";
-"use client";
-"use client";
 
 import Title from "@components/Title";
 import React, { useEffect, useState } from "react";
