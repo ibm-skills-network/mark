@@ -27,12 +27,12 @@ function Overview(props: Props) {
   return (
     <div className="p-4 border rounded-lg">
       <h3 className="mb-4 text-lg font-bold">Exam Overview</h3>
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap gap-2"> {/* Flexbox container */}
         {questions.map((question, index) => (
           <div
             key={index}
             onClick={() => setCurrentIndex(index)} // Redirect to the clicked question
-            className={`p-2 mb-2 border rounded-lg text-center cursor-pointer ${
+            className={`p-2 border rounded-lg text-center cursor-pointer flex-1 ${
               question.status === "correct"
                 ? "bg-green-100"
                 : question.status === "incorrect"
