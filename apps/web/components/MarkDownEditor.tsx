@@ -24,6 +24,7 @@ function MarkdownEditor(props: Props) {
         style={{ height: "400px", ...style }} // Merge the passed style with the default height
         renderHTML={(text) => mdParser.render(text)}
         onChange={handleEditorChange as any}
+        view={{ menu: true, md: true, html: false }}
       />
     </div>
   );
