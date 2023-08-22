@@ -1,23 +1,29 @@
+// AuthorLayout.tsx
 import DynamicTextBoxContainer from './DynamicTextBoxContainer';
-import TextBox from "./TextBox";
-
+import TextBox from './TextBox';
+import PageComponent from './PageComponent';
 
 interface Props {}
 
-
 function AuthorLayout(props: Props) {
-
   return (
-    <div className="bg-white min-h-screen">
-      <div className="bg-white flex flex-col min-h-screen">
-        <div className="mt-0">
-          <DynamicTextBoxContainer />
+    <PageComponent>
+      {(currentPage) => (
+        <div>
+          {currentPage === 2 ? (
+            <div>
+              <div className="mt-0">
+                <DynamicTextBoxContainer />
+              </div>
+              <TextBox />
+            </div>
+          ) : (
+            <div>Content for other pages</div>
+          )}
         </div>
-        <div className="flex-grow">
-          <TextBox />
-        </div>
-      </div>
-    </div>
+      )}
+    </PageComponent>
   );
 }
+
 export default AuthorLayout;
