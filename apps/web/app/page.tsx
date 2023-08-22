@@ -7,7 +7,7 @@ import LearnerHeader from "./(learner)/components/LearnerHeader";
 import LearnerLayout from "./(learner)/components/LearnerLayout";
 
 export default function Home() {
-  const role = "author";
+  const role = "learner";
   const [showIntroduction, setShowIntroduction] = useState(true);
 
   const beginAssignment = () => {
@@ -19,13 +19,13 @@ export default function Home() {
       {role === "author" ? (
         <AuthorHeader />
       ) : (
-        <LearnerHeader attemptsAllowed={1} timeLimit={50} outOf={40} />
+        <LearnerHeader />
       )}
-      <main className="flex flex-col items-center justify-between min-h-screen">
+      <main className="flex flex-col items-center justify-between min-h-screen p-4 m-4">
         {role === "author" ? (
           <AuthorLayout />
         ) : showIntroduction ? (
-          <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} onBegin={beginAssignment} />
+          <IntroductionPage className="p-24 m-24" attemptsAllowed={1} timeLimit={50} outOf={40} onBegin={beginAssignment} />
         ) : (
           <LearnerLayout />
         )}
