@@ -144,7 +144,7 @@ function TextBox() {
       style={{minWidth: '67.5625rem', minHeight: '30.5rem', maxHeight: '50.5rem' }}
     >
     <div
-      className={`flex flex-col mt-8 pl-2 border ${isActive ? 'border-l-20 border-blue-700' : 'border-l-20 border-gray-700'} rounded-md p-4`}
+      className={`flex flex-col mt-8 pl-2 border ${isActive ? 'border-l-20 border-blue-700' : 'border-l-20 border-gray-300'} rounded-md p-4`}
       style={{minWidth: '62.5625rem', minHeight: '25.5rem', maxHeight: '50.5rem' }}
       onFocus={handleFocus}
       onBlur={handleBlur}
