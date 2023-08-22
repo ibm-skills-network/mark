@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import TextBox from "./TextBox";
+import TextBox from "./Textbox";
 
 function DynamicTextBoxContainer() {
   const [textBoxes, setTextBoxes] = useState<number[]>([]); // Track the number of TextBox components

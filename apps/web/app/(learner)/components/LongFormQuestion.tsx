@@ -29,8 +29,8 @@
 
 "use client";
 
+import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useState } from "react";
-import MarkdownEditor from "../../MarkDownEditor";
 import Button from "./Button";
 import Title from "./Title";
 

@@ -2,7 +2,7 @@
 import AuthorIntroduction from "./AuthorIntroduction";
 import DynamicTextBoxContainer from "./DynamicTextBoxContainer";
 import PageComponent from "./PageComponent";
-import TextBox from "./TextBox";
+import TextBox from "./Textbox";
 
 interface Props {}
 
