@@ -1,26 +1,26 @@
-import AuthorLayout from "./(author)/components/AuthorLayout";
-import LearnerLayout from "./(learner)/components/LearnerLayout";
-import IntroductionPage from "./(learner)/components/IntroductionPage";
+import { User } from "@/config/types";
+import { BASE_API_ROUTES } from "@config/constants";
+import { redirect } from "next/navigation";
+import AuthorHeader from "./author/components/Header";
+import AuthorLayout from "./author/page";
+import LearnerHeader from "./learner/components/LearnerHeader";
+import LearnerLayout from "./learner/page";
 
-function getUser() {
-  // Your code here...
-  return { user: "learner" } as { user: "author" | "learner" };
+async function getUser<T>() {
+  const res = await fetch(BASE_API_ROUTES.user);
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch user data");
+  }
+
+  return res.json() as Promise<T>;
 }
 
-export default function Home() {
-  const { user } = getUser();
-
-  return (
-    <main className="flex flex-col items-center justify-between min-h-screen">
-      {user === "author" ? (
-        <AuthorLayout>
-          <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
-        </AuthorLayout>
-      ) : (
-        <LearnerLayout>
-          <IntroductionPage attemptsAllowed={1} timeLimit={50} outOf={40} />
-        </LearnerLayout>
-      )}
-    </main>
-  );
+export default async function Home() {
+  const { role } = await getUser<User>();
+  if (role === "author") {
+    redirect("/author/introduction");
+  } else {
+    redirect("/learner");
+  }
 }

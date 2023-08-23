@@ -1,0 +1,90 @@
+"use client";
+
+import { QuestionStatus } from "@/config/types";
+import { useState } from "react";
+import Button from "./components/Button";
+import IntroductionPage from "./components/IntroductionPage";
+import LongFormQuestion from "./components/LongFormQuestion";
+import MultipleChoiceQuestion from "./components/MultipleChoiceQuestion";
+import Overview from "./components/Overview";
+import { QuestionData, questionsData } from "./components/questions";
+
+function LearnerLayout() {
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [questionStatuses, setQuestionStatuses] = useState<QuestionStatus[]>(
+    questionsData.map(() => "unanswered")
+  );
+
+  const [showIntroduction, setShowIntroduction] = useState(true);
+
+  const beginAssignment = () => {
+    setShowIntroduction(false);
+  };
+
+  const updateStatus = (
+    status: "correct" | "incorrect" | "partiallyCorrect"
+  ) => {
+    setQuestionStatuses((prevStatuses) => {
+      const updatedStatuses = [...prevStatuses];
+      updatedStatuses[currentIndex] = status;
+      return updatedStatuses;
+    });
+  };
+
+  const renderQuestion = (question: QuestionData, index: number) => {
+    const questionNumber = index + 1;
+
+    if (question.type === "longForm") {
+      return <LongFormQuestion {...question} questionNumber={questionNumber} />;
+    } else {
+      return (
+        <MultipleChoiceQuestion
+          {...question}
+          questionNumber={questionNumber}
+          onAnswerSelected={updateStatus}
+        />
+      );
+    }
+  };
+
+  return (
+    <>
+      {showIntroduction ? (
+        <IntroductionPage
+          className="p-24 m-24"
+          attemptsAllowed={1}
+          timeLimit={50}
+          outOf={40}
+          onBegin={beginAssignment}
+        />
+      ) : (
+        <div className="flex">
+          <div className="w-3/4">
+            {renderQuestion(questionsData[currentIndex], currentIndex)}
+            <div className="flex justify-between mt-4">
+              <Button
+                text="Previous"
+                onClick={() => setCurrentIndex(currentIndex - 1)}
+                disabled={currentIndex === 0}
+              />
+              <Button
+                text="Next"
+                onClick={() => setCurrentIndex(currentIndex + 1)}
+                disabled={currentIndex === questionsData.length - 1}
+              />
+            </div>
+          </div>
+          <div className="w-1/4">
+            <Overview
+              questions={questionStatuses}
+              timeLimit={3600}
+              setCurrentIndex={setCurrentIndex}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default LearnerLayout;

@@ -1,6 +1,10 @@
 {
   "*": ["yarn secrets:check:staged", "yarn format:staged"],
-  "*.ts": ["yarn test:staged", "yarn lint:staged"],
+  "apps/api/**/*.ts": [
+    "cd apps/api && yarn test:staged",
+    "cd apps/api && yarn lint:staged"
+  ],
+  "apps/web/**/*.ts?(x)": ["cd apps/web && yarn lint:staged"],
   "Dockerfile": ["hadolint"],
   "*.{sh,zsh,bash}": ["shellcheck"]
 }
