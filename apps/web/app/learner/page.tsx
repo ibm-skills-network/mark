@@ -1,18 +1,19 @@
 "use client";
 
+import { QuestionStatus } from "@/config/types";
 import { useState } from "react";
-import Button from "./Button";
-import IntroductionPage from "./IntroductionPage";
-import LongFormQuestion from "./LongFormQuestion";
-import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
-import Overview from "./Overview";
-import { QuestionData, questionsData } from "./questions";
+import Button from "./components/Button";
+import IntroductionPage from "./components/IntroductionPage";
+import LongFormQuestion from "./components/LongFormQuestion";
+import MultipleChoiceQuestion from "./components/MultipleChoiceQuestion";
+import Overview from "./components/Overview";
+import { QuestionData, questionsData } from "./components/questions";
 
 function LearnerLayout() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [questionStatuses, setQuestionStatuses] = useState<
-    Array<"correct" | "incorrect" | "partiallyCorrect" | "unanswered">
-  >(questionsData.map(() => "unanswered"));
+  const [questionStatuses, setQuestionStatuses] = useState<QuestionStatus[]>(
+    questionsData.map(() => "unanswered")
+  );
 
   const [showIntroduction, setShowIntroduction] = useState(true);
 
@@ -75,7 +76,7 @@ function LearnerLayout() {
           </div>
           <div className="w-1/4">
             <Overview
-              questions={questionStatuses.map((status) => ({ status }))}
+              questions={questionStatuses}
               timeLimit={3600}
               setCurrentIndex={setCurrentIndex}
             />

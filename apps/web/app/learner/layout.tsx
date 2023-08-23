@@ -1,4 +1,4 @@
-import "./globals.css";
+import "../globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
@@ -16,15 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body
-        className={
-          inter.className +
-          " " +
-          "bg-blue-50 flex flex-col items-center justify-between min-h-screen p-4 m-4"
-        }
-      >
-        {children}
-      </body>
+      <body className={inter.className + " " + "bg-blue-50"}>{children}</body>
     </html>
   );
 }

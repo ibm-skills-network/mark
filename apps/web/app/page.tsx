@@ -1,17 +1,26 @@
-import AuthorHeader from "./(author)/components/AuthorHeader";
-import AuthorLayout from "./(author)/components/AuthorLayout";
-import LearnerHeader from "./(learner)/components/LearnerHeader";
-import LearnerLayout from "./(learner)/components/LearnerLayout";
+import { User } from "@/config/types";
+import { BASE_API_ROUTES } from "@config/constants";
+import { redirect } from "next/navigation";
+import AuthorHeader from "./author/components/Header";
+import AuthorLayout from "./author/page";
+import LearnerHeader from "./learner/components/LearnerHeader";
+import LearnerLayout from "./learner/page";
 
-export default function Home() {
-  const role = "author";
+async function getUser<T>() {
+  const res = await fetch(BASE_API_ROUTES.user);
 
-  return (
-    <>
-      {role === "author" ? <AuthorHeader /> : <LearnerHeader />}
-      <main className="flex flex-col items-center justify-between min-h-screen p-4 m-4">
-        {role === "author" ? <AuthorLayout /> : <LearnerLayout />}
-      </main>
-    </>
-  );
+  if (!res.ok) {
+    throw new Error("Failed to fetch user data");
+  }
+
+  return res.json() as Promise<T>;
+}
+
+export default async function Home() {
+  const { role } = await getUser<User>();
+  if (role === "author") {
+    redirect("/author/introduction");
+  } else {
+    redirect("/learner");
+  }
 }

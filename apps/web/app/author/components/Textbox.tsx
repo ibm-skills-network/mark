@@ -38,7 +38,7 @@ function TextBox() {
   >([]);
   const [isActive, setIsActive] = useState(false); // Track the active state of the component
   const [score, setScore] = useState("");
-  const [switchState, setSwitchState] = useState('a');
+  const [switchState, setSwitchState] = useState("a");
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -523,61 +523,61 @@ function TextBox() {
                   maxWidth: "100%",
                 }}
               />
-                    <div className="flex items-center">
-        <label className="mr-2">Switch:</label>
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={switchState === 'a'}
-            onChange={() => setSwitchState(switchState === 'a' ? 'b' : 'a')}
-          />
-          <span className="slider round"></span>
-        </label>
-      </div>
-
-      {switchState === 'a' && (
-        <div>
-          <p>Options:</p>
-              {optionsWrittenQuestion.map((option, index) => (
-                <div key={index} className="flex items-center">
+              <div className="flex items-center">
+                <label className="mr-2">Switch:</label>
+                <label className="switch">
                   <input
-                    type="text"
-                    className="p-2 rounded-md text-black bg-transparent outline-none w-full" // Removed 'border ml-2' and added 'w-full'
-                    placeholder={`Option ${index + 1}`}
-                    value={option}
-                    onChange={(event) =>
-                      handleOptionChangeWrittenQuestion(
-                        index,
-                        event.target.value
-                      )
+                    type="checkbox"
+                    checked={switchState === "a"}
+                    onChange={() =>
+                      setSwitchState(switchState === "a" ? "b" : "a")
                     }
-                    style={{
-                      height: "2.125rem",
-                      maxWidth: "100%",
-                    }}
                   />
+                  <span className="slider round"></span>
+                </label>
+              </div>
+
+              {switchState === "a" && (
+                <div>
+                  <p>Options:</p>
+                  {optionsWrittenQuestion.map((option, index) => (
+                    <div key={index} className="flex items-center">
+                      <input
+                        type="text"
+                        className="p-2 rounded-md text-black bg-transparent outline-none w-full" // Removed 'border ml-2' and added 'w-full'
+                        placeholder={`Option ${index + 1}`}
+                        value={option}
+                        onChange={(event) =>
+                          handleOptionChangeWrittenQuestion(
+                            index,
+                            event.target.value
+                          )
+                        }
+                        style={{
+                          height: "2.125rem",
+                          maxWidth: "100%",
+                        }}
+                      />
+                      <button
+                        className="ml-2 text-red-600"
+                        onClick={() => handleRemoveOptionWrittenQuestion(index)}
+                      >
+                        X
+                      </button>
+                    </div>
+                  ))}
                   <button
-                    className="ml-2 text-red-600"
-                    onClick={() => handleRemoveOptionWrittenQuestion(index)}
+                    className="bg-blue-500 text-white p-2 rounded-md mt-2"
+                    onClick={handleAddOptionWrittenQuestion}
                   >
-                    X
+                    Add Option
                   </button>
                 </div>
-              ))}
-              <button
-                className="bg-blue-500 text-white p-2 rounded-md mt-2"
-                onClick={handleAddOptionWrittenQuestion}
-              >
-                Add Option
-              </button>
-        </div>
-      )}
+              )}
 
-      {switchState === 'b' && (
-        <div>
-          {/* Empty content for state 'b' */}
-        </div>
-      )}
+              {switchState === "b" && (
+                <div>{/* Empty content for state 'b' */}</div>
+              )}
             </div>
           )}
         </div>

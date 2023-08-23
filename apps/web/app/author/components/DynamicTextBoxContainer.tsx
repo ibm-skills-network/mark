@@ -1,4 +1,3 @@
-// DynamicTextBoxContainer.tsx
 // This is the component that we use to add/delete questions for author, it contains two buttons
 // which are "add new textbox" and "delete"
 "use client";

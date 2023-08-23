@@ -1,6 +1,7 @@
-import "./globals.css";
+import "../globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Header from "./components/Header";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,13 +17,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body
-        className={
-          inter.className +
-          " " +
-          "bg-blue-50 flex flex-col items-center justify-between min-h-screen p-4 m-4"
-        }
-      >
+      <body className={inter.className + " " + "bg-blue-50"}>
+        <Header />
         {children}
       </body>
     </html>

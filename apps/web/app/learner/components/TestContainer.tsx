@@ -1,6 +1,6 @@
 import React, { useState } from "react";
+import LearnerLayout from "../page";
 import IntroductionPage from "./IntroductionPage";
-import LearnerLayout from "./LearnerLayout";
 
 interface Props {}
 
