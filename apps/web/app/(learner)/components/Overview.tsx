@@ -27,7 +27,8 @@ function Overview(props: Props) {
   return (
     <div className="p-4 border rounded-lg">
       <h3 className="mb-4 text-lg font-bold">Exam Overview</h3>
-      <div className="mb-4 flex flex-wrap gap-2"> {/* Flexbox container */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {/* Flexbox container */}
         {questions.map((question, index) => (
           <div
             key={index}
