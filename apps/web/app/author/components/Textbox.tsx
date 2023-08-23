@@ -1,7 +1,7 @@
 "use client";
 
-import LongFormQuestion from "@/app/(learner)/components/LongFormQuestion";
-import MultipleChoiceQuestion from "@/app/(learner)/components/MultipleChoiceQuestion";
+import LongFormQuestion from "@/app/learner/components/LongFormQuestion";
+import MultipleChoiceQuestion from "@/app/learner/components/MultipleChoiceQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useEffect, useRef, useState } from "react";
 
