@@ -429,11 +429,11 @@ const AuthorIntroduction = () => {
 
         
         <form id="form-file-upload" onDragEnter={handleDrag} onSubmit={(e) => e.preventDefault()}>
-          <input ref={inputRef} type="file" id="input-file-upload" multiple={true} onChange={handleChange} />
+          <input className="ml-96 mt-16" ref={inputRef} type="file" id="input-file-upload" multiple={true} onChange={handleChange} />
           <label id="label-file-upload" htmlFor="input-file-upload" className={dragActive ? "drag-active" : "" }>
             <div>
-              <button className="upload-button" onClick={onButtonClick}>Upload a file here or</button>
-              <p>Drag and drop</p>
+              <button className="upload-button ml-96 mt-2" onClick={onButtonClick}>Upload a file here or</button>
+              <p className="ml-[543px] -mt-6">drag and drop</p>
             </div> 
           </label>
           { dragActive && <div id="drag-file-element" onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}></div> }
