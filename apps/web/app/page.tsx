@@ -1,10 +1,6 @@
-import { User } from "@/config/types";
 import { BASE_API_ROUTES } from "@config/constants";
+import { User } from "@config/types";
 import { redirect } from "next/navigation";
-import AuthorHeader from "./author/components/Header";
-import AuthorLayout from "./author/page";
-import LearnerHeader from "./learner/components/LearnerHeader";
-import LearnerLayout from "./learner/page";
 
 async function getUser<T>() {
   const res = await fetch(BASE_API_ROUTES.user);
