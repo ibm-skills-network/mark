@@ -1,7 +1,7 @@
 "use client";
 
-import LongFormQuestion from "@/app/learner/components/LongFormQuestion";
-import MultipleChoiceQuestion from "@/app/learner/components/MultipleChoiceQuestion";
+import LongFormQuestion from "@/app/learner/(components)/LongFormQuestion";
+import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -166,7 +166,7 @@ function TextBox() {
 
   return (
     <div
-      className={`flex flex-col mt-8 pl-2 rounded-md p-4`}
+      className={`flex flex-col mt-8 pl-2 rounded-md p-4 ml-[550px]`}
       style={{
         width: "27.5625rem",
         minHeight: "30.5rem",
@@ -175,7 +175,7 @@ function TextBox() {
     >
       {/* Toggle view button */}
       <button
-        className="rounded-md bg-indigo-50 px-3.5 py-2.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-100"
+        className="w-52 rounded-md bg-indigo-50 px-3.5 py-2.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-100 ml-[380px]"
         onClick={() => setIsLearnerView(!isLearnerView)}
       >
         {isLearnerView ? "Author View" : "Learner View"}
