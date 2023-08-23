@@ -1,4 +1,5 @@
 // AuthorIntroduction.tsx
+// This is the component that we use in Page 1: Set up intro
 "use client";
 
 import MarkdownEditor from "@components/MarkDownEditor";

@@ -1,3 +1,6 @@
+// PageComponent
+// This is the component that we use to manage three pages for author (set up intro, questions and rubrics and preview)
+
 "use client";
 
 import React, { useState } from "react";
