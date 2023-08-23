@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Button from "./Button";
+import IntroductionPage from "./IntroductionPage";
 import LongFormQuestion from "./LongFormQuestion";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import Overview from "./Overview";
@@ -12,6 +13,12 @@ function LearnerLayout() {
   const [questionStatuses, setQuestionStatuses] = useState<
     Array<"correct" | "incorrect" | "partiallyCorrect" | "unanswered">
   >(questionsData.map(() => "unanswered"));
+
+  const [showIntroduction, setShowIntroduction] = useState(true);
+
+  const beginAssignment = () => {
+    setShowIntroduction(false);
+  };
 
   const updateStatus = (
     status: "correct" | "incorrect" | "partiallyCorrect"
@@ -40,30 +47,42 @@ function LearnerLayout() {
   };
 
   return (
-    <div className="flex">
-      <div className="w-3/4">
-        {renderQuestion(questionsData[currentIndex], currentIndex)}
-        <div className="flex justify-between mt-4">
-          <Button
-            text="Previous"
-            onClick={() => setCurrentIndex(currentIndex - 1)}
-            disabled={currentIndex === 0}
-          />
-          <Button
-            text="Next"
-            onClick={() => setCurrentIndex(currentIndex + 1)}
-            disabled={currentIndex === questionsData.length - 1}
-          />
-        </div>
-      </div>
-      <div className="w-1/4">
-        <Overview
-          questions={questionStatuses.map((status) => ({ status }))}
-          timeLimit={3600}
-          setCurrentIndex={setCurrentIndex}
+    <>
+      {showIntroduction ? (
+        <IntroductionPage
+          className="p-24 m-24"
+          attemptsAllowed={1}
+          timeLimit={50}
+          outOf={40}
+          onBegin={beginAssignment}
         />
-      </div>
-    </div>
+      ) : (
+        <div className="flex">
+          <div className="w-3/4">
+            {renderQuestion(questionsData[currentIndex], currentIndex)}
+            <div className="flex justify-between mt-4">
+              <Button
+                text="Previous"
+                onClick={() => setCurrentIndex(currentIndex - 1)}
+                disabled={currentIndex === 0}
+              />
+              <Button
+                text="Next"
+                onClick={() => setCurrentIndex(currentIndex + 1)}
+                disabled={currentIndex === questionsData.length - 1}
+              />
+            </div>
+          </div>
+          <div className="w-1/4">
+            <Overview
+              questions={questionStatuses.map((status) => ({ status }))}
+              timeLimit={3600}
+              setCurrentIndex={setCurrentIndex}
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

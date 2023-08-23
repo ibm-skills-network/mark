@@ -1,3 +1,5 @@
+"use client";
+
 import AuthorIntroduction from "./AuthorIntroduction";
 import DynamicTextBoxContainer from "./DynamicTextBoxContainer";
 import PageComponent from "./PageComponent";
