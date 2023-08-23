@@ -49,8 +49,8 @@ function IntroductionPage(props: Props) {
           About this Assignment
         </h3>
         <p className="text-gray-600 mb-4">
-          Welcome to the 'Introduction to Project Management' course! This
-          comprehensive course is designed for individuals interested in
+          Welcome to the &apos;Introduction to Project Management&apos; course!
+          This comprehensive course is designed for individuals interested in
           starting a career in project management.
         </p>
         <h3 className="text-xl font-semibold text-gray-800 mb-4">
@@ -65,18 +65,18 @@ function IntroductionPage(props: Props) {
           Midterm Assignment Format:
         </h3>
         <p className="text-gray-600 mb-4">
-          The Exam is open-book, open-notes. For your learning experience, it's
-          best that you do not collaborate with anyone else on the assignment,
-          in person or otherwise...
+          The Exam is open-book, open-notes. For your learning experience,
+          it&apos;s best that you do not collaborate with anyone else on the
+          assignment, in person or otherwise...
         </p>
         <h3 className="text-xl font-semibold text-gray-800 mb-4">
           Materials Covered:
         </h3>
         <p className="text-gray-600 mb-4">
-          Midterm 1 will cover Weeks 2 - 7, or 'Nature of Science' through
-          'History of Evolutionary Thought'. Exams cover Lectures and Required
-          materials. I will not directly test from the textbook or Supplemental
-          materials.
+          Midterm 1 will cover Weeks 2 - 7, or &apos;Nature of Science&apos;
+          through &apos;History of Evolutionary Thought&apos;. Exams cover
+          Lectures and Required materials. I will not directly test from the
+          textbook or Supplemental materials.
         </p>
         <h3 className="text-xl font-semibold text-gray-800 mb-4">
           Value of Midterm Exams and Policies:

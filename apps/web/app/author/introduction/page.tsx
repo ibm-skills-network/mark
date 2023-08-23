@@ -60,8 +60,8 @@ const AuthorIntroduction = () => {
 
   // this handles how many attempt the learner can take the assignment
   const handleAttemptChange = (event: React.MouseEvent<HTMLButtonElement>) => {
-    // @Rui-Zhu1 this might be the issue with the attempt dropdown. value does not exist in type MouseEvent
-    setSelectedAttempt(parseInt(event.target.value as string));
+    const target = event.target as HTMLButtonElement;
+    setSelectedAttempt(parseInt(target.value));
   };
 
   // this handles the introduction markdown input
