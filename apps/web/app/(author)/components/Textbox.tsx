@@ -38,6 +38,7 @@ function TextBox() {
   >([]);
   const [isActive, setIsActive] = useState(false); // Track the active state of the component
   const [score, setScore] = useState("");
+  const [switchState, setSwitchState] = useState('a');
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -522,7 +523,21 @@ function TextBox() {
                   maxWidth: "100%",
                 }}
               />
-              <p>Options:</p>
+                    <div className="flex items-center">
+        <label className="mr-2">Switch:</label>
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={switchState === 'a'}
+            onChange={() => setSwitchState(switchState === 'a' ? 'b' : 'a')}
+          />
+          <span className="slider round"></span>
+        </label>
+      </div>
+
+      {switchState === 'a' && (
+        <div>
+          <p>Options:</p>
               {optionsWrittenQuestion.map((option, index) => (
                 <div key={index} className="flex items-center">
                   <input
@@ -555,6 +570,14 @@ function TextBox() {
               >
                 Add Option
               </button>
+        </div>
+      )}
+
+      {switchState === 'b' && (
+        <div>
+          {/* Empty content for state 'b' */}
+        </div>
+      )}
             </div>
           )}
         </div>
