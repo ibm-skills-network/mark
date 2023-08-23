@@ -2,6 +2,8 @@
 
 import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useEffect, useRef, useState } from "react";
+import MultipleChoiceQuestion from "@/app/(learner)/components/MultipleChoiceQuestion";
+import LongFormQuestion from "@/app/(learner)/components/LongFormQuestion";
 
 enum QuestionType {
   SingleCorrect = "single_correct",
@@ -10,6 +12,7 @@ enum QuestionType {
 }
 
 function TextBox() {
+  const [isLearnerView, setIsLearnerView] = useState(false);
   const [inputText, setInputText] = useState("");
   const [displayText, setDisplayText] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -160,7 +163,46 @@ function TextBox() {
         maxHeight: "50.5rem",
       }}
     >
-      <div
+     {/* Toggle view button */}
+     <button className="rounded-md bg-indigo-50 px-3.5 py-2.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-100"
+     onClick={() => setIsLearnerView(!isLearnerView)}>
+        {isLearnerView ? 'Author View' : 'Learner View'}
+      </button>
+
+      {isLearnerView ? (
+        <div>
+          {selectedQuestionType === QuestionType.SingleCorrect ||
+          selectedQuestionType === QuestionType.MultipleAnswers ? (
+            <MultipleChoiceQuestion
+              questionNumber={questions.length + 1}
+              questionText={inputText}
+              options={
+                selectedQuestionType === QuestionType.SingleCorrect
+                  ? optionsSingleCorrect
+                  : optionsMultipleAnswers
+              }
+              correctOptions={
+                selectedQuestionType === QuestionType.SingleCorrect
+                  ? [selectedOptionSingleCorrect].filter(Boolean) // To filter out null/undefined values
+                  : selectedOptionsMultipleAnswers
+              }
+              points={100} // Adjust as needed
+              onAnswerSelected={(status) => {
+                console.log(status); // Handle answer status if needed
+              }}
+            />
+          ) : selectedQuestionType === QuestionType.WrittenQuestion ? (
+            <LongFormQuestion
+              questionText={writtenQuestionText}
+              instructions={"Please write a detailed answer."}
+              maxWords={800} // Set a default or a dynamic value
+              points={40} // Set a default or a dynamic value
+              questionNumber={questions.length + 1}
+            />
+          ) : null}
+        </div>
+      ) :  
+      (<div
         className={`flex flex-col mt-8 bg-white transition border-l-8 rounded-md p-10 ${
           isActive ? "border-blue-700" : "border-white"
         }`}
@@ -504,7 +546,7 @@ function TextBox() {
             </button>
           </div>
         )}
-      </div>
+      </div>)}
     </div>
   );
 }

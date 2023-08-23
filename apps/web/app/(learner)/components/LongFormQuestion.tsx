@@ -22,7 +22,7 @@ function LongFormQuestion(props: Props) {
     questionNumber,
   } = props;
   const [answer, setAnswer] = useState<string>("");
-
+  
   return (
     <div
       className="p-8 rounded-lg shadow-md question-container"
