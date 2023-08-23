@@ -89,8 +89,8 @@ model AssignmentGroup {
 // questions: The list of questions in the assignment
 model Assignment {
   id              Int                     @id @default(autoincrement())
-  name            String?
-  type            AssignmentType?
+  name            String
+  type            AssignmentType
   numAttempts     Int?
   allotedTime     Int?
   passingGrade    Int?

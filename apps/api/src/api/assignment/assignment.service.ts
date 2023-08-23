@@ -13,37 +13,6 @@ import {
 export class AssignmentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(user: User): Promise<BaseAssignmentResponseDto> {
-    // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupID
-    // or by creating a new Group with that groupID
-    const assignment = await this.prisma.assignment.create({
-      data: {
-        groups: {
-          create: [
-            {
-              group: {
-                connectOrCreate: {
-                  where: {
-                    id: user.groupID,
-                  },
-                  create: {
-                    id: user.groupID,
-                  },
-                },
-              },
-            },
-          ],
-        },
-      },
-    });
-
-    // Return the response
-    return {
-      id: assignment.id,
-      success: true,
-    };
-  }
-
   async findOne(
     id: number,
     user: User
@@ -141,8 +110,6 @@ export class AssignmentService {
     // Not including groupID as that should remain same to reflect correct ownership
     /* eslint-disable unicorn/no-null */
     return {
-      name: null,
-      type: null,
       numAttempts: null,
       allotedTime: null,
       passingGrade: null,

@@ -53,18 +53,6 @@ export class AssignmentController {
     this.logger = parentLogger.child({ context: AssignmentController.name });
   }
 
-  @Post()
-  @Roles(UserRole.AUTHOR)
-  @ApiOperation({ summary: "Create assignment" })
-  @ApiBody({ type: CreateUpdateAssignmentRequestDto })
-  @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
-  @ApiResponse({ status: 403 })
-  createAssignment(
-    @Req() request: UserRequest
-  ): Promise<BaseAssignmentResponseDto> {
-    return this.assignmentService.create(request.user);
-  }
-
   @Get(":id")
   @Roles(UserRole.AUTHOR, UserRole.LEARNER)
   @UseGuards(AssignmentAccessControlGuard)

@@ -26,8 +26,8 @@ CREATE TABLE "AssignmentGroup" (
 -- CreateTable
 CREATE TABLE "Assignment" (
     "id" SERIAL NOT NULL,
-    "name" TEXT,
-    "type" "AssignmentType",
+    "name" TEXT NOT NULL,
+    "type" "AssignmentType" NOT NULL,
     "numAttempts" INTEGER,
     "allotedTime" INTEGER,
     "passingGrade" INTEGER,

@@ -8,6 +8,11 @@ import { JwtConfigService } from "../../auth/jwt/jwt.config.service";
 import { PrismaService } from "../../prisma.service";
 import { AddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
+import {
+  CreateAssignmentRequestDto,
+  UpdateAssignmentRequestDto,
+} from "./dto/assignment/create.update.assignment.request.dto";
+import { GetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
 import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
 @Injectable()
@@ -158,6 +163,82 @@ export class AdminService {
     return {
       assignmentID: assignmentID,
       groupID: groupID,
+      success: true,
+    };
+  }
+
+  async createAssignment(
+    createAssignmentRequestDto: CreateAssignmentRequestDto
+  ): Promise<BaseAssignmentResponseDto> {
+    // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupID
+    // or by creating a new Group with that groupID
+    const assignment = await this.prisma.assignment.create({
+      data: {
+        name: createAssignmentRequestDto.name,
+        type: createAssignmentRequestDto.type,
+        groups: {
+          create: [
+            {
+              group: {
+                connectOrCreate: {
+                  where: {
+                    id: createAssignmentRequestDto.groupID,
+                  },
+                  create: {
+                    id: createAssignmentRequestDto.groupID,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    return {
+      id: assignment.id,
+      success: true,
+    };
+  }
+
+  async getAssignment(id: number): Promise<GetAssignmentResponseDto> {
+    const result = await this.prisma.assignment.findUnique({
+      where: { id },
+    });
+
+    if (!result) {
+      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+    }
+    return {
+      id: result.id,
+      name: result.name,
+      type: result.type,
+      success: true,
+    };
+  }
+
+  async updateAssignment(
+    id: number,
+    updateAssignmentDto: UpdateAssignmentRequestDto
+  ): Promise<BaseAssignmentResponseDto> {
+    const result = await this.prisma.assignment.update({
+      where: { id },
+      data: updateAssignmentDto,
+    });
+
+    return {
+      id: result.id,
+      success: true,
+    };
+  }
+
+  async removeAssignment(id: number): Promise<BaseAssignmentResponseDto> {
+    const result = await this.prisma.assignment.delete({
+      where: { id },
+    });
+
+    return {
+      id: result.id,
       success: true,
     };
   }
