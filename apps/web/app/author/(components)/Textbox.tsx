@@ -1,7 +1,7 @@
 "use client";
 
-import LongFormQuestion from "@/app/learner/(components)/LongFormQuestion";
-import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
+import LongFormQuestion from "@/app/learner/components/LongFormQuestion";
+import MultipleChoiceQuestion from "@/app/learner/components/MultipleChoiceQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -168,7 +168,7 @@ function TextBox() {
     <div
       className={`flex flex-col mt-8 pl-2 rounded-md p-4`}
       style={{
-        minWidth: "67.5625rem",
+        width: "27.5625rem",
         minHeight: "30.5rem",
         maxHeight: "50.5rem",
       }}
@@ -244,7 +244,7 @@ function TextBox() {
             Question:
           </div>
           <MarkdownEditor
-            style={{ height: "200px" }}
+            style={{ height: "200px", width:"800px"}}
             value={inputText}
             onChange={setInputText}
           />
@@ -491,7 +491,7 @@ function TextBox() {
 
           {selectedQuestionType === QuestionType.WrittenQuestion && (
             <div className="mt-4">
-              <div style={{ width: 1070, height: 104, background: "#E0E7FF" }}>
+              <div style={{ width: 800, height: 104, background: "#E0E7FF" }}>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="65"
