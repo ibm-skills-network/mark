@@ -30,7 +30,16 @@ function TextBox() {
     useState<string[]>([]);
   const [writtenQuestionText, setWrittenQuestionText] = useState("");
   const [questions, setQuestions] = useState<Array<JSX.Element>>([]);
-  const [jsonData, setJsonData] = useState<any>(null);
+  const [jsonData, setJsonData] = useState<{
+    inputText: string;
+    displayText: string;
+    questionType: QuestionType | null;
+    optionsSingleCorrect: string[];
+    selectedOptionSingleCorrect: string | null;
+    optionsMultipleAnswers: string[];
+    selectedOptionsMultipleAnswers: string[];
+    writtenQuestionText: string;
+  } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isTableMode, setIsTableMode] = useState(false);
   const [optionsWrittenQuestion, setOptionsWrittenQuestion] = useState<
@@ -150,7 +159,7 @@ function TextBox() {
     setOptionsWrittenQuestion(updatedOptions);
   };
 
-  const handleScore = (event) => {
+  const handleScore = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newScore = event.target.value;
     setScore(newScore);
   };
