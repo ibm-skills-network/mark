@@ -4,6 +4,7 @@ import LongFormQuestion from "@/app/learner/(components)/LongFormQuestion";
 import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useEffect, useRef, useState } from "react";
+import EditableTable from "./editable-react-table/src/EditableTable.js"
 
 enum QuestionType {
   SingleCorrect = "single_correct",
@@ -533,22 +534,33 @@ function TextBox() {
                 }}
               />
               <div className="flex items-center">
-                <label className="mr-2">Switch:</label>
                 <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={switchState === "a"}
-                    onChange={() =>
-                      setSwitchState(switchState === "a" ? "b" : "a")
-                    }
-                  />
+
+
+                <button
+                  className={`text-black bg-white hover:bg-white focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-white dark:hover:bg-gray-300 ${switchState === 'a' ? 'bg-blue-800' : ''}`}
+                  onClick={() => setSwitchState('a')}
+                >
+                  Single Criteria
+                </button>
+                
+                <button
+                  className={`text-black bg-white hover:bg-white focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-white dark:hover:bg-gray-300 ${switchState === 'b' ? 'bg-blue-800' : ''}`}
+                  onClick={() => setSwitchState('b')}
+                >
+                  Multiple Criteria
+                </button>
+
+
+
+
                   <span className="slider round"></span>
                 </label>
               </div>
 
               {switchState === "a" && (
                 <div>
-                  <p>Options:</p>
+                  <p>Point distribution for the Rubric</p>
                   {optionsWrittenQuestion.map((option, index) => (
                     <div key={index} className="flex items-center">
                       <input
@@ -585,7 +597,9 @@ function TextBox() {
               )}
 
               {switchState === "b" && (
-                <div>{/* Empty content for state 'b' */}</div>
+                <div>
+                  <EditableTable/>
+                </div>
               )}
             </div>
           )}
