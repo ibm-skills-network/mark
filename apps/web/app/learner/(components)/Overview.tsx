@@ -25,15 +25,20 @@ function Overview(props: Props) {
   }, [secondsRemaining]);
 
   return (
-    <div className="p-4 border rounded-lg">
-      <h3 className="mb-4 text-lg font-bold">Exam Overview</h3>
-      <div className="mb-4 flex flex-wrap gap-2">
-        {/* Flexbox container */}
+    <div className="p-4 border rounded-lg space-y-4 w-full max-w-xl mx-auto">
+      <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
+      
+      <div className="text-center font-medium">
+        Time remaining: {Math.floor(secondsRemaining / 60)}:
+        {(secondsRemaining % 60).toString().padStart(2, "0")}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
         {questions.map((question: QuestionStatus, index) => (
           <div
             key={index}
-            onClick={() => setCurrentIndex(index)} // Redirect to the clicked question
-            className={`p-2 border rounded-lg text-center cursor-pointer flex-1 ${
+            onClick={() => setCurrentIndex(index)}
+            className={`p-2 border rounded-lg text-center cursor-pointer ${
               question === "correct"
                 ? "bg-green-100"
                 : question === "incorrect"
@@ -43,19 +48,17 @@ function Overview(props: Props) {
                 : "bg-gray-100"
             }`}
           >
-            Question {index + 1}: {question === "correct" && "✓"}
-            {question === "incorrect" && "✗"}
-            {question === "partiallyCorrect" && "✓✗"}
-            {question === "unanswered" && "Unanswered"}
+            <div>{index + 1}</div> {/* Displaying just the number on a separate line */}
+            {question === "correct" && <div className="text-green-600">✓</div>}
+            {question === "incorrect" && <div className="text-red-600">✗</div>}
+            {question === "partiallyCorrect" && <div>✓✗</div>}
+            {/* Removed the unanswered status */}
           </div>
         ))}
-      </div>
-      <div>
-        Time remaining: {Math.floor(secondsRemaining / 60)}:
-        {(secondsRemaining % 60).toString().padStart(2, "0")}
       </div>
     </div>
   );
 }
 
 export default Overview;
+

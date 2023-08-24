@@ -33,19 +33,6 @@ function MultipleChoiceQuestion(props: Props) {
   const [pointsEarned, setPointsEarned] = useState<number>(0);
   const [submitted, setSubmitted] = useState<boolean>(false);
 
-  useEffect(() => {
-    const storedAttempts = localStorage.getItem(
-      `attempts-question-${questionNumber}`
-    );
-    const attemptsCount = storedAttempts ? parseInt(storedAttempts) : 0;
-
-    setAttempts(attemptsCount);
-    setSelectedOptions([]);
-    setIsCorrect(null);
-    setPointsEarned(0);
-    setSubmitted(false);
-  }, [questionNumber]);
-
   const handleOptionClick = (option: string) => {
     setSubmitted(false);
     const alreadySelected = selectedOptions.includes(option);
@@ -57,14 +44,6 @@ function MultipleChoiceQuestion(props: Props) {
   };
 
   const handleSubmit = () => {
-    setAttempts((prevAttempts) => {
-      const newAttempts = prevAttempts + 1;
-      localStorage.setItem(
-        `attempts-question-${questionNumber}`,
-        String(newAttempts)
-      );
-      return newAttempts;
-    });
     setAttempts((prevAttempts) => prevAttempts + 1);
     setSubmitted(true);
     let correctCount = 0;
