@@ -6,6 +6,7 @@ import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
+  maxAttempts: number;
   questionNumber: number;
   questionText: string;
   options: string[];
@@ -24,6 +25,7 @@ function MultipleChoiceQuestion(props: Props) {
     correctOptions,
     onAnswerSelected,
   } = props;
+  const [attempts, setAttempts] = useState<number>(0);  
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isCorrect, setIsCorrect] = useState<"all" | "some" | "none" | null>(
     null
@@ -32,11 +34,15 @@ function MultipleChoiceQuestion(props: Props) {
   const [submitted, setSubmitted] = useState<boolean>(false);
 
   useEffect(() => {
+    const storedAttempts = localStorage.getItem(`attempts-question-${questionNumber}`);
+    const attemptsCount = storedAttempts ? parseInt(storedAttempts) : 0;
+
+    setAttempts(attemptsCount);
     setSelectedOptions([]);
     setIsCorrect(null);
     setPointsEarned(0);
     setSubmitted(false);
-  }, [questionNumber]);
+}, [questionNumber]);
 
   const handleOptionClick = (option: string) => {
     setSubmitted(false);
@@ -49,6 +55,12 @@ function MultipleChoiceQuestion(props: Props) {
   };
 
   const handleSubmit = () => {
+    setAttempts((prevAttempts) => {
+      const newAttempts = prevAttempts + 1;
+      localStorage.setItem(`attempts-question-${questionNumber}`, String(newAttempts));
+      return newAttempts;
+    });
+    setAttempts(prevAttempts => prevAttempts + 1);
     setSubmitted(true);
     let correctCount = 0;
     let incorrectCount = 0;
@@ -103,6 +115,23 @@ function MultipleChoiceQuestion(props: Props) {
     return null;
   };
 
+  const renderAttemptMessage = () => {
+    if (attempts >= props.maxAttempts) {
+      return (
+        <p className="text-red-600">
+          You have exhausted your attempts for this question.
+        </p>
+      );
+    } else if (attempts > 0) {
+      return (
+        <p className="text-yellow-600">
+          You have used {attempts} of {props.maxAttempts} attempts.
+        </p>
+      );
+    }
+    return null;
+  };
+
   return (
     <div
       className="p-8 rounded-lg shadow-md question-container"
@@ -135,8 +164,9 @@ function MultipleChoiceQuestion(props: Props) {
           </button>
         ))}
       </div>
-      <Button text="Submit" onClick={handleSubmit} />
+      <Button text="Submit" onClick={handleSubmit} disabled={attempts >= props.maxAttempts} /> 
       {renderFeedbackMessage()}
+      {renderAttemptMessage()}
     </div>
   );
 }
