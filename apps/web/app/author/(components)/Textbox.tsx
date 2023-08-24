@@ -242,7 +242,7 @@ function TextBox() {
             </div>
           )}
           <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2">
-            Question:
+            Question
           </div>
           <MarkdownEditor
             style={{ height: "200px", width: "800px" }}
