@@ -27,7 +27,7 @@ function Overview(props: Props) {
   return (
     <div className="p-4 border rounded-lg space-y-4 w-full max-w-xl mx-auto">
       <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
-      
+
       <div className="text-center font-medium">
         Time remaining: {Math.floor(secondsRemaining / 60)}:
         {(secondsRemaining % 60).toString().padStart(2, "0")}
@@ -48,7 +48,8 @@ function Overview(props: Props) {
                 : "bg-gray-100"
             }`}
           >
-            <div>{index + 1}</div> {/* Displaying just the number on a separate line */}
+            <div>{index + 1}</div>{" "}
+            {/* Displaying just the number on a separate line */}
             {question === "correct" && <div className="text-green-600">✓</div>}
             {question === "incorrect" && <div className="text-red-600">✗</div>}
             {question === "partiallyCorrect" && <div>✓✗</div>}
@@ -61,4 +62,3 @@ function Overview(props: Props) {
 }
 
 export default Overview;
-

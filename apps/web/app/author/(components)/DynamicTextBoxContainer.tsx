@@ -26,19 +26,21 @@ function DynamicTextBoxContainer() {
 
   return (
     <div className="mb-[600px]">
-
       {/* Render each TextBox component */}
       {textBoxes.map((timestamp, index) => (
         <div key={timestamp} className="relative">
-          <div className="inline-flex mr-[1000px] rounded-full border-gray-200 border-2 bg-white p-1" style={{ width: '2.875rem', height: '2.875rem' }}>
+          <div
+            className="inline-flex mr-[1000px] rounded-full border-gray-200 border-2 bg-white p-1"
+            style={{ width: "2.875rem", height: "2.875rem" }}
+          >
             <p className="text-gray-500 text-lg mx-auto my-auto">{index + 1}</p>
           </div>
           {/* Delete question button */}
-          <button className={`absolute 
+          <button
+            className={`absolute 
                               top-0 
                               right-0 
-                              text-red-500`
-                            }
+                              text-red-500`}
             onClick={() => handleDeleteTextBox(timestamp)}
           >
             <svg
@@ -58,14 +60,19 @@ function DynamicTextBoxContainer() {
             </svg>
           </button>
           <TextBox />
-          
         </div>
       ))}
       <button
         className="bg-blue-700 text-white p-2 rounded-full mb-4 mx-auto justify-center ml-[450px]"
         onClick={handleAddTextBox}
       >
-        <svg width="54" height="54" viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg
+          width="54"
+          height="54"
+          viewBox="0 0 54 54"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
           <g filter="url(#filter0_d_702_15817)">
             <circle cx="27" cy="27" r="25" fill="#1D4ED8" />
             <path
