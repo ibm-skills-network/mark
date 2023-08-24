@@ -20,12 +20,6 @@ function DynamicTextBoxContainer() {
 
   return (
     <div>
-      <button
-        className="bg-green-500 text-white p-2 rounded-md mt-4"
-        onClick={handleAddTextBox}
-      >
-        Add New TextBox
-      </button>
 
       {/* Render each TextBox component */}
       {textBoxes.map((timestamp) => (
@@ -52,8 +46,15 @@ function DynamicTextBoxContainer() {
             </svg>
           </button>
           <TextBox />
+          
         </div>
       ))}
+      <button
+        className="bg-green-500 text-white p-2 rounded-md mb-4 mx-auto justify-center"
+        onClick={handleAddTextBox}
+      >
+        Add New TextBox
+      </button>
     </div>
   );
 }

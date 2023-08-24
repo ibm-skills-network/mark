@@ -166,11 +166,9 @@ function TextBox() {
 
   return (
     <div
-      className={`flex flex-col mt-8 pl-2 rounded-md p-4 ml-[550px]`}
+      className={`flex flex-col pl-2 rounded-md p-4 mx-auto`}
       style={{
-        width: "27.5625rem",
         minHeight: "30.5rem",
-        maxHeight: "50.5rem",
       }}
     >
       {/* Toggle view button */}
