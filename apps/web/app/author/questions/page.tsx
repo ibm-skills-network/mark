@@ -8,7 +8,6 @@ function Component(props: Props) {
 
   return (
     <div>
-      <TextBox />
       <div className="mt-0">
         <DynamicTextBoxContainer />
       </div>
