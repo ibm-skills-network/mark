@@ -1,3 +1,4 @@
+import ErrorPage from "@components/ErrorPage";
 import { BASE_API_ROUTES } from "@config/constants";
 import { User } from "@config/types";
 import { redirect } from "next/navigation";
@@ -16,7 +17,8 @@ export default async function Home() {
   const { role } = await getUser<User>();
   if (role === "author") {
     redirect("/author/introduction");
-  } else {
+  } else if (role === "learner") {
     redirect("/learner");
   }
+  return <ErrorPage error={new Error("Invalid role")} />;
 }
