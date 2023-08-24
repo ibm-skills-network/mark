@@ -1,6 +1,5 @@
 "use client";
 
-import ErrorPage from "@components/ErrorPage";
 import { BASE_API_ROUTES } from "@config/constants";
 import { User } from "@config/types";
 import { useRouter } from "next/navigation";

@@ -6,9 +6,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-blue-50 flex flex-col items-center justify-between min-h-screen">
+    <>
       <Header />
-      {children}
-    </div>
+      <div className="bg-blue-50">{children}</div>
+    </>
   );
 }

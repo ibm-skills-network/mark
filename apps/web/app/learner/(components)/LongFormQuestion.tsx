@@ -35,7 +35,7 @@ function LongFormQuestion(props: Props) {
       />
       <p className="mb-4 text-gray-700">{questionText}</p>
       <p className="mb-4 text-gray-700">{instructions}</p>
-      <MarkdownEditor value={answer} onChange={setAnswer} />
+      <MarkdownEditor value={answer} setValue={setAnswer} />
       <p className="text-gray-600">Max {maxWords} words</p>
       <div className="flex justify-between mt-4">
         <Button text="Submit Question" />

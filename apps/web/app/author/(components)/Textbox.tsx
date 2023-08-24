@@ -241,7 +241,7 @@ function TextBox() {
           <MarkdownEditor
             style={{ height: "200px", width: "800px" }}
             value={inputText}
-            onChange={setInputText}
+            setValue={setInputText}
           />
           {/* <div className="mt-2">
         <button

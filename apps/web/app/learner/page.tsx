@@ -48,19 +48,25 @@ function LearnerLayout() {
     }
   };
   return (
-    <>
+    <main className="p-24">
       {showIntroduction ? (
         <IntroductionPage
-          className="p-24 m-24"
+          className=""
           attemptsAllowed={1}
           timeLimit={50}
           outOf={40}
           onBegin={beginAssignment}
         />
       ) : (
-        <div className="flex p-8"> {/* Added padding to give some space between components */}
-          <div className="w-3/4 pr-8 min-h-screen"> {/* Added right padding and min-height */}
-            <div className="bg-white p-4 shadow-lg rounded-lg"> {/* Added a container with padding, shadow, and rounded corners for better separation */}
+        <div className="flex p-8">
+          {" "}
+          {/* Added padding to give some space between components */}
+          <div className="w-3/4 pr-8 min-h-screen">
+            {" "}
+            {/* Added right padding and min-height */}
+            <div className="bg-white p-4 shadow-lg rounded-lg">
+              {" "}
+              {/* Added a container with padding, shadow, and rounded corners for better separation */}
               {renderQuestion(questionsData[currentIndex], currentIndex)}
             </div>
             <div className="flex justify-between mt-4">
@@ -76,7 +82,9 @@ function LearnerLayout() {
               />
             </div>
           </div>
-          <div className="w-1/4 min-h-screen"> {/* Added min-height */}
+          <div className="w-1/4 min-h-screen">
+            {" "}
+            {/* Added min-height */}
             <Overview
               questions={questionStatuses}
               timeLimit={3600}
@@ -85,7 +93,7 @@ function LearnerLayout() {
           </div>
         </div>
       )}
-    </>
+    </main>
   );
 }
 

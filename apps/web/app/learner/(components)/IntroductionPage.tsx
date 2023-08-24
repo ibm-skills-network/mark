@@ -1,7 +1,8 @@
 import React from "react";
+import { twMerge } from "tailwind-merge";
 import Button from "./Button";
 
-interface Props extends React.HTMLAttributes<HTMLDivElement> {
+interface Props extends React.ComponentPropsWithoutRef<"div"> {
   title?: string;
   attemptsAllowed?: number;
   timeLimit?: number;
@@ -16,14 +17,15 @@ function IntroductionPage(props: Props) {
     timeLimit = 50,
     outOf = 40,
     onBegin,
-    className,
+    className = "",
   } = props;
 
   return (
     <div
-      className={
-        "bg-white p-8 rounded-lg shadow-md introduction-container " + className
-      }
+      className={twMerge(
+        "bg-white p-8 rounded-lg shadow-md introduction-container",
+        className
+      )}
     >
       <div className="border-2 p-4 flex justify-between items-center mb-4">
         <div>

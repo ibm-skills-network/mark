@@ -3,7 +3,7 @@
 import React from "react";
 import { twMerge } from "tailwind-merge";
 
-interface Props extends React.HTMLAttributes<HTMLHeadingElement> {
+interface Props extends React.ComponentPropsWithoutRef<"h1"> {
   text: string;
   level?: string;
 }
