@@ -20,7 +20,7 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
-import { getAdminAuthGuard } from "src/auth/jwt/admin/utils";
+import { getAdminAuthGuard } from "../../auth/jwt/admin/utils";
 import { Admin } from "../../auth/jwt/jwt.global.auth.guard";
 import { AdminService } from "./admin.service";
 import { AddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
