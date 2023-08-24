@@ -220,7 +220,6 @@ function TextBox() {
           style={{
             minWidth: "62.5625rem",
             minHeight: "25.5rem",
-            maxHeight: "50.5rem",
           }}
           onFocus={handleFocus}
           onBlur={handleBlur}

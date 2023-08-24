@@ -25,11 +25,12 @@ function DynamicTextBoxContainer() {
   };
 
   return (
-    <div>
+    <div className="mb-[600px]">
 
       {/* Render each TextBox component */}
-      {textBoxes.map((timestamp) => (
+      {textBoxes.map((timestamp, index) => (
         <div key={timestamp} className="relative">
+          <p className="-mb-[10px]">Question {index + 1}:</p>
           {/* Delete question button */}
           <button className={`absolute 
                               top-0 
