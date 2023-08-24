@@ -1,6 +1,12 @@
 import MarkdownEditor from "@/components/MarkDownEditor";
 import Title from "@/components/Title";
-import { ComponentPropsWithoutRef, ElementType } from "react";
+import { GradingData } from "@/config/types";
+import {
+  ComponentPropsWithoutRef,
+  ElementType,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { twMerge } from "tailwind-merge";
 import GradingOptionsForm from "./GradingOptionsForm";
 import {
@@ -8,8 +14,6 @@ import {
   InstructionIcon,
   IntroductionIcon,
 } from "./IntroductionSvgs";
-
-interface Props {}
 
 const titleToDescription = {
   Introduction:
@@ -38,7 +42,7 @@ export function IntroductionSection<T extends ElementType = "section">({
   className?: string;
   title: string;
   value: unknown;
-  setValue: (value: unknown) => void;
+  setValue: Dispatch<SetStateAction<unknown>>;
 }) {
   const Component = as ?? "section";
   const description = titleToDescription[title];
@@ -64,7 +68,10 @@ export function IntroductionSection<T extends ElementType = "section">({
             className=""
           />
         ) : (
-          <GradingOptionsForm />
+          <GradingOptionsForm
+            value={value as GradingData}
+            setValue={setValue}
+          />
         )}
       </div>
     </Component>

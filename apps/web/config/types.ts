@@ -14,5 +14,5 @@ export type GradingData = {
   isGraded: boolean;
   timeEstimate: number;
   passingGrade: number;
-  Attempts: number;
+  attempts: number;
 };

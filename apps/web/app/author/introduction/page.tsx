@@ -9,8 +9,13 @@ import { IntroductionSection } from "../(components)/IntroductionSection";
 const AuthorIntroduction = () => {
   const [introduction, setIntroduction] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [grading, setGrading] = useState<GradingData>();
-  const [isGraded, setIsGraded] = useState(true);
+  const [grading, setGrading] = useState<GradingData>({
+    isGraded: true,
+    attempts: 1,
+    passingGrade: 50,
+    timeEstimate: 50,
+  });
+
   const [selectedAttempt, setSelectedAttempt] = useState(1); // Default selected attempt is 1
 
   const [file, setFile] = useState();
@@ -79,14 +84,14 @@ const AuthorIntroduction = () => {
   // };
 
   // this handles when user set this assignment to be practice/ungraded
-  const handleUngradedChange = () => {
-    setIsGraded(false); // Set isActive to true when the component is focused
-  };
+  // const handleUngradedChange = () => {
+  //   setIsGraded(false); // Set isActive to true when the component is focused
+  // };
 
-  // this handles when user set this assignment to be graded
-  const handleGradedChange = () => {
-    setIsGraded(true); // Set isActive to false when the component loses focus
-  };
+  // // this handles when user set this assignment to be graded
+  // const handleGradedChange = () => {
+  //   setIsGraded(true); // Set isActive to false when the component loses focus
+  // };
 
   return (
     <main className="flex flex-col gap-y-11 mx-auto max-w-6xl py-20">
