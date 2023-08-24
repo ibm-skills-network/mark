@@ -11,7 +11,6 @@ function Component(props: Props) {
       <div className="mt-0">
         <DynamicTextBoxContainer />
       </div>
-      <TextBox />
     </div>
   );
 }

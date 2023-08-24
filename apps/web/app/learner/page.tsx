@@ -47,7 +47,6 @@ function LearnerLayout() {
       );
     }
   };
-
   return (
     <>
       {showIntroduction ? (
@@ -59,9 +58,11 @@ function LearnerLayout() {
           onBegin={beginAssignment}
         />
       ) : (
-        <div className="flex">
-          <div className="w-3/4">
-            {renderQuestion(questionsData[currentIndex], currentIndex)}
+        <div className="flex p-8"> {/* Added padding to give some space between components */}
+          <div className="w-3/4 pr-8 min-h-screen"> {/* Added right padding and min-height */}
+            <div className="bg-white p-4 shadow-lg rounded-lg"> {/* Added a container with padding, shadow, and rounded corners for better separation */}
+              {renderQuestion(questionsData[currentIndex], currentIndex)}
+            </div>
             <div className="flex justify-between mt-4">
               <Button
                 text="Previous"
@@ -75,7 +76,7 @@ function LearnerLayout() {
               />
             </div>
           </div>
-          <div className="w-1/4">
+          <div className="w-1/4 min-h-screen"> {/* Added min-height */}
             <Overview
               questions={questionStatuses}
               timeLimit={3600}
