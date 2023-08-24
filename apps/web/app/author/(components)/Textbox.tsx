@@ -4,7 +4,6 @@ import LongFormQuestion from "@/app/learner/(components)/LongFormQuestion";
 import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
 import React, { useEffect, useRef, useState } from "react";
-import EditableTable from "./editable-react-table/src/EditableTable.js"
 
 enum QuestionType {
   SingleCorrect = "single_correct",
@@ -187,6 +186,7 @@ function TextBox() {
           {selectedQuestionType === QuestionType.SingleCorrect ||
           selectedQuestionType === QuestionType.MultipleAnswers ? (
             <MultipleChoiceQuestion
+              maxAttempts={3}
               questionNumber={questions.length + 1}
               questionText={inputText}
               options={
@@ -245,7 +245,7 @@ function TextBox() {
             Question:
           </div>
           <MarkdownEditor
-            style={{ height: "200px", width:"800px"}}
+            style={{ height: "200px", width: "800px" }}
             value={inputText}
             onChange={setInputText}
           />
@@ -535,24 +535,23 @@ function TextBox() {
               />
               <div className="flex items-center">
                 <label className="switch">
+                  <button
+                    className={`text-black bg-white hover:bg-white focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-white dark:hover:bg-gray-300 ${
+                      switchState === "a" ? "bg-blue-800" : ""
+                    }`}
+                    onClick={() => setSwitchState("a")}
+                  >
+                    Single Criteria
+                  </button>
 
-
-                <button
-                  className={`text-black bg-white hover:bg-white focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-white dark:hover:bg-gray-300 ${switchState === 'a' ? 'bg-blue-800' : ''}`}
-                  onClick={() => setSwitchState('a')}
-                >
-                  Single Criteria
-                </button>
-                
-                <button
-                  className={`text-black bg-white hover:bg-white focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-white dark:hover:bg-gray-300 ${switchState === 'b' ? 'bg-blue-800' : ''}`}
-                  onClick={() => setSwitchState('b')}
-                >
-                  Multiple Criteria
-                </button>
-
-
-
+                  <button
+                    className={`text-black bg-white hover:bg-white focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-white dark:hover:bg-gray-300 ${
+                      switchState === "b" ? "bg-blue-800" : ""
+                    }`}
+                    onClick={() => setSwitchState("b")}
+                  >
+                    Multiple Criteria
+                  </button>
 
                   <span className="slider round"></span>
                 </label>
@@ -596,11 +595,7 @@ function TextBox() {
                 </div>
               )}
 
-              {switchState === "b" && (
-                <div>
-                  <EditableTable/>
-                </div>
-              )}
+              {switchState === "b" && <div></div>}
             </div>
           )}
         </div>
