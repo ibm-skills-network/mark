@@ -87,9 +87,9 @@ const AuthorIntroduction = () => {
   return (
     <div>
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
         style={{
-          minWidth: "67.5625rem",
+          width: "68.5625rem",
           minHeight: "20.5rem",
           maxHeight: "50.5rem",
         }}
@@ -146,9 +146,9 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
         style={{
-          minWidth: "67.5625rem",
+          width: "68.5625rem",
           minHeight: "20.5rem",
           maxHeight: "50.5rem",
         }}
@@ -205,9 +205,9 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
         style={{
-          minWidth: "67.5625rem",
+          width: "68.5625rem",
           minHeight: "20.5rem",
           maxHeight: "50.5rem",
         }}
@@ -372,7 +372,7 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
         style={{
           width: "68.5625rem",
           minHeight: "20.5rem",
@@ -442,9 +442,8 @@ const AuthorIntroduction = () => {
                 className="upload-button ml-96 mt-2"
                 onClick={onButtonClick}
               >
-                Upload a file here or
+                Upload a file here or drag and drop
               </button>
-              <p className="ml-[543px] -mt-6">drag and drop</p>
             </div>
           </label>
           {dragActive && (
