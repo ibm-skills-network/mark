@@ -87,7 +87,7 @@ const AuthorIntroduction = () => {
   return (
     <div>
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
         style={{
           minWidth: "67.5625rem",
           minHeight: "20.5rem",
@@ -113,7 +113,7 @@ const AuthorIntroduction = () => {
         <div
           className=""
           style={{
-            width: 223.17,
+            width: "57.5625rem",
             color: "#000000",
             fontSize: 19.17,
 
@@ -135,7 +135,7 @@ const AuthorIntroduction = () => {
           what learners will be required to do
         </div>
 
-        <div className="w-[1082px] h-[104px] bg-gray-50 rounded-tl-xl rounded-tr-xl border -mt-20 border-gray-300" />
+        <div className="w-[1095px] h-[104px] bg-gray-50 rounded-tl-xl rounded-tr-xl border -ml-[10px] -mt-[95px] border-gray-300" />
         <div>
           <MarkdownEditor
             style={{ height: "150px" }}
@@ -146,7 +146,7 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
         style={{
           minWidth: "67.5625rem",
           minHeight: "20.5rem",
@@ -172,7 +172,7 @@ const AuthorIntroduction = () => {
         <div
           className=""
           style={{
-            width: 223.17,
+            width: "57.5625rem",
             color: "#000000",
             fontSize: 19.17,
 
@@ -205,7 +205,7 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
         style={{
           minWidth: "67.5625rem",
           minHeight: "20.5rem",
@@ -230,7 +230,7 @@ const AuthorIntroduction = () => {
 
         <div
           style={{
-            width: 223.17,
+            width: "57.5625rem",
             color: "#000000",
             fontSize: 19.17,
             transform: "translate(105px, -6px)", // Adjust the vertical value as needed
@@ -372,9 +372,9 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[100px]`}
         style={{
-          minWidth: "67.5625rem",
+          width: "68.5625rem",
           minHeight: "20.5rem",
           maxHeight: "50.5rem",
         }}
@@ -397,7 +397,7 @@ const AuthorIntroduction = () => {
 
         <div
           style={{
-            width: 223.17,
+            width: "68.5625rem",
             color: "#000000",
             fontSize: 19.17,
             transform: "translate(105px, -6px)", // Adjust the vertical value as needed
@@ -417,7 +417,7 @@ const AuthorIntroduction = () => {
           Drag and drop any files the student may need to interact
         </div>
 
-        <div className="w-[1082px] h-[104px] bg-gray-50 rounded-tl-xl rounded-tr-xl border -mt-20 border-gray-300" />
+        <div className="w-[1095px] h-[104px] bg-gray-50 rounded-tl-xl rounded-tr-xl border -ml-[10px] -mt-[95px] border-gray-300" />
 
         <form
           id="form-file-upload"
