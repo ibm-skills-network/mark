@@ -1,13 +1,13 @@
 "use client";
 
 import { QuestionStatus } from "@/config/types";
+import { QuestionData, questionsData } from "@config/constants";
 import { useState } from "react";
 import Button from "./(components)/Button";
 import IntroductionPage from "./(components)/IntroductionPage";
 import LongFormQuestion from "./(components)/LongFormQuestion";
 import MultipleChoiceQuestion from "./(components)/MultipleChoiceQuestion";
 import Overview from "./(components)/Overview";
-import { QuestionData, questionsData } from "./(components)/questions";
 
 function LearnerLayout() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -40,6 +40,7 @@ function LearnerLayout() {
       return (
         <MultipleChoiceQuestion
           {...question}
+          maxAttempts={3}
           questionNumber={questionNumber}
           onAnswerSelected={updateStatus}
         />
