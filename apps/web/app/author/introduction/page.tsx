@@ -87,7 +87,7 @@ const AuthorIntroduction = () => {
   return (
     <div>
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white mx-auto`}
         style={{
           width: "68.5625rem",
           minHeight: "20.5rem",
@@ -146,7 +146,7 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white mx-auto`}
         style={{
           width: "68.5625rem",
           minHeight: "20.5rem",
@@ -205,7 +205,7 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white mx-auto`}
         style={{
           width: "68.5625rem",
           minHeight: "20.5rem",
@@ -372,7 +372,7 @@ const AuthorIntroduction = () => {
       </div>
 
       <div
-        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white ml-[750px]`}
+        className={`flex flex-col border mt-8 pl-2 rounded-md p-4 bg-white mx-auto`}
         style={{
           width: "68.5625rem",
           minHeight: "20.5rem",
