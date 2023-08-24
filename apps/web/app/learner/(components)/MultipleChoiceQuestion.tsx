@@ -25,7 +25,7 @@ function MultipleChoiceQuestion(props: Props) {
     correctOptions,
     onAnswerSelected,
   } = props;
-  const [attempts, setAttempts] = useState<number>(0);  
+  const [attempts, setAttempts] = useState<number>(0);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isCorrect, setIsCorrect] = useState<"all" | "some" | "none" | null>(
     null
@@ -34,7 +34,9 @@ function MultipleChoiceQuestion(props: Props) {
   const [submitted, setSubmitted] = useState<boolean>(false);
 
   useEffect(() => {
-    const storedAttempts = localStorage.getItem(`attempts-question-${questionNumber}`);
+    const storedAttempts = localStorage.getItem(
+      `attempts-question-${questionNumber}`
+    );
     const attemptsCount = storedAttempts ? parseInt(storedAttempts) : 0;
 
     setAttempts(attemptsCount);
@@ -42,7 +44,7 @@ function MultipleChoiceQuestion(props: Props) {
     setIsCorrect(null);
     setPointsEarned(0);
     setSubmitted(false);
-}, [questionNumber]);
+  }, [questionNumber]);
 
   const handleOptionClick = (option: string) => {
     setSubmitted(false);
@@ -57,10 +59,13 @@ function MultipleChoiceQuestion(props: Props) {
   const handleSubmit = () => {
     setAttempts((prevAttempts) => {
       const newAttempts = prevAttempts + 1;
-      localStorage.setItem(`attempts-question-${questionNumber}`, String(newAttempts));
+      localStorage.setItem(
+        `attempts-question-${questionNumber}`,
+        String(newAttempts)
+      );
       return newAttempts;
     });
-    setAttempts(prevAttempts => prevAttempts + 1);
+    setAttempts((prevAttempts) => prevAttempts + 1);
     setSubmitted(true);
     let correctCount = 0;
     let incorrectCount = 0;
@@ -164,7 +169,11 @@ function MultipleChoiceQuestion(props: Props) {
           </button>
         ))}
       </div>
-      <Button text="Submit" onClick={handleSubmit} disabled={attempts >= props.maxAttempts} /> 
+      <Button
+        text="Submit"
+        onClick={handleSubmit}
+        disabled={attempts >= props.maxAttempts}
+      />
       {renderFeedbackMessage()}
       {renderAttemptMessage()}
     </div>

@@ -40,7 +40,7 @@ function LearnerLayout() {
       return (
         <MultipleChoiceQuestion
           {...question}
-          maxAttempts={3} 
+          maxAttempts={3}
           questionNumber={questionNumber}
           onAnswerSelected={updateStatus}
         />
