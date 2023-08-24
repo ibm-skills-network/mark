@@ -6,3 +6,5 @@ export const SUBMISSION_DEADLINE_EXCEPTION_MESSAGE =
   "The submission deadline has passed.";
 export const GRADE_SUBMISSION_EXCEPTION =
   "Failed to submit the final grade to lms.";
+export const IN_PROGRESS_SUBMISSION_EXCEPTION =
+  "A submission is already in progress and has not expired.";

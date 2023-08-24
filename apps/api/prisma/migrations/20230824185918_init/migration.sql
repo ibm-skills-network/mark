@@ -2,6 +2,9 @@
 CREATE TYPE "AssignmentType" AS ENUM ('AI_GRADED', 'MANUAL');
 
 -- CreateEnum
+CREATE TYPE "GradingType" AS ENUM ('GRADED', 'PRACTICE');
+
+-- CreateEnum
 CREATE TYPE "AssignmentDisplayOrder" AS ENUM ('DEFINED', 'RANDOM');
 
 -- CreateEnum
@@ -27,7 +30,10 @@ CREATE TABLE "AssignmentGroup" (
 CREATE TABLE "Assignment" (
     "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
+    "introduction" TEXT,
+    "instructions" TEXT,
     "type" "AssignmentType" NOT NULL,
+    "gradingType" "GradingType",
     "numAttempts" INTEGER,
     "allotedTime" INTEGER,
     "passingGrade" INTEGER,

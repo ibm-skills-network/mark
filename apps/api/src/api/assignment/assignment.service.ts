@@ -2,12 +2,13 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { User, UserRole } from "../../auth/interfaces/user.interface";
 import { PrismaService } from "../../prisma.service";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
-import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
 import {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
+import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
+import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 
 @Injectable()
 export class AssignmentService {
@@ -62,14 +63,11 @@ export class AssignmentService {
 
   async replace(
     id: number,
-    updateAssignmentDto: CreateUpdateAssignmentRequestDto
+    replaceAssignmentDto: ReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
-      data: {
-        ...this.createEmptyDto(),
-        ...updateAssignmentDto,
-      },
+      data: replaceAssignmentDto,
     });
 
     return {
@@ -80,7 +78,7 @@ export class AssignmentService {
 
   async update(
     id: number,
-    updateAssignmentDto: CreateUpdateAssignmentRequestDto
+    updateAssignmentDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -91,30 +89,5 @@ export class AssignmentService {
       id: result.id,
       success: true,
     };
-  }
-
-  async remove(id: number): Promise<BaseAssignmentResponseDto> {
-    const result = await this.prisma.assignment.delete({
-      where: { id },
-    });
-
-    return {
-      id: result.id,
-      success: true,
-    };
-  }
-
-  // private methods
-
-  private createEmptyDto(): CreateUpdateAssignmentRequestDto {
-    // Not including groupID as that should remain same to reflect correct ownership
-    /* eslint-disable unicorn/no-null */
-    return {
-      numAttempts: null,
-      allotedTime: null,
-      passingGrade: null,
-      displayOrder: null,
-    };
-    /* eslint-enable unicorn/no-null */
   }
 }

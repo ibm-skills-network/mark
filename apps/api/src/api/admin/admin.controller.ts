@@ -7,10 +7,13 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   Request,
   UnauthorizedException,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -28,12 +31,19 @@ import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.resp
 import { AssignmentCloneRequestDto } from "./dto/assignment/clone.assignment.request.dto";
 import {
   CreateAssignmentRequestDto,
-  UpdateAssignmentRequestDto,
-} from "./dto/assignment/create.update.assignment.request.dto";
+  ReplaceAssignmentRequestDto,
+} from "./dto/assignment/create.replace.assignment.request.dto";
 import { GetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
+import { UpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
 import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
 @ApiTags("Admin (Requires a JWT Bearer token for authorization)")
+@UsePipes(
+  new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  })
+)
 @UseGuards(getAdminAuthGuard())
 @Admin()
 @ApiBearerAuth()
@@ -122,6 +132,22 @@ export class AdminController {
     return this.adminService.getAssignment(Number(id));
   }
 
+  @Put("/assignments/:id")
+  @ApiOperation({ summary: "Replace an assignment" })
+  @ApiParam({ name: "id", required: true })
+  @ApiBody({ type: ReplaceAssignmentRequestDto })
+  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 403 })
+  replaceAssignment(
+    @Param("id") id: number,
+    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto
+  ): Promise<BaseAssignmentResponseDto> {
+    return this.adminService.replaceAssignment(
+      Number(id),
+      replaceAssignmentRequestDto
+    );
+  }
+
   @Patch("/assignments/:id")
   @ApiOperation({ summary: "Update an assignment" })
   @ApiParam({ name: "id", required: true })
@@ -139,7 +165,7 @@ export class AdminController {
   }
 
   @Delete("assignments/:id")
-  @ApiOperation({ summary: "Delete an ssignment" })
+  @ApiOperation({ summary: "Delete an assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })

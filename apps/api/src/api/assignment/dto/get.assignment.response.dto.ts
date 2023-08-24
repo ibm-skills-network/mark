@@ -1,8 +1,8 @@
 import { ApiProperty, OmitType } from "@nestjs/swagger";
 import { Question } from "@prisma/client";
-import { CreateUpdateAssignmentRequestDto } from "./create.update.assignment.request.dto";
+import { UpdateAssignmentRequestDto } from "./update.assignment.request.dto";
 
-export class AssignmentResponseDto extends CreateUpdateAssignmentRequestDto {
+export class AssignmentResponseDto extends UpdateAssignmentRequestDto {
   @ApiProperty({
     description: "The ID of the assignment.",
     type: Number,

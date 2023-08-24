@@ -1,6 +1,9 @@
 {
   "name": "Mathematics Quiz",
+  "introduction": "Welcome to the Mathematics Quiz! This AI-graded quiz aims to test your math skills in a fun and interactive way.",
+  "instructions": null,
   "type": "AI_GRADED",
+  "gradingType": "PRACTICE",
   "numAttempts": 5,
   "allotedTime": 60,
   "passingGrade": 70,

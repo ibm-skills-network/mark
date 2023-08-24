@@ -2,7 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentType } from "@prisma/client";
 import { IsDefined, IsEnum, IsString } from "class-validator";
 
-export class UpdateAssignmentRequestDto {
+export class ReplaceAssignmentRequestDto {
   @ApiProperty({
     description: "The name of the assignment.",
     type: String,
@@ -11,17 +11,6 @@ export class UpdateAssignmentRequestDto {
   @IsDefined()
   @IsString()
   name: string;
-}
-
-export class CreateAssignmentRequestDto extends UpdateAssignmentRequestDto {
-  @ApiProperty({
-    description: "The ID of the group that the assignment belongs to.",
-    type: String,
-    required: true,
-  })
-  @IsDefined()
-  @IsString()
-  groupID: string;
 
   @ApiProperty({
     description: "The type of the assignment.",
@@ -31,4 +20,15 @@ export class CreateAssignmentRequestDto extends UpdateAssignmentRequestDto {
   @IsDefined()
   @IsEnum(AssignmentType)
   type: AssignmentType;
+}
+
+export class CreateAssignmentRequestDto extends ReplaceAssignmentRequestDto {
+  @ApiProperty({
+    description: "The ID of the group that the assignment belongs to.",
+    type: String,
+    required: true,
+  })
+  @IsDefined()
+  @IsString()
+  groupID: string;
 }

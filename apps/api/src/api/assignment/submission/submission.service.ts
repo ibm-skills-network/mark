@@ -17,6 +17,7 @@ import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
+  IN_PROGRESS_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
@@ -62,6 +63,22 @@ export class SubmissionService {
     assignmentID: number,
     user: User
   ): Promise<BaseAssignmentSubmissionResponseDto> {
+    // Check if any of the existing submissions is in progress and has not expired, otherwise return exception
+    const ongoingSubmissions = await this.prisma.assignmentSubmission.findMany({
+      where: {
+        userId: user.userID,
+        assignmentId: assignmentID,
+        submitted: false,
+        expiry: {
+          gte: new Date(), // Compare with the current time to see if it has expired.
+        },
+      },
+    });
+
+    if (ongoingSubmissions.length > 0) {
+      throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
+    }
+
     // Get assignment's allotedTime to calculate expiry for the submission and check for numAttempts
     const assignment = await this.assignmentService.findOne(assignmentID, user);
 

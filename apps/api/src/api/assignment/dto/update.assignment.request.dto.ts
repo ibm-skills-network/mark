@@ -1,8 +1,36 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AssignmentDisplayOrder } from "@prisma/client";
-import { IsEnum, IsInt, IsOptional } from "class-validator";
+import { AssignmentDisplayOrder, GradingType } from "@prisma/client";
+import { IsEnum, IsInt, IsOptional, IsString } from "class-validator";
 
-export class CreateUpdateAssignmentRequestDto {
+//making properties optional because user might just patch one or two fields
+export class UpdateAssignmentRequestDto {
+  @ApiProperty({
+    description: "The introduction of the assignment.",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  introduction: string | null;
+
+  @ApiProperty({
+    description: "The instructions of the assignment.",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  instructions: string | null;
+
+  @ApiProperty({
+    description: "The grading type of the assignment.",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  gradingType: GradingType | null;
+
   @ApiProperty({
     description: "The number of attempts made on the assignment.",
     type: Number,

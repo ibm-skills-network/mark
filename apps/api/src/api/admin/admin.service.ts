@@ -10,9 +10,10 @@ import { AddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
 import {
   CreateAssignmentRequestDto,
-  UpdateAssignmentRequestDto,
-} from "./dto/assignment/create.update.assignment.request.dto";
+  ReplaceAssignmentRequestDto,
+} from "./dto/assignment/create.replace.assignment.request.dto";
 import { GetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
+import { UpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
 import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
 @Injectable()
@@ -221,6 +222,22 @@ export class AdminService {
     id: number,
     updateAssignmentDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
+    console.log(updateAssignmentDto);
+    const result = await this.prisma.assignment.update({
+      where: { id },
+      data: updateAssignmentDto,
+    });
+
+    return {
+      id: result.id,
+      success: true,
+    };
+  }
+
+  async replaceAssignment(
+    id: number,
+    updateAssignmentDto: ReplaceAssignmentRequestDto
+  ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,
@@ -233,6 +250,12 @@ export class AdminService {
   }
 
   async removeAssignment(id: number): Promise<BaseAssignmentResponseDto> {
+    // Delete all related records in AssignmentGroup table
+    await this.prisma.assignmentGroup.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    // Now delete the assignment
     const result = await this.prisma.assignment.delete({
       where: { id },
     });
