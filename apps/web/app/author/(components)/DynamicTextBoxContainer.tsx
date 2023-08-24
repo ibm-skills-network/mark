@@ -30,7 +30,9 @@ function DynamicTextBoxContainer() {
       {/* Render each TextBox component */}
       {textBoxes.map((timestamp, index) => (
         <div key={timestamp} className="relative">
-          <p className="-mb-[10px]">Question {index + 1}:</p>
+          <div className="inline-flex mr-[1000px] rounded-full border-gray-200 border-2 bg-white p-1" style={{ width: '2rem', height: '2rem' }}>
+            <p className="text-gray-500 mx-auto my-auto">{index + 1}</p>
+          </div>
           {/* Delete question button */}
           <button className={`absolute 
                               top-0 
