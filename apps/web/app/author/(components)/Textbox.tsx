@@ -168,6 +168,7 @@ function TextBox() {
     <div
       className={`flex flex-col pl-2 rounded-md p-4 mx-auto my-auto`}
       style={{
+        width: "67rem",
         minHeight: "30.5rem",
       }}
     >
