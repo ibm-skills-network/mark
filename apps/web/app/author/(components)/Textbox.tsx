@@ -9,6 +9,7 @@ import { CheckIcon, ChevronDownIcon } from '@heroicons/react/solid'
 
 //////////////////Answer Type////////////////////////////////////////
 const answerTypes = [
+  { title: '', description: '', current: true },
   { title: 'Multiple Choice - Single Answer', description: 'This multiple choice should have exactly one answer.', current: false },
   { title: 'Multiple Choice - Multiple Answer', description: 'This multiple choice can have zero or more than one answer', current: false },
   { title: 'Written Answer', description: 'This question has a written answer', current: false },
@@ -195,6 +196,10 @@ function TextBox() {
         minHeight: "30.5rem",
       }}
     >
+
+
+
+
       {/* Toggle view button */}
       <button
         className="w-52 rounded-md bg-indigo-50 px-3.5 py-2.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-100 ml-[380px]"
@@ -310,7 +315,7 @@ function TextBox() {
           <Listbox.Label className="sr-only">Change published status</Listbox.Label>
           <div className="relative">
             <div className="inline-flex divide-x divide-indigo-700 rounded-md shadow-sm">
-              <div className="inline-flex items-center gap-x-1.5 rounded-l-md bg-indigo-600 px-3 py-2 text-white shadow-sm">
+              <div className="inline-flex items-center gap-x-1.5 rounded-l-md bg-white-600 px-3 py-2 text-black shadow-sm">
                 <CheckIcon className="-ml-0.5 h-5 w-5" aria-hidden="true" />
                 <p className="text-sm font-semibold">{answerTypeSelected.title}</p>
               </div>
@@ -585,7 +590,7 @@ function TextBox() {
                     }`}
                     onClick={() => setSwitchState("b")}
                   >
-                    Multiple Criteria (Advanced Mode)
+                    Multiple Criteria (Pro Mode)
                   </button>
 
                   <span className="slider round"></span>
