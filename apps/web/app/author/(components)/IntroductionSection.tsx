@@ -37,12 +37,14 @@ export function IntroductionSection<T extends ElementType = "section">({
   title,
   value,
   setValue,
+  ...props
 }: Omit<ComponentPropsWithoutRef<T>, "as" | "className"> & {
   as?: T;
   className?: string;
   title: string;
   value: unknown;
   setValue: Dispatch<SetStateAction<unknown>>;
+  [key: string]: unknown;
 }) {
   const Component = as ?? "section";
   const description = titleToDescription[title];
@@ -50,6 +52,8 @@ export function IntroductionSection<T extends ElementType = "section">({
   return (
     <Component
       className={twMerge("group relative flex flex-col items-start", className)}
+      id={title.toLowerCase()}
+      {...props}
     >
       <div className="flex items-center bg-gray-50 rounded-t-lg border-t border-l border-r border-gray-300 w-full min-h-[6.5rem] px-12 2xl:px-14">
         <div className="w-12 mr-6">{svg}</div>
@@ -61,7 +65,6 @@ export function IntroductionSection<T extends ElementType = "section">({
       <div className="w-full border rounded-b-lg border-gray-300 bg-white px-12 2xl:px-14 py-8">
         {title === "Introduction" || title === "Instructions" ? (
           <MarkdownEditor
-            // style={{ height: "150px" }}
             value={value as string}
             setValue={setValue}
             textareaClassName="!min-h-[6.5rem] !max-h-72"

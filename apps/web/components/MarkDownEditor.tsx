@@ -2,6 +2,7 @@ import MarkdownIt from "markdown-it";
 import { type ComponentPropsWithoutRef } from "react";
 import MdEditor from "react-markdown-editor-lite";
 import "react-markdown-editor-lite/lib/index.css";
+import { twMerge } from "tailwind-merge";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
@@ -23,7 +24,10 @@ function MarkdownEditor(props: Props) {
         className + " rounded-md border border-gray-300 overflow-hidden"
       }
       // make height of editor dynamic
-      markdownClass={textareaClassName}
+      markdownClass={twMerge(
+        "focus:ring-0 focus:ring-offset-0",
+        textareaClassName
+      )}
       value={value}
       style={{ ...style }}
       renderHTML={(text) => mdParser.render(text)}

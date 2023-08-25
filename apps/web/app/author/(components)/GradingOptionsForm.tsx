@@ -15,11 +15,11 @@ function GradingOptionsForm(props: Props) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
-      isGraded: e.target.checked,
+      isGraded: e.target.value === "graded",
     }));
   }
 
-  function handleAttemptChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleAttemptChange(e: React.ChangeEvent<HTMLSelectElement>) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
@@ -44,116 +44,85 @@ function GradingOptionsForm(props: Props) {
   }
 
   return (
-    <div className="grid grid-cols-2">
-      <div>
+    <div className="grid grid-cols-2 gap-x-16 gap-y-7">
+      <div className="flex items-start gap-x-3 mb-3">
         <input
-          className="ml-40"
+          className="text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-600 h-[1.375rem] w-[1.375rem]"
           type="radio"
-          name="gradingOption"
+          name="graded"
+          value="graded"
           checked={isGraded}
           onChange={handleGradedChange}
         />
-        <label htmlFor="graded center" className="ml-12">
-          Graded Assignment
-        </label>
+        <div className="space-y-2">
+          <label htmlFor="graded" className="font-medium leading-5">
+            Graded Assignment
+          </label>
+          <p className="text-gray-500">
+            This assignment&apos;s score directly impacts the student&apos;s
+            overall course grade.
+          </p>
+        </div>
+      </div>
 
+      <div className="flex items-start gap-x-3 mb-3">
         <input
-          className="ml-40"
+          className="text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-600 h-[1.375rem] w-[1.375rem]"
           type="radio"
-          id="ungraded"
-          name="gradingOption"
+          name="ungraded"
           value="ungraded"
           checked={!isGraded}
           onChange={handleGradedChange}
         />
-        <label htmlFor="ungraded" className="ml-12">
-          Practice or Ungraded
-        </label>
-      </div>
-
-      <div className="flex items-center">
-        <textarea className="border w-42 h-14 p-2" placeholder="Textarea 1" />
-
-        <button
-          className="bg-white border text-black p-2 rounded-md"
-          // onClick={handleAttemptChange}
-          style={{
-            width: "19.125rem",
-            height: "3.5rem",
-          }}
-        >
-          <span style={{ marginLeft: "10px" }}>{"Attempts"}</span>
-        </button>
-
-        <button
-          id="dropdownDividerButton"
-          data-dropdown-toggle="dropdownDivider"
-          className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
-          type="button"
-        >
-          Attempts{" "}
-          <svg
-            className="w-2.5 h-2.5 ml-2.5"
-            aria-hidden="true"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 10 6"
-          >
-            <path
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="m1 1 4 4 4-4"
-            />
-          </svg>
-        </button>
-
-        <div
-          id="dropdownDivider"
-          className="z-10 hidden bg-white divide-y divide-gray-100 rounded-lg shadow w-44 dark:bg-gray-700 dark:divide-gray-600"
-        >
-          <ul
-            className="py-2 text-sm text-gray-700 dark:text-gray-200"
-            aria-labelledby="dropdownDividerButton"
-          >
-            <li>
-              <a
-                href="#"
-                className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
-              >
-                Dashboard
-              </a>
-            </li>
-            <li>
-              <a
-                href="#"
-                className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
-              >
-                Settings
-              </a>
-            </li>
-            <li>
-              <a
-                href="#"
-                className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white"
-              >
-                Earnings
-              </a>
-            </li>
-          </ul>
-          <div className="py-2">
-            <a
-              href="#"
-              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white"
-            >
-              Separated link
-            </a>
-          </div>
+        <div className="space-y-2">
+          <label htmlFor="ungraded" className="font-medium leading-5">
+            Practice or Ungraded
+          </label>
+          <p className="text-gray-500 text-sm">
+            This assignment will not count towards the grade total for the
+            student in the course.
+          </p>
         </div>
       </div>
 
-      <textarea className="border w-42 h-14 p-2" placeholder="Textarea 3" />
+      <div className="space-y-2">
+        <label htmlFor="passingGrade" className="font-medium leading-5">
+          <span className="text-gray-800">Time Estimate</span>{" "}
+          <span className="text-gray-500">(minutes)</span>
+        </label>
+        <input
+          type="number"
+          className="border border-gray-300 rounded-md h-12 p-4 w-full"
+          placeholder="ex. 60"
+        />
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="attempts" className="font-medium leading-5">
+          <span className="text-gray-800">Attempts Allowed</span>
+        </label>
+        <select
+          className="border border-gray-300 rounded-md h-12 px-4 w-full"
+          name="attempts"
+          id="attempts"
+          onChange={handleAttemptChange}
+          value={attempts}
+        >
+          <option value={1}>1</option>
+          <option value={2}>2</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="passingGrade" className="font-medium leading-5">
+          <span className="text-gray-800">Passing Grade</span>{" "}
+          <span className="text-gray-500">(%)</span>
+        </label>
+        <input
+          type="number"
+          className="border border-gray-300 rounded-md h-12 p-4 w-full"
+          placeholder="ex. 50"
+        />
+      </div>
     </div>
   );
 }

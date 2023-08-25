@@ -16,3 +16,18 @@ export type GradingData = {
   passingGrade: number;
   attempts: number;
 };
+
+export type Assignment = {
+  name?: string;
+  type?: "AI_GRADED" | "MANUAL";
+  numAttempts?: number;
+  allotedTime?: number;
+  passingGrade?: number;
+  displayOrder?: "DEFINED" | "RANDOM";
+};
+
+export type AssignmentBackendResponse = {
+  id: number;
+  success: boolean;
+  error?: string;
+};
