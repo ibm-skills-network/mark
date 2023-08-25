@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AssignmentDisplayOrder, GradingType } from "@prisma/client";
+import { AssignmentDisplayOrder } from "@prisma/client";
 import {
+  IsBoolean,
   IsDefined,
   IsEnum,
   IsInt,
@@ -29,13 +30,13 @@ export class ReplaceAssignmentRequestDto {
   instructions: string;
 
   @ApiProperty({
-    description: "The grading type of the assignment.",
-    enum: GradingType,
+    description: "Is the assignment graded or not.",
+    type: Boolean,
     required: true,
   })
   @IsDefined()
-  @IsEnum(GradingType)
-  gradingType: GradingType;
+  @IsBoolean()
+  graded: boolean;
 
   @ApiProperty({
     description: "The number of attempts made on the assignment.",
