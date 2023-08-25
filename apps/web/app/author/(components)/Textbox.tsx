@@ -9,9 +9,8 @@ import { CheckIcon, ChevronDownIcon } from '@heroicons/react/solid'
 
 //////////////////Answer Type////////////////////////////////////////
 const answerTypes = [
-  { title: '', description: '', current: true },
   { title: 'Multiple Choice - Single Answer', description: 'This multiple choice should have exactly one answer.', current: false },
-  { title: 'Multiple Choice - Multiple Answer', description: 'This multiple choice can have zero or more than one answer', current: false },
+  { title: 'Multiple Choice - Multiple Answer', description: 'This multiple choice can have either zero or more than one answer', current: false },
   { title: 'Written Answer', description: 'This question has a written answer', current: false },
 ]
 function classNames(...classes) {
@@ -286,8 +285,8 @@ function TextBox() {
           <p className="bg-gray-100 p-2 rounded-md text-black">{displayText}</p>
         </div>
       )} */}
-          <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2 h-4">
-            Question type:
+          <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2 h-4 mt-[20px]">
+            How would you like your question type
           </div>
 
 
@@ -307,7 +306,7 @@ function TextBox() {
 
 
 
-
+<div className="mt-[20px]">
 
           <Listbox value={answerTypeSelected} onChange={setanswerTypeSelected}>
       {({ open }) => (
@@ -370,7 +369,7 @@ function TextBox() {
 
 
 
-
+    </div>
 
 
 
@@ -405,6 +404,8 @@ function TextBox() {
                     value={option}
                     checked={option === selectedOptionSingleCorrect}
                     onChange={() => handleOptionToggleSingleCorrect(index)}
+                    className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+
                   />
                   <input
                     type="text"

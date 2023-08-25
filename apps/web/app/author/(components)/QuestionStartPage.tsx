@@ -2,7 +2,7 @@
 
 import React, { Fragment, useEffect, useRef, useState } from "react";
 import velocity from "velocity-animate"; // Import Velocity.js
-
+import { TypeAnimation } from 'react-type-animation';
 
 function QuestionStartPage() {
 
@@ -36,14 +36,31 @@ function QuestionStartPage() {
         <div className="mx-auto max-w-7xl py-24 sm:px-6 sm:py-32 lg:px-8">
           <div className="relative isolate overflow-hidden bg-gray-900 px-6 py-24 text-center shadow-2xl sm:rounded-3xl sm:px-16">
           <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            <span style={{ fontFamily: "Times New Roman" }}>Meet up </span>{" "}
-            <span style={{ fontStyle: "italic" }}>Mark</span>
+            <span style={{ fontSize: '1em', fontFamily: "Times New Roman" }}>Connect with </span>{" "}
+            <span style={{ fontSize: '1em', fontStyle: "italic" }}>Mark</span>
             <br />
-            <span style={{ fontFamily: "Times New Roman" }}>your new teacher assistant everywhere.</span>{" "}
+            <span style={{ fontFamily: "Times New Roman" }}>Your reliable companion for teaching assistance across the board.</span>{" "}
           </h2>
             <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-gray-300">
               Mark is a smart auto-grader based on WatsonX kernal
             </p>
+            <TypeAnimation className="mx-auto mt-6 max-w-xl leading-8 text-gray-300"
+                sequence={[
+                    // Same substring at the start will only be typed out once, initially
+                    'Meet Mark: Your WatsonX-backed smart mentor. Elevate learning with Mark intelligent teacher assistant expertise',
+                    1000, // wait 1s before replacing "Mice" with "Hamsters"
+                    'Meet Mark: Your WatsonX-backed smart mentor. Elevate learning with Mark intelligent cheat police expertise',
+                    1000,
+                    'Meet Mark: Your WatsonX-backed smart mentor. Elevate learning with Mark intelligent auto-grader expertise',
+                    1000,
+                    'Meet Mark: Your WatsonX-backed smart mentor. Elevate learning with Mark intelligent mentor expertise',
+                    1000
+                ]}
+                wrapper="span"
+                speed={50}
+                style={{ fontSize: '1.2em', display: 'inline-block' }}
+                repeat={Infinity}
+            />
             <div className="mt-10 flex items-center justify-center gap-x-6">
               <a
                 href="#"
