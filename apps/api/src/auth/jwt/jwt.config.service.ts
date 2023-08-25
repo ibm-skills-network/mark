@@ -5,7 +5,7 @@ export class JwtConfigService {
   get jwtConstants() {
     return {
       secret: process.env.SECRET || "devsecret", //pragma: allowlist secret
-      signOptions: { expiresIn: "1h" },
+      signOptions: { expiresIn: "6h" },
     };
   }
 }

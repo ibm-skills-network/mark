@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionType } from "@prisma/client";
-import { BaseResponseDto } from "../base.response.dto";
 
-export class GetAssignmentSubmissionQuestionResponseDto extends BaseResponseDto {
+export class GetAssignmentSubmissionQuestionResponseDto {
   @ApiProperty({
     description: "The ID of the question.",
     type: Number,

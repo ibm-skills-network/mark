@@ -39,6 +39,14 @@ docker run --name my_postgres -e POSTGRES_PASSWORD=mysecretpassword -e POSTGRES_
 yarn
 ```
 
+## Setup
+
+Perform one-time setup (e.g. prisma migrations and generations) by running:
+
+```bash
+yarn setup
+```
+
 ## Build
 
 ```bash
@@ -52,20 +60,6 @@ yarn test
 ```
 
 ## Run the Application
-
-# Run primsa migrations (only required once)
-
-```bash
-cd apps/api
-source dev.env
-npx prisma migrate dev
-```
-
-# Generate prisma client models (only required once)
-
-```bash
-npx prisma generate
-```
 
 ```bash
 yarn dev

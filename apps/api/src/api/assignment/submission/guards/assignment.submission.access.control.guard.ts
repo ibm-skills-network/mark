@@ -17,11 +17,6 @@ export class AssignmentSubmissionAccessControlGuard implements CanActivate {
 
     const assignmentID = Number(assignmentId);
 
-    // allow all actions for admin
-    if (user.role === UserRole.ADMIN) {
-      return true;
-    }
-
     // Check if the logged-in user's groupId is associated with this assignment
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {

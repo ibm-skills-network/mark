@@ -18,6 +18,15 @@ enum AssignmentType {
   MANUAL
 }
 
+// This enum represents the types of grading for the assignment
+// GRADED: The grade of this assignment will count towards the final grade of the learner
+// PRACTICE: The grading type is practice and will not ount towards the final grade of the learner
+enum GradingType {
+  GRADED
+  PRACTICE
+}
+
+
 // This enum defines the order in which assignments are displayed
 // DEFINED: The assignments are displayed in a predefined order
 // RANDOM: The assignments are displayed in a random order
@@ -81,7 +90,10 @@ model AssignmentGroup {
 // The Assignment model represents a particular assignment
 // id: Unique identifier for the assignment
 // name: Name of the assignment
+// introduction: Introduction Paragraph for the assignment
+// instructions: Instructions for the assingment 
 // type: Type of assignment
+// gradingType: The grading type of the assingment
 // numAttempts: Max number of times a learner can attempt the assignment
 // allotedTime: Time allotted to complete the assignment in minutes
 // passingGrade: The minimum grade required to pass the assignment
@@ -89,8 +101,11 @@ model AssignmentGroup {
 // questions: The list of questions in the assignment
 model Assignment {
   id              Int                     @id @default(autoincrement())
-  name            String?
-  type            AssignmentType?
+  name            String
+  introduction    String?
+  instructions    String?
+  type            AssignmentType
+  gradingType     GradingType?
   numAttempts     Int?
   allotedTime     Int?
   passingGrade    Int?

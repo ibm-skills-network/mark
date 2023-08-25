@@ -1,6 +1,8 @@
+import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -13,17 +15,24 @@ import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.q
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
-import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
 import {
-  AdminCreateUpdateAssignmentSubmissionRequestDto,
-  LearnerUpdateAssignmentSubmissionRequestDto,
-} from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
-import { GetAssignmentSubmissionResponseDto } from "./dto/assignment-submission/get.assignment.submission.response.dto";
+  GRADE_SUBMISSION_EXCEPTION,
+  IN_PROGRESS_SUBMISSION_EXCEPTION,
+  MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+  MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
+  SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+} from "./api-exceptions/exceptions";
+import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
+import { LearnerUpdateAssignmentSubmissionRequestDto } from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
+import {
+  AssignmentSubmissionResponseDto,
+  GetAssignmentSubmissionResponseDto,
+} from "./dto/assignment-submission/get.assignment.submission.response.dto";
 import { UpdateAssignmentSubmissionResponseDto } from "./dto/assignment-submission/update.assignment.submission.response.dto";
 import { CreateQuestionResponseSubmissionRequestDto } from "./dto/question-response/create.question.response.submission.request.dto";
 import { CreateQuestionResponseSubmissionResponseDto } from "./dto/question-response/create.question.response.submission.response.dto";
 import { GetAssignmentSubmissionQuestionResponseDto } from "./dto/question/get.assignment.submission.questions.response.dto";
-import { GradingHelper } from "./helper/grading.helper";
+import { SubmissionHelper } from "./helper/submission.helper";
 
 @Injectable()
 export class SubmissionService {
@@ -31,15 +40,44 @@ export class SubmissionService {
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
     private readonly questionService: QuestionService,
-    private readonly assignmentService: AssignmentService
+    private readonly assignmentService: AssignmentService,
+    private readonly httpService: HttpService
   ) {}
+
+  async listAssignmentSubmissions(
+    assignmentID: number,
+    user: User
+  ): Promise<AssignmentSubmissionResponseDto[]> {
+    //correct ownership permissions already taken care of through AssignmentSubmissionAccessControlGuard
+    const results = await (user.role === UserRole.AUTHOR
+      ? this.prisma.assignmentSubmission.findMany({
+          where: { assignmentId: assignmentID },
+        })
+      : this.prisma.assignmentSubmission.findMany({
+          where: { assignmentId: assignmentID, userId: user.userID },
+        }));
+    return results;
+  }
 
   async createAssignmentSubmission(
     assignmentID: number,
-    user: User,
-    adminCreateUpdateAssignmentSubmissionRequestDto?: AdminCreateUpdateAssignmentSubmissionRequestDto
+    user: User
   ): Promise<BaseAssignmentSubmissionResponseDto> {
-    const userRole = user.role;
+    // Check if any of the existing submissions is in progress and has not expired, otherwise return exception
+    const ongoingSubmissions = await this.prisma.assignmentSubmission.findMany({
+      where: {
+        userId: user.userID,
+        assignmentId: assignmentID,
+        submitted: false,
+        expiry: {
+          gte: new Date(), // Compare with the current time to see if it has expired.
+        },
+      },
+    });
+
+    if (ongoingSubmissions.length > 0) {
+      throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
+    }
 
     // Get assignment's allotedTime to calculate expiry for the submission and check for numAttempts
     const assignment = await this.assignmentService.findOne(assignmentID, user);
@@ -53,7 +91,7 @@ export class SubmissionService {
 
       if (submissionCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
-          "Maximum number of attempts reached for this assignment"
+          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
         );
       }
     }
@@ -67,25 +105,15 @@ export class SubmissionService {
       );
     }
 
-    let submissionData = {
-      expiry: submissionExpiry,
-      submitted: false,
-      assignmentId: assignmentID,
-      // eslint-disable-next-line unicorn/no-null
-      grade: null,
-      userId: user.userID,
-    };
-
-    if (userRole === UserRole.ADMIN) {
-      // Merge the default properties with the provided Admin DTO
-      submissionData = {
-        ...submissionData,
-        ...adminCreateUpdateAssignmentSubmissionRequestDto,
-      };
-    }
-
     const result = await this.prisma.assignmentSubmission.create({
-      data: submissionData,
+      data: {
+        expiry: submissionExpiry,
+        submitted: false,
+        assignmentId: assignmentID,
+        // eslint-disable-next-line unicorn/no-null
+        grade: null,
+        userId: user.userID,
+      },
     });
 
     return {
@@ -97,35 +125,21 @@ export class SubmissionService {
   async updateAssignmentSubmission(
     assignmentSubmissionID: number,
     assignmentID: number,
-    userRole: UserRole,
-    updateAssignmentSubmissionDto:
-      | LearnerUpdateAssignmentSubmissionRequestDto
-      | AdminCreateUpdateAssignmentSubmissionRequestDto
+    updateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto,
+    authCookie: string
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
-    if (userRole === UserRole.ADMIN) {
-      const result = await this.prisma.assignmentSubmission.update({
-        data: updateAssignmentSubmissionDto,
-        where: { id: assignmentSubmissionID },
-      });
-
-      return {
-        id: result.id,
-        grade: result.grade,
-        submitted: result.submitted,
-        success: true,
-      };
-    }
-
     const assignmentSubmission =
       await this.prisma.assignmentSubmission.findUnique({
         where: { id: assignmentSubmissionID },
       });
 
     if (new Date() > assignmentSubmission.expiry) {
-      throw new BadRequestException("The submission deadline has passed.");
+      throw new UnprocessableEntityException(
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
+      );
     }
 
-    // If the role is learner, we only allow submitted to be true, then means now calculate grade and sent back to lms
+    // Calculate grade and sent back to lms
     let grade = 0;
 
     const assignment = await this.prisma.assignment.findUnique({
@@ -163,6 +177,25 @@ export class SubmissionService {
 
     grade = totalPointsEarned / totalPossiblePoints;
 
+    // Send the grade to LTI gateway
+    const ltiGatewayResponse = await this.httpService
+      .post(
+        process.env.GRADING_LTI_GATEWAY_URL,
+        { score: grade },
+        {
+          headers: {
+            Cookie: `authentication=${authCookie}`,
+          },
+        }
+      )
+      .toPromise();
+
+    // Checking if the request was successful
+    if (ltiGatewayResponse.status !== 200) {
+      // Handle the error according to your needs
+      throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
+    }
+
     // Update AssignmentSubmission with the calculated grade
     const result = await this.prisma.assignmentSubmission.update({
       data: {
@@ -171,20 +204,6 @@ export class SubmissionService {
       },
       where: { id: assignmentSubmissionID },
     });
-
-    // Send the grade to LTI gateway
-    // const ltiGatewayResponse = await this.httpService
-    //   .post('/lti-gateway/submit-grade', {
-    //     userId: result.userId,
-    //     grade,
-    //   })
-    //   .toPromise();
-
-    // // Checking if the request was successful
-    // if (ltiGatewayResponse.status !== 200) {
-    //   // Handle the error according to your needs
-    //   throw new Error('Failed to submit grade to LTI Gateway');
-    // }
 
     return {
       id: result.id,
@@ -208,10 +227,7 @@ export class SubmissionService {
       );
     }
 
-    return {
-      ...result,
-      success: true,
-    };
+    return result;
   }
 
   async getAssignmentSubmissionQuestions(
@@ -233,12 +249,6 @@ export class SubmissionService {
     }));
   }
 
-  // async listAssignmentSubmissions(userRole:UserRole): Promise<GetAssignmentSubmissionResponseDto>{
-  //   if(userRole===UserRole.ADMIN){
-
-  //   }
-  // }
-
   async createQuestionResponse(
     assignmentSubmissionID: number,
     questionID: number,
@@ -255,7 +265,7 @@ export class SubmissionService {
 
       if (retryCount >= question.numRetries) {
         throw new UnprocessableEntityException(
-          "Maximum number of retries attempted for this question."
+          MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE
         );
       }
     }
@@ -268,15 +278,14 @@ export class SubmissionService {
       question.type === QuestionType.UPLOAD ||
       question.type === QuestionType.URL
     ) {
-      if (!createQuestionResponseSubmissionRequestDto.learnerResponse) {
-        throw new BadRequestException(
-          "Expected a text-based response (learnerResponse), but did not receive one."
-        );
-      }
+      learnerResponse = await SubmissionHelper.validateAndGetTextResponse(
+        question.type,
+        createQuestionResponseSubmissionRequestDto
+      );
 
       const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
         question.question,
-        createQuestionResponseSubmissionRequestDto.learnerResponse,
+        learnerResponse as string,
         question.totalPoints,
         question.scoring?.type ?? "",
         question.scoring?.criteria ?? {}
@@ -292,10 +301,8 @@ export class SubmissionService {
         0
       );
       responseDto.feedback = models.map((element) =>
-        GradingHelper.toTextBasedFeedbackDto(element)
+        SubmissionHelper.toTextBasedFeedbackDto(element)
       );
-      learnerResponse =
-        createQuestionResponseSubmissionRequestDto.learnerResponse;
     }
 
     // Grade True False Questions
@@ -368,7 +375,6 @@ export class SubmissionService {
     });
 
     responseDto.id = result.id;
-    responseDto.success = true;
     return responseDto;
   }
 

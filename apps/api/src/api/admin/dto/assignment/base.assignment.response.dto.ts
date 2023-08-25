@@ -1,11 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-export class BaseAssignmentSubmissionResponseDto {
+export class BaseAssignmentResponseDto {
   @ApiProperty({
-    description: "The unique ID of the AssignmentSubmission",
+    description: "The ID of the assignment.",
     type: Number,
     required: true,
-    example: 1,
   })
   id: number;
 

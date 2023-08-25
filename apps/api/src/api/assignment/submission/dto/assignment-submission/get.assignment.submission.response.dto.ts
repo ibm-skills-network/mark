@@ -1,8 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { QuestionResponse } from "@prisma/client";
-import { BaseResponseDto } from "../base.response.dto";
 
-export class GetAssignmentSubmissionResponseDto extends BaseResponseDto {
+export class AssignmentSubmissionResponseDto {
   @ApiProperty({
     description: "The unique ID of the AssignmentSubmission",
     type: Number,
@@ -16,13 +15,6 @@ export class GetAssignmentSubmissionResponseDto extends BaseResponseDto {
     example: 2,
   })
   assignmentId: number;
-
-  @ApiProperty({
-    description:
-      "The list of responses provided by the learner for each of the questions in the assignment",
-    isArray: true,
-  })
-  questionResponses: QuestionResponse[];
 
   @ApiProperty({
     description: "Represents if the learner has submitted this or not",
@@ -48,4 +40,13 @@ export class GetAssignmentSubmissionResponseDto extends BaseResponseDto {
     required: false,
   })
   expiry: Date | null;
+}
+
+export class GetAssignmentSubmissionResponseDto extends AssignmentSubmissionResponseDto {
+  @ApiProperty({
+    description:
+      "The list of responses provided by the learner for each of the questions in the assignment",
+    isArray: true,
+  })
+  questionResponses: QuestionResponse[];
 }

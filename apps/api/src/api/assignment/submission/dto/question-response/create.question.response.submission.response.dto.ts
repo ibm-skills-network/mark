@@ -1,6 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { TrueFalseChoiceBasedFeedback } from "../../../../..//api/llm/model/true.false.based.question.response.model";
-import { BaseResponseDto } from "../base.response.dto";
 
 export class TextBasedFeedbackDto {
   @ApiProperty({
@@ -42,7 +41,7 @@ export class ChoiceBasedFeedbackDto {
   feedback: string;
 }
 
-export class CreateQuestionResponseSubmissionResponseDto extends BaseResponseDto {
+export class CreateQuestionResponseSubmissionResponseDto {
   @ApiProperty({
     description: "The unqiue id of the question response.",
     type: Number,

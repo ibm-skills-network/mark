@@ -1,7 +1,6 @@
 import { Request } from "express";
 
 export enum UserRole {
-  ADMIN = "admin",
   LEARNER = "learner",
   AUTHOR = "author",
 }

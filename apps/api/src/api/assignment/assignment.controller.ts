@@ -1,13 +1,11 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Inject,
   Injectable,
   Param,
   Patch,
-  Post,
   Put,
   Req,
   UseGuards,
@@ -28,11 +26,13 @@ import { Roles } from "../../auth/role/roles.global.guard";
 import { AssignmentService } from "./assignment.service";
 import { ASSIGNMENT_SCHEMA_URL } from "./constants";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
-import { CreateUpdateAssignmentRequestDto } from "./dto/create.update.assignment.request.dto";
 import {
+  AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
+import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
+import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 
 @ApiTags(
@@ -52,19 +52,8 @@ export class AssignmentController {
     this.logger = parentLogger.child({ context: AssignmentController.name });
   }
 
-  @Post()
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
-  @ApiOperation({ summary: "Create assignment" })
-  @ApiBody({ type: CreateUpdateAssignmentRequestDto })
-  @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
-  createAssignment(
-    @Req() request: UserRequest
-  ): Promise<BaseAssignmentResponseDto> {
-    return this.assignmentService.create(request.user);
-  }
-
   @Get(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR, UserRole.LEARNER)
+  @Roles(UserRole.AUTHOR, UserRole.LEARNER)
   @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Get assignment" })
   @ApiParam({ name: "id", required: true })
@@ -77,6 +66,7 @@ export class AssignmentController {
     description:
       "The response structure varies based on the role of the user requesting the assignment i.e. learner/author/admin (see schema).",
   })
+  @ApiResponse({ status: 403 })
   async getAssignment(
     @Param("id") id: number,
     @Req() request: UserRequest
@@ -84,19 +74,36 @@ export class AssignmentController {
     return this.assignmentService.findOne(Number(id), request.user);
   }
 
+  @Get()
+  @Roles(UserRole.AUTHOR, UserRole.LEARNER)
+  @ApiOperation({ summary: "List Assignments" })
+  @ApiResponse({
+    status: 200,
+    type: [AssignmentResponseDto],
+    description:
+      "List assignments scoped to the user's role (doest include questions to avoid potentially large queries).",
+  })
+  @ApiResponse({ status: 403 })
+  async listAssignments(
+    @Req() request: UserRequest
+  ): Promise<AssignmentResponseDto[]> {
+    return this.assignmentService.list(request.user);
+  }
+
   @Patch(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Update assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
-    type: CreateUpdateAssignmentRequestDto,
+    type: UpdateAssignmentRequestDto,
     description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
   })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 403 })
   updateAssignment(
     @Param("id") id: number,
-    @Body() updateAssignmentRequestDto: CreateUpdateAssignmentRequestDto
+    @Body() updateAssignmentRequestDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.update(
       Number(id),
@@ -105,46 +112,23 @@ export class AssignmentController {
   }
 
   @Put(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
+  @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Replace assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({
-    type: CreateUpdateAssignmentRequestDto,
+    type: ReplaceAssignmentRequestDto,
     description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
   })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 403 })
   replaceAssignment(
     @Param("id") id: number,
-    @Body() updateAssignmentRequestDto: CreateUpdateAssignmentRequestDto
+    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.replace(
       Number(id),
-      updateAssignmentRequestDto
+      replaceAssignmentRequestDto
     );
-  }
-
-  @Delete(":id")
-  @Roles(UserRole.ADMIN, UserRole.AUTHOR)
-  @UseGuards(AssignmentAccessControlGuard)
-  @ApiOperation({ summary: "Delete assignment" })
-  @ApiParam({ name: "id", required: true })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
-  deleteAssignment(
-    @Param("id") id: number
-  ): Promise<BaseAssignmentResponseDto> {
-    return this.assignmentService.remove(Number(id));
-  }
-
-  @Post(":id/clone")
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: "Clone an assignment" })
-  @ApiParam({ name: "id", required: true })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
-  cloneAssignment(
-    @Param("id") id: number,
-    @Req() request: UserRequest
-  ): Promise<BaseAssignmentResponseDto> {
-    return this.assignmentService.clone(Number(id), request.user);
   }
 }

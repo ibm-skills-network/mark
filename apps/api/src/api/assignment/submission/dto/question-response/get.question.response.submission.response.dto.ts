@@ -1,8 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { JsonValue } from "@prisma/client/runtime/library";
-import { BaseResponseDto } from "../base.response.dto";
 
-export class GetQuestionResponseSubmissionResponseDto extends BaseResponseDto {
+export class GetQuestionResponseSubmissionResponseDto {
   @ApiProperty({ description: "Unique identifier for the question response." })
   id: number;
 
