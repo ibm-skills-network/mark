@@ -3,7 +3,23 @@
 import LongFormQuestion from "@/app/learner/(components)/LongFormQuestion";
 import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
-import React, { useEffect, useRef, useState } from "react";
+import React, { Fragment, useEffect, useRef, useState } from "react";
+import { Listbox, Transition } from '@headlessui/react'
+import { CheckIcon, ChevronDownIcon } from '@heroicons/react/solid'
+
+//////////////////Answer Type////////////////////////////////////////
+const answerTypes = [
+  { title: 'Multiple Choice - Single Answer', description: 'This multiple choice should have exactly one answer.', current: false },
+  { title: 'Multiple Choice - Multiple Answer', description: 'This multiple choice can have zero or more than one answer', current: false },
+  { title: 'Written Answer', description: 'This question has a written answer', current: false },
+]
+function classNames(...classes) {
+  return classes.filter(Boolean).join(' ')
+}
+
+
+
+
 
 enum QuestionType {
   SingleCorrect = "single_correct",
@@ -48,6 +64,7 @@ function TextBox() {
   const [isActive, setIsActive] = useState(false); // Track the active state of the component
   const [score, setScore] = useState("");
   const [switchState, setSwitchState] = useState("a");
+  const [answerTypeSelected, setanswerTypeSelected] = useState(answerTypes[0]) // use this the change the state of the answer type (single multiple written)
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -262,94 +279,111 @@ function TextBox() {
             Question type:
           </div>
 
-          <div className="mt-4 relative" ref={menuRef}>
-            <div className="flex items-start gap-0.75rem">
-              <button
-                className="bg-white border text-black p-2 rounded-md"
-                onClick={handleMenuToggle}
-                style={{
-                  width: "19.125rem",
-                  height: "3.5rem",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <svg
-                    width="23"
-                    height="24"
-                    viewBox="0 0 23 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <circle
-                      cx="11.5"
-                      cy="12"
-                      r="10.75"
-                      stroke="#6B7280"
-                      stroke-width="1.5"
-                    />
-                    <path
-                      fill-rule="evenodd"
-                      clip-rule="evenodd"
-                      d="M15.5572 9.06597C15.6048 9.10206 15.6448 9.14717 15.6749 9.19872C15.705 9.25027 15.7247 9.30725 15.7327 9.36639C15.7408 9.42554 15.7371 9.48569 15.7218 9.5434C15.7066 9.60111 15.6801 9.65525 15.6438 9.70272L10.7954 16.0582C10.7561 16.1097 10.7062 16.1522 10.6491 16.1828C10.592 16.2134 10.5289 16.2315 10.4642 16.2358C10.3995 16.2401 10.3347 16.2305 10.274 16.2077C10.2133 16.1849 10.1582 16.1494 10.1124 16.1036L7.38518 13.3798C7.30489 13.2938 7.26118 13.1799 7.26325 13.0623C7.26533 12.9447 7.31304 12.8325 7.39631 12.7493C7.47959 12.6662 7.59195 12.6185 7.7097 12.6164C7.82746 12.6144 7.94143 12.658 8.02759 12.7382L10.3876 15.0946L14.9208 9.15252C14.9938 9.05686 15.1018 8.99401 15.2211 8.97779C15.3404 8.96156 15.4613 8.99327 15.5572 9.06597Z"
-                      fill="#6B7280"
-                      stroke="#6B7280"
-                    />
-                  </svg>
-                  <span style={{ marginLeft: "10px" }}>
-                    {selectedQuestionType
-                      ? selectedQuestionType === QuestionType.SingleCorrect
-                        ? "Single Correct"
-                        : selectedQuestionType === QuestionType.MultipleAnswers
-                        ? "Multiple Answers"
-                        : "Written Question"
-                      : "Select Question Type"}
-                  </span>
-                </div>
-              </button>
 
-              {isMenuOpen && (
-                <div className="absolute bottom-25 bg-white border rounded-md shadow-md">
-                  <button
-                    className={`w-full text-left p-2 ${
-                      selectedQuestionType === QuestionType.SingleCorrect
-                        ? "bg-gray-200 text-black"
-                        : "text-black"
-                    }`}
-                    onClick={() =>
-                      handleQuestionTypeSelect(QuestionType.SingleCorrect)
-                    }
-                  >
-                    Single Correct
-                  </button>
-                  <button
-                    className={`w-full text-left p-2 ${
-                      selectedQuestionType === QuestionType.MultipleAnswers
-                        ? "bg-gray-200 text-black"
-                        : "text-black"
-                    }`}
-                    onClick={() =>
-                      handleQuestionTypeSelect(QuestionType.MultipleAnswers)
-                    }
-                  >
-                    Multiple Answers
-                  </button>
-                  <button
-                    className={`w-full text-left p-2 ${
-                      selectedQuestionType === QuestionType.WrittenQuestion
-                        ? "bg-gray-200 text-black"
-                        : "text-black"
-                    }`}
-                    onClick={() =>
-                      handleQuestionTypeSelect(QuestionType.WrittenQuestion)
-                    }
-                  >
-                    Written Question
-                  </button>
-                </div>
-              )}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          <Listbox value={answerTypeSelected} onChange={setanswerTypeSelected}>
+      {({ open }) => (
+        <>
+          <Listbox.Label className="sr-only">Change published status</Listbox.Label>
+          <div className="relative">
+            <div className="inline-flex divide-x divide-indigo-700 rounded-md shadow-sm">
+              <div className="inline-flex items-center gap-x-1.5 rounded-l-md bg-indigo-600 px-3 py-2 text-white shadow-sm">
+                <CheckIcon className="-ml-0.5 h-5 w-5" aria-hidden="true" />
+                <p className="text-sm font-semibold">{answerTypeSelected.title}</p>
+              </div>
+              <Listbox.Button className="inline-flex items-center rounded-l-none rounded-r-md bg-indigo-600 p-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 focus:ring-offset-gray-50">
+                <span className="sr-only">Change published status</span>
+                <ChevronDownIcon className="h-5 w-5 text-white" aria-hidden="true" />
+              </Listbox.Button>
             </div>
+
+            <Transition
+              show={open}
+              as={Fragment}
+              leave="transition ease-in duration-100"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <Listbox.Options className="absolute right-0 z-10 mt-2 w-72 origin-top-right divide-y divide-gray-200 overflow-hidden rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                {answerTypes.map((option) => (
+                  <Listbox.Option
+                    key={option.title}
+                    className={({ active }) =>
+                      classNames(
+                        active ? 'bg-indigo-600 text-white' : 'text-gray-900',
+                        'cursor-default select-none p-4 text-sm'
+                      )
+                    }
+                    value={option}
+                  >
+                    {({ selected, active }) => (
+                      <div className="flex flex-col">
+                        <div className="flex justify-between">
+                          <p className={selected ? 'font-semibold' : 'font-normal'}>{option.title}</p>
+                          {selected ? (
+                            <span className={active ? 'text-white' : 'text-indigo-600'}>
+                              <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className={classNames(active ? 'text-indigo-200' : 'text-gray-500', 'mt-2')}>
+                          {option.description}
+                        </p>
+                      </div>
+                    )}
+                  </Listbox.Option>
+                ))}
+              </Listbox.Options>
+            </Transition>
           </div>
-          {selectedQuestionType === QuestionType.SingleCorrect ? (
+        </>
+      )}
+    </Listbox>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          {answerTypeSelected === answerTypes[0] ? (
             <div className="mt-4">
               <p>Options:</p>
               {optionsSingleCorrect.map((option, index) => (
@@ -408,7 +442,7 @@ function TextBox() {
               </button>
             </div>
           ) : null}
-          {selectedQuestionType === QuestionType.MultipleAnswers ? (
+          {answerTypeSelected === answerTypes[1] ? (
             <div className="mt-4">
               <p>Options:</p>
               {optionsMultipleAnswers.map((option, index) => {
@@ -485,7 +519,7 @@ function TextBox() {
             </div>
           ) : null}
 
-          {selectedQuestionType === QuestionType.WrittenQuestion && (
+          {answerTypeSelected === answerTypes[2] && (
             <div className="mt-4">
               <div style={{ width: 800, height: 104, background: "#E0E7FF" }}>
                 <svg
