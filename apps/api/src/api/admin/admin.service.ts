@@ -6,14 +6,15 @@ import {
 import { sign } from "jsonwebtoken";
 import { JwtConfigService } from "../../auth/jwt/jwt.config.service";
 import { PrismaService } from "../../prisma.service";
-import { AddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
+import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
+import { AdminAssignmentCloneRequestDto } from "./dto/assignment/clone.assignment.request.dto";
 import {
-  CreateAssignmentRequestDto,
-  ReplaceAssignmentRequestDto,
+  AdminCreateAssignmentRequestDto,
+  AdminReplaceAssignmentRequestDto,
 } from "./dto/assignment/create.replace.assignment.request.dto";
-import { GetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
-import { UpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
+import { AdminGetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
+import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
 import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
 @Injectable()
@@ -113,7 +114,7 @@ export class AdminService {
   async addAssignmentToGroup(
     assignmentID: number,
     groupID: string
-  ): Promise<AddAssignmentToGroupResponseDto> {
+  ): Promise<AdminAddAssignmentToGroupResponseDto> {
     // check if the assignment exists
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentID },
@@ -169,7 +170,7 @@ export class AdminService {
   }
 
   async createAssignment(
-    createAssignmentRequestDto: CreateAssignmentRequestDto
+    createAssignmentRequestDto: AdminCreateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupID
     // or by creating a new Group with that groupID
@@ -202,7 +203,7 @@ export class AdminService {
     };
   }
 
-  async getAssignment(id: number): Promise<GetAssignmentResponseDto> {
+  async getAssignment(id: number): Promise<AdminGetAssignmentResponseDto> {
     const result = await this.prisma.assignment.findUnique({
       where: { id },
     });
@@ -220,7 +221,7 @@ export class AdminService {
 
   async updateAssignment(
     id: number,
-    updateAssignmentDto: UpdateAssignmentRequestDto
+    updateAssignmentDto: AdminUpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     console.log(updateAssignmentDto);
     const result = await this.prisma.assignment.update({
@@ -236,7 +237,7 @@ export class AdminService {
 
   async replaceAssignment(
     id: number,
-    updateAssignmentDto: ReplaceAssignmentRequestDto
+    updateAssignmentDto: AdminReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },

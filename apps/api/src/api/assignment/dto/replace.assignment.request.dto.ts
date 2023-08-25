@@ -30,11 +30,11 @@ export class ReplaceAssignmentRequestDto {
 
   @ApiProperty({
     description: "The grading type of the assignment.",
-    type: String,
+    enum: GradingType,
     required: true,
   })
   @IsDefined()
-  @IsString()
+  @IsEnum(GradingType)
   gradingType: GradingType;
 
   @ApiProperty({

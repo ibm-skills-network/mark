@@ -2,7 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentType } from "@prisma/client";
 import { IsDefined, IsEnum, IsString } from "class-validator";
 
-export class ReplaceAssignmentRequestDto {
+export class AdminReplaceAssignmentRequestDto {
   @ApiProperty({
     description: "The name of the assignment.",
     type: String,
@@ -22,7 +22,7 @@ export class ReplaceAssignmentRequestDto {
   type: AssignmentType;
 }
 
-export class CreateAssignmentRequestDto extends ReplaceAssignmentRequestDto {
+export class AdminCreateAssignmentRequestDto extends AdminReplaceAssignmentRequestDto {
   @ApiProperty({
     description: "The ID of the group that the assignment belongs to.",
     type: String,

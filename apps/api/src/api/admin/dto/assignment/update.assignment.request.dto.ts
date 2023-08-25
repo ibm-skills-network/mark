@@ -2,7 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentType } from "@prisma/client";
 import { IsEnum, IsOptional, IsString } from "class-validator";
 
-export class UpdateAssignmentRequestDto {
+export class AdminUpdateAssignmentRequestDto {
   @ApiProperty({
     description: "The name of the assignment.",
     type: String,

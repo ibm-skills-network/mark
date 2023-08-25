@@ -124,11 +124,11 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   replaceAssignment(
     @Param("id") id: number,
-    @Body() updateAssignmentRequestDto: ReplaceAssignmentRequestDto
+    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.replace(
       Number(id),
-      updateAssignmentRequestDto
+      replaceAssignmentRequestDto
     );
   }
 }

@@ -26,15 +26,15 @@ import {
 import { getAdminAuthGuard } from "../../auth/jwt/admin/utils";
 import { Admin } from "../../auth/jwt/jwt.global.auth.guard";
 import { AdminService } from "./admin.service";
-import { AddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
+import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
-import { AssignmentCloneRequestDto } from "./dto/assignment/clone.assignment.request.dto";
+import { AdminAssignmentCloneRequestDto } from "./dto/assignment/clone.assignment.request.dto";
 import {
-  CreateAssignmentRequestDto,
-  ReplaceAssignmentRequestDto,
+  AdminCreateAssignmentRequestDto,
+  AdminReplaceAssignmentRequestDto,
 } from "./dto/assignment/create.replace.assignment.request.dto";
-import { GetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
-import { UpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
+import { AdminGetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
+import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
 import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
 @ApiTags("Admin (Requires a JWT Bearer token for authorization)")
@@ -87,7 +87,7 @@ export class AdminController {
   @ApiResponse({ status: 403 })
   cloneAssignment(
     @Param("id") assignmentID: number,
-    @Body() assignmentCloneRequestDto: AssignmentCloneRequestDto
+    @Body() assignmentCloneRequestDto: AdminAssignmentCloneRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.cloneAssignment(
       Number(assignmentID),
@@ -98,12 +98,12 @@ export class AdminController {
   @Post("assignments/:assignmentId/groups/:groupId")
   @ApiOperation({ summary: "Associate an assignment with a group" })
   @ApiParam({ name: "id", required: true })
-  @ApiResponse({ status: 200, type: AddAssignmentToGroupResponseDto })
+  @ApiResponse({ status: 200, type: AdminAddAssignmentToGroupResponseDto })
   @ApiResponse({ status: 403 })
   addAssignmentToGroup(
     @Param("assignmentId") assignmentID: number,
     @Param("groupId") groupID: string
-  ): Promise<AddAssignmentToGroupResponseDto> {
+  ): Promise<AdminAddAssignmentToGroupResponseDto> {
     return this.adminService.addAssignmentToGroup(
       Number(assignmentID),
       groupID
@@ -112,11 +112,11 @@ export class AdminController {
 
   @Post("/assignments")
   @ApiOperation({ summary: "Create an assignment" })
-  @ApiBody({ type: CreateAssignmentRequestDto })
+  @ApiBody({ type: AdminCreateAssignmentRequestDto })
   @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   createAssignment(
-    @Body() createAssignmentRequestDto: CreateAssignmentRequestDto
+    @Body() createAssignmentRequestDto: AdminCreateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.createAssignment(createAssignmentRequestDto);
   }
@@ -128,19 +128,19 @@ export class AdminController {
   @ApiResponse({ status: 403 })
   async getAssignment(
     @Param("id") id: number
-  ): Promise<GetAssignmentResponseDto> {
+  ): Promise<AdminGetAssignmentResponseDto> {
     return this.adminService.getAssignment(Number(id));
   }
 
   @Put("/assignments/:id")
   @ApiOperation({ summary: "Replace an assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiBody({ type: ReplaceAssignmentRequestDto })
+  @ApiBody({ type: AdminReplaceAssignmentRequestDto })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   replaceAssignment(
     @Param("id") id: number,
-    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto
+    @Body() replaceAssignmentRequestDto: AdminReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.replaceAssignment(
       Number(id),
@@ -151,12 +151,12 @@ export class AdminController {
   @Patch("/assignments/:id")
   @ApiOperation({ summary: "Update an assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiBody({ type: UpdateAssignmentRequestDto })
+  @ApiBody({ type: AdminUpdateAssignmentRequestDto })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   updateAssignment(
     @Param("id") id: number,
-    @Body() updateAssignmentRequestDto: UpdateAssignmentRequestDto
+    @Body() updateAssignmentRequestDto: AdminUpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.updateAssignment(
       Number(id),
