@@ -4,6 +4,7 @@
 
 import React, { useState } from "react";
 import TextBox from "./Textbox";
+import { PlusIcon } from '@heroicons/react/solid'
 
 function DynamicTextBoxContainer() {
   const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
@@ -62,64 +63,13 @@ function DynamicTextBoxContainer() {
           <TextBox />
         </div>
       ))}
+
       <button
-        className="bg-blue-700 text-white p-2 rounded-full mb-4 mx-auto justify-center ml-[450px]"
+        type="button"
+        className="rounded-full bg-indigo-600 p-2 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
         onClick={handleAddTextBox}
       >
-        <svg
-          width="54"
-          height="54"
-          viewBox="0 0 54 54"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <g filter="url(#filter0_d_702_15817)">
-            <circle cx="27" cy="27" r="25" fill="#1D4ED8" />
-            <path
-              d="M27 20V26M27 26V32M27 26H33M27 26L21 26"
-              stroke="white"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </g>
-          <defs>
-            <filter
-              id="filter0_d_702_15817"
-              x="0"
-              y="0"
-              width="54"
-              height="54"
-              filterUnits="userSpaceOnUse"
-              color-interpolation-filters="sRGB"
-            >
-              <feFlood flood-opacity="0" result="BackgroundImageFix" />
-              <feColorMatrix
-                in="SourceAlpha"
-                type="matrix"
-                values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
-                result="hardAlpha"
-              />
-              <feOffset dy="1" />
-              <feGaussianBlur stdDeviation="1" />
-              <feColorMatrix
-                type="matrix"
-                values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0"
-              />
-              <feBlend
-                mode="normal"
-                in2="BackgroundImageFix"
-                result="effect1_dropShadow_702_15817"
-              />
-              <feBlend
-                mode="normal"
-                in="SourceGraphic"
-                in2="effect1_dropShadow_702_15817"
-                result="shape"
-              />
-            </filter>
-          </defs>
-        </svg>
+        <PlusIcon className="h-5 w-5" aria-hidden="true" />
       </button>
     </div>
   );
