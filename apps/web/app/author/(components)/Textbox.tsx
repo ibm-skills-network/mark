@@ -4,7 +4,7 @@ import LongFormQuestion from "@/app/learner/(components)/LongFormQuestion";
 import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import { Listbox, Transition } from '@headlessui/react'
+import { Listbox, Transition, RadioGroup } from '@headlessui/react'
 import { CheckIcon, ChevronDownIcon } from '@heroicons/react/solid'
 
 //////////////////Answer Type////////////////////////////////////////
@@ -18,6 +18,12 @@ function classNames(...classes) {
 }
 
 
+//////////////////////////Single Multiple Choice Type////////////////////////////////////////////
+const singleAnswer = [
+  { name: 'Public access', description: 'This project would be available to anyone who has the link' },
+  { name: 'Private to Project Members', description: 'Only members of this project would be able to access' },
+  { name: 'Private to you', description: 'You are the only one able to access this project' },
+]
 
 
 
@@ -570,7 +576,7 @@ function TextBox() {
                     }`}
                     onClick={() => setSwitchState("a")}
                   >
-                    Single Criteria
+                    Single Criteria (easy mode)
                   </button>
 
                   <button
@@ -579,7 +585,7 @@ function TextBox() {
                     }`}
                     onClick={() => setSwitchState("b")}
                   >
-                    Multiple Criteria
+                    Multiple Criteria (Advanced Mode)
                   </button>
 
                   <span className="slider round"></span>
