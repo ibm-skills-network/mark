@@ -10,6 +10,8 @@ function QuestionStartPage() {
 
   const handleGetStarted = () => {
     // Animate the container to slide up and disappear
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     velocity(containerRef.current, "fadeOut", {
       duration: 500, // Animation duration in milliseconds
       complete: () => {
