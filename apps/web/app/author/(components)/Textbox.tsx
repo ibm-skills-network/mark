@@ -1,7 +1,7 @@
 "use client";
 
-import LongFormQuestion from "@/app/learner/(components)/LongFormQuestion";
 import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
+import TextQuestion from "@/app/learner/(components)/TextQuestion";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { Listbox, RadioGroup, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/react/solid";
@@ -113,14 +113,6 @@ function TextBox() {
       document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, []);
-
-  const handleFocus = () => {
-    setIsActive(true); // Set isActive to true when the component is focused
-  };
-
-  const handleBlur = () => {
-    setIsActive(false); // Set isActive to false when the component loses focus
-  };
 
   const generateJsonData = () => {
     const data = {
@@ -237,11 +229,10 @@ function TextBox() {
           {selectedQuestionType === QuestionType.SingleCorrect ||
           selectedQuestionType === QuestionType.MultipleAnswers ? (
             <MultipleChoiceQuestion
-              // questionData={{}}
-              questionNumber={questions.length + 1}
+            // questionData={{}}
             />
           ) : selectedQuestionType === QuestionType.WrittenQuestion ? (
-            <LongFormQuestion
+            <TextQuestion
               // questionData={{}}
               questionNumber={questions.length + 1}
             />
@@ -249,15 +240,11 @@ function TextBox() {
         </div>
       ) : (
         <div
-          className={`flex flex-col mt-8 bg-white transition border-l-8 rounded-md p-10 ${
-            isActive ? "border-blue-700" : "border-white"
-          }`}
+          className="flex flex-col mt-8 bg-white transition border-l-8 rounded-md p-10 border-blue-700"
           style={{
             minWidth: "62.5625rem",
             minHeight: "25.5rem",
           }}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
         >
           {/* <button
         className="bg-blue-500 text-white p-2 rounded-md ml-2"

@@ -8,7 +8,7 @@ export default function RootLayout({
   return (
     <>
       <Header />
-      <div className="bg-blue-50">{children}</div>
+      <div className="bg-blue-50 flex-1">{children}</div>
     </>
   );
 }

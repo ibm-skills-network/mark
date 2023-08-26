@@ -1,11 +1,12 @@
 "use client";
 
+import TextQuestion from "@/app/learner/(components)/TextQuestion";
 import { Question, QuestionStatus } from "@/config/types";
-import { QuestionData, questionsData } from "@config/constants";
+import { questionsData } from "@config/constants";
 import Button from "@learnerComponents/Button";
-import LongFormQuestion from "@learnerComponents/LongFormQuestion";
 import MultipleChoiceQuestion from "@learnerComponents/MultipleChoiceQuestion";
 import Overview from "@learnerComponents/Overview";
+import QuestionContainer from "@learnerComponents/QuestionContainer";
 import { useState } from "react";
 
 function LearnerLayout() {
@@ -13,12 +14,6 @@ function LearnerLayout() {
   const [questionStatuses, setQuestionStatuses] = useState<QuestionStatus[]>(
     questionsData.map(() => "unanswered")
   );
-
-  const [showIntroduction, setShowIntroduction] = useState(true);
-
-  const beginAssignment = () => {
-    setShowIntroduction(false);
-  };
 
   const updateStatus = (
     status: "correct" | "incorrect" | "partiallyCorrect"
@@ -30,63 +25,43 @@ function LearnerLayout() {
     });
   };
 
-  const renderQuestion = (question: Question, index: number) => {
-    const questionNumber = index + 1;
-
-    if (question.type === "TEXT") {
-      return (
-        <LongFormQuestion
-          questionData={question}
-          questionNumber={questionNumber}
-        />
-      );
-    } else {
-      return (
-        <MultipleChoiceQuestion
-          questionData={question}
-          questionNumber={questionNumber}
-          onAnswerSelected={updateStatus}
-        />
-      );
-    }
-  };
   return (
-    <main className="p-24 min-h-screen">
-      <div className="flex p-8">
-        {" "}
-        {/* Added padding to give some space between components */}
-        <div className="w-3/4 pr-8">
-          {" "}
-          {/* Added right padding and min-height */}
-          <div className="p-4">
-            {" "}
-            {/* Added a container with padding, shadow, and rounded corners for better separation */}
-            {renderQuestion(questionsData[currentIndex], currentIndex)}
-          </div>
-          <div className="flex justify-between mt-4">
-            <Button
-              onClick={() => setCurrentIndex(currentIndex - 1)}
-              disabled={currentIndex === 0}
-            >
-              Previous
-            </Button>
-            <Button
-              onClick={() => setCurrentIndex(currentIndex + 1)}
-              disabled={currentIndex === questionsData.length - 1}
-            >
-              {" "}
-              Next{" "}
-            </Button>
-          </div>
+    <main className="p-24 grid grid-cols-4 gap-x-5">
+      {/* Added padding to give some space between components */}
+      <div className="col-span-3 -mt-6">
+        {/* Added a container with padding, shadow, and rounded corners for better separation */}
+        {questionsData.map((question, index) => {
+          return (
+            <QuestionContainer
+              key={index}
+              questionNumber={index + 1}
+              className={`${index === currentIndex ? "" : "hidden"} `}
+              question={question}
+            />
+          );
+        })}
+
+        <div className="flex justify-between mt-4">
+          <Button
+            onClick={() => setCurrentIndex(currentIndex - 1)}
+            disabled={currentIndex === 0}
+          >
+            Previous
+          </Button>
+          <Button
+            onClick={() => setCurrentIndex(currentIndex + 1)}
+            disabled={currentIndex === questionsData.length - 1}
+          >
+            Next
+          </Button>
         </div>
-        <div className="w-1/4">
-          {/* Added min-height */}
-          <Overview
-            questions={questionStatuses}
-            timeLimit={3600}
-            setCurrentIndex={setCurrentIndex}
-          />
-        </div>
+      </div>
+      <div className="col-span-1">
+        <Overview
+          questions={questionStatuses}
+          timeLimit={3600}
+          setCurrentIndex={setCurrentIndex}
+        />
       </div>
     </main>
   );

@@ -7,15 +7,17 @@ import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
+  // TODO: temporarily made optional(the '?')
   questionData?: Question;
-  questionNumber: number;
+  singleCorrect?: boolean;
   onAnswerSelected?: (
     status: "correct" | "incorrect" | "partiallyCorrect"
   ) => void;
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  const { questionNumber, questionData, onAnswerSelected } = props;
+  // TODO @Bennyli1995 - I will handle the situation where it's a single correct answer
+  const { questionData, onAnswerSelected, singleCorrect = false } = props;
   const { question, choices, numRetries, totalPoints } = questionData;
   const correctOptions = Object.keys(choices).filter(
     (option) => choices[option]
@@ -109,14 +111,8 @@ function MultipleChoiceQuestion(props: Props) {
   };
 
   return (
-    <div
-      className="p-8 question-container"
-      style={{ height: "500px", overflowY: "auto" }}
-    >
-      <p>
-        Question {questionNumber}: Points {totalPoints.toFixed(2)} out of 100
-      </p>
-      <div className="mb-4 bg-white p-5">
+    <>
+      <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
         <InfoLine text={question} />
         {choices.map((option, index) => {
           // get key from choice
@@ -148,7 +144,7 @@ function MultipleChoiceQuestion(props: Props) {
       </Button>
       {renderFeedbackMessage()}
       {renderAttemptMessage()}
-    </div>
+    </>
   );
 }
 

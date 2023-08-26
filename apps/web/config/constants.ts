@@ -65,5 +65,26 @@ export const questionsData: Question[] = [
       { "C++": true },
     ],
   },
-  // ... (other questions)
+  {
+    id: 4,
+    assignmentID: 2,
+    type: "TRUE_FALSE",
+    totalPoints: 3,
+    question: "Is the Earth flat?",
+    answer: false,
+  },
+  {
+    id: 5,
+    assignmentID: 2,
+    type: "URL",
+    totalPoints: 8,
+    question: "Provide a link to a relevant resource.",
+  },
+  {
+    id: 6,
+    assignmentID: 3,
+    type: "UPLOAD",
+    totalPoints: 15,
+    question: "Upload a screenshot of your completed code.",
+  },
 ];

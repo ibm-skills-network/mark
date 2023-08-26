@@ -1,4 +1,4 @@
-interface Props {}
+interface Props extends React.ComponentPropsWithoutRef<"div"> {}
 
 function Component(props: Props) {
   const {} = props;

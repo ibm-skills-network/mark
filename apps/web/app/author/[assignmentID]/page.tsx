@@ -59,8 +59,8 @@ const AuthorIntroduction = ({
   }, []);
 
   /**
-   * check if assignment exists, if it does, update it, if not, create it
-   *
+   * Updates the assignment with the details from the introduction page
+   * and redirects to the questions page
    * */
   async function updateAssignment() {
     const modified = await modifyAssignment(
