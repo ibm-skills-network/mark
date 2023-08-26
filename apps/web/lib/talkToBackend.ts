@@ -1,19 +1,39 @@
 /**
  * This file is used to talk to the backend.
  */
-
 import { BASE_API_ROUTES } from "@config/constants";
-import type { Assignment, AssignmentBackendResponse } from "@config/types";
+import type {
+  Assignment,
+  AssignmentBackendResponse,
+  GetAssignmentResponse,
+  ModifyAssignmentRequest,
+  User,
+} from "@config/types";
+
+/**
+ * Calls the backend to see who the user is (author, learner, or admin).
+ */
+export async function getUser(): Promise<User | undefined> {
+  const res = await fetch(BASE_API_ROUTES.user);
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch user data");
+  }
+
+  return (await res.json()) as User;
+}
 
 /**
  * Calls the backend to create an assignment.
  */
-export async function createAssignment(
-  data: Assignment
-): Promise<number | undefined> {
+export async function modifyAssignment(
+  data: ModifyAssignmentRequest,
+  id: number
+): Promise<boolean | undefined> {
   try {
-    const res = await fetch(BASE_API_ROUTES.assignments, {
-      method: "POST",
+    //
+    const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
@@ -22,14 +42,52 @@ export async function createAssignment(
     if (!res.ok) {
       throw new Error("Failed to create assignment");
     }
-    const { success, id, error } =
-      (await res.json()) as AssignmentBackendResponse;
+    const { success, error } = (await res.json()) as AssignmentBackendResponse;
     if (!success) {
       throw new Error(error);
     }
-    return id;
+    return true;
   } catch (err) {
     console.error(err);
-    return undefined;
+    return false;
   }
 }
+
+/**
+ * Calls the backend to get an assignment.
+ * @param id The id of the assignment to get.
+ * @returns The assignment if it exists, undefined otherwise.
+ * @throws An error if the request fails.
+ * @throws An error if the assignment does not exist.
+ * @throws An error if the user is not authorized to view the assignment.
+ */
+export async function getAssignment(id: number): Promise<Assignment> {
+  const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch assignment");
+  }
+  const { success, error, ...remainingData } =
+    (await res.json()) as GetAssignmentResponse;
+  if (!success) {
+    throw new Error(error);
+  }
+  const assignmentData: Assignment = remainingData;
+  return assignmentData;
+}
+
+/**
+ * Calls the backend to get all assignments.
+ * @returns An array of assignments.
+ */
+export async function getAssignments(): Promise<Assignment[]> {
+  const res = await fetch(BASE_API_ROUTES.assignments);
+  if (!res.ok) {
+    throw new Error("Failed to fetch assignments");
+  }
+  const assignments = (await res.json()) as Assignment[];
+  return assignments;
+}
+
+/**
+ *
+ */

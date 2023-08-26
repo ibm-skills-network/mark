@@ -9,13 +9,13 @@ interface Props extends React.ComponentPropsWithoutRef<"div"> {
 function GradingOptionsForm(props: Props) {
   const { value, setValue } = props;
 
-  const { isGraded, attempts, passingGrade, timeEstimate } = value;
+  const { graded, attempts, passingGrade, timeEstimate } = value;
 
   function handleGradedChange(e: React.ChangeEvent<HTMLInputElement>) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
-      isGraded: e.target.value === "graded",
+      graded: e.target.value === "graded",
     }));
   }
 
@@ -51,7 +51,7 @@ function GradingOptionsForm(props: Props) {
           type="radio"
           name="graded"
           value="graded"
-          checked={isGraded}
+          checked={graded}
           onChange={handleGradedChange}
         />
         <div className="space-y-2">
@@ -71,7 +71,7 @@ function GradingOptionsForm(props: Props) {
           type="radio"
           name="ungraded"
           value="ungraded"
-          checked={!isGraded}
+          checked={!graded}
           onChange={handleGradedChange}
         />
         <div className="space-y-2">
@@ -94,6 +94,8 @@ function GradingOptionsForm(props: Props) {
           type="number"
           className="border border-gray-300 rounded-md h-12 p-4 w-full"
           placeholder="ex. 60"
+          onChange={handleTimeEstimateChange}
+          value={timeEstimate}
         />
       </div>
       <div className="space-y-2">
@@ -121,6 +123,8 @@ function GradingOptionsForm(props: Props) {
           type="number"
           className="border border-gray-300 rounded-md h-12 p-4 w-full"
           placeholder="ex. 50"
+          onChange={handlePassingGradeChange}
+          value={passingGrade}
         />
       </div>
     </div>

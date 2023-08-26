@@ -1,5 +1,4 @@
-import DynamicTextBoxContainer from "../(components)/DynamicTextBoxContainer";
-import TextBox from "../(components)/Textbox";
+import DynamicTextBoxContainer from "../../(components)/DynamicTextBoxContainer";
 
 interface Props {}
 

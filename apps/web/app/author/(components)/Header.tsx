@@ -10,28 +10,30 @@ interface Props {}
 function AuthorHeader(props: Props) {
   const {} = props;
   const pathname = usePathname();
-  function getCurrentId() {
-    const currentStep = steps.find((step) => step.href === pathname);
-    return currentStep?.id;
-  }
+  const assignmentID = pathname.split("/")[2]; // ex: /author/1234/introduction
 
   const steps = [
     {
       id: 1,
       name: "Set Up Intro",
-      href: "/author/introduction",
+      href: `/author/${assignmentID}`,
     },
     {
       id: 2,
       name: "Questions & Review",
-      href: "/author/questions",
+      href: `/author/${assignmentID}/questions`,
     },
     {
       id: 3,
       name: "Preview",
-      href: "/author/preview",
+      href: `/author/${assignmentID}/preview`,
     },
   ];
+
+  function getCurrentId() {
+    const currentStep = steps.find((step) => step.href === pathname);
+    return currentStep?.id;
+  }
 
   return (
     <header className="border-b border-gray-300 w-full px-6 py-6 bg-white justify-between gap-x-16 grid grid-cols-4">

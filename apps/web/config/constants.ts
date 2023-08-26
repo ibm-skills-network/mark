@@ -1,6 +1,6 @@
-// import { absoluteUrl } from "../lib/utils";
+import { absoluteUrl } from "../lib/utils";
 
-const BASE_API_PATH = "/api/v1";
+const BASE_API_PATH = absoluteUrl("/api/v1");
 
 export const BASE_API_ROUTES = {
   // default

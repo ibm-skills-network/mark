@@ -1,30 +1,31 @@
 "use client";
 
-import { BASE_API_ROUTES } from "@config/constants";
-import { User } from "@config/types";
+import { getUser } from "@/lib/talkToBackend";
+import { useAuthorStore } from "@/stores/author";
+import { useLearnerStore } from "@/stores/learner";
 import { useRouter } from "next/navigation";
 // import { redirect } from "next/navigation";
 import { useEffect } from "react";
 
-async function getUser<T>() {
-  const res = await fetch(window.location.origin + BASE_API_ROUTES.user);
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch user data");
-  }
-
-  return res.json() as Promise<T>;
-}
-
 export default function Home() {
   const router = useRouter();
+
+  const setAuthorActiveAssignmentID = useAuthorStore(
+    (state) => state.setActiveAssignmentID
+  );
+
+  const setLearnerActiveAssignmentID = useLearnerStore(
+    (state) => state.setActiveAssignmentID
+  );
   useEffect(() => {
     const asyncFunc = async () => {
-      const { role } = await getUser<User>();
+      const { role, assignmentID } = await getUser();
       if (role === "author") {
-        router.push("/author/introduction");
+        setAuthorActiveAssignmentID(assignmentID);
+        router.push(`/author/${assignmentID}`);
       } else if (role === "learner") {
-        router.push("/learner");
+        setLearnerActiveAssignmentID(assignmentID);
+        router.push(`/learner/${assignmentID}`);
       }
     };
     void asyncFunc();
