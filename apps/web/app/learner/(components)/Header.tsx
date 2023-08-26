@@ -18,9 +18,10 @@ function LearnerHeader(props: Props) {
             text="Auto-Graded Assignment Creator"
             className="text-lg font-semibold"
           />
-          <div>
+          {/* TODO: add back when needed */}
+          {/* <div>
             <Breadcrumbs />
-          </div>
+          </div> */}
         </div>
       </div>
     </header>

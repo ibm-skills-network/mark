@@ -237,30 +237,12 @@ function TextBox() {
           {selectedQuestionType === QuestionType.SingleCorrect ||
           selectedQuestionType === QuestionType.MultipleAnswers ? (
             <MultipleChoiceQuestion
-              maxAttempts={3}
+              // questionData={{}}
               questionNumber={questions.length + 1}
-              questionText={inputText}
-              options={
-                selectedQuestionType === QuestionType.SingleCorrect
-                  ? optionsSingleCorrect
-                  : optionsMultipleAnswers
-              }
-              correctOptions={
-                selectedQuestionType === QuestionType.SingleCorrect
-                  ? [selectedOptionSingleCorrect].filter(Boolean) // To filter out null/undefined values
-                  : selectedOptionsMultipleAnswers
-              }
-              points={100} // Adjust as needed
-              onAnswerSelected={(status) => {
-                console.log(status); // Handle answer status if needed
-              }}
             />
           ) : selectedQuestionType === QuestionType.WrittenQuestion ? (
             <LongFormQuestion
-              questionText={writtenQuestionText}
-              instructions={"Please write a detailed answer."}
-              maxWords={800} // Set a default or a dynamic value
-              points={40} // Set a default or a dynamic value
+              // questionData={{}}
               questionNumber={questions.length + 1}
             />
           ) : null}

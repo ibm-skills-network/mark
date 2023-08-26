@@ -27,6 +27,9 @@ export type Scoring = {
   criteria?: unknown;
 };
 
+/**
+ * used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
+ */
 export type Choice = {
   // key value pair
   [option: string]: boolean;
@@ -38,11 +41,11 @@ export type Question = {
   numRetries?: number;
   question: string;
   scoring?: Scoring;
-  answer?: string;
+  // used if question type is TRUE_FALSE
+  answer?: boolean;
   id: number;
   assignmentID: number;
-  success: boolean;
-  error?: string;
+  // used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
   choices?: Choice[];
 };
 

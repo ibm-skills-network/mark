@@ -25,7 +25,7 @@ function Overview(props: Props) {
   }, [secondsRemaining]);
 
   return (
-    <div className="p-4 border rounded-lg space-y-4 w-full max-w-xl mx-auto">
+    <div className="p-4 border rounded-lg space-y-4 w-full max-w-xl mx-auto bg-white">
       <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
 
       <div className="text-center font-medium">

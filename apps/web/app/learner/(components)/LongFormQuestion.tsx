@@ -1,42 +1,33 @@
 "use client";
 
+import { Question } from "@/config/types";
 import MarkdownEditor from "@components/MarkDownEditor";
-import Title from "@components/Title";
 import React, { useState } from "react";
 import Button from "./Button";
 
 interface Props {
-  questionText: string;
-  instructions: string;
-  maxWords?: number;
-  points: number;
+  questionData?: Question;
   questionNumber: number;
 }
 
 function LongFormQuestion(props: Props) {
-  const {
-    questionText,
-    instructions,
-    maxWords = 800,
-    points,
-    questionNumber,
-  } = props;
+  const { questionData, questionNumber } = props;
+  const { question, totalPoints } = questionData;
   const [answer, setAnswer] = useState<string>("");
-
+  const maxWords = 1000;
   return (
     <div
-      className="p-8 rounded-lg shadow-md question-container"
+      className="p-8 question-container"
       style={{ height: "500px", overflowY: "auto" }}
     >
-      <Title
-        text={`Question ${questionNumber}: Points out of ${points} (${
-          (points / 40) * 100
-        }%)`}
-      />
-      <p className="mb-4 text-gray-700">{questionText}</p>
-      <p className="mb-4 text-gray-700">{instructions}</p>
-      <MarkdownEditor value={answer} setValue={setAnswer} />
-      <p className="text-gray-600">Max {maxWords} words</p>
+      <p>
+        Question {questionNumber}: Points {totalPoints.toFixed(2)} out of 100
+      </p>
+      <div className="mb-4 bg-white p-5">
+        <p className="mb-4 text-gray-700">{question}</p>
+        <MarkdownEditor value={answer} setValue={setAnswer} />
+        <p className="text-gray-600">Max {maxWords} words</p>
+      </div>
       <div className="flex justify-between mt-4">
         <Button>Submit Question</Button>
       </div>

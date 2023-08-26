@@ -1,6 +1,6 @@
 "use client";
 
-import { QuestionStatus } from "@/config/types";
+import { Question, QuestionStatus } from "@/config/types";
 import { QuestionData, questionsData } from "@config/constants";
 import Button from "@learnerComponents/Button";
 import LongFormQuestion from "@learnerComponents/LongFormQuestion";
@@ -30,16 +30,20 @@ function LearnerLayout() {
     });
   };
 
-  const renderQuestion = (question: QuestionData, index: number) => {
+  const renderQuestion = (question: Question, index: number) => {
     const questionNumber = index + 1;
 
-    if (question.type === "longForm") {
-      return <LongFormQuestion {...question} questionNumber={questionNumber} />;
+    if (question.type === "TEXT") {
+      return (
+        <LongFormQuestion
+          questionData={question}
+          questionNumber={questionNumber}
+        />
+      );
     } else {
       return (
         <MultipleChoiceQuestion
-          {...question}
-          maxAttempts={3}
+          questionData={question}
           questionNumber={questionNumber}
           onAnswerSelected={updateStatus}
         />
@@ -47,14 +51,14 @@ function LearnerLayout() {
     }
   };
   return (
-    <main className="p-24">
+    <main className="p-24 min-h-screen">
       <div className="flex p-8">
         {" "}
         {/* Added padding to give some space between components */}
-        <div className="w-3/4 pr-8 min-h-screen">
+        <div className="w-3/4 pr-8">
           {" "}
           {/* Added right padding and min-height */}
-          <div className="bg-white p-4 shadow-lg rounded-lg">
+          <div className="p-4">
             {" "}
             {/* Added a container with padding, shadow, and rounded corners for better separation */}
             {renderQuestion(questionsData[currentIndex], currentIndex)}
@@ -75,8 +79,7 @@ function LearnerLayout() {
             </Button>
           </div>
         </div>
-        <div className="w-1/4 min-h-screen">
-          {" "}
+        <div className="w-1/4">
           {/* Added min-height */}
           <Overview
             questions={questionStatuses}
