@@ -148,11 +148,9 @@ function MultipleChoiceQuestion(props: Props) {
           </button>
         ))}
       </div>
-      <Button
-        text="Submit"
-        onClick={handleSubmit}
-        disabled={attempts >= props.maxAttempts}
-      />
+      <Button onClick={handleSubmit} disabled={attempts >= props.maxAttempts}>
+        Submit
+      </Button>
       {renderFeedbackMessage()}
       {renderAttemptMessage()}
     </div>

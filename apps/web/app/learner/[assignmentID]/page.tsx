@@ -1,6 +1,7 @@
+import Button from "@learnerComponents/Button";
+import Link from "next/link";
 import React from "react";
 import { twMerge } from "tailwind-merge";
-import Button from "./Button";
 
 interface Props extends React.ComponentPropsWithoutRef<"div"> {
   title?: string;
@@ -10,7 +11,7 @@ interface Props extends React.ComponentPropsWithoutRef<"div"> {
   onBegin?: () => void;
 }
 
-function IntroductionPage(props: Props) {
+function IntroductionPage(props: Props & { params: { assignmentID: string } }) {
   const {
     title = "Introduction to Project Management",
     attemptsAllowed = 1,
@@ -18,15 +19,11 @@ function IntroductionPage(props: Props) {
     outOf = 40,
     onBegin,
     className = "",
+    params,
   } = props;
 
   return (
-    <div
-      className={twMerge(
-        "bg-white p-8 rounded-lg shadow-md introduction-container",
-        className
-      )}
-    >
+    <main className={twMerge("p-24 rounded-lg shadow-md h-full", className)}>
       <div className="border-2 p-4 flex justify-between items-center mb-4">
         <div>
           <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
@@ -44,7 +41,9 @@ function IntroductionPage(props: Props) {
             <div className="flex items-center">Out Of: {outOf}</div>
           </div>
         </div>
-        <Button text="Begin the Assignment >" onClick={onBegin} />
+        <Link href={`/learner/${params.assignmentID}/questions`}>
+          <Button>Begin the Assignment {">"}</Button>
+        </Link>
       </div>
       <div className="border-2 border-gray-400 bg-white p-4">
         <h3 className="text-xl font-semibold text-gray-800 mb-4">
@@ -89,7 +88,7 @@ function IntroductionPage(props: Props) {
           that is counted is worth ~13.3% of your final grade...
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 
