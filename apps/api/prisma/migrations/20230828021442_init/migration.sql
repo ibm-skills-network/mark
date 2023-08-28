@@ -46,6 +46,7 @@ CREATE TABLE "Question" (
     "numRetries" INTEGER NOT NULL,
     "type" "QuestionType" NOT NULL,
     "question" TEXT NOT NULL,
+    "maxWords" INTEGER,
     "scoring" JSONB,
     "choices" JSONB,
     "answer" BOOLEAN,

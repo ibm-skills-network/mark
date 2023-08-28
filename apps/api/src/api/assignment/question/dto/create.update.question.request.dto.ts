@@ -55,7 +55,7 @@ export class CreateUpdateQuestionRequestDto {
   totalPoints: number;
 
   @ApiProperty({
-    description: "The number of retries allowed for the assignment.",
+    description: "The number of retries allowed for this question.",
     type: Number,
     required: false,
   })
@@ -79,6 +79,14 @@ export class CreateUpdateQuestionRequestDto {
   @IsNotEmpty()
   @IsString()
   question: string;
+
+  @ApiProperty({
+    description: "The max number of words allowed for this question.",
+    type: Number,
+    required: false,
+  })
+  @IsInt()
+  maxWords: number;
 
   @ApiPropertyOptional({ description: "The scoring criteria.", type: Scoring })
   @IsOptional()

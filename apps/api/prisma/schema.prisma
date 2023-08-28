@@ -111,6 +111,7 @@ model Assignment {
 // numRetries: Max number of times a student can retry a question
 // type: Type of question
 // question: The text of the question
+// max words: optional maximum number of words allowed for a written response type question
 // scoring: Scoring details for the question, stored as JSON
 // choices: Possible choices for the question, stored as JSON
 // answer: The correct answer for the question (used for auto grading)
@@ -122,6 +123,7 @@ model Question {
   numRetries   Int
   type         QuestionType
   question     String
+  maxWords     Int?
   scoring      Json?
   choices      Json?
   answer       Boolean?
