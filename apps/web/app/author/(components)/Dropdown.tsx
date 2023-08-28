@@ -1,10 +1,13 @@
 "use client";
 
-import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
-import TextQuestion from "@/app/learner/(components)/TextQuestion";
-import MarkdownEditor from "@components/MarkDownEditor";
-import { Listbox, RadioGroup, Transition } from "@headlessui/react";
-import { CheckIcon, ChevronDownIcon } from "@heroicons/react/solid";
+import { Listbox, Menu, RadioGroup, Transition } from "@headlessui/react";
+import {
+  CheckCircleIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  PencilIcon,
+  ViewListIcon,
+} from "@heroicons/react/solid";
 import React, { Fragment, useEffect, useRef, useState } from "react";
 
 interface DropdownProps {
@@ -51,7 +54,7 @@ function Dropdown(props: DropdownProps) {
               leaveTo="opacity-0"
             >
               <Listbox.Options className="absolute right-0 z-10 mt-2 w-72 origin-top-right divide-y divide-gray-200 overflow-hidden rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                {answerTypes.map((option) => (
+                {answerTypes.map((option, index) => (
                   <Listbox.Option
                     key={option.title}
                     className={({ active }) =>
@@ -64,7 +67,23 @@ function Dropdown(props: DropdownProps) {
                   >
                     {({ selected, active }) => (
                       <div className="flex flex-col">
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
+                          {index === 0 ? ( // Use CashIcon for the first option
+                            <CheckCircleIcon
+                              className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500"
+                              aria-hidden="true"
+                            />
+                          ) : index === 1 ? ( // Use CheckIcon for the second option
+                            <ViewListIcon
+                              className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500"
+                              aria-hidden="true"
+                            />
+                          ) : index === 2 ? ( // Use ChevronDownIcon for the third option
+                            <PencilIcon
+                              className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500"
+                              aria-hidden="true"
+                            />
+                          ) : null}
                           <p
                             className={
                               selected ? "font-semibold" : "font-normal"

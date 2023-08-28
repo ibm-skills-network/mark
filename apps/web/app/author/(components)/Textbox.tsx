@@ -21,7 +21,7 @@ const answerTypes = [
     current: false,
   },
   {
-    title: "Written Answer",
+    title: "Written Answer Question",
     description: "This question has a written answer",
     current: false,
   },
@@ -290,7 +290,7 @@ function TextBox() {
         </div>
       )} */}
           <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2 h-4 mt-[20px]">
-            How would you like your question type
+            How would you like your question type?
           </div>
           <div className="my-[20px]">
             <Dropdown
@@ -470,6 +470,25 @@ function TextBox() {
                   </span>
                 </div>
               </button>
+              <div>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="w-6 h-6"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.249-8.25-3.286zm0 13.036h.008v.008H12v-.008z"
+                  />
+                </svg>
+                Warning: in multiple answer - multiple choice, one or more than
+                one wrong option in answer would cause 0 points in this
+                question.
+              </div>
             </div>
           ) : null}
           {answerTypeSelected === answerTypes[2] && (
