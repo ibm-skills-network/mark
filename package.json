@@ -22,6 +22,7 @@
     "secrets:check:staged": "scripts/detect-secrets-staged.sh",
     "secrets:setup": "detect-secrets scan --update .secrets.baseline",
     "setup": "cd \"$(git root)/apps/api\" && op run --env-file=./dev.env -- npx prisma migrate dev && npx prisma generate; cd $(git root)",
+    "setup:no-git": "cd \"./apps/api\" && op run --env-file=./dev.env -- npx prisma migrate dev && npx prisma generate; cd ../../",
     "test": "turbo run test",
     "test:staged": "turbo run test:staged --"
   },

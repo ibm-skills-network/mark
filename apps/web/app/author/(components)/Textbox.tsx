@@ -246,6 +246,7 @@ function TextBox() {
             minHeight: "25.5rem",
           }}
         >
+          Question:
           {/* <button
         className="bg-blue-500 text-white p-2 rounded-md ml-2"
         onClick={generateJsonData}
@@ -260,11 +261,19 @@ function TextBox() {
               </pre>
             </div>
           )}
-          <MarkdownEditor
-            style={{ height: "200px", width: "800px" }}
-            value={inputText}
-            setValue={setInputText}
-          />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <MarkdownEditor
+              style={{ height: "200px", width: "800px" }}
+              value={inputText}
+              setValue={setInputText}
+            />
+          </div>
           {/* <div className="mt-2">
         <button
           className="bg-blue-500 text-white p-2 rounded-md"
@@ -282,96 +291,103 @@ function TextBox() {
           <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2 h-4 mt-[20px]">
             How would you like your question type
           </div>
-
-          <Listbox value={answerTypeSelected} onChange={setanswerTypeSelected}>
-            {({ open }) => (
-              <>
-                <Listbox.Label className="sr-only">
-                  Change published status
-                </Listbox.Label>
-                <div className="relative">
-                  <div className="inline-flex divide-x divide-indigo-700 rounded-md shadow-sm">
-                    <div className="inline-flex items-center gap-x-1.5 rounded-l-md bg-indigo-600 px-3 py-2 text-white shadow-sm">
-                      <CheckIcon
-                        className="-ml-0.5 h-5 w-5"
-                        aria-hidden="true"
-                      />
-                      <p className="text-sm font-semibold">
-                        {answerTypeSelected.title}
-                      </p>
+          <div className="my-[20px]">
+            <Listbox
+              value={answerTypeSelected}
+              onChange={setanswerTypeSelected}
+            >
+              {({ open }) => (
+                <>
+                  <Listbox.Label className="sr-only">
+                    Change published status
+                  </Listbox.Label>
+                  <div className="relative">
+                    <div className="inline-flex divide-x divide-indigo-700 rounded-md shadow-sm">
+                      <div className="inline-flex items-center gap-x-1.5 rounded-l-md bg-indigo-600 px-3 py-2 text-white shadow-sm">
+                        <CheckIcon
+                          className="-ml-0.5 h-5 w-5"
+                          aria-hidden="true"
+                        />
+                        <p className="text-sm font-semibold">
+                          {answerTypeSelected.title}
+                        </p>
+                      </div>
+                      <Listbox.Button className="inline-flex items-center rounded-l-none rounded-r-md bg-indigo-600 p-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 focus:ring-offset-gray-50">
+                        <span className="sr-only">Change published status</span>
+                        <ChevronDownIcon
+                          className="h-5 w-5 text-white"
+                          aria-hidden="true"
+                        />
+                      </Listbox.Button>
                     </div>
-                    <Listbox.Button className="inline-flex items-center rounded-l-none rounded-r-md bg-indigo-600 p-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 focus:ring-offset-gray-50">
-                      <span className="sr-only">Change published status</span>
-                      <ChevronDownIcon
-                        className="h-5 w-5 text-white"
-                        aria-hidden="true"
-                      />
-                    </Listbox.Button>
-                  </div>
 
-                  <Transition
-                    show={open}
-                    as={Fragment}
-                    leave="transition ease-in duration-100"
-                    leaveFrom="opacity-100"
-                    leaveTo="opacity-0"
-                  >
-                    <Listbox.Options className="absolute right-0 z-10 mt-2 w-72 origin-top-right divide-y divide-gray-200 overflow-hidden rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                      {answerTypes.map((option) => (
-                        <Listbox.Option
-                          key={option.title}
-                          className={({ active }) =>
-                            classNames(
-                              active
-                                ? "bg-indigo-600 text-white"
-                                : "text-gray-900",
-                              "cursor-default select-none p-4 text-sm"
-                            )
-                          }
-                          value={option}
-                        >
-                          {({ selected, active }) => (
-                            <div className="flex flex-col">
-                              <div className="flex justify-between">
-                                <p
-                                  className={
-                                    selected ? "font-semibold" : "font-normal"
-                                  }
-                                >
-                                  {option.title}
-                                </p>
-                                {selected ? (
-                                  <span
+                    <Transition
+                      show={open}
+                      as={Fragment}
+                      leave="transition ease-in duration-100"
+                      leaveFrom="opacity-100"
+                      leaveTo="opacity-0"
+                    >
+                      <Listbox.Options className="absolute right-0 z-10 mt-2 w-72 origin-top-right divide-y divide-gray-200 overflow-hidden rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                        {answerTypes.map((option) => (
+                          <Listbox.Option
+                            key={option.title}
+                            className={({ active }) =>
+                              classNames(
+                                active
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-gray-900",
+                                "cursor-default select-none p-4 text-sm"
+                              )
+                            }
+                            value={option}
+                          >
+                            {({ selected, active }) => (
+                              <div className="flex flex-col">
+                                <div className="flex justify-between">
+                                  <p
                                     className={
-                                      active ? "text-white" : "text-indigo-600"
+                                      selected ? "font-semibold" : "font-normal"
                                     }
                                   >
-                                    <CheckIcon
-                                      className="h-5 w-5"
-                                      aria-hidden="true"
-                                    />
-                                  </span>
-                                ) : null}
+                                    {option.title}
+                                  </p>
+                                  {selected ? (
+                                    <span
+                                      className={
+                                        active
+                                          ? "text-white"
+                                          : "text-indigo-600"
+                                      }
+                                    >
+                                      <CheckIcon
+                                        className="h-5 w-5"
+                                        aria-hidden="true"
+                                      />
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p
+                                  className={classNames(
+                                    active
+                                      ? "text-indigo-200"
+                                      : "text-gray-500",
+                                    "mt-2"
+                                  )}
+                                >
+                                  {option.description}
+                                </p>
                               </div>
-                              <p
-                                className={classNames(
-                                  active ? "text-indigo-200" : "text-gray-500",
-                                  "mt-2"
-                                )}
-                              >
-                                {option.description}
-                              </p>
-                            </div>
-                          )}
-                        </Listbox.Option>
-                      ))}
-                    </Listbox.Options>
-                  </Transition>
-                </div>
-              </>
-            )}
-          </Listbox>
-
+                            )}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                </>
+              )}
+            </Listbox>
+          </div>
           {answerTypeSelected === answerTypes[0] ? (
             <div className="mt-4">
               <p>Options:</p>
@@ -545,7 +561,6 @@ function TextBox() {
               </button>
             </div>
           ) : null}
-
           {answerTypeSelected === answerTypes[2] && (
             <div className="mt-4">
               <div style={{ width: 800, height: 104, background: "#E0E7FF" }}>
