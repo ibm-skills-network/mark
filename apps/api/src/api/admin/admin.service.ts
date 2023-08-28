@@ -256,13 +256,21 @@ export class AdminService {
       where: { assignmentId: id },
     });
 
-    // Now delete the assignment
-    const result = await this.prisma.assignment.delete({
+    const assignmentExists = await this.prisma.assignment.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!assignmentExists) {
+      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+    }
+
+    await this.prisma.assignment.delete({
       where: { id },
     });
 
     return {
-      id: result.id,
+      id: id,
       success: true,
     };
   }
