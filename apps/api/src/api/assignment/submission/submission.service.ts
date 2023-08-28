@@ -271,7 +271,7 @@ export class SubmissionService {
     }
 
     const responseDto = new CreateQuestionResponseSubmissionResponseDto();
-    let learnerResponse;
+    let learnerResponse: string;
     // Grade Text Based Questions
     if (
       question.type === QuestionType.TEXT ||
@@ -285,7 +285,7 @@ export class SubmissionService {
 
       const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
         question.question,
-        learnerResponse as string,
+        learnerResponse,
         question.totalPoints,
         question.scoring?.type ?? "",
         question.scoring?.criteria ?? {}

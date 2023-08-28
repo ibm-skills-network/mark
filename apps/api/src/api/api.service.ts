@@ -13,6 +13,7 @@ export class ApiService {
     this.logger = parentLogger.child({ context: ApiService.name });
   }
   rootV1(): Record<string, string | number> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     this.logger.info("showing api version information");
     void this.messagingService.publishService("api", {});
 
