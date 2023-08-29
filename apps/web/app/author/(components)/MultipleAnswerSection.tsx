@@ -26,7 +26,7 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
   const [points, setPoints] = useState(0);
 
   const handleButtonClick = (optionId: string) => {
-    setIsInputMode(!isInputMode); // Toggle input mode
+    setIsInputMode(true);
     setPoints(pointInputs[optionId] || 0); // Set points based on existing value or default to 0
   };
 
@@ -113,24 +113,27 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
               </svg>
             </button>
             <div className="ml-[5px]">
-              <input
-                className="w-[80px]"
-                type="number"
-                autoFocus
-                disabled={!isOptionChecked} // Disable input when checkbox is not checked
-              />
-              <button
-                onClick={() => handleButtonClick(optionId)}
-                style={{
-                  color: isOptionChecked ? "blue-700" : "gray-700",
-                  borderColor: "transparent",
-                  backgroundColor: "transparent",
-                  cursor: isOptionChecked ? "pointer" : "not-allowed", // Set cursor based on checkbox state
-                }}
-                disabled={!isOptionChecked} // Disable button when checkbox is not checked
-              >
-                {0} points
-              </button>
+              {isInputMode ? (
+                <input
+                  className="w-[80px]"
+                  type="number"
+                  autoFocus
+                  onBlur={() => setIsInputMode(false)}
+                />
+              ) : (
+                <button
+                  onClick={() => handleButtonClick(optionId)}
+                  style={{
+                    color: isOptionChecked ? "blue-700" : "gray-700",
+                    borderColor: "transparent",
+                    backgroundColor: "transparent",
+                    cursor: isOptionChecked ? "pointer" : "not-allowed", // Set cursor based on checkbox state
+                  }}
+                  disabled={!isOptionChecked} // Disable button when checkbox is not checked
+                >
+                  {0} points
+                </button>
+              )}
             </div>
           </div>
         );
