@@ -25,15 +25,24 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
   const [isInputMode, setIsInputMode] = useState(false);
   const [points, setPoints] = useState(0);
 
-  const handleButtonClick = () => {
-    setIsInputMode(true);
+  const handleButtonClick = (optionId: string) => {
+    setIsInputMode(!isInputMode); // Toggle input mode
+    setPoints(pointInputs[optionId] || 0); // Set points based on existing value or default to 0
   };
 
-  const handleInputBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+  const handleInputBlur = (
+    event: React.FocusEvent<HTMLInputElement>,
+    optionId: string
+  ) => {
     const newPoints = parseInt(event.target.value);
-    setPoints(newPoints);
-    setIsInputMode(false);
+    const newPointInputs = { ...pointInputs, [optionId]: newPoints };
+    setPointInputs(newPointInputs);
   };
+
+  const [optionChecked, setOptionChecked] = useState<boolean[]>(
+    Array(optionsMultipleAnswers.length).fill(false)
+  );
+
   return (
     <div className="mt-4">
       <p>Options:</p>
@@ -41,13 +50,19 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
       {optionsMultipleAnswers.map((option, index) => {
         const optionId = `option_${index}`; // Generate a unique ID for each option
         const isChecked = selectedOptionsMultipleAnswers.includes(optionId);
+        const isOptionChecked = optionChecked[index];
         return (
           <div key={optionId} className="flex items-center mb-[5px]">
             <input
               type="checkbox"
               id={optionId}
-              checked={selectedOptionsMultipleAnswers.includes(optionId)}
-              onChange={() => handleOptionToggleMultipleAnswers(optionId)}
+              checked={isChecked}
+              onChange={() => {
+                handleOptionToggleMultipleAnswers(optionId);
+                const newOptionChecked = [...optionChecked];
+                newOptionChecked[index] = !newOptionChecked[index];
+                setOptionChecked(newOptionChecked);
+              }}
             />
             <div className="ml-2">
               {" "}
@@ -98,25 +113,24 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
               </svg>
             </button>
             <div className="ml-[5px]">
-              {isInputMode ? (
-                <input
-                  className="w-[80px]"
-                  type="number"
-                  onBlur={handleInputBlur}
-                  autoFocus
-                />
-              ) : (
-                <button
-                  onClick={handleButtonClick}
-                  style={{
-                    color: "blue",
-                    borderColor: "transparent",
-                    backgroundColor: "transparent",
-                  }}
-                >
-                  {points} points
-                </button>
-              )}
+              <input
+                className="w-[80px]"
+                type="number"
+                autoFocus
+                disabled={!isOptionChecked} // Disable input when checkbox is not checked
+              />
+              <button
+                onClick={() => handleButtonClick(optionId)}
+                style={{
+                  color: isOptionChecked ? "blue-700" : "gray-700",
+                  borderColor: "transparent",
+                  backgroundColor: "transparent",
+                  cursor: isOptionChecked ? "pointer" : "not-allowed", // Set cursor based on checkbox state
+                }}
+                disabled={!isOptionChecked} // Disable button when checkbox is not checked
+              >
+                {0} points
+              </button>
             </div>
           </div>
         );
