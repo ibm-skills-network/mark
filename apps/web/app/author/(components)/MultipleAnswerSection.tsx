@@ -42,7 +42,7 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
         const optionId = `option_${index}`; // Generate a unique ID for each option
         const isChecked = selectedOptionsMultipleAnswers.includes(optionId);
         return (
-          <div key={optionId} className="flex items-center">
+          <div key={optionId} className="flex items-center mb-[5px]">
             <input
               type="checkbox"
               id={optionId}
@@ -62,7 +62,7 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
                 handleOptionChangeMultipleAnswers(index, event.target.value)
               }
               style={{
-                height: "1.5rem", // Changed 'height' to 'minHeight'
+                height: "2.0rem", // Changed 'height' to 'minHeight'
                 maxWidth: "100%",
                 overflow: "hidden",
                 resize: "vertical",
@@ -97,65 +97,57 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
                 />
               </svg>
             </button>
-            <input
-              className={`ml-2 w-16 py-1 text-gray-900 rounded-md ${
-                isChecked ? "" : "bg-gray-100"
-              }`}
-              placeholder="Points"
-              value={pointInputs[optionId] || ""}
-              onChange={(event) => {
-                if (isChecked) {
-                  const newPointInputs = { ...pointInputs };
-                  newPointInputs[optionId] = parseInt(event.target.value, 10);
-                  setPointInputs(newPointInputs);
-                }
-              }}
-              disabled={!isChecked}
-            />
-
-            {isInputMode ? (
-              <input type="number" onBlur={handleInputBlur} autoFocus />
-            ) : (
-              <button
-                onClick={handleButtonClick}
-                style={{
-                  color: "blue",
-                  borderColor: "transparent",
-                  backgroundColor: "transparent",
-                }}
-              >
-                {points} points
-              </button>
-            )}
+            <div className="ml-[5px]">
+              {isInputMode ? (
+                <input
+                  className="w-[80px]"
+                  type="number"
+                  onBlur={handleInputBlur}
+                  autoFocus
+                />
+              ) : (
+                <button
+                  onClick={handleButtonClick}
+                  style={{
+                    color: "blue",
+                    borderColor: "transparent",
+                    backgroundColor: "transparent",
+                  }}
+                >
+                  {points} points
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
-
-      <button
-        type="button"
-        className="rounded-full w-[140px] bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
-        onClick={() =>
-          setOptionsMultipleAnswers([...optionsMultipleAnswers, ""])
-        }
-      >
-        <div className="flex items-center">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="21"
-            viewBox="0 0 20 21"
-            fill="none"
-          >
-            <path
-              d="M11.3438 7.34375C11.3438 7.11997 11.2549 6.90536 11.0966 6.74713C10.9384 6.58889 10.7238 6.5 10.5 6.5C10.2762 6.5 10.0616 6.58889 9.90338 6.74713C9.74515 6.90536 9.65625 7.11997 9.65625 7.34375V10.1562H6.84375C6.61997 10.1562 6.40536 10.2451 6.24713 10.4034C6.08889 10.5616 6 10.7762 6 11C6 11.2238 6.08889 11.4384 6.24713 11.5966C6.40536 11.7549 6.61997 11.8438 6.84375 11.8438H9.65625V14.6562C9.65625 14.88 9.74515 15.0946 9.90338 15.2529C10.0616 15.4111 10.2762 15.5 10.5 15.5C10.7238 15.5 10.9384 15.4111 11.0966 15.2529C11.2549 15.0946 11.3438 14.88 11.3438 14.6562V11.8438H14.1562C14.38 11.8438 14.5946 11.7549 14.7529 11.5966C14.9111 11.4384 15 11.2238 15 11C15 10.7762 14.9111 10.5616 14.7529 10.4034C14.5946 10.2451 14.38 10.1562 14.1562 10.1562H11.3438V7.34375Z"
-              fill="#1D4ED8"
-            />
-          </svg>
-          <span style={{ fontSize: "0.8rem", marginLeft: "0.5rem" }}>
-            Add Option
-          </span>
-        </div>
-      </button>
+      <div className="mt-[10px]">
+        <button
+          type="button"
+          className="rounded-full w-[140px] bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
+          onClick={() =>
+            setOptionsMultipleAnswers([...optionsMultipleAnswers, ""])
+          }
+        >
+          <div className="flex items-center">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="21"
+              viewBox="0 0 20 21"
+              fill="none"
+            >
+              <path
+                d="M11.3438 7.34375C11.3438 7.11997 11.2549 6.90536 11.0966 6.74713C10.9384 6.58889 10.7238 6.5 10.5 6.5C10.2762 6.5 10.0616 6.58889 9.90338 6.74713C9.74515 6.90536 9.65625 7.11997 9.65625 7.34375V10.1562H6.84375C6.61997 10.1562 6.40536 10.2451 6.24713 10.4034C6.08889 10.5616 6 10.7762 6 11C6 11.2238 6.08889 11.4384 6.24713 11.5966C6.40536 11.7549 6.61997 11.8438 6.84375 11.8438H9.65625V14.6562C9.65625 14.88 9.74515 15.0946 9.90338 15.2529C10.0616 15.4111 10.2762 15.5 10.5 15.5C10.7238 15.5 10.9384 15.4111 11.0966 15.2529C11.2549 15.0946 11.3438 14.88 11.3438 14.6562V11.8438H14.1562C14.38 11.8438 14.5946 11.7549 14.7529 11.5966C14.9111 11.4384 15 11.2238 15 11C15 10.7762 14.9111 10.5616 14.7529 10.4034C14.5946 10.2451 14.38 10.1562 14.1562 10.1562H11.3438V7.34375Z"
+                fill="#1D4ED8"
+              />
+            </svg>
+            <span style={{ fontSize: "0.8rem", marginLeft: "0.5rem" }}>
+              Add Option
+            </span>
+          </div>
+        </button>
+      </div>
       <div>
         <svg
           xmlns="http://www.w3.org/2000/svg"
