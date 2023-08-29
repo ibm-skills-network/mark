@@ -1,23 +1,14 @@
 "use client";
 
-import { Listbox, Menu, RadioGroup, Transition } from "@headlessui/react";
-import {
-  CheckCircleIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  PencilIcon,
-  ViewListIcon,
-} from "@heroicons/react/solid";
-import React, { Fragment, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 
 interface MultipleAnswerSectionProps {
-  optionsMultipleAnswers: any; // Replace 'any' with the appropriate type
-  selectedOptionsMultipleAnswers: any;
-  setOptionsMultipleAnswers: (selected: any) => void;
-  handleOptionToggleMultipleAnswers: (selected: any) => void; // Replace 'any' with the appropriate type
-  handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  optionsMultipleAnswers: string[]; // Replace with the appropriate type
+  selectedOptionsMultipleAnswers: string[];
+  handleOptionToggleMultipleAnswers: (selected: string) => void; // Replace with the appropriate type
   handleOptionChangeMultipleAnswers: (index: number, value: string) => void;
-  setSelectedOptionsMultipleAnswers: (selected: any) => void;
+  setOptionsMultipleAnswers: (options: string[]) => void;
+  setSelectedOptionsMultipleAnswers: (selected: string[]) => void;
 }
 
 function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
@@ -29,11 +20,27 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
     setOptionsMultipleAnswers,
     setSelectedOptionsMultipleAnswers,
   } = props;
+  const [pointInputs, setPointInputs] = useState<{ [id: string]: number }>({});
+
+  const [isInputMode, setIsInputMode] = useState(false);
+  const [points, setPoints] = useState(0);
+
+  const handleButtonClick = () => {
+    setIsInputMode(true);
+  };
+
+  const handleInputBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+    const newPoints = parseInt(event.target.value);
+    setPoints(newPoints);
+    setIsInputMode(false);
+  };
   return (
     <div className="mt-4">
       <p>Options:</p>
+
       {optionsMultipleAnswers.map((option, index) => {
         const optionId = `option_${index}`; // Generate a unique ID for each option
+        const isChecked = selectedOptionsMultipleAnswers.includes(optionId);
         return (
           <div key={optionId} className="flex items-center">
             <input
@@ -42,17 +49,23 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
               checked={selectedOptionsMultipleAnswers.includes(optionId)}
               onChange={() => handleOptionToggleMultipleAnswers(optionId)}
             />
-            <input
-              type="text"
-              className="p-2 rounded-md text-black bg-transparent outline-none w-full" // Removed 'border ml-2' and added 'w-full'
+            <div className="ml-2">
+              {" "}
+              {/* Add margin to create space */}
+              {String.fromCharCode(65 + index)}.
+            </div>
+            <textarea
+              className="w-[800px] p-2 rounded-md text-black bg-transparent outline-none" // Removed 'border ml-2' and added 'w-full'
               placeholder={`Option ${index + 1}`}
               value={option}
               onChange={(event) =>
                 handleOptionChangeMultipleAnswers(index, event.target.value)
               }
               style={{
-                height: "2.125rem",
+                height: "1.5rem", // Changed 'height' to 'minHeight'
                 maxWidth: "100%",
+                overflow: "hidden",
+                resize: "vertical",
               }}
             />
             <button
@@ -84,6 +97,36 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
                 />
               </svg>
             </button>
+            <input
+              className={`ml-2 w-16 py-1 text-gray-900 rounded-md ${
+                isChecked ? "" : "bg-gray-100"
+              }`}
+              placeholder="Points"
+              value={pointInputs[optionId] || ""}
+              onChange={(event) => {
+                if (isChecked) {
+                  const newPointInputs = { ...pointInputs };
+                  newPointInputs[optionId] = parseInt(event.target.value, 10);
+                  setPointInputs(newPointInputs);
+                }
+              }}
+              disabled={!isChecked}
+            />
+
+            {isInputMode ? (
+              <input type="number" onBlur={handleInputBlur} autoFocus />
+            ) : (
+              <button
+                onClick={handleButtonClick}
+                style={{
+                  color: "blue",
+                  borderColor: "transparent",
+                  backgroundColor: "transparent",
+                }}
+              >
+                {points} points
+              </button>
+            )}
           </div>
         );
       })}
