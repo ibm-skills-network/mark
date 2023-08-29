@@ -42,9 +42,20 @@ function Component(props: Props) {
 
   return (
     <section className={twMerge("", className)}>
-      <p>
-        Question {questionNumber}: Points {totalPoints.toFixed(2)} out of 100
-      </p>
+      <div className="w-96">
+        <span className="text-gray-600 text-xl font-medium leading-tight">
+          {" "}
+          Question {questionNumber}:
+        </span>
+        <span className="text-gray-500 text-xl font-medium leading-tight">
+          {" "}
+        </span>
+        <span className="text-blue-700 text-base font-medium leading-tight">
+          Points {totalPoints.toFixed(2)} out of 100 (
+          {((totalPoints / 100) * 100).toFixed(2)}%)
+        </span>
+      </div>
+
       {RenderQuestion()}
     </section>
   );
