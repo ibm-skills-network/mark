@@ -40,27 +40,43 @@ function RubricTableProps(props: RubricTableProps) {
                 <tr className="divide-x divide-gray-200">
                   <th
                     scope="col"
-                    className="py-3.5 pl-4 pr-4 text-left text-sm font-semibold bg-gray-100 text-gray-900 sm:pl-0"
+                    className="py-3.5 pl-4 pr-4 w-[19.70812rem] h-[2.75rem] text-left text-sm font-semibold bg-gray-100 text-gray-900 sm:pl-0"
                   >
-                    Criteria
+                    <div className="flex items-center text-xs font-normal ml-8 text-0.5xl">
+                      {" "}
+                      {/* Adding ml-2 to move the text */}
+                      Criteria
+                    </div>
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3.5 text-left text-sm font-semibold text-gray-900"
+                    className="px-4 py-3.5 w-[22.5rem] h-[1.25rem] text-left text-sm font-semibold text-gray-900"
                   >
-                    Performance Descripiton
+                    <div className="flex items-center text-xs font-normal ml-2 text-0.5xl">
+                      {" "}
+                      {/* Adding ml-2 to move the text */}
+                      Performance Descripiton
+                    </div>
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3.5 text-left text-sm font-semibold text-gray-900"
+                    className="px-4 py-3.5 w-[8.2rem] h-[2.75rem]  text-left text-sm font-semibold text-gray-900"
                   >
-                    Point Range
+                    <div className="flex items-center text-xs font-normal ml-1">
+                      {" "}
+                      {/* Adding ml-2 to move the text */}
+                      Point Range
+                    </div>
                   </th>
                   <th
                     scope="col"
                     className="py-3.5 pl-4 pr-4 text-left text-sm font-semibold text-gray-900 sm:pr-0"
                   >
-                    Weight
+                    <div className="flex items-center text-xs font-normal text-0.5xl">
+                      {" "}
+                      {/* Adding ml-2 to move the text */}
+                      Weight
+                    </div>
                   </th>
                 </tr>
               </thead>
