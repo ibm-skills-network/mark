@@ -397,7 +397,23 @@ function TextBox() {
               }
             />
           ) : null}
-          {answerTypeSelected === answerTypes[2] && <WrittenQuestionView />}
+          {answerTypeSelected === answerTypes[2] && (
+            <WrittenQuestionView
+              handleScore={handleScore}
+              score={score}
+              switchState={switchState}
+              setSwitchState={setSwitchState}
+              optionsWrittenQuestion={optionsWrittenQuestion}
+              handleOptionChangeWrittenQuestion={
+                handleOptionChangeWrittenQuestion
+              }
+              handleRemoveOptionWrittenQuestion={
+                handleRemoveOptionWrittenQuestion
+              }
+              handleAddOptionWrittenQuestion={handleAddOptionWrittenQuestion}
+              rubrics={rubrics}
+            />
+          )}
         </div>
       )}
     </div>
