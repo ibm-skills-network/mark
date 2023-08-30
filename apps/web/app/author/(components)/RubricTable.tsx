@@ -5,10 +5,11 @@ import React, { useState } from "react";
 interface RubricTableProps {
   rubrics: any;
   onAddRow: () => void; // Define a prop for the add row functionality
+  onDeleteRow: (index: number) => void;
 }
 
 function RubricTableProps(props: RubricTableProps) {
-  const { rubrics, onAddRow } = props;
+  const { rubrics, onAddRow, onDeleteRow } = props;
 
   return (
     <div>
@@ -84,6 +85,15 @@ function RubricTableProps(props: RubricTableProps) {
                     </td>
                     <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm text-gray-500 sm:pr-0">
                       {rubric.weight}
+                    </td>
+                    <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm text-red-500">
+                      <button
+                        type="button"
+                        onClick={() => onDeleteRow(index)}
+                        className="text-red-500"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}

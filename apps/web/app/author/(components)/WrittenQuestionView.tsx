@@ -39,6 +39,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     initialRubrics,
   } = props;
 
+  // COMMENT: here's the state and helper function we use to control the row of the rubric table
   const [rubrics, setRubrics] = useState(initialRubrics);
 
   const handleAddRow = () => {
@@ -50,6 +51,15 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       weight: "",
     };
     setRubrics([...rubrics, newRow]);
+  };
+  const handleDeleteRow = (index) => {
+    if (rubrics.length === 1) {
+      alert("You only have one criteria, so you cannot delete it.");
+      return;
+    }
+
+    const updatedRubrics = rubrics.filter((_, i) => i !== index);
+    setRubrics(updatedRubrics);
   };
 
   return (
@@ -170,7 +180,11 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       )}
 
       {switchState === "b" && (
-        <RubricTable rubrics={rubrics} onAddRow={handleAddRow} />
+        <RubricTable
+          rubrics={rubrics}
+          onAddRow={handleAddRow}
+          onDeleteRow={handleDeleteRow}
+        />
       )}
     </div>
   );
