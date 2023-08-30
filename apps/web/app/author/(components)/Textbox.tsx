@@ -355,7 +355,7 @@ function TextBox() {
               ))}
               <button
                 type="button"
-                className="rounded-full w-[140px] bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
+                className="rounded-full w-[160px] bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
                 onClick={() =>
                   setOptionsSingleCorrect([...optionsSingleCorrect, ""])
                 }
