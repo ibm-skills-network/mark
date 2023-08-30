@@ -4,7 +4,7 @@ import React, { useState } from "react";
 
 interface RubricTableProps {
   rubrics: any;
-  onAddRow: () => void; // Define a prop for the add row functionality
+  onAddRow: () => void;
   onDeleteRow: (index: number) => void;
 }
 
