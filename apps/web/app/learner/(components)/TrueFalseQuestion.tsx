@@ -1,19 +1,21 @@
 "use client";
 
-import { Question } from "@/config/types";
+import { Question, QuestionResponse } from "@/config/types";
+import { submitQuestionResponse } from "@/lib/talkToBackend";
 import Title from "@components/Title";
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
+  submissionID?: number;
   questionData?: Question;
   onAnswerSelected?: (status: "correct" | "incorrect") => void;
 }
 
 function TrueFalseQuestion(props: Props) {
   const { questionData, onAnswerSelected } = props;
-  const { question, answer } = questionData!;
+  const { question, answer, id, assignmentID } = questionData!;
 
   const [selectedOption, setSelectedOption] = useState<boolean | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -25,7 +27,26 @@ function TrueFalseQuestion(props: Props) {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // Talking to backend when submitting question
+    const response: QuestionResponse = {
+      learnerAnswerChoice: selectedOption,
+    };
+
+    try {
+      const success = await submitQuestionResponse(
+        assignmentID,
+        props.submissionID,
+        id,
+        response
+      );
+      if (!success) {
+        console.error("Error submitting the answer");
+      }
+    } catch (error) {
+      console.error("Error while submitting the answer:", error);
+    }
+
     setSubmitted(true);
     let status: "correct" | "incorrect" = "incorrect";
     if (selectedOption === answer) {
