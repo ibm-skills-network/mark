@@ -35,14 +35,21 @@ function RubricTableProps(props: RubricTableProps) {
       <div className="mt-8 flow-root">
         <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
           <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-            <table className="min-w-full divide-y divide-gray-300 border border-gray-300">
+            <table
+              className="min-w-full divide-y divide-gray-300 border border-gray-700"
+              style={{
+                overflow: "hidden",
+                borderCollapse: "collapse",
+                borderRadius: "10px",
+              }}
+            >
               <thead>
                 <tr className="divide-x divide-gray-200">
                   <th
                     scope="col"
                     className="py-3.5 pl-4 pr-4 w-[19.70812rem] h-[2.75rem] text-left text-sm font-semibold bg-gray-100 text-gray-900 sm:pl-0"
                   >
-                    <div className="flex items-center text-xs font-normal ml-8 text-0.5xl">
+                    <div className="flex items-center font-normal ml-8 text-0.5xl">
                       {" "}
                       {/* Adding ml-2 to move the text */}
                       Criteria
@@ -52,7 +59,7 @@ function RubricTableProps(props: RubricTableProps) {
                     scope="col"
                     className="px-4 py-3.5 w-[22.5rem] h-[1.25rem] text-left text-sm font-semibold text-gray-900"
                   >
-                    <div className="flex items-center text-xs font-normal ml-2 text-0.5xl">
+                    <div className="flex items-center font-normal ml-2 text-0.5xl">
                       {" "}
                       {/* Adding ml-2 to move the text */}
                       Performance Descripiton
@@ -62,7 +69,7 @@ function RubricTableProps(props: RubricTableProps) {
                     scope="col"
                     className="px-4 py-3.5 w-[8.2rem] h-[2.75rem]  text-left text-sm font-semibold text-gray-900"
                   >
-                    <div className="flex items-center text-xs font-normal ml-1">
+                    <div className="flex items-center font-normal ml-1">
                       {" "}
                       {/* Adding ml-2 to move the text */}
                       Point Range
@@ -72,7 +79,7 @@ function RubricTableProps(props: RubricTableProps) {
                     scope="col"
                     className="py-3.5 pl-4 pr-4 text-left text-sm font-semibold text-gray-900 sm:pr-0"
                   >
-                    <div className="flex items-center text-xs font-normal text-0.5xl">
+                    <div className="flex items-center font-normal text-0.5xl">
                       {" "}
                       {/* Adding ml-2 to move the text */}
                       Weight
@@ -87,7 +94,7 @@ function RubricTableProps(props: RubricTableProps) {
                     className="divide-x divide-gray-200"
                   >
                     <td
-                      className={`whitespace-nowrap py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
+                      className={`whitespace-nowrap  w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                     >
                       {rubric.criteria}
                     </td>
