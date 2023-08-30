@@ -15,10 +15,12 @@ function RubricTableProps(props: RubricTableProps) {
       {" "}
       <div className="sm:flex sm:items-center">
         <div className="sm:flex-auto">
-          <h1 className="text-base font-semibold leading-6 text-gray-900">
-            Rubrics
+          <h1 className="text-base font-semibold leading-6 text-gray-900 relative">
+            Point Distributon for the Rubric
+            <span className="absolute -top-1 left-38 text-blue-400">*</span>
           </h1>
         </div>
+
         <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
           <button
             type="button"
