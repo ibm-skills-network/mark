@@ -293,7 +293,7 @@ function TextBox() {
         </div>
       )} */}
           <div className="text-m text-black font-inter text-1rem leading-1.25rem mr-2 h-4 mt-[20px]">
-            How would you like your question type?
+            Question Type
           </div>
           <div className="my-[20px]">
             <Dropdown
