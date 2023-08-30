@@ -26,7 +26,8 @@ function Component(props: Props) {
           />
         );
       case "SINGLE_CORRECT":
-        return <MultipleChoiceQuestion questionData={question} singleCorrect />;
+        // removed singleCorrect
+        return <MultipleChoiceQuestion questionData={question} />;
       case "MULTIPLE_CORRECT":
         return <MultipleChoiceQuestion questionData={question} />;
       case "TRUE_FALSE":

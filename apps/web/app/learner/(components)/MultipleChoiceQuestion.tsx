@@ -1,27 +1,27 @@
 "use client";
 
-import { Question } from "@/config/types";
+import { Question } from "@/config/types"; // Ensure the Question type matches with GetQuestionResponseDto
 import Title from "@components/Title";
 import React, { useEffect, useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
-  // TODO: temporarily made optional(the '?')
   questionData?: Question;
-  singleCorrect?: boolean;
   onAnswerSelected?: (
     status: "correct" | "incorrect" | "partiallyCorrect"
   ) => void;
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  // TODO @Bennyli1995 - I will handle the situation where it's a single correct answer
-  const { questionData, onAnswerSelected, singleCorrect = false } = props;
-  const { question, choices, numRetries, totalPoints } = questionData;
+  const { questionData, onAnswerSelected } = props;
+
+  // Removed 'singleCorrect' since the question type itself implies if it's single or multiple correct
+  const { question, choices, numRetries } = questionData!;
   const correctOptions = Object.keys(choices).filter(
     (option) => choices[option]
   );
+
   const [attempts, setAttempts] = useState<number>(0);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isCorrect, setIsCorrect] = useState<"all" | "some" | "none" | null>(
@@ -42,6 +42,7 @@ function MultipleChoiceQuestion(props: Props) {
   const handleSubmit = () => {
     setAttempts((prevAttempts) => prevAttempts + 1);
     setSubmitted(true);
+
     let correctCount = 0;
     let incorrectCount = 0;
 
@@ -114,30 +115,26 @@ function MultipleChoiceQuestion(props: Props) {
     <>
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
         <InfoLine text={question} />
-        {choices.map((option, index) => {
-          // get key from choice
-          const choiceText = Object.keys(option)[0];
-          const isCorrect = option[choiceText];
-          return (
-            <button
-              key={index}
-              className={`block w-full text-left p-2 mb-2 border rounded ${
-                submitted
-                  ? selectedOptions.includes(choiceText)
-                    ? isCorrect
-                      ? "bg-green-100 text-black"
-                      : "bg-red-100 text-black"
-                    : "text-black"
-                  : selectedOptions.includes(choiceText)
-                  ? "bg-blue-100 text-black"
+        {/* Used Object.entries() for iteration instead of mapping over 'choices' directly */}
+        {Object.entries(choices).map(([choiceText, isChoiceCorrect], index) => (
+          <button
+            key={index}
+            className={`block w-full text-left p-2 mb-2 border rounded ${
+              submitted
+                ? selectedOptions.includes(choiceText)
+                  ? isChoiceCorrect
+                    ? "bg-green-100 text-black"
+                    : "bg-red-100 text-black"
                   : "text-black"
-              }`}
-              onClick={() => handleOptionClick(choiceText)}
-            >
-              {choiceText}
-            </button>
-          );
-        })}
+                : selectedOptions.includes(choiceText)
+                ? "bg-blue-100 text-black"
+                : "text-black"
+            }`}
+            onClick={() => handleOptionClick(choiceText)}
+          >
+            {choiceText}
+          </button>
+        ))}
       </div>
       <Button onClick={handleSubmit} disabled={attempts >= numRetries}>
         Submit
