@@ -7,6 +7,7 @@ import type {
   AssignmentBackendResponse,
   GetAssignmentResponse,
   ModifyAssignmentRequest,
+  QuestionResponse,
   User,
 } from "@config/types";
 
@@ -122,33 +123,42 @@ export async function submitTextOrURLAnswer(
   }
 }
 
-/**
- * Submits a file answer for a given assignment, submission, and question.
- */
-export async function submitFileAnswer(
+// talk to backend when submitting individual questions (Benny)
+export async function submitQuestionResponse(
   assignmentId: number,
   submissionId: number,
   questionId: number,
-  file: File
+  response: QuestionResponse
 ): Promise<boolean> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionId}/questions/${questionId}/responses`;
 
   try {
-    const formData = new FormData();
-    formData.append("learnerFileResponse", file);
+    let body;
+    const headers = {};
+
+    if (response.learnerFileResponse) {
+      body = new FormData();
+      body.append("learnerFileResponse", response.learnerFileResponse);
+    } else {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(response);
+    }
 
     const res = await fetch(endpointURL, {
       method: "POST",
-      body: formData,
+      headers,
+      body,
     });
 
     if (!res.ok) {
-      throw new Error("Failed to submit file");
+      throw new Error("Failed to submit response");
     }
-    const { success, error } = await res.json();
-    if (!success) {
-      throw new Error(error);
+
+    const result = await res.json();
+    if (result.error) {
+      throw new Error(result.error);
     }
+
     return true;
   } catch (err) {
     console.error(err);

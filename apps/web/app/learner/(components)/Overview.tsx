@@ -60,7 +60,7 @@ function Overview(props: Props) {
           >
             <div>{index + 1}</div>{" "}
             {/* Displaying just the number on a separate line */}
-            {question === "correct" && <div className="text-green-600">✓</div>}
+            {question === "correct" && <div className="emerald-600">✓</div>}
             {question === "incorrect" && <div className="text-red-600">✗</div>}
             {question === "partiallyCorrect" && <div>✓✗</div>}
             {/* Removed the unanswered status */}

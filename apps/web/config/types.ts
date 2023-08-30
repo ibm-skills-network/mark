@@ -4,6 +4,16 @@ export type User = {
   assignmentID: number;
 };
 
+// For submitting a question response to backend (Benny's Implementation)
+
+export type QuestionResponse = {
+  learnerTextResponse?: string;
+  learnerUrlResponse?: string;
+  learnerChoices?: string[];
+  learnerAnswerChoice?: boolean;
+  learnerFileResponse?: File;
+};
+
 export type QuestionStatus =
   | "correct"
   | "incorrect"

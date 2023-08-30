@@ -1,12 +1,16 @@
 "use client";
 
-import { Question } from "@/config/types"; // Ensure the Question type matches with GetQuestionResponseDto
+import { Question, QuestionResponse } from "@/config/types"; // Ensure the Question type matches with GetQuestionResponseDto
+
+import { submitQuestionResponse } from "@/lib/talkToBackend";
 import Title from "@components/Title";
 import React, { useEffect, useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
+  // this ID is required but not received from Questiondata (for talking to backend upon submission)
+  submissionId?: number;
   questionData?: Question;
   onAnswerSelected?: (
     status: "correct" | "incorrect" | "partiallyCorrect"
@@ -17,7 +21,8 @@ function MultipleChoiceQuestion(props: Props) {
   const { questionData, onAnswerSelected } = props;
 
   // CHANGE: Removed 'singleCorrect' comment since the question type itself implies if it's single or multiple correct
-  const { question, choices, numRetries, type } = questionData!;
+  const { question, choices, numRetries, type, assignmentID, id } =
+    questionData!;
 
   const correctOptions = choices
     .filter((choiceObj) => choiceObj[Object.keys(choiceObj)[0]])
@@ -45,7 +50,26 @@ function MultipleChoiceQuestion(props: Props) {
     }
   };
 
-  const handleSubmit = () => {
+  // For talking to backend upon submission
+  const handleSubmit = async () => {
+    const response: QuestionResponse = {
+      learnerChoices: selectedOptions,
+    };
+
+    try {
+      const success = await submitQuestionResponse(
+        assignmentID,
+        props.submissionId,
+        id,
+        response
+      );
+      if (!success) {
+        console.error("Error submitting the answer");
+      }
+    } catch (error) {
+      console.error("Error while submitting the answer:", error);
+    }
+
     setAttempts((prevAttempts) => prevAttempts + 1);
     setSubmitted(true);
 
