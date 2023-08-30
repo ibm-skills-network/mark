@@ -2,36 +2,31 @@
 
 import { Question } from "@/config/types";
 import Title from "@components/Title";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
-  // TODO: temporarily made optional(the '?')
   questionData?: Question;
-  singleCorrect?: boolean;
-  onAnswerSelected?: (
-    status: "correct" | "incorrect" | "partiallyCorrect"
-  ) => void;
+  onAnswerSelected?: (status: "correct" | "incorrect") => void;
 }
 
-function MultipleChoiceQuestion(props: Props) {
-  const { questionData, onAnswerSelected, singleCorrect = false } = props;
-  const { question, numRetries, totalPoints, answer } = questionData;
-  const [attempts, setAttempts] = useState<number>(0);
+function TrueFalseQuestion(props: Props) {
+  const { questionData, onAnswerSelected } = props;
+  const { question, answer } = questionData!;
+
   const [selectedOption, setSelectedOption] = useState<boolean | null>(null);
-  const [isCorrect, setIsCorrect] = useState<boolean>(null);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);
 
   const handleOptionClick = (option: boolean) => {
-    setSubmitted(false);
-    setSelectedOption(option);
+    if (!submitted) {
+      setSelectedOption(option);
+    }
   };
 
   const handleSubmit = () => {
-    setAttempts((prevAttempts) => prevAttempts + 1);
     setSubmitted(true);
-
     let status: "correct" | "incorrect" = "incorrect";
     if (selectedOption === answer) {
       status = "correct";
@@ -47,32 +42,28 @@ function MultipleChoiceQuestion(props: Props) {
 
   const renderFeedbackMessage = () => {
     if (submitted) {
-      if (isCorrect) {
-        return <p className="text-green-600">Correct! Well done.</p>;
-      } else if (!isCorrect) {
-        return (
-          <p className="text-red-600">Incorrect choice. Please try again.</p>
-        );
-      }
+      return isCorrect ? (
+        <p className="text-green-600">Correct! Well done.</p>
+      ) : (
+        <p className="text-red-600">Incorrect choice.</p>
+      );
     }
     return null;
   };
 
-  const renderAttemptMessage = () => {
-    if (attempts >= numRetries) {
-      return (
-        <p className="text-red-600">
-          You have exhausted your attempts for this question.
-        </p>
-      );
-    } else if (attempts > 0) {
-      return (
-        <p className="text-yellow-600">
-          You have used {attempts} of {numRetries} attempts.
-        </p>
-      );
+  const buttonStyle = (choice: boolean) => {
+    if (submitted) {
+      if (selectedOption === choice) {
+        return choice === answer
+          ? "bg-green-100 text-black"
+          : "bg-red-100 text-black";
+      }
+    } else {
+      if (selectedOption === choice) {
+        return "bg-blue-100 text-black";
+      }
     }
-    return null;
+    return "text-black";
   };
 
   return (
@@ -80,49 +71,30 @@ function MultipleChoiceQuestion(props: Props) {
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
         <InfoLine text={question} />
         <button
-          className={`block w-full text-left p-2 mb-2 border rounded ${
-            submitted
-              ? selectedOption
-                ? isCorrect
-                  ? "bg-green-100 text-black"
-                  : "bg-red-100 text-black"
-                : "text-black"
-              : selectedOption
-              ? "bg-blue-100 text-black"
-              : "text-black"
-          }`}
+          className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
+            true
+          )}`}
           onClick={() => handleOptionClick(true)}
+          disabled={submitted}
         >
-          true
+          True
         </button>
         <button
-          className={`block w-full text-left p-2 mb-2 border rounded ${
-            submitted
-              ? selectedOption === false
-                ? isCorrect
-                  ? "bg-green-100 text-black"
-                  : "bg-red-100 text-black"
-                : "text-black"
-              : selectedOption === false
-              ? "bg-blue-100 text-black"
-              : "text-black"
-          }`}
+          className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
+            false
+          )}`}
           onClick={() => handleOptionClick(false)}
+          disabled={submitted}
         >
-          false
+          False
         </button>
       </div>
-      <Button
-        onClick={handleSubmit}
-        disabled={attempts >= numRetries}
-        className=""
-      >
+      <Button onClick={handleSubmit} disabled={submitted}>
         Submit
       </Button>
       {renderFeedbackMessage()}
-      {renderAttemptMessage()}
     </>
   );
 }
 
-export default MultipleChoiceQuestion;
+export default TrueFalseQuestion;
