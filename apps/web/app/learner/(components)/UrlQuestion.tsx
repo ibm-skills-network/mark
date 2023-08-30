@@ -7,46 +7,58 @@ import InfoLine from "./InfoLine";
 
 interface Props {
   questionData?: Question;
-  onAnswerSelected?: (
-    status: "correct" | "incorrect" | "partiallyCorrect"
-  ) => void;
+  onURLSubmit?: (url: string) => void; // This callback is for when the URL is submitted
 }
-/* @Bennyli1995 - I just copied the code from MultipleChoiceQuestion
-If you have time, please implement the URL question type */
-function MultipleChoiceQuestion(props: Props) {
-  const { questionData, onAnswerSelected } = props;
-  const { question, choices, numRetries, totalPoints } = questionData;
-  const [attempts, setAttempts] = useState<number>(0);
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
 
-  const [submitted, setSubmitted] = useState<boolean>(false);
+function URLQuestion(props: Props) {
+  const { questionData, onURLSubmit } = props;
+  const { question } = questionData;
+  const [url, setURL] = useState<string>("");
 
-  const handleOptionClick = (option: string) => {
-    setSubmitted(false);
-    const alreadySelected = selectedOptions.includes(option);
-    const newSelectedOptions = alreadySelected
-      ? selectedOptions.filter((opt) => opt !== option)
-      : [...selectedOptions, option];
-
-    setSelectedOptions(newSelectedOptions);
+  const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setURL(e.target.value);
   };
 
   const handleSubmit = () => {
-    setAttempts((prevAttempts) => prevAttempts + 1);
-    setSubmitted(true);
+    if (validateURL(url)) {
+      if (onURLSubmit) {
+        onURLSubmit(url);
+      }
+    } else {
+      alert("Please enter a valid URL.");
+    }
+  };
+
+  const validateURL = (str: string) => {
+    const pattern = new RegExp(
+      "^(https?:\\/\\/)?" + // protocol
+        "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
+        "((\\d{1,3}\\.){3}\\d{1,3}))" + // OR ip (v4) address
+        "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" + // port and path
+        "(\\?[;&a-z\\d%_.~+=-]*)?" + // query string
+        "(\\#[-a-z\\d_]*)?$",
+      "i"
+    ); // fragment locator
+    return pattern.test(str);
   };
 
   return (
     <>
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
         <InfoLine text={question} />
-        {/* TODO @Bennyli1995 - upload here */}
+        <input
+          type="text"
+          placeholder="Enter website URL"
+          value={url}
+          onChange={handleURLChange}
+          className="w-full p-2 mt-4 border rounded"
+        />
       </div>
-      <Button onClick={handleSubmit} disabled={attempts >= numRetries}>
-        Submit
+      <Button onClick={handleSubmit} disabled={!url}>
+        Submit URL
       </Button>
     </>
   );
 }
 
-export default MultipleChoiceQuestion;
+export default URLQuestion;

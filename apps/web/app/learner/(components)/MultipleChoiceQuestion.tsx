@@ -76,22 +76,54 @@ function MultipleChoiceQuestion(props: Props) {
   };
 
   const renderFeedbackMessage = () => {
-    if (isCorrect === "all") {
-      return <p className="text-green-600">Correct! Well done.</p>;
+    let feedbackText = "";
+    let bgColor = "";
+    let borderColor = "";
+    let textColor = "";
+    let innerCircleColor = "";
+
+    switch (isCorrect) {
+      case "all":
+        feedbackText = "Correct! Well done.";
+        bgColor = "bg-emerald-100";
+        borderColor = "border-emerald-500";
+        textColor = "text-emerald-800";
+        innerCircleColor = "bg-emerald-400";
+        break;
+      case "some":
+        feedbackText = "Not all correct answers were selected. Try again.";
+        bgColor = "bg-yellow-100";
+        borderColor = "border-yellow-500";
+        textColor = "text-yellow-800";
+        innerCircleColor = "bg-yellow-400";
+        break;
+      case "none":
+        feedbackText = "Incorrect choice. Please try again.";
+        bgColor = "bg-red-100";
+        borderColor = "border-red-500";
+        textColor = "text-red-800";
+        innerCircleColor = "bg-red-400";
+        break;
+      default:
+        return null;
     }
-    if (isCorrect === "some") {
-      return (
-        <p className="text-yellow-600">
-          Not all correct answers were selected. Try again.
-        </p>
-      );
-    }
-    if (isCorrect === "none") {
-      return (
-        <p className="text-red-600">Incorrect choice. Please try again.</p>
-      );
-    }
-    return null;
+
+    return (
+      <div
+        className={`w-96 h-16 pl-2 pr-2.5 py-0.5 ${bgColor} rounded-lg ${borderColor} justify-center items-center gap-1.5 inline-flex`}
+      >
+        <div className="w-2 h-2 relative">
+          <div
+            className={`w-1.5 h-1.5 left-[1px] top-[1px] absolute ${innerCircleColor} rounded-full`}
+          />
+        </div>
+        <div
+          className={`text-center ${textColor} text-base font-medium leading-none`}
+        >
+          {feedbackText}
+        </div>
+      </div>
+    );
   };
 
   const renderAttemptMessage = () => {
@@ -136,11 +168,11 @@ function MultipleChoiceQuestion(props: Props) {
           </button>
         ))}
       </div>
+      {renderFeedbackMessage()}
+      {renderAttemptMessage()}
       <Button onClick={handleSubmit} disabled={attempts >= numRetries}>
         Submit
       </Button>
-      {renderFeedbackMessage()}
-      {renderAttemptMessage()}
     </>
   );
 }
