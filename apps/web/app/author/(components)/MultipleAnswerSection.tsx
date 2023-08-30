@@ -159,7 +159,14 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
                 fill="#1D4ED8"
               />
             </svg>
-            <span style={{ fontSize: "0.8rem", marginLeft: "0.5rem" }}>
+            <span
+              style={{
+                fontSize: "0.8rem",
+                marginLeft: "0.5rem",
+                whiteSpace: "nowrap", // Prevent text from wrapping
+                display: "inline-block", // Ensure it stays on one line
+              }}
+            >
               Add Option
             </span>
           </div>
