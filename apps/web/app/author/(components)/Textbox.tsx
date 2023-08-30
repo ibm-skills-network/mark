@@ -33,14 +33,14 @@ function classNames(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-const rubrics = [
+const initialRubrics = [
   {
     criteria: "Novelty",
     judgement: "Does it contain copy of existing product?",
     rate: "10",
     weight: "40%",
   },
-  // More people...
+  // More rubrics ...
 ];
 
 //////////////////////////Single Multiple Choice Type////////////////////////////////////////////
@@ -411,7 +411,7 @@ function TextBox() {
                 handleRemoveOptionWrittenQuestion
               }
               handleAddOptionWrittenQuestion={handleAddOptionWrittenQuestion}
-              rubrics={rubrics}
+              initialRubrics={initialRubrics}
             />
           )}
         </div>

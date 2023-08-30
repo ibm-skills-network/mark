@@ -1,21 +1,15 @@
 "use client";
 
-import { Listbox, Menu, RadioGroup, Transition } from "@headlessui/react";
-import {
-  CheckCircleIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  PencilIcon,
-  ViewListIcon,
-} from "@heroicons/react/solid";
-import React, { Fragment, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 
 interface RubricTableProps {
   rubrics: any;
+  onAddRow: () => void; // Define a prop for the add row functionality
 }
 
 function RubricTableProps(props: RubricTableProps) {
-  const { rubrics } = props;
+  const { rubrics, onAddRow } = props;
+
   return (
     <div>
       {" "}
@@ -29,8 +23,9 @@ function RubricTableProps(props: RubricTableProps) {
           <button
             type="button"
             className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+            onClick={onAddRow}
           >
-            Add rubric
+            Add row
           </button>
         </div>
       </div>
@@ -50,13 +45,13 @@ function RubricTableProps(props: RubricTableProps) {
                     scope="col"
                     className="px-4 py-3.5 text-left text-sm font-semibold text-gray-900"
                   >
-                    How to judge
+                    Performance Descripiton
                   </th>
                   <th
                     scope="col"
                     className="px-4 py-3.5 text-left text-sm font-semibold text-gray-900"
                   >
-                    Rate
+                    Point Range
                   </th>
                   <th
                     scope="col"
@@ -67,12 +62,16 @@ function RubricTableProps(props: RubricTableProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {rubrics.map((rubric) => (
+                {rubrics.map((rubric, index) => (
                   <tr
                     key={rubric.criteria}
                     className="divide-x divide-gray-200"
                   >
-                    <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm font-medium text-gray-900 sm:pl-0">
+                    <td
+                      className={`whitespace-nowrap py-4 pl-4 pr-4 text-sm font-medium ${
+                        index === 0 ? "bg-gray-80" : ""
+                      } sm:pl-0`}
+                    >
                       {rubric.criteria}
                     </td>
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500">

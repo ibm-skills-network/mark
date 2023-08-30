@@ -1,5 +1,8 @@
 "use client";
 
+// COMMENT: this is the component where we show written question for the author
+// this contains "points", and the "rubric table"
+
 // import { Listbox, Menu, RadioGroup, Transition } from "@headlessui/react";
 // import {
 //   CheckCircleIcon,
@@ -20,7 +23,7 @@ interface WrittenQuestionViewProps {
   handleOptionChangeWrittenQuestion: any;
   handleRemoveOptionWrittenQuestion: any;
   handleAddOptionWrittenQuestion: any;
-  rubrics: any;
+  initialRubrics: any;
 }
 
 function WrittenQuestionView(props: WrittenQuestionViewProps) {
@@ -33,8 +36,21 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     optionsWrittenQuestion,
     handleRemoveOptionWrittenQuestion,
     handleAddOptionWrittenQuestion,
-    rubrics,
+    initialRubrics,
   } = props;
+
+  const [rubrics, setRubrics] = useState(initialRubrics);
+
+  const handleAddRow = () => {
+    // Create a new row object and add it to the initialRubrics array
+    const newRow = {
+      criteria: "New Criteria",
+      judgement: "",
+      rate: "",
+      weight: "",
+    };
+    setRubrics([...rubrics, newRow]);
+  };
 
   return (
     <div className="mt-4">
@@ -153,7 +169,9 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
         </div>
       )}
 
-      {switchState === "b" && <RubricTable rubrics={rubrics} />}
+      {switchState === "b" && (
+        <RubricTable rubrics={rubrics} onAddRow={handleAddRow} />
+      )}
     </div>
   );
 }
