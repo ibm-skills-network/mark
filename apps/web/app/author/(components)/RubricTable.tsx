@@ -40,7 +40,7 @@ function RubricTableProps(props: RubricTableProps) {
                 <tr className="divide-x divide-gray-200">
                   <th
                     scope="col"
-                    className="py-3.5 pl-4 pr-4 text-left text-sm font-semibold text-gray-900 sm:pl-0"
+                    className="py-3.5 pl-4 pr-4 text-left text-sm font-semibold bg-gray-100 text-gray-900 sm:pl-0"
                   >
                     Criteria
                   </th>
@@ -71,9 +71,7 @@ function RubricTableProps(props: RubricTableProps) {
                     className="divide-x divide-gray-200"
                   >
                     <td
-                      className={`whitespace-nowrap py-4 pl-4 pr-4 text-sm font-medium ${
-                        index === 0 ? "bg-gray-80" : ""
-                      } sm:pl-0`}
+                      className={`whitespace-nowrap py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                     >
                       {rubric.criteria}
                     </td>
