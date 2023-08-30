@@ -16,11 +16,12 @@ interface Props {
 function MultipleChoiceQuestion(props: Props) {
   const { questionData, onAnswerSelected } = props;
 
-  // Removed 'singleCorrect' since the question type itself implies if it's single or multiple correct
-  const { question, choices, numRetries } = questionData!;
-  const correctOptions = Object.keys(choices).filter(
-    (option) => choices[option]
-  );
+  // CHANGE: Removed 'singleCorrect' comment since the question type itself implies if it's single or multiple correct
+  const { question, choices, numRetries, type } = questionData!;
+
+  const correctOptions = choices
+    .filter((choiceObj) => choiceObj[Object.keys(choiceObj)[0]])
+    .map((choiceObj) => Object.keys(choiceObj)[0]);
 
   const [attempts, setAttempts] = useState<number>(0);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
@@ -31,12 +32,17 @@ function MultipleChoiceQuestion(props: Props) {
 
   const handleOptionClick = (option: string) => {
     setSubmitted(false);
-    const alreadySelected = selectedOptions.includes(option);
-    const newSelectedOptions = alreadySelected
-      ? selectedOptions.filter((opt) => opt !== option)
-      : [...selectedOptions, option];
 
-    setSelectedOptions(newSelectedOptions);
+    if (type === "SINGLE_CORRECT") {
+      setSelectedOptions([option]);
+    } else {
+      const alreadySelected = selectedOptions.includes(option);
+      const newSelectedOptions = alreadySelected
+        ? selectedOptions.filter((opt) => opt !== option)
+        : [...selectedOptions, option];
+
+      setSelectedOptions(newSelectedOptions);
+    }
   };
 
   const handleSubmit = () => {
@@ -91,14 +97,14 @@ function MultipleChoiceQuestion(props: Props) {
         innerCircleColor = "bg-emerald-400";
         break;
       case "some":
-        feedbackText = "Not all correct answers were selected. Try again.";
+        feedbackText = "Not all correct answers were selected.";
         bgColor = "bg-yellow-100";
         borderColor = "border-yellow-500";
         textColor = "text-yellow-800";
         innerCircleColor = "bg-yellow-400";
         break;
       case "none":
-        feedbackText = "Incorrect choice. Please try again.";
+        feedbackText = "Incorrect choice.";
         bgColor = "bg-red-100";
         borderColor = "border-red-500";
         textColor = "text-red-800";
@@ -147,31 +153,34 @@ function MultipleChoiceQuestion(props: Props) {
     <>
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
         <InfoLine text={question} />
-        {/* Used Object.entries() for iteration instead of mapping over 'choices' directly */}
-        {Object.entries(choices).map(([choiceText, isChoiceCorrect], index) => (
-          <button
-            key={index}
-            className={`block w-full text-left p-2 mb-2 border rounded ${
-              submitted
-                ? selectedOptions.includes(choiceText)
-                  ? isChoiceCorrect
-                    ? "bg-green-100 text-black"
-                    : "bg-red-100 text-black"
+        {choices.map((choiceObj, index) => {
+          const choiceText = Object.keys(choiceObj)[0];
+          const isChoiceCorrect = choiceObj[choiceText];
+          return (
+            <button
+              key={index}
+              className={`block w-full text-left p-2 mb-2 border rounded ${
+                submitted
+                  ? selectedOptions.includes(choiceText)
+                    ? isChoiceCorrect
+                      ? "bg-green-100 text-black"
+                      : "bg-red-100 text-black"
+                    : "text-black"
+                  : selectedOptions.includes(choiceText)
+                  ? "bg-blue-100 text-black"
                   : "text-black"
-                : selectedOptions.includes(choiceText)
-                ? "bg-blue-100 text-black"
-                : "text-black"
-            }`}
-            onClick={() => handleOptionClick(choiceText)}
-          >
-            {choiceText}
-          </button>
-        ))}
+              }`}
+              onClick={() => handleOptionClick(choiceText)}
+            >
+              {choiceText}
+            </button>
+          );
+        })}
       </div>
       {renderFeedbackMessage()}
       {renderAttemptMessage()}
       <Button onClick={handleSubmit} disabled={attempts >= numRetries}>
-        Submit
+        Submit Question
       </Button>
     </>
   );

@@ -28,9 +28,19 @@ function Overview(props: Props) {
     <div className="p-4 border border-gray-300 rounded-lg space-y-4 w-full max-w-xl mx-auto bg-white">
       <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
 
-      <div className="text-center font-medium">
-        Time remaining: {Math.floor(secondsRemaining / 60)}:
-        {(secondsRemaining % 60).toString().padStart(2, "0")}
+      <div className="flex items-center space-x-2">
+        {/* Time Remaining Label */}
+        <div className="text-gray-600 text-base font-medium leading-tight">
+          Time Remaining:
+        </div>
+
+        {/* Time Display */}
+        <div className="text-blue-600 text-base font-bold leading-tight">
+          {Math.floor(secondsRemaining / 60)}:
+          {secondsRemaining % 60 < 10
+            ? `0${secondsRemaining % 60}`
+            : secondsRemaining % 60}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">

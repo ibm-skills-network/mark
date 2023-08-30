@@ -52,8 +52,7 @@ function Component(props: Props) {
           {" "}
         </span>
         <span className="text-blue-700 text-base font-medium leading-tight">
-          Points {totalPoints.toFixed(2)} out of 100 (
-          {((totalPoints / 100) * 100).toFixed(2)}%)
+          {totalPoints.toFixed(2)} Points
         </span>
       </div>
 
