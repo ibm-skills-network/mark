@@ -1,0 +1,110 @@
+import { submitFileAnswer, submitTextOrURLAnswer } from "@/lib/talkToBackend";
+import React, { useState } from "react";
+
+interface Props {
+  assignmentId: number;
+  submissionId: number;
+  questionId: number;
+  questionType: string;
+}
+
+const SubmitAnswerComponent: React.FC<Props> = ({
+  assignmentId,
+  submissionId,
+  questionId,
+  questionType,
+}) => {
+  // State hooks for managing the answer, loading state, and success/failure
+  const [answer, setAnswer] = useState<string | File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [success, setSuccess] = useState<boolean | null>(null);
+
+  const handleSubmit = async () => {
+    setIsLoading(true);
+
+    let responseBody = {};
+
+    // Prepare the request body based on the question type.
+    switch (questionType) {
+      case "TEXT":
+        responseBody = { learnerTextResponse: answer };
+        break;
+      case "URL":
+        responseBody = { learnerUrlResponse: answer };
+        break;
+      default:
+        break;
+    }
+
+    try {
+      // Check the question type and submit the appropriate response
+      if (questionType === "UPLOAD" && answer instanceof File) {
+        const isSuccess = await submitFileAnswer(
+          assignmentId,
+          submissionId,
+          questionId,
+          answer
+        );
+        setSuccess(isSuccess);
+      } else {
+        const isSuccess = await submitTextOrURLAnswer(
+          assignmentId,
+          submissionId,
+          questionId,
+          responseBody
+        );
+        setSuccess(isSuccess);
+      }
+    } catch (error) {
+      console.error("Error submitting response:", error);
+      setSuccess(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const renderInputField = () => {
+    switch (questionType) {
+      case "TEXT":
+        return (
+          <textarea
+            value={answer as string}
+            onChange={(e) => setAnswer(e.target.value)}
+          />
+        );
+      case "URL":
+        return (
+          <input
+            type="url"
+            value={answer as string}
+            onChange={(e) => setAnswer(e.target.value)}
+          />
+        );
+      case "UPLOAD":
+        return (
+          <input
+            type="file"
+            onChange={(e) =>
+              setAnswer(e.target.files ? e.target.files[0] : null)
+            }
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div>
+      {renderInputField()}
+      <button onClick={handleSubmit} disabled={isLoading || !answer}>
+        Submit
+      </button>
+      {isLoading && <p>Submitting...</p>}
+      {success === true && <p>Answer submitted successfully!</p>}
+      {success === false && <p>Failed to submit answer. Please try again.</p>}
+    </div>
+  );
+};
+
+export default SubmitAnswerComponent;

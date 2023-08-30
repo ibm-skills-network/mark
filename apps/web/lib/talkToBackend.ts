@@ -89,5 +89,69 @@ export async function getAssignments(): Promise<Assignment[]> {
 }
 
 /**
- *
+ * Submits an answer (text or URL) for a given assignment, submission, and question.
  */
+export async function submitTextOrURLAnswer(
+  assignmentId: number,
+  submissionId: number,
+  questionId: number,
+  responseBody: any
+): Promise<boolean> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionId}/questions/${questionId}/responses`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(responseBody),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to submit answer");
+    }
+    const { success, error } = await res.json();
+    if (!success) {
+      throw new Error(error);
+    }
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+/**
+ * Submits a file answer for a given assignment, submission, and question.
+ */
+export async function submitFileAnswer(
+  assignmentId: number,
+  submissionId: number,
+  questionId: number,
+  file: File
+): Promise<boolean> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionId}/questions/${questionId}/responses`;
+
+  try {
+    const formData = new FormData();
+    formData.append("learnerFileResponse", file);
+
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to submit file");
+    }
+    const { success, error } = await res.json();
+    if (!success) {
+      throw new Error(error);
+    }
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
