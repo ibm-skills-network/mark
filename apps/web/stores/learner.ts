@@ -1,3 +1,4 @@
+import type { Question } from "@/config/types";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 

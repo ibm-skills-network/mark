@@ -45,19 +45,28 @@ export type Choice = {
   [option: string]: boolean;
 };
 
-export type Question = {
+export type CreateQuestionRequest = {
   type: QuestionType;
   totalPoints: number;
   numRetries?: number;
   question: string;
   scoring?: Scoring;
+  maxWords?: number;
   // used if question type is TRUE_FALSE
   answer?: boolean;
-  id: number;
-  assignmentID: number;
   // used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
   choices?: Choice[];
 };
+
+export interface Question extends CreateQuestionRequest {
+  id: number;
+  assignmentID: number;
+}
+
+export interface GetQuestionResponse extends Question {
+  success: boolean;
+  error?: string;
+}
 
 export type GradingData = {
   graded: boolean;
@@ -88,7 +97,7 @@ export interface GetAssignmentResponse extends Assignment {
   error?: string;
 }
 
-export type AssignmentBackendResponse = {
+export type BaseBackendResponse = {
   id: number;
   success: boolean;
   error?: string;

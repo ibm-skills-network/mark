@@ -28,7 +28,7 @@ const AuthorIntroduction = ({
   const [activeAssignmentID, setActiveAssignmentID] = useAuthorStore(
     (state) => [state.activeAssignmentID, state.setActiveAssignmentID]
   );
-
+  const setQuestions = useAuthorStore((state) => state.setQuestions);
   useEffect(() => {
     // if there is no active assignment, check if we are able to fetch the details of the assignmentID from the url
     async function InitializeAssignment(assignmentID: number) {
@@ -47,6 +47,7 @@ const AuthorIntroduction = ({
           passingGrade: assignment.passingGrade || 50,
           timeEstimate: assignment.allotedTime || 50,
         });
+        setQuestions(assignment.questions || []);
       } else {
         router.push("/");
       }
