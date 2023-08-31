@@ -13,6 +13,7 @@
 // } from "@heroicons/react/solid";
 import React, { Fragment, useEffect, useRef, useState } from "react";
 import RubricTable from "./RubricTable";
+import WordCountComponent from "./WordCountComponent";
 
 interface WrittenQuestionViewProps {
   handleScore: any;
@@ -72,6 +73,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
   return (
     <div className="mt-4">
+      <WordCountComponent text="Minimum & Maximum Word Count (Optional)" />
       <div className="w-auto h-[104px]" style={{ background: "#E0E7FF" }}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
