@@ -31,7 +31,7 @@ function DynamicTextBoxContainer() {
             {/* Delete question button */}
             <button
               disabled={textBoxes.length <= 1}
-              className="inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 mx-auto text-2xl leading-5 font-bold"
+              className="inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 mx-auto text-2xl leading-5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => handleDeleteTextBox(timestamp)}
             >
               <svg
@@ -57,7 +57,7 @@ function DynamicTextBoxContainer() {
 
       <button
         type="button"
-        className="mx-[48%] rounded-full bg-indigo-600 p-2 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+        className="mx-[48%] rounded-full bg-blue-700 p-2 text-white shadow-sm hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
         onClick={handleAddTextBox}
       >
         <PlusIcon className="h-5 w-5" aria-hidden="true" />
