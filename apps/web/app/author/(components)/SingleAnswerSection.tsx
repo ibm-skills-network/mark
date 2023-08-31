@@ -126,7 +126,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
             />
           ) : (
             <button
-              className="ml-2"
+              disabled={option !== selectedOptionSingleCorrect}
               onClick={() => handleShowPointsInputChange(index, true)}
             >
               {points[index] === undefined ? 0 : points[index]} points
