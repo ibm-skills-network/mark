@@ -21,6 +21,33 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
     setOptionsSingleCorrect,
   } = props;
 
+  ////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////////
+  const [points, setPoints] = useState(
+    Array(optionsSingleCorrect.length).fill(0)
+  );
+
+  // Add a new function to handle changes to the points input
+  const handlePointsChange = (index, value) => {
+    // Parse the value as an integer
+    const intValue = parseInt(value);
+
+    // Check if the value is a positive integer
+    if (Number.isInteger(intValue) && intValue >= 0) {
+      // Update the points for the specified option
+      const updatedPoints = [...points];
+      updatedPoints[index] = intValue;
+      setPoints(updatedPoints);
+    }
+  };
+  const [showPointsInput, setShowPointsInput] = useState(false);
+
+  ////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////
+
   return (
     <div className="mt-4">
       <p>Options:</p>
@@ -77,6 +104,21 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
               />
             </svg>
           </button>
+          {showPointsInput ? (
+            <input
+              type="number"
+              value={points[index]}
+              onChange={(event) =>
+                handlePointsChange(index, event.target.value)
+              }
+              className="ml-2 w-20"
+              onBlur={() => setShowPointsInput(false)}
+            />
+          ) : (
+            <button className="ml-2" onClick={() => setShowPointsInput(true)}>
+              {points[index] === undefined ? 0 : points[index]} points
+            </button>
+          )}
         </div>
       ))}
       <button
