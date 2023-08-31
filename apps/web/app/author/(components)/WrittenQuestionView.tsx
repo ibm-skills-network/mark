@@ -41,14 +41,16 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
   // COMMENT: here's the state and helper function we use to control the row of the rubric table
   const [rubrics, setRubrics] = useState(initialRubrics);
-
+  var maxLength = 1;
   const handleAddRow = () => {
     // Calculate the index for the new row
-    const newIndex = rubrics.length + 1;
-
+    if (maxLength < rubrics.length + 1) {
+      maxLength = rubrics.length + 1;
+    }
     // Create a new row object with dynamic criteria
     const newRow = {
-      criteria: `New Criteria ${newIndex}`,
+      key: maxLength,
+      criteria: `New Criteria`,
       judgement: "",
       rate: "",
       weight: "",
@@ -70,7 +72,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
   return (
     <div className="mt-4">
-      <div style={{ width: 800, height: 104, background: "#E0E7FF" }}>
+      <div className="w-auto h-[104px]" style={{ background: "#E0E7FF" }}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="65"
@@ -93,17 +95,30 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
             color: "#1D4ED8",
             fontSize: 19.17,
             fontWeight: "bold",
-            transform: "translate(5px, -45px)", // Adjust the vertical value as needed
+            transform: "translate(5px, -50px)", // Adjust the vertical value as needed
             textAlign: "center",
           }}
         >
           Rubric
         </div>
+        <div
+          className="font-medium"
+          style={{
+            width: 900,
+            color: "#1D4ED8",
+            fontSize: 13.17,
+            transform: "translate(85px, -45px)", // Adjust the vertical value as needed
+          }}
+        >
+          Set up a rubric to define how the paragraph should be graded. MARK
+          handles grading, saving you time. <br /> Students submit paragraphs,
+          and MARK provides feedback and grades based on the rubric.
+        </div>
       </div>
-      <p>Points:</p>
+      <p className="mt-[10px]">Points:</p>
       <input
         type="number"
-        className="p-2 border rounded-md text-gray-700 bg-transparent outline-none"
+        className="p-2 border rounded-md w-[200px] mt-[15px] text-gray-700 bg-transparent outline-none"
         placeholder={`ex. 10`}
         value={score}
         onChange={handleScore}

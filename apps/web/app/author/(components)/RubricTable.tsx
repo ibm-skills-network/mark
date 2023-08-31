@@ -89,10 +89,7 @@ function RubricTableProps(props: RubricTableProps) {
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {rubrics.map((rubric, index) => (
-                  <tr
-                    key={rubric.criteria}
-                    className="divide-x divide-gray-200"
-                  >
+                  <tr key={rubric.key} className="divide-x divide-gray-200">
                     <td
                       className={`whitespace-nowrap  w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                     >
