@@ -34,18 +34,18 @@ function Dropdown(props: DropdownProps) {
             <Listbox.Label className="sr-only">
               Change published status
             </Listbox.Label>
-            <div className="relative">
+            <div className="relative hover:bg-gray-400 rounded-md">
               <div className="w-[19.125rem] h-[3.5rem] inline-flex divide-x divide-white rounded-md shadow-sm">
-                <Listbox.Button className="flex items-center w-[19.125rem] h-[3.5rem] rounded-l-none rounded-r-md bg-white p-2 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 focus:ring-offset-gray-50">
+                <Listbox.Button className="flex items-center w-[19.125rem] h-[3.5rem] rounded-l-none rounded-r-md  bg-white p-2 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 focus:ring-offset-gray-90">
                   <span
-                    className="flex items-center"
+                    className="flex-grow flex items-center"
                     style={{ whiteSpace: "nowrap" }}
                   >
                     {answerTypeSelected === answerTypes[0] && (
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
-                        width="23"
-                        height="23"
+                        width="30"
+                        height="30"
                         viewBox="0 0 23 23"
                         fill="none"
                       >
@@ -68,8 +68,8 @@ function Dropdown(props: DropdownProps) {
                     {answerTypeSelected === answerTypes[1] && (
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
-                        width="23"
-                        height="23"
+                        width="30"
+                        height="30"
                         viewBox="0 0 23 23"
                         fill="none"
                       >
@@ -94,8 +94,8 @@ function Dropdown(props: DropdownProps) {
                     {answerTypeSelected === answerTypes[2] && (
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
-                        width="23"
-                        height="23"
+                        width="30"
+                        height="30"
                         viewBox="0 0 23 23"
                         fill="none"
                       >
@@ -110,11 +110,12 @@ function Dropdown(props: DropdownProps) {
                     )}
                     <span className="ml-2">{answerTypeSelected.title}</span>
                   </span>
-
-                  <ChevronDownIcon
-                    className="ml-[160px] h-6 w-6 text-white"
-                    aria-hidden="true"
-                  />
+                  <div className="hover:bg-gray-400 h-[64px] ml-[3px]">
+                    <ChevronDownIcon
+                      className="ml-[0px] mt-[15px] h-6 w-6 bg-transparent"
+                      aria-hidden="true"
+                    />
+                  </div>
                 </Listbox.Button>
               </div>
 
