@@ -2,7 +2,6 @@
 
 import { Question, QuestionResponse, QuestionStatus } from "@/config/types";
 import { submitQuestionResponse } from "@/lib/talkToBackend";
-import Title from "@components/Title";
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
@@ -14,7 +13,7 @@ interface Props {
 }
 
 function TrueFalseQuestion(props: Props) {
-  const { questionData, updateStatus } = props;
+  const { questionData, submissionID, updateStatus } = props;
   const { question, answer, id, assignmentID } = questionData!;
 
   const [selectedOption, setSelectedOption] = useState<boolean | null>(null);
@@ -24,51 +23,79 @@ function TrueFalseQuestion(props: Props) {
   const handleOptionClick = (option: boolean) => {
     if (!submitted) {
       setSelectedOption(option);
+      setSubmitted(false);
     }
   };
 
   const handleSubmit = async () => {
-    // Talking to backend when submitting question
     const response: QuestionResponse = {
       learnerAnswerChoice: selectedOption,
     };
-
-    try {
-      const success = await submitQuestionResponse(
-        assignmentID,
-        props.submissionID,
-        id,
-        response
-      );
-      if (!success) {
-        console.error("Error submitting the answer");
-      }
-    } catch (error) {
-      console.error("Error while submitting the answer:", error);
+    const success = await submitQuestionResponse(
+      assignmentID,
+      submissionID,
+      id,
+      response
+    );
+    if (!success) {
+      console.error("Error submitting the answer");
     }
 
     setSubmitted(true);
-    let status: "correct" | "incorrect" = "incorrect";
+
     if (selectedOption === answer) {
-      status = "correct";
       setIsCorrect(true);
+      if (updateStatus) {
+        updateStatus("correct");
+      }
     } else {
       setIsCorrect(false);
-    }
-
-    if (updateStatus) {
-      updateStatus(status);
+      if (updateStatus) {
+        updateStatus("incorrect");
+      }
     }
   };
 
   const renderFeedbackMessage = () => {
+    let feedbackText = "";
+    let bgColor = "";
+    let borderColor = "";
+    let textColor = "";
+    let innerCircleColor = "";
+
     if (submitted) {
-      return isCorrect ? (
-        <p className="text-green-600">Correct! Well done.</p>
-      ) : (
-        <p className="text-red-600">Incorrect choice.</p>
+      if (isCorrect) {
+        feedbackText = "Correct! Well done.";
+        bgColor = "bg-emerald-100";
+        borderColor = "border-emerald-500";
+        textColor = "text-emerald-800";
+        innerCircleColor = "bg-emerald-400";
+      } else {
+        feedbackText = "Incorrect choice.";
+        bgColor = "bg-red-100";
+        borderColor = "border-red-500";
+        textColor = "text-red-800";
+        innerCircleColor = "bg-red-400";
+      }
+
+      return (
+        <div
+          className={`w-96 h-16 pl-2 pr-2.5 py-0.5 ${bgColor} rounded-lg ${borderColor} justify-center items-center gap-1.5 inline-flex`}
+        >
+          <div className="w-2 h-2 relative">
+            <div
+              className={`w-1.5 h-1.5 left-[1px] top-[1px] absolute ${innerCircleColor} rounded-full`}
+            />
+          </div>
+          <div
+            className={`text-center ${textColor} text-base font-medium leading-none`}
+          >
+            {feedbackText}
+          </div>
+        </div>
       );
     }
+
     return null;
   };
 
@@ -110,10 +137,22 @@ function TrueFalseQuestion(props: Props) {
           False
         </button>
       </div>
-      <Button onClick={handleSubmit} disabled={submitted}>
-        Submit
-      </Button>
-      {renderFeedbackMessage()}
+      <div className="mt-4 flex flex-col items-center">
+        {renderFeedbackMessage()}
+        <div className="mt-4">
+          <Button
+            onClick={handleSubmit}
+            disabled={submitted}
+            className={
+              submitted
+                ? "bg-white text-indigo-300 cursor-not-allowed hover:bg-white"
+                : "hover:bg-indigo-500"
+            }
+          >
+            Submit Question
+          </Button>
+        </div>
+      </div>
     </>
   );
 }
