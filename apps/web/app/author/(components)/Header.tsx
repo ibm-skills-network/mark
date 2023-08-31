@@ -2,6 +2,7 @@
 
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
+import { EyeIcon } from "@heroicons/react/outline";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,6 +12,13 @@ function AuthorHeader(props: Props) {
   const {} = props;
   const pathname = usePathname();
   const assignmentID = pathname.split("/")[2]; // ex: /author/1234/introduction
+
+  function handlePublishButton() {
+    const confirmPublish = confirm("Are you sure you want to publish?");
+    if (confirmPublish) {
+      alert("Published!");
+    }
+  }
 
   const steps = [
     {
@@ -59,9 +67,9 @@ function AuthorHeader(props: Props) {
                 // completed
                 <Link
                   href={href}
-                  className="group w-full flex flex-col border-l-4 border-indigo-600 py-2 pl-4 hover:border-indigo-800 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
+                  className="group transition w-full flex flex-col border-l-4 border-blue-700 py-2 pl-4 hover:border-blue-500 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
                 >
-                  <span className="text-sm font-medium text-indigo-600 group-hover:text-indigo-800">
+                  <span className="text-sm font-medium text-blue-700 group-hover:text-blue-500">
                     Step {id}
                   </span>
                   <span className="text-sm font-medium">{name}</span>
@@ -70,10 +78,10 @@ function AuthorHeader(props: Props) {
                 // current
                 <Link
                   href={href}
-                  className="flex w-full flex-col border-l-4 border-indigo-600 py-2 pl-4 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
+                  className="group flex w-full flex-col border-l-4 border-blue-700 hover:border-blue-500 py-2 pl-4 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
                   aria-current="step"
                 >
-                  <span className="text-sm font-medium text-indigo-600">
+                  <span className="text-sm font-medium text-blue-700 group-hover:text-blue-500">
                     Step {id}
                   </span>
                   <span className="text-sm font-medium">{name}</span>
@@ -91,7 +99,23 @@ function AuthorHeader(props: Props) {
           ))}
         </ol>
       </nav>
-      <div className="text-end">buttons and settings</div>
+      <div className="items-center flex justify-end gap-x-2.5">
+        <button
+          type="button"
+          onClick={handlePublishButton}
+          className="inline-flex leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        >
+          Publish
+        </button>
+
+        <Link
+          href={`/author/${assignmentID}/preview`}
+          className="inline-flex items-center px-4 py-2 border border-transparent leading-6 font-medium rounded-md text-blue-700 hover:text-blue-500 bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        >
+          <EyeIcon className="h-5 w-5 mr-2" aria-hidden="true" />
+          Learner View
+        </Link>
+      </div>
     </header>
   );
 }

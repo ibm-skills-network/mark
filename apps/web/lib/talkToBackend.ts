@@ -4,7 +4,8 @@
 import { BASE_API_ROUTES } from "@config/constants";
 import type {
   Assignment,
-  AssignmentBackendResponse,
+  BaseBackendResponse,
+  CreateQuestionRequest,
   GetAssignmentResponse,
   ModifyAssignmentRequest,
   QuestionResponse,
@@ -48,7 +49,7 @@ export async function modifyAssignment(
     if (!res.ok) {
       throw new Error("Failed to create assignment");
     }
-    const { success, error } = (await res.json()) as AssignmentBackendResponse;
+    const { success, error } = (await res.json()) as BaseBackendResponse;
     if (!success) {
       throw new Error(error);
     }
@@ -181,5 +182,42 @@ export async function submitQuestionResponse(
   } catch (err) {
     console.error(err);
     return false;
+  }
+}
+
+/**
+ * Creates a question for a given assignment.
+ * @param assignmentId The id of the assignment to create the question for.
+ * @param question The question to create.
+ * @returns The id of the created question.
+ * @throws An error if the request fails.
+ */
+export async function createQuestion(
+  assignmentId: number,
+  question: CreateQuestionRequest
+): Promise<number> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(question),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to create question");
+    }
+    const { success, error, id } = (await res.json()) as BaseBackendResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+
+    return id;
+  } catch (err) {
+    console.error(err);
+    return -1;
   }
 }
