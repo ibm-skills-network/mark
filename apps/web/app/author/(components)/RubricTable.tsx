@@ -93,16 +93,16 @@ function RubricTableProps(props: RubricTableProps) {
                     <td
                       className={`whitespace-nowrap  w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                     >
-                      {rubric.criteria}
+                      <div contentEditable>{rubric.criteria}</div>
                     </td>
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500">
-                      {rubric.judgement}
+                      <div contentEditable>{rubric.judgement}</div>
                     </td>
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500">
-                      {rubric.rate}
+                      <div contentEditable>{rubric.rate}</div>
                     </td>
                     <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm text-gray-500 sm:pr-0">
-                      {rubric.weight}
+                      <div contentEditable>{rubric.weight}</div>
                     </td>
                     <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm text-red-500">
                       <button
