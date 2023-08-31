@@ -82,7 +82,7 @@ export class LlmService {
       template: feedbackTrueFalseBasedQuestionLlmTemplate,
       inputVariables: [],
       partialVariables: {
-        exercise_question: question,
+        question: question,
         learner_choice: JSON.stringify(learnerChoice),
         answer: JSON.stringify(answer),
         format_instructions: formatInstructions,
@@ -139,7 +139,7 @@ export class LlmService {
       template: feedbackChoiceBasedQuestionLlmTemplate,
       inputVariables: [],
       partialVariables: {
-        exercise_question: question,
+        question: question,
         learner_choices: JSON.stringify(learnerChoices),
         valid_choices: JSON.stringify(validChoices),
         format_instructions: formatInstructions,
@@ -205,7 +205,7 @@ export class LlmService {
       template: gradeTextBasedQuestionLlmTemplate,
       inputVariables: [],
       partialVariables: {
-        exercise_question: question,
+        question: question,
         learner_response: learnerResponse,
         total_points: totalPoints.toString(),
         scoring_type: scoringCriteriaType,

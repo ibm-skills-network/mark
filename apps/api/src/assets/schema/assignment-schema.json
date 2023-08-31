@@ -5,9 +5,18 @@
     "name": {
       "type": "string"
     },
+    "intorduction": {
+      "type": "string"
+    },
+    "instructions": {
+      "type": "string"
+    },
     "type": {
       "type": "string",
       "enum": ["AI_GRADED", "MANUAL"]
+    },
+    "graded": {
+      "type": "boolean"
     },
     "numAttempts": {
       "type": "integer"
@@ -44,12 +53,7 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": [
-                  "SINGLE_CRITERIA",
-                  "MULTIPLE_CRITERIA",
-                  "LOSS_PER_MISTAKE",
-                  "AI_GRADED"
-                ]
+                "enum": ["CRITERIA_BASED", "LOSS_PER_MISTAKE", "AI_GRADED"]
               },
               "criteria": {
                 "type": "object",

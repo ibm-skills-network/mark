@@ -1,18 +1,42 @@
+import { QuestionType } from "@prisma/client";
 import {
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from "class-validator";
 import {
+  CreateUpdateQuestionRequestDto,
   Criteria,
   Scoring,
   ScoringType,
 } from "../dto/create.update.question.request.dto";
 
-@ValidatorConstraint({ async: true })
+type CriteriaBasedType = {
+  criteria: string;
+  performanceDescription: string;
+  maxPoints: number;
+};
+
+@ValidatorConstraint({ async: false })
 export class CustomScoringValidator implements ValidatorConstraintInterface {
-  validate(criteria: Criteria | null, arguments_: ValidationArguments) {
-    const scoringType: ScoringType = (arguments_.object as Scoring).type;
+  validate(scoring: Scoring | null, arguments_: ValidationArguments) {
+    const dto: CreateUpdateQuestionRequestDto =
+      arguments_.object as CreateUpdateQuestionRequestDto;
+    const totalPoints = dto.totalPoints;
+
+    // No validation needed because scoring is not required for TRUE/FALSE questions
+    if (dto.type === QuestionType.TRUE_FALSE) {
+      return false;
+    }
+
+    // Scoring cannot be null otherwise
+    if (!scoring) {
+      arguments_.constraints[0] = "Scoring cannot be null.";
+      return false;
+    }
+
+    const scoringType: ScoringType = scoring.type;
+    const criteria = scoring.criteria;
 
     // Criteria can't be null except for AI_GRADED and shouldn't be empty
     if (
@@ -25,50 +49,57 @@ export class CustomScoringValidator implements ValidatorConstraintInterface {
     }
 
     switch (scoringType) {
-      case ScoringType.MULTIPLE_CRITERIA: {
-        if (typeof criteria !== "object" || criteria === null) {
+      case ScoringType.CRITERIA_BASED: {
+        let totalMaxPoints = 0;
+        if (!Array.isArray(criteria) || criteria.length === 0) {
           arguments_.constraints[0] =
-            "criteria for MULTIPLE_CRITERIA scoring type should be an object.";
+            "criteria for CRITERIA_BASED scoring type should be a non-empty array.";
           return false;
         }
 
-        for (const key in criteria) {
+        for (const criterion of criteria as CriteriaBasedType[]) {
+          if (typeof criterion !== "object" || criterion === null) {
+            arguments_.constraints[0] =
+              "Each item in the criteria array should be an object.";
+            return false;
+          }
+
           if (
-            typeof key !== "string" ||
-            typeof criteria[key] !== "object" ||
-            criteria[key] === null
+            !criterion["criteria"] ||
+            !criterion["performanceDescription"] ||
+            criterion["maxPoints"] === undefined
           ) {
-            arguments_.constraints[0] = `criteria for MULTIPLE_CRITERIA scoring type should be an object for each category. Check the category "${key}".`;
+            arguments_.constraints[0] =
+              "Each criterion object should have all three fields: criteria, performanceDescription, and maxPoints.";
             return false;
           }
 
-          const nestedObject = criteria[key] as Record<string, unknown>;
-
-          // Check if each nested object is a key-value pair with key as number and value as string
-          for (const nestedKey in nestedObject) {
-            if (
-              Number.isNaN(Number(nestedKey)) ||
-              typeof nestedObject[nestedKey] !== "string"
-            ) {
-              arguments_.constraints[0] = `criteria is invalid. In the category "${key}", each criteria should be a key-value pair with key as number and value as string. Check the criteria "${nestedKey}".`;
-              return false;
-            }
+          if (typeof criterion["criteria"] !== "string") {
+            arguments_.constraints[0] =
+              "Each criterion in the criteria array should have a 'criteria' field of type string.";
+            return false;
           }
+
+          if (typeof criterion["performanceDescription"] !== "string") {
+            arguments_.constraints[0] =
+              "Each criterion in the criteria array should have a 'performanceDescription' field of type string.";
+            return false;
+          }
+
+          if (typeof criterion["maxPoints"] !== "number") {
+            arguments_.constraints[0] =
+              "Each criterion in the criteria array should have a 'maxPoints' field of type number.";
+            return false;
+          }
+
+          totalMaxPoints += criterion["maxPoints"];
         }
-        break;
-      }
-      case ScoringType.SINGLE_CRITERIA: {
-        if (typeof criteria !== "object" || criteria === null) {
-          arguments_.constraints[0] =
-            "criteria for SINGLE_CRITERIA scoring type should be an object.";
+
+        if (totalMaxPoints !== totalPoints) {
+          arguments_.constraints[0] = `The sum of maxPoints in criteria should exactly add up to ${totalPoints}.`;
           return false;
         }
-        for (const key in criteria) {
-          if (Number.isNaN(Number(key)) || typeof criteria[key] !== "string") {
-            arguments_.constraints[0] = `criteria is invalid. In SINGLE_CRITERIA, each key should be a number and each criteria should be a string. Check the criteria "${key}".`;
-            return false;
-          }
-        }
+
         break;
       }
       case ScoringType.LOSS_PER_MISTAKE: {

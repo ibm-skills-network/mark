@@ -43,13 +43,11 @@ enum QuestionType {
 }
 
 // This enum represents the ways in which an assignment can be scored
-// SINGLE_CRITERIA: The assignment is scored based on a single criteria
-// MULTIPLE_CRITERIA: The assignment is scored based on multiple criteria
+// SINGLE_CRITERIA: The assignment is scored based on specifying one or more criterias
 // LOSS_PER_MISTAKE: Points are deducted for each mistake in the assignment
 // AI_GRADED: The assignment is graded by an AI
 enum ScoringType {
-  SINGLE_CRITERIA
-  MULTIPLE_CRITERIA
+  CRITERIA_BASED
   LOSS_PER_MISTAKE
   AI_GRADED
 }
