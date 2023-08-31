@@ -43,15 +43,21 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
   const [rubrics, setRubrics] = useState(initialRubrics);
 
   const handleAddRow = () => {
-    // Create a new row object and add it to the initialRubrics array
+    // Calculate the index for the new row
+    const newIndex = rubrics.length + 1;
+
+    // Create a new row object with dynamic criteria
     const newRow = {
-      criteria: "New Criteria",
+      criteria: `New Criteria ${newIndex}`,
       judgement: "",
       rate: "",
       weight: "",
     };
+
+    // Add the new row to the initialRubrics array
     setRubrics([...rubrics, newRow]);
   };
+
   const handleDeleteRow = (index) => {
     if (rubrics.length === 1) {
       alert("You only have one criteria, so you cannot delete it.");
