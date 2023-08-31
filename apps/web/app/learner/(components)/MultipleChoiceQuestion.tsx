@@ -1,6 +1,6 @@
 "use client";
 
-import { Question, QuestionResponse } from "@/config/types"; // Ensure the Question type matches with GetQuestionResponseDto
+import { Question, QuestionResponse, QuestionStatus } from "@/config/types"; // Ensure the Question type matches with GetQuestionResponseDto
 
 import { submitQuestionResponse } from "@/lib/talkToBackend";
 import Title from "@components/Title";
@@ -11,14 +11,12 @@ import InfoLine from "./InfoLine";
 interface Props {
   // this ID is required but not received from Questiondata (for talking to backend upon submission)
   submissionID?: number;
+  updateStatus?: (status: QuestionStatus) => void;
   questionData?: Question;
-  onAnswerSelected?: (
-    status: "correct" | "incorrect" | "partiallyCorrect"
-  ) => void;
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  const { questionData, onAnswerSelected, submissionID } = props;
+  const { questionData, submissionID, updateStatus } = props;
 
   // CHANGE: Removed 'singleCorrect' comment since the question type itself implies if it's single or multiple correct
   const { question, choices, numRetries, type, assignmentID, id } =
@@ -95,8 +93,8 @@ function MultipleChoiceQuestion(props: Props) {
       setIsCorrect("none");
     }
 
-    if (onAnswerSelected) {
-      onAnswerSelected(status);
+    if (updateStatus) {
+      updateStatus(status);
     }
   };
 
@@ -172,6 +170,7 @@ function MultipleChoiceQuestion(props: Props) {
     <>
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
         <InfoLine text={question} />
+
         {choices.map((choiceObj, index) => {
           const choiceText = Object.keys(choiceObj)[0];
           const isChoiceCorrect = choiceObj[choiceText];
@@ -195,12 +194,28 @@ function MultipleChoiceQuestion(props: Props) {
             </button>
           );
         })}
+
+        {/* Feedback and attempts messages */}
+        <div className="mt-4 flex flex-col items-center">
+          <div className="text-center">{renderFeedbackMessage()}</div>
+          <div className="mt-2 text-center">{renderAttemptMessage()}</div>
+
+          {/* Submit Button */}
+          <div className="mt-4">
+            <Button
+              onClick={handleSubmit}
+              disabled={attempts >= numRetries}
+              className={
+                attempts >= numRetries
+                  ? "bg-white text-indigo-300 cursor-not-allowed hover:bg-white"
+                  : "hover:bg-indigo-500"
+              }
+            >
+              Submit Question
+            </Button>
+          </div>
+        </div>
       </div>
-      {renderFeedbackMessage()}
-      {renderAttemptMessage()}
-      <Button onClick={handleSubmit} disabled={attempts >= numRetries}>
-        Submit Question
-      </Button>
     </>
   );
 }

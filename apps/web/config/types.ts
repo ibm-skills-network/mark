@@ -18,6 +18,7 @@ export type QuestionStatus =
   | "correct"
   | "incorrect"
   | "partiallyCorrect"
+  | "answered"
   | "unanswered";
 
 export type QuestionType =

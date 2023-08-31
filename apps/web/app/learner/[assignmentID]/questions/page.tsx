@@ -15,9 +15,7 @@ function LearnerLayout() {
     questionsData.map(() => "unanswered")
   );
 
-  const updateStatus = (
-    status: "correct" | "incorrect" | "partiallyCorrect"
-  ) => {
+  const updateStatus = (status: QuestionStatus) => {
     setQuestionStatuses((prevStatuses) => {
       const updatedStatuses = [...prevStatuses];
       updatedStatuses[currentIndex] = status;
@@ -37,6 +35,7 @@ function LearnerLayout() {
               questionNumber={index + 1}
               className={`${index === currentIndex ? "" : "hidden"} `}
               question={question}
+              updateStatus={updateStatus}
             />
           );
         })}

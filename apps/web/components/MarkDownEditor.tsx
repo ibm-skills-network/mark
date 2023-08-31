@@ -8,32 +8,48 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
   setValue: (value: string) => void;
   textareaClassName?: string;
+  maxWords?: number; // Introduced maxWords prop for word limit
 }
 
 function MarkdownEditor(props: Props) {
-  const { value, setValue, className, style, textareaClassName } = props; // Destructure the style prop
+  const { value, setValue, className, style, textareaClassName, maxWords } =
+    props;
   const mdParser = new MarkdownIt();
 
+  const wordCount = value.split(/\s+/).filter(Boolean).length; // Count number of words in value
+
   const handleEditorChange = ({ text }: { text: string }) => {
-    setValue(text);
+    const newTextWordCount = text.split(/\s+/).filter(Boolean).length; // Count number of words in new text
+
+    if (maxWords !== undefined && newTextWordCount <= maxWords) {
+      setValue(text);
+    } else if (maxWords === undefined) {
+      setValue(text);
+    }
   };
 
   return (
-    <MdEditor
-      className={
-        className + " rounded-md border border-gray-300 overflow-hidden"
-      }
-      // make height of editor dynamic
-      markdownClass={twMerge(
-        "focus:ring-0 focus:ring-offset-0",
-        textareaClassName
-      )}
-      value={value}
-      style={{ ...style }}
-      renderHTML={(text) => mdParser.render(text)}
-      onChange={handleEditorChange}
-      view={{ menu: true, md: true, html: false }}
-    />
+    <div>
+      <MdEditor
+        className={
+          className + " rounded-md border border-gray-300 overflow-hidden"
+        }
+        markdownClass={twMerge(
+          "focus:ring-0 focus:ring-offset-0",
+          textareaClassName
+        )}
+        value={value}
+        style={{ ...style }}
+        renderHTML={(text) => mdParser.render(text)}
+        onChange={handleEditorChange}
+        view={{ menu: true, md: true, html: false }}
+      />
+
+      {/* Word count display */}
+      <div className="text-gray-400 text-sm font-medium leading-tight">
+        Words: {wordCount} / {maxWords}
+      </div>
+    </div>
   );
 }
 

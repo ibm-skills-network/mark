@@ -1,6 +1,6 @@
 "use client";
 
-import { Question } from "@/config/types";
+import { Question, QuestionStatus } from "@/config/types";
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
@@ -8,10 +8,11 @@ import InfoLine from "./InfoLine";
 interface Props {
   questionData?: Question;
   onAnswerSelected?: (status: "pendingReview") => void;
+  updateStatus: (status: QuestionStatus) => void;
 }
 
 function UploadQuestion(props: Props) {
-  const { questionData, onAnswerSelected } = props;
+  const { questionData, onAnswerSelected, updateStatus } = props;
   const { question, totalPoints } = questionData;
 
   const [file, setFile] = useState<File | null>(null);
@@ -33,6 +34,8 @@ function UploadQuestion(props: Props) {
   const handleSubmit = () => {
     if (file) {
       setSubmitted(true);
+      updateStatus("answered");
+      if (onAnswerSelected) onAnswerSelected("pendingReview");
     }
   };
 

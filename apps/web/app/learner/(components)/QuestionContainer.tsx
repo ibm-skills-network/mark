@@ -1,4 +1,5 @@
-import type { Question } from "@/config/types";
+import type { Question, QuestionStatus } from "@/config/types";
+import { VehicleModule } from "@faker-js/faker";
 import { twMerge } from "tailwind-merge";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import TextQuestion from "./TextQuestion";
@@ -9,6 +10,7 @@ import UrlQuestion from "./UrlQuestion";
 interface Props extends React.ComponentPropsWithoutRef<"section"> {
   question: Question;
   questionNumber: number;
+  updateStatus: (QuestionStatus) => void;
 }
 
 function Component(props: Props) {
@@ -23,19 +25,45 @@ function Component(props: Props) {
           <TextQuestion
             questionData={question}
             questionNumber={questionNumber}
+            updateStatus={props.updateStatus}
           />
         );
       case "SINGLE_CORRECT":
         // removed singleCorrect
-        return <MultipleChoiceQuestion questionData={question} />;
+        return (
+          <MultipleChoiceQuestion
+            questionData={question}
+            updateStatus={props.updateStatus}
+          />
+        );
       case "MULTIPLE_CORRECT":
-        return <MultipleChoiceQuestion questionData={question} />;
+        return (
+          <MultipleChoiceQuestion
+            questionData={question}
+            updateStatus={props.updateStatus}
+          />
+        );
       case "TRUE_FALSE":
-        return <TrueFalseQuestion questionData={question} />;
+        return (
+          <TrueFalseQuestion
+            questionData={question}
+            updateStatus={props.updateStatus}
+          />
+        );
       case "URL":
-        return <UrlQuestion questionData={question} />;
+        return (
+          <UrlQuestion
+            questionData={question}
+            updateStatus={props.updateStatus}
+          />
+        );
       case "UPLOAD":
-        return <UploadQuestion questionData={question} />;
+        return (
+          <UploadQuestion
+            questionData={question}
+            updateStatus={props.updateStatus}
+          />
+        );
       default:
         return null;
     }

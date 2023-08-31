@@ -1,6 +1,6 @@
 "use client";
 
-import { Question, QuestionResponse } from "@/config/types";
+import { Question, QuestionResponse, QuestionStatus } from "@/config/types";
 import { submitQuestionResponse } from "@/lib/talkToBackend";
 import Title from "@components/Title";
 import React, { useState } from "react";
@@ -10,11 +10,11 @@ import InfoLine from "./InfoLine";
 interface Props {
   submissionID?: number;
   questionData?: Question;
-  onAnswerSelected?: (status: "correct" | "incorrect") => void;
+  updateStatus?: (status: QuestionStatus) => void;
 }
 
 function TrueFalseQuestion(props: Props) {
-  const { questionData, onAnswerSelected } = props;
+  const { questionData, updateStatus } = props;
   const { question, answer, id, assignmentID } = questionData!;
 
   const [selectedOption, setSelectedOption] = useState<boolean | null>(null);
@@ -56,8 +56,8 @@ function TrueFalseQuestion(props: Props) {
       setIsCorrect(false);
     }
 
-    if (onAnswerSelected) {
-      onAnswerSelected(status);
+    if (updateStatus) {
+      updateStatus(status);
     }
   };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Question } from "@/config/types";
+import { Question, QuestionStatus } from "@/config/types";
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
@@ -8,10 +8,11 @@ import InfoLine from "./InfoLine";
 interface Props {
   questionData?: Question;
   onURLSubmit?: (url: string) => void; // This callback is for when the URL is submitted
+  updateStatus: (status: QuestionStatus) => void;
 }
 
 function URLQuestion(props: Props) {
-  const { questionData, onURLSubmit } = props;
+  const { questionData, onURLSubmit, updateStatus } = props;
   const { question } = questionData;
   const [url, setURL] = useState<string>("");
 
@@ -21,6 +22,7 @@ function URLQuestion(props: Props) {
 
   const handleSubmit = () => {
     if (validateURL(url)) {
+      updateStatus("answered");
       if (onURLSubmit) {
         onURLSubmit(url);
       }
@@ -55,7 +57,7 @@ function URLQuestion(props: Props) {
         />
       </div>
       <Button onClick={handleSubmit} disabled={!url}>
-        Submit URL
+        Submit Question
       </Button>
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { QuestionStatus } from "@config/types";
+import { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
 import React, { useEffect, useState } from "react";
 
 interface Props {
@@ -13,7 +13,6 @@ function Overview(props: Props) {
   const { questions, timeLimit, setCurrentIndex } = props;
   const [secondsRemaining, setSecondsRemaining] = useState<number>(timeLimit);
 
-  // Timer logic to decrement the seconds remaining
   useEffect(() => {
     const timer = setInterval(() => {
       if (secondsRemaining > 0) {
@@ -29,12 +28,9 @@ function Overview(props: Props) {
       <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
 
       <div className="flex items-center space-x-2">
-        {/* Time Remaining Label */}
         <div className="text-gray-600 text-base font-medium leading-tight">
           Time Remaining:
         </div>
-
-        {/* Time Display */}
         <div className="text-blue-600 text-base font-bold leading-tight">
           {Math.floor(secondsRemaining / 60)}:
           {secondsRemaining % 60 < 10
@@ -45,26 +41,38 @@ function Overview(props: Props) {
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
         {questions.map((question: QuestionStatus, index) => (
-          <div
+          <button
             key={index}
             onClick={() => setCurrentIndex(index)}
-            className={`p-2 border rounded-lg text-center cursor-pointer ${
-              question === "correct"
-                ? "bg-green-100"
-                : question === "incorrect"
-                ? "bg-red-100"
-                : question === "partiallyCorrect"
-                ? "bg-yellow-100"
-                : "bg-gray-100"
-            }`}
+            className={`p-2 border rounded-lg text-center cursor-pointer focus:outline-none 
+              ${question === "correct" ? "bg-green-100 border-green-500" : ""}
+              ${question === "incorrect" ? "bg-red-100 border-red-500" : ""}
+              ${
+                question === "partiallyCorrect"
+                  ? "bg-yellow-100 border-yellow-500"
+                  : ""
+              }
+              ${question === "answered" ? "bg-gray-100 border-gray-300" : ""}
+              ${
+                question === "unanswered" ? "bg-white-100 border-white-300" : ""
+              }
+            `}
           >
-            <div>{index + 1}</div>{" "}
-            {/* Displaying just the number on a separate line */}
-            {question === "correct" && <div className="emerald-600">✓</div>}
-            {question === "incorrect" && <div className="text-red-600">✗</div>}
-            {question === "partiallyCorrect" && <div>✓✗</div>}
-            {/* Removed the unanswered status */}
-          </div>
+            <div className="text-sm font-medium">{index + 1}</div>
+
+            {question === "correct" && (
+              <div className="text-green-600 mt-1">✓</div>
+            )}
+            {question === "incorrect" && (
+              <div className="text-red-600 mt-1">✗</div>
+            )}
+            {question === "partiallyCorrect" && (
+              <div className="text-orange-600 mt-1">✓✗</div>
+            )}
+            {question === "answered" && (
+              <div className="text-gray-600 mt-1">-</div>
+            )}
+          </button>
         ))}
       </div>
     </div>
