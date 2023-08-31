@@ -30,19 +30,20 @@ const AuthorIntroduction = ({
 
   useEffect(() => {
     // if there is no active assignment, check if we are able to fetch the details of the assignmentID from the url
-    async function checkAssignmentExists(assignmentID: number) {
+    async function InitializeAssignment(assignmentID: number) {
       const assignment = await getAssignment(assignmentID);
       if (assignment) {
+        console.log(assignment);
         // if assignment exists, set it as the active assignment
         setActiveAssignmentID(assignmentID);
         // update the state of the introduction page with the assignment details from the backend
         setIntroduction(assignment.introduction);
         setInstructions(assignment.instructions);
         setGrading({
-          graded: assignment.graded,
-          attempts: assignment.numAttempts,
-          passingGrade: assignment.passingGrade,
-          timeEstimate: assignment.allotedTime,
+          graded: assignment.graded || true,
+          attempts: assignment.numAttempts || 1,
+          passingGrade: assignment.passingGrade || 50,
+          timeEstimate: assignment.allotedTime || 50,
         });
       } else {
         router.push("/");
@@ -51,7 +52,7 @@ const AuthorIntroduction = ({
     if (!activeAssignmentID) {
       const assignmentID = params.assignmentID;
       if (assignmentID !== undefined && !isNaN(Number(assignmentID))) {
-        void checkAssignmentExists(parseInt(assignmentID));
+        void InitializeAssignment(parseInt(assignmentID));
       } else {
         router.push("/");
       }

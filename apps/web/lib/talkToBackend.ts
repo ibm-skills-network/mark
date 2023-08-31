@@ -67,7 +67,9 @@ export async function modifyAssignment(
  * @throws An error if the assignment does not exist.
  * @throws An error if the user is not authorized to view the assignment.
  */
-export async function getAssignment(id: number): Promise<Assignment> {
+export async function getAssignment(
+  id: number
+): Promise<Assignment | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`);
     if (!res.ok) {
@@ -82,7 +84,8 @@ export async function getAssignment(id: number): Promise<Assignment> {
     return assignmentData;
   } catch (err) {
     console.error(err);
-    return {} as Assignment;
+    // TODO: handle error in a better way with the help of the response code
+    return undefined;
   }
 }
 
