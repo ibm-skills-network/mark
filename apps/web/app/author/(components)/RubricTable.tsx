@@ -99,7 +99,27 @@ function RubricTableProps(props: RubricTableProps) {
                       <div contentEditable>{rubric.judgement}</div>
                     </td>
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500">
-                      <div contentEditable>{rubric.rate}</div>
+                      <div className="flex items-center">
+                        <div contentEditable className="flex-grow">
+                          {rubric.rate}
+                        </div>
+                        <svg
+                          className="mr-[40px]"
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="19"
+                          height="18"
+                          viewBox="0 0 19 18"
+                          fill="none"
+                        >
+                          <path
+                            d="M13.8816 2.77258L15.2875 1.36591C15.5805 1.07284 15.978 0.908203 16.3925 0.908203C16.8069 0.908203 17.2044 1.07284 17.4975 1.36591C17.7905 1.65897 17.9552 2.05645 17.9552 2.47091C17.9552 2.88536 17.7905 3.28285 17.4975 3.57591L5.52329 15.5501C5.08273 15.9904 4.53943 16.314 3.94246 16.4917L1.70496 17.1584L2.37162 14.9209C2.54935 14.3239 2.87298 13.7806 3.31329 13.3401L13.8825 2.77258H13.8816ZM13.8816 2.77258L16.08 4.97091"
+                            stroke="#1D4ED8"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
                     </td>
                     <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm text-gray-500 sm:pr-0">
                       <div contentEditable>{rubric.weight}</div>
