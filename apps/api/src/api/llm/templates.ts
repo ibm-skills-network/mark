@@ -1,25 +1,23 @@
-export const gradeTextBasedQuestionLlmTemplate = `As an experienced grader with over a decade of expertise, your task is to evaluate and grade an exercise following the provided guidelines.
+export const gradeTextBasedQuestionLlmTemplate = `As an experienced grader with over a decade of expertise, your task is to evaluate and grade a response to a question following the provided guidelines.
 
-The exercise question is "{exercise_question}".\n The learner's response is "{learner_response}". 
+The question is "{question}".\n The learner's response is "{learner_response}". 
 
-The exercise offers a maximum of {total_points} points, utilizes a scoring method of {scoring_type}, and follows the scoring criteria presented in the JSON format as follows: {scoring_criteria}. 
+The question offers a maximum of {total_points} points, utilizes a scoring method of {scoring_type}, and follows the scoring criteria presented in the JSON format as follows: {scoring_criteria}. 
 
 Based on these parameters, assign points and provide constructive feedback:
 
-1. If the scoring type is "multiple_criteria", each criterion within the response should be evaluated independently. Award points for each criterion based on the learner's compliance with the expectations set for each point value within these criteria. If a criterion is not explicitly described for a specific point value (between the max and min points), use your AI capabilities to interpolate between the available descriptions to create a suitable criterion. Provide individualized feedback for each criterion that corresponds to the points allocated. This means each criterion should receive its own score and feedback.
+1. If the scoring type is "CRITERIA_BASED", you are to evaluate the learner's response against each of the listed criteria. For each criterion, award points based on the learner's adherence to the expectations described. Provide feedback corresponding to the points awarded for each criterion. This means you should give a separate score and specific feedback for each criterion, guiding the learner on how they performed in that specific area. If a criterion's performance description does not precisely match the learner's response, use your expertise to make a fair judgment and award points accordingly.
 
-2. If the scoring type is "single_criteria", grade the response according to the expectations established for each point value in the scoring criteria. If a criterion is not explicitly provided for a specific point value (between the max and min points), use your AI capabilities to interpolate between the existing descriptions to create a suitable criterion. Assign points and feedback based on the learner's success in meeting the outlined expectations.
+2. If the scoring type is "AI_GRADED", use your analytical capabilities to comprehensively assess the response. Based on your assessment, allocate points out of the possible {total_points}. Provide feedback detailing the quality of the learner's answer and the rationale behind the points awarded.
 
-3. If the scoring type is "ai_graded", apply your analytical capabilities to assess the response. From your assessment, allot a point value from the total possible points, which is {total_points}. Provide feedback based on the quality of the response and the points awarded.
-
-Please remember that your feedback should be constructive, designed to guide the learner in understanding their mistakes and learning from them. The ultimate objective is to support the learner in securing the maximum points on future attempts. Use a first person perespective as if you are speaking to the learner directly as a grader.
+Ensure your feedback is constructive, helping the learner grasp their mistakes and learn from them. The overarching goal is to assist the learner in achieving the full point value in subsequent attempts. Speak to the learner directly in the first person, as if you are a grader communicating feedback.
 
 {format_instructions}
 `;
 
 export const feedbackChoiceBasedQuestionLlmTemplate = `As an experienced grader with over a decade of expertise, your task is to provide constructive feedback on a choice-based question.
 
-The question is "{exercise_question}". 
+The question is "{question}". 
 
 The choices provided in the question are in the following JSON format: {valid_choices}. 
 In this JSON, each key represents a possible answer choice for the question, and its value, either 'true' or 'false', denotes whether the choice is correct or incorrect respectively.
@@ -37,7 +35,7 @@ Remember that your feedback should be constructive, aimed to guide the learner i
 
 export const feedbackTrueFalseBasedQuestionLlmTemplate = `As an experienced grader with over a decade of expertise, your task is to provide constructive feedback on a true false choice-based question.
 
-The question is "{exercise_question}". 
+The question is "{question}". 
 
 The learner selected this choice: {learner_choice}.
 

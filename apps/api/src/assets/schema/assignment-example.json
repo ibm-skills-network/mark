@@ -3,7 +3,7 @@
   "introduction": "Welcome to the Mathematics Quiz! This AI-graded quiz aims to test your math skills in a fun and interactive way.",
   "instructions": null,
   "type": "AI_GRADED",
-  "gradingType": "PRACTICE",
+  "graded": true,
   "numAttempts": 5,
   "allotedTime": 60,
   "passingGrade": 70,
@@ -12,7 +12,7 @@
     {
       "totalPoints": 5,
       "numRetries": 2,
-      "type": "text",
+      "type": "TEXT",
       "question": "What is 2+2?",
       "scoring": {
         "type": "MULTIPLE_CRITERIA",
@@ -38,21 +38,40 @@
     {
       "totalPoints": 4,
       "numRetries": 3,
-      "type": "text",
-      "question": "Who is known as the Father of Mathematics?",
+      "type": "TEXT",
+      "question": "Write a brief note about the significance of the Pythagoras theorem in mathematics.",
       "scoring": {
-        "type": "SINGLE_CRITERIA",
-        "criteria": {
-          "4": "The learner gives a detailed and correct answer",
-          "2": "The learner gives a correct but not detailed answer",
-          "0": "The learner gives an incorrect answer"
-        }
+        "type": "CRITERIA_BASED",
+        "criteria": [
+          {
+            "criteria": "Accuracy",
+            "performanceDescription": "The learner provides an accurate description of the Pythagoras theorem and its significance.",
+            "maxPoints": 2
+          },
+          {
+            "criteria": "Clarity",
+            "performanceDescription": "The learner's response is clear, concise, and easy to understand.",
+            "maxPoints": 1
+          },
+          {
+            "criteria": "Writing style",
+            "performanceDescription": "The learner's response has good grammar, sentence structure, and is well-organized.",
+            "maxPoints": 1
+          }
+        ]
       }
     },
     {
       "totalPoints": 4,
+      "type": "true_false",
+      "numRetries": 0,
+      "question": "Is 0 an even number?",
+      "answer": true
+    },
+    {
+      "totalPoints": 4,
       "numRetries": 2,
-      "type": "single_correct",
+      "type": "SINGLE_CORRECT",
       "question": "What is the square root of 64?",
       "choices": {
         "6": false,
@@ -68,7 +87,7 @@
     },
     {
       "totalPoints": 4,
-      "type": "multiple_correct",
+      "type": "MULTIPLE_CORRECT",
       "numRetries": 0,
       "question": "Which of the following are prime numbers?",
       "choices": {
@@ -85,24 +104,29 @@
       }
     },
     {
-      "totalPoints": 4,
-      "type": "true_false",
-      "numRetries": 0,
-      "question": "Is 0 an even number?",
-      "answer": true
-    },
-    {
       "totalPoints": 5,
       "numRetries": 1,
       "type": "url",
       "question": "Please provide a URL to your project repository.",
       "scoring": {
-        "type": "SINGLE_CRITERIA",
-        "criteria": {
-          "5": "URL points to a valid repository",
-          "3": "URL points to a repository, but it's not fully accessible",
-          "0": "URL does not point to a valid repository"
-        }
+        "type": "CRITERIA_BASED",
+        "criteria": [
+          {
+            "criteria": "Validity",
+            "performanceDescription": "URL points to a valid repository",
+            "maxPoints": 3
+          },
+          {
+            "criteria": "Accessibility",
+            "performanceDescription": "The repository is fully accessible",
+            "maxPoints": 1
+          },
+          {
+            "criteria": "Relevance",
+            "performanceDescription": "The repository is relevant to the assignment",
+            "maxPoints": 1
+          }
+        ]
       }
     },
     {
@@ -111,12 +135,24 @@
       "type": "upload",
       "question": "Upload a document summarizing your project findings.",
       "scoring": {
-        "type": "SINGLE_CRITERIA",
-        "criteria": {
-          "7": "Document is comprehensive and well-structured",
-          "5": "Document provides some useful information but lacks depth or structure",
-          "2": "Document does not provide sufficient information"
-        }
+        "type": "CRITERIA_BASED",
+        "criteria": [
+          {
+            "criteria": "Comprehensiveness",
+            "performanceDescription": "Document covers all required aspects of the project findings",
+            "maxPoints": 4
+          },
+          {
+            "criteria": "Structure",
+            "performanceDescription": "Document is well-organized and logically structured",
+            "maxPoints": 2
+          },
+          {
+            "criteria": "Clarity",
+            "performanceDescription": "Language is clear, concise, and free of jargon",
+            "maxPoints": 1
+          }
+        ]
       }
     }
   ]

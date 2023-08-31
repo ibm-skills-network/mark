@@ -10,13 +10,11 @@ import {
   IsOptional,
   IsString,
   Validate,
-  ValidateNested,
 } from "class-validator";
 import { CustomScoringValidator } from "../custom-validator/scoring.criteria.validator";
 
 export enum ScoringType {
-  SINGLE_CRITERIA = "SINGLE_CRITERIA",
-  MULTIPLE_CRITERIA = "MULTIPLE_CRITERIA",
+  CRITERIA_BASED = "CRITERIA_BASED",
   LOSS_PER_MISTAKE = "LOSS_PER_MISTAKE",
   AI_GRADED = "AI_GRADED",
 }
@@ -40,7 +38,6 @@ export class Scoring {
     type: Object,
     additionalProperties: true,
   })
-  @Validate(CustomScoringValidator, [""])
   criteria: Criteria | null;
 }
 
@@ -85,13 +82,14 @@ export class CreateUpdateQuestionRequestDto {
     type: Number,
     required: false,
   })
+  @IsOptional()
   @IsInt()
-  maxWords: number;
+  maxWords?: number;
 
   @ApiPropertyOptional({ description: "The scoring criteria.", type: Scoring })
   @IsOptional()
   @Type(() => Scoring)
-  @ValidateNested()
+  @Validate(CustomScoringValidator, [{ alwaysValidate: true }])
   scoring?: Scoring;
 
   @ApiPropertyOptional({
