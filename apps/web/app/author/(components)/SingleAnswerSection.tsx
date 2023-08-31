@@ -42,7 +42,17 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
       setPoints(updatedPoints);
     }
   };
-  const [showPointsInput, setShowPointsInput] = useState(false);
+  const [showPointsInput, setShowPointsInput] = useState(
+    Array(optionsSingleCorrect.length).fill(false)
+  );
+
+  const handleShowPointsInputChange = (index, value) => {
+    setShowPointsInput((prevState) => {
+      const updatedState = [...prevState];
+      updatedState[index] = value;
+      return updatedState;
+    });
+  };
 
   ////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////
@@ -104,7 +114,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
               />
             </svg>
           </button>
-          {showPointsInput ? (
+          {showPointsInput[index] ? (
             <input
               type="number"
               value={points[index]}
@@ -112,10 +122,13 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
                 handlePointsChange(index, event.target.value)
               }
               className="ml-2 w-20"
-              onBlur={() => setShowPointsInput(false)}
+              onBlur={() => handleShowPointsInputChange(index, false)}
             />
           ) : (
-            <button className="ml-2" onClick={() => setShowPointsInput(true)}>
+            <button
+              className="ml-2"
+              onClick={() => handleShowPointsInputChange(index, true)}
+            >
               {points[index] === undefined ? 0 : points[index]} points
             </button>
           )}
