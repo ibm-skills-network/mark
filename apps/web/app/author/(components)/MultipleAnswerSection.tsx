@@ -70,7 +70,7 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
               {String.fromCharCode(65 + index)}.
             </div>
             <textarea
-              className="w-[800px] p-2 rounded-md text-black bg-transparent outline-none" // Removed 'border ml-2' and added 'w-full'
+              className="w-[800px] p-2 border-transparent mb-[10px] rounded-md text-black bg-transparent outline-none" // Removed 'border ml-2' and added 'w-full'
               placeholder={`Option ${index + 1}`}
               value={option}
               onChange={(event) =>
