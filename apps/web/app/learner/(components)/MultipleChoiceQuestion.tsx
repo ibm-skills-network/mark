@@ -10,7 +10,7 @@ import InfoLine from "./InfoLine";
 
 interface Props {
   // this ID is required but not received from Questiondata (for talking to backend upon submission)
-  submissionId?: number;
+  submissionID?: number;
   questionData?: Question;
   onAnswerSelected?: (
     status: "correct" | "incorrect" | "partiallyCorrect"
@@ -18,7 +18,7 @@ interface Props {
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  const { questionData, onAnswerSelected } = props;
+  const { questionData, onAnswerSelected, submissionID } = props;
 
   // CHANGE: Removed 'singleCorrect' comment since the question type itself implies if it's single or multiple correct
   const { question, choices, numRetries, type, assignmentID, id } =
@@ -55,19 +55,14 @@ function MultipleChoiceQuestion(props: Props) {
     const response: QuestionResponse = {
       learnerChoices: selectedOptions,
     };
-
-    try {
-      const success = await submitQuestionResponse(
-        assignmentID,
-        props.submissionId,
-        id,
-        response
-      );
-      if (!success) {
-        console.error("Error submitting the answer");
-      }
-    } catch (error) {
-      console.error("Error while submitting the answer:", error);
+    const success = await submitQuestionResponse(
+      assignmentID,
+      submissionID,
+      id,
+      response
+    );
+    if (!success) {
+      console.error("Error submitting the answer");
     }
 
     setAttempts((prevAttempts) => prevAttempts + 1);

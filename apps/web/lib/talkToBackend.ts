@@ -15,13 +15,18 @@ import type {
  * Calls the backend to see who the user is (author, learner, or admin).
  */
 export async function getUser(): Promise<User | undefined> {
-  const res = await fetch(BASE_API_ROUTES.user);
+  try {
+    const res = await fetch(BASE_API_ROUTES.user);
 
-  if (!res.ok) {
-    throw new Error("Failed to fetch user data");
+    if (!res.ok) {
+      throw new Error("Failed to fetch user data");
+    }
+
+    return (await res.json()) as User;
+  } catch (err) {
+    console.error(err);
+    return undefined;
   }
-
-  return (await res.json()) as User;
 }
 
 /**
@@ -30,7 +35,7 @@ export async function getUser(): Promise<User | undefined> {
 export async function modifyAssignment(
   data: ModifyAssignmentRequest,
   id: number
-): Promise<boolean | undefined> {
+): Promise<boolean> {
   try {
     //
     const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
@@ -63,17 +68,22 @@ export async function modifyAssignment(
  * @throws An error if the user is not authorized to view the assignment.
  */
 export async function getAssignment(id: number): Promise<Assignment> {
-  const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`);
-  if (!res.ok) {
-    throw new Error("Failed to fetch assignment");
+  try {
+    const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`);
+    if (!res.ok) {
+      throw new Error("Failed to fetch assignment");
+    }
+    const { success, error, ...remainingData } =
+      (await res.json()) as GetAssignmentResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+    const assignmentData: Assignment = remainingData;
+    return assignmentData;
+  } catch (err) {
+    console.error(err);
+    return {} as Assignment;
   }
-  const { success, error, ...remainingData } =
-    (await res.json()) as GetAssignmentResponse;
-  if (!success) {
-    throw new Error(error);
-  }
-  const assignmentData: Assignment = remainingData;
-  return assignmentData;
 }
 
 /**
@@ -81,12 +91,17 @@ export async function getAssignment(id: number): Promise<Assignment> {
  * @returns An array of assignments.
  */
 export async function getAssignments(): Promise<Assignment[]> {
-  const res = await fetch(BASE_API_ROUTES.assignments);
-  if (!res.ok) {
-    throw new Error("Failed to fetch assignments");
+  try {
+    const res = await fetch(BASE_API_ROUTES.assignments);
+    if (!res.ok) {
+      throw new Error("Failed to fetch assignments");
+    }
+    const assignments = (await res.json()) as Assignment[];
+    return assignments;
+  } catch (err) {
+    console.error(err);
+    return [];
   }
-  const assignments = (await res.json()) as Assignment[];
-  return assignments;
 }
 
 /**
@@ -94,11 +109,11 @@ export async function getAssignments(): Promise<Assignment[]> {
  */
 export async function submitTextOrURLAnswer(
   assignmentId: number,
-  submissionId: number,
+  submissionID: number,
   questionId: number,
   responseBody: any
 ): Promise<boolean> {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionId}/questions/${questionId}/responses`;
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionID}/questions/${questionId}/responses`;
 
   try {
     const res = await fetch(endpointURL, {
@@ -126,11 +141,11 @@ export async function submitTextOrURLAnswer(
 // talk to backend when submitting individual questions (Benny)
 export async function submitQuestionResponse(
   assignmentId: number,
-  submissionId: number,
+  submissionID: number,
   questionId: number,
   response: QuestionResponse
 ): Promise<boolean> {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionId}/questions/${questionId}/responses`;
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionID}/questions/${questionId}/responses`;
 
   try {
     let body;
