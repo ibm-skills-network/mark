@@ -16,6 +16,7 @@ const AuthorIntroduction = ({
 }) => {
   const router = useRouter();
   const [introduction, setIntroduction] = useState("");
+  const [assignmentTitle, setAssignmentTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [grading, setGrading] = useState<GradingData>({
     graded: true,
@@ -37,8 +38,9 @@ const AuthorIntroduction = ({
         // if assignment exists, set it as the active assignment
         setActiveAssignmentID(assignmentID);
         // update the state of the introduction page with the assignment details from the backend
-        setIntroduction(assignment.introduction);
-        setInstructions(assignment.instructions);
+        setAssignmentTitle(assignment.name || "Introduction");
+        setIntroduction(assignment.introduction || "");
+        setInstructions(assignment.instructions || "");
         setGrading({
           graded: assignment.graded || true,
           attempts: assignment.numAttempts || 1,
@@ -86,7 +88,7 @@ const AuthorIntroduction = ({
   return (
     <main className="flex flex-col gap-y-11 mx-auto max-w-6xl py-20">
       <Title
-        text="Introduction"
+        text={assignmentTitle}
         className="text-gray-900 text-4xl leading-10 font-extrabold"
       />
       <IntroductionSection

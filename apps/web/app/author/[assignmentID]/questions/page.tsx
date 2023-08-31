@@ -8,7 +8,7 @@ function Component(props: Props) {
 
   return (
     <div>
-      <div
+      {/* <div
         style={{
           position: "fixed",
           top: 0,
@@ -18,7 +18,7 @@ function Component(props: Props) {
         }}
       >
         <QuestionStartPage />
-      </div>
+      </div> */}
 
       <div className="relative">
         <DynamicTextBoxContainer />
