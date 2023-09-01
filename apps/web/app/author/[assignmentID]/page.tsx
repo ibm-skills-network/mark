@@ -67,17 +67,18 @@ const AuthorIntroduction = ({
    * and redirects to the questions page
    * */
   async function updateAssignment() {
-    const modified = await modifyAssignment(
-      {
-        allotedTime: grading.timeEstimate,
-        instructions: instructions,
-        introduction: introduction,
-        graded: grading.graded,
-        passingGrade: grading.passingGrade,
-        numAttempts: grading.attempts,
-      },
-      activeAssignmentID
-    );
+    const assignment = {
+      allotedTime: grading.timeEstimate,
+      instructions: instructions,
+      introduction: introduction,
+      graded: grading.graded,
+      passingGrade: grading.passingGrade,
+    };
+    // if attempts is -1, it means unlimited attempts, so we don't send that to the backend(default is unlimited)
+    if (grading.attempts !== -1) {
+      assignment["numAttempts"] = grading.attempts;
+    }
+    const modified = await modifyAssignment(assignment, activeAssignmentID);
     if (modified) {
       router.push(`/author/${activeAssignmentID}/questions`);
     } else {
