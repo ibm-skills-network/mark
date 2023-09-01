@@ -52,14 +52,14 @@ const AuthorIntroduction = ({
         router.push("/");
       }
     }
-    if (!activeAssignmentID) {
-      const assignmentID = params.assignmentID;
-      if (assignmentID !== undefined && !isNaN(Number(assignmentID))) {
-        void InitializeAssignment(parseInt(assignmentID));
-      } else {
-        router.push("/");
-      }
+    // if (!activeAssignmentID) {
+    const assignmentID = params.assignmentID;
+    if (assignmentID !== undefined && !isNaN(Number(assignmentID))) {
+      void InitializeAssignment(parseInt(assignmentID));
+    } else {
+      router.push("/");
     }
+    // }
   }, []);
 
   /**
