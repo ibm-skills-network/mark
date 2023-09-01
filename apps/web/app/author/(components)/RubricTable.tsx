@@ -144,10 +144,10 @@ function RubricTableProps(props: RubricTableProps) {
           <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
             <button
               type="button"
-              className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              className="block w-[10rem] h-[2.5rem] rounded-md bg-gray-200 px-3 py-2 text-center text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
               onClick={onAddRow}
             >
-              Add row
+              Add Criteria
             </button>
           </div>
         </div>
