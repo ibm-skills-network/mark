@@ -1,5 +1,4 @@
 import type { Question, QuestionStatus } from "@/config/types";
-import { VehicleModule } from "@faker-js/faker";
 import { twMerge } from "tailwind-merge";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import TextQuestion from "./TextQuestion";

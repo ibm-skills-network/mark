@@ -4,13 +4,13 @@ import { QuestionStatus } from "@config/types"; // Ensure this type is updated a
 import React, { useEffect, useState } from "react";
 
 interface Props {
-  questions: QuestionStatus[];
+  questionstatus: QuestionStatus[];
   timeLimit: number; // Time limit in seconds
   setCurrentIndex: (index: number) => void;
 }
 
 function Overview(props: Props) {
-  const { questions, timeLimit, setCurrentIndex } = props;
+  const { questionstatus, timeLimit, setCurrentIndex } = props;
   const [secondsRemaining, setSecondsRemaining] = useState<number>(timeLimit);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ function Overview(props: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-        {questions.map((question: QuestionStatus, index) => (
+        {questionstatus.map((question: QuestionStatus, index) => (
           <button
             key={index}
             onClick={() => setCurrentIndex(index)}
