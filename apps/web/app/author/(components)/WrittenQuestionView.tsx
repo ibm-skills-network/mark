@@ -207,6 +207,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
           rubrics={rubrics}
           onAddRow={handleAddRow}
           onDeleteRow={handleDeleteRow}
+          setRubrics={setRubrics}
         />
       )}
     </div>
