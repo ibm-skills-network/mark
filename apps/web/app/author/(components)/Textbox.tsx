@@ -36,10 +36,10 @@ function classNames(...classes) {
 
 const initialRubrics = [
   {
-    criteria: "Novelty",
-    judgement: "Does it contain copy of existing product?",
-    rate: "10",
-    weight: "40%",
+    criteria: "",
+    judgement: "",
+    rate: "",
+    weight: "",
   },
   // More rubrics ...
 ];

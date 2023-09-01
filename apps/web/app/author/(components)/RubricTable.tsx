@@ -1,15 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { MouseEventHandler, useState } from "react";
 
 interface RubricTableProps {
   rubrics: any;
   onAddRow: () => void;
   onDeleteRow: (index: number) => void;
+  setRubrics: any;
 }
 
 function RubricTableProps(props: RubricTableProps) {
-  const { rubrics, onAddRow, onDeleteRow } = props;
+  const { rubrics, onAddRow, onDeleteRow, setRubrics } = props;
+
+  // state for the pencil button
+  const [inputEnabled, setInputEnabled] = useState(false);
+
+  const handleButtonClick = (value: boolean) => {
+    setInputEnabled(value);
+  };
+  //////////////////////////////////////////////////
 
   return (
     <div>
@@ -22,7 +31,7 @@ function RubricTableProps(props: RubricTableProps) {
           </h1>
         </div>
       </div>
-      <div className="mt-8 flow-root">
+      <div className="mt-8 flow-root w-[59.1rem]">
         <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
           <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
             <table
@@ -81,38 +90,125 @@ function RubricTableProps(props: RubricTableProps) {
                 {rubrics.map((rubric, index) => (
                   <tr key={rubric.key} className="divide-x divide-gray-200">
                     <td
-                      className={`whitespace-nowrap  w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
+                      className={` w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                     >
-                      <div contentEditable>{rubric.criteria}</div>
+                      <td
+                        className={` w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
+                      >
+                        <input
+                          type="text"
+                          className="w-full h-full border-transparent bg-gray-100 hover:bg-gray-300 text-sm placeholder-gray-400 hover:placeholder-white focus:outline-none focus:bg-gray-300 focus:placeholder-gray-600"
+                          placeholder="Describe the key elements of a project charter."
+                          style={{ overflowWrap: "break-word" }} // Set overflow-wrap to 'break-word'
+                          value={rubrics[index].criteria}
+                          onChange={(event) => {
+                            const newRubrics = [...rubrics];
+                            newRubrics[index].criteria = event.target.value;
+                            setRubrics(newRubrics);
+                          }}
+                        />
+                      </td>
                     </td>
-                    <td className="whitespace-nowrap p-4 text-sm text-gray-500">
-                      <div contentEditable>{rubric.judgement}</div>
+                    <td className=" p-4 text-sm text-gray-500 ">
+                      <td
+                        className={`  w-[25.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
+                      >
+                        <textarea
+                          type="text"
+                          className="w-[100%] h-[100%] border-transparent text-xs break-normal  hover:bg-gray-300 "
+                          // make the placeholder text automatically starts new line
+                          placeholder="Expands and Mentions any key elements such as; Project Purpose, Project Scope, Project Timeline, Project TeamThe student must explain each section with considerable amount of detail."
+                          value={rubrics[index].judgement}
+                          onChange={(event) => {
+                            const newRubrics = [...rubrics];
+                            newRubrics[index].judgement = event.target.value;
+                            setRubrics(newRubrics);
+                          }}
+                        />
+                      </td>
+                    </td>
+                    <td className="whitespace-nowrap p-4 text-sm text-gray-500 flex">
+                      <div className="flex items-center">
+                        <td
+                          className={`whitespace-nowrap  w-[5.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0 flex`}
+                        >
+                          <input
+                            type="text"
+                            className="w-[100%] h-[40%] items-center justify-center border-transparent ${
+                              inputEnabled ? 'bg-gray-300' : 'bg-white'
+                            } "
+                            value={rubrics[index].rate}
+                            onChange={(event) => {
+                              const newRubrics = [...rubrics];
+                              newRubrics[index].rate = event.target.value;
+                              setRubrics(newRubrics);
+                            }}
+                            disabled={!inputEnabled}
+                            onBlur={() => handleButtonClick(false)}
+                          />
+                        </td>
+                        <button onClick={() => handleButtonClick(true)}>
+                          <svg
+                            className="mr-[40px]"
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="19"
+                            height="18"
+                            viewBox="0 0 19 18"
+                            fill="none"
+                          >
+                            <path
+                              d="M13.8816 2.77258L15.2875 1.36591C15.5805 1.07284 15.978 0.908203 16.3925 0.908203C16.8069 0.908203 17.2044 1.07284 17.4975 1.36591C17.7905 1.65897 17.9552 2.05645 17.9552 2.47091C17.9552 2.88536 17.7905 3.28285 17.4975 3.57591L5.52329 15.5501C5.08273 15.9904 4.53943 16.314 3.94246 16.4917L1.70496 17.1584L2.37162 14.9209C2.54935 14.3239 2.87298 13.7806 3.31329 13.3401L13.8825 2.77258H13.8816ZM13.8816 2.77258L16.08 4.97091"
+                              stroke="#1D4ED8"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500">
                       <div className="flex items-center">
-                        <div contentEditable className="flex-grow">
-                          {rubric.rate}
-                        </div>
-                        <svg
-                          className="mr-[40px]"
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="19"
-                          height="18"
-                          viewBox="0 0 19 18"
-                          fill="none"
+                        <td
+                          className={`whitespace-nowrap  py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
                         >
-                          <path
-                            d="M13.8816 2.77258L15.2875 1.36591C15.5805 1.07284 15.978 0.908203 16.3925 0.908203C16.8069 0.908203 17.2044 1.07284 17.4975 1.36591C17.7905 1.65897 17.9552 2.05645 17.9552 2.47091C17.9552 2.88536 17.7905 3.28285 17.4975 3.57591L5.52329 15.5501C5.08273 15.9904 4.53943 16.314 3.94246 16.4917L1.70496 17.1584L2.37162 14.9209C2.54935 14.3239 2.87298 13.7806 3.31329 13.3401L13.8825 2.77258H13.8816ZM13.8816 2.77258L16.08 4.97091"
-                            stroke="#1D4ED8"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                          <input
+                            type="number"
+                            className="w-[100px] h-[100%] border-transparent  ${
+                              inputEnabled ? 'bg-gray-300' : 'bg-white'
+                            } "
+                            value={rubrics[index].weight}
+                            onChange={(event) => {
+                              const newRubrics = [...rubrics];
+                              newRubrics[index].weight = event.target.value;
+                              setRubrics(newRubrics);
+                            }}
+                            disabled={!inputEnabled}
+                            onBlur={() => handleButtonClick(false)}
+                            min={0}
+                            max={10}
+                            step={1}
                           />
-                        </svg>
+                        </td>
+                        <button onClick={() => handleButtonClick(true)}>
+                          <svg
+                            className="mr-[20px]"
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="19"
+                            height="18"
+                            viewBox="0 0 19 18"
+                            fill="none"
+                          >
+                            <path
+                              d="M13.8816 2.77258L15.2875 1.36591C15.5805 1.07284 15.978 0.908203 16.3925 0.908203C16.8069 0.908203 17.2044 1.07284 17.4975 1.36591C17.7905 1.65897 17.9552 2.05645 17.9552 2.47091C17.9552 2.88536 17.7905 3.28285 17.4975 3.57591L5.52329 15.5501C5.08273 15.9904 4.53943 16.314 3.94246 16.4917L1.70496 17.1584L2.37162 14.9209C2.54935 14.3239 2.87298 13.7806 3.31329 13.3401L13.8825 2.77258H13.8816ZM13.8816 2.77258L16.08 4.97091"
+                              stroke="#1D4ED8"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
                       </div>
-                    </td>
-                    <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm text-gray-500 sm:pr-0">
-                      <div contentEditable>{rubric.weight}</div>
                     </td>
                     <td className="whitespace-nowrap py-4 pl-4 pr-4 text-sm text-red-500">
                       <button
