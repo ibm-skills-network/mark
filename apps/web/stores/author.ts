@@ -7,11 +7,16 @@ export type AuthorState = {
   questions: Question[];
 };
 
+type OptionalQuestion = {
+  [K in keyof Question]?: Question[K];
+};
+
 export type AuthorActions = {
   setActiveAssignmentID: (id: number) => void;
   setQuestions: (questions: Question[]) => void;
   addQuestion: (question: Question) => void;
   removeQuestion: (question: number) => void;
+  modifyQuestion: (questionID: number, modifiedData: OptionalQuestion) => void;
 };
 
 export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
@@ -25,6 +30,21 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
     removeQuestion: (questionID) =>
       set((state) => ({
         questions: state.questions.filter((q) => q.id !== questionID),
+      })),
+    modifyQuestion: (questionID, modifiedData) =>
+      set((state) => ({
+        questions: state.questions.map((q) =>
+          q.id === questionID
+            ? {
+                // keep the original data
+                ...q,
+                // add the modified data to the question
+                ...modifiedData,
+              }
+            : {
+                ...q,
+              }
+        ),
       })),
   }),
   shallow

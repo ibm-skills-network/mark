@@ -7,14 +7,13 @@ import Button from "./Button";
 
 interface Props {
   questionData?: Question;
-  questionNumber: number;
   updateStatus: (status: QuestionStatus) => void;
 }
 
 function TextQuestion(props: Props) {
   const [submitted, setSubmitted] = useState<boolean>(false);
-  const { questionData, questionNumber } = props;
-  const { question, totalPoints } = questionData;
+  const { questionData } = props;
+  const { question, totalPoints, id } = questionData;
   const [answer, setAnswer] = useState<string>("");
   const handleSubmit = () => {
     setSubmitted(true);

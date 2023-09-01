@@ -29,6 +29,12 @@ export type QuestionType =
   | "URL"
   | "UPLOAD";
 
+export type QuestionTypeDropdown = {
+  value: QuestionType;
+  label: string;
+  description: string;
+};
+
 export type Scoring = {
   type:
     | "SINGLE_CRITERIA"

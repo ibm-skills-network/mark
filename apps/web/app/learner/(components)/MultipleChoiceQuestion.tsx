@@ -20,38 +20,38 @@ function MultipleChoiceQuestion(props: Props) {
 
   // CHANGE: Removed 'singleCorrect' comment since the question type itself implies if it's single or multiple correct
   const { question, choices, numRetries, type, assignmentID, id } =
-    questionData!;
+    questionData;
 
-  const correctOptions = choices
+  const correctChoices = choices
     .filter((choiceObj) => choiceObj[Object.keys(choiceObj)[0]])
     .map((choiceObj) => Object.keys(choiceObj)[0]);
 
   const [attempts, setAttempts] = useState<number>(0);
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [selectedChoices, setSelectedChoices] = useState<string[]>([]);
   const [isCorrect, setIsCorrect] = useState<"all" | "some" | "none" | null>(
     null
   );
   const [submitted, setSubmitted] = useState<boolean>(false);
 
-  const handleOptionClick = (option: string) => {
+  const handleChoiceClick = (choice: string) => {
     setSubmitted(false);
 
     if (type === "SINGLE_CORRECT") {
-      setSelectedOptions([option]);
+      setSelectedChoices([choice]);
     } else {
-      const alreadySelected = selectedOptions.includes(option);
-      const newSelectedOptions = alreadySelected
-        ? selectedOptions.filter((opt) => opt !== option)
-        : [...selectedOptions, option];
+      const alreadySelected = selectedChoices.includes(choice);
+      const newSelectedChoices = alreadySelected
+        ? selectedChoices.filter((opt) => opt !== choice)
+        : [...selectedChoices, choice];
 
-      setSelectedOptions(newSelectedOptions);
+      setSelectedChoices(newSelectedChoices);
     }
   };
 
   // For talking to backend upon submission
   const handleSubmit = async () => {
     const response: QuestionResponse = {
-      learnerChoices: selectedOptions,
+      learnerChoices: selectedChoices,
     };
     const success = await submitQuestionResponse(
       assignmentID,
@@ -69,8 +69,8 @@ function MultipleChoiceQuestion(props: Props) {
     let correctCount = 0;
     let incorrectCount = 0;
 
-    selectedOptions.forEach((option) => {
-      if (correctOptions.includes(option)) {
+    selectedChoices.forEach((choice) => {
+      if (correctChoices.includes(choice)) {
         correctCount++;
       } else {
         incorrectCount++;
@@ -81,8 +81,8 @@ function MultipleChoiceQuestion(props: Props) {
 
     let status: "correct" | "incorrect" | "partiallyCorrect" = "incorrect";
     if (
-      finalCorrectCount === correctOptions.length &&
-      selectedOptions.length === correctOptions.length
+      finalCorrectCount === correctChoices.length &&
+      selectedChoices.length === correctChoices.length
     ) {
       status = "correct";
       setIsCorrect("all");
@@ -179,16 +179,16 @@ function MultipleChoiceQuestion(props: Props) {
               key={index}
               className={`block w-full text-left p-2 mb-2 border rounded ${
                 submitted
-                  ? selectedOptions.includes(choiceText)
+                  ? selectedChoices.includes(choiceText)
                     ? isChoiceCorrect
                       ? "bg-green-100 text-black"
                       : "bg-red-100 text-black"
                     : "text-black"
-                  : selectedOptions.includes(choiceText)
+                  : selectedChoices.includes(choiceText)
                   ? "bg-blue-100 text-black"
                   : "text-black"
               }`}
-              onClick={() => handleOptionClick(choiceText)}
+              onClick={() => handleChoiceClick(choiceText)}
             >
               {choiceText}
             </button>
@@ -205,11 +205,7 @@ function MultipleChoiceQuestion(props: Props) {
             <Button
               onClick={handleSubmit}
               disabled={attempts >= numRetries}
-              className={
-                attempts >= numRetries
-                  ? "bg-white text-indigo-300 cursor-not-allowed hover:bg-white"
-                  : "hover:bg-indigo-500"
-              }
+              className="disabled:bg-white disabled:text-indigo-300 disabled:cursor-not-allowed hover:bg-indigo-500"
             >
               Submit Question
             </Button>

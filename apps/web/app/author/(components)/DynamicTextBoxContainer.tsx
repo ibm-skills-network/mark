@@ -9,13 +9,27 @@ import TextBox from "./Textbox";
 
 function DynamicTextBoxContainer() {
   const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
-  const [questions, setQuestions, removeQuestion] = useAuthorStore((state) => [
+  const [
+    questions,
+    setQuestions,
+    removeQuestion,
+    addQuestion,
+    activeAssignmentID,
+  ] = useAuthorStore((state) => [
     state.questions,
     state.setQuestions,
     state.removeQuestion,
+    state.addQuestion,
+    state.activeAssignmentID,
   ]);
   const handleAddTextBox = () => {
-    setTextBoxes((prevTextBoxes) => [...prevTextBoxes, Date.now()]); // Add a new TextBox by adding a question to the array
+    addQuestion({
+      id: questions.length + 1,
+      assignmentID: activeAssignmentID,
+      question: "",
+      totalPoints: 0,
+      type: "MULTIPLE_CORRECT",
+    });
   };
 
   const handleDeleteTextBox = (question: number) => {
@@ -34,7 +48,7 @@ function DynamicTextBoxContainer() {
             </div>
             {/* Delete question button */}
             <button
-              disabled={textBoxes.length <= 1}
+              disabled={questions.length <= 1}
               className="inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 mx-auto text-2xl leading-5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => handleDeleteTextBox(question.id)}
             >
@@ -55,7 +69,7 @@ function DynamicTextBoxContainer() {
               </svg>
             </button>
           </div>
-          <TextBox />
+          <TextBox question={question} />
         </div>
       ))}
 

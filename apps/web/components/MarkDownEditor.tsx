@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import { type ComponentPropsWithoutRef } from "react";
+import { useState, type ComponentPropsWithoutRef } from "react";
 import MdEditor from "react-markdown-editor-lite";
 import "react-markdown-editor-lite/lib/index.css";
 import { twMerge } from "tailwind-merge";
@@ -16,12 +16,14 @@ function MarkdownEditor(props: Props) {
     props;
   const mdParser = new MarkdownIt();
 
-  const wordCount = value.split(/\s+/).filter(Boolean).length; // Count number of words in value
+  const [wordCount, setWordCount] = useState<number>(
+    value.split(/\s+/).filter(Boolean).length
+  );
 
   const handleEditorChange = ({ text }: { text: string }) => {
-    const newTextWordCount = text.split(/\s+/).filter(Boolean).length; // Count number of words in new text
+    setWordCount(text.split(/\s+/).filter(Boolean).length);
 
-    if (maxWords !== undefined && newTextWordCount <= maxWords) {
+    if (maxWords !== undefined && wordCount <= maxWords) {
       setValue(text);
     } else if (maxWords === undefined) {
       setValue(text);
@@ -46,9 +48,15 @@ function MarkdownEditor(props: Props) {
       />
 
       {/* Word count display */}
-      <div className="text-gray-400 text-sm font-medium leading-tight">
-        Words: {wordCount} / {maxWords}
-      </div>
+      {maxWords !== undefined ? (
+        <div
+          className={`${
+            wordCount > maxWords ? "text-red-500" : "text-gray-400"
+          } text-sm font-medium leading-tight`}
+        >
+          Words: {wordCount} / {maxWords}
+        </div>
+      ) : null}
     </div>
   );
 }

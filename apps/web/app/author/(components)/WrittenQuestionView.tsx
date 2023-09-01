@@ -20,10 +20,10 @@ interface WrittenQuestionViewProps {
   score: any;
   switchState: any;
   setSwitchState: any;
-  optionsWrittenQuestion: any;
-  handleOptionChangeWrittenQuestion: any;
-  handleRemoveOptionWrittenQuestion: any;
-  handleAddOptionWrittenQuestion: any;
+  choicesWrittenQuestion: any;
+  handleChoiceChangeWrittenQuestion: any;
+  handleRemoveChoiceWrittenQuestion: any;
+  handleAddChoiceWrittenQuestion: any;
   initialRubrics: any;
 }
 
@@ -33,10 +33,10 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     score,
     switchState,
     setSwitchState,
-    handleOptionChangeWrittenQuestion,
-    optionsWrittenQuestion,
-    handleRemoveOptionWrittenQuestion,
-    handleAddOptionWrittenQuestion,
+    handleChoiceChangeWrittenQuestion,
+    choicesWrittenQuestion,
+    handleRemoveChoiceWrittenQuestion,
+    handleAddChoiceWrittenQuestion,
     initialRubrics,
   } = props;
 
@@ -73,7 +73,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
   return (
     <div className="mt-4">
-      <WordCountComponent text="Minimum & Maximum Word Count (Optional)" />
+      <WordCountComponent text="Minimum & Maximum Word Count (Choiceal)" />
       <div className="w-auto h-[104px]" style={{ background: "#E0E7FF" }}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -157,15 +157,15 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       {switchState === "a" && (
         <div>
           <p>Point distribution for the Rubric</p>
-          {optionsWrittenQuestion.map((option, index) => (
+          {choicesWrittenQuestion.map((choice, index) => (
             <div key={index} className="flex items-center">
               <input
                 type="text"
                 className="p-2 rounded-md text-black bg-transparent outline-none w-full" // Removed 'border ml-2' and added 'w-full'
-                placeholder={`Option ${index + 1}`}
-                value={option}
+                placeholder={`Choice ${index + 1}`}
+                value={choice}
                 onChange={(event) =>
-                  handleOptionChangeWrittenQuestion(index, event.target.value)
+                  handleChoiceChangeWrittenQuestion(index, event.target.value)
                 }
                 style={{
                   height: "2.125rem",
@@ -174,7 +174,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
               />
               <button
                 className="ml-2 text-red-600"
-                onClick={() => handleRemoveOptionWrittenQuestion(index)}
+                onClick={() => handleRemoveChoiceWrittenQuestion(index)}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -195,7 +195,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
           ))}
           <button
             className="bg-blue-500 text-white p-2 rounded-md mt-2"
-            onClick={handleAddOptionWrittenQuestion}
+            onClick={handleAddChoiceWrittenQuestion}
           >
             Add Option
           </button>

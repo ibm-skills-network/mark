@@ -5,20 +5,20 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
 
 interface SingleAnswerSectionProps {
-  optionsSingleCorrect: any;
-  selectedOptionSingleCorrect: any;
-  handleOptionToggleSingleCorrect: any;
-  handleOptionChangeSingleCorrect: any;
-  setOptionsSingleCorrect: any;
+  choicesSingleCorrect: any;
+  selectedChoiceSingleCorrect: any;
+  handleChoiceToggleSingleCorrect: any;
+  handleChoiceChangeSingleCorrect: any;
+  setChoicesSingleCorrect: any;
 }
 
 function SingleAnswerSection(props: SingleAnswerSectionProps) {
   const {
-    optionsSingleCorrect,
-    selectedOptionSingleCorrect,
-    handleOptionToggleSingleCorrect,
-    handleOptionChangeSingleCorrect,
-    setOptionsSingleCorrect,
+    choicesSingleCorrect,
+    selectedChoiceSingleCorrect,
+    handleChoiceToggleSingleCorrect,
+    handleChoiceChangeSingleCorrect,
+    setChoicesSingleCorrect,
   } = props;
 
   ////////////////////////////////////////////////////////////
@@ -26,7 +26,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
   ////////////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////////
   const [points, setPoints] = useState(
-    Array(optionsSingleCorrect.length).fill(0)
+    Array(choicesSingleCorrect.length).fill(0)
   );
 
   // Add a new function to handle changes to the points input
@@ -36,14 +36,14 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
 
     // Check if the value is a positive integer
     if (Number.isInteger(intValue) && intValue >= 0) {
-      // Update the points for the specified option
+      // Update the points for the specified choice
       const updatedPoints = [...points];
       updatedPoints[index] = intValue;
       setPoints(updatedPoints);
     }
   };
   const [showPointsInput, setShowPointsInput] = useState(
-    Array(optionsSingleCorrect.length).fill(false)
+    Array(choicesSingleCorrect.length).fill(false)
   );
 
   const handleShowPointsInputChange = (index, value) => {
@@ -60,15 +60,15 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
 
   return (
     <div className="mt-4">
-      <p>Options:</p>
-      {optionsSingleCorrect.map((option, index) => (
+      <p>Choices:</p>
+      {choicesSingleCorrect.map((choice, index) => (
         <div key={index} className="flex items-center mb-[5px]">
           <input
             type="radio"
-            name="singleCorrectOption"
-            value={option}
-            checked={option === selectedOptionSingleCorrect}
-            onChange={() => handleOptionToggleSingleCorrect(index)}
+            name="singleCorrectChoice"
+            value={choice}
+            checked={choice === selectedChoiceSingleCorrect}
+            onChange={() => handleChoiceToggleSingleCorrect(index)}
             className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
           />
           <div className="ml-2">
@@ -79,10 +79,10 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
 
           <textarea
             className="w-[800px] p-2 border-transparent mb-[10px] rounded-md text-black bg-transparent outline-none" // Removed 'border ml-2' and added 'w-full'
-            placeholder={`Option ${index + 1}`}
-            value={option}
+            placeholder={`Choice ${index + 1}`}
+            value={choice}
             onChange={(event) =>
-              handleOptionChangeSingleCorrect(index, event.target.value)
+              handleChoiceChangeSingleCorrect(index, event.target.value)
             }
             style={{
               height: "2.0rem", // Changed 'height' to 'minHeight'
@@ -94,9 +94,9 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
           <button
             className="ml-2 text-red-600"
             onClick={() => {
-              const updatedOptions = [...optionsSingleCorrect];
-              updatedOptions.splice(index, 1);
-              setOptionsSingleCorrect(updatedOptions);
+              const updatedChoices = [...choicesSingleCorrect];
+              updatedChoices.splice(index, 1);
+              setChoicesSingleCorrect(updatedChoices);
             }}
           >
             <svg
@@ -126,7 +126,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
             />
           ) : (
             <button
-              disabled={option !== selectedOptionSingleCorrect}
+              disabled={choice !== selectedChoiceSingleCorrect}
               onClick={() => handleShowPointsInputChange(index, true)}
             >
               {points[index] === undefined ? 0 : points[index]} points
@@ -137,7 +137,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
       <button
         type="button"
         className="rounded-full w-[160px] bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
-        onClick={() => setOptionsSingleCorrect([...optionsSingleCorrect, ""])}
+        onClick={() => setChoicesSingleCorrect([...choicesSingleCorrect, ""])}
       >
         <div className="flex items-center">
           <svg

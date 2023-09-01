@@ -1,67 +1,68 @@
 "use client";
 
+import type { Choice } from "@/config/types";
 import React, { useState } from "react";
 
-interface MultipleAnswerSectionProps {
-  optionsMultipleAnswers: string[]; // Replace with the appropriate type
-  selectedOptionsMultipleAnswers: string[];
-  handleOptionToggleMultipleAnswers: (selected: string) => void; // Replace with the appropriate type
-  handleOptionChangeMultipleAnswers: (index: number, value: string) => void;
-  setOptionsMultipleAnswers: (options: string[]) => void;
-  setSelectedOptionsMultipleAnswers: (selected: string[]) => void;
+interface sectionProps {
+  choices: Choice[];
+  selectedChoices: string[];
+  handleChoiceToggle: (selected: string) => void; // Replace with the appropriate type
+  handleChoiceChange: (index: number, value: string) => void;
+  setChoices: (choices: string[]) => void;
+  setSelectedChoices: (selected: string[]) => void;
 }
 
-function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
+function Section(props: sectionProps) {
   const {
-    optionsMultipleAnswers,
-    selectedOptionsMultipleAnswers,
-    handleOptionToggleMultipleAnswers,
-    handleOptionChangeMultipleAnswers,
-    setOptionsMultipleAnswers,
-    setSelectedOptionsMultipleAnswers,
+    choices,
+    selectedChoices,
+    handleChoiceToggle,
+    handleChoiceChange,
+    setChoices,
+    setSelectedChoices,
   } = props;
   const [pointInputs, setPointInputs] = useState<{ [id: string]: number }>({});
 
   const [isInputMode, setIsInputMode] = useState(false);
   const [points, setPoints] = useState(0);
 
-  const handleButtonClick = (optionId: string) => {
+  const handleButtonClick = (choiceId: string) => {
     setIsInputMode(true);
-    setPoints(pointInputs[optionId] || 0); // Set points based on existing value or default to 0
+    setPoints(pointInputs[choiceId] || 0); // Set points based on existing value or default to 0
   };
 
   const handleInputBlur = (
     event: React.FocusEvent<HTMLInputElement>,
-    optionId: string
+    choiceId: string
   ) => {
     const newPoints = parseInt(event.target.value);
-    const newPointInputs = { ...pointInputs, [optionId]: newPoints };
+    const newPointInputs = { ...pointInputs, [choiceId]: newPoints };
     setPointInputs(newPointInputs);
   };
 
-  const [optionChecked, setOptionChecked] = useState<boolean[]>(
-    Array(optionsMultipleAnswers.length).fill(false)
+  const [choiceChecked, setChoiceChecked] = useState<boolean[]>(
+    Array(choices.length).fill(false)
   );
 
   return (
     <div className="mt-4">
-      <p>Options:</p>
+      <p>Choices</p>
 
-      {optionsMultipleAnswers.map((option, index) => {
-        const optionId = `option_${index}`; // Generate a unique ID for each option
-        const isChecked = selectedOptionsMultipleAnswers.includes(optionId);
-        const isOptionChecked = optionChecked[index];
+      {choices.map((choice, index) => {
+        const choiceId = `choice_${index}`; // Generate a unique ID for each choice
+        const isChecked = selectedChoices.includes(choiceId);
+        const isChoiceChecked = choiceChecked[index];
         return (
-          <div key={optionId} className="flex items-center mb-[5px]">
+          <div key={choiceId} className="flex items-center mb-[5px]">
             <input
               type="checkbox"
-              id={optionId}
+              id={choiceId}
               checked={isChecked}
               onChange={() => {
-                handleOptionToggleMultipleAnswers(optionId);
-                const newOptionChecked = [...optionChecked];
-                newOptionChecked[index] = !newOptionChecked[index];
-                setOptionChecked(newOptionChecked);
+                handleChoiceToggle(choiceId);
+                const newChoiceChecked = [...choiceChecked];
+                newChoiceChecked[index] = !newChoiceChecked[index];
+                setChoiceChecked(newChoiceChecked);
               }}
             />
             <div className="ml-2">
@@ -71,10 +72,10 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
             </div>
             <textarea
               className="w-[800px] p-2 border-transparent mb-[10px] rounded-md text-black bg-transparent outline-none" // Removed 'border ml-2' and added 'w-full'
-              placeholder={`Option ${index + 1}`}
-              value={option}
+              placeholder={`Choice ${index + 1}`}
+              value={Object.keys(choices)}
               onChange={(event) =>
-                handleOptionChangeMultipleAnswers(index, event.target.value)
+                handleChoiceChange(index, event.target.value)
               }
               style={{
                 height: "2.0rem", // Changed 'height' to 'minHeight'
@@ -86,15 +87,13 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
             <button
               className="ml-2 text-red-600"
               onClick={() => {
-                const updatedOptions = optionsMultipleAnswers.filter(
-                  (_, i) => i !== index
+                // remove choice
+                const updatedChoices = choices.filter((_, i) => i !== index);
+                const updatedSelectedChoices = selectedChoices.filter(
+                  (id) => id !== choiceId
                 );
-                const updatedSelectedOptions =
-                  selectedOptionsMultipleAnswers.filter(
-                    (id) => id !== optionId
-                  );
-                setOptionsMultipleAnswers(updatedOptions);
-                setSelectedOptionsMultipleAnswers(updatedSelectedOptions);
+                setChoices(updatedChoices);
+                setSelectedChoices(updatedSelectedChoices);
               }}
             >
               <svg
@@ -122,14 +121,14 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
                 />
               ) : (
                 <button
-                  onClick={() => handleButtonClick(optionId)}
+                  onClick={() => handleButtonClick(choiceId)}
                   style={{
-                    color: isOptionChecked ? "blue-700" : "gray-700",
+                    color: isChoiceChecked ? "blue-700" : "gray-700",
                     borderColor: "transparent",
                     backgroundColor: "transparent",
-                    cursor: isOptionChecked ? "pointer" : "not-allowed", // Set cursor based on checkbox state
+                    cursor: isChoiceChecked ? "pointer" : "not-allowed", // Set cursor based on checkbox state
                   }}
-                  disabled={!isOptionChecked} // Disable button when checkbox is not checked
+                  disabled={!isChoiceChecked} // Disable button when checkbox is not checked
                 >
                   {0} points
                 </button>
@@ -142,9 +141,7 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
         <button
           type="button"
           className="rounded-full w-[160px] bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
-          onClick={() =>
-            setOptionsMultipleAnswers([...optionsMultipleAnswers, ""])
-          }
+          onClick={() => setChoices([...choices, ""])}
         >
           <div className="flex items-center">
             <svg
@@ -177,21 +174,21 @@ function MultipleAnswerSection(props: MultipleAnswerSectionProps) {
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
-          stroke-width="1.5"
+          strokeWidth="1.5"
           stroke="currentColor"
-          class="w-6 h-6"
+          className="w-6 h-6"
         >
           <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.249-8.25-3.286zm0 13.036h.008v.008H12v-.008z"
           />
         </svg>
         Warning: in multiple answer - multiple choice, one or more than one
-        wrong option in answer would cause 0 points in this question.
+        wrong choice in answer would cause 0 points in this question.
       </div>
     </div>
   );
 }
 
-export default MultipleAnswerSection;
+export default Section;

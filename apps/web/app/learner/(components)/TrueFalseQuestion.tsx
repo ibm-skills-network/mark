@@ -16,20 +16,20 @@ function TrueFalseQuestion(props: Props) {
   const { questionData, submissionID, updateStatus } = props;
   const { question, answer, id, assignmentID } = questionData!;
 
-  const [selectedOption, setSelectedOption] = useState<boolean | null>(null);
+  const [selectedChoice, setSelectedChoice] = useState<boolean | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);
 
-  const handleOptionClick = (option: boolean) => {
+  const handleChoiceClick = (choice: boolean) => {
     if (!submitted) {
-      setSelectedOption(option);
+      setSelectedChoice(choice);
       setSubmitted(false);
     }
   };
 
   const handleSubmit = async () => {
     const response: QuestionResponse = {
-      learnerAnswerChoice: selectedOption,
+      learnerAnswerChoice: selectedChoice,
     };
     const success = await submitQuestionResponse(
       assignmentID,
@@ -43,7 +43,7 @@ function TrueFalseQuestion(props: Props) {
 
     setSubmitted(true);
 
-    if (selectedOption === answer) {
+    if (selectedChoice === answer) {
       setIsCorrect(true);
       if (updateStatus) {
         updateStatus("correct");
@@ -101,13 +101,13 @@ function TrueFalseQuestion(props: Props) {
 
   const buttonStyle = (choice: boolean) => {
     if (submitted) {
-      if (selectedOption === choice) {
+      if (selectedChoice === choice) {
         return choice === answer
           ? "bg-green-100 text-black"
           : "bg-red-100 text-black";
       }
     } else {
-      if (selectedOption === choice) {
+      if (selectedChoice === choice) {
         return "bg-blue-100 text-black";
       }
     }
@@ -122,7 +122,7 @@ function TrueFalseQuestion(props: Props) {
           className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
             true
           )}`}
-          onClick={() => handleOptionClick(true)}
+          onClick={() => handleChoiceClick(true)}
           disabled={submitted}
         >
           True
@@ -131,7 +131,7 @@ function TrueFalseQuestion(props: Props) {
           className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
             false
           )}`}
-          onClick={() => handleOptionClick(false)}
+          onClick={() => handleChoiceClick(false)}
           disabled={submitted}
         >
           False
