@@ -21,16 +21,6 @@ function RubricTableProps(props: RubricTableProps) {
             <span className="absolute -top-1 left-38 text-blue-400">*</span>
           </h1>
         </div>
-
-        <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
-          <button
-            type="button"
-            className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-            onClick={onAddRow}
-          >
-            Add row
-          </button>
-        </div>
       </div>
       <div className="mt-8 flow-root">
         <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -150,6 +140,15 @@ function RubricTableProps(props: RubricTableProps) {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+            <button
+              type="button"
+              className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              onClick={onAddRow}
+            >
+              Add row
+            </button>
           </div>
         </div>
       </div>

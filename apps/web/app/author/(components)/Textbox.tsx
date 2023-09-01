@@ -266,19 +266,15 @@ function TextBox() {
               </pre>
             </div>
           )}
-          <div
+          <MarkdownEditor
             style={{
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
             }}
-          >
-            <MarkdownEditor
-              style={{ height: "150px", width: "1200px" }}
-              value={inputText}
-              setValue={setInputText}
-            />
-          </div>
+            value={inputText}
+            setValue={setInputText}
+          />
           {/* <div className="mt-2">
         <button
           className="bg-blue-500 text-white p-2 rounded-md"
