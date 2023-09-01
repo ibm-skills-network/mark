@@ -31,7 +31,7 @@ function RubricTableProps(props: RubricTableProps) {
           </h1>
         </div>
       </div>
-      <div className="mt-8 flow-root">
+      <div className="mt-8 flow-root w-[59.1rem]">
         <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
           <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
             <table
@@ -90,14 +90,16 @@ function RubricTableProps(props: RubricTableProps) {
                 {rubrics.map((rubric, index) => (
                   <tr key={rubric.key} className="divide-x divide-gray-200">
                     <td
-                      className={`whitespace-nowrap  w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
+                      className={` w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                     >
                       <td
-                        className={`whitespace-nowrap  w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
+                        className={` w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                       >
                         <input
                           type="text"
-                          className="ml-[40px] w-[150px] h-[60px] border-transparent bg-gray-100  hover:bg-gray-300 "
+                          className="w-full h-full border-transparent bg-gray-100 hover:bg-gray-300 text-sm placeholder-gray-400 hover:placeholder-white focus:outline-none focus:bg-gray-300 focus:placeholder-gray-600"
+                          placeholder="Describe the key elements of a project charter."
+                          style={{ overflowWrap: "break-word" }} // Set overflow-wrap to 'break-word'
                           value={rubrics[index].criteria}
                           onChange={(event) => {
                             const newRubrics = [...rubrics];
@@ -107,13 +109,15 @@ function RubricTableProps(props: RubricTableProps) {
                         />
                       </td>
                     </td>
-                    <td className="whitespace-nowrap p-4 text-sm text-gray-500 ">
+                    <td className=" p-4 text-sm text-gray-500 ">
                       <td
-                        className={`whitespace-nowrap  w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
+                        className={`  w-[25.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
                       >
-                        <input
+                        <textarea
                           type="text"
-                          className="w-[100%] h-[100%] border-transparent  hover:bg-gray-300 "
+                          className="w-[100%] h-[100%] border-transparent text-xs break-normal  hover:bg-gray-300 "
+                          // make the placeholder text automatically starts new line
+                          placeholder="Expands and Mentions any key elements such as; Project Purpose, Project Scope, Project Timeline, Project TeamThe student must explain each section with considerable amount of detail."
                           value={rubrics[index].judgement}
                           onChange={(event) => {
                             const newRubrics = [...rubrics];
