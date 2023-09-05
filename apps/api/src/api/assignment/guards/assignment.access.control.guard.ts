@@ -12,12 +12,12 @@ export class AssignmentAccessControlGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<UserRequest>();
     const { user, params } = request;
     const { id } = params;
-    const assingmentID = Number(id);
+    const assignmentID = Number(id);
 
     // Check if the logged-in user's (can be either learner or author) groupId is associated with this assignment
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {
-        assignmentId,
+        assignmentId: assignmentID,
         groupId: user.groupID,
       },
     });

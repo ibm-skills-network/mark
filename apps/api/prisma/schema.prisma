@@ -48,9 +48,9 @@ model Group {
 /// The AssignmentGroup model represents the many-to-many relationship between Assignments and Groups
 model AssignmentGroup {
   assignment       Assignment     @relation(fields: [assignmentId], references: [id])     /// The associated Assignment model
-  assignmentId     Int                                                                    /// The ID of the associated assignment
+  assignmentId     Int                                                                    /// Relation scalar field  (used in the `@relation` attribute above)
   group            Group @relation(fields: [groupId], references: [id])                   /// The associated Group model
-  groupId          String                                                                 /// The ID of the associated group
+  groupId          String                                                                 /// Relation scalar field  (used in the `@relation` attribute above)
   @@id([assignmentId, groupId])                                                           /// Unique identifier for the relationship
 }
 
