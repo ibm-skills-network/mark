@@ -22,9 +22,8 @@ export class RolesGlobalGuard implements CanActivate {
     if (!requiredRoles) {
       return true;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const request = context.switchToHttp().getRequest();
-    const { user } = request as UserRequest;
+    const request: UserRequest = context.switchToHttp().getRequest();
+    const { user } = request;
     return requiredRoles.includes(user.role);
   }
 }

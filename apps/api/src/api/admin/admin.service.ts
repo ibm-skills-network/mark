@@ -8,7 +8,6 @@ import { JwtConfigService } from "../../auth/jwt/jwt.config.service";
 import { PrismaService } from "../../prisma.service";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
-import { AdminAssignmentCloneRequestDto } from "./dto/assignment/clone.assignment.request.dto";
 import {
   AdminCreateAssignmentRequestDto,
   AdminReplaceAssignmentRequestDto,

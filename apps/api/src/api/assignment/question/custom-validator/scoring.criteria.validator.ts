@@ -1,6 +1,5 @@
 import { QuestionType } from "@prisma/client";
 import {
-  validate,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
