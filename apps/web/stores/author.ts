@@ -1,4 +1,5 @@
 import { Question } from "@/config/types";
+import { createRef, type RefObject } from "react";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 
@@ -6,6 +7,7 @@ export type AuthorState = {
   activeAssignmentID?: number;
   questions: Question[];
   assignmentTitle: string;
+  updateAssignmentButtonRef: RefObject<HTMLButtonElement>;
 };
 
 type OptionalQuestion = {
@@ -50,6 +52,7 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
       })),
     assignmentTitle: "",
     setAssignmentTitle: (title) => set({ assignmentTitle: title }),
+    updateAssignmentButtonRef: createRef<HTMLButtonElement>(),
   }),
   shallow
 );

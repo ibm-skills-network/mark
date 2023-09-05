@@ -1,5 +1,6 @@
 "use client";
 
+import { updateAssignment } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
@@ -14,6 +15,9 @@ function AuthorHeader(props: Props) {
   const pathname = usePathname();
   const assignmentID = pathname.split("/")[2]; // ex: /author/1234/introduction
   const assignmentTitle = useAuthorStore((state) => state.assignmentTitle);
+  const updateAssignmentButtonRef = useAuthorStore(
+    (state) => state.updateAssignmentButtonRef
+  );
 
   function handlePublishButton() {
     const confirmPublish = confirm("Are you sure you want to publish?");
@@ -43,6 +47,21 @@ function AuthorHeader(props: Props) {
   function getCurrentId() {
     const currentStep = steps.find((step) => step.href === pathname);
     return currentStep?.id;
+  }
+
+  function handleIncompleteClick(id) {
+    // when clicking on step 2, it will click the update button located in the bottom of the page
+    // if (id === 2) updateAssignmentButtonRef.current?.click();
+    switch (id) {
+      case 2:
+        updateAssignmentButtonRef.current?.click();
+        break;
+      case 3:
+        alert("Please complete step 2 first.");
+        break;
+      default:
+        break;
+    }
   }
 
   return (
@@ -90,7 +109,10 @@ function AuthorHeader(props: Props) {
                 </Link>
               ) : (
                 // incomplete
-                <button className="group w-full flex flex-col border-l-4 border-gray-200 py-2 pl-4 hover:border-gray-300 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4">
+                <button
+                  className="group w-full flex flex-col border-l-4 border-gray-200 py-2 pl-4 hover:border-gray-300 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
+                  onClick={() => handleIncompleteClick(id)}
+                >
                   <span className="text-sm font-medium text-gray-500 group-hover:text-gray-700">
                     Step {id}
                   </span>

@@ -20,6 +20,7 @@ const AuthorIntroduction = ({
     state.assignmentTitle,
     state.setAssignmentTitle,
   ]);
+
   const [instructions, setInstructions] = useState("");
   const [grading, setGrading] = useState<GradingData>({
     graded: true,
@@ -30,6 +31,9 @@ const AuthorIntroduction = ({
 
   const [activeAssignmentID, setActiveAssignmentID] = useAuthorStore(
     (state) => [state.activeAssignmentID, state.setActiveAssignmentID]
+  );
+  const updateAssignmentButtonRef = useAuthorStore(
+    (state) => state.updateAssignmentButtonRef
   );
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   useEffect(() => {
@@ -124,6 +128,7 @@ const AuthorIntroduction = ({
           parts of the assignment are properly filled out.
         </p>
         <button
+          ref={updateAssignmentButtonRef}
           className="mt-4 px-9 py-2 bg-blue-700 text-white shadow-md rounded-md"
           onClick={updateAssignment}
         >
