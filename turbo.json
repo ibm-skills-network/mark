@@ -8,9 +8,11 @@
     "lint": {},
     "lint:staged": {},
     "dev": {
-      "cache": false
+      "cache": false,
+      "dotEnv": [".env.local"]
     },
     "test": {
+      "dotEnv": [".env.local"],
       "outputs": ["coverage/**"],
       "dependsOn": []
     },
