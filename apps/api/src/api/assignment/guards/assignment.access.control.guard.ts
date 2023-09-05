@@ -17,7 +17,7 @@ export class AssignmentAccessControlGuard implements CanActivate {
     // Check if the logged-in user's (can be either learner or author) groupId is associated with this assignment
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {
-        assignmentId: assingmentID,
+        assignmentId,
         groupId: user.groupID,
       },
     });
