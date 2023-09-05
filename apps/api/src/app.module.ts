@@ -1,4 +1,3 @@
-import { HttpModule } from "@nestjs/axios";
 import {
   MiddlewareConsumer,
   Module,
