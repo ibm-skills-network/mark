@@ -74,7 +74,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
   return (
     <div className="mt-4">
-      <WordCountComponent text="Minimum & Maximum Word Count (Choiceal)" />
+      <WordCountComponent text="Minimum & Maximum Word Count  " />
       <div className="w-auto h-[104px]" style={{ background: "#E0E7FF" }}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
