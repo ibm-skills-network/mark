@@ -4,7 +4,6 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumber,
-  IsOptional,
   IsString,
 } from "class-validator";
 import { UserRole } from "../../../auth/interfaces/user.interface";
