@@ -6,7 +6,7 @@ function Component(props: Props) {
   const {} = props;
 
   return (
-    <div>
+    <div className="">
       <DynamicTextBoxContainer />
     </div>
   );

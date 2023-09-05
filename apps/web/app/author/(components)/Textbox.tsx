@@ -202,14 +202,7 @@ function TextBox(props: Props) {
   };
 
   return (
-    <div
-      className={`relative flex flex-col pl-2 rounded-md p-4 mx-auto my-auto`}
-      style={{
-        width: "67rem",
-        minHeight: "30.5rem",
-        maxWidth: "100%",
-      }}
-    >
+    <div className={`relative flex flex-col flex-1 max-w-6xl rounded-md`}>
       {/* Toggle view button */}
       {/* <button
         className="w-52 rounded-md bg-indigo-50 px-3.5 py-2.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-100 ml-[380px]"
@@ -236,13 +229,7 @@ function TextBox(props: Props) {
           ) : null}
         </div>
       ) : ( */}
-      <div
-        className="flex flex-col mt-8 bg-white transition border-l-8 rounded-md p-10 border-blue-700"
-        style={{
-          minWidth: "62.5625rem",
-          minHeight: "25.5rem",
-        }}
-      >
+      <div className="flex flex-col bg-white transition border-l-8 rounded-md p-10 border-blue-700">
         Question
         <MarkdownEditor
           value={"" as string}
