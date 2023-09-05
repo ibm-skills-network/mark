@@ -89,7 +89,7 @@ export class SubmissionService {
           },
           {
             createdAt: {
-              gte: timeRangeStartDate, // Get all submission wihthin the time range (for example within last 2 hours)
+              gte: timeRangeStartDate, // Get all submission within the time range (for example within last 2 hours)
               lte: new Date(),
             },
           },
@@ -101,6 +101,7 @@ export class SubmissionService {
     const ongoingSubmissions = submissions.filter(
       (sub) => !sub.submitted && sub.expiry >= new Date()
     );
+
     const submissionsInTimeRange = submissions.filter(
       (sub) =>
         sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
@@ -121,6 +122,7 @@ export class SubmissionService {
 
     //Get exising submissions count to check if new attempt is possible
     if (assignment.numAttempts) {
+      //if null then assume unlimited attempts
       const submissionCount = await this.countUserSubmissions(
         user.userID,
         assignmentID
@@ -291,6 +293,17 @@ export class SubmissionService {
     questionID: number,
     createQuestionResponseSubmissionRequestDto: CreateQuestionResponseSubmissionRequestDto
   ): Promise<CreateQuestionResponseSubmissionResponseDto> {
+    const assignmentSubmission =
+      await this.prisma.assignmentSubmission.findUnique({
+        where: { id: assignmentSubmissionID },
+      });
+
+    if (new Date() > assignmentSubmission.expiry) {
+      throw new UnprocessableEntityException(
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
+      );
+    }
+
     const question = await this.questionService.findOne(questionID);
 
     //Get exising question respones count to check if new response is possible
