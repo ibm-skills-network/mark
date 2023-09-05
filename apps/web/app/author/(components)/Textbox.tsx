@@ -245,9 +245,10 @@ function TextBox(props: Props) {
       >
         Question
         <MarkdownEditor
-          value={question.question}
+          value={"" as string}
           setValue={handleQuestionTextChange}
-          maxWords={question.maxWords}
+          textareaClassName="!min-h-[6.5rem] !max-h-72"
+          className=""
         />
         <div className="text-black font-inter leading-5 mr-2 h-4 mt-5">
           Question Type

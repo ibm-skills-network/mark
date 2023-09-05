@@ -81,7 +81,7 @@ function RubricTableProps(props: RubricTableProps) {
                     <div className="flex items-center font-normal text-0.5xl">
                       {" "}
                       {/* Adding ml-2 to move the text */}
-                      Weight
+                      Weight (%)
                     </div>
                   </th>
                 </tr>
