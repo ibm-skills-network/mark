@@ -28,6 +28,7 @@ function MarkdownEditor(props: Props) {
     } else if (maxWords === undefined) {
       setValue(text);
     }
+    setValue(text); // Temporary
   };
 
   return (
