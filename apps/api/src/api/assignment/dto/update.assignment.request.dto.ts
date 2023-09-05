@@ -58,7 +58,7 @@ export class UpdateAssignmentRequestDto {
   @ApiProperty({
     description: "Number of allowed attempts within the specified time range.",
     type: Number,
-    required: true,
+    required: false,
   })
   @IsOptional()
   @IsInt()
@@ -67,7 +67,7 @@ export class UpdateAssignmentRequestDto {
   @ApiProperty({
     description: "Time range, in hours, over which the attempts are counted.",
     type: Number,
-    required: true,
+    required: false,
   })
   @IsOptional()
   @IsInt()
