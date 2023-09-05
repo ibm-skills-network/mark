@@ -21,6 +21,7 @@ import {
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+  TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
 } from "./api-exceptions/exceptions";
 import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
 import { LearnerUpdateAssignmentSubmissionRequestDto } from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
@@ -63,24 +64,60 @@ export class SubmissionService {
     assignmentID: number,
     user: User
   ): Promise<BaseAssignmentSubmissionResponseDto> {
-    // Check if any of the existing submissions is in progress and has not expired, otherwise return exception
-    const ongoingSubmissions = await this.prisma.assignmentSubmission.findMany({
+    // Check if any of the existing submissions is in progress and has not expired and user is allowed to start a new submission, otherwise return exception
+
+    const assignment = await this.assignmentService.findOne(assignmentID, user);
+
+    // Calculate the start date of the time range.
+    let timeRangeStartDate = new Date();
+    if (assignment.attemptsTimeRange) {
+      timeRangeStartDate = new Date(
+        Date.now() - assignment.attemptsTimeRange * 60 * 60 * 1000
+      ); // Convert hours to milliseconds
+    }
+
+    const submissions = await this.prisma.assignmentSubmission.findMany({
       where: {
         userId: user.userID,
         assignmentId: assignmentID,
-        submitted: false,
-        expiry: {
-          gte: new Date(), // Compare with the current time to see if it has expired.
-        },
+        OR: [
+          {
+            submitted: false,
+            expiry: {
+              gte: new Date(), // Get any submission that is not submitted and has not expired yet too (is in progress)
+            },
+          },
+          {
+            createdAt: {
+              gte: timeRangeStartDate, // Get all submission wihthin the time range (for example within last 2 hours)
+              lte: new Date(),
+            },
+          },
+        ],
       },
     });
+
+    // Separate the submissions based on ongoing and within the time range
+    const ongoingSubmissions = submissions.filter(
+      (sub) => !sub.submitted && sub.expiry >= new Date()
+    );
+    const submissionsInTimeRange = submissions.filter(
+      (sub) =>
+        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
+    );
 
     if (ongoingSubmissions.length > 0) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
 
-    // Get assignment's allotedTime to calculate expiry for the submission and check for numAttempts
-    const assignment = await this.assignmentService.findOne(assignmentID, user);
+    if (
+      assignment.attemptsPerTimeRange &&
+      submissionsInTimeRange.length >= assignment.attemptsPerTimeRange
+    ) {
+      throw new UnprocessableEntityException(
+        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
+      );
+    }
 
     //Get exising submissions count to check if new attempt is possible
     if (assignment.numAttempts) {

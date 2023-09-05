@@ -1,21 +1,15 @@
 import { QuestionType } from "@prisma/client";
 import {
+  validate,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from "class-validator";
 import {
   CreateUpdateQuestionRequestDto,
-  Criteria,
   Scoring,
   ScoringType,
 } from "../dto/create.update.question.request.dto";
-
-type CriteriaBasedType = {
-  criteria: string;
-  performanceDescription: string;
-  maxPoints: number;
-};
 
 @ValidatorConstraint({ async: false })
 export class CustomScoringValidator implements ValidatorConstraintInterface {
@@ -50,53 +44,18 @@ export class CustomScoringValidator implements ValidatorConstraintInterface {
 
     switch (scoringType) {
       case ScoringType.CRITERIA_BASED: {
-        let totalMaxPoints = 0;
         if (!Array.isArray(criteria) || criteria.length === 0) {
           arguments_.constraints[0] =
             "criteria for CRITERIA_BASED scoring type should be a non-empty array.";
           return false;
         }
 
-        for (const criterion of criteria as CriteriaBasedType[]) {
-          if (typeof criterion !== "object" || criterion === null) {
-            arguments_.constraints[0] =
-              "Each item in the criteria array should be an object.";
-            return false;
-          }
+        const maxPointsCriterion = Math.max(
+          ...criteria.map((criterion) => criterion.points)
+        );
 
-          if (
-            !criterion["criteria"] ||
-            !criterion["performanceDescription"] ||
-            criterion["maxPoints"] === undefined
-          ) {
-            arguments_.constraints[0] =
-              "Each criterion object should have all three fields: criteria, performanceDescription, and maxPoints.";
-            return false;
-          }
-
-          if (typeof criterion["criteria"] !== "string") {
-            arguments_.constraints[0] =
-              "Each criterion in the criteria array should have a 'criteria' field of type string.";
-            return false;
-          }
-
-          if (typeof criterion["performanceDescription"] !== "string") {
-            arguments_.constraints[0] =
-              "Each criterion in the criteria array should have a 'performanceDescription' field of type string.";
-            return false;
-          }
-
-          if (typeof criterion["maxPoints"] !== "number") {
-            arguments_.constraints[0] =
-              "Each criterion in the criteria array should have a 'maxPoints' field of type number.";
-            return false;
-          }
-
-          totalMaxPoints += criterion["maxPoints"];
-        }
-
-        if (totalMaxPoints !== totalPoints) {
-          arguments_.constraints[0] = `The sum of maxPoints in criteria should exactly add up to ${totalPoints}.`;
+        if (maxPointsCriterion !== totalPoints) {
+          arguments_.constraints[0] = `The max points criterion specified should have a point value that should be exactly be equal to totalPoints of the question i.e. ${totalPoints}.`;
           return false;
         }
 

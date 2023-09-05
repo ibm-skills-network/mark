@@ -6,37 +6,13 @@
   "graded": true,
   "numAttempts": 5,
   "allotedTime": 60,
+  "attemptsPerTimeRange": 5,
+  "attemptsTimeRange": 2,
   "passingGrade": 70,
   "displayOrder": "RANDOM",
   "exercises": [
     {
-      "totalPoints": 5,
-      "numRetries": 2,
-      "type": "TEXT",
-      "question": "What is 2+2?",
-      "scoring": {
-        "type": "MULTIPLE_CRITERIA",
-        "criteria": {
-          "introduction": {
-            "10": "The learner gets the correct answer",
-            "5": "The learner is within 1 of the correct answer",
-            "0": "The learner gets the wrong answer"
-          },
-          "conclusion": {
-            "10": "The learner gets the correct answer",
-            "5": "The learner is within 1 of the correct answer",
-            "0": "The learner gets the wrong answer"
-          },
-          "creativity": {
-            "10": "The learner shows creativity in the response",
-            "5": "The learner shows some creativity in the response",
-            "0": "The learner does not show creativity in the response"
-          }
-        }
-      }
-    },
-    {
-      "totalPoints": 4,
+      "totalPoints": 3,
       "numRetries": 3,
       "type": "TEXT",
       "question": "Write a brief note about the significance of the Pythagoras theorem in mathematics.",
@@ -44,19 +20,12 @@
         "type": "CRITERIA_BASED",
         "criteria": [
           {
-            "criteria": "Accuracy",
-            "performanceDescription": "The learner provides an accurate description of the Pythagoras theorem and its significance.",
-            "maxPoints": 2
+            "points": 1,
+            "description": "The learner provides a basic description of the Pythagoras theorem."
           },
           {
-            "criteria": "Clarity",
-            "performanceDescription": "The learner's response is clear, concise, and easy to understand.",
-            "maxPoints": 1
-          },
-          {
-            "criteria": "Writing style",
-            "performanceDescription": "The learner's response has good grammar, sentence structure, and is well-organized.",
-            "maxPoints": 1
+            "points": 3,
+            "description": "The learner's response is clear, accurate, and easy to understand with a good writing style."
           }
         ]
       }
@@ -69,7 +38,7 @@
       "answer": true
     },
     {
-      "totalPoints": 4,
+      "totalPoints": 2,
       "numRetries": 2,
       "type": "SINGLE_CORRECT",
       "question": "What is the square root of 64?",
@@ -77,16 +46,10 @@
         "6": false,
         "8": true,
         "10": false
-      },
-      "scoring": {
-        "type": "LOSS_PER_MISTAKE",
-        "criteria": {
-          "loss_per_mistake": 1
-        }
       }
     },
     {
-      "totalPoints": 4,
+      "totalPoints": 2,
       "type": "MULTIPLE_CORRECT",
       "numRetries": 0,
       "question": "Which of the following are prime numbers?",
@@ -95,12 +58,6 @@
         "7": true,
         "13": true,
         "15": false
-      },
-      "scoring": {
-        "type": "LOSS_PER_MISTAKE",
-        "criteria": {
-          "loss_per_mistake": 1
-        }
       }
     },
     {
@@ -112,19 +69,12 @@
         "type": "CRITERIA_BASED",
         "criteria": [
           {
-            "criteria": "Validity",
-            "performanceDescription": "URL points to a valid repository",
-            "maxPoints": 3
+            "points": 2,
+            "description": "URL points to a valid repository."
           },
           {
-            "criteria": "Accessibility",
-            "performanceDescription": "The repository is fully accessible",
-            "maxPoints": 1
-          },
-          {
-            "criteria": "Relevance",
-            "performanceDescription": "The repository is relevant to the assignment",
-            "maxPoints": 1
+            "points": 5,
+            "description": "The repository is fully accessible and relevant to the assignment."
           }
         ]
       }
@@ -138,19 +88,12 @@
         "type": "CRITERIA_BASED",
         "criteria": [
           {
-            "criteria": "Comprehensiveness",
-            "performanceDescription": "Document covers all required aspects of the project findings",
-            "maxPoints": 4
+            "points": 7,
+            "description": "Document is well-organized, logically structured, and written in clear, concise language and covers all required aspects of the project findings."
           },
           {
-            "criteria": "Structure",
-            "performanceDescription": "Document is well-organized and logically structured",
-            "maxPoints": 2
-          },
-          {
-            "criteria": "Clarity",
-            "performanceDescription": "Language is clear, concise, and free of jargon",
-            "maxPoints": 1
+            "points": 3,
+            "description": "Document is well-organized, logically structured, and written in clear, concise language."
           }
         ]
       }
