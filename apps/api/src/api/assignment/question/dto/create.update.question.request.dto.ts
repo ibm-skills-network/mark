@@ -39,7 +39,7 @@ export class Scoring {
   @IsEnum(ScoringType)
   type: ScoringType;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description:
       'The scoring criteria. (Not required only if type is "AI_GRADED").',
     type: [Criteria],
