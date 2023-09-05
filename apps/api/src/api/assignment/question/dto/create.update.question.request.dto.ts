@@ -6,10 +6,12 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
   Validate,
+  ValidateNested,
 } from "class-validator";
 import { CustomScoringValidator } from "../custom-validator/scoring.criteria.validator";
 
@@ -19,7 +21,12 @@ export enum ScoringType {
   AI_GRADED = "AI_GRADED",
 }
 
-export type Criteria = Record<string, unknown>;
+export class Criteria {
+  @IsNumber()
+  points: number;
+  @IsString()
+  description: string;
+}
 
 export class Scoring {
   @ApiProperty({
@@ -38,7 +45,8 @@ export class Scoring {
     type: Object,
     additionalProperties: true,
   })
-  criteria: Criteria | null;
+  @IsOptional()
+  criteria: Criteria[] | null;
 }
 
 export class CreateUpdateQuestionRequestDto {
@@ -89,6 +97,7 @@ export class CreateUpdateQuestionRequestDto {
   @ApiPropertyOptional({ description: "The scoring criteria.", type: Scoring })
   @IsOptional()
   @Type(() => Scoring)
+  @ValidateNested()
   @Validate(CustomScoringValidator, [{ alwaysValidate: true }])
   scoring?: Scoring;
 

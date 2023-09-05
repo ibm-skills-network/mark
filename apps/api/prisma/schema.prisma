@@ -10,157 +10,102 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// This enum represents the types of assignments
-// AI_GRADED: The assignment is graded by an AI
-// MANUAL: The assignment is manually graded by a human
+/// This enum represents the types of assignments
 enum AssignmentType {
-  AI_GRADED
-  MANUAL
+  AI_GRADED         /// The assignment is graded by an AI
+  MANUAL            /// The assignment is manually graded by a human
 }
 
-// This enum defines the order in which assignments are displayed
-// DEFINED: The assignments are displayed in a predefined order
-// RANDOM: The assignments are displayed in a random order
+/// This enum defines the order in which assignments are displayed
 enum AssignmentDisplayOrder {
-  DEFINED
-  RANDOM
+  DEFINED           /// The assignments are displayed in a predefined order
+  RANDOM            /// The assignments are displayed in a random order
 }
 
-// This enum represents the types of questions that can be part of an assignment
-// TEXT: The question requires a text response
-// SINGLE_CORRECT: The question has multiple choices, only one of which is correct
-// MULTIPLE_CORRECT: The question has multiple choices, more than one of which can be correct
-// TRUE_FALSE: The question requires a True/False response
-// URL: The question requires a URL response
-// UPLOAD: The question requires the upload of a file as a response
+/// This enum represents the types of questions that can be part of an assignment
 enum QuestionType {
-  TEXT
-  SINGLE_CORRECT
-  MULTIPLE_CORRECT
-  TRUE_FALSE
-  URL
-  UPLOAD
+  TEXT                  /// The question requires a text response
+  SINGLE_CORRECT        /// The question has multiple choices, only one of which is correct
+  MULTIPLE_CORRECT      /// The question has multiple choices, more than one of which can be correct
+  TRUE_FALSE            /// The question requires a True/False response
+  URL                   /// The question requires a URL response
+  UPLOAD                /// The question requires the upload of a file as a response
 }
 
-// This enum represents the ways in which an assignment can be scored
-// SINGLE_CRITERIA: The assignment is scored based on specifying one or more criterias
-// LOSS_PER_MISTAKE: Points are deducted for each mistake in the assignment
-// AI_GRADED: The assignment is graded by an AI
+/// This enum represents the ways in which an assignment can be scored
 enum ScoringType {
-  CRITERIA_BASED
-  LOSS_PER_MISTAKE
-  AI_GRADED
+  CRITERIA_BASED       /// The assignment is scored based on specifying one or more criterias
+  LOSS_PER_MISTAKE     /// Points are deducted for each mistake in the assignment
+  AI_GRADED            /// The assignment is graded by an AI
 }
 
-// The Group model represents a particular group of users (having the same groupID)
-// id: Unique identifier for the group
-// name: Name of the group
-// assignments: The list of assignments associated with this group
+/// The Group model represents a particular group of users (having the same groupID)
 model Group {
-  id          String         @unique
-  assignments AssignmentGroup[]
+  id          String         @unique      /// Unique ID of the course
+  assignments AssignmentGroup[]           /// The list of assignments associated with this group
 }
 
-// The AssignmentGroup model represents the many-to-many relationship
-// between Assignments and Groups
-// id: Unique identifier for the relationship
-// assignmentId: The ID of the associated assignment
-// groupId: The ID of the associated group
-// assignment: The associated Assignment model
-// group: The associated Group model
+/// The AssignmentGroup model represents the many-to-many relationship between Assignments and Groups
 model AssignmentGroup {
-  assignment       Assignment     @relation(fields: [assignmentId], references: [id])
-  assignmentId     Int
-  group            Group @relation(fields: [groupId], references: [id])
-  groupId          String
-  @@id([assignmentId, groupId])
+  assignment       Assignment     @relation(fields: [assignmentId], references: [id])     /// The associated Assignment model
+  assignmentId     Int                                                                    /// The ID of the associated assignment
+  group            Group @relation(fields: [groupId], references: [id])                   /// The associated Group model
+  groupId          String                                                                 /// The ID of the associated group
+  @@id([assignmentId, groupId])                                                           /// Unique identifier for the relationship
 }
 
-// The Assignment model represents a particular assignment
-// id: Unique identifier for the assignment
-// name: Name of the assignment
-// introduction: Introduction Paragraph for the assignment
-// instructions: Instructions for the assingment 
-// type: Type of assignment
-// graded: Is the assignment graded or not
-// numAttempts: Max number of times a learner can attempt the assignment
-// allotedTime: Time allotted to complete the assignment in minutes
-// passingGrade: The minimum grade required to pass the assignment
-// displayOrder: The order in which the assignment is displayed
-// questions: The list of questions in the assignment
+/// The Assignment model represents a particular assignment
 model Assignment {
-  id              Int                     @id @default(autoincrement())
-  name            String
-  introduction    String?
-  instructions    String?
-  type            AssignmentType
-  graded          Boolean?
-  numAttempts     Int?
-  allotedTime     Int?
-  passingGrade    Int?
-  displayOrder    AssignmentDisplayOrder?
-  questions       Question[]
-  groups          AssignmentGroup[]
+  id              Int                     @id @default(autoincrement())         /// Unique identifier for the assignment
+  name            String                                                        /// Name of the assignment
+  introduction    String?                                                       /// Introduction Paragraph for the assignment
+  instructions    String?                                                       /// Instructions for the assignment
+  type            AssignmentType                                                /// Type of assignment
+  graded          Boolean?                                                      /// Is the assignment graded or not
+  numAttempts     Int?                                                          /// Max number of times a learner can attempt the assignment
+  allotedTime     Int?                                                          /// Time allotted to complete the assignment in minutes
+  attemptsPerTimeRange Int?                                                     /// Number of allowed attempts within the specified time range.
+  attemptsTimeRange    Int?                                                     /// Time range, in hours, over which the attempts are counted.
+  passingGrade    Int?                                                          /// The minimum grade required to pass the assignment
+  displayOrder    AssignmentDisplayOrder?                                       /// The order in which the assignment is displayed
+  questions       Question[]                                                    /// The list of questions in the assignment
+  groups          AssignmentGroup[]                                             /// List of groups associated with the assignment
 }
 
-// The Question model represents a question in an assignment
-// id: Unique identifier for the question
-// totalPoints: Total points that can be scored for the question
-// numRetries: Max number of times a student can retry a question
-// type: Type of question
-// question: The text of the question
-// max words: optional maximum number of words allowed for a written response type question
-// scoring: Scoring details for the question, stored as JSON
-// choices: Possible choices for the question, stored as JSON
-// answer: The correct answer for the question (used for auto grading)
-// assignmentId: The ID of the assignment to which the question belongs
-// assignment: The assignment to which the question belongs
+/// The Question model represents a question in an assignment
 model Question {
-  id           Int          @id @default(autoincrement())
-  totalPoints  Int
-  numRetries   Int
-  type         QuestionType
-  question     String
-  maxWords     Int?
-  scoring      Json?
-  choices      Json?
-  answer       Boolean?
-  assignmentId Int
-  assignment   Assignment   @relation(fields: [assignmentId], references: [id])
+  id           Int          @id @default(autoincrement())         /// Unique identifier for the question
+  totalPoints  Int                                                /// Total points that can be scored for the question
+  numRetries   Int                                                /// Max number of times a student can retry a question
+  type         QuestionType                                       /// Type of question
+  question     String                                             /// The text of the question
+  maxWords     Int?                                               /// optional maximum number of words allowed for a written response type question
+  scoring      Json?                                              /// Scoring details for the question, stored as JSON
+  choices      Json?                                              /// Possible choices for the question, stored as JSON
+  answer       Boolean?                                           /// The correct answer for the question (used for auto grading)
+  assignmentId Int                                                /// The ID of the assignment to which the question belongs
+  assignment   Assignment   @relation(fields: [assignmentId], references: [id])   /// The assignment to which the question belongs
 }
 
-// This model represents an assignment submission by a learner
-// id: Unique identifier for the assignment submission
-// assignmentId: The ID of the assignment that has been submitted
-// questionResponses: The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
-// submitted: Boolean value representing if the submission is submitted by the learner or not
-// grade: The overall LTI grade value (from 0.0 - 1.0) that the learner earned 
-// userId: The id of the user who created this submission
-// expiry: The DateTime at which the submission window ends (can no longer submit it)
+/// This model represents an assignment submission by a learner
 model AssignmentSubmission {
-  id                Int                @id @default(autoincrement())
-  assignmentId      Int
-  userId            String
-  questionResponses QuestionResponse[]
-  submitted         Boolean
-  grade             Float?
-  expiry            DateTime?
+  id                Int                @id @default(autoincrement())         /// Unique identifier for the assignment submission
+  assignmentId      Int                                                      /// The ID of the assignment that has been submitted
+  userId            String                                                   /// The id of the user who created this submission
+  questionResponses QuestionResponse[]                                       /// The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
+  submitted         Boolean                                                  /// Boolean value representing if the submission is submitted by the learner or not
+  grade             Float?                                                   /// The overall LTI grade value (from 0.0 - 1.0) that the learner earned 
+  expiry            DateTime?                                                /// The DateTime at which the submission window ends (can no longer submit it)
+  createdAt         DateTime @default(now())
 }
 
-// This model represents a student's response to a question
-// id: Unique identifier for the question response
-// assignmentSubmissionId: The ID of the assignment submission that includes this response
-// assignmentSubmission: The assignment submission that includes this response
-// questionId: The ID of the question to which the student is responding
-// learnerResponse: The student's response to the question
-// points: The points earned by the student for this response
-// feedback: Feedback on the student's response, stored as JSON
+/// This model represents a student's response to a question
 model QuestionResponse {
-  id                     Int                  @id @default(autoincrement())
-  assignmentSubmissionId Int
-  assignmentSubmission   AssignmentSubmission @relation(fields: [assignmentSubmissionId], references: [id])
-  questionId             Int
-  learnerResponse        String
-  points                 Int
-  feedback               Json
+  id                     Int                  @id @default(autoincrement())       /// Unique identifier for the question response
+  assignmentSubmissionId Int                                                      /// The ID of the assignment submission that includes this response
+  assignmentSubmission   AssignmentSubmission @relation(fields: [assignmentSubmissionId], references: [id])   /// The assignment submission that includes this response
+  questionId             Int                                                      /// The ID of the question to which the student is responding
+  learnerResponse        String                                                   /// The student's response to the question
+  points                 Int                                                      /// The points earned by the student for this response
+  feedback               Json                                                     /// Feedback on the student's response, stored as JSON
 }

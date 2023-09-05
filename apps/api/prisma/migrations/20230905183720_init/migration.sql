@@ -33,6 +33,8 @@ CREATE TABLE "Assignment" (
     "graded" BOOLEAN,
     "numAttempts" INTEGER,
     "allotedTime" INTEGER,
+    "attemptsPerTimeRange" INTEGER,
+    "attemptsTimeRange" INTEGER,
     "passingGrade" INTEGER,
     "displayOrder" "AssignmentDisplayOrder",
 
@@ -63,6 +65,7 @@ CREATE TABLE "AssignmentSubmission" (
     "submitted" BOOLEAN NOT NULL,
     "grade" DOUBLE PRECISION,
     "expiry" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "AssignmentSubmission_pkey" PRIMARY KEY ("id")
 );

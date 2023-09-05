@@ -8,3 +8,5 @@ export const GRADE_SUBMISSION_EXCEPTION =
   "Failed to submit the final grade to lms.";
 export const IN_PROGRESS_SUBMISSION_EXCEPTION =
   "A submission is already in progress and has not expired.";
+export const TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE =
+  "You have exceeded the allowed number of attempts within the specified time range.";
