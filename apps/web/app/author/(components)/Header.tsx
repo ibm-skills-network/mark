@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { EyeIcon } from "@heroicons/react/outline";
@@ -12,6 +13,7 @@ function AuthorHeader(props: Props) {
   const {} = props;
   const pathname = usePathname();
   const assignmentID = pathname.split("/")[2]; // ex: /author/1234/introduction
+  const assignmentTitle = useAuthorStore((state) => state.assignmentTitle);
 
   function handlePublishButton() {
     const confirmPublish = confirm("Are you sure you want to publish?");
@@ -55,7 +57,7 @@ function AuthorHeader(props: Props) {
             className="text-lg font-semibold leading-6"
           />
           <div className="text-gray-500 font-medium text-sm leading-5">
-            title of assignment
+            {assignmentTitle || "Untitled Assignment"}
           </div>
         </div>
       </div>

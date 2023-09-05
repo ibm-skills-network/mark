@@ -16,7 +16,10 @@ const AuthorIntroduction = ({
 }) => {
   const router = useRouter();
   const [introduction, setIntroduction] = useState("");
-  const [assignmentTitle, setAssignmentTitle] = useState("");
+  const [assignmentTitle, setAssignmentTitle] = useAuthorStore((state) => [
+    state.assignmentTitle,
+    state.setAssignmentTitle,
+  ]);
   const [instructions, setInstructions] = useState("");
   const [grading, setGrading] = useState<GradingData>({
     graded: true,

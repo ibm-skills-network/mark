@@ -5,6 +5,7 @@ import { createWithEqualityFn } from "zustand/traditional";
 export type AuthorState = {
   activeAssignmentID?: number;
   questions: Question[];
+  assignmentTitle: string;
 };
 
 type OptionalQuestion = {
@@ -17,6 +18,7 @@ export type AuthorActions = {
   addQuestion: (question: Question) => void;
   removeQuestion: (question: number) => void;
   modifyQuestion: (questionID: number, modifiedData: OptionalQuestion) => void;
+  setAssignmentTitle: (title: string) => void;
 };
 
 export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
@@ -46,6 +48,8 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
               }
         ),
       })),
+    assignmentTitle: "",
+    setAssignmentTitle: (title) => set({ assignmentTitle: title }),
   }),
   shallow
 );

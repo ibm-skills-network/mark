@@ -1,6 +1,6 @@
 "use client";
 
-import { Question, QuestionStatus } from "@/config/types";
+import type { QuestionStatus } from "@/config/types";
 import { questionsData } from "@config/constants";
 import Button from "@learnerComponents/Button";
 import Overview from "@learnerComponents/Overview";
