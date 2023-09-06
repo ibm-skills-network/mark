@@ -21,7 +21,7 @@ function RubricTableProps(props: RubricTableProps) {
   //////////////////////////////////////////////////
 
   return (
-    <div>
+    <div className="w-[802px]">
       {" "}
       <div className="sm:flex sm:items-center">
         <div className="sm:flex-auto">
@@ -31,7 +31,7 @@ function RubricTableProps(props: RubricTableProps) {
           </h1>
         </div>
       </div>
-      <div className="mt-8 flow-root w-[59.1rem]">
+      <div className="mt-8 flex">
         <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
           <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
             <table
@@ -46,7 +46,7 @@ function RubricTableProps(props: RubricTableProps) {
                 <tr className="divide-x divide-gray-200">
                   <th
                     scope="col"
-                    className="py-3.5 pl-4 pr-4 w-[19.70812rem] h-[2.75rem] text-left text-sm font-semibold bg-gray-100 text-gray-900 sm:pl-0"
+                    className="py-3.5 pl-4 pr-4 h-[2.75rem] text-left text-sm font-semibold bg-gray-100 text-gray-900 sm:pl-0"
                   >
                     <div className="flex items-center font-normal ml-8 text-0.5xl">
                       {" "}
@@ -56,7 +56,7 @@ function RubricTableProps(props: RubricTableProps) {
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3.5 w-[22.5rem] h-[1.25rem] text-left text-sm font-semibold text-gray-900"
+                    className="px-4 py-3.5 h-[1.25rem] text-left text-sm font-semibold text-gray-900"
                   >
                     <div className="flex items-center font-normal ml-2 text-0.5xl">
                       {" "}
@@ -66,7 +66,7 @@ function RubricTableProps(props: RubricTableProps) {
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3.5 w-[8.2rem] h-[2.75rem]  text-left text-sm font-semibold text-gray-900"
+                    className="px-4 py-3.5 h-[2.75rem]  text-left text-sm font-semibold text-gray-900"
                   >
                     <div className="flex items-center font-normal ml-1">
                       {" "}
@@ -90,10 +90,10 @@ function RubricTableProps(props: RubricTableProps) {
                 {rubrics.map((rubric, index) => (
                   <tr key={rubric.key} className="divide-x divide-gray-200">
                     <td
-                      className={` w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
+                      className={` h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                     >
                       <td
-                        className={` w-[19.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
+                        className={` h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
                       >
                         <input
                           type="text"
@@ -111,7 +111,7 @@ function RubricTableProps(props: RubricTableProps) {
                     </td>
                     <td className=" p-4 text-sm text-gray-500 ">
                       <td
-                        className={`  w-[25.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
+                        className={` h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
                       >
                         <textarea
                           type="text"
@@ -130,7 +130,7 @@ function RubricTableProps(props: RubricTableProps) {
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500 flex">
                       <div className="flex items-center">
                         <td
-                          className={`whitespace-nowrap  w-[5.6875rem] h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0 flex`}
+                          className={`whitespace-nowrap  h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0 flex`}
                         >
                           <input
                             type="text"
@@ -174,7 +174,7 @@ function RubricTableProps(props: RubricTableProps) {
                         >
                           <input
                             type="number"
-                            className="w-[100px] h-[100%] border-transparent  ${
+                            className=" h-[100%] border-transparent  ${
                               inputEnabled ? 'bg-gray-300' : 'bg-white'
                             } "
                             value={rubrics[index].weight}
@@ -240,7 +240,7 @@ function RubricTableProps(props: RubricTableProps) {
           <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
             <button
               type="button"
-              className="block w-[10rem] h-[2.5rem] rounded-md bg-gray-200 px-3 py-2 text-center text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              className="block h-[2.5rem] rounded-md bg-gray-200 px-3 py-2 text-center text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
               onClick={onAddRow}
             >
               Add Criteria
