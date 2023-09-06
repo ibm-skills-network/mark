@@ -17,7 +17,7 @@ enum AssignmentType {
 }
 
 /// This enum defines the order in which assignments are displayed
-enum AssignmentDisplayOrder {
+enum AssignmentQuestionDisplayOrder {
   DEFINED           /// The assignments are displayed in a predefined order
   RANDOM            /// The assignments are displayed in a random order
 }
@@ -67,7 +67,7 @@ model Assignment {
   attemptsPerTimeRange Int?                                                     /// Number of allowed attempts within the specified time range.
   attemptsTimeRange    Int?                                                     /// Time range, in hours, over which the attempts are counted.
   passingGrade    Int?                                                          /// The minimum grade required to pass the assignment
-  displayOrder    AssignmentDisplayOrder?                                       /// The order in which the assignment is displayed
+  displayOrder    AssignmentQuestionDisplayOrder?                                       /// The order in which the assignment is displayed
   questions       Question[]                                                    /// The list of questions in the assignment
   groups          AssignmentGroup[]                                             /// List of groups associated with the assignment
 }
@@ -95,7 +95,7 @@ model AssignmentSubmission {
   questionResponses QuestionResponse[]                                       /// The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
   submitted         Boolean                                                  /// Boolean value representing if the submission is submitted by the learner or not
   grade             Float?                                                   /// The overall LTI grade value (from 0.0 - 1.0) that the learner earned 
-  expiry            DateTime?                                                /// The DateTime at which the submission window ends (can no longer submit it)
+  expiresAt            DateTime?                                                /// The DateTime at which the submission window ends (can no longer submit it)
   createdAt         DateTime @default(now())
 }
 

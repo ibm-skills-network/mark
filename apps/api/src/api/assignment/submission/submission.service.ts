@@ -83,7 +83,7 @@ export class SubmissionService {
         OR: [
           {
             submitted: false,
-            expiry: {
+            expiresAt: {
               gte: new Date(), // Get any submission that is not submitted and has not expired yet too (is in progress)
             },
           },
@@ -99,7 +99,7 @@ export class SubmissionService {
 
     // Separate the submissions based on ongoing and within the time range
     const ongoingSubmissions = submissions.filter(
-      (sub) => !sub.submitted && sub.expiry >= new Date()
+      (sub) => !sub.submitted && sub.expiresAt >= new Date()
     );
 
     const submissionsInTimeRange = submissions.filter(
@@ -136,17 +136,17 @@ export class SubmissionService {
     }
 
     // eslint-disable-next-line unicorn/no-null
-    let submissionExpiry: Date | null = null;
+    let submissionexpiresAt: Date | null = null;
     if (assignment.allotedTime) {
       const currentDate = new Date();
-      submissionExpiry = new Date(
+      submissionexpiresAt = new Date(
         currentDate.getTime() + assignment.allotedTime * 60 * 1000
       );
     }
 
     const result = await this.prisma.assignmentSubmission.create({
       data: {
-        expiry: submissionExpiry,
+        expiresAt: submissionexpiresAt,
         submitted: false,
         assignmentId: assignmentID,
         // eslint-disable-next-line unicorn/no-null
@@ -172,7 +172,7 @@ export class SubmissionService {
         where: { id: assignmentSubmissionID },
       });
 
-    if (new Date() > assignmentSubmission.expiry) {
+    if (new Date() > assignmentSubmission.expiresAt) {
       throw new UnprocessableEntityException(
         SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );
@@ -298,7 +298,7 @@ export class SubmissionService {
         where: { id: assignmentSubmissionID },
       });
 
-    if (new Date() > assignmentSubmission.expiry) {
+    if (new Date() > assignmentSubmission.expiresAt) {
       throw new UnprocessableEntityException(
         SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );

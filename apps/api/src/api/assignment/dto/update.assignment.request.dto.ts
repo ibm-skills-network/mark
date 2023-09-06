@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AssignmentDisplayOrder } from "@prisma/client";
+import { AssignmentQuestionDisplayOrder } from "@prisma/client";
 import {
   IsBoolean,
   IsEnum,
@@ -85,9 +85,9 @@ export class UpdateAssignmentRequestDto {
   @ApiProperty({
     description: "The display order of the assignment.",
     required: false,
-    enum: AssignmentDisplayOrder,
+    enum: AssignmentQuestionDisplayOrder,
   })
   @IsOptional()
-  @IsEnum(AssignmentDisplayOrder)
-  displayOrder: AssignmentDisplayOrder | null;
+  @IsEnum(AssignmentQuestionDisplayOrder)
+  displayOrder: AssignmentQuestionDisplayOrder | null;
 }
