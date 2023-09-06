@@ -1,5 +1,7 @@
 import type { Config } from "jest";
 
+process.env.OPENAI_API_KEY = "dummy-key"; // pragma: allowlist secret
+
 const config: Config = {
   moduleFileExtensions: ["js", "json", "ts"],
   rootDir: "src",
