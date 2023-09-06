@@ -17,12 +17,12 @@
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/main",
-    "test": "jest",
-    "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:staged": "jest --bail --findRelatedTests --passWithNoTests --collectCoverage=false",
-    "test:watch": "jest --watch"
+    "test": "op run --env-file=./dev.env -- jest",
+    "test:cov": "op run --env-file=./dev.env -- jest --coverage",
+    "test:debug": "op run --env-file=./dev.env -- node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:e2e": "op run --env-file=./dev.env -- jest --config ./test/jest-e2e.json",
+    "test:staged": "op run --env-file=./dev.env -- jest --bail --findRelatedTests --passWithNoTests --collectCoverage=false",
+    "test:watch": "op run --env-file=./dev.env -- jest --watch"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.0",

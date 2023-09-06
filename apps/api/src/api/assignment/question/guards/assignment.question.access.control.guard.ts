@@ -11,13 +11,13 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const request = context.switchToHttp().getRequest<UserRequest>();
     const { user, params } = request;
-    const { assignmentId, id } = params;
-    const assingmentID = Number(assignmentId);
+    const { assignmentId: assignmentIdString, id } = params;
+    const assignmentId = Number(assignmentIdString);
 
     // Check if the logged-in user's groupId is associated with this assignment
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {
-        assignmentId: assingmentID,
+        assignmentId,
         groupId: user.groupID,
       },
     });
@@ -35,7 +35,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
       const questionInAssignment = await this.prisma.question.findFirst({
         where: {
           id: questionID,
-          assignmentId: assingmentID,
+          assignmentId,
         },
       });
 
