@@ -2,7 +2,7 @@
 CREATE TYPE "AssignmentType" AS ENUM ('AI_GRADED', 'MANUAL');
 
 -- CreateEnum
-CREATE TYPE "AssignmentDisplayOrder" AS ENUM ('DEFINED', 'RANDOM');
+CREATE TYPE "AssignmentQuestionDisplayOrder" AS ENUM ('DEFINED', 'RANDOM');
 
 -- CreateEnum
 CREATE TYPE "QuestionType" AS ENUM ('TEXT', 'SINGLE_CORRECT', 'MULTIPLE_CORRECT', 'TRUE_FALSE', 'URL', 'UPLOAD');
@@ -36,7 +36,7 @@ CREATE TABLE "Assignment" (
     "attemptsPerTimeRange" INTEGER,
     "attemptsTimeRange" INTEGER,
     "passingGrade" INTEGER,
-    "displayOrder" "AssignmentDisplayOrder",
+    "displayOrder" "AssignmentQuestionDisplayOrder",
 
     CONSTRAINT "Assignment_pkey" PRIMARY KEY ("id")
 );
@@ -64,7 +64,7 @@ CREATE TABLE "AssignmentSubmission" (
     "userId" TEXT NOT NULL,
     "submitted" BOOLEAN NOT NULL,
     "grade" DOUBLE PRECISION,
-    "expiry" TIMESTAMP(3),
+    "expiresAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "AssignmentSubmission_pkey" PRIMARY KEY ("id")

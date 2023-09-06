@@ -39,7 +39,7 @@ export class AssignmentSubmissionResponseDto {
     example: "2023-12-31T23:59:59Z",
     required: false,
   })
-  expiry: Date | null;
+  expiresAt: Date | null;
 }
 
 export class GetAssignmentSubmissionResponseDto extends AssignmentSubmissionResponseDto {
