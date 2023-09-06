@@ -1,9 +1,26 @@
-import MarkdownEditor from "@/components/MarkDownEditor";
 import React, { useState } from "react";
 
 interface ExtendableRubricChartProps {}
 
 function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
+  ////////////////////////////////////////////////
+  // state and handle function for the prompt part
+  ////////////////////////////////////////////////
+  const [inputValues, setInputValues] = useState<string[]>([]);
+
+  // Function to handle input changes and update the state
+  const handleInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    divKey: number
+  ) => {
+    const updatedInputValues = [...inputValues];
+    updatedInputValues[divKey] = event.target.value;
+    setInputValues(updatedInputValues);
+  };
+
+  ////////////////////////////////////////////////
+  ////////////////////////////////////////////////
+
   // Step 1: State Management
   const [divElements, setDivElements] = useState<number[]>([]);
   const [promptOptions, setPromptOptions] = useState<{
@@ -81,40 +98,53 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
       {divElements.map((divKey) => (
         <div
           key={divKey}
-          className={`relative flex flex-col pl-2 mt-[60px] rounded-md p-4 mx-auto my-auto bg-white border-l-8 rounded-md p-10 border-blue-500`}
+          className={`relative flex flex-col pl-2 mt-[60px] rounded-md p-4 mx-auto my-auto bg-white border rounded-md p-10 border-gray-200`}
         >
-          <p> Total Points</p>
-          <p> Point Adjustment</p>
           <div style={{ position: "relative" }}>
             <button
               className="absolute top-0 right-0 m-2 text-red-600"
               onClick={() => handleDeleteDiv(divKey)}
             >
-              X
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="25"
+                viewBox="0 0 24 25"
+                fill="none"
+              >
+                <path
+                  d="M6 18.0166L18 6.0166M6 6.0166L18 18.0166"
+                  stroke="#EF4444"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
             </button>
           </div>
 
           <div className="flex flex-col w-full border-black">
-            <div className="w-full h-[80px] px-6 py-3 bg-gray-200 justify-start items-center inline-flex">
-              <div className="text-gray-800 text-base font-medium capitalize h-[30px] leading-tight">
-                Write the first Criteria Question 1 will be graded upon
+            <div className="w-full h-[80px] w-9/12 px-6 py-3 bg-gray-200 justify-start items-center inline-flex">
+              <div className="text-gray-800 w-9/12 text-base font-medium capitalize h-[30px] leading-tight">
+                Write the No. Criteria Question will be graded upon
               </div>
             </div>
 
             <input
               type="text"
-              value={"" as string}
+              value={inputValues[divKey]}
               placeholder={`ex. “is the question legible?”`}
-              onChange={(event) =>
-                function (value: string): void {
-                  throw new Error("Function not implemented.");
-                }
-              }
-              className="w-full h-[200px] p-2 border rounded-md text-gray-700 bg-transparent outline-none"
+              onChange={(event) => handleInputChange(event, divKey)}
+              className="w-full h-[100px] p-2 border rounded-md text-gray-700 bg-transparent outline-none"
               style={{
                 maxWidth: "100%",
               }}
             />
+
+            {/* {<button onClick={handleAddValue}>Add</button>} */}
+
+            {/* Display the stored values */}
+            {/* {<ul>        {inputValues.map((value, index) => (<li key={index}>{value}</li>))}/* </ul>} */}
           </div>
 
           <div>
@@ -157,10 +187,8 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   />
                   <input
                     type="text"
-                    className="p-2 rounded-md ml-[10px] w-[750px] h-[3.256rem] text-black bg-transparent outline-none"
-                    placeholder={`Prompt Option ${
-                      index + 1
-                    } ex. “The question not legible” `}
+                    className="p-2 rounded-md ml-[10px] w-[700px] h-[3.256rem] text-black bg-transparent outline-none"
+                    placeholder={`ex. “The question not legible” `}
                     value={choice}
                     onChange={(event) =>
                       handleChoiceChangeWrittenQuestion(
@@ -198,11 +226,12 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                 </button>
               </div>
             ))}
+
             <button
-              className="bg-gray-100 w-[70px] text-black p-2 rounded-md mt-2"
+              className="bg-gray-100 w-[70px] text-black p-2 rounded-md mt-2 flex items-center justify-center"
               onClick={() => handleAddChoiceWrittenQuestion(divKey)}
             >
-              Add Option
+              {/* {Add Option} */}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="24"
@@ -213,9 +242,9 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                 <path
                   d="M12 6.0166V18.0166M18 12.0166H6"
                   stroke="#6B7280"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
               </svg>
             </button>
@@ -223,10 +252,26 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
         </div>
       ))}
       <button
-        className="bg-red-500 text-white p-2 rounded-md mt-2"
+        className="bg-gray-200 text-gray-500 p-2 rounded-md mt-2 flex items-center"
         onClick={handleAddDiv}
       >
-        Add Propmt Part
+        <span>Add Criteria</span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="25"
+          viewBox="0 0 24 25"
+          fill="none"
+          className="ml-2" // Add margin to separate the text and the SVG
+        >
+          <path
+            d="M12 6.0166V18.0166M18 12.0166H6"
+            stroke="#6B7280"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
       </button>
     </div>
   );
