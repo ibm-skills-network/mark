@@ -39,7 +39,7 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
       <div>
         <input
           type="number"
-          className="rounded-md w-[9.17381rem] h-[3.53331rem] text-1.5xl"
+          className="rounded-md w-[9.17381rem] h-[3.53331rem] text-1.5xl border-gray-300"
           placeholder={`ex. 600`}
           value={textArea1Value}
           onChange={handleTextArea1Change}
@@ -49,7 +49,7 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
         />
         <input
           type="number"
-          className="rounded-md ml-[30px] mt-[10px] mb-[30px] w-[9.17381rem] h-[3.53331rem]"
+          className="rounded-md ml-[30px] mt-[10px] mb-[30px] w-[9.17381rem] h-[3.53331rem] border-gray-300"
           placeholder={`ex. 1200`}
           value={textArea2Value}
           onChange={handleTextArea2Change}

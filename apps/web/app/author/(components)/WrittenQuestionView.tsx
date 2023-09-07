@@ -75,7 +75,10 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
   return (
     <div className="mt-4">
       <WordCountComponent text="Minimum & Maximum Word Count  " />
-      <div className="w-auto h-[104px]" style={{ background: "#E0E7FF" }}>
+      <div
+        className="w-auto h-[104px] rounded-lg"
+        style={{ background: "#E0E7FF" }}
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="65"
@@ -96,8 +99,8 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
           style={{
             width: 223.17,
             color: "#1D4ED8",
-            fontSize: 19.17,
-            fontWeight: "bold",
+            fontSize: 16.17,
+            fontWeight: "",
             transform: "translate(5px, -50px)", // Adjust the vertical value as needed
             textAlign: "center",
           }}
@@ -105,12 +108,13 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
           Rubric
         </div>
         <div
-          className="font-medium"
+          className=""
           style={{
             width: 900,
-            color: "#1D4ED8",
+            color: "#4B5563",
+            textAlign: "left",
             fontSize: 13.17,
-            transform: "translate(85px, -45px)", // Adjust the vertical value as needed
+            transform: "translate(90px, -45px)", // Adjust the vertical value as needed
           }}
         >
           Set up a rubric to define how the paragraph should be graded. MARK
@@ -121,7 +125,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       <p className="mt-[10px]">Points:</p>
       <input
         type="number"
-        className="p-2 border rounded-md w-[200px] mt-[15px] text-gray-700 bg-transparent outline-none"
+        className="p-2 border rounded-md w-[200px] mt-[15px] text-gray-700 bg-transparent outline-none border-gray-300"
         placeholder={`ex. 10`}
         value={score}
         onChange={handleScore}

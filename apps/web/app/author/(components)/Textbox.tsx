@@ -235,7 +235,7 @@ function TextBox(props: Props) {
           value={"" as string}
           setValue={handleQuestionTextChange}
           textareaClassName="!min-h-[6.5rem] !max-h-72"
-          className=""
+          className="bg-gray-600"
         />
         <div className="text-black font-inter leading-5 mr-2 h-4 mt-5">
           Question Type

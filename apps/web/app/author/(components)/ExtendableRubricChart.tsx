@@ -98,7 +98,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
       {divElements.map((divKey) => (
         <div
           key={divKey}
-          className={`relative flex flex-col pl-2 mt-[60px] rounded-md p-4 mx-auto my-auto bg-white border rounded-md p-10 border-gray-200`}
+          className={`relative flex flex-col pl-2 mt-[30px] rounded-md p-4 mx-auto my-auto bg-white border rounded-md p-10 border-transparent`}
         >
           <div style={{ position: "relative" }}>
             <button
@@ -124,7 +124,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
           </div>
 
           <div className="flex flex-col w-full border-black">
-            <div className="w-full h-[80px] w-9/12 px-6 py-3 bg-gray-200 justify-start items-center inline-flex">
+            <div className="w-full h-[80px] px-6 py-3 bg-gray-200 justify-start items-center inline-flex">
               <div className="text-gray-800 w-9/12 text-base font-medium capitalize h-[30px] leading-tight">
                 Write the No. Criteria Question will be graded upon
               </div>
@@ -135,7 +135,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
               value={inputValues[divKey]}
               placeholder={`ex. “is the question legible?”`}
               onChange={(event) => handleInputChange(event, divKey)}
-              className="w-full h-[100px] p-2 border rounded-md text-gray-700 bg-transparent outline-none"
+              className="w-full h-[100px] p-2 border rounded-md text-gray-700 bg-gray-50 outline-none"
               style={{
                 maxWidth: "100%",
               }}
