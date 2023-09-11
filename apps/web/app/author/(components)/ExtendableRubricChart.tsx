@@ -123,7 +123,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
             </button>
           </div>
 
-          <div className="flex flex-col w-full border-black">
+          {/* <div className="flex flex-col w-full border-black">
             <div className="w-full h-[80px] px-6 py-3 bg-gray-200 justify-start items-center inline-flex">
               <div className="text-gray-800 w-9/12 text-base font-medium capitalize h-[30px] leading-tight">
                 Write the No. Criteria Question will be graded upon
@@ -139,13 +139,13 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
               style={{
                 maxWidth: "100%",
               }}
-            />
+            /> */}
 
-            {/* {<button onClick={handleAddValue}>Add</button>} */}
+          {/* {<button onClick={handleAddValue}>Add</button>} */}
 
-            {/* Display the stored values */}
-            {/* {<ul>        {inputValues.map((value, index) => (<li key={index}>{value}</li>))}/* </ul>} */}
-          </div>
+          {/* Display the stored values */}
+          {/* {<ul>        {inputValues.map((value, index) => (<li key={index}>{value}</li>))}/* </ul>} */}
+          {/* </div> */}
 
           <div>
             <h1 className="text-base font-normal mt-[10px] leading-6 text-gray-900 relative">
