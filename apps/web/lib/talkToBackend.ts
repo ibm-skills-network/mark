@@ -142,26 +142,28 @@ export async function submitTextOrURLAnswer(
   }
 }
 
-// talk to backend when submitting individual questions (Benny)
+/**
+ * talk to backend when submitting individual questions (Benny)
+ */
 export async function submitQuestionResponse(
   assignmentId: number,
   submissionID: number,
   questionId: number,
-  response: QuestionResponse
+  questionResponse: QuestionResponse
 ): Promise<boolean> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionID}/questions/${questionId}/responses`;
 
   try {
-    let body;
+    const body = JSON.stringify(questionResponse);
     const headers = {};
 
-    if (response.learnerFileResponse) {
-      body = new FormData();
-      body.append("learnerFileResponse", response.learnerFileResponse);
-    } else {
-      headers["Content-Type"] = "application/json";
-      body = JSON.stringify(response);
-    }
+    // TODO: handle file upload
+    // if (response.learnerFileResponse) {
+    //   body = new FormData();
+    //   body.append("learnerFileResponse", response.learnerFileResponse);
+    // } else {
+    headers["Content-Type"] = "application/json";
+    // }
 
     const res = await fetch(endpointURL, {
       method: "POST",
@@ -173,11 +175,12 @@ export async function submitQuestionResponse(
       throw new Error("Failed to submit response");
     }
 
-    const result = await res.json();
-    if (result.error) {
-      throw new Error(result.error);
-    }
-
+    const data = (await res.json()) as {
+      id: number;
+      totalPoints: number;
+      feedback: any[];
+    };
+    // TODO: handle feedback (at least for text responses for v1)
     return true;
   } catch (err) {
     console.error(err);

@@ -50,14 +50,14 @@ function MultipleChoiceQuestion(props: Props) {
 
   // For talking to backend upon submission
   const handleSubmit = async () => {
-    const response: QuestionResponse = {
+    const QuestionResponse: QuestionResponse = {
       learnerChoices: selectedChoices,
     };
     const success = await submitQuestionResponse(
       assignmentID,
       submissionID,
       id,
-      response
+      QuestionResponse
     );
     if (!success) {
       console.error("Error submitting the answer");

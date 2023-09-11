@@ -14,7 +14,7 @@ interface Props {
 
 function TrueFalseQuestion(props: Props) {
   const { questionData, submissionID, updateStatus } = props;
-  const { question, answer, id, assignmentID } = questionData!;
+  const { question, answer, id, assignmentID } = questionData;
 
   const [selectedChoice, setSelectedChoice] = useState<boolean | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -28,14 +28,14 @@ function TrueFalseQuestion(props: Props) {
   };
 
   const handleSubmit = async () => {
-    const response: QuestionResponse = {
+    const questionResponse: QuestionResponse = {
       learnerAnswerChoice: selectedChoice,
     };
     const success = await submitQuestionResponse(
       assignmentID,
       submissionID,
       id,
-      response
+      questionResponse
     );
     if (!success) {
       console.error("Error submitting the answer");
