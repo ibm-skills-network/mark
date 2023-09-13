@@ -63,11 +63,11 @@ model Assignment {
   type            AssignmentType                                                /// Type of assignment
   graded          Boolean?                                                      /// Is the assignment graded or not
   numAttempts     Int?                                                          /// Max number of times a learner can attempt the assignment
-  allotedTime     Int?                                                          /// Time allotted to complete the assignment in minutes
-  attemptsPerTimeRange Int?                                                     /// Number of allowed attempts within the specified time range.
-  attemptsTimeRange    Int?                                                     /// Time range, in hours, over which the attempts are counted.
+  allotedTimeMinutes        Int?                                                /// Time allotted to complete the assignment in minutes
+  attemptsPerTimeRange      Int?                                                /// Number of allowed attempts within the specified time range.
+  attemptsTimeRangeHours    Int?                                                /// Time range, in hours, over which the attempts are counted.
   passingGrade    Int?                                                          /// The minimum grade required to pass the assignment
-  displayOrder    AssignmentQuestionDisplayOrder?                                       /// The order in which the assignment is displayed
+  displayOrder    AssignmentQuestionDisplayOrder?                               /// The order in which the assignment is displayed
   questions       Question[]                                                    /// The list of questions in the assignment
   groups          AssignmentGroup[]                                             /// List of groups associated with the assignment
 }

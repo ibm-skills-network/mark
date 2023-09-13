@@ -32,9 +32,9 @@ CREATE TABLE "Assignment" (
     "type" "AssignmentType" NOT NULL,
     "graded" BOOLEAN,
     "numAttempts" INTEGER,
-    "allotedTime" INTEGER,
+    "allotedTimeMinutes" INTEGER,
     "attemptsPerTimeRange" INTEGER,
-    "attemptsTimeRange" INTEGER,
+    "attemptsTimeRangeHours" INTEGER,
     "passingGrade" INTEGER,
     "displayOrder" "AssignmentQuestionDisplayOrder",
 

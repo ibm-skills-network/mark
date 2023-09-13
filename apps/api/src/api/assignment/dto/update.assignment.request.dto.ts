@@ -53,7 +53,7 @@ export class UpdateAssignmentRequestDto {
   })
   @IsOptional()
   @IsInt()
-  allotedTime: number | null;
+  allotedTimeMinutes: number | null;
 
   @ApiProperty({
     description: "Number of allowed attempts within the specified time range.",
@@ -71,7 +71,7 @@ export class UpdateAssignmentRequestDto {
   })
   @IsOptional()
   @IsInt()
-  attemptsTimeRange: number | null;
+  attemptsTimeRangeHours: number | null;
 
   @ApiProperty({
     description: "The passing grade for the assignment.",
