@@ -70,9 +70,9 @@ export class SubmissionService {
 
     // Calculate the start date of the time range.
     let timeRangeStartDate = new Date();
-    if (assignment.attemptsTimeRange) {
+    if (assignment.attemptsTimeRangeHours) {
       timeRangeStartDate = new Date(
-        Date.now() - assignment.attemptsTimeRange * 60 * 60 * 1000
+        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000
       ); // Convert hours to milliseconds
     }
 
@@ -137,10 +137,10 @@ export class SubmissionService {
 
     // eslint-disable-next-line unicorn/no-null
     let submissionexpiresAt: Date | null = null;
-    if (assignment.allotedTime) {
+    if (assignment.allotedTimeMinutes) {
       const currentDate = new Date();
       submissionexpiresAt = new Date(
-        currentDate.getTime() + assignment.allotedTime * 60 * 1000
+        currentDate.getTime() + assignment.allotedTimeMinutes * 60 * 1000
       );
     }
 

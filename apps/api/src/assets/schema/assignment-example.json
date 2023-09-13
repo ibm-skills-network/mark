@@ -5,9 +5,9 @@
   "type": "AI_GRADED",
   "graded": true,
   "numAttempts": 5,
-  "allotedTime": 60,
+  "allotedTimeMinutes": 60,
   "attemptsPerTimeRange": 5,
-  "attemptsTimeRange": 2,
+  "attemptsTimeRangeHours": 2,
   "passingGrade": 70,
   "displayOrder": "RANDOM",
   "exercises": [

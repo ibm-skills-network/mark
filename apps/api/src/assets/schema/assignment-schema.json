@@ -21,7 +21,7 @@
     "numAttempts": {
       "type": "integer"
     },
-    "allotedTime": {
+    "allotedTimeMinutes": {
       "type": "integer"
     },
     "passingGrade": {
@@ -83,7 +83,7 @@
     "type",
     "numRetries",
     "numAttempts",
-    "allotedTime",
+    "allotedTimeMinutes",
     "passingGrade",
     "displayOrder",
     "exercises"
