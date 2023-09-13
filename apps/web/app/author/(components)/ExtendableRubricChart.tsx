@@ -251,7 +251,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
           </div>
         </div>
       ))}
-      {/* <button
+      <button
         className="bg-gray-200 text-gray-500 p-2 rounded-md mt-2 flex items-center"
         onClick={handleAddDiv}
       >
@@ -272,7 +272,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
             stroke-linejoin="round"
           />
         </svg>
-      </button> */}
+      </button>
     </div>
   );
 }
