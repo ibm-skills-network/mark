@@ -16,7 +16,6 @@ import ExtendableRubricChart from "./ExtendableRubricChart";
 import RubricTable from "./RubricTable";
 import WordCountComponent from "./WordCountComponent";
 
-9;
 interface WrittenQuestionViewProps {
   handleScore: any;
   score: any;
