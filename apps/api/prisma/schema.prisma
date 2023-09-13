@@ -39,7 +39,7 @@ enum ScoringType {
   AI_GRADED            /// The assignment is graded by an AI
 }
 
-/// The Group model represents a particular group of users (having the same groupID)
+/// The Group model represents a particular group of assignments (having the same groupID)
 model Group {
   id          String         @unique      /// Unique ID of the course
   assignments AssignmentGroup[]           /// The list of assignments associated with this group
