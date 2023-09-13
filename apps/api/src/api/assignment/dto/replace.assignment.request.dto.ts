@@ -39,7 +39,8 @@ export class ReplaceAssignmentRequestDto {
   graded: boolean;
 
   @ApiProperty({
-    description: "The max number of attempts allowed for this assignment.",
+    description:
+      "The max number of attempts allowed for this assignment. (null means unlimited attempts)",
     type: Number,
     required: false,
   })
@@ -48,13 +49,14 @@ export class ReplaceAssignmentRequestDto {
   numAttempts: number | null;
 
   @ApiProperty({
-    description: "The allotted time for the assignment.",
+    description:
+      "The allotted time for the assignment. (null means unlimited time)",
     type: Number,
-    required: true,
+    required: false,
   })
-  @IsDefined()
+  @IsOptional()
   @IsInt()
-  allotedTimeMinutes: number;
+  allotedTimeMinutes: number | null;
 
   @ApiProperty({
     description: "Number of allowed attempts within the specified time range.",
