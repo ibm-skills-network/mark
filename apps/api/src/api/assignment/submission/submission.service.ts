@@ -87,6 +87,11 @@ export class SubmissionService {
             },
           },
           {
+            submitted: false,
+            // eslint-disable-next-line unicorn/no-null
+            expiresAt: null, // Get any submission that is not submitted and has no expiry date (meaning time limit in unlimited)
+          },
+          {
             createdAt: {
               gte: timeRangeStartDate, // Get all submission within the time range (for example within last 2 hours)
               lte: new Date(),
@@ -98,7 +103,9 @@ export class SubmissionService {
 
     // Separate the submissions based on ongoing and within the time range
     const ongoingSubmissions = submissions.filter(
-      (sub) => !sub.submitted && sub.expiresAt >= new Date()
+      (sub) =>
+        !sub.submitted &&
+        (sub.expiresAt >= new Date() || sub.expiresAt === null)
     );
 
     const submissionsInTimeRange = submissions.filter(
