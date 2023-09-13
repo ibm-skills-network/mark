@@ -1,5 +1,5 @@
 import { submitFileAnswer, submitTextOrURLAnswer } from "@/lib/talkToBackend";
-import React, { useState } from "react";
+import { useState, type FC } from "react";
 
 interface Props {
   assignmentId: number;
@@ -8,7 +8,7 @@ interface Props {
   questionType: string;
 }
 
-const SubmitAnswerComponent: React.FC<Props> = ({
+const SubmitAnswerComponent: FC<Props> = ({
   assignmentId,
   submissionID,
   questionId,

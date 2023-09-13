@@ -1,11 +1,17 @@
 "use client";
 
-import { Question, QuestionResponse, QuestionStatus } from "@/config/types"; // Ensure the Question type matches with GetQuestionResponseDto
+import {
+  Question,
+  QuestionStatus,
+  type QuestionSubmissionRequest,
+} from "@/config/types";
+// Ensure the Question type matches with GetQuestionResponseDto
 
 import { submitQuestionResponse } from "@/lib/talkToBackend";
 import Title from "@components/Title";
 import React, { useEffect, useState } from "react";
 import Button from "./Button";
+import { FeedbackMessage } from "./FeedbackMessage";
 import InfoLine from "./InfoLine";
 
 interface Props {
@@ -50,7 +56,7 @@ function MultipleChoiceQuestion(props: Props) {
 
   // For talking to backend upon submission
   const handleSubmit = async () => {
-    const QuestionResponse: QuestionResponse = {
+    const QuestionResponse: QuestionSubmissionRequest = {
       learnerChoices: selectedChoices,
     };
     const success = await submitQuestionResponse(
@@ -96,57 +102,6 @@ function MultipleChoiceQuestion(props: Props) {
     if (updateStatus) {
       updateStatus(status);
     }
-  };
-
-  const renderFeedbackMessage = () => {
-    let feedbackText = "";
-    let bgColor = "";
-    let borderColor = "";
-    let textColor = "";
-    let innerCircleColor = "";
-
-    switch (isCorrect) {
-      case "all":
-        feedbackText = "Correct! Well done.";
-        bgColor = "bg-emerald-100";
-        borderColor = "border-emerald-500";
-        textColor = "text-emerald-800";
-        innerCircleColor = "bg-emerald-400";
-        break;
-      case "some":
-        feedbackText = "Not all correct answers were selected.";
-        bgColor = "bg-yellow-100";
-        borderColor = "border-yellow-500";
-        textColor = "text-yellow-800";
-        innerCircleColor = "bg-yellow-400";
-        break;
-      case "none":
-        feedbackText = "Incorrect choice.";
-        bgColor = "bg-red-100";
-        borderColor = "border-red-500";
-        textColor = "text-red-800";
-        innerCircleColor = "bg-red-400";
-        break;
-      default:
-        return null;
-    }
-
-    return (
-      <div
-        className={`w-96 h-16 pl-2 pr-2.5 py-0.5 ${bgColor} rounded-lg ${borderColor} justify-center items-center gap-1.5 inline-flex`}
-      >
-        <div className="w-2 h-2 relative">
-          <div
-            className={`w-1.5 h-1.5 left-[1px] top-[1px] absolute ${innerCircleColor} rounded-full`}
-          />
-        </div>
-        <div
-          className={`text-center ${textColor} text-base font-medium leading-none`}
-        >
-          {feedbackText}
-        </div>
-      </div>
-    );
   };
 
   const renderAttemptMessage = () => {
@@ -197,7 +152,9 @@ function MultipleChoiceQuestion(props: Props) {
 
         {/* Feedback and attempts messages */}
         <div className="mt-4 flex flex-col items-center">
-          <div className="text-center">{renderFeedbackMessage()}</div>
+          <div className="text-center">
+            <FeedbackMessage />
+          </div>
           <div className="mt-2 text-center">{renderAttemptMessage()}</div>
 
           {/* Submit Button */}

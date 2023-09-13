@@ -14,22 +14,22 @@ export const BASE_API_ROUTES = {
   admin: `${BASE_API_PATH}/admin`,
 };
 
-export interface LongFormQuestionData {
-  type: "longForm";
-  questionText: string;
-  instructions: string;
-  points: number;
-}
+// interface LongFormQuestionData {
+//   type: "longForm";
+//   questionText: string;
+//   instructions: string;
+//   points: number;
+// }
 
-export interface MultipleChoiceQuestionData {
-  type: "multipleChoice";
-  questionText: string;
-  options: string[];
-  points: number;
-  correctOptions: string[];
-}
+// interface MultipleChoiceQuestionData {
+//   type: "multipleChoice";
+//   questionText: string;
+//   options: string[];
+//   points: number;
+//   correctOptions: string[];
+// }
 
-export type QuestionData = LongFormQuestionData | MultipleChoiceQuestionData;
+// type QuestionData = LongFormQuestionData | MultipleChoiceQuestionData;
 
 export const questionsData: Question[] = [
   {
