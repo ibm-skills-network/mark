@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
 } from "class-validator";
 import { UserRole } from "../../../auth/interfaces/user.interface";
@@ -56,10 +57,9 @@ export class CreateTokenRequestDto {
     required: true,
     description: "The callback url for sending grades back to.",
   })
-  @IsDefined()
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  lis_outcome_service_url: string;
+  lis_outcome_service_url?: string;
 
   @ApiProperty({
     type: String,
@@ -76,10 +76,9 @@ export class CreateTokenRequestDto {
     required: true,
     description: "Extra field required for grading.",
   })
-  @IsDefined()
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  lis_result_sourcedid: string;
+  lis_result_sourcedid?: string;
 
   @ApiProperty({
     type: String,
