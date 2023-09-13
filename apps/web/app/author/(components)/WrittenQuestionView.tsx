@@ -11,11 +11,12 @@
 //   PencilIcon,
 //   ViewListIcon,
 // } from "@heroicons/react/solid";
-import React, { Fragment, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import ExtendableRubricChart from "./ExtendableRubricChart";
 import RubricTable from "./RubricTable";
 import WordCountComponent from "./WordCountComponent";
 
+9;
 interface WrittenQuestionViewProps {
   handleScore: any;
   score: any;

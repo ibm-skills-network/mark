@@ -2,7 +2,7 @@
 
 // COMMENT: this is the component where we show single answer question section for the author
 // this contains "points", and the "add options"
-import React, { Fragment, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 interface SingleAnswerSectionProps {
   choicesSingleCorrect: any;
