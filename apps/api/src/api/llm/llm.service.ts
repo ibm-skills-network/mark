@@ -183,9 +183,6 @@ export class LlmService {
       z
         .array(
           z.object({
-            criteria: z
-              .string()
-              .describe("Criteria used for grading the response"),
             points: z.number().describe("Points awarded based on the criteria"),
             feedback: z
               .string()

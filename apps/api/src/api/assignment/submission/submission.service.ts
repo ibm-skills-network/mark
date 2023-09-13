@@ -65,7 +65,6 @@ export class SubmissionService {
     user: User
   ): Promise<BaseAssignmentSubmissionResponseDto> {
     // Check if any of the existing submissions is in progress and has not expired and user is allowed to start a new submission, otherwise return exception
-
     const assignment = await this.assignmentService.findOne(assignmentID, user);
 
     // Calculate the start date of the time range.
@@ -136,17 +135,17 @@ export class SubmissionService {
     }
 
     // eslint-disable-next-line unicorn/no-null
-    let submissionexpiresAt: Date | null = null;
+    let submissionExpiresAt: Date | null = null;
     if (assignment.allotedTimeMinutes) {
       const currentDate = new Date();
-      submissionexpiresAt = new Date(
+      submissionExpiresAt = new Date(
         currentDate.getTime() + assignment.allotedTimeMinutes * 60 * 1000
       );
     }
 
     const result = await this.prisma.assignmentSubmission.create({
       data: {
-        expiresAt: submissionexpiresAt,
+        expiresAt: submissionExpiresAt,
         submitted: false,
         assignmentId: assignmentID,
         // eslint-disable-next-line unicorn/no-null
@@ -172,7 +171,10 @@ export class SubmissionService {
         where: { id: assignmentSubmissionID },
       });
 
-    if (new Date() > assignmentSubmission.expiresAt) {
+    if (
+      assignmentSubmission.expiresAt &&
+      new Date() > assignmentSubmission.expiresAt
+    ) {
       throw new UnprocessableEntityException(
         SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );
@@ -298,7 +300,10 @@ export class SubmissionService {
         where: { id: assignmentSubmissionID },
       });
 
-    if (new Date() > assignmentSubmission.expiresAt) {
+    if (
+      assignmentSubmission.expiresAt &&
+      new Date() > assignmentSubmission.expiresAt
+    ) {
       throw new UnprocessableEntityException(
         SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );

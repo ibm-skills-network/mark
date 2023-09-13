@@ -3,14 +3,6 @@ import { TrueFalseChoiceBasedFeedback } from "../../../../..//api/llm/model/true
 
 export class TextBasedFeedbackDto {
   @ApiProperty({
-    description:
-      "The criteria on the basis of which the points and feedback are given.",
-    type: String,
-    required: true,
-  })
-  criteria: string;
-
-  @ApiProperty({
     description: "The points earned for the above criteria.",
     type: Number,
     required: true,
