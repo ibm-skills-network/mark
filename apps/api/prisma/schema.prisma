@@ -95,7 +95,7 @@ model AssignmentSubmission {
   questionResponses QuestionResponse[]                                       /// The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
   submitted         Boolean                                                  /// Boolean value representing if the submission is submitted by the learner or not
   grade             Float?                                                   /// The overall LTI grade value (from 0.0 - 1.0) that the learner earned 
-  expiresAt            DateTime?                                                /// The DateTime at which the submission window ends (can no longer submit it)
+  expiresAt         DateTime?                                                /// The DateTime at which the submission window ends (can no longer submit it)
   createdAt         DateTime @default(now())
 }
 

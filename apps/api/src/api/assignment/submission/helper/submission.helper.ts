@@ -19,7 +19,6 @@ export const SubmissionHelper = {
     model: TextBasedQuestionResponseModel
   ): TextBasedFeedbackDto {
     const dto = new TextBasedFeedbackDto();
-    dto.criteria = model.criteria;
     dto.points = model.points;
     dto.feedback = model.feedback;
     return dto;
