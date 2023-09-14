@@ -27,6 +27,7 @@ export class MockJwtAuthGuard extends AuthGuard("jwt") {
       role: UserRole.LEARNER,
       groupID: "test-group-id",
       assignmentID: 1,
+      gradingCallbackRequired: false,
     };
 
     return true;

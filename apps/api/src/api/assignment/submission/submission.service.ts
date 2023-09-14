@@ -171,7 +171,8 @@ export class SubmissionService {
     assignmentSubmissionID: number,
     assignmentID: number,
     updateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto,
-    authCookie: string
+    authCookie: string,
+    gradingCallbackRequired: boolean
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
     const assignmentSubmission =
       await this.prisma.assignmentSubmission.findUnique({
@@ -225,23 +226,25 @@ export class SubmissionService {
 
     grade = totalPointsEarned / totalPossiblePoints;
 
-    // Send the grade to LTI gateway
-    const ltiGatewayResponse = await this.httpService
-      .post(
-        process.env.GRADING_LTI_GATEWAY_URL,
-        { score: grade },
-        {
-          headers: {
-            Cookie: `authentication=${authCookie}`,
-          },
-        }
-      )
-      .toPromise();
+    // Send the grade to LTI gateway (optional)
+    if (gradingCallbackRequired) {
+      const ltiGatewayResponse = await this.httpService
+        .post(
+          process.env.GRADING_LTI_GATEWAY_URL,
+          { score: grade },
+          {
+            headers: {
+              Cookie: `authentication=${authCookie}`,
+            },
+          }
+        )
+        .toPromise();
 
-    // Checking if the request was successful
-    if (ltiGatewayResponse.status !== 200) {
-      // Handle the error according to your needs
-      throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
+      // Checking if the request was successful
+      if (ltiGatewayResponse.status !== 200) {
+        // Handle the error according to your needs
+        throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
+      }
     }
 
     // Update AssignmentSubmission with the calculated grade

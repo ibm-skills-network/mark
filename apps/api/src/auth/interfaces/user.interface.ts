@@ -13,6 +13,7 @@ export interface ClientUser {
 
 export interface User extends ClientUser {
   groupID: string;
+  gradingCallbackRequired?: boolean;
 }
 
 export interface UserRequest extends Request {

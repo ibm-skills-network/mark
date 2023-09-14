@@ -26,9 +26,7 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })
-  );
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.useGlobalGuards(
     app.select(AuthModule).get(JwtGlobalAuthGuard),
     app.select(AuthModule).get(RolesGlobalGuard)
