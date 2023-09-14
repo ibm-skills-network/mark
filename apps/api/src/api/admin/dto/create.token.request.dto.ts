@@ -1,9 +1,11 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
+  IsBoolean,
   IsDefined,
   IsEnum,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
 } from "class-validator";
@@ -51,42 +53,22 @@ export class CreateTokenRequestDto {
   assignmentID: number;
 
   // Grading related fields
-
   @ApiProperty({
     type: String,
     required: true,
     description: "The callback url for sending grades back to.",
   })
-  @IsOptional()
-  @IsString()
-  lis_outcome_service_url?: string;
-
-  @ApiProperty({
-    type: String,
-    required: true,
-    description: "Extra field required for grading.",
-  })
   @IsDefined()
-  @IsNotEmpty()
-  @IsString()
-  oauth_consumer_key: string;
+  @IsBoolean()
+  gradingCallbackRequired: boolean;
 
   @ApiProperty({
     type: String,
     required: true,
-    description: "Extra field required for grading.",
+    description:
+      "The extra params that will just be embeded to the JWT (Irrelevant to Mark iteself).",
   })
   @IsOptional()
-  @IsString()
-  lis_result_sourcedid?: string;
-
-  @ApiProperty({
-    type: String,
-    required: true,
-    description: "Extra field required for grading.",
-  })
-  @IsDefined()
-  @IsNotEmpty()
-  @IsString()
-  toolServiceName: string;
+  @IsObject()
+  extraParams: object;
 }

@@ -138,15 +138,18 @@ export class SubmissionController {
     @Param("assignmentId") assignmentId: number,
     @Body()
     learnerUpdateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto,
-    @Req() request: Request
+    @Req() request: UserRequest
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const authCookie: string = request?.cookies?.authentication;
+    const gradingCallbackRequired =
+      request?.user.gradingCallbackRequired ?? false;
     return this.submissionService.updateAssignmentSubmission(
       Number(assignmentSubmissionID),
       Number(assignmentId),
       learnerUpdateAssignmentSubmissionDto,
-      authCookie
+      authCookie,
+      gradingCallbackRequired
     );
   }
 

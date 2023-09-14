@@ -24,31 +24,8 @@ export class AdminService {
   ) {}
 
   createJWTToken(createTokenRequestDto: CreateTokenRequestDto) {
-    const {
-      userID,
-      role,
-      groupID,
-      assignmentID,
-      lis_outcome_service_url,
-      lis_result_sourcedid,
-      oauth_consumer_key,
-      toolServiceName,
-    } = createTokenRequestDto;
     const { secret, signOptions } = this.jwtConfigService.jwtConstants;
-    return sign(
-      {
-        userID,
-        role,
-        groupID,
-        assignmentID,
-        lis_outcome_service_url,
-        lis_result_sourcedid,
-        oauth_consumer_key,
-        toolServiceName,
-      },
-      secret,
-      signOptions
-    );
+    return sign(createTokenRequestDto, secret, signOptions);
   }
 
   async cloneAssignment(

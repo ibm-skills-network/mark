@@ -37,6 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role,
       groupID: payload.groupID,
       assignmentID: payload.assignmentID,
+      gradingCallbackRequired: payload.gradingCallbackRequired,
     };
   }
 }
