@@ -76,6 +76,7 @@ values.backup
 .history
 .vscode/settings.json
 apps/web/.vscode
+apps/api-gateway/.vscode
 
 # misc
 *.DS_Store
