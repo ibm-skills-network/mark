@@ -1,35 +1,36 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
+import { DynamicJwtBearerTokenAuthGuard } from "./jwt/bearer-token-based/dynamic.jwt.bearer.token.auth.guard";
+import { JwtBearerTokenAuthGuard } from "./jwt/bearer-token-based/jwt.bearer.token.auth.guard";
+import { JwtBearerTokenStrategy } from "./jwt/bearer-token-based/jwt.bearer.token.strategy";
+import { MockJwtBearerTokenAuthGuard } from "./jwt/bearer-token-based/mock.jwt.bearer.token.auth.guard";
+import { DynamicJwtCookieAuthGuard } from "./jwt/cookie-based/dynamic.jwt.cookie.auth.guard";
+import { JwtCookieAuthGuard } from "./jwt/cookie-based/jwt.cookie.auth.guard";
+import { JwtCookieStrategy } from "./jwt/cookie-based/jwt.cookie.strategy";
+import { MockJwtCookieAuthGuard } from "./jwt/cookie-based/mock.jwt.cookie.auth.guard";
 import { JwtConfigService } from "./jwt/jwt.config.service";
-import { JwtGlobalAuthGuard } from "./jwt/jwt.global.auth.guard";
-import { JwtStrategy } from "./jwt/jwt.strategy";
-import { MockJwtAuthGuard } from "./jwt/mock.jwt.auth.guard";
-import { RolesGlobalGuard } from "./role/roles.global.guard";
 
 @Module({
-  imports: [
-    PassportModule.register({ defaultStrategy: "jwt" }),
-    JwtModule.register({}),
-  ],
+  imports: [PassportModule.register({}), JwtModule.register({})],
   providers: [
-    {
-      provide: JwtStrategy,
-      useClass: JwtStrategy,
-    },
-    {
-      provide: JwtGlobalAuthGuard,
-      useClass:
-        process.env.NODE_ENV !== "production" &&
-        process.env.AUTH_DISABLED === "true"
-          ? MockJwtAuthGuard
-          : JwtGlobalAuthGuard,
-    },
+    JwtCookieAuthGuard,
+    MockJwtCookieAuthGuard,
+    DynamicJwtCookieAuthGuard,
+    JwtBearerTokenAuthGuard,
+    MockJwtBearerTokenAuthGuard,
+    DynamicJwtBearerTokenAuthGuard,
+    JwtCookieStrategy,
+    JwtBearerTokenStrategy,
     JwtConfigService,
-    {
-      provide: RolesGlobalGuard,
-      useClass: RolesGlobalGuard,
-    },
+  ],
+  exports: [
+    JwtCookieAuthGuard,
+    MockJwtCookieAuthGuard,
+    DynamicJwtCookieAuthGuard,
+    JwtBearerTokenAuthGuard,
+    MockJwtBearerTokenAuthGuard,
+    DynamicJwtBearerTokenAuthGuard,
   ],
 })
 export class AuthModule {}

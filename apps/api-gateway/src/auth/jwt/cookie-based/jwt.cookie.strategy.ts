@@ -2,8 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { Request } from "express";
 import { ExtractJwt, Strategy } from "passport-jwt";
-import { UserSession } from "../interfaces/user.interface";
-import { JwtConfigService } from "./jwt.config.service";
+import { UserSession } from "../../interfaces/user.session.interface";
+import { JwtConfigService } from "../jwt.config.service";
 
 interface IRequestWithCookies extends Request {
   cookies: {
@@ -17,7 +17,10 @@ interface IJwtPayload extends UserSession {
 }
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class JwtCookieStrategy extends PassportStrategy(
+  Strategy,
+  "cookie-strategy"
+) {
   constructor(private configService: JwtConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([

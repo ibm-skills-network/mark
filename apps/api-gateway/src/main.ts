@@ -1,6 +1,7 @@
 import { VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import * as cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
@@ -21,6 +22,8 @@ async function bootstrap() {
   });
 
   app.use(helmet());
+
+  app.use(cookieParser());
 
   // TODO(user): customize the title, description, etc.
   const config = new DocumentBuilder()

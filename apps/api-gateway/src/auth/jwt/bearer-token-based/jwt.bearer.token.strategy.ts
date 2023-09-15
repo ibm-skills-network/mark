@@ -1,17 +1,20 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy, VerifiedCallback } from "passport-jwt";
-import { User } from "../../interfaces/user.interface";
+import { UserSession } from "../../interfaces/user.session.interface";
 import { JwtConfigService } from "../jwt.config.service";
 
-interface IJwtPayload extends User {
+interface IJwtPayload extends UserSession {
   admin: boolean;
   iat: number;
   exp: number;
 }
 
 @Injectable()
-export class JwtAdminStrategy extends PassportStrategy(Strategy, "jwt-admin") {
+export class JwtBearerTokenStrategy extends PassportStrategy(
+  Strategy,
+  "bearer-token-strategy"
+) {
   constructor(private configService: JwtConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

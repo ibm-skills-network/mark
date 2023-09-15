@@ -4,7 +4,9 @@ import { Reflector } from "@nestjs/core";
 import { AuthGuard } from "@nestjs/passport";
 
 @Injectable()
-export class MockJwtAdminAuthGuard extends AuthGuard("jwt-admin") {
+export class MockJwtBearerTokenAuthGuard extends AuthGuard(
+  "bearer-token-strategy"
+) {
   constructor(private reflector: Reflector) {
     super();
   }
