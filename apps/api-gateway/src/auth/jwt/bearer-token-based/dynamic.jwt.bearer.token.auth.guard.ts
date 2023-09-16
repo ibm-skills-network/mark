@@ -13,13 +13,9 @@ export class DynamicJwtBearerTokenAuthGuard implements CanActivate {
   canActivate(
     context: ExecutionContext
   ): boolean | Promise<boolean> | Observable<boolean> {
-    if (
-      process.env.NODE_ENV !== "production" &&
+    return process.env.NODE_ENV !== "production" &&
       process.env.AUTH_DISABLED === "true"
-    ) {
-      return this.mockGuard.canActivate(context);
-    } else {
-      return this.realGuard.canActivate(context);
-    }
+      ? this.mockGuard.canActivate(context)
+      : this.realGuard.canActivate(context);
   }
 }

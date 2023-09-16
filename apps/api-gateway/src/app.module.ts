@@ -9,7 +9,6 @@ import { RouterModule } from "@nestjs/core";
 import { WinstonModule } from "nest-winston";
 import { ApiModule } from "./api/api.module";
 import { AppService } from "./app.service";
-import { AuthModule } from "./auth/auth.module";
 import { HealthModule } from "./health/health.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
