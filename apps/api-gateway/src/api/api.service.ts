@@ -66,6 +66,7 @@ export class ApiService {
       const config: AxiosRequestConfig = {
         method: request.method.toLowerCase() as Method,
         url: forwardingEndpoint,
+        // eslint-disable-next-line  @typescript-eslint/no-unsafe-assignment
         data: request.body,
         headers: {
           ...request.headers,
