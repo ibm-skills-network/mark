@@ -35,7 +35,6 @@ export class AppModule implements NestModule {
       .apply(LoggerMiddleware)
       .forRoutes({ path: "*", method: RequestMethod.ALL })
       .apply(UserSessionMiddleware)
-      .exclude({ path: "admin", method: RequestMethod.ALL })
-      .forRoutes("*");
+      .forRoutes({ path: "/v1/assignments*", method: RequestMethod.ALL });
   }
 }
