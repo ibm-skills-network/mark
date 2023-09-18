@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import {
   UserRole,
@@ -17,55 +23,74 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
 
     const assignmentID = Number(assignmentId);
 
-    // Check if the logged-in user's groupId is associated with this assignment
-    const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
-      where: {
-        assignmentId: assignmentID,
-        groupId: userSession.groupID,
-      },
-    });
-
-    if (!assignmentGroup) {
-      // The user's group is not associated with this assignment
-      return false;
-    }
+    const queries: any[] = [
+      // Query to check if the assignment itself exists
+      this.prisma.assignment.findUnique({ where: { id: assignmentID } }),
+      // Query to check if the user's groupId is associated with the assignment
+      this.prisma.assignmentGroup.findFirst({
+        where: {
+          assignmentId: assignmentID,
+          groupId: userSession.groupID,
+        },
+      }),
+    ];
 
     if (attemptId) {
       const attemptID = Number(attemptId);
-
-      const whereClause: { [key: string]: number | string } = {
-        //check if attempt actually belongs to the assignmentID provided
+      const whereClause: {
+        id: number;
+        assignmentId: number;
+        userId?: string;
+      } = {
         id: attemptID,
         assignmentId: assignmentID,
       };
 
       if (userSession.role === UserRole.LEARNER) {
-        whereClause.userId = userSession.userID; //check if learner actually owns this attempt
+        whereClause.userId = userSession.userID;
       }
 
-      const attempt = await this.prisma.assignmentAttempt.findFirst({
-        where: whereClause,
-      });
-
-      if (!attempt) {
-        return false;
-      }
+      // Query to check if the attempt belongs to the assignment and is owned by the user (if they're a learner)
+      queries.push(
+        this.prisma.assignmentAttempt.findFirst({ where: whereClause })
+      );
     }
 
     if (questionId) {
       const questionID = Number(questionId);
-      // Check if the questionId from params actually belongs to the assignmentId
-      const questionInAssignment = await this.prisma.question.findFirst({
-        where: {
-          id: questionID,
-          assignmentId: assignmentID,
-        },
-      });
+      // Query to check if the question belongs to the assignment
+      queries.push(
+        this.prisma.question.findFirst({
+          where: {
+            id: questionID,
+            assignmentId: assignmentID,
+          },
+        })
+      );
+    }
 
-      if (!questionInAssignment) {
-        // The question doesn't belong to this assignment
-        return false;
-      }
+    // Execute all queries in a transaction
+    const [assignment, assignmentGroup, attempt, questionInAssignment] =
+      await this.prisma.$transaction(queries);
+
+    // Check if the assignment exists
+    if (!assignment) {
+      throw new NotFoundException("Assignment not found");
+    }
+
+    // Check if the user's groupId is associated with it
+    if (!assignmentGroup) {
+      return false;
+    }
+
+    if (attemptId && !attempt) {
+      throw new NotFoundException("Attempt not found or not owned by the user");
+    }
+
+    if (questionId && !questionInAssignment) {
+      throw new NotFoundException(
+        "Question not found within the specified assignment"
+      );
     }
 
     return true;

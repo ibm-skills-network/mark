@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../prisma.service";
@@ -8,41 +14,58 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
   constructor(private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params } = request;
     const { assignmentId: assignmentIdString, id } = params;
     const assignmentId = Number(assignmentIdString);
 
-    // Check if the logged-in user's groupId is associated with this assignment
-    const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
-      where: {
-        assignmentId,
-        groupId: userSession.groupID,
-      },
-    });
+    const questionID = id ? Number(id) : null;
 
+    // Construct the array of queries for the transaction
+    const queries: any[] = [
+      // Query to check if the assignment exists
+      this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
+      // Query to check if the user's groupId is associated with this assignment
+      this.prisma.assignmentGroup.findFirst({
+        where: {
+          assignmentId,
+          groupId: userSession.groupID,
+        },
+      }),
+    ];
+
+    if (questionID) {
+      // If the questionID is present, add query to check if it belongs to the specified assignmentId
+      queries.push(
+        this.prisma.question.findFirst({
+          where: {
+            id: questionID,
+            assignmentId,
+          },
+        })
+      );
+    }
+
+    // Execute all queries in a transaction
+    const [assignment, assignmentGroup, questionInAssignment] =
+      await this.prisma.$transaction(queries);
+
+    // Check if the assignment exists
+    if (!assignment) {
+      throw new NotFoundException("Assignment not found");
+    }
+
+    // Check if the user's groupId is associated with the assignment
     if (!assignmentGroup) {
-      // The user's group is not associated with this assignment
       return false;
     }
 
-    // Check if questionId is present in params
-    if (id) {
-      const questionID = Number(id);
-
-      // Check if the questionId from params actually belongs to the assignmentId
-      const questionInAssignment = await this.prisma.question.findFirst({
-        where: {
-          id: questionID,
-          assignmentId,
-        },
-      });
-
-      return !!questionInAssignment;
+    if (questionID && !questionInAssignment) {
+      throw new NotFoundException(
+        "Question not found within the specified assignment"
+      );
     }
 
-    // If there is no questionId in params, the guard passes
     return true;
   }
 }
