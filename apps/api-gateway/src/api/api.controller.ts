@@ -7,6 +7,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBadRequestResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
 import { DynamicJwtBearerTokenAuthGuard } from "../auth/jwt/bearer-token-based/dynamic.jwt.bearer.token.auth.guard";
 import { DynamicJwtCookieAuthGuard } from "../auth/jwt/cookie-based/dynamic.jwt.cookie.auth.guard";
 import { ApiService } from "./api.service";
@@ -35,7 +36,7 @@ export class ApiController {
   @UseGuards(DynamicJwtBearerTokenAuthGuard)
   @ApiOperation({ summary: "Handle CRUD operations for LTI Consumers" })
   @ApiBadRequestResponse({ description: "Bad request" })
-  async handleLtiOauthConsumers(@Req() request: Request) {
+  async handleLtiOauthConsumers(@Req() request: UserSessionRequest) {
     return this.apiService.forwardRequestToDownstreamService(
       DownstreamService.LTI_CREDENTIAL_MANAGER,
       request
@@ -46,7 +47,7 @@ export class ApiController {
   @UseGuards(DynamicJwtCookieAuthGuard)
   @ApiOperation({ summary: "Handle API requests for the Mark API" })
   @ApiBadRequestResponse({ description: "Bad request" })
-  async handleApiRequests(@Req() request: Request) {
+  async handleApiRequests(@Req() request: UserSessionRequest) {
     return this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
       request

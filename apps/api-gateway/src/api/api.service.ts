@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -8,6 +9,7 @@ import { AxiosRequestConfig } from "@nestjs/terminus/dist/health-indicator/http/
 import axios, { AxiosError, Method } from "axios";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
 import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
 
@@ -31,7 +33,7 @@ export class ApiService {
 
   async forwardRequestToDownstreamService(
     forwardingService: DownstreamService,
-    request: Request & { originalUrl?: string }
+    request: UserSessionRequest & { originalUrl?: string }
   ): Promise<unknown> {
     try {
       if (!request.originalUrl) {
@@ -65,8 +67,13 @@ export class ApiService {
         method: request.method.toLowerCase() as Method,
         url: forwardingEndpoint,
         data: request.body,
-        headers: { ...request.headers },
+        headers: {
+          ...request.headers,
+          "user-session": JSON.stringify(request.user),
+        },
       };
+
+      this.logger.info("Forwarding request: ", config);
 
       const response = await axios.request(config);
       // eslint-disable-next-line @typescript-eslint/no-unsafe-return
@@ -78,9 +85,12 @@ export class ApiService {
         axiosError.response &&
         axiosError.response.data
       ) {
-        throw new InternalServerErrorException(axiosError.response.data);
+        throw new HttpException(
+          axiosError.response.data,
+          axiosError.response.status
+        );
       }
-      throw new InternalServerErrorException("Error forwarding request");
+      throw new InternalServerErrorException();
     }
   }
 }

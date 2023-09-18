@@ -17,10 +17,8 @@ export class DynamicJwtCookieAuthGuard implements CanActivate {
       process.env.NODE_ENV !== "production" &&
       process.env.AUTH_DISABLED === "true"
     ) {
-      console.log("CALLED MOCK");
       return this.mockGuard.canActivate(context);
     } else {
-      console.log("CALLED REAL");
       return this.realGuard.canActivate(context);
     }
   }
