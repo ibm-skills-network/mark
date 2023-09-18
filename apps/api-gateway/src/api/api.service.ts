@@ -63,13 +63,20 @@ export class ApiService {
 
       this.logger.info(`Making request to ${forwardingEndpoint}`);
 
+      const originalHeaders = { ...request.headers };
+
+      // Delete potentially problematic headers.
+      delete originalHeaders["host"];
+      delete originalHeaders["content-length"];
+      delete originalHeaders["connection"];
+
       const config: AxiosRequestConfig = {
         method: request.method.toLowerCase() as Method,
         url: forwardingEndpoint,
         // eslint-disable-next-line  @typescript-eslint/no-unsafe-assignment
         data: request.body,
         headers: {
-          ...request.headers,
+          ...originalHeaders,
           "user-session": JSON.stringify(request.user),
         },
       };
