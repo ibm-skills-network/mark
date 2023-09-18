@@ -1,5 +1,5 @@
 import { TextBasedQuestionResponseModel } from "../../../llm/model/text.based.question.response.model";
-import { TextBasedFeedbackDto } from "../../submission/dto/question-response/create.question.response.submission.response.dto";
+import { TextBasedFeedbackDto } from "../../attempt/dto/question-response/create.question.response.attempt.response.dto";
 
 // Create a new class
 export const GradingHelper = {

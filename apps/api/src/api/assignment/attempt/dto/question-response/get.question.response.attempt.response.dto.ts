@@ -1,15 +1,15 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { JsonValue } from "@prisma/client/runtime/library";
 
-export class GetQuestionResponseSubmissionResponseDto {
+export class GetQuestionResponseAttemptResponseDto {
   @ApiProperty({ description: "Unique identifier for the question response." })
   id: number;
 
   @ApiProperty({
     description:
-      "The ID of the assignment submission that includes this response.",
+      "The ID of the assignment attempt that includes this response.",
   })
-  assignmentSubmissionId: number;
+  assignmentAttemptId: number;
 
   @ApiProperty({
     description: "The ID of the question to which the student is responding.",

@@ -87,23 +87,23 @@ model Question {
   assignment   Assignment   @relation(fields: [assignmentId], references: [id])   /// The assignment to which the question belongs
 }
 
-/// This model represents an assignment submission by a learner
-model AssignmentSubmission {
-  id                Int                @id @default(autoincrement())         /// Unique identifier for the assignment submission
+/// This model represents an assignment attempt by a learner
+model AssignmentAttempt {
+  id                Int                @id @default(autoincrement())         /// Unique identifier for the assignment attempt
   assignmentId      Int                                                      /// The ID of the assignment that has been submitted
-  userId            String                                                   /// The id of the user who created this submission
+  userId            String                                                   /// The id of the user who created this attempt
   questionResponses QuestionResponse[]                                       /// The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
-  submitted         Boolean                                                  /// Boolean value representing if the submission is submitted by the learner or not
-  grade             Float?                                                   /// The overall LTI grade value (from 0.0 - 1.0) that the learner earned 
-  expiresAt         DateTime?                                                /// The DateTime at which the submission window ends (can no longer submit it)
+  submitted         Boolean                                                  /// Boolean value representing if the attempt is submitted by the learner or not
+  grade             Float?                                                   /// The overall LTI grade value (from 0.0 - 1.0) that the learner earned
+  expiresAt         DateTime?                                                /// The DateTime at which the attempt window ends (can no longer submit it)
   createdAt         DateTime @default(now())
 }
 
 /// This model represents a student's response to a question
 model QuestionResponse {
   id                     Int                  @id @default(autoincrement())       /// Unique identifier for the question response
-  assignmentSubmissionId Int                                                      /// The ID of the assignment submission that includes this response
-  assignmentSubmission   AssignmentSubmission @relation(fields: [assignmentSubmissionId], references: [id])   /// The assignment submission that includes this response
+  assignmentAttemptId    Int                                                      /// The ID of the assignment attempt that includes this response
+  assignmentAttempt      AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id])   /// The assignment attempt that includes this response
   questionId             Int                                                      /// The ID of the question to which the student is responding
   learnerResponse        String                                                   /// The student's response to the question
   points                 Int                                                      /// The points earned by the student for this response

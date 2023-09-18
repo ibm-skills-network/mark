@@ -6,17 +6,15 @@ import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
 import { AssignmentService } from "../assignment.service";
 import { QuestionService } from "../question/question.service";
-import { SubmissionController } from "./submission.controller";
-import { SubmissionService } from "./submission.service";
+import { AttemptService } from "./attempt.service";
 
-describe("SubmissionController", () => {
-  let controller: SubmissionController;
+describe("AttemptService", () => {
+  let service: AttemptService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [SubmissionController],
       providers: [
-        SubmissionService,
+        AttemptService,
         PrismaService,
         LlmService,
         QuestionService,
@@ -31,10 +29,10 @@ describe("SubmissionController", () => {
       imports: [HttpModule],
     }).compile();
 
-    controller = module.get<SubmissionController>(SubmissionController);
+    service = module.get<AttemptService>(AttemptService);
   });
 
   it("should be defined", () => {
-    expect(controller).toBeDefined();
+    expect(service).toBeDefined();
   });
 });

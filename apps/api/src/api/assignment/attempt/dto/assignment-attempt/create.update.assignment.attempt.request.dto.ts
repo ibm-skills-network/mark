@@ -1,7 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Equals, IsBoolean, IsDefined } from "class-validator";
 
-export class LearnerUpdateAssignmentSubmissionRequestDto {
+export class LearnerUpdateAssignmentAttemptRequestDto {
   @ApiProperty({
     description: "Represents if the learner has submitted this or not",
     type: Boolean,

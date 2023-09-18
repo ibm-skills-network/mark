@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionType } from "@prisma/client";
 
-export class GetAssignmentSubmissionQuestionResponseDto {
+export class GetAssignmentAttemptQuestionResponseDto {
   @ApiProperty({
     description: "The ID of the question.",
     type: Number,

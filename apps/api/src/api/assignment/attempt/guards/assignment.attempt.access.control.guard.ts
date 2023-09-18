@@ -7,13 +7,13 @@ import {
 import { PrismaService } from "../../../../prisma.service";
 
 @Injectable()
-export class AssignmentSubmissionAccessControlGuard implements CanActivate {
+export class AssignmentAttemptAccessControlGuard implements CanActivate {
   constructor(private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params } = request;
-    const { assignmentId, submissionId, questionId } = params;
+    const { assignmentId, attemptId, questionId } = params;
 
     const assignmentID = Number(assignmentId);
 
@@ -30,24 +30,24 @@ export class AssignmentSubmissionAccessControlGuard implements CanActivate {
       return false;
     }
 
-    if (submissionId) {
-      const submissionID = Number(submissionId);
+    if (attemptId) {
+      const attemptID = Number(attemptId);
 
       const whereClause: { [key: string]: number | string } = {
-        //check if submission actually belongs to the assignmentID provided
-        id: submissionID,
+        //check if attempt actually belongs to the assignmentID provided
+        id: attemptID,
         assignmentId: assignmentID,
       };
 
       if (userSession.role === UserRole.LEARNER) {
-        whereClause.userId = userSession.userID; //check if learner actually owns this submission
+        whereClause.userId = userSession.userID; //check if learner actually owns this attempt
       }
 
-      const submission = await this.prisma.assignmentSubmission.findFirst({
+      const attempt = await this.prisma.assignmentAttempt.findFirst({
         where: whereClause,
       });
 
-      if (!submission) {
+      if (!attempt) {
         return false;
       }
     }
