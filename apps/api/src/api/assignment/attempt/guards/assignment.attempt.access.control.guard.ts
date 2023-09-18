@@ -1,7 +1,6 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -70,6 +69,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
     }
 
     // Execute all queries in a transaction
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const [assignment, assignmentGroup, attempt, questionInAssignment] =
       await this.prisma.$transaction(queries);
 

@@ -1,7 +1,6 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -19,10 +18,10 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
     const { assignmentId: assignmentIdString, id } = params;
     const assignmentId = Number(assignmentIdString);
 
-    const questionID = id ? Number(id) : null;
+    const questionID = id ? Number(id) : undefined;
 
     // Construct the array of queries for the transaction
-    const queries: any[] = [
+    const queries: unknown[] = [
       // Query to check if the assignment exists
       this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
       // Query to check if the user's groupId is associated with this assignment
@@ -47,6 +46,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
     }
 
     // Execute all queries in a transaction
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const [assignment, assignmentGroup, questionInAssignment] =
       await this.prisma.$transaction(queries);
 
