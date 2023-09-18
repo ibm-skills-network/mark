@@ -14,13 +14,12 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Request } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
-  UserRequest,
   UserRole,
-} from "../../..//auth/interfaces/user.interface";
+  UserSessionRequest,
+} from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
 import {
   GRADE_SUBMISSION_EXCEPTION,
@@ -41,9 +40,7 @@ import { GetAssignmentSubmissionQuestionResponseDto } from "./dto/question/get.a
 import { AssignmentSubmissionAccessControlGuard } from "./guards/assignment.submission.access.control.guard";
 import { SubmissionService } from "./submission.service";
 
-@ApiTags(
-  "Submissions (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
-)
+@ApiTags("Submissions")
 @Injectable()
 @Controller({
   path: "assignments/:assignmentId/submissions",
@@ -73,11 +70,11 @@ export class SubmissionController {
   @ApiResponse({ status: 403 })
   createAssignmentSubmission(
     @Param("assignmentId") assignmentId: number,
-    @Req() request: UserRequest
+    @Req() request: UserSessionRequest
   ): Promise<BaseAssignmentSubmissionResponseDto> {
     return this.submissionService.createAssignmentSubmission(
       Number(assignmentId),
-      request.user
+      request.userSession
     );
   }
 
@@ -89,11 +86,11 @@ export class SubmissionController {
   @ApiResponse({ status: 403 })
   listAssignmentSubmissions(
     @Param("assignmentId") assignmentId: number,
-    @Req() request: UserRequest
+    @Req() request: UserSessionRequest
   ): Promise<AssignmentSubmissionResponseDto[]> {
     return this.submissionService.listAssignmentSubmissions(
       Number(assignmentId),
-      request.user
+      request.userSession
     );
   }
 
@@ -138,12 +135,12 @@ export class SubmissionController {
     @Param("assignmentId") assignmentId: number,
     @Body()
     learnerUpdateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto,
-    @Req() request: UserRequest
+    @Req() request: UserSessionRequest
   ): Promise<UpdateAssignmentSubmissionResponseDto> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const authCookie: string = request?.cookies?.authentication;
     const gradingCallbackRequired =
-      request?.user.gradingCallbackRequired ?? false;
+      request?.userSession.gradingCallbackRequired ?? false;
     return this.submissionService.updateAssignmentSubmission(
       Number(assignmentSubmissionID),
       Number(assignmentId),

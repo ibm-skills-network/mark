@@ -8,7 +8,10 @@ import {
 } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import { TrueFalseBasedQuestionEvaluateModel } from "../../../api/llm/model/true.false.based.question.evaluate.model";
-import { User, UserRole } from "../../../auth/interfaces/user.interface";
+import {
+  UserRole,
+  UserSession,
+} from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
 import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.question.evaluate.model";
@@ -47,25 +50,28 @@ export class SubmissionService {
 
   async listAssignmentSubmissions(
     assignmentID: number,
-    user: User
+    userSession: UserSession
   ): Promise<AssignmentSubmissionResponseDto[]> {
     //correct ownership permissions already taken care of through AssignmentSubmissionAccessControlGuard
-    const results = await (user.role === UserRole.AUTHOR
+    const results = await (userSession.role === UserRole.AUTHOR
       ? this.prisma.assignmentSubmission.findMany({
           where: { assignmentId: assignmentID },
         })
       : this.prisma.assignmentSubmission.findMany({
-          where: { assignmentId: assignmentID, userId: user.userID },
+          where: { assignmentId: assignmentID, userId: userSession.userID },
         }));
     return results;
   }
 
   async createAssignmentSubmission(
     assignmentID: number,
-    user: User
+    userSession: UserSession
   ): Promise<BaseAssignmentSubmissionResponseDto> {
     // Check if any of the existing submissions is in progress and has not expired and user is allowed to start a new submission, otherwise return exception
-    const assignment = await this.assignmentService.findOne(assignmentID, user);
+    const assignment = await this.assignmentService.findOne(
+      assignmentID,
+      userSession
+    );
 
     // Calculate the start date of the time range.
     let timeRangeStartDate = new Date();
@@ -77,7 +83,7 @@ export class SubmissionService {
 
     const submissions = await this.prisma.assignmentSubmission.findMany({
       where: {
-        userId: user.userID,
+        userId: userSession.userID,
         assignmentId: assignmentID,
         OR: [
           {
@@ -130,7 +136,7 @@ export class SubmissionService {
     if (assignment.numAttempts) {
       //if null then assume unlimited attempts
       const submissionCount = await this.countUserSubmissions(
-        user.userID,
+        userSession.userID,
         assignmentID
       );
 
@@ -157,7 +163,7 @@ export class SubmissionService {
         assignmentId: assignmentID,
         // eslint-disable-next-line unicorn/no-null
         grade: null,
-        userId: user.userID,
+        userId: userSession.userID,
       },
     });
 
