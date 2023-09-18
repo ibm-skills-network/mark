@@ -7,7 +7,7 @@ const nextConfig = {
       {
         source: "/api/:path*",
         destination: `http://localhost:${
-          process.env.API_PORT || 4222
+          process.env.API_GATEWAY_PORT || 8000
         }/api/:path*`,
       },
     ];
