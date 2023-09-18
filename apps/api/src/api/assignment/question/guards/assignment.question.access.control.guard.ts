@@ -21,7 +21,8 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
     const questionID = id ? Number(id) : undefined;
 
     // Construct the array of queries for the transaction
-    const queries: unknown[] = [
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const queries: any[] = [
       // Query to check if the assignment exists
       this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
       // Query to check if the user's groupId is associated with this assignment
