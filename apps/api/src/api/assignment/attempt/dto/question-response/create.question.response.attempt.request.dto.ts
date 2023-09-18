@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { IsArray, IsBoolean, IsOptional, IsString } from "class-validator";
 
-export class CreateQuestionResponseSubmissionRequestDto {
+export class CreateQuestionResponseAttemptRequestDto {
   @ApiPropertyOptional({
     description: "The learner's text response (for text based questions).",
     type: String,

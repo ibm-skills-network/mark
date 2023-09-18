@@ -4,8 +4,8 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import mammoth from "mammoth";
 import { TextBasedQuestionResponseModel } from "../../../llm/model/text.based.question.response.model";
-import { CreateQuestionResponseSubmissionRequestDto } from "../dto/question-response/create.question.response.submission.request.dto";
-import { TextBasedFeedbackDto } from "../dto/question-response/create.question.response.submission.response.dto";
+import { CreateQuestionResponseAttemptRequestDto } from "../dto/question-response/create.question.response.attempt.request.dto";
+import { TextBasedFeedbackDto } from "../dto/question-response/create.question.response.attempt.response.dto";
 
 interface UploadedFile {
   originalname: string;
@@ -13,7 +13,7 @@ interface UploadedFile {
 }
 
 // Create a new class
-export const SubmissionHelper = {
+export const AttemptHelper = {
   // Converts TextBasedQuestionResponseModel to TextBasedFeedbackDto
   toTextBasedFeedbackDto(
     model: TextBasedQuestionResponseModel
@@ -26,32 +26,32 @@ export const SubmissionHelper = {
 
   async validateAndGetTextResponse(
     questionType: QuestionType,
-    createQuestionResponseSubmissionRequestDto: CreateQuestionResponseSubmissionRequestDto
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
   ): Promise<string> {
     if (questionType === QuestionType.TEXT) {
-      if (!createQuestionResponseSubmissionRequestDto.learnerTextResponse) {
+      if (!createQuestionResponseAttemptRequestDto.learnerTextResponse) {
         throw new BadRequestException(
           "Expected a text-based response (learnerResponse), but did not receive one."
         );
       }
-      return createQuestionResponseSubmissionRequestDto.learnerTextResponse;
+      return createQuestionResponseAttemptRequestDto.learnerTextResponse;
     }
 
     if (questionType === QuestionType.URL) {
-      if (!createQuestionResponseSubmissionRequestDto.learnerUrlResponse) {
+      if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
         throw new BadRequestException(
           "Expected a url-based response (learnerUrlResponse), but did not receive one."
         );
       }
       return await this.fetchPlainTextFromUrl(
-        createQuestionResponseSubmissionRequestDto.learnerUrlResponse
+        createQuestionResponseAttemptRequestDto.learnerUrlResponse
       );
     }
 
     if (questionType === QuestionType.UPLOAD) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const file =
-        createQuestionResponseSubmissionRequestDto.learnerFileResponse as UploadedFile;
+        createQuestionResponseAttemptRequestDto.learnerFileResponse as UploadedFile;
       if (!file) {
         throw new BadRequestException(
           "Expected a file-based response (learnerFileResponse), but did not receive one."

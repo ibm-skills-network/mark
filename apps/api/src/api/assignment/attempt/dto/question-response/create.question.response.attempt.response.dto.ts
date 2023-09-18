@@ -33,7 +33,7 @@ export class ChoiceBasedFeedbackDto {
   feedback: string;
 }
 
-export class CreateQuestionResponseSubmissionResponseDto {
+export class CreateQuestionResponseAttemptResponseDto {
   @ApiProperty({
     description: "The unqiue id of the question response.",
     type: Number,

@@ -1,7 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { BaseAssignmentSubmissionResponseDto } from "./base.assignment.submission.response.dto";
+import { BaseAssignmentAttemptResponseDto } from "./base.assignment.attempt.response.dto";
 
-export class UpdateAssignmentSubmissionResponseDto extends BaseAssignmentSubmissionResponseDto {
+export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptResponseDto {
   @ApiProperty({
     description: "Represents if the learner has submitted this or not.",
     type: Boolean,
@@ -12,7 +12,7 @@ export class UpdateAssignmentSubmissionResponseDto extends BaseAssignmentSubmiss
 
   @ApiProperty({
     description:
-      "The overall LTI grade value (from 0.0 - 1.0) that the learner earned for this submission.",
+      "The overall LTI grade value (from 0.0 - 1.0) that the learner earned for this attempt.",
     type: Number,
     example: 0.8,
     required: false,

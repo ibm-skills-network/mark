@@ -4,19 +4,19 @@ import { PrismaService } from "../../prisma.service";
 import { LlmService } from "../llm/llm.service";
 import { AssignmentController } from "./assignment.controller";
 import { AssignmentService } from "./assignment.service";
+import { AttemptController } from "./attempt/attempt.controller";
+import { AttemptService } from "./attempt/attempt.service";
 import { QuestionController } from "./question/question.controller";
 import { QuestionService } from "./question/question.service";
-import { SubmissionController } from "./submission/submission.controller";
-import { SubmissionService } from "./submission/submission.service";
 
 @Module({
-  controllers: [AssignmentController, QuestionController, SubmissionController],
+  controllers: [AssignmentController, QuestionController, AttemptController],
   providers: [
     AssignmentService,
     PrismaService,
     QuestionService,
     LlmService,
-    SubmissionService,
+    AttemptService,
   ],
   imports: [HttpModule],
 })

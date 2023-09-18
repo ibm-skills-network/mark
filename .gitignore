@@ -78,6 +78,9 @@ values.backup
 apps/web/.vscode
 apps/api-gateway/.vscode
 
+#.idea
+.idea/*
+
 # misc
 *.DS_Store
 *.pem
@@ -88,3 +91,4 @@ dist/
 .next/
 .turbo/
 out/
+.idea/whitesource/WebStormUsageMetrics.txt

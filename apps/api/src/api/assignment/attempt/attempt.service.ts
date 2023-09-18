@@ -26,20 +26,20 @@ import {
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
   TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
 } from "./api-exceptions/exceptions";
-import { BaseAssignmentSubmissionResponseDto } from "./dto/assignment-submission/base.assignment.submission.response.dto";
-import { LearnerUpdateAssignmentSubmissionRequestDto } from "./dto/assignment-submission/create.update.assignment.submission.request.dto";
+import { BaseAssignmentAttemptResponseDto } from "./dto/assignment-attempt/base.assignment.attempt.response.dto";
+import { LearnerUpdateAssignmentAttemptRequestDto } from "./dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
-  AssignmentSubmissionResponseDto,
-  GetAssignmentSubmissionResponseDto,
-} from "./dto/assignment-submission/get.assignment.submission.response.dto";
-import { UpdateAssignmentSubmissionResponseDto } from "./dto/assignment-submission/update.assignment.submission.response.dto";
-import { CreateQuestionResponseSubmissionRequestDto } from "./dto/question-response/create.question.response.submission.request.dto";
-import { CreateQuestionResponseSubmissionResponseDto } from "./dto/question-response/create.question.response.submission.response.dto";
-import { GetAssignmentSubmissionQuestionResponseDto } from "./dto/question/get.assignment.submission.questions.response.dto";
-import { SubmissionHelper } from "./helper/submission.helper";
+  AssignmentAttemptResponseDto,
+  GetAssignmentAttemptResponseDto,
+} from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
+import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
+import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
+import { GetAssignmentAttemptQuestionResponseDto } from "./dto/question/get.assignment.attempt.questions.response.dto";
+import { AttemptHelper } from "./helper/attempts.helper";
 
 @Injectable()
-export class SubmissionService {
+export class AttemptService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
@@ -48,26 +48,26 @@ export class SubmissionService {
     private readonly httpService: HttpService
   ) {}
 
-  async listAssignmentSubmissions(
+  async listAssignmentAttempts(
     assignmentID: number,
     userSession: UserSession
-  ): Promise<AssignmentSubmissionResponseDto[]> {
-    //correct ownership permissions already taken care of through AssignmentSubmissionAccessControlGuard
+  ): Promise<AssignmentAttemptResponseDto[]> {
+    //correct ownership permissions already taken care of through AssignmentAttemptAccessControlGuard
     const results = await (userSession.role === UserRole.AUTHOR
-      ? this.prisma.assignmentSubmission.findMany({
+      ? this.prisma.assignmentAttempt.findMany({
           where: { assignmentId: assignmentID },
         })
-      : this.prisma.assignmentSubmission.findMany({
+      : this.prisma.assignmentAttempt.findMany({
           where: { assignmentId: assignmentID, userId: userSession.userID },
         }));
     return results;
   }
 
-  async createAssignmentSubmission(
+  async createAssignmentAttempt(
     assignmentID: number,
     userSession: UserSession
-  ): Promise<BaseAssignmentSubmissionResponseDto> {
-    // Check if any of the existing submissions is in progress and has not expired and user is allowed to start a new submission, otherwise return exception
+  ): Promise<BaseAssignmentAttemptResponseDto> {
+    // Check if any of the existing attempts is in progress and has not expired and user is allowed to start a new attempt, otherwise return exception
     const assignment = await this.assignmentService.findOne(
       assignmentID,
       userSession
@@ -81,7 +81,7 @@ export class SubmissionService {
       ); // Convert hours to milliseconds
     }
 
-    const submissions = await this.prisma.assignmentSubmission.findMany({
+    const attempts = await this.prisma.assignmentAttempt.findMany({
       where: {
         userId: userSession.userID,
         assignmentId: assignmentID,
@@ -89,17 +89,17 @@ export class SubmissionService {
           {
             submitted: false,
             expiresAt: {
-              gte: new Date(), // Get any submission that is not submitted and has not expired yet too (is in progress)
+              gte: new Date(), // Get any attempt that is not submitted and has not expired yet too (is in progress)
             },
           },
           {
             submitted: false,
             // eslint-disable-next-line unicorn/no-null
-            expiresAt: null, // Get any submission that is not submitted and has no expiry date (meaning time limit in unlimited)
+            expiresAt: null, // Get any attempt that is not submitted and has no expiry date (meaning time limit in unlimited)
           },
           {
             createdAt: {
-              gte: timeRangeStartDate, // Get all submission within the time range (for example within last 2 hours)
+              gte: timeRangeStartDate, // Get all attempt within the time range (for example within last 2 hours)
               lte: new Date(),
             },
           },
@@ -107,40 +107,40 @@ export class SubmissionService {
       },
     });
 
-    // Separate the submissions based on ongoing and within the time range
-    const ongoingSubmissions = submissions.filter(
+    // Separate the attempts based on ongoing and within the time range
+    const ongoingAttempts = attempts.filter(
       (sub) =>
         !sub.submitted &&
         (sub.expiresAt >= new Date() || sub.expiresAt === null)
     );
 
-    const submissionsInTimeRange = submissions.filter(
+    const attemptsInTimeRange = attempts.filter(
       (sub) =>
         sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
     );
 
-    if (ongoingSubmissions.length > 0) {
+    if (ongoingAttempts.length > 0) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
 
     if (
       assignment.attemptsPerTimeRange &&
-      submissionsInTimeRange.length >= assignment.attemptsPerTimeRange
+      attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
     ) {
       throw new UnprocessableEntityException(
         TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
       );
     }
 
-    //Get exising submissions count to check if new attempt is possible
+    //Get exising attempts count to check if new attempt is possible
     if (assignment.numAttempts) {
       //if null then assume unlimited attempts
-      const submissionCount = await this.countUserSubmissions(
+      const attemptCount = await this.countUserAttempts(
         userSession.userID,
         assignmentID
       );
 
-      if (submissionCount >= assignment.numAttempts) {
+      if (attemptCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
           MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
         );
@@ -148,17 +148,17 @@ export class SubmissionService {
     }
 
     // eslint-disable-next-line unicorn/no-null
-    let submissionExpiresAt: Date | null = null;
+    let attemptExpiresAt: Date | null = null;
     if (assignment.allotedTimeMinutes) {
       const currentDate = new Date();
-      submissionExpiresAt = new Date(
+      attemptExpiresAt = new Date(
         currentDate.getTime() + assignment.allotedTimeMinutes * 60 * 1000
       );
     }
 
-    const result = await this.prisma.assignmentSubmission.create({
+    const result = await this.prisma.assignmentAttempt.create({
       data: {
-        expiresAt: submissionExpiresAt,
+        expiresAt: attemptExpiresAt,
         submitted: false,
         assignmentId: assignmentID,
         // eslint-disable-next-line unicorn/no-null
@@ -173,21 +173,20 @@ export class SubmissionService {
     };
   }
 
-  async updateAssignmentSubmission(
-    assignmentSubmissionID: number,
+  async updateAssignmentAttempt(
+    assignmentAttemptID: number,
     assignmentID: number,
-    updateAssignmentSubmissionDto: LearnerUpdateAssignmentSubmissionRequestDto,
+    updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     gradingCallbackRequired: boolean
-  ): Promise<UpdateAssignmentSubmissionResponseDto> {
-    const assignmentSubmission =
-      await this.prisma.assignmentSubmission.findUnique({
-        where: { id: assignmentSubmissionID },
-      });
+  ): Promise<UpdateAssignmentAttemptResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptID },
+    });
 
     if (
-      assignmentSubmission.expiresAt &&
-      new Date() > assignmentSubmission.expiresAt
+      assignmentAttempt.expiresAt &&
+      new Date() > assignmentAttempt.expiresAt
     ) {
       throw new UnprocessableEntityException(
         SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
@@ -208,7 +207,7 @@ export class SubmissionService {
     }
 
     const questionResponses = await this.prisma.questionResponse.findMany({
-      where: { assignmentSubmissionId: assignmentSubmissionID },
+      where: { assignmentAttemptId: assignmentAttemptID },
     });
 
     // Map to store the highest score for each question
@@ -253,13 +252,13 @@ export class SubmissionService {
       }
     }
 
-    // Update AssignmentSubmission with the calculated grade
-    const result = await this.prisma.assignmentSubmission.update({
+    // Update AssignmentAttempt with the calculated grade
+    const result = await this.prisma.assignmentAttempt.update({
       data: {
-        ...updateAssignmentSubmissionDto,
+        ...updateAssignmentAttemptDto,
         grade,
       },
-      where: { id: assignmentSubmissionID },
+      where: { id: assignmentAttemptID },
     });
 
     return {
@@ -270,26 +269,26 @@ export class SubmissionService {
     };
   }
 
-  async getAssignmentSubmission(
-    assignmentSubmissionID: number
-  ): Promise<GetAssignmentSubmissionResponseDto> {
-    const result = await this.prisma.assignmentSubmission.findUnique({
-      where: { id: assignmentSubmissionID },
+  async getAssignmentAttempt(
+    assignmentAttemptID: number
+  ): Promise<GetAssignmentAttemptResponseDto> {
+    const result = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptID },
       include: { questionResponses: true },
     });
 
     if (!result) {
       throw new NotFoundException(
-        `AssignmentSubmission with ID ${assignmentSubmissionID} not found.`
+        `AssignmentAttempt with ID ${assignmentAttemptID} not found.`
       );
     }
 
     return result;
   }
 
-  async getAssignmentSubmissionQuestions(
+  async getAssignmentAttemptQuestions(
     assignmentID: number
-  ): Promise<GetAssignmentSubmissionQuestionResponseDto[]> {
+  ): Promise<GetAssignmentAttemptQuestionResponseDto[]> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentID },
       include: { questions: true },
@@ -307,18 +306,17 @@ export class SubmissionService {
   }
 
   async createQuestionResponse(
-    assignmentSubmissionID: number,
+    assignmentAttemptID: number,
     questionID: number,
-    createQuestionResponseSubmissionRequestDto: CreateQuestionResponseSubmissionRequestDto
-  ): Promise<CreateQuestionResponseSubmissionResponseDto> {
-    const assignmentSubmission =
-      await this.prisma.assignmentSubmission.findUnique({
-        where: { id: assignmentSubmissionID },
-      });
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+  ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptID },
+    });
 
     if (
-      assignmentSubmission.expiresAt &&
-      new Date() > assignmentSubmission.expiresAt
+      assignmentAttempt.expiresAt &&
+      new Date() > assignmentAttempt.expiresAt
     ) {
       throw new UnprocessableEntityException(
         SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
@@ -331,7 +329,7 @@ export class SubmissionService {
     if (question.numRetries) {
       const retryCount = await this.countUserQuestionResponses(
         questionID,
-        assignmentSubmissionID
+        assignmentAttemptID
       );
 
       if (retryCount >= question.numRetries) {
@@ -341,7 +339,7 @@ export class SubmissionService {
       }
     }
 
-    const responseDto = new CreateQuestionResponseSubmissionResponseDto();
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
     let learnerResponse: string;
     // Grade Text Based Questions
     if (
@@ -349,9 +347,9 @@ export class SubmissionService {
       question.type === QuestionType.UPLOAD ||
       question.type === QuestionType.URL
     ) {
-      learnerResponse = await SubmissionHelper.validateAndGetTextResponse(
+      learnerResponse = await AttemptHelper.validateAndGetTextResponse(
         question.type,
-        createQuestionResponseSubmissionRequestDto
+        createQuestionResponseAttemptRequestDto
       );
 
       const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
@@ -372,13 +370,13 @@ export class SubmissionService {
         0
       );
       responseDto.feedback = models.map((element) =>
-        SubmissionHelper.toTextBasedFeedbackDto(element)
+        AttemptHelper.toTextBasedFeedbackDto(element)
       );
     }
 
     // Grade True False Questions
     else if (question.type === QuestionType.TRUE_FALSE) {
-      if (!createQuestionResponseSubmissionRequestDto.learnerAnswerChoice) {
+      if (!createQuestionResponseAttemptRequestDto.learnerAnswerChoice) {
         throw new BadRequestException(
           "Expected a true-false-based response (learnerAnswerChoice), but did not receive one."
         );
@@ -388,7 +386,7 @@ export class SubmissionService {
         new TrueFalseBasedQuestionEvaluateModel(
           question.question,
           question.answer,
-          createQuestionResponseSubmissionRequestDto.learnerAnswerChoice,
+          createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
           question.totalPoints
         );
 
@@ -400,13 +398,13 @@ export class SubmissionService {
       responseDto.totalPoints = model.points;
       responseDto.feedback = model.feedback;
       learnerResponse = JSON.stringify(
-        createQuestionResponseSubmissionRequestDto.learnerAnswerChoice
+        createQuestionResponseAttemptRequestDto.learnerAnswerChoice
       );
     }
 
     //Grade Choice Based Questions
     else {
-      if (!createQuestionResponseSubmissionRequestDto.learnerChoices) {
+      if (!createQuestionResponseAttemptRequestDto.learnerChoices) {
         throw new BadRequestException(
           "Expected a choice-based response (learnerChoices), but did not receive one."
         );
@@ -416,7 +414,7 @@ export class SubmissionService {
         new ChoiceBasedQuestionEvaluateModel(
           question.question,
           question.choices ?? {},
-          createQuestionResponseSubmissionRequestDto.learnerChoices,
+          createQuestionResponseAttemptRequestDto.learnerChoices,
           question.totalPoints,
           question.scoring?.type,
           question.scoring?.criteria ?? undefined
@@ -430,14 +428,14 @@ export class SubmissionService {
       responseDto.totalPoints = model.points;
       responseDto.feedback = model.feedback;
       learnerResponse = JSON.stringify(
-        createQuestionResponseSubmissionRequestDto.learnerChoices
+        createQuestionResponseAttemptRequestDto.learnerChoices
       );
     }
 
     // create a question response record in db
     const result = await this.prisma.questionResponse.create({
       data: {
-        assignmentSubmissionId: assignmentSubmissionID,
+        assignmentAttemptId: assignmentAttemptID,
         questionId: questionID,
         learnerResponse: learnerResponse,
         points: responseDto.totalPoints,
@@ -451,11 +449,11 @@ export class SubmissionService {
 
   // private methods
 
-  async countUserSubmissions(
+  async countUserAttempts(
     userID: string,
     assignmentId: number
   ): Promise<number> {
-    return this.prisma.assignmentSubmission.count({
+    return this.prisma.assignmentAttempt.count({
       where: {
         userId: userID,
         assignmentId: assignmentId,
@@ -465,12 +463,12 @@ export class SubmissionService {
 
   async countUserQuestionResponses(
     questionID: number,
-    assignmentSubmissionID: number
+    assignmentAttemptID: number
   ): Promise<number> {
     return this.prisma.questionResponse.count({
       where: {
         questionId: questionID,
-        assignmentSubmissionId: assignmentSubmissionID,
+        assignmentAttemptId: assignmentAttemptID,
       },
     });
   }

@@ -58,7 +58,7 @@ CREATE TABLE "Question" (
 );
 
 -- CreateTable
-CREATE TABLE "AssignmentSubmission" (
+CREATE TABLE "AssignmentAttempt" (
     "id" SERIAL NOT NULL,
     "assignmentId" INTEGER NOT NULL,
     "userId" TEXT NOT NULL,
@@ -67,13 +67,13 @@ CREATE TABLE "AssignmentSubmission" (
     "expiresAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "AssignmentSubmission_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AssignmentAttempt_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "QuestionResponse" (
     "id" SERIAL NOT NULL,
-    "assignmentSubmissionId" INTEGER NOT NULL,
+    "assignmentAttemptId" INTEGER NOT NULL,
     "questionId" INTEGER NOT NULL,
     "learnerResponse" TEXT NOT NULL,
     "points" INTEGER NOT NULL,
@@ -95,4 +95,4 @@ ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_groupId_fkey" FORE
 ALTER TABLE "Question" ADD CONSTRAINT "Question_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "QuestionResponse" ADD CONSTRAINT "QuestionResponse_assignmentSubmissionId_fkey" FOREIGN KEY ("assignmentSubmissionId") REFERENCES "AssignmentSubmission"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "QuestionResponse" ADD CONSTRAINT "QuestionResponse_assignmentAttemptId_fkey" FOREIGN KEY ("assignmentAttemptId") REFERENCES "AssignmentAttempt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

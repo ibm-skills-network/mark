@@ -37,7 +37,10 @@ export class ApiController {
   }
 
   @Get("user-session")
-  @ApiOperation({ summary: "Get user session information" })
+  @ApiOperation({
+    summary:
+      "Get user session information - needs a user-session header (injected using the API Gateway)",
+  })
   @ApiResponse({
     status: 200,
     description: "The user session information was successfully retrieved.",

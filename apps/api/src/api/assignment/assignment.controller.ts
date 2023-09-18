@@ -38,7 +38,9 @@ import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dt
 import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 
-@ApiTags("Assignments")
+@ApiTags(
+  "Assignments (All endpoints need a user-session header (injected using the API Gateway)"
+)
 @Injectable()
 @Controller({
   path: "assignments",
