@@ -22,6 +22,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
 
     const assignmentID = Number(assignmentId);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [
       // Query to check if the assignment itself exists
       this.prisma.assignment.findUnique({ where: { id: assignmentID } }),
