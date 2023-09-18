@@ -14,7 +14,7 @@ import {
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
-import { UserRole } from "../../..//auth/interfaces/user.interface";
+import { UserRole } from "../../..//auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
 import { ASSIGNMENT_SCHEMA_URL } from "../constants";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
@@ -23,9 +23,7 @@ import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
 import { AssignmentQuestionAccessControlGuard } from "./guards/assignment.question.access.control.guard";
 import { QuestionService } from "./question.service";
 
-@ApiTags(
-  "Questions (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
-)
+@ApiTags("Questions")
 @Injectable()
 @Controller({
   path: "assignments/:assignmentId/questions",

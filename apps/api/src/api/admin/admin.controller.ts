@@ -8,10 +8,6 @@ import {
   Patch,
   Post,
   Put,
-  Req,
-  Request,
-  UnauthorizedException,
-  UseGuards,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
@@ -23,8 +19,6 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
-import { getAdminAuthGuard } from "../../auth/jwt/admin/utils";
-import { Admin } from "../../auth/jwt/jwt.global.auth.guard";
 import { AdminService } from "./admin.service";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
@@ -35,17 +29,14 @@ import {
 } from "./dto/assignment/create.replace.assignment.request.dto";
 import { AdminGetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
 import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
-import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
-@ApiTags("Admin (Requires a JWT Bearer token for authorization)")
+@ApiTags("Admin")
 @UsePipes(
   new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
   })
 )
-@UseGuards(getAdminAuthGuard())
-@Admin()
 @ApiBearerAuth()
 @Injectable()
 @Controller({
@@ -54,29 +45,6 @@ import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 })
 export class AdminController {
   constructor(private adminService: AdminService) {}
-
-  @Post("tokens")
-  @ApiOperation({
-    summary: "Create a new admin token",
-    description:
-      "This endpoint creates a new admin token. Requires a JWT Bearer token for authorization.",
-  })
-  @ApiBody({
-    type: CreateTokenRequestDto,
-    description: "Data to create a new admin token",
-  })
-  createToken(
-    @Body() createTokenRequestDto: CreateTokenRequestDto,
-    @Req() request: Request
-  ) {
-    //request.user contains the token's payload
-    if (!("user" in request)) {
-      throw new UnauthorizedException("Invalid token");
-    }
-
-    const newToken = this.adminService.createJWTToken(createTokenRequestDto);
-    return { token: newToken };
-  }
 
   @Post("assignments/clone/:id")
   @ApiOperation({

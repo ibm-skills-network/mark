@@ -21,7 +21,10 @@ import {
 } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
-import { UserRequest, UserRole } from "../../auth/interfaces/user.interface";
+import {
+  UserRole,
+  UserSessionRequest,
+} from "../../auth/interfaces/user.session.interface";
 import { Roles } from "../../auth/role/roles.global.guard";
 import { AssignmentService } from "./assignment.service";
 import { ASSIGNMENT_SCHEMA_URL } from "./constants";
@@ -35,9 +38,7 @@ import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dt
 import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 
-@ApiTags(
-  "Assignments (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
-)
+@ApiTags("Assignments")
 @Injectable()
 @Controller({
   path: "assignments",
@@ -69,9 +70,9 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   async getAssignment(
     @Param("id") id: number,
-    @Req() request: UserRequest
+    @Req() request: UserSessionRequest
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    return this.assignmentService.findOne(Number(id), request.user);
+    return this.assignmentService.findOne(Number(id), request.userSession);
   }
 
   @Get()
@@ -85,9 +86,9 @@ export class AssignmentController {
   })
   @ApiResponse({ status: 403 })
   async listAssignments(
-    @Req() request: UserRequest
+    @Req() request: UserSessionRequest
   ): Promise<AssignmentResponseDto[]> {
-    return this.assignmentService.list(request.user);
+    return this.assignmentService.list(request.userSession);
   }
 
   @Patch(":id")

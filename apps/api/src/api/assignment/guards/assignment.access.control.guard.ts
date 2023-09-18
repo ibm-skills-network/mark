@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { UserRequest } from "../../../auth/interfaces/user.interface";
+import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../prisma.service";
 
 @Injectable()
@@ -9,8 +9,8 @@ export class AssignmentAccessControlGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const request = context.switchToHttp().getRequest<UserRequest>();
-    const { user, params } = request;
+    const request = context.switchToHttp().getRequest<UserSessionRequest>();
+    const { userSession, params } = request;
     const { id } = params;
     const assignmentID = Number(id);
 
@@ -18,7 +18,7 @@ export class AssignmentAccessControlGuard implements CanActivate {
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {
         assignmentId: assignmentID,
-        groupId: user.groupID,
+        groupId: userSession.groupID,
       },
     });
 

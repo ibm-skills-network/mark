@@ -5,17 +5,17 @@ export enum UserRole {
   AUTHOR = "author",
 }
 
-export interface ClientUser {
+export interface ClientUserSession {
   userID: string;
   role: UserRole;
   assignmentID: number;
 }
 
-export interface User extends ClientUser {
+export interface UserSession extends ClientUserSession {
   groupID: string;
   gradingCallbackRequired?: boolean;
 }
 
-export interface UserRequest extends Request {
-  user: User;
+export interface UserSessionRequest extends Request {
+  userSession: UserSession;
 }

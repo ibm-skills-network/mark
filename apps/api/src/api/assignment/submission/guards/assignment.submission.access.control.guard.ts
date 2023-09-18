@@ -1,9 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import {
-  UserRequest,
   UserRole,
-} from "../../../../auth/interfaces/user.interface";
+  UserSessionRequest,
+} from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../prisma.service";
 
 @Injectable()
@@ -11,8 +11,8 @@ export class AssignmentSubmissionAccessControlGuard implements CanActivate {
   constructor(private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<UserRequest>();
-    const { user, params } = request;
+    const request = context.switchToHttp().getRequest<UserSessionRequest>();
+    const { userSession, params } = request;
     const { assignmentId, submissionId, questionId } = params;
 
     const assignmentID = Number(assignmentId);
@@ -21,7 +21,7 @@ export class AssignmentSubmissionAccessControlGuard implements CanActivate {
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {
         assignmentId: assignmentID,
-        groupId: user.groupID,
+        groupId: userSession.groupID,
       },
     });
 
@@ -39,8 +39,8 @@ export class AssignmentSubmissionAccessControlGuard implements CanActivate {
         assignmentId: assignmentID,
       };
 
-      if (user.role === UserRole.LEARNER) {
-        whereClause.userId = user.userID; //check if learner actually owns this submission
+      if (userSession.role === UserRole.LEARNER) {
+        whereClause.userId = userSession.userID; //check if learner actually owns this submission
       }
 
       const submission = await this.prisma.assignmentSubmission.findFirst({

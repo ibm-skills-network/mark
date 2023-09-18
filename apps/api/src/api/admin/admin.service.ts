@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { sign } from "jsonwebtoken";
-import { JwtConfigService } from "../../auth/jwt/jwt.config.service";
 import { PrismaService } from "../../prisma.service";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
@@ -14,19 +13,10 @@ import {
 } from "./dto/assignment/create.replace.assignment.request.dto";
 import { AdminGetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
 import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
-import { CreateTokenRequestDto } from "./dto/create.token.request.dto";
 
 @Injectable()
 export class AdminService {
-  constructor(
-    private jwtConfigService: JwtConfigService,
-    private readonly prisma: PrismaService
-  ) {}
-
-  createJWTToken(createTokenRequestDto: CreateTokenRequestDto) {
-    const { secret, signOptions } = this.jwtConfigService.jwtConstants;
-    return sign(createTokenRequestDto, secret, signOptions);
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async cloneAssignment(
     id: number,
