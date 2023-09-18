@@ -81,16 +81,15 @@ export class ApiService {
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError;
-      if (
-        axiosError.isAxiosError &&
-        axiosError.response &&
-        axiosError.response.data
-      ) {
+      if (axiosError.isAxiosError && axiosError.response) {
+        this.logger.error(axiosError.response.status);
+        this.logger.error(axiosError.response.data);
         throw new HttpException(
-          axiosError.response.data,
+          axiosError.response?.data ?? "",
           axiosError.response.status
         );
       }
+      this.logger.error(error);
       throw new InternalServerErrorException();
     }
   }
