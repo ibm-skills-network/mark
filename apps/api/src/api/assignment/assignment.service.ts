@@ -1,5 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { User, UserRole } from "../../auth/interfaces/user.interface";
+import {
+  UserRole,
+  UserSession,
+} from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../prisma.service";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import {
@@ -16,9 +19,9 @@ export class AssignmentService {
 
   async findOne(
     id: number,
-    user: User
+    userSession: UserSession
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    const includeQuestions = user.role !== UserRole.LEARNER;
+    const includeQuestions = userSession.role !== UserRole.LEARNER;
 
     const result = await this.prisma.assignment.findUnique({
       where: { id },
@@ -30,7 +33,7 @@ export class AssignmentService {
     }
 
     // If learner then get rid of irrelevant/sensitive fields like questions and displayOrder
-    if (user.role === UserRole.LEARNER) {
+    if (userSession.role === UserRole.LEARNER) {
       delete result["displayOrder"];
       return {
         ...result,
@@ -44,16 +47,18 @@ export class AssignmentService {
     } as GetAssignmentResponseDto;
   }
 
-  async list(user: User): Promise<AssignmentResponseDto[]> {
+  async list(userSession: UserSession): Promise<AssignmentResponseDto[]> {
     const results = await this.prisma.assignmentGroup.findMany({
-      where: { groupId: user.groupID },
+      where: { groupId: userSession.groupID },
       include: {
         assignment: true,
       },
     });
 
     if (!results) {
-      throw new NotFoundException(`Group with ID ${user.groupID} not found.`);
+      throw new NotFoundException(
+        `Group with ID ${userSession.groupID} not found.`
+      );
     }
 
     return results.map((result) => ({

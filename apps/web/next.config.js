@@ -10,7 +10,9 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:4222/api/:path*",
+        destination: `http://localhost:${
+          process.env.API_GATEWAY_PORT || 8000
+        }/api/:path*`,
       },
     ];
   },

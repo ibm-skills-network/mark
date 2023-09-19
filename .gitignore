@@ -75,6 +75,11 @@ values.backup
 !.vscode/*.code-snippets
 .history
 .vscode/settings.json
+apps/web/.vscode
+apps/api-gateway/.vscode
+
+#.idea
+.idea/*
 
 # misc
 *.DS_Store
@@ -86,3 +91,4 @@ dist/
 .next/
 .turbo/
 out/
+.idea/whitesource/WebStormUsageMetrics.txt

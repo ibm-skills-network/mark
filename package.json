@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
+    "dev": "source dev.env && turbo run dev --parallel",
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write \"**/*.{ts,tsx,md}\"",
     "lint": "turbo run lint",
