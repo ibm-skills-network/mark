@@ -36,10 +36,10 @@ export class JwtCookieStrategy extends PassportStrategy(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validate(payload: IJwtPayload): UserSession {
     return {
-      userID: payload.userID,
+      userId: payload.userId,
       role: payload.role,
-      groupID: payload.groupID,
-      assignmentID: payload.assignmentID,
+      groupId: payload.groupId,
+      assignmentId: payload.assignmentId,
       gradingCallbackRequired: payload.gradingCallbackRequired,
     };
   }
