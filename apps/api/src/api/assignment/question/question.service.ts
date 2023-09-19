@@ -49,7 +49,7 @@ export class QuestionService {
     });
 
     if (!result) {
-      throw new NotFoundException(`Question with ID ${id} not found.`);
+      throw new NotFoundException(`Question with Id ${id} not found.`);
     }
 
     return {
@@ -60,7 +60,7 @@ export class QuestionService {
       choices: result.choices
         ? (result.choices as Record<string, boolean>)
         : undefined,
-      assignmentID: result.assignmentId,
+      assignmentId: result.assignmentId,
       success: true,
     };
   }

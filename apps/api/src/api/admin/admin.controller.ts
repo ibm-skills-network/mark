@@ -48,18 +48,18 @@ export class AdminController {
 
   @Post("assignments/clone/:id")
   @ApiOperation({
-    summary: "Clone an assignment and associates it with the provided groupID",
+    summary: "Clone an assignment and associates it with the provided groupId",
   })
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   cloneAssignment(
-    @Param("id") assignmentID: number,
+    @Param("id") assignmentId: number,
     @Body() assignmentCloneRequestDto: AdminAssignmentCloneRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.cloneAssignment(
-      Number(assignmentID),
-      assignmentCloneRequestDto.groupID
+      Number(assignmentId),
+      assignmentCloneRequestDto.groupId
     );
   }
 
@@ -69,12 +69,12 @@ export class AdminController {
   @ApiResponse({ status: 200, type: AdminAddAssignmentToGroupResponseDto })
   @ApiResponse({ status: 403 })
   addAssignmentToGroup(
-    @Param("assignmentId") assignmentID: number,
-    @Param("groupId") groupID: string
+    @Param("assignmentId") assignmentId: number,
+    @Param("groupId") groupId: string
   ): Promise<AdminAddAssignmentToGroupResponseDto> {
     return this.adminService.addAssignmentToGroup(
-      Number(assignmentID),
-      groupID
+      Number(assignmentId),
+      groupId
     );
   }
 

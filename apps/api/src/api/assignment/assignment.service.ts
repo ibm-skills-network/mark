@@ -29,7 +29,7 @@ export class AssignmentService {
     });
 
     if (!result) {
-      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+      throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
     // If learner then get rid of irrelevant/sensitive fields like questions and displayOrder
@@ -49,7 +49,7 @@ export class AssignmentService {
 
   async list(userSession: UserSession): Promise<AssignmentResponseDto[]> {
     const results = await this.prisma.assignmentGroup.findMany({
-      where: { groupId: userSession.groupID },
+      where: { groupId: userSession.groupId },
       include: {
         assignment: true,
       },
@@ -57,7 +57,7 @@ export class AssignmentService {
 
     if (!results) {
       throw new NotFoundException(
-        `Group with ID ${userSession.groupID} not found.`
+        `Group with Id ${userSession.groupId} not found.`
       );
     }
 
