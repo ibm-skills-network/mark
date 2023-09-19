@@ -7,12 +7,12 @@ export class GetQuestionResponseAttemptResponseDto {
 
   @ApiProperty({
     description:
-      "The ID of the assignment attempt that includes this response.",
+      "The Id of the assignment attempt that includes this response.",
   })
   assignmentAttemptId: number;
 
   @ApiProperty({
-    description: "The ID of the question to which the student is responding.",
+    description: "The Id of the question to which the student is responding.",
   })
   questionId: number;
 

@@ -49,27 +49,27 @@ export class AttemptService {
   ) {}
 
   async listAssignmentAttempts(
-    assignmentID: number,
+    assignmentId: number,
     userSession: UserSession
   ): Promise<AssignmentAttemptResponseDto[]> {
     //correct ownership permissions already taken care of through AssignmentAttemptAccessControlGuard
     const results = await (userSession.role === UserRole.AUTHOR
       ? this.prisma.assignmentAttempt.findMany({
-          where: { assignmentId: assignmentID },
+          where: { assignmentId: assignmentId },
         })
       : this.prisma.assignmentAttempt.findMany({
-          where: { assignmentId: assignmentID, userId: userSession.userID },
+          where: { assignmentId: assignmentId, userId: userSession.userId },
         }));
     return results;
   }
 
   async createAssignmentAttempt(
-    assignmentID: number,
+    assignmentId: number,
     userSession: UserSession
   ): Promise<BaseAssignmentAttemptResponseDto> {
     // Check if any of the existing attempts is in progress and has not expired and user is allowed to start a new attempt, otherwise return exception
     const assignment = await this.assignmentService.findOne(
-      assignmentID,
+      assignmentId,
       userSession
     );
 
@@ -83,8 +83,8 @@ export class AttemptService {
 
     const attempts = await this.prisma.assignmentAttempt.findMany({
       where: {
-        userId: userSession.userID,
-        assignmentId: assignmentID,
+        userId: userSession.userId,
+        assignmentId: assignmentId,
         OR: [
           {
             submitted: false,
@@ -136,8 +136,8 @@ export class AttemptService {
     if (assignment.numAttempts) {
       //if null then assume unlimited attempts
       const attemptCount = await this.countUserAttempts(
-        userSession.userID,
-        assignmentID
+        userSession.userId,
+        assignmentId
       );
 
       if (attemptCount >= assignment.numAttempts) {
@@ -160,10 +160,10 @@ export class AttemptService {
       data: {
         expiresAt: attemptExpiresAt,
         submitted: false,
-        assignmentId: assignmentID,
+        assignmentId: assignmentId,
         // eslint-disable-next-line unicorn/no-null
         grade: null,
-        userId: userSession.userID,
+        userId: userSession.userId,
       },
     });
 
@@ -174,14 +174,14 @@ export class AttemptService {
   }
 
   async updateAssignmentAttempt(
-    assignmentAttemptID: number,
-    assignmentID: number,
+    assignmentAttemptId: number,
+    assignmentId: number,
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     gradingCallbackRequired: boolean
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptID },
+      where: { id: assignmentAttemptId },
     });
 
     if (
@@ -197,7 +197,7 @@ export class AttemptService {
     let grade = 0;
 
     const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentID },
+      where: { id: assignmentId },
       include: { questions: true },
     });
 
@@ -207,7 +207,7 @@ export class AttemptService {
     }
 
     const questionResponses = await this.prisma.questionResponse.findMany({
-      where: { assignmentAttemptId: assignmentAttemptID },
+      where: { assignmentAttemptId: assignmentAttemptId },
     });
 
     // Map to store the highest score for each question
@@ -258,7 +258,7 @@ export class AttemptService {
         ...updateAssignmentAttemptDto,
         grade,
       },
-      where: { id: assignmentAttemptID },
+      where: { id: assignmentAttemptId },
     });
 
     return {
@@ -270,16 +270,16 @@ export class AttemptService {
   }
 
   async getAssignmentAttempt(
-    assignmentAttemptID: number
+    assignmentAttemptId: number
   ): Promise<GetAssignmentAttemptResponseDto> {
     const result = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptID },
+      where: { id: assignmentAttemptId },
       include: { questionResponses: true },
     });
 
     if (!result) {
       throw new NotFoundException(
-        `AssignmentAttempt with ID ${assignmentAttemptID} not found.`
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
       );
     }
 
@@ -287,10 +287,10 @@ export class AttemptService {
   }
 
   async getAssignmentAttemptQuestions(
-    assignmentID: number
+    assignmentId: number
   ): Promise<GetAssignmentAttemptQuestionResponseDto[]> {
     const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentID },
+      where: { id: assignmentId },
       include: { questions: true },
     });
 
@@ -306,12 +306,12 @@ export class AttemptService {
   }
 
   async createQuestionResponse(
-    assignmentAttemptID: number,
-    questionID: number,
+    assignmentAttemptId: number,
+    questionId: number,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptID },
+      where: { id: assignmentAttemptId },
     });
 
     if (
@@ -323,13 +323,13 @@ export class AttemptService {
       );
     }
 
-    const question = await this.questionService.findOne(questionID);
+    const question = await this.questionService.findOne(questionId);
 
     //Get exising question respones count to check if new response is possible
     if (question.numRetries) {
       const retryCount = await this.countUserQuestionResponses(
-        questionID,
-        assignmentAttemptID
+        questionId,
+        assignmentAttemptId
       );
 
       if (retryCount >= question.numRetries) {
@@ -435,8 +435,8 @@ export class AttemptService {
     // create a question response record in db
     const result = await this.prisma.questionResponse.create({
       data: {
-        assignmentAttemptId: assignmentAttemptID,
-        questionId: questionID,
+        assignmentAttemptId: assignmentAttemptId,
+        questionId: questionId,
         learnerResponse: learnerResponse,
         points: responseDto.totalPoints,
         feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
@@ -450,25 +450,25 @@ export class AttemptService {
   // private methods
 
   async countUserAttempts(
-    userID: string,
+    userId: string,
     assignmentId: number
   ): Promise<number> {
     return this.prisma.assignmentAttempt.count({
       where: {
-        userId: userID,
+        userId: userId,
         assignmentId: assignmentId,
       },
     });
   }
 
   async countUserQuestionResponses(
-    questionID: number,
-    assignmentAttemptID: number
+    questionId: number,
+    assignmentAttemptId: number
   ): Promise<number> {
     return this.prisma.questionResponse.count({
       where: {
-        questionId: questionID,
-        assignmentAttemptId: assignmentAttemptID,
+        questionId: questionId,
+        assignmentAttemptId: assignmentAttemptId,
       },
     });
   }

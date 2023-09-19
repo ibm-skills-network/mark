@@ -18,7 +18,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
     const { assignmentId: assignmentIdString, id } = params;
     const assignmentId = Number(assignmentIdString);
 
-    const questionID = id ? Number(id) : undefined;
+    const questionId = id ? Number(id) : undefined;
 
     // Construct the array of queries for the transaction
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,17 +29,17 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
       this.prisma.assignmentGroup.findFirst({
         where: {
           assignmentId,
-          groupId: userSession.groupID,
+          groupId: userSession.groupId,
         },
       }),
     ];
 
-    if (questionID) {
-      // If the questionID is present, add query to check if it belongs to the specified assignmentId
+    if (questionId) {
+      // If the questionId is present, add query to check if it belongs to the specified assignmentId
       queries.push(
         this.prisma.question.findFirst({
           where: {
-            id: questionID,
+            id: questionId,
             assignmentId,
           },
         })
@@ -61,7 +61,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
       return false;
     }
 
-    if (questionID && !questionInAssignment) {
+    if (questionId && !questionInAssignment) {
       throw new NotFoundException(
         "Question not found within the specified assignment"
       );

@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class BaseQuestionResponseDto {
   @ApiProperty({
-    description: "The ID of the question.",
+    description: "The Id of the question.",
     type: Number,
     required: true,
   })
