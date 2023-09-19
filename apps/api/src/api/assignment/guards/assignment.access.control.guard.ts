@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../prisma.service";
@@ -8,20 +14,31 @@ export class AssignmentAccessControlGuard implements CanActivate {
   constructor(private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params } = request;
     const { id } = params;
     const assignmentID = Number(id);
 
-    // Check if the logged-in user's (can be either learner or author) groupId is associated with this assignment
-    const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
-      where: {
-        assignmentId: assignmentID,
-        groupId: userSession.groupID,
-      },
-    });
+    const [assignmentGroup, assignment] = await this.prisma.$transaction([
+      this.prisma.assignmentGroup.findFirst({
+        where: {
+          assignmentId: assignmentID,
+          groupId: userSession.groupID,
+        },
+      }),
+      this.prisma.assignment.findUnique({
+        where: { id: assignmentID },
+      }),
+    ]);
 
-    return !!assignmentGroup;
+    if (!assignment) {
+      throw new NotFoundException("Assignment not found");
+    }
+
+    if (!assignmentGroup) {
+      throw new ForbiddenException("Access denied to this assignment");
+    }
+
+    return true;
   }
 }
