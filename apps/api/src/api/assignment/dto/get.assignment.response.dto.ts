@@ -4,7 +4,7 @@ import { UpdateAssignmentRequestDto } from "./update.assignment.request.dto";
 
 export class AssignmentResponseDto extends UpdateAssignmentRequestDto {
   @ApiProperty({
-    description: "The ID of the assignment.",
+    description: "The Id of the assignment.",
     type: Number,
     required: true,
   })

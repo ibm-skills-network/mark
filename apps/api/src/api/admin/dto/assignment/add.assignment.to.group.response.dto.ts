@@ -2,18 +2,18 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class AdminAddAssignmentToGroupResponseDto {
   @ApiProperty({
-    description: "The ID of the assignment.",
+    description: "The Id of the assignment.",
     type: Number,
     required: true,
   })
-  assignmentID: number;
+  assignmentId: number;
 
   @ApiProperty({
-    description: "The ID of the group.",
+    description: "The Id of the group.",
     type: String,
     required: true,
   })
-  groupID: string;
+  groupId: string;
 
   @ApiProperty({
     description: "Indicates if the operation was successful.",

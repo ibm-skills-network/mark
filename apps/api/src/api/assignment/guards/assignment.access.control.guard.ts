@@ -17,17 +17,17 @@ export class AssignmentAccessControlGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params } = request;
     const { id } = params;
-    const assignmentID = Number(id);
+    const assignmentId = Number(id);
 
     const [assignmentGroup, assignment] = await this.prisma.$transaction([
       this.prisma.assignmentGroup.findFirst({
         where: {
-          assignmentId: assignmentID,
-          groupId: userSession.groupID,
+          assignmentId: assignmentId,
+          groupId: userSession.groupId,
         },
       }),
       this.prisma.assignment.findUnique({
-        where: { id: assignmentID },
+        where: { id: assignmentId },
       }),
     ]);
 

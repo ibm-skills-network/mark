@@ -18,36 +18,40 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params } = request;
-    const { assignmentId, attemptId, questionId } = params;
+    const {
+      assignmentId: assignmentIdString,
+      attemptId: attemptIdString,
+      questionId: questionIdString,
+    } = params;
 
-    const assignmentID = Number(assignmentId);
+    const assignmentId = Number(assignmentIdString);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [
       // Query to check if the assignment itself exists
-      this.prisma.assignment.findUnique({ where: { id: assignmentID } }),
+      this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
       // Query to check if the user's groupId is associated with the assignment
       this.prisma.assignmentGroup.findFirst({
         where: {
-          assignmentId: assignmentID,
-          groupId: userSession.groupID,
+          assignmentId: assignmentId,
+          groupId: userSession.groupId,
         },
       }),
     ];
 
-    if (attemptId) {
-      const attemptID = Number(attemptId);
+    if (attemptIdString) {
+      const attemptId = Number(attemptIdString);
       const whereClause: {
         id: number;
         assignmentId: number;
         userId?: string;
       } = {
-        id: attemptID,
-        assignmentId: assignmentID,
+        id: attemptId,
+        assignmentId: assignmentId,
       };
 
       if (userSession.role === UserRole.LEARNER) {
-        whereClause.userId = userSession.userID;
+        whereClause.userId = userSession.userId;
       }
 
       // Query to check if the attempt belongs to the assignment and is owned by the user (if they're a learner)
@@ -56,14 +60,14 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       );
     }
 
-    if (questionId) {
-      const questionID = Number(questionId);
+    if (questionIdString) {
+      const questionId = Number(questionIdString);
       // Query to check if the question belongs to the assignment
       queries.push(
         this.prisma.question.findFirst({
           where: {
-            id: questionID,
-            assignmentId: assignmentID,
+            id: questionId,
+            assignmentId: assignmentId,
           },
         })
       );
@@ -84,11 +88,11 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       return false;
     }
 
-    if (attemptId && !attempt) {
+    if (attemptIdString && !attempt) {
       throw new NotFoundException("Attempt not found or not owned by the user");
     }
 
-    if (questionId && !questionInAssignment) {
+    if (questionIdString && !questionInAssignment) {
       throw new NotFoundException(
         "Question not found within the specified assignment"
       );

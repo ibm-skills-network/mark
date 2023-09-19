@@ -24,11 +24,11 @@ export class AdminReplaceAssignmentRequestDto {
 
 export class AdminCreateAssignmentRequestDto extends AdminReplaceAssignmentRequestDto {
   @ApiProperty({
-    description: "The ID of the group that the assignment belongs to.",
+    description: "The Id of the group that the assignment belongs to.",
     type: String,
     required: true,
   })
   @IsDefined()
   @IsString()
-  groupID: string;
+  groupId: string;
 }
