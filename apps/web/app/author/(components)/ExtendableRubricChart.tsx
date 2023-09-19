@@ -83,7 +83,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   return (
     <div>
       <div
-        className={`relative flex flex-col pl-2 mt-[30px] rounded-md p-4 mx-auto my-auto bg-white border rounded-md p-10 border-transparent`}
+        className={`relative flex flex-col pl-2 mt-[30px] rounded-md p-4 mx-auto my-auto bg-white border border-transparent`}
       >
         <div>
           <h1 className="text-base font-normal mt-[10px] leading-6 text-gray-900 relative">

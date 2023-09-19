@@ -17,14 +17,14 @@ import RubricTable from "./RubricTable";
 import WordCountComponent from "./WordCountComponent";
 
 interface WrittenQuestionViewProps {
-  handleScore: any;
-  score: any;
-  switchState: any;
-  setSwitchState: any;
-  choicesWrittenQuestion: any;
-  handleChoiceChangeWrittenQuestion: any;
-  handleRemoveChoiceWrittenQuestion: any;
-  handleAddChoiceWrittenQuestion: any;
+  handleScore: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  score: string;
+  switchState: string;
+  setSwitchState: React.Dispatch<React.SetStateAction<string>>;
+  choicesWrittenQuestion: string[];
+  handleChoiceChangeWrittenQuestion: (index: number, value: string) => void;
+  handleRemoveChoiceWrittenQuestion: (index: number) => void;
+  handleAddChoiceWrittenQuestion: () => void;
   initialRubrics: any;
 }
 
