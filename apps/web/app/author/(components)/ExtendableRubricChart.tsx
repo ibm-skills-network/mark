@@ -23,9 +23,16 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
 
   // Step 1: State Management
   const [divElements, setDivElements] = useState<number[]>([]);
-  const [promptOptions, setPromptOptions] = useState<string[]>([]);
+  // const [promptOptions, setPromptOptions] = useState<string[]>([]);
   // New state for promptPoints as a matrix
-  const [promptPoints, setPromptPoints] = useState<string[]>([]);
+  // const [promptPoints, setPromptPoints] = useState<string[]>([]);
+
+  type promptOption = {
+    point: string;
+    description: string;
+  };
+
+  const [promptOptions, setPromptOptions] = useState<promptOption[]>([]);
 
   // Step 2: Add Button Handler
   // const handleAddDiv = () => {
@@ -60,24 +67,36 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   };
 
   const handleChoiceChangeWrittenQuestion = (index: number, value: string) => {
-    const updatedChoices = [...promptOptions];
-    updatedChoices[index] = value;
-    setPromptOptions(updatedChoices);
+    // Create a copy of the current state
+    const updatedOptions = [...promptOptions];
+
+    // Update the description of the promptOption at the specified index
+    updatedOptions[index] = { ...updatedOptions[index], description: value };
+
+    // Update the state with the modified array
+    setPromptOptions(updatedOptions);
   };
 
   const handleAddChoiceWrittenQuestion = () => {
-    // Create a new input (e.g., an empty string)
-    const newChoice = "";
+    // Create a copy of the current state
+    const updatedOptions = [...promptOptions];
 
-    // Update the state by adding the new input to the end of the PromptOptions array
-    setPromptOptions([...promptOptions, newChoice]);
+    // Append a new empty promptOption at the end of updatedOptions
+    updatedOptions.push({ point: "", description: "" });
+
+    // Update the state with the modified array
+    setPromptOptions(updatedOptions);
   };
 
-  // New handler for changing promptPoints
   const handlePromptPoints = (index: number, value: string) => {
-    const updatedPoints = [...promptPoints];
-    updatedPoints[index] = value;
-    setPromptPoints(updatedPoints);
+    // Create a copy of the current state
+    const updatedOptions = [...promptOptions];
+
+    // Update the point of the promptOption at the specified index
+    updatedOptions[index] = { ...updatedOptions[index], point: value };
+
+    // Update the state with the modified array
+    setPromptOptions(updatedOptions);
   };
 
   return (
@@ -117,7 +136,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   type="number"
                   className="p-2 border ml-[10px] rounded-md h-[3.256rem] w-[100px] text-gray-700 bg-transparent outline-none"
                   placeholder={`ex. ${index}`}
-                  value={promptPoints[index]}
+                  value={promptOptions[index]?.point || ""}
                   onChange={(event) =>
                     handlePromptPoints(index, event.target.value)
                   }
@@ -134,7 +153,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   type="text"
                   className="p-2 rounded-md ml-[10px] w-[700px] h-[3.256rem] text-black bg-transparent outline-none"
                   placeholder={`ex. “The question is not legible” `}
-                  value={choice}
+                  value={promptOptions[index]?.description || ""}
                   onChange={(event) =>
                     handleChoiceChangeWrittenQuestion(index, event.target.value)
                   }
