@@ -42,6 +42,6 @@ async function bootstrap() {
   // Starts listening for shutdown hooks
   app.enableShutdownHooks();
 
-  await app.listen(process.env.API_PORT || 4222);
+  await app.listen(process.env.API_PORT || 3000);
 }
 void bootstrap();
