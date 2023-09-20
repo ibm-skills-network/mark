@@ -12,8 +12,8 @@
 //   ViewListIcon,
 // } from "@heroicons/react/solid";
 import { useState } from "react";
+import RubricTable from "../../../components/depreciated/RubricTable";
 import ExtendableRubricChart from "./ExtendableRubricChart";
-import RubricTable from "./RubricTable";
 import WordCountComponent from "./WordCountComponent";
 
 interface WrittenQuestionViewProps {
@@ -38,39 +38,39 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     choicesWrittenQuestion,
     handleRemoveChoiceWrittenQuestion,
     handleAddChoiceWrittenQuestion,
-    initialRubrics,
+    // initialRubrics,
   } = props;
 
   // COMMENT: here's the state and helper function we use to control the row of the rubric table
-  const [rubrics, setRubrics] = useState(initialRubrics);
-  var maxLength = 1;
-  const handleAddRow = () => {
-    // Calculate the index for the new row
-    if (maxLength < rubrics.length + 1) {
-      maxLength = rubrics.length + 1;
-    }
-    // Create a new row object with dynamic criteria
-    const newRow = {
-      key: maxLength,
-      criteria: `New Criteria`,
-      judgement: "",
-      rate: "",
-      weight: "",
-    };
+  // const [rubrics, setRubrics] = useState(initialRubrics);
+  // var maxLength = 1;
+  // const handleAddRow = () => {
+  // Calculate the index for the new row
+  // if (maxLength < rubrics.length + 1) {
+  //   maxLength = rubrics.length + 1;
+  // }
+  // Create a new row object with dynamic criteria
+  // const newRow = {
+  //   key: maxLength,
+  //   criteria: `New Criteria`,
+  //   judgement: "",
+  //   rate: "",
+  //   weight: "",
+  // };
 
-    // Add the new row to the initialRubrics array
-    setRubrics([...rubrics, newRow]);
-  };
+  // Add the new row to the initialRubrics array
+  // setRubrics([...rubrics, newRow]);
+  // };
 
-  const handleDeleteRow = (index) => {
-    if (rubrics.length === 1) {
-      alert("You only have one criteria, so you cannot delete it.");
-      return;
-    }
+  // const handleDeleteRow = (index) => {
+  //   if (rubrics.length === 1) {
+  //     alert("You only have one criteria, so you cannot delete it.");
+  //     return;
+  //   }
 
-    const updatedRubrics = rubrics.filter((_, i) => i !== index);
-    setRubrics(updatedRubrics);
-  };
+  //   const updatedRubrics = rubrics.filter((_, i) => i !== index);
+  //   setRubrics(updatedRubrics);
+  // };
 
   return (
     <div className="mt-4">
@@ -161,14 +161,14 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
       {switchState === "a" && <ExtendableRubricChart />}
 
-      {switchState === "b" && (
-        <RubricTable
-          rubrics={rubrics}
-          onAddRow={handleAddRow}
-          onDeleteRow={handleDeleteRow}
-          setRubrics={setRubrics}
-        />
-      )}
+      {/* {switchState === "b" && (
+        // <RubricTable
+        //   rubrics={rubrics}
+        //   onAddRow={handleAddRow}
+        //   onDeleteRow={handleDeleteRow}
+        //   setRubrics={setRubrics}
+        // />
+      )} */}
     </div>
   );
 }

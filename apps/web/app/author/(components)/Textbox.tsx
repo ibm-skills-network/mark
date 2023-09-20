@@ -14,8 +14,8 @@ import MarkdownEditor from "@components/MarkDownEditor";
 import { Listbox, RadioGroup, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/react/solid";
 import { Fragment, useEffect, useRef, useState } from "react";
+import RubricTable from "../../../components/depreciated/RubricTable";
 import MultipleAnswerSection from "./MultipleAnswerSection";
-import RubricTable from "./RubricTable";
 import SingleAnswerSection from "./SingleAnswerSection";
 import WrittenQuestionView from "./WrittenQuestionView";
 
