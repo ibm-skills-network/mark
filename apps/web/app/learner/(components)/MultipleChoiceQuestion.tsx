@@ -1,9 +1,9 @@
 "use client";
 
-import {
+import type {
   Question,
+  QuestionResponse,
   QuestionStatus,
-  type QuestionSubmissionRequest,
 } from "@/config/types";
 // Ensure the Question type matches with GetQuestionResponseDto
 
@@ -56,7 +56,7 @@ function MultipleChoiceQuestion(props: Props) {
 
   // For talking to backend upon submission
   const handleSubmit = async () => {
-    const QuestionResponse: QuestionSubmissionRequest = {
+    const QuestionResponse: QuestionResponse = {
       learnerChoices: selectedChoices,
     };
     const success = await submitQuestionResponse(
