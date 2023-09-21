@@ -35,7 +35,6 @@ import {
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
-import { GetAssignmentAttemptQuestionResponseDto } from "./dto/question/get.assignment.attempt.questions.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
 
 @Injectable()
@@ -53,14 +52,13 @@ export class AttemptService {
     userSession: UserSession
   ): Promise<AssignmentAttemptResponseDto[]> {
     //correct ownership permissions already taken care of through AssignmentAttemptAccessControlGuard
-    const results = await (userSession.role === UserRole.AUTHOR
+    return userSession.role === UserRole.AUTHOR
       ? this.prisma.assignmentAttempt.findMany({
           where: { assignmentId: assignmentId },
         })
       : this.prisma.assignmentAttempt.findMany({
           where: { assignmentId: assignmentId, userId: userSession.userId },
-        }));
-    return results;
+        });
   }
 
   async createAssignmentAttempt(
@@ -272,37 +270,45 @@ export class AttemptService {
   async getAssignmentAttempt(
     assignmentAttemptId: number
   ): Promise<GetAssignmentAttemptResponseDto> {
-    const result = await this.prisma.assignmentAttempt.findUnique({
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
       include: { questionResponses: true },
     });
 
-    if (!result) {
+    if (!assignmentAttempt) {
       throw new NotFoundException(
         `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
       );
     }
 
-    return result;
-  }
-
-  async getAssignmentAttemptQuestions(
-    assignmentId: number
-  ): Promise<GetAssignmentAttemptQuestionResponseDto[]> {
     const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      include: { questions: true },
+      where: { id: assignmentAttempt.assignmentId },
+      select: { questions: true },
     });
 
-    return assignment.questions.map((question) => ({
-      id: question.id,
-      totalPoints: question.totalPoints,
-      numRetries: question.numRetries,
-      type: question.type,
-      question: question.question,
-      choices: question.choices ? Object.keys(question.choices) : undefined,
-      success: true,
-    }));
+    const questions = assignment.questions.map((question) => {
+      const correspondingResponses = assignmentAttempt.questionResponses.filter(
+        (response) => response.questionId === question.id
+      );
+
+      return {
+        id: question.id,
+        totalPoints: question.totalPoints,
+        numRetries: question.numRetries,
+        type: question.type,
+        question: question.question,
+        choices: question.choices ? Object.keys(question.choices) : undefined,
+        questionResponses:
+          correspondingResponses.length > 0 ? correspondingResponses : [],
+      };
+    });
+
+    delete assignmentAttempt.questionResponses;
+
+    return {
+      ...assignmentAttempt,
+      questions: questions,
+    };
   }
 
   async createQuestionResponse(
