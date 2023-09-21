@@ -303,6 +303,8 @@ export class AttemptService {
       };
     });
 
+    delete assignmentAttempt.questionResponses;
+
     return {
       ...assignmentAttempt,
       questions: questions,
