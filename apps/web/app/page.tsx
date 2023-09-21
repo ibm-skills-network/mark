@@ -10,22 +10,22 @@ import { useEffect } from "react";
 export default function Home() {
   const router = useRouter();
 
-  const setAuthorActiveAssignmentID = useAuthorStore(
-    (state) => state.setActiveAssignmentID
+  const setAuthorActiveAssignmentId = useAuthorStore(
+    (state) => state.setActiveAssignmentId
   );
 
-  const setLearnerActiveAssignmentID = useLearnerStore(
-    (state) => state.setActiveAssignmentID
+  const setLearnerActiveAssignmentId = useLearnerStore(
+    (state) => state.setActiveAssignmentId
   );
   useEffect(() => {
     const asyncFunc = async () => {
-      const { role, assignmentID } = await getUser();
+      const { role, assignmentId } = await getUser();
       if (role === "author") {
-        setAuthorActiveAssignmentID(assignmentID);
-        router.push(`/author/${assignmentID}`);
+        setAuthorActiveAssignmentId(assignmentId);
+        router.push(`/author/${assignmentId}`);
       } else if (role === "learner") {
-        setLearnerActiveAssignmentID(assignmentID);
-        router.push(`/learner/${assignmentID}`);
+        setLearnerActiveAssignmentId(assignmentId);
+        router.push(`/learner/${assignmentId}`);
       }
     };
     void asyncFunc();

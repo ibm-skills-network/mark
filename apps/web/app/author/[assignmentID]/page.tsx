@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 const AuthorIntroduction = ({
   params,
 }: {
-  params: { assignmentID: string };
+  params: { assignmentId: string };
 }) => {
   const router = useRouter();
   const [introduction, setIntroduction] = useState("");
@@ -29,21 +29,21 @@ const AuthorIntroduction = ({
     timeEstimate: 50,
   });
 
-  const [activeAssignmentID, setActiveAssignmentID] = useAuthorStore(
-    (state) => [state.activeAssignmentID, state.setActiveAssignmentID]
+  const [activeAssignmentId, setActiveAssignmentId] = useAuthorStore(
+    (state) => [state.activeAssignmentId, state.setActiveAssignmentId]
   );
   const updateAssignmentButtonRef = useAuthorStore(
     (state) => state.updateAssignmentButtonRef
   );
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   useEffect(() => {
-    // if there is no active assignment, check if we are able to fetch the details of the assignmentID from the url
-    async function InitializeAssignment(assignmentID: number) {
-      const assignment = await getAssignment(assignmentID);
+    // if there is no active assignment, check if we are able to fetch the details of the assignmentId from the url
+    async function InitializeAssignment(assignmentId: number) {
+      const assignment = await getAssignment(assignmentId);
       if (assignment) {
         console.log(assignment);
         // if assignment exists, set it as the active assignment
-        setActiveAssignmentID(assignmentID);
+        setActiveAssignmentId(assignmentId);
         // update the state of the introduction page with the assignment details from the backend
         setAssignmentTitle(assignment.name || "Introduction");
         setIntroduction(assignment.introduction || "");
@@ -52,17 +52,17 @@ const AuthorIntroduction = ({
           graded: assignment.graded || true,
           attempts: assignment.numAttempts || 1,
           passingGrade: assignment.passingGrade || 50,
-          timeEstimate: assignment.allotedTime || 50,
+          timeEstimate: assignment.allotedTimeMinutes || 50,
         });
         setQuestions(assignment.questions || []);
       } else {
         router.push("/");
       }
     }
-    // if (!activeAssignmentID) {
-    const assignmentID = params.assignmentID;
-    if (assignmentID !== undefined && !isNaN(Number(assignmentID))) {
-      void InitializeAssignment(parseInt(assignmentID));
+    // if (!activeAssignmentId) {
+    const assignmentId = params.assignmentId;
+    if (assignmentId !== undefined && !isNaN(Number(assignmentId))) {
+      void InitializeAssignment(parseInt(assignmentId));
     } else {
       router.push("/");
     }
@@ -75,7 +75,7 @@ const AuthorIntroduction = ({
    * */
   async function updateAssignment() {
     const assignment = {
-      allotedTime: grading.timeEstimate,
+      allotedTimeMinutes: grading.timeEstimate,
       instructions: instructions,
       introduction: introduction,
       graded: grading.graded,
@@ -85,9 +85,9 @@ const AuthorIntroduction = ({
     if (grading.attempts !== -1) {
       assignment["numAttempts"] = grading.attempts;
     }
-    const modified = await modifyAssignment(assignment, activeAssignmentID);
+    const modified = await modifyAssignment(assignment, activeAssignmentId);
     if (modified) {
-      router.push(`/author/${activeAssignmentID}/questions`);
+      router.push(`/author/${activeAssignmentId}/questions`);
     } else {
       // TODO: show error message to user
       console.log("error");

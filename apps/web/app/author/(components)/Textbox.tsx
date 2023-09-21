@@ -87,13 +87,13 @@ function TextBox(props: Props) {
     setQuestions,
     removeQuestion,
     addQuestion,
-    activeAssignmentID,
+    activeAssignmentId,
     modifyQuestion,
   ] = useAuthorStore((state) => [
     state.setQuestions,
     state.removeQuestion,
     state.addQuestion,
-    state.activeAssignmentID,
+    state.activeAssignmentId,
     state.modifyQuestion,
   ]);
   const menuRef = useRef<HTMLDivElement>(null);

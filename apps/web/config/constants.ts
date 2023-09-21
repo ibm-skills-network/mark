@@ -1,11 +1,11 @@
 import { absoluteUrl } from "../lib/utils";
-import { Question } from "./types";
+import type { Question } from "./types";
 
 const BASE_API_PATH = absoluteUrl("/api/v1");
 
 export const BASE_API_ROUTES = {
   // default
-  user: `${BASE_API_PATH}/user`,
+  user: `${BASE_API_PATH}/user-session`,
   info: `${BASE_API_PATH}/info`,
   assets: `${BASE_API_PATH}/assets`,
   // assignments
@@ -34,14 +34,14 @@ export const BASE_API_ROUTES = {
 export const questionsData: Question[] = [
   {
     id: 1,
-    assignmentID: 1,
+    assignmentId: 1,
     type: "TEXT",
     totalPoints: 10,
     question: "Describe the key elements of a project charter...",
   },
   {
     id: 2,
-    assignmentID: 1,
+    assignmentId: 1,
     type: "SINGLE_CORRECT",
     totalPoints: 5,
     numRetries: 2,
@@ -55,7 +55,7 @@ export const questionsData: Question[] = [
   },
   {
     id: 3,
-    assignmentID: 1,
+    assignmentId: 1,
     type: "MULTIPLE_CORRECT",
     numRetries: 2,
     totalPoints: 5,
@@ -69,7 +69,7 @@ export const questionsData: Question[] = [
   },
   {
     id: 4,
-    assignmentID: 2,
+    assignmentId: 2,
     type: "TRUE_FALSE",
     totalPoints: 3,
     question: "Is the Earth flat?",
@@ -77,21 +77,21 @@ export const questionsData: Question[] = [
   },
   {
     id: 5,
-    assignmentID: 2,
+    assignmentId: 2,
     type: "URL",
     totalPoints: 8,
     question: "Provide a link to a relevant resource.",
   },
   {
     id: 6,
-    assignmentID: 3,
+    assignmentId: 3,
     type: "UPLOAD",
     totalPoints: 15,
     question: "Upload a screenshot of your completed code.",
   },
   {
     id: 7,
-    assignmentID: 1,
+    assignmentId: 1,
     type: "SINGLE_CORRECT",
     totalPoints: 5,
     numRetries: 2,
@@ -105,7 +105,7 @@ export const questionsData: Question[] = [
   },
   {
     id: 8,
-    assignmentID: 1,
+    assignmentId: 1,
     type: "MULTIPLE_CORRECT",
     numRetries: 2,
     totalPoints: 5,
@@ -119,7 +119,7 @@ export const questionsData: Question[] = [
   },
   {
     id: 10,
-    assignmentID: 1,
+    assignmentId: 1,
     type: "TRUE_FALSE",
     totalPoints: 3,
     question: "HTML stands for Hyper Text Markup Language?",

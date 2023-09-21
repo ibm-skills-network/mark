@@ -1,12 +1,12 @@
 "use client";
 
-import { Question, QuestionStatus } from "@/config/types";
+import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
-  questionData?: Question;
+  questionData?: QuestionStore;
   onAnswerSelected?: (status: "pendingReview") => void;
   updateStatus: (status: QuestionStatus) => void;
 }
@@ -30,7 +30,7 @@ function UploadQuestion(props: Props) {
     setFile(null);
   };
 
-  // Handles the form submission
+  // Handles the form attempt
   const handleSubmit = () => {
     if (file) {
       setSubmitted(true);

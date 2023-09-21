@@ -1,40 +1,31 @@
-"use client";
-
-import { Question, QuestionResponse, QuestionStatus } from "@/config/types";
+import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
+import { useLearnerStore } from "@/stores/learner";
 import MarkdownEditor from "@components/MarkDownEditor";
-import React, { useState } from "react";
-import Button from "./Button";
 
 interface Props {
-  questionData?: Question;
+  questionData?: QuestionStore;
   updateStatus: (status: QuestionStatus) => void;
 }
 
 function TextQuestion(props: Props) {
-  const [submitted, setSubmitted] = useState<boolean>(false);
-  const { questionData } = props;
-  const { question, totalPoints, id } = questionData;
-  const [answer, setAnswer] = useState<string>("");
-  const handleSubmit = () => {
-    setSubmitted(true);
-    props.updateStatus("answered");
-  };
+  const { questionData, updateStatus } = props;
+  const { question, totalPoints } = questionData;
+  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+
+  const [questions, setTextResponse] = useLearnerStore((state) => [
+    state.questions,
+    state.setTextResponse,
+  ]);
+
   const maxWords = 5;
   return (
     <>
-      <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
-        <p className="mb-4 text-gray-700">{question}</p>
-        <MarkdownEditor
-          value={answer}
-          setValue={setAnswer}
-          maxWords={maxWords}
-        />
-      </div>
-      <div className="flex justify-center mt-4">
-        <Button className=" " onClick={handleSubmit}>
-          Submit Question
-        </Button>
-      </div>
+      <p className="mb-4 text-gray-700">{question}</p>
+      <MarkdownEditor
+        value={questions[activeQuestionId]?.learnerTextResponse || ""}
+        setValue={(value) => setTextResponse(value)}
+        maxWords={maxWords}
+      />
     </>
   );
 }

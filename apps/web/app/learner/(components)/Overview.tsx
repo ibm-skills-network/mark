@@ -1,18 +1,23 @@
 "use client";
 
-import { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
+import { useLearnerStore } from "@/stores/learner";
+import type { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
 import React, { useEffect, useState } from "react";
 
 interface Props {
-  questionstatus: QuestionStatus[];
   timeLimit: number; // Time limit in seconds
   setCurrentIndex: (index: number) => void;
 }
 
 function Overview(props: Props) {
-  const { questionstatus, timeLimit, setCurrentIndex } = props;
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(timeLimit);
+  const { timeLimit, setCurrentIndex } = props;
 
+  const questionsStore = useLearnerStore((state) => state.questions);
+
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(timeLimit);
+  const [questionStatuses, setQuestionStatuses] = useState<QuestionStatus[]>(
+    questionsStore.map(() => "unedited")
+  );
   useEffect(() => {
     const timer = setInterval(() => {
       if (secondsRemaining > 0) {
@@ -40,7 +45,7 @@ function Overview(props: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-        {questionstatus.map((question: QuestionStatus, index) => (
+        {/* {questionstatus.map((question: QuestionStatus, index) => (
           <button
             key={index}
             onClick={() => setCurrentIndex(index)}
@@ -73,7 +78,7 @@ function Overview(props: Props) {
               <div className="text-gray-600 mt-1">-</div>
             )}
           </button>
-        ))}
+        ))} */}
       </div>
     </div>
   );

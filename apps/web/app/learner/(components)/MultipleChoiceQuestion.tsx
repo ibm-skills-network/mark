@@ -1,13 +1,14 @@
 "use client";
 
 import type {
-  Question,
-  QuestionResponse,
+  QuestionAttemptRequest,
   QuestionStatus,
+  QuestionStore,
 } from "@/config/types";
 // Ensure the Question type matches with GetQuestionResponseDto
 
 import { submitQuestionResponse } from "@/lib/talkToBackend";
+import { useLearnerStore } from "@/stores/learner";
 import Title from "@components/Title";
 import React, { useEffect, useState } from "react";
 import Button from "./Button";
@@ -15,18 +16,17 @@ import { FeedbackMessage } from "./FeedbackMessage";
 import InfoLine from "./InfoLine";
 
 interface Props {
-  // this ID is required but not received from Questiondata (for talking to backend upon submission)
-  submissionID?: number;
+  // this Id is required but not received from Questiondata (for talking to backend upon attempt)
+  attemptId?: number;
   updateStatus?: (status: QuestionStatus) => void;
-  questionData?: Question;
+  questionData?: QuestionStore;
 }
 
 function MultipleChoiceQuestion(props: Props) {
-  const { questionData, submissionID, updateStatus } = props;
+  const { questionData, attemptId, updateStatus } = props;
 
   // CHANGE: Removed 'singleCorrect' comment since the question type itself implies if it's single or multiple correct
-  const { question, choices, numRetries, type, assignmentID, id } =
-    questionData;
+  const { question, choices, numRetries, type, id } = questionData;
 
   const correctChoices = choices
     .filter((choiceObj) => choiceObj[Object.keys(choiceObj)[0]])
@@ -38,6 +38,8 @@ function MultipleChoiceQuestion(props: Props) {
     null
   );
   const [submitted, setSubmitted] = useState<boolean>(false);
+
+  const assignmentId = useLearnerStore((state) => state.activeAssignmentId);
 
   const handleChoiceClick = (choice: string) => {
     setSubmitted(false);
@@ -54,14 +56,14 @@ function MultipleChoiceQuestion(props: Props) {
     }
   };
 
-  // For talking to backend upon submission
+  // For talking to backend upon attempt
   const handleSubmit = async () => {
-    const QuestionResponse: QuestionResponse = {
+    const QuestionResponse: QuestionAttemptRequest = {
       learnerChoices: selectedChoices,
     };
     const success = await submitQuestionResponse(
-      assignmentID,
-      submissionID,
+      assignmentId,
+      attemptId,
       id,
       QuestionResponse
     );

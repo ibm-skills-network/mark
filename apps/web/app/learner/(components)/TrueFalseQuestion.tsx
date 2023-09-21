@@ -1,24 +1,32 @@
 "use client";
 
-import { Question, QuestionResponse, QuestionStatus } from "@/config/types";
+import {
+  Question,
+  QuestionAttemptRequest,
+  QuestionStatus,
+  QuestionStore,
+} from "@/config/types";
 import { submitQuestionResponse } from "@/lib/talkToBackend";
+import { useLearnerStore } from "@/stores/learner";
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
-  submissionID?: number;
-  questionData?: Question;
+  attemptId?: number;
+  questionData?: QuestionStore;
   updateStatus?: (status: QuestionStatus) => void;
 }
 
 function TrueFalseQuestion(props: Props) {
-  const { questionData, submissionID, updateStatus } = props;
-  const { question, answer, id, assignmentID } = questionData;
+  const { questionData, attemptId, updateStatus } = props;
+  const { question, id } = questionData;
 
   const [selectedChoice, setSelectedChoice] = useState<boolean | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);
+
+  const assignmentId = useLearnerStore((state) => state.activeAssignmentId);
 
   const handleChoiceClick = (choice: boolean) => {
     if (!submitted) {
@@ -28,12 +36,12 @@ function TrueFalseQuestion(props: Props) {
   };
 
   const handleSubmit = async () => {
-    const questionResponse: QuestionResponse = {
+    const questionResponse: QuestionAttemptRequest = {
       learnerAnswerChoice: selectedChoice,
     };
     const success = await submitQuestionResponse(
-      assignmentID,
-      submissionID,
+      assignmentId,
+      attemptId,
       id,
       questionResponse
     );
@@ -43,7 +51,7 @@ function TrueFalseQuestion(props: Props) {
 
     setSubmitted(true);
 
-    if (selectedChoice === answer) {
+    if (selectedChoice === true) {
       setIsCorrect(true);
       if (updateStatus) {
         updateStatus("correct");
@@ -102,7 +110,7 @@ function TrueFalseQuestion(props: Props) {
   const buttonStyle = (choice: boolean) => {
     if (submitted) {
       if (selectedChoice === choice) {
-        return choice === answer
+        return choice === true
           ? "bg-green-100 text-black"
           : "bg-red-100 text-black";
       }

@@ -12,11 +12,12 @@ interface Props {}
 function AuthorHeader(props: Props) {
   const {} = props;
   const pathname = usePathname();
-  const assignmentID = pathname.split("/")[2]; // ex: /author/1234/introduction
+  const assignmentId = pathname.split("/")[2]; // ex: /author/1234/introduction
   const assignmentTitle = useAuthorStore((state) => state.assignmentTitle);
   const updateAssignmentButtonRef = useAuthorStore(
     (state) => state.updateAssignmentButtonRef
   );
+  const questions = useAuthorStore((state) => state.questions);
 
   function handlePublishButton() {
     const confirmPublish = confirm("Are you sure you want to publish?");
@@ -29,17 +30,12 @@ function AuthorHeader(props: Props) {
     {
       id: 1,
       name: "Set Up Intro",
-      href: `/author/${assignmentID}`,
+      href: `/author/${assignmentId}`,
     },
     {
       id: 2,
       name: "Questions & Review",
-      href: `/author/${assignmentID}/questions`,
-    },
-    {
-      id: 3,
-      name: "Preview",
-      href: `/author/${assignmentID}/preview`,
+      href: `/author/${assignmentId}/questions`,
     },
   ];
 
@@ -54,9 +50,6 @@ function AuthorHeader(props: Props) {
     switch (id) {
       case 2:
         updateAssignmentButtonRef.current?.click();
-        break;
-      case 3:
-        alert("Please complete step 2 first.");
         break;
       default:
         break;
@@ -125,19 +118,20 @@ function AuthorHeader(props: Props) {
       <div className="items-center flex justify-end gap-x-2.5">
         <button
           type="button"
+          disabled={questions.length === 0}
           onClick={handlePublishButton}
           className="inline-flex leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
         >
           Publish
         </button>
 
-        <Link
-          href={`/author/${assignmentID}/preview`}
+        <button
+          onClick={() => alert("Coming soon!")}
           className="inline-flex items-center px-4 py-2 border border-transparent leading-6 font-medium rounded-md text-blue-700 hover:text-blue-500 bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
         >
           <EyeIcon className="h-5 w-5 mr-2" aria-hidden="true" />
           Learner View
-        </Link>
+        </button>
       </div>
     </header>
   );

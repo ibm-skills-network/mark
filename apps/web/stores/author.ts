@@ -1,10 +1,10 @@
-import { Question } from "@/config/types";
+import type { Question } from "@/config/types";
 import { createRef, type RefObject } from "react";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 
 export type AuthorState = {
-  activeAssignmentID?: number;
+  activeAssignmentId?: number;
   questions: Question[];
   assignmentTitle: string;
   updateAssignmentButtonRef: RefObject<HTMLButtonElement>;
@@ -15,30 +15,30 @@ type OptionalQuestion = {
 };
 
 export type AuthorActions = {
-  setActiveAssignmentID: (id: number) => void;
+  setActiveAssignmentId: (id: number) => void;
   setQuestions: (questions: Question[]) => void;
   addQuestion: (question: Question) => void;
   removeQuestion: (question: number) => void;
-  modifyQuestion: (questionID: number, modifiedData: OptionalQuestion) => void;
+  modifyQuestion: (questionId: number, modifiedData: OptionalQuestion) => void;
   setAssignmentTitle: (title: string) => void;
 };
 
 export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
   (set) => ({
-    activeAssignmentID: undefined,
-    setActiveAssignmentID: (id) => set({ activeAssignmentID: id }),
+    activeAssignmentId: undefined,
+    setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
     questions: [],
     setQuestions: (questions) => set({ questions }),
     addQuestion: (question) =>
       set((state) => ({ questions: [...state.questions, question] })),
-    removeQuestion: (questionID) =>
+    removeQuestion: (questionId) =>
       set((state) => ({
-        questions: state.questions.filter((q) => q.id !== questionID),
+        questions: state.questions.filter((q) => q.id !== questionId),
       })),
-    modifyQuestion: (questionID, modifiedData) =>
+    modifyQuestion: (questionId, modifiedData) =>
       set((state) => ({
         questions: state.questions.map((q) =>
-          q.id === questionID
+          q.id === questionId
             ? {
                 // keep the original data
                 ...q,

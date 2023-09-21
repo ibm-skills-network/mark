@@ -4,11 +4,15 @@
 import { BASE_API_ROUTES } from "@config/constants";
 import type {
   Assignment,
+  AssignmentAttempt,
+  AssignmentAttemptWithQuestions,
   BaseBackendResponse,
   CreateQuestionRequest,
   GetAssignmentResponse,
+  LearnerGetQuestionResponse,
   ModifyAssignmentRequest,
-  QuestionResponse,
+  QuestionAttemptRequest,
+  QuestionAttemptResponse,
   User,
 } from "@config/types";
 
@@ -17,7 +21,9 @@ import type {
  */
 export async function getUser(): Promise<User | undefined> {
   try {
-    const res = await fetch(BASE_API_ROUTES.user);
+    const res = await fetch(BASE_API_ROUTES.user, {
+      cache: "no-cache",
+    });
 
     if (!res.ok) {
       throw new Error("Failed to fetch user data");
@@ -72,7 +78,10 @@ export async function getAssignment(
   id: number
 ): Promise<Assignment | undefined> {
   try {
-    const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`);
+    const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
+      cache: "no-cache",
+    });
+
     if (!res.ok) {
       throw new Error("Failed to fetch assignment");
     }
@@ -109,15 +118,15 @@ export async function getAssignments(): Promise<Assignment[]> {
 }
 
 /**
- * Submits an answer (text or URL) for a given assignment, submission, and question.
+ * Submits an answer (text or URL) for a given assignment, attempt, and question.
  */
 // export async function submitTextOrURLAnswer(
 //   assignmentId: number,
-//   submissionID: number,
+//   attemptId: number,
 //   questionId: number,
 //   responseBody: any
 // ): Promise<boolean> {
-//   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionID}/questions/${questionId}/responses`;
+//   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
 //   try {
 //     const res = await fetch(endpointURL, {
@@ -147,11 +156,11 @@ export async function getAssignments(): Promise<Assignment[]> {
  */
 export async function submitQuestionResponse(
   assignmentId: number,
-  submissionID: number,
+  attemptId: number,
   questionId: number,
-  questionResponse: QuestionResponse
-): Promise<boolean> {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionID}/questions/${questionId}/responses`;
+  questionResponse: QuestionAttemptRequest
+): Promise<QuestionAttemptResponse> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
   try {
     const body = JSON.stringify(questionResponse);
@@ -181,10 +190,10 @@ export async function submitQuestionResponse(
       feedback: any[];
     };
     // TODO: handle feedback (at least for text responses for v1)
-    return true;
+    return data;
   } catch (err) {
     console.error(err);
-    return false;
+    return;
   }
 }
 
@@ -222,5 +231,85 @@ export async function createQuestion(
   } catch (err) {
     console.error(err);
     return -1;
+  }
+}
+
+/**
+ * Gets a list of attempts for a given assignment.
+ * @param assignmentId The id of the assignment to get attempts for.
+ * @returns An array of attempts.
+ * @throws An error if the request fails.
+ * @throws An error if the user is not authorized to view the attempts.
+ */
+export async function getAttempts(
+  assignmentId: number
+): Promise<AssignmentAttempt[]> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
+
+  try {
+    const res = await fetch(endpointURL);
+    if (!res.ok) {
+      throw new Error("Failed to get attempts");
+    }
+    const attempts = (await res.json()) as AssignmentAttempt[];
+    return attempts;
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
+/**
+ * Creates a attempt for a given assignment.
+ * @param assignmentId The id of the assignment to create the attempt for.
+ * @returns The id of the created attempt.
+ * @throws An error if the request fails.
+ */
+export async function createAttempt(assignmentId: number): Promise<number> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to create attempt");
+    }
+    const { success, error, id } = (await res.json()) as BaseBackendResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+
+    return id;
+  } catch (err) {
+    console.error(err);
+    return -1;
+  }
+}
+
+/**
+ * gets the questions for a given attempt and assignment
+ * @param assignmentId The id of the assignment to get the questions for.
+ * @param attemptId The id of the attempt to get the questions for.
+ * @returns An array of questions.
+ * @throws An error if the request fails.
+ */
+export async function getAttempt(
+  assignmentId: number,
+  attemptId: number
+): Promise<AssignmentAttemptWithQuestions> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
+
+  try {
+    const res = await fetch(endpointURL);
+    if (!res.ok) {
+      throw new Error("Failed to get attempt questions");
+    }
+    const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
+    return attempt;
+  } catch (err) {
+    console.error(err);
+    return [];
   }
 }

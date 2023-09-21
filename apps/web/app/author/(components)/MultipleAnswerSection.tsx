@@ -49,7 +49,7 @@ function Section(props: sectionProps) {
       <p>Choices</p>
 
       {choices.map((choice, index) => {
-        const choiceId = `choice_${index}`; // Generate a unique ID for each choice
+        const choiceId = `choice_${index}`; // Generate a unique Id for each choice
         const isChecked = selectedChoices.includes(choiceId);
         const isChoiceChecked = choiceChecked[index];
         return (

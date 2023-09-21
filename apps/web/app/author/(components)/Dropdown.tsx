@@ -1,6 +1,6 @@
 "use client";
 
-import { QuestionTypeDropdown } from "@/config/types";
+import type { QuestionTypeDropdown } from "@/config/types";
 import { Listbox, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/react/solid";
 import { Fragment, type Dispatch, type SetStateAction } from "react";

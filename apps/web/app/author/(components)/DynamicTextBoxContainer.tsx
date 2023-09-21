@@ -14,18 +14,18 @@ function DynamicTextBoxContainer() {
     setQuestions,
     removeQuestion,
     addQuestion,
-    activeAssignmentID,
+    activeAssignmentId,
   ] = useAuthorStore((state) => [
     state.questions,
     state.setQuestions,
     state.removeQuestion,
     state.addQuestion,
-    state.activeAssignmentID,
+    state.activeAssignmentId,
   ]);
   const handleAddTextBox = () => {
     addQuestion({
       id: questions.length + 1,
-      assignmentID: activeAssignmentID,
+      assignmentId: activeAssignmentId,
       question: "",
       totalPoints: 0,
       type: "MULTIPLE_CORRECT",

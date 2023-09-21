@@ -1,12 +1,12 @@
 "use client";
 
-import { Question, QuestionStatus } from "@/config/types";
+import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import React, { useState } from "react";
 import Button from "./Button";
 import InfoLine from "./InfoLine";
 
 interface Props {
-  questionData?: Question;
+  questionData?: QuestionStore;
   onURLSubmit?: (url: string) => void; // This callback is for when the URL is submitted
   updateStatus: (status: QuestionStatus) => void;
 }
