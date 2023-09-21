@@ -1,5 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { QuestionResponse } from "@prisma/client";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { QuestionResponse, QuestionType } from "@prisma/client";
 
 export class AssignmentAttemptResponseDto {
   @ApiProperty({
@@ -45,7 +45,57 @@ export class AssignmentAttemptResponseDto {
 export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDto {
   @ApiProperty({
     description:
-      "The list of responses provided by the learner for each of the questions in the assignment",
+      "The list of questions for the assignment that this attempt corresponds to with learner's responses",
+    isArray: true,
+  })
+  questions: AssignmentAttemptQuestions[];
+}
+
+class AssignmentAttemptQuestions {
+  @ApiProperty({
+    description: "The Id of the question.",
+    type: Number,
+    required: true,
+  })
+  id: number;
+
+  @ApiProperty({
+    description: "Total points for the question.",
+    type: Number,
+    required: true,
+  })
+  totalPoints: number;
+
+  @ApiProperty({
+    description: "The number of retries allowed for the assignment.",
+    type: Number,
+    required: false,
+  })
+  numRetries: number;
+
+  @ApiProperty({
+    description: "Type of the question.",
+    enum: QuestionType,
+    required: true,
+  })
+  type: QuestionType;
+
+  @ApiProperty({
+    description: "The question content.",
+    type: String,
+    required: true,
+  })
+  question: string;
+
+  @ApiPropertyOptional({
+    description: "The choices for the question.",
+    type: [String],
+  })
+  choices: string[];
+
+  @ApiProperty({
+    description:
+      "The list of responses provided by the learner for this question",
     isArray: true,
   })
   questionResponses: QuestionResponse[];
