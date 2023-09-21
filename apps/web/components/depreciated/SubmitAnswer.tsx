@@ -3,14 +3,14 @@ import { useState, type FC } from "react";
 
 interface Props {
   assignmentId: number;
-  submissionID: number;
+  attemptId: number;
   questionId: number;
   questionType: string;
 }
 
 const SubmitAnswerComponent: FC<Props> = ({
   assignmentId,
-  submissionID,
+  attemptId,
   questionId,
   questionType,
 }) => {
@@ -41,7 +41,7 @@ const SubmitAnswerComponent: FC<Props> = ({
       if (questionType === "UPLOAD" && answer instanceof File) {
         const isSuccess = await submitFileAnswer(
           assignmentId,
-          submissionID,
+          attemptId,
           questionId,
           answer
         );
@@ -49,7 +49,7 @@ const SubmitAnswerComponent: FC<Props> = ({
       } else {
         const isSuccess = await submitTextOrURLAnswer(
           assignmentId,
-          submissionID,
+          attemptId,
           questionId,
           responseBody
         );
