@@ -111,36 +111,36 @@ export async function getAssignments(): Promise<Assignment[]> {
 /**
  * Submits an answer (text or URL) for a given assignment, submission, and question.
  */
-export async function submitTextOrURLAnswer(
-  assignmentId: number,
-  submissionID: number,
-  questionId: number,
-  responseBody: any
-): Promise<boolean> {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionID}/questions/${questionId}/responses`;
+// export async function submitTextOrURLAnswer(
+//   assignmentId: number,
+//   submissionID: number,
+//   questionId: number,
+//   responseBody: any
+// ): Promise<boolean> {
+//   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/submissions/${submissionID}/questions/${questionId}/responses`;
 
-  try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(responseBody),
-    });
+//   try {
+//     const res = await fetch(endpointURL, {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/json",
+//       },
+//       body: JSON.stringify(responseBody),
+//     });
 
-    if (!res.ok) {
-      throw new Error("Failed to submit answer");
-    }
-    const { success, error } = await res.json();
-    if (!success) {
-      throw new Error(error);
-    }
-    return true;
-  } catch (err) {
-    console.error(err);
-    return false;
-  }
-}
+//     if (!res.ok) {
+//       throw new Error("Failed to submit answer");
+//     }
+//     const { success, error } = await res.json();
+//     if (!success) {
+//       throw new Error(error);
+//     }
+//     return true;
+//   } catch (err) {
+//     console.error(err);
+//     return false;
+//   }
+// }
 
 /**
  * talk to backend when submitting individual questions (Benny)

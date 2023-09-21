@@ -23,7 +23,7 @@ function Component(props: Props) {
         return (
           <TextQuestion
             questionData={question}
-            questionNumber={questionNumber}
+            // questionNumber={questionNumber}
             updateStatus={props.updateStatus}
           />
         );

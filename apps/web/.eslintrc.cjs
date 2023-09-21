@@ -83,6 +83,6 @@ module.exports = {
     "tailwind.config.js",
     "postcss.config.js",
     ".eslintrc.cjs",
-    "**/deprecated/**",
+    "**/depreciated/*",
   ],
 };

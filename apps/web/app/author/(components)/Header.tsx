@@ -1,6 +1,5 @@
 "use client";
 
-import { updateAssignment } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";

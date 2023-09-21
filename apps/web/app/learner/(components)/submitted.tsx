@@ -1,14 +1,10 @@
 "use client";
 
 import Button from "@learnerComponents/Button";
-import { useRouter } from "next/router";
 
 function Submitted() {
-  const router = useRouter();
-
   const handleGoHome = () => {
-    // Replace this with your desired route, such as the dashboard or homepage
-    router.push("/");
+    console.log("go home");
   };
 
   return (
