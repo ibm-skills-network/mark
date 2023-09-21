@@ -37,7 +37,6 @@ import {
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
-import { GetAssignmentAttemptQuestionResponseDto } from "./dto/question/get.assignment.attempt.questions.response.dto";
 import { AssignmentAttemptAccessControlGuard } from "./guards/assignment.attempt.access.control.guard";
 
 @ApiTags("Attempts")
@@ -147,23 +146,6 @@ export class AttemptController {
       learnerUpdateAssignmentAttemptDto,
       authCookie,
       gradingCallbackRequired
-    );
-  }
-
-  @Get(":attemptId/questions/")
-  @Roles(UserRole.LEARNER)
-  @UseGuards(AssignmentAttemptAccessControlGuard)
-  @ApiOperation({ summary: "Get questions for an assignment attempt." })
-  @ApiResponse({
-    status: 200,
-    type: [GetAssignmentAttemptQuestionResponseDto],
-  })
-  @ApiResponse({ status: 403 })
-  getAssignmentAttemptQuestions(
-    @Param("assignmentId") assignmentId: number
-  ): Promise<GetAssignmentAttemptQuestionResponseDto[]> {
-    return this.attemptService.getAssignmentAttemptQuestions(
-      Number(assignmentId)
     );
   }
 
