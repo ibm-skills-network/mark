@@ -2,9 +2,11 @@
 
 ![Build Status](https://github.com/ibm-skills-network/mark/actions/workflows/release.yml/badge.svg)
 
-## Usage
+## About mark
 
-<!-- TODO(user): fill this part out. Explain what the purpose of this repo is. Include a diagram if possible. A picture is worth a thousand words. -->
+Mark is an end-to-end Learning Tools Interoperability (LTI) service designed to offer a streamlined process for authors and educators to create AI-graded assignments. It provides an interface for various question types and allows learners to access assignments, submit their answers, and receive instantaneous feedback by leveraging the power of LLMs.
+
+## Usage
 
 ## Contributing
 

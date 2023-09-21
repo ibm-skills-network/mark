@@ -60,8 +60,9 @@ typings/
 # local configs
 config/local
 
-# typescript dist
-dist
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 
 values.backup
 
@@ -74,3 +75,19 @@ values.backup
 !.vscode/*.code-snippets
 .history
 .vscode/settings.json
+apps/web/.vscode
+
+#.idea
+.idea/*
+
+# misc
+*.DS_Store
+*.pem
+
+# build output
+build/
+dist/
+.next/
+.turbo/
+out/
+.idea/whitesource/WebStormUsageMetrics.txt

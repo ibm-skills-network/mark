@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
+    "lint": {},
+    "lint:staged": {},
+    "dev": {
+      "cache": false,
+      "dotEnv": [".env.local"]
+    },
+    "test": {
+      "dotEnv": [".env.local"],
+      "outputs": ["coverage/**"],
+      "dependsOn": []
+    },
+    "test:staged": {
+      "dependsOn": []
+    }
+  }
+}

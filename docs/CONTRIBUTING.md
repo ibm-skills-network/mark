@@ -27,10 +27,24 @@
    asdf install
    ```
 
+## Start Postgress database locally for development
+
+```
+docker run --name my_postgres -e POSTGRES_PASSWORD=mysecretpassword -e POSTGRES_USER=myuser -e POSTGRES_DB=mydatabase -p 5432:5432 -d postgres # pragma: allowlist secret
+```
+
 ## Install Dependencies
 
 ```bash
 yarn
+```
+
+## Setup
+
+Perform one-time setup (e.g. prisma migrations and generations) by running:
+
+```bash
+yarn setup
 ```
 
 ## Build
@@ -53,7 +67,7 @@ yarn dev
 
 ## View API Documentation
 
-With the application running, you can view API documentation by visiting [localhost:3000](http://localhost:3000)
+With the application running, you can view API documentation by visiting [localhost:3000/api](http://localhost:3000/api)
 
 ## Secrets
 
