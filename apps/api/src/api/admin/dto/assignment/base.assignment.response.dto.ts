@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class BaseAssignmentResponseDto {
   @ApiProperty({
-    description: "The ID of the assignment.",
+    description: "The Id of the assignment.",
     type: Number,
     required: true,
   })

@@ -6,13 +6,13 @@ export enum UserRole {
 }
 
 export interface ClientUserSession {
-  userID: string;
+  userId: string;
   role: UserRole;
-  assignmentID: number;
+  assignmentId: number;
 }
 
 export interface UserSession extends ClientUserSession {
-  groupID: string;
+  groupId: string;
   gradingCallbackRequired?: boolean;
 }
 

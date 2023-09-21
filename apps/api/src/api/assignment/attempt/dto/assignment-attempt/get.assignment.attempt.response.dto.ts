@@ -3,14 +3,14 @@ import { QuestionResponse } from "@prisma/client";
 
 export class AssignmentAttemptResponseDto {
   @ApiProperty({
-    description: "The unique ID of the AssignmentAttempt",
+    description: "The unique Id of the AssignmentAttempt",
     type: Number,
     example: 1,
   })
   id: number;
 
   @ApiProperty({
-    description: "The ID of the assignment that this attempt corresponds to",
+    description: "The Id of the assignment that this attempt corresponds to",
     type: Number,
     example: 2,
   })

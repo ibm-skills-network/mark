@@ -19,7 +19,7 @@ export class AdminService {
 
   async cloneAssignment(
     id: number,
-    groupID: string
+    groupId: string
   ): Promise<BaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: id },
@@ -27,7 +27,7 @@ export class AdminService {
     });
 
     if (!assignment) {
-      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+      throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
     // Prepare data for new assignment (excluding id)
@@ -52,10 +52,10 @@ export class AdminService {
             group: {
               connectOrCreate: {
                 where: {
-                  id: groupID,
+                  id: groupId,
                 },
                 create: {
-                  id: groupID,
+                  id: groupId,
                 },
               },
             },
@@ -77,36 +77,36 @@ export class AdminService {
   }
 
   async addAssignmentToGroup(
-    assignmentID: number,
-    groupID: string
+    assignmentId: number,
+    groupId: string
   ): Promise<AdminAddAssignmentToGroupResponseDto> {
     // check if the assignment exists
     const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentID },
+      where: { id: assignmentId },
     });
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with ID ${assignmentID} not found.`
+        `Assignment with Id ${assignmentId} not found.`
       );
     }
 
     const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
       where: {
-        assignmentId: assignmentID,
-        groupId: groupID,
+        assignmentId: assignmentId,
+        groupId: groupId,
       },
     });
 
     if (assignmentGroup) {
       throw new BadRequestException(
-        `Assignment with id '${assignmentID}' is already added to the group having id '${groupID}'`
+        `Assignment with id '${assignmentId}' is already added to the group having id '${groupId}'`
       );
     }
 
     // Now, connect the assignment to the group or create the group if it doesn't exist
     await this.prisma.assignment.update({
-      where: { id: assignmentID },
+      where: { id: assignmentId },
       data: {
         groups: {
           create: [
@@ -114,10 +114,10 @@ export class AdminService {
               group: {
                 connectOrCreate: {
                   where: {
-                    id: groupID,
+                    id: groupId,
                   },
                   create: {
-                    id: groupID,
+                    id: groupId,
                   },
                 },
               },
@@ -128,8 +128,8 @@ export class AdminService {
     });
 
     return {
-      assignmentID: assignmentID,
-      groupID: groupID,
+      assignmentId: assignmentId,
+      groupId: groupId,
       success: true,
     };
   }
@@ -137,8 +137,8 @@ export class AdminService {
   async createAssignment(
     createAssignmentRequestDto: AdminCreateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
-    // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupID
-    // or by creating a new Group with that groupID
+    // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupId
+    // or by creating a new Group with that groupId
     const assignment = await this.prisma.assignment.create({
       data: {
         name: createAssignmentRequestDto.name,
@@ -149,10 +149,10 @@ export class AdminService {
               group: {
                 connectOrCreate: {
                   where: {
-                    id: createAssignmentRequestDto.groupID,
+                    id: createAssignmentRequestDto.groupId,
                   },
                   create: {
-                    id: createAssignmentRequestDto.groupID,
+                    id: createAssignmentRequestDto.groupId,
                   },
                 },
               },
@@ -174,7 +174,7 @@ export class AdminService {
     });
 
     if (!result) {
-      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+      throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
     return {
       id: result.id,
@@ -227,7 +227,7 @@ export class AdminService {
     });
 
     if (!assignmentExists) {
-      throw new NotFoundException(`Assignment with ID ${id} not found.`);
+      throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
     await this.prisma.assignment.delete({

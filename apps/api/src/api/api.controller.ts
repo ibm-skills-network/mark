@@ -48,9 +48,9 @@ export class ApiController {
   getUserSession(@Req() request: UserSessionRequest): ClientUserSession {
     const userSession = request.userSession;
     return {
-      userID: userSession.userID,
+      userId: userSession.userId,
       role: userSession.role,
-      assignmentID: userSession.assignmentID,
+      assignmentId: userSession.assignmentId,
     };
   }
 }

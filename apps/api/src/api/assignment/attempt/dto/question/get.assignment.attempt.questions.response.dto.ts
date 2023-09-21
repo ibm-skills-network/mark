@@ -3,7 +3,7 @@ import { QuestionType } from "@prisma/client";
 
 export class GetAssignmentAttemptQuestionResponseDto {
   @ApiProperty({
-    description: "The ID of the question.",
+    description: "The Id of the question.",
     type: Number,
     required: true,
   })

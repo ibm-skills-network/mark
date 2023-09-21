@@ -101,10 +101,10 @@ export class AttemptController {
   @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptID: number
+    @Param("attemptId") assignmentAttemptId: number
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
-      Number(assignmentAttemptID)
+      Number(assignmentAttemptId)
     );
   }
 
@@ -131,7 +131,7 @@ export class AttemptController {
   })
   @ApiResponse({ status: 403 })
   async updateAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptID: number,
+    @Param("attemptId") assignmentAttemptId: number,
     @Param("assignmentId") assignmentId: number,
     @Body()
     learnerUpdateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
@@ -142,7 +142,7 @@ export class AttemptController {
     const gradingCallbackRequired =
       request?.userSession.gradingCallbackRequired ?? false;
     return this.attemptService.updateAssignmentAttempt(
-      Number(assignmentAttemptID),
+      Number(assignmentAttemptId),
       Number(assignmentId),
       learnerUpdateAssignmentAttemptDto,
       authCookie,
@@ -160,10 +160,10 @@ export class AttemptController {
   })
   @ApiResponse({ status: 403 })
   getAssignmentAttemptQuestions(
-    @Param("assignmentId") assignmentID: number
+    @Param("assignmentId") assignmentId: number
   ): Promise<GetAssignmentAttemptQuestionResponseDto[]> {
     return this.attemptService.getAssignmentAttemptQuestions(
-      Number(assignmentID)
+      Number(assignmentId)
     );
   }
 
@@ -186,8 +186,8 @@ export class AttemptController {
   })
   @ApiResponse({ status: 403 })
   createQuestionResponse(
-    @Param("attemptId") assignmentAttemptID: number,
-    @Param("questionId") questionID: number,
+    @Param("attemptId") assignmentAttemptId: number,
+    @Param("questionId") questionId: number,
     @UploadedFile() file: Express.Multer.File,
     @Body()
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
@@ -196,8 +196,8 @@ export class AttemptController {
     createQuestionResponseAttemptRequestDto.learnerFileResponse = file;
 
     return this.attemptService.createQuestionResponse(
-      Number(assignmentAttemptID),
-      Number(questionID),
+      Number(assignmentAttemptId),
+      Number(questionId),
       createQuestionResponseAttemptRequestDto
     );
   }
