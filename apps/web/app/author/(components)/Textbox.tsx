@@ -16,7 +16,6 @@ import { CheckIcon, ChevronDownIcon } from "@heroicons/react/solid";
 import { Fragment, useEffect, useRef, useState } from "react";
 import RubricTable from "../../../components/depreciated/RubricTable";
 import MultipleAnswerSection from "./MultipleAnswerSection";
-import SingleAnswerSection from "./SingleAnswerSection";
 import WrittenQuestionView from "./WrittenQuestionView";
 
 //////////////////Answer Type////////////////////////////////////////
