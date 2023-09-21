@@ -17,9 +17,26 @@ on:
         required: false
   repository_dispatch:
 jobs:
-  build:
+  build_api_gateway:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
       image: icr.io/skills-network-labs/mark
+      docker_context: ./apps/api_gateway
+      docker_target: patched
+    secrets: inherit
+
+  build_api:
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network-labs/mark
+      docker_context: ./apps/api
+      docker_target: patched
+    secrets: inherit
+
+  build_ui:
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network-labs/mark
+      docker_context: ./apps/web
       docker_target: patched
     secrets: inherit
