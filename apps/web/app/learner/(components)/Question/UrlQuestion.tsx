@@ -2,8 +2,8 @@
 
 import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import React, { useState } from "react";
-import Button from "./Button";
-import InfoLine from "./InfoLine";
+import Button from "../Button";
+import InfoLine from "../InfoLine";
 
 interface Props {
   questionData?: QuestionStore;
@@ -22,7 +22,7 @@ function URLQuestion(props: Props) {
 
   const handleSubmit = () => {
     if (validateURL(url)) {
-      updateStatus("answered");
+      updateStatus("edited");
       if (onURLSubmit) {
         onURLSubmit(url);
       }

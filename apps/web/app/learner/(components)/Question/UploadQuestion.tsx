@@ -2,8 +2,8 @@
 
 import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import React, { useState } from "react";
-import Button from "./Button";
-import InfoLine from "./InfoLine";
+import Button from "../Button";
+import InfoLine from "../InfoLine";
 
 interface Props {
   questionData?: QuestionStore;
@@ -34,7 +34,7 @@ function UploadQuestion(props: Props) {
   const handleSubmit = () => {
     if (file) {
       setSubmitted(true);
-      updateStatus("answered");
+      updateStatus("edited");
       if (onAnswerSelected) onAnswerSelected("pendingReview");
     }
   };

@@ -310,6 +310,6 @@ export async function getAttempt(
     return attempt;
   } catch (err) {
     console.error(err);
-    return [];
+    return null;
   }
 }

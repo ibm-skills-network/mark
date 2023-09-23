@@ -17,12 +17,11 @@ function MarkdownEditor(props: Props) {
   const mdParser = new MarkdownIt();
 
   const [wordCount, setWordCount] = useState<number>(
-    value.split(/\s+/).filter(Boolean).length
+    value?.split(/\s+/).filter(Boolean).length ?? 0
   );
 
   const handleEditorChange = ({ text }: { text: string }) => {
-    setWordCount(text.split(/\s+/).filter(Boolean).length);
-
+    setWordCount(text.split(/\s+/).filter(Boolean).length ?? 0);
     if (maxWords !== undefined && wordCount <= maxWords) {
       setValue(text);
     } else if (maxWords === undefined) {

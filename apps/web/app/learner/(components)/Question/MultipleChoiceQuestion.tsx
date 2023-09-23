@@ -11,9 +11,9 @@ import { submitQuestionResponse } from "@/lib/talkToBackend";
 import { useLearnerStore } from "@/stores/learner";
 import Title from "@components/Title";
 import React, { useEffect, useState } from "react";
-import Button from "./Button";
-import { FeedbackMessage } from "./FeedbackMessage";
-import InfoLine from "./InfoLine";
+import Button from "../Button";
+import { FeedbackMessage } from "../FeedbackMessage";
+import InfoLine from "../InfoLine";
 
 interface Props {
   // this Id is required but not received from Questiondata (for talking to backend upon attempt)

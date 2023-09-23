@@ -1,7 +1,7 @@
 "use client";
 
-import MultipleChoiceQuestion from "@/app/learner/(components)/MultipleChoiceQuestion";
-import TextQuestion from "@/app/learner/(components)/TextQuestion";
+import MultipleChoiceQuestion from "@/app/learner/(components)/Question/MultipleChoiceQuestion";
+import TextQuestion from "@/app/learner/(components)/Question/TextQuestion";
 import type {
   Choice,
   Question,

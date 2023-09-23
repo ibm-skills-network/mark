@@ -9,8 +9,8 @@ import {
 import { submitQuestionResponse } from "@/lib/talkToBackend";
 import { useLearnerStore } from "@/stores/learner";
 import React, { useState } from "react";
-import Button from "./Button";
-import InfoLine from "./InfoLine";
+import Button from "../Button";
+import InfoLine from "../InfoLine";
 
 interface Props {
   attemptId?: number;

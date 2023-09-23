@@ -1,5 +1,5 @@
+import QuestionPage from "@/app/learner/(components)/Question";
 import { createAttempt, getAttempt, getAttempts } from "@/lib/talkToBackend";
-import QuestionPage from "@learnerComponents/QuestionPage";
 
 interface Props {
   params: { assignmentId: string };

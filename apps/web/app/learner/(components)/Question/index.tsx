@@ -10,8 +10,8 @@ import { useLearnerStore } from "@/stores/learner";
 import { questionsData } from "@config/constants";
 import Button from "@learnerComponents/Button";
 import Overview from "@learnerComponents/Overview";
-import QuestionContainer from "@learnerComponents/QuestionContainer";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import QuestionContainer from "./QuestionContainer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -26,37 +26,47 @@ function QuestionPage(props: Props) {
 
   // store the questions in zustand store
   useEffect(() => {
-    // TODO: remove this once we have the backend fully integrated
-    questionsData.concat(questions).forEach((question: QuestionStore) => {
-      // take out the info about previous attempts
+    const allQuestions: QuestionStore[] = questionsData
+      .concat(questions)
+      .map((question: QuestionStore) => {
+        // TODO: remove this once we have the backend fully integrated
+        // take out the info about previous attempts
 
-      // add the input field for the question
-      switch (question.type) {
-        case "TEXT":
-          question.learnerTextResponse = "";
-          break;
-        case "URL":
-          question.learnerUrlResponse = "";
-          break;
-        case "SINGLE_CORRECT":
-          question.learnerChoices = [];
-          break;
-        case "MULTIPLE_CORRECT":
-          question.learnerChoices = [];
-          break;
-        case "TRUE_FALSE":
-          question.learnerAnswerChoice = undefined;
-          break;
-        case "UPLOAD":
-          question.learnerFileResponse = undefined;
-          break;
-        default:
-          break;
-      }
-      // store the question in zustand store
-      addQuestion(question);
-    });
-  }, [questions, addQuestion]);
+        // add the input field for the question
+        switch (question.type) {
+          case "TEXT":
+            question.learnerTextResponse = "hi";
+            break;
+          case "URL":
+            question.learnerUrlResponse = "";
+            break;
+          case "SINGLE_CORRECT":
+            question.learnerChoices = [];
+            break;
+          case "MULTIPLE_CORRECT":
+            question.learnerChoices = [];
+            break;
+          case "TRUE_FALSE":
+            question.learnerAnswerChoice = undefined;
+            break;
+          case "UPLOAD":
+            question.learnerFileResponse = undefined;
+            break;
+          default:
+            break;
+        }
+        return question;
+      });
+    useLearnerStore.setState({ questions: allQuestions });
+  }, []);
+
+  // useEffect(
+  //   () =>
+  //     useLearnerStore.subscribe((state) => {
+  //       console.log(state.questions);
+  //     }),
+  //   []
+  // );
 
   const [activeQuestionId, setActiveQuestionId] = useLearnerStore((state) => [
     state.activeQuestionId,
@@ -99,7 +109,7 @@ function QuestionPage(props: Props) {
               <QuestionContainer
                 key={index}
                 questionNumber={index + 1}
-                className={`${index === activeQuestionId ? "" : "hidden"} `}
+                className={`${index + 1 === activeQuestionId ? "" : "hidden"} `}
                 question={question}
               />
             ))}
