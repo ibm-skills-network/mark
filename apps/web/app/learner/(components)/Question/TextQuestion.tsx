@@ -1,9 +1,5 @@
-"use client";
-
-import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
 import MarkdownEditor from "@components/MarkDownEditor";
-import { useEffect, useState } from "react";
 
 interface Props {}
 
@@ -21,15 +17,8 @@ function TextQuestion(props: Props) {
   //     setText(state.questions[activeQuestionId - 1]?.learnerTextResponse);
   //   });
   // }, [activeQuestionId]);
-  // useEffect(() => {
-  //   setTextResponse(text);
-  // }, []);
 
   const maxWords = 5;
-  console.log(
-    "questions[activeQuestionId]?.learnerTextResponse",
-    questions[activeQuestionId - 1].learnerTextResponse
-  );
   return (
     <MarkdownEditor
       value={questions[activeQuestionId - 1]?.learnerTextResponse || ""}

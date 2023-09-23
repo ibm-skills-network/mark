@@ -1,5 +1,3 @@
-import { QuestionStatus } from "@/config/types";
-import { useLearnerStore } from "@/stores/learner";
 import { type FC } from "react";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import TextQuestion from "./TextQuestion";

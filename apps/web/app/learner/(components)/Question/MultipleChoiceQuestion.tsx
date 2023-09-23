@@ -1,5 +1,3 @@
-"use client";
-
 import {
   Question,
   QuestionAttemptRequest,
@@ -67,6 +65,7 @@ function TrueFalseQuestion(props: Props) {
   };
 
   const renderFeedbackMessage = () => {
+    // TODO: make this a component and move it to a separate file
     let feedbackText = "";
     let bgColor = "";
     let borderColor = "";

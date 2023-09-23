@@ -2,7 +2,6 @@
 
 import type {
   AssignmentAttemptWithQuestions,
-  LearnerGetQuestionResponse,
   QuestionStatus,
   QuestionStore,
 } from "@/config/types";
@@ -35,7 +34,7 @@ function QuestionPage(props: Props) {
         // add the input field for the question
         switch (question.type) {
           case "TEXT":
-            question.learnerTextResponse = "hi";
+            question.learnerTextResponse = "";
             break;
           case "URL":
             question.learnerUrlResponse = "";
@@ -81,20 +80,17 @@ function QuestionPage(props: Props) {
   const isLastQuestion = false;
 
   if (!questionsStore.length) {
-    console.log(
-      "🚀 ~ file: QuestionPage.tsx:88 ~ QuestionPage ~ questionsStore.length:",
-      questionsStore.length
-    );
     return (
       <div className="col-span-4 flex items-center justify-center h-full">
         <h1>Loading...</h1>
       </div>
     );
   }
-  console.log(
-    "🚀 ~ file: QuestionPage.tsx:88 ~ QuestionPage ~ questionsStore.length:",
-    questionsStore.length
-  );
+
+  function updateStatus(status: QuestionStatus) {
+    const question = questionsStore[activeQuestionId - 1];
+    console.log("question", question);
+  }
 
   return (
     <>
@@ -110,6 +106,7 @@ function QuestionPage(props: Props) {
                 key={index}
                 questionNumber={index + 1}
                 className={`${index + 1 === activeQuestionId ? "" : "hidden"} `}
+                updateStatus={updateStatus}
                 question={question}
               />
             ))}

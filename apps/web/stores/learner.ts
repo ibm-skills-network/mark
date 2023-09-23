@@ -1,4 +1,3 @@
-import { questionsData } from "@/config/constants";
 import type { QuestionStore } from "@/config/types";
 import { devtools } from "zustand/middleware";
 import { shallow } from "zustand/shallow";

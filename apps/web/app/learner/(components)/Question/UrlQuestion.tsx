@@ -1,6 +1,3 @@
-"use client";
-
-import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
 import React, { useState } from "react";
 import Button from "../Button";
