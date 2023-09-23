@@ -12,15 +12,17 @@ import React, { useState } from "react";
 import Button from "../Button";
 import InfoLine from "../InfoLine";
 
-interface Props {
-  attemptId?: number;
-  questionData?: QuestionStore;
-  updateStatus?: (status: QuestionStatus) => void;
-}
+interface Props {}
 
 function TrueFalseQuestion(props: Props) {
-  const { questionData, attemptId, updateStatus } = props;
-  const { question, id } = questionData;
+  const {} = props;
+  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+
+  const [questions, setTextResponse] = useLearnerStore((state) => [
+    state.questions,
+    state.setTextResponse,
+  ]);
+  const { question, id } = questions[activeQuestionId - 1];
 
   const [selectedChoice, setSelectedChoice] = useState<boolean | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -41,7 +43,7 @@ function TrueFalseQuestion(props: Props) {
     };
     const success = await submitQuestionResponse(
       assignmentId,
-      attemptId,
+      id,
       id,
       questionResponse
     );
@@ -49,19 +51,19 @@ function TrueFalseQuestion(props: Props) {
       console.error("Error submitting the answer");
     }
 
-    setSubmitted(true);
+    // setSubmitted(true);
 
-    if (selectedChoice === true) {
-      setIsCorrect(true);
-      if (updateStatus) {
-        updateStatus("correct");
-      }
-    } else {
-      setIsCorrect(false);
-      if (updateStatus) {
-        updateStatus("incorrect");
-      }
-    }
+    // if (selectedChoice === true) {
+    //   setIsCorrect(true);
+    //   if (updateStatus) {
+    //     updateStatus("correct");
+    //   }
+    // } else {
+    //   setIsCorrect(false);
+    //   if (updateStatus) {
+    //     updateStatus("incorrect");
+    //   }
+    // }
   };
 
   const renderFeedbackMessage = () => {

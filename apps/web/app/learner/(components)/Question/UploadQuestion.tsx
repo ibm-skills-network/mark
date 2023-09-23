@@ -1,19 +1,22 @@
 "use client";
 
 import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
+import { useLearnerStore } from "@/stores/learner";
 import React, { useState } from "react";
 import Button from "../Button";
 import InfoLine from "../InfoLine";
 
-interface Props {
-  questionData?: QuestionStore;
-  onAnswerSelected?: (status: "pendingReview") => void;
-  updateStatus: (status: QuestionStatus) => void;
-}
+interface Props {}
 
 function UploadQuestion(props: Props) {
-  const { questionData, onAnswerSelected, updateStatus } = props;
-  const { question, totalPoints } = questionData;
+  const {} = props;
+  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+
+  const [questions, setTextResponse] = useLearnerStore((state) => [
+    state.questions,
+    state.setTextResponse,
+  ]);
+  const { question, id } = questions[activeQuestionId - 1];
 
   const [file, setFile] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);
@@ -34,8 +37,8 @@ function UploadQuestion(props: Props) {
   const handleSubmit = () => {
     if (file) {
       setSubmitted(true);
-      updateStatus("edited");
-      if (onAnswerSelected) onAnswerSelected("pendingReview");
+      // updateStatus("edited");
+      // if (onAnswerSelected) onAnswerSelected("pendingReview");
     }
   };
 

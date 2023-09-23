@@ -1,19 +1,22 @@
 "use client";
 
 import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
+import { useLearnerStore } from "@/stores/learner";
 import React, { useState } from "react";
 import Button from "../Button";
 import InfoLine from "../InfoLine";
 
-interface Props {
-  questionData?: QuestionStore;
-  onURLSubmit?: (url: string) => void; // This callback is for when the URL is submitted
-  updateStatus: (status: QuestionStatus) => void;
-}
+interface Props {}
 
 function URLQuestion(props: Props) {
-  const { questionData, onURLSubmit, updateStatus } = props;
-  const { question } = questionData;
+  const {} = props;
+  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+
+  const [questions, setTextResponse] = useLearnerStore((state) => [
+    state.questions,
+    state.setTextResponse,
+  ]);
+  const { question, id } = questions[activeQuestionId - 1];
   const [url, setURL] = useState<string>("");
 
   const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -22,10 +25,10 @@ function URLQuestion(props: Props) {
 
   const handleSubmit = () => {
     if (validateURL(url)) {
-      updateStatus("edited");
-      if (onURLSubmit) {
-        onURLSubmit(url);
-      }
+      // updateStatus("edited");
+      // if (onURLSubmit) {
+      //   onURLSubmit(url);
+      // }
     } else {
       alert("Please enter a valid URL.");
     }
