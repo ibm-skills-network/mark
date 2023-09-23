@@ -1,8 +1,6 @@
-"use client";
-
 import { useLearnerStore } from "@/stores/learner";
 import type { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface Props {
   timeLimit: number; // Time limit in seconds

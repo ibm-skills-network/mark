@@ -1,9 +1,9 @@
 "use client";
 
-import React from "react";
+import { type ComponentPropsWithoutRef } from "react";
 import { twMerge } from "tailwind-merge";
 
-interface Props extends React.ComponentPropsWithoutRef<"h1"> {
+interface Props extends ComponentPropsWithoutRef<"h1"> {
   text: string;
   level?: string;
 }

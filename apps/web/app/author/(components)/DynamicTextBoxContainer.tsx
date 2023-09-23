@@ -4,7 +4,7 @@
 
 import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/solid";
-import React, { useState } from "react";
+import { useState } from "react";
 import TextBox from "./Textbox";
 
 function DynamicTextBoxContainer() {

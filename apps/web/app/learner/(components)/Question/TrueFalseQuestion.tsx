@@ -1,12 +1,7 @@
-import {
-  Question,
-  QuestionAttemptRequest,
-  QuestionStatus,
-  QuestionStore,
-} from "@/config/types";
+import { QuestionAttemptRequest } from "@/config/types";
 import { submitQuestionResponse } from "@/lib/talkToBackend";
 import { useLearnerStore } from "@/stores/learner";
-import React, { useState } from "react";
+import { useState } from "react";
 import Button from "../Button";
 import InfoLine from "../InfoLine";
 

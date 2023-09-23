@@ -1,11 +1,17 @@
 import { debounce } from "@/lib/utils";
-import React, { SetStateAction, useCallback, useEffect, useState } from "react";
+import {
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+} from "react";
 
 const DEBOUNCE_SAVE_DELAY_MS = 1000;
 
 export default function useAutosave<T>(
   dataToSave: T
-): [T, React.Dispatch<SetStateAction<T>>] {
+): [T, Dispatch<SetStateAction<T>>] {
   // This UI state mirrors what's in the database.
   const [data, setData] = useState<T>(dataToSave);
 

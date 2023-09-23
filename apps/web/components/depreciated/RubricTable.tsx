@@ -1,6 +1,6 @@
 "use client";
 
-import React, { MouseEventHandler, useState } from "react";
+import { useState } from "react";
 
 interface RubricTableProps {
   rubrics: any;
@@ -114,7 +114,6 @@ function RubricTableProps(props: RubricTableProps) {
                         className={` h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
                       >
                         <textarea
-                          type="text"
                           className="w-[100%] h-[100%] border-transparent text-xs break-normal  hover:bg-gray-300 "
                           // make the placeholder text automatically starts new line
                           placeholder="Expands and Mentions any key elements such as; Project Purpose, Project Scope, Project Timeline, Project TeamThe student must explain each section with considerable amount of detail."

@@ -1,5 +1,4 @@
 import { ChevronRightIcon, HomeIcon } from "@heroicons/react/solid";
-import React from "react";
 
 interface Page {
   name: string;

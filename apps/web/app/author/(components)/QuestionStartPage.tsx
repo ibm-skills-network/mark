@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Fragment, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { TypeAnimation } from "react-type-animation";
 import velocity from "velocity-animate"; // Import Velocity.js
 
