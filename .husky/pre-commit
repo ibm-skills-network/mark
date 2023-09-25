@@ -1,18 +1,3 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 npx lint-staged
-
-echo "Linting complete."
-
-echo "Copying yarn.lock to each app..."
-
-cp yarn.lock ./apps/api-gateway/
-cp yarn.lock ./apps/api/
-cp yarn.lock ./apps/web/
-
-# Add the updated yarn.lock files to the commit
-git add ./apps/api-gateway/yarn.lock
-git add ./apps/api/yarn.lock
-git add ./apps/web/yarn.lock
-
-echo "yarn.lock copied successfully to all apps."
