@@ -1,5 +1,4 @@
 name: Build and Release Image
-
 on:
   push:
     branches:
@@ -17,55 +16,27 @@ on:
         description: Custom suffix for tag
         required: false
   repository_dispatch:
-
 jobs:
   build_api_gateway:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-      
-    - name: Copy yarn.lock to api_gateway
-      run: cp yarn.lock ./apps/api_gateway/
-      
-    - name: Build and Release Image for api_gateway
-      uses: ibm-skills-network/.github/.github/workflows/release.yml@main
-      with:
-        image: icr.io/skills-network-labs/mark
-        docker_context: ./apps/api_gateway
-        docker_target: patched
-      secrets: inherit
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network-labs/mark
+      docker_context: ./apps/api_gateway
+      docker_target: patched
+    secrets: inherit
 
   build_api:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-
-    - name: Copy yarn.lock to api
-      run: cp yarn.lock ./apps/api/
-
-    - name: Build and Release Image for api
-      uses: ibm-skills-network/.github/.github/workflows/release.yml@main
-      with:
-        image: icr.io/skills-network-labs/mark
-        docker_context: ./apps/api
-        docker_target: patched
-      secrets: inherit
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network-labs/mark
+      docker_context: ./apps/api
+      docker_target: patched
+    secrets: inherit
 
   build_ui:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-      
-    - name: Copy yarn.lock to web
-      run: cp yarn.lock ./apps/web/
-
-    - name: Build and Release Image for web
-      uses: ibm-skills-network/.github/.github/workflows/release.yml@main
-      with:
-        image: icr.io/skills-network-labs/mark
-        docker_context: ./apps/web
-        docker_target: patched
-      secrets: inherit
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network-labs/mark
+      docker_context: ./apps/web
+      docker_target: patched
+    secrets: inherit
