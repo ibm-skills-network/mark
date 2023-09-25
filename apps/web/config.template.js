@@ -1,0 +1,3 @@
+window.RUNTIME_CONFIG = {
+  API_GATEWAY_HOST: "$API_URL",
+};

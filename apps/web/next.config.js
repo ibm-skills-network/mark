@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+
 const nextConfig = {
   reactStrictMode: true,
   // ignore typescript errors
@@ -10,9 +11,7 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `http://localhost:${
-          process.env.API_GATEWAY_PORT || 8000
-        }/api/:path*`,
+        destination: `${process.env.API_GATEWAY_HOST || "http://localhost:8080"}/api/:path*`,
       },
     ];
   },
