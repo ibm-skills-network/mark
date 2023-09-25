@@ -1,21 +1,10 @@
 "use client";
 
-import MultipleChoiceQuestion from "@/app/learner/(components)/Question/MultipleChoiceQuestion";
-import TextQuestion from "@/app/learner/(components)/Question/TextQuestion";
-import type {
-  Choice,
-  Question,
-  QuestionType,
-  QuestionTypeDropdown,
-} from "@/config/types";
+import type { Choice, Question, QuestionTypeDropdown } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import Dropdown from "@authorComponents/Dropdown";
 import MarkdownEditor from "@components/MarkDownEditor";
-import { Listbox, RadioGroup, Transition } from "@headlessui/react";
-import { CheckIcon, ChevronDownIcon } from "@heroicons/react/solid";
-import { Fragment, useEffect, useRef, useState } from "react";
-import RubricTable from "../../../components/depreciated/RubricTable";
-import MultipleAnswerSection from "./MultipleAnswerSection";
+import { useEffect, useRef, useState } from "react";
 import WrittenQuestionView from "./WrittenQuestionView";
 
 //////////////////Answer Type////////////////////////////////////////
