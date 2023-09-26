@@ -111,11 +111,16 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     setPromptOptions(updatedOptions);
   };
 
+  // Calculate the sum of prompt points
+  const sumOfPoints = promptOptions.reduce((total, option) => {
+    return total + Number(option.point);
+  }, 0);
+
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
-  function textAreaAdjust(element) {
-    var offset = element.offsetHeight - element.clientHeight;
+  function textAreaAdjust(element: HTMLElement) {
+    const offset = element.offsetHeight - element.clientHeight;
     element.style.height = "auto";
-    element.style.height = element.scrollHeight + offset + "px";
+    element.style.height = `${element.scrollHeight + offset}px`;
     window.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
   }
 
@@ -155,7 +160,9 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 <textarea
-                  onKeyUp={(event) => textAreaAdjust(event.target)}
+                  onKeyUp={(event) =>
+                    textAreaAdjust(event.target as HTMLElement)
+                  }
                   className="p-2 rounded-md ml-[10px] text-black bg-transparent outline-none"
                   placeholder={`ex. “The question is not legible” `}
                   value={promptOptions[index]?.description || ""}
@@ -254,6 +261,12 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
       {/* this is a add button for each criteria, we need to remove this and change the state function */}
       {/* this is a add button for each criteria, we need to remove this and change the state function */}
       {/* this is a add button for each criteria, we need to remove this and change the state function */}
+      <div
+        className="absolute top-20 left-0 ml-[-85px] mt-[-25px] text-blue-700"
+        style={{ zIndex: 1 }}
+      >
+        {sumOfPoints} Points
+      </div>
     </div>
   );
 }
