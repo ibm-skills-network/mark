@@ -113,21 +113,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
             <div key={index} className="flex items-center mt-[10px]">
               {/* Add input for promptPoints */}
               <div className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="15"
-                  viewBox="0 0 14 15"
-                  fill="none"
-                >
-                  <rect
-                    y="0.516602"
-                    width="14"
-                    height="14"
-                    rx="7"
-                    fill="#E5E7EB"
-                  />
-                </svg>
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
@@ -149,18 +134,22 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                <input
-                  type="text"
-                  className="p-2 rounded-md ml-[10px] w-[700px] h-[3.256rem] text-black bg-transparent outline-none"
+                <textarea
+                  className="p-2 rounded-md ml-[10px] text-black bg-transparent outline-none"
                   placeholder={`ex. “The question is not legible” `}
                   value={promptOptions[index]?.description || ""}
                   onChange={(event) =>
                     handleChoiceChangeWrittenQuestion(index, event.target.value)
                   }
                   style={{
-                    maxWidth: "100%",
+                    width: "700px",
+                    height: "3.256rem",
+                    overflow: "auto",
+                    resize: "none",
+                    paddingRight: "25%", // Add this line
                   }}
                 />
+
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
