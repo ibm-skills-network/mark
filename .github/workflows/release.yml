@@ -23,7 +23,7 @@ jobs:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
       image: icr.io/skills-network-labs/mark
-      docker_file: api-gateway.dockerfile
+      docker_file: apps/api-gateway/Dockerfile
       docker_target: patched
     secrets: inherit
 
@@ -31,7 +31,7 @@ jobs:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
       image: icr.io/skills-network-labs/mark
-      docker_file: api.dockerfile
+      docker_file: apps/api/Dockerfile
       docker_target: patched
     secrets: inherit
 
@@ -39,6 +39,6 @@ jobs:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
       image: icr.io/skills-network-labs/mark
-      docker_file: ui.dockerfile
+      docker_file: apps/web/Dockerfile
       docker_target: patched
     secrets: inherit
