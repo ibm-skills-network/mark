@@ -22,23 +22,23 @@ jobs:
   build_api_gateway:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
-      image: icr.io/skills-network-labs/mark
-      docker_file: api-gateway.dockerfile
+      image: icr.io/skills-network-labs/mark-api-gateway
+      docker_file: apps/api-gateway/Dockerfile
       docker_target: patched
     secrets: inherit
 
   build_api:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
-      image: icr.io/skills-network-labs/mark
-      docker_file: api.dockerfile
+      image: icr.io/skills-network-labs/mark-api
+      docker_file: apps/api/Dockerfile
       docker_target: patched
     secrets: inherit
 
   build_ui:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
-      image: icr.io/skills-network-labs/mark
-      docker_file: ui.dockerfile
+      image: icr.io/skills-network-labs/mark-ui
+      docker_file: apps/web/Dockerfile
       docker_target: patched
     secrets: inherit
