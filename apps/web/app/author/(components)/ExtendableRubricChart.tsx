@@ -31,8 +31,20 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     point: string;
     description: string;
   };
+  // Initialize the promptOptions state with two default rubric options
+  const initialPromptOptions: promptOption[] = [
+    {
+      point: "0",
+      description: "",
+    },
+    {
+      point: "1",
+      description: "",
+    },
+  ];
 
-  const [promptOptions, setPromptOptions] = useState<promptOption[]>([]);
+  const [promptOptions, setPromptOptions] =
+    useState<promptOption[]>(initialPromptOptions);
 
   // Step 2: Add Button Handler
   // const handleAddDiv = () => {
@@ -99,6 +111,14 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     setPromptOptions(updatedOptions);
   };
 
+  // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
+  function textAreaAdjust(element) {
+    var offset = element.offsetHeight - element.clientHeight;
+    element.style.height = "auto";
+    element.style.height = element.scrollHeight + offset + "px";
+    window.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+  }
+
   return (
     <div>
       <div
@@ -106,28 +126,13 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
       >
         <div>
           <h1 className="text-base font-normal mt-[10px] leading-6 text-gray-900 relative">
-            Below write the conditions for the Criteria above
+            List the conditions for meeting the Criteria of Question
             <span className="absolute -top-1 left-38 text-blue-400">*</span>
           </h1>
           {promptOptions.map((choice, index) => (
             <div key={index} className="flex items-center mt-[10px]">
               {/* Add input for promptPoints */}
               <div className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="15"
-                  viewBox="0 0 14 15"
-                  fill="none"
-                >
-                  <rect
-                    y="0.516602"
-                    width="14"
-                    height="14"
-                    rx="7"
-                    fill="#E5E7EB"
-                  />
-                </svg>
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
@@ -149,18 +154,23 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                <input
-                  type="text"
-                  className="p-2 rounded-md ml-[10px] w-[700px] h-[3.256rem] text-black bg-transparent outline-none"
+                <textarea
+                  onKeyUp={(event) => textAreaAdjust(event.target)}
+                  className="p-2 rounded-md ml-[10px] text-black bg-transparent outline-none"
                   placeholder={`ex. “The question is not legible” `}
                   value={promptOptions[index]?.description || ""}
                   onChange={(event) =>
                     handleChoiceChangeWrittenQuestion(index, event.target.value)
                   }
                   style={{
-                    maxWidth: "100%",
+                    width: "700px",
+                    height: "3.256rem",
+                    overflow: "hidden",
+                    resize: "none",
+                    paddingRight: "25%", // Add this line
                   }}
                 />
+
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
@@ -168,21 +178,22 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
               </div>
 
               <button
-                className="ml-2 text-red-600"
+                className="ml-[-100px] text-red-600"
                 onClick={() => handleRemoveChoiceWrittenQuestion(index)}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="25"
+                  viewBox="0 0 24 25"
                   fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                  className="w-6 h-6"
                 >
                   <path
+                    d="M6 18.5L18 6.5M6 6.5L18 18.5"
+                    stroke="#FCA5A5"
+                    stroke-width="1.5"
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                    d="M12 9.75L14.25 12m0 0l2.25 2.25M14.25 12l2.25-2.25M14.25 12L12 14.25m-2.58 4.92l-6.375-6.375a1.125 1.125 0 010-1.59L9.42 4.83c.211-.211.498-.33.796-.33H19.5a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25h-9.284c-.298 0-.585-.119-.796-.33z"
                   />
                 </svg>
               </button>
