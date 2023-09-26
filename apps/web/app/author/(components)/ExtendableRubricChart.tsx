@@ -111,9 +111,10 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     setPromptOptions(updatedOptions);
   };
 
-  // Calculate the sum of prompt points
-  const sumOfPoints = promptOptions.reduce((total, option) => {
-    return total + Number(option.point);
+  // Calculate the maximum of prompt points
+  const maxPoints = promptOptions.reduce((max, option) => {
+    const optionPoints = Number(option.point);
+    return optionPoints > max ? optionPoints : max;
   }, 0);
 
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
@@ -265,7 +266,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
         className="absolute top-20 left-0 ml-[-85px] mt-[-25px] text-blue-700"
         style={{ zIndex: 1 }}
       >
-        {sumOfPoints} Points
+        {maxPoints} Points
       </div>
     </div>
   );
