@@ -111,6 +111,11 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     setPromptOptions(updatedOptions);
   };
 
+  // Calculate the sum of prompt points
+  const sumOfPoints = promptOptions.reduce((total, option) => {
+    return total + Number(option.point);
+  }, 0);
+
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
   function textAreaAdjust(element) {
     var offset = element.offsetHeight - element.clientHeight;
@@ -254,6 +259,12 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
       {/* this is a add button for each criteria, we need to remove this and change the state function */}
       {/* this is a add button for each criteria, we need to remove this and change the state function */}
       {/* this is a add button for each criteria, we need to remove this and change the state function */}
+      <div
+        className="absolute top-20 left-0 ml-[-85px] mt-[-25px] text-blue-700"
+        style={{ zIndex: 1 }}
+      >
+        {sumOfPoints} Points
+      </div>
     </div>
   );
 }
