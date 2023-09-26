@@ -99,12 +99,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     setPromptOptions(updatedOptions);
   };
 
-  // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
-  function textAreaAdjust(element) {
-    element.style.height = "1px";
-    element.style.height = 25 + element.scrollHeight + "px";
-  }
-
   return (
     <div>
       <div
@@ -141,7 +135,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 <textarea
-                  onKeyUp={(event) => textAreaAdjust(event.target)}
                   className="p-2 rounded-md ml-[10px] text-black bg-transparent outline-none"
                   placeholder={`ex. “The question is not legible” `}
                   value={promptOptions[index]?.description || ""}
@@ -151,7 +144,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   style={{
                     width: "700px",
                     height: "3.256rem",
-                    overflow: "hidden",
+                    overflow: "auto",
                     resize: "none",
                     paddingRight: "25%", // Add this line
                   }}
