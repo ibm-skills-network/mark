@@ -116,7 +116,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
           </div>
         </div>
       </div>
-      <p className="mt-[10px]">Points:</p>
+      {/* <p className="mt-[10px]">Points:</p>
       <input
         type="number"
         className="p-2 border rounded-md w-[200px] mt-[15px] text-gray-700 bg-transparent outline-none border-gray-300"
@@ -128,8 +128,8 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
         style={{
           maxWidth: "100%",
         }}
-      />
-      <div className="flex items-center">
+      /> */}
+      {/* <div className="flex items-center">
         <label className="switch">
           <button
             className={`text-black bg-white hover:bg-white focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-white dark:hover:bg-gray-300 ${
@@ -151,9 +151,9 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
           <span className="slider round"></span>
         </label>
-      </div>
+      </div> */}
 
-      {switchState === "a" && <ExtendableRubricChart />}
+      {<ExtendableRubricChart />}
 
       {/* {switchState === "b" && (
         // <RubricTable
