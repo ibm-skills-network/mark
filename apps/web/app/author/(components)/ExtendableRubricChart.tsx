@@ -31,8 +31,20 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     point: string;
     description: string;
   };
+  // Initialize the promptOptions state with two default rubric options
+  const initialPromptOptions: promptOption[] = [
+    {
+      point: "0",
+      description: "",
+    },
+    {
+      point: "1",
+      description: "",
+    },
+  ];
 
-  const [promptOptions, setPromptOptions] = useState<promptOption[]>([]);
+  const [promptOptions, setPromptOptions] =
+    useState<promptOption[]>(initialPromptOptions);
 
   // Step 2: Add Button Handler
   // const handleAddDiv = () => {
@@ -114,7 +126,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
       >
         <div>
           <h1 className="text-base font-normal mt-[10px] leading-6 text-gray-900 relative">
-            Below write the conditions for the Criteria above
+            List the conditions for meeting the Criteria of Question
             <span className="absolute -top-1 left-38 text-blue-400">*</span>
           </h1>
           {promptOptions.map((choice, index) => (
