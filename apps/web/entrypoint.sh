@@ -1,7 +1,11 @@
 #!/bin/sh
 
-# Use envsubst to replace the placeholders in config.template.js with real environment variables, generating config.js.
-envsubst < ./config.template.js > ./public/config.js
+# Extract API_GATEWAY_HOST from environment variable
+API_GATEWAY_HOST_VALUE=${API_GATEWAY_HOST}
 
-# Now, run the provided CMD command (in our case, "start" which translates to "yarn next start")
-exec yarn next start
+# Replace placeholder text in the specified files
+sed -i "s|{API_GATEWAY_HOST}|${API_GATEWAY_HOST_VALUE}|g" .next/required-server-files.json
+sed -i "s|{API_GATEWAY_HOST}|${API_GATEWAY_HOST_VALUE}|g" .next/routes-manifest.json
+
+# Start the Next.js application
+yarn next start
