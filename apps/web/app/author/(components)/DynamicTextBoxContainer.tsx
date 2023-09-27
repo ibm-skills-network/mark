@@ -7,11 +7,7 @@ import { PlusIcon } from "@heroicons/react/solid";
 import { useState } from "react";
 import TextBox from "./Textbox";
 
-interface DynamicTextBoxContainerProps {
-  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
-}
-
-function DynamicTextBoxContainer(props: DynamicTextBoxContainerProps) {
+function DynamicTextBoxContainer() {
   const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
   const [
     questions,
@@ -26,7 +22,6 @@ function DynamicTextBoxContainer(props: DynamicTextBoxContainerProps) {
     state.addQuestion,
     state.activeAssignmentId,
   ]);
-  const { onMaxPointsChange } = props;
   const handleAddTextBox = () => {
     addQuestion({
       id: questions.length + 1,
