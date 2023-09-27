@@ -155,8 +155,10 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   max={100}
                   style={{
                     maxWidth: "100%",
+                    border: "1px solid #D1D5DB", // Add this line to set the border color to gray-300
                   }}
                 />
+
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
@@ -176,6 +178,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                     overflow: "hidden",
                     resize: "none",
                     paddingRight: "25%", // Add this line
+                    border: "1px solid #D1D5DB", // Add this line to set the border color to gray-300
                   }}
                 />
 
