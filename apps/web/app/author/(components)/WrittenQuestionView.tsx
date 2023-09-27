@@ -26,6 +26,7 @@ interface WrittenQuestionViewProps {
   handleRemoveChoiceWrittenQuestion: (index: number) => void;
   handleAddChoiceWrittenQuestion: () => void;
   initialRubrics: any;
+  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
 }
 
 function WrittenQuestionView(props: WrittenQuestionViewProps) {
@@ -71,6 +72,15 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
   //   const updatedRubrics = rubrics.filter((_, i) => i !== index);
   //   setRubrics(updatedRubrics);
   // };
+
+  // this code is used to handle maxPoints passed from extendable rubric chart, so we can print points on the top left
+  const [parentMaxPoints, setParentMaxPoints] = useState<number | null>(null);
+
+  // Define a function to receive the maxPoints value from the child component
+  const handleMaxPointsChange = (maxPoints: number) => {
+    setParentMaxPoints(maxPoints);
+  };
+  props.onMaxPointsChange(parentMaxPoints);
 
   return (
     <div className="mt-4">
@@ -153,7 +163,8 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
         </label>
       </div> */}
 
-      {<ExtendableRubricChart />}
+      {/* Render the child component and pass the handleMaxPointsChange function as a prop */}
+      <ExtendableRubricChart onMaxPointsChange={handleMaxPointsChange} />
 
       {/* {switchState === "b" && (
         // <RubricTable

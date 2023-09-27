@@ -55,11 +55,12 @@ const singleAnswer = [
   },
 ];
 
-interface Props extends React.ComponentPropsWithoutRef<"div"> {
+interface TextBoxProps {
   question: Question;
+  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
 }
 
-function TextBox(props: Props) {
+function TextBox(props: TextBoxProps) {
   const { question } = props;
   const [isLearnerView, setIsLearnerView] = useState(false);
   const [displayText, setDisplayText] = useState("");
@@ -94,6 +95,15 @@ function TextBox(props: Props) {
   const [questionType, setQuestionType] = useState<QuestionTypeDropdown>(
     questionTypes[0]
   ); // use this the change the state of the answer type (single multiple written)
+
+  // this is used to pass maxpoints from written question view to text box
+  const [parentMaxPoints, setParentMaxPoints] = useState<number | null>(null);
+
+  // Define a function to receive the maxPoints value from the child component
+  const handleMaxPointsChange = (maxPoints: number) => {
+    setParentMaxPoints(maxPoints);
+  };
+  props.onMaxPointsChange(parentMaxPoints);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -256,6 +266,7 @@ function TextBox(props: Props) {
         ) : null} */}
         {questionType.value === "TEXT" ? (
           <WrittenQuestionView
+            onMaxPointsChange={handleMaxPointsChange}
             handleScore={handleScore}
             score={score}
             switchState={switchState}

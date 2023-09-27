@@ -1,6 +1,8 @@
 import { useState } from "react";
 
-interface ExtendableRubricChartProps {}
+interface ExtendableRubricChartProps {
+  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
+}
 
 function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   ////////////////////////////////////////////////
@@ -23,9 +25,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
 
   // Step 1: State Management
   const [divElements, setDivElements] = useState<number[]>([]);
-  // const [promptOptions, setPromptOptions] = useState<string[]>([]);
-  // New state for promptPoints as a matrix
-  // const [promptPoints, setPromptPoints] = useState<string[]>([]);
 
   type promptOption = {
     point: string;
@@ -45,27 +44,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
 
   const [promptOptions, setPromptOptions] =
     useState<promptOption[]>(initialPromptOptions);
-
-  // Step 2: Add Button Handler
-  // const handleAddDiv = () => {
-  //   const newDivKey = Date.now();
-  //   setDivElements([...divElements, newDivKey]);
-  //   setPromptOptions({ ...promptOptions, [newDivKey]: [] });
-  //   // Initialize an empty matrix for promptPoints for the new divKey
-  //   setPromptPoints({ ...promptPoints, [newDivKey]: [] });
-  // };
-
-  // Step 3: Delete Button Handler
-  // const handleDeleteDiv = (divKeyToDelete: number) => {
-  //   const updatedDivElements = divElements.filter(
-  //     (key) => key !== divKeyToDelete
-  //   );
-  //   setDivElements(updatedDivElements);
-  //   const { [divKeyToDelete]: _, ...updatedPromptOptions } = promptOptions;
-  //   setPromptOptions(updatedPromptOptions);
-  //   const { [divKeyToDelete]: __, ...updatedPromptPoints } = promptPoints;
-  //   setPromptPoints(updatedPromptPoints);
-  // };
 
   const handleRemoveChoiceWrittenQuestion = (indexToRemove: number) => {
     // Create a copy of the current state
@@ -111,11 +89,13 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     setPromptOptions(updatedOptions);
   };
 
-  // Calculate the maximum of prompt points
   const maxPoints = promptOptions.reduce((max, option) => {
     const optionPoints = Number(option.point);
     return optionPoints > max ? optionPoints : max;
   }, 0);
+
+  // Call the onMaxPointsChange function with the maxPoints value
+  props.onMaxPointsChange(maxPoints);
 
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
   function textAreaAdjust(element: HTMLElement) {
@@ -139,10 +119,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
             <div key={index} className="flex items-center mt-[10px]">
               {/* Add input for promptPoints */}
               <div className="flex items-center">
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 <input
                   type="number"
                   className="p-2 border ml-[10px] rounded-md h-[3.256rem] w-[100px] text-gray-700 bg-transparent outline-none"
@@ -159,9 +135,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   }}
                 />
 
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
                 <textarea
                   onKeyUp={(event) =>
                     textAreaAdjust(event.target as HTMLElement)
@@ -181,11 +154,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                     border: "1px solid #D1D5DB", // Add this line to set the border color to gray-300
                   }}
                 />
-
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
-                {/* this is each rubric for the criteria, we need to change the state function from matrix to list*/}
               </div>
 
               <button
@@ -233,43 +201,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
             </svg>
           </button>
         </div>
-      </div>
-
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      {/* <button
-        className="bg-gray-200 text-gray-500 p-2 rounded-md mt-2 flex items-center"
-        onClick={handleAddDiv}
-      >
-        <span>Add Criteria</span>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="25"
-          viewBox="0 0 24 25"
-          fill="none"
-          className="ml-2" // Add margin to separate the text and the SVG
-        >
-          <path
-            d="M12 6.0166V18.0166M18 12.0166H6"
-            stroke="#6B7280"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </button> */}
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      {/* this is a add button for each criteria, we need to remove this and change the state function */}
-      <div
-        className="absolute top-20 left-0 ml-[-85px] mt-[-25px] text-blue-700"
-        style={{ zIndex: 1 }}
-      >
-        {maxPoints} Points
       </div>
     </div>
   );

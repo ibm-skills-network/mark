@@ -7,7 +7,11 @@ import { PlusIcon } from "@heroicons/react/solid";
 import { useState } from "react";
 import TextBox from "./Textbox";
 
-function DynamicTextBoxContainer() {
+interface DynamicTextBoxContainerProps {
+  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
+}
+
+function DynamicTextBoxContainer(props: DynamicTextBoxContainerProps) {
   const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
   const [
     questions,
@@ -22,6 +26,7 @@ function DynamicTextBoxContainer() {
     state.addQuestion,
     state.activeAssignmentId,
   ]);
+  const { onMaxPointsChange } = props;
   const handleAddTextBox = () => {
     addQuestion({
       id: questions.length + 1,
@@ -35,7 +40,16 @@ function DynamicTextBoxContainer() {
   const handleDeleteTextBox = (question: number) => {
     removeQuestion(question);
   };
+
   // TODO: duplicate feat
+
+  const [parentMaxPoints, setParentMaxPoints] = useState<number | null>(null);
+
+  // Define a function to receive the maxPoints value from the child component
+  const handleMaxPointsChange = (maxPoints: number) => {
+    setParentMaxPoints(maxPoints);
+  };
+
   return (
     <>
       <p className="text-center text-gray-500 text-base leading-5 my-8">
@@ -47,7 +61,15 @@ function DynamicTextBoxContainer() {
             <div className="sticky top-10 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold">
               {index + 1}
             </div>
-            <TextBox question={question} />
+            <div className="sticky top-10 text-blue-700 items-center justify-center w-11 h-11">
+              {parentMaxPoints} Points
+            </div>
+            <TextBox
+              question={question}
+              onMaxPointsChange={handleMaxPointsChange}
+            />
+            {/* Display the maxPoints value received from the child component */}
+
             {/* Delete question button */}
             <button
               disabled={questions.length <= 1}
