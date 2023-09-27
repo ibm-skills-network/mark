@@ -146,18 +146,18 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                     handleChoiceChangeWrittenQuestion(index, event.target.value)
                   }
                   style={{
-                    width: "700px",
+                    width: "800px",
                     height: "3.256rem",
                     overflow: "hidden",
                     resize: "none",
-                    paddingRight: "25%", // Add this line
+                    paddingRight: "8%", // Add this line
                     border: "1px solid #D1D5DB", // Add this line to set the border color to gray-300
                   }}
                 />
               </div>
 
               <button
-                className="ml-[-100px] text-red-600"
+                className="ml-[-60px] text-red-600"
                 onClick={() => handleRemoveChoiceWrittenQuestion(index)}
               >
                 <svg
