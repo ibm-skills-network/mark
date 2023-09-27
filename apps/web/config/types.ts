@@ -67,13 +67,21 @@ export type Choice = {
   // key value pair
   [option: string]: boolean;
 };
-
+type QuestionResponse = {
+  id: number;
+  assignmentAttemptId: number;
+  questionId: number;
+  learnerResponse: string;
+  points: number;
+  feedback: Record<string, string[]>;
+};
 export interface BaseQuestion {
   type: QuestionType;
   totalPoints: number;
   numRetries?: number;
   question: string;
   choices?: Choice[];
+  questionResponses?: QuestionResponse[];
 }
 
 export interface LearnerGetQuestionResponse extends BaseQuestion {

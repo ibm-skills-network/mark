@@ -9,7 +9,6 @@ import type {
   BaseBackendResponse,
   CreateQuestionRequest,
   GetAssignmentResponse,
-  LearnerGetQuestionResponse,
   ModifyAssignmentRequest,
   QuestionAttemptRequest,
   QuestionAttemptResponse,
@@ -265,13 +264,17 @@ export async function getAttempts(
  * @returns The id of the created attempt.
  * @throws An error if the request fails.
  */
-export async function createAttempt(assignmentId: number): Promise<number> {
+export async function createAttempt(
+  assignmentId: number
+): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
-
+  console.log("endpointURL", endpointURL);
   try {
     const res = await fetch(endpointURL, {
       method: "POST",
+      cache: "no-cache",
     });
+    console.log("res", res);
 
     if (!res.ok) {
       throw new Error("Failed to create attempt");
@@ -284,7 +287,7 @@ export async function createAttempt(assignmentId: number): Promise<number> {
     return id;
   } catch (err) {
     console.error(err);
-    return -1;
+    return undefined;
   }
 }
 

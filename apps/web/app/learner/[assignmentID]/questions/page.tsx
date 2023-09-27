@@ -9,6 +9,7 @@ async function LearnerLayout(props: Props) {
   const { params } = props;
   const assignmentId = parseInt(params.assignmentId);
   const listOfAttempts = await getAttempts(assignmentId);
+  console.log("listOfAttempts", listOfAttempts);
   // check if there are any attempts that are not submitted and have not expired
   const unsubmittedAssignment = listOfAttempts.find(
     (attempt) =>
@@ -20,8 +21,10 @@ async function LearnerLayout(props: Props) {
   const attemptId = unsubmittedAssignment
     ? unsubmittedAssignment.id
     : await createAttempt(assignmentId);
+  console.log("attemptId", attemptId);
   // get the questions for the assignment from the attemptId
   const attempt = await getAttempt(assignmentId, attemptId);
+  console.log("attempt", attempt);
   return (
     <main className="p-24 grid grid-cols-4 gap-x-5">
       <QuestionPage attempt={attempt} />

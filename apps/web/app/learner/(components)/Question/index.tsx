@@ -25,8 +25,8 @@ function QuestionPage(props: Props) {
 
   // store the questions in zustand store
   useEffect(() => {
-    const allQuestions: QuestionStore[] = questionsData
-      .concat(questions)
+    const allQuestions: QuestionStore[] = questions
+      .concat(questionsData)
       .map((question: QuestionStore) => {
         // TODO: remove this once we have the backend fully integrated
         // take out the info about previous attempts
@@ -87,11 +87,6 @@ function QuestionPage(props: Props) {
     );
   }
 
-  function updateStatus(status: QuestionStatus) {
-    const question = questionsStore[activeQuestionId - 1];
-    console.log("question", question);
-  }
-
   return (
     <>
       {submittedSuccessfully ? (
@@ -106,7 +101,6 @@ function QuestionPage(props: Props) {
                 key={index}
                 questionNumber={index + 1}
                 className={`${index + 1 === activeQuestionId ? "" : "hidden"} `}
-                updateStatus={updateStatus}
                 question={question}
               />
             ))}
@@ -141,7 +135,7 @@ function QuestionPage(props: Props) {
             </div>
           </div>
           <div className="col-span-1">
-            <Overview timeLimit={3600} setCurrentIndex={setActiveQuestionId} />
+            <Overview />
           </div>
 
           {/* Attempt Warning Modal */}

@@ -1,24 +1,24 @@
 import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
-import { useState } from "react";
+import { ComponentPropsWithoutRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
 import Button from "../Button";
 import RenderQuestion from "./RenderQuestion";
 
-interface Props extends React.ComponentPropsWithoutRef<"section"> {
+interface Props extends ComponentPropsWithoutRef<"section"> {
   question: QuestionStore;
   questionNumber: number;
   updateStatus?: (status: QuestionStatus) => void;
 }
 
 function Component(props: Props) {
-  const { question, className, questionNumber, updateStatus } = props;
+  const { question, className, questionNumber } = props;
 
   const { type, totalPoints } = question;
   const [submitted, setSubmitted] = useState<boolean>(false);
 
   function handleSubmit() {
-    setSubmitted(true);
-    updateStatus("edited");
+    // setSubmitted(true);
+    // updateStatus("edited");
   }
 
   return (
