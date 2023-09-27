@@ -27,15 +27,18 @@ function Overview(props: Props) {
             ? response.points
             : highestPoints;
         }, 0) || 0;
-      console.log("question", question.questionResponses);
-      if (question.learnerTextResponse === "") {
-        return "unedited";
-      } else if (question.totalPoints === earnedPoints) {
+      if (question.totalPoints === earnedPoints) {
         return "correct";
       } else if (earnedPoints > 0) {
         return "partiallyCorrect";
-      } else {
+        // TODO: add other types of questions
+      } else if (earnedPoints === 0 && question?.learnerTextResponse) {
+        return "edited";
+        // TODO: figure out how to check if the question has been submitted and is incorrect
+      } else if (earnedPoints === 0 && !!false) {
         return "incorrect";
+      } else {
+        return "unedited";
       }
     });
   }, [questionsStore]);
