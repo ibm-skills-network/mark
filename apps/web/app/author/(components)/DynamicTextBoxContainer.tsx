@@ -4,11 +4,14 @@
 
 import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/solid";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TextBox from "./Textbox";
 
 function DynamicTextBoxContainer() {
   const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
+
+  // click me button for textboxes
+  const [scrollTargets, setScrollTargets] = useState([]); // Keep track of scroll targets for each textbox
   const [
     questions,
     setQuestions,
@@ -30,10 +33,23 @@ function DynamicTextBoxContainer() {
       totalPoints: 0,
       type: "MULTIPLE_CORRECT",
     });
+    setScrollTargets((prevTargets) => [...prevTargets, questions.length + 1]);
   };
 
-  const handleDeleteTextBox = (question: number) => {
-    removeQuestion(question);
+  const handleDeleteTextBox = (questionId) => {
+    // Remove the textbox and its scroll target
+    removeQuestion(questionId);
+
+    setScrollTargets((prevTargets) =>
+      prevTargets.filter((target) => target !== questionId)
+    );
+  };
+  const handleScrollToTarget = (questionId) => {
+    // Scroll to the specified target
+    const targetElement = document.getElementById(`textbox-${questionId}`);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   // TODO: duplicate feat
@@ -50,6 +66,18 @@ function DynamicTextBoxContainer() {
       <p className="text-center text-gray-500 text-base leading-5 my-8">
         Begin writing the questions for your assignment below.
       </p>
+      <div className="flex gap-4 my-4">
+        {questions.map((question, index) => (
+          <button
+            key={index}
+            type="button"
+            onClick={() => handleScrollToTarget(question.id)}
+            className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+          >
+            Click Me {index + 1}
+          </button>
+        ))}
+      </div>
       <div className="mb-24 flex flex-col gap-y-20">
         {questions.map((question, index) => (
           <section key={index} className="flex gap-x-4 mx-auto">
@@ -61,10 +89,12 @@ function DynamicTextBoxContainer() {
                 {parentMaxPoints} Points
               </div>
             </div>
-            <TextBox
-              question={question}
-              onMaxPointsChange={handleMaxPointsChange}
-            />
+            <div id={`textbox-${question.id}`}>
+              <TextBox
+                question={question}
+                onMaxPointsChange={handleMaxPointsChange}
+              />
+            </div>
             {/* Display the maxPoints value received from the child component */}
 
             {/* Delete question button */}
