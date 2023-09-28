@@ -8,10 +8,9 @@ function Overview(props: Props) {
   const {} = props;
 
   const questionsStore = useLearnerStore((state) => state.questions);
-  const [activeQuestionId, setActiveQuestionId] = useLearnerStore((state) => [
-    state.activeQuestionId,
-    state.setActiveQuestionId,
-  ]);
+  const setActiveQuestionId = useLearnerStore(
+    (state) => state.setActiveQuestionId
+  );
 
   // TODO: use the allotedTimeMinutes variable
   const [secondsRemaining, setSecondsRemaining] = useState<number>(3600);
