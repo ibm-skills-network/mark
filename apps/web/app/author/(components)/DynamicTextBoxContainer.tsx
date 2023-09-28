@@ -70,24 +70,38 @@ function DynamicTextBoxContainer() {
   const handleMaxPointsChange = (maxPoints: number) => {
     setParentMaxPoints(maxPoints);
   };
-
+  const [isOpen, setIsOpen] = useState(false);
   return (
     <>
+      <div style={{ width: "100%", height: "2vw", background: "white" }}>
+        <div className="flex gap-4 my-0 justify-end">
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="bg-white text-black py-2 px-4 rounded hover:bg-gray-300 w-auto"
+          >
+            {isOpen ? "Hide Buttons" : "Show Buttons"}
+          </button>
+          {isOpen && (
+            <div className="flex flex-col gap-2">
+              {questions.map((question, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => handleScrollToTarget(question.id)}
+                  className="bg-white text-black py-2 px-4 rounded hover:bg-gray-300"
+                >
+                  Click Me {index + 1}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       <p className="text-center text-gray-500 text-base leading-5 my-8">
         Begin writing the questions for your assignment below.
       </p>
-      <div className="flex gap-4 my-4">
-        {questions.map((question, index) => (
-          <button
-            key={index}
-            type="button"
-            onClick={() => handleScrollToTarget(question.id)}
-            className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
-          >
-            Click Me {index + 1}
-          </button>
-        ))}
-      </div>
       <div className="mb-24 flex flex-col gap-y-20">
         {questions.map((question, index) => (
           <section key={index} className="flex gap-x-4 mx-auto">
