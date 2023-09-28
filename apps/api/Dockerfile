@@ -42,7 +42,7 @@ COPY --chown=node:node --from=sourcer $DIR/prisma ./prisma
 COPY --chown=node:node --from=sourcer $DIR/apps/api/entrypoint.sh ./entrypoint.sh
 COPY --chown=node:node --from=sourcer $DIR/apps/api/ensureDb.js ./ensureDb.js
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["./entrypoint.sh"]
+CMD ["tail", "-f", "/dev/null"]
 EXPOSE 3000
 
 # Patched stage with updates
