@@ -31,15 +31,23 @@ function AssignmentOverview(props: Props) {
           </h1>
           <div className="mt-1 flex flex-row space-x-2 text-sm text-gray-500">
             <div className="flex items-center">
-              Attempts Allowed: {numAttempts}
+              Attempts Allowed: {numAttempts || "Unlimited"}
             </div>
             <div className="border-r border-gray-400 h-4 self-center"></div>
             <div className="flex items-center">
-              Time Limit: {allotedTimeMinutes} minutes
+              {allotedTimeMinutes ? (
+                <>Time Alloted: {allotedTimeMinutes} minutes</>
+              ) : (
+                "No Time Limit"
+              )}
             </div>
             <div className="border-r border-gray-400 h-4 self-center"></div>
             <div className="flex items-center">
-              Passing Grade: {passingGrade}%
+              {passingGrade ? (
+                <>Passing Grade: {passingGrade}%</>
+              ) : (
+                "No Passing Grade"
+              )}
             </div>
             {/* <div className="flex items-center">Out Of: {outOf}</div> */}
           </div>
@@ -49,14 +57,27 @@ function AssignmentOverview(props: Props) {
         </Link>
       </div>
       <div className="border-2 border-gray-400 bg-white p-4">
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">
-          About this Assignment
-        </h3>
-        <p className="text-gray-600 mb-4">{introduction}</p>
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">
-          Instructions
-        </h3>
-        <p className="text-gray-600 mb-4">{instructions}</p>
+        {introduction && (
+          <>
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              About this Assignment
+            </h3>
+            <p className="text-gray-600 mb-4">{introduction}</p>
+          </>
+        )}
+        {instructions && (
+          <>
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              Instructions
+            </h3>
+            <p className="text-gray-600 mb-4">{instructions}</p>
+          </>
+        )}
+        {!introduction && !instructions && (
+          <p className="text-gray-600 mb-4">
+            No instructions or introduction provided for this assignment.
+          </p>
+        )}
       </div>
     </>
   );
