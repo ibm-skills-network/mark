@@ -124,9 +124,14 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   className="p-2 border ml-[10px] rounded-md h-[3.256rem] w-[100px] text-gray-700 bg-transparent outline-none"
                   placeholder={`ex. ${index}`}
                   value={promptOptions[index]?.point || ""}
-                  onChange={(event) =>
-                    handlePromptPoints(index, event.target.value)
-                  }
+                  onChange={(event) => {
+                    if (
+                      parseInt(event.target.value) > parseInt(event.target.max)
+                    ) {
+                      event.target.value = event.target.max;
+                    }
+                    handlePromptPoints(index, event.target.value);
+                  }}
                   min={1}
                   max={100}
                   style={{

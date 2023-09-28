@@ -4,11 +4,14 @@
 
 import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/solid";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TextBox from "./Textbox";
 
 function DynamicTextBoxContainer() {
   const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
+
+  // click me button for textboxes
+  const [scrollTargets, setScrollTargets] = useState([]); // Keep track of scroll targets for each textbox
   const [
     questions,
     setQuestions,
@@ -30,10 +33,33 @@ function DynamicTextBoxContainer() {
       totalPoints: 0,
       type: "MULTIPLE_CORRECT",
     });
+    setScrollTargets((prevTargets) => {
+      const newTargets: number[] = [
+        ...(prevTargets as number[]),
+        questions.length + 1,
+      ];
+      return newTargets;
+    });
   };
 
-  const handleDeleteTextBox = (question: number) => {
-    removeQuestion(question);
+  const handleDeleteTextBox = (questionId: number) => {
+    // Remove the textbox and its scroll target
+    removeQuestion(questionId);
+
+    setScrollTargets((prevTargets: number[]) =>
+      prevTargets.filter((target) => target !== questionId)
+    );
+  };
+  const handleScrollToTarget = (questionId: number) => {
+    if (typeof questionId !== "number") {
+      throw new Error("questionId must be a string");
+    }
+
+    // Scroll to the specified target
+    const targetElement = document.getElementById(`textbox-${questionId}`);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   // TODO: duplicate feat
@@ -50,19 +76,35 @@ function DynamicTextBoxContainer() {
       <p className="text-center text-gray-500 text-base leading-5 my-8">
         Begin writing the questions for your assignment below.
       </p>
+      <div className="flex gap-4 my-4">
+        {questions.map((question, index) => (
+          <button
+            key={index}
+            type="button"
+            onClick={() => handleScrollToTarget(question.id)}
+            className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+          >
+            Click Me {index + 1}
+          </button>
+        ))}
+      </div>
       <div className="mb-24 flex flex-col gap-y-20">
         {questions.map((question, index) => (
           <section key={index} className="flex gap-x-4 mx-auto">
-            <div className="sticky top-10 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold">
-              {index + 1}
+            <div className="sticky">
+              <div className="sticky top-10 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold">
+                {index + 1}
+              </div>
+              <div className="sticky top-[100px] text-blue-700 items-center justify-center w-15 h-11 flex flex-row">
+                {parentMaxPoints} Points
+              </div>
             </div>
-            <div className="sticky top-10 text-blue-700 items-center justify-center w-11 h-11">
-              {parentMaxPoints} Points
+            <div id={`textbox-${question.id}`}>
+              <TextBox
+                question={question}
+                onMaxPointsChange={handleMaxPointsChange}
+              />
             </div>
-            <TextBox
-              question={question}
-              onMaxPointsChange={handleMaxPointsChange}
-            />
             {/* Display the maxPoints value received from the child component */}
 
             {/* Delete question button */}
