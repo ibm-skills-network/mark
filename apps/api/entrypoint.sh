@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Ensure the database exists
+node ensureDb.js
+
 # Run Prisma migrations
 npx prisma migrate deploy
 
