@@ -35,7 +35,7 @@ RUN yarn turbo run build --scope=api --include-dependencies
 FROM base AS production
 ENV NODE_ENV production
 WORKDIR $DIR
-RUN apk add --no-cache dumb-init~=1
+RUN apk add --no-cache dumb-init~=1 && apk add --no-cache nano
 COPY --chown=node:node --from=sourcer $DIR/apps/api/dist ./dist
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 COPY --chown=node:node --from=sourcer $DIR/prisma ./prisma
