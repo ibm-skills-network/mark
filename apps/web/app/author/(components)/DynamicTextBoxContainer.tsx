@@ -53,11 +53,13 @@ function DynamicTextBoxContainer() {
       <div className="mb-24 flex flex-col gap-y-20">
         {questions.map((question, index) => (
           <section key={index} className="flex gap-x-4 mx-auto">
-            <div className="sticky top-10 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold">
-              {index + 1}
-            </div>
-            <div className="sticky top-10 text-blue-700 items-center justify-center w-11 h-11">
-              {parentMaxPoints} Points
+            <div className="sticky">
+              <div className="sticky top-10 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold">
+                {index + 1}
+              </div>
+              <div className="sticky top-[100px] text-blue-700 items-center justify-center w-15 h-11 flex flex-row">
+                {parentMaxPoints} Points
+              </div>
             </div>
             <TextBox
               question={question}
