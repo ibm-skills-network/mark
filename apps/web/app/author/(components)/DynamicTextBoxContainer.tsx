@@ -33,18 +33,28 @@ function DynamicTextBoxContainer() {
       totalPoints: 0,
       type: "MULTIPLE_CORRECT",
     });
-    setScrollTargets((prevTargets) => [...prevTargets, questions.length + 1]);
+    setScrollTargets((prevTargets) => {
+      const newTargets: number[] = [
+        ...(prevTargets as number[]),
+        questions.length + 1,
+      ];
+      return newTargets;
+    });
   };
 
-  const handleDeleteTextBox = (questionId) => {
+  const handleDeleteTextBox = (questionId: number) => {
     // Remove the textbox and its scroll target
     removeQuestion(questionId);
 
-    setScrollTargets((prevTargets) =>
+    setScrollTargets((prevTargets: number[]) =>
       prevTargets.filter((target) => target !== questionId)
     );
   };
-  const handleScrollToTarget = (questionId) => {
+  const handleScrollToTarget = (questionId: number) => {
+    if (typeof questionId !== "number") {
+      throw new Error("questionId must be a string");
+    }
+
     // Scroll to the specified target
     const targetElement = document.getElementById(`textbox-${questionId}`);
     if (targetElement) {
