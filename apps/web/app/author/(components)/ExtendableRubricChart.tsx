@@ -100,9 +100,12 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
   function textAreaAdjust(element: HTMLElement) {
     const offset = element.offsetHeight - element.clientHeight;
+    const oldScrollTop = document.documentElement.scrollTop; // Save old scroll position
+
     element.style.height = "auto";
     element.style.height = `${element.scrollHeight + offset}px`;
-    window.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+
+    document.documentElement.scrollTop = oldScrollTop; // Reset scroll position
   }
 
   return (
