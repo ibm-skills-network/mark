@@ -1,8 +1,10 @@
 const { Client } = require("pg");
 
 let connectionString = process.env.DATABASE_URL;
-const targetDatabase = connectionString.match(/\/([^\/?]+)(?:\?)?/)[1]; // Extract the database name from the connection string
-connectionString = connectionString.replace(/\/[^\/?]+\?/, "/postgres?"); // Replace target database with 'postgres'
+// Extract the database name from the connection string
+const targetDatabase = connectionString.match(/\/([^\/?]+)(?=\?|$)/)[1];
+// Replace target database with 'postgres'
+connectionString = connectionString.replace(/(\/)[^\/?]+(\?)?$/, "/postgres$2");
 
 const client = new Client({
   connectionString: connectionString,
