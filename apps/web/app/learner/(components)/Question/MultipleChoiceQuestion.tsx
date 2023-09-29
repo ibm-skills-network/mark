@@ -4,7 +4,6 @@ import {
   QuestionStatus,
   QuestionStore,
 } from "@/config/types";
-import { submitQuestionResponse } from "@/lib/talkToBackend";
 import { useLearnerStore } from "@/stores/learner";
 import { useState } from "react";
 import Button from "../Button";
@@ -35,19 +34,10 @@ function TrueFalseQuestion(props: Props) {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const questionResponse: QuestionAttemptRequest = {
       learnerAnswerChoice: selectedChoice,
     };
-    const success = await submitQuestionResponse(
-      assignmentId,
-      id,
-      id,
-      questionResponse
-    );
-    if (!success) {
-      console.error("Error submitting the answer");
-    }
 
     // setSubmitted(true);
 

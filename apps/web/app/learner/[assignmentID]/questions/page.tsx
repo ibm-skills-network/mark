@@ -1,5 +1,5 @@
-import QuestionPage from "@/app/learner/(components)/Question";
 import { createAttempt, getAttempt, getAttempts } from "@/lib/talkToBackend";
+import QuestionPage from "@learnerComponents/Question";
 
 interface Props {
   params: { assignmentId: string };
@@ -27,7 +27,7 @@ async function LearnerLayout(props: Props) {
   console.log("attempt", attempt);
   return (
     <main className="p-24 grid grid-cols-4 gap-x-5">
-      <QuestionPage attempt={attempt} />
+      <QuestionPage attempt={attempt} assignmentId={assignmentId} />
     </main>
   );
 }

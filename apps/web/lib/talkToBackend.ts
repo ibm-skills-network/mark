@@ -36,7 +36,7 @@ export async function getUser(): Promise<User | undefined> {
 }
 
 /**
- * Calls the backend to create an assignment.
+ * Calls the backend to modify an assignment.
  */
 export async function modifyAssignment(
   data: ModifyAssignmentRequest,
@@ -102,7 +102,7 @@ export async function getAssignment(
  * Calls the backend to get all assignments.
  * @returns An array of assignments.
  */
-export async function getAssignments(): Promise<Assignment[]> {
+export async function getAssignments(): Promise<Assignment[] | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments);
     if (!res.ok) {
@@ -112,87 +112,7 @@ export async function getAssignments(): Promise<Assignment[]> {
     return assignments;
   } catch (err) {
     console.error(err);
-    return [];
-  }
-}
-
-/**
- * Submits an answer (text or URL) for a given assignment, attempt, and question.
- */
-// export async function submitTextOrURLAnswer(
-//   assignmentId: number,
-//   attemptId: number,
-//   questionId: number,
-//   responseBody: any
-// ): Promise<boolean> {
-//   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
-
-//   try {
-//     const res = await fetch(endpointURL, {
-//       method: "POST",
-//       headers: {
-//         "Content-Type": "application/json",
-//       },
-//       body: JSON.stringify(responseBody),
-//     });
-
-//     if (!res.ok) {
-//       throw new Error("Failed to submit answer");
-//     }
-//     const { success, error } = await res.json();
-//     if (!success) {
-//       throw new Error(error);
-//     }
-//     return true;
-//   } catch (err) {
-//     console.error(err);
-//     return false;
-//   }
-// }
-
-/**
- * talk to backend when submitting individual questions (Benny)
- */
-export async function submitQuestionResponse(
-  assignmentId: number,
-  attemptId: number,
-  questionId: number,
-  questionResponse: QuestionAttemptRequest
-): Promise<QuestionAttemptResponse> {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
-
-  try {
-    const body = JSON.stringify(questionResponse);
-    const headers = {};
-
-    // TODO: handle file upload
-    // if (response.learnerFileResponse) {
-    //   body = new FormData();
-    //   body.append("learnerFileResponse", response.learnerFileResponse);
-    // } else {
-    headers["Content-Type"] = "application/json";
-    // }
-
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers,
-      body,
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to submit response");
-    }
-
-    const data = (await res.json()) as {
-      id: number;
-      totalPoints: number;
-      feedback: any[];
-    };
-    // TODO: handle feedback (at least for text responses for v1)
-    return data;
-  } catch (err) {
-    console.error(err);
-    return;
+    return undefined;
   }
 }
 
@@ -242,7 +162,7 @@ export async function createQuestion(
  */
 export async function getAttempts(
   assignmentId: number
-): Promise<AssignmentAttempt[]> {
+): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
 
   try {
@@ -254,7 +174,7 @@ export async function getAttempts(
     return attempts;
   } catch (err) {
     console.error(err);
-    return [];
+    return undefined;
   }
 }
 
@@ -301,7 +221,7 @@ export async function createAttempt(
 export async function getAttempt(
   assignmentId: number,
   attemptId: number
-): Promise<AssignmentAttemptWithQuestions> {
+): Promise<AssignmentAttemptWithQuestions | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 
   try {
@@ -313,6 +233,44 @@ export async function getAttempt(
     return attempt;
   } catch (err) {
     console.error(err);
-    return null;
+    return undefined;
+  }
+}
+
+/**
+ * Submits an answer for a given assignment, attempt, and question.
+ */
+export async function submitQuestion(
+  assignmentId: number,
+  attemptId: number,
+  questionId: number,
+  requestBody: QuestionAttemptRequest
+): Promise<QuestionAttemptResponse | undefined> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      // remove empty fields
+      body: JSON.stringify(requestBody, (key, value) => {
+        if (value === "" || value === null || value === undefined) {
+          return undefined;
+        }
+        return value as QuestionAttemptRequest;
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to submit answer");
+    }
+    const { id, feedback, totalPoints } =
+      (await res.json()) as QuestionAttemptResponse;
+    return { id, feedback, totalPoints };
+  } catch (err) {
+    console.error(err);
+    return undefined;
   }
 }

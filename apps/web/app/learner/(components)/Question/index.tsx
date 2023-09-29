@@ -14,11 +14,12 @@ import QuestionContainer from "./QuestionContainer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
+  assignmentId: number;
 }
 
 function QuestionPage(props: Props) {
-  const { attempt } = props;
-  const { questions } = attempt;
+  const { attempt, assignmentId } = props;
+  const { questions, id } = attempt;
 
   const questionsStore = useLearnerStore((state) => state.questions);
   const addQuestion = useLearnerStore((state) => state.addQuestion);
@@ -56,7 +57,11 @@ function QuestionPage(props: Props) {
         }
         return question;
       });
-    useLearnerStore.setState({ questions: allQuestions });
+    useLearnerStore.setState({
+      questions: allQuestions,
+      activeAttemptId: id,
+      activeAssignmentId: assignmentId,
+    });
   }, []);
 
   // useEffect(

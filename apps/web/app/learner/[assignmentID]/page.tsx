@@ -7,8 +7,8 @@ interface Props {
 
 async function IntroductionPage(props: Props) {
   const { params } = props;
-
-  const assignment = await getAssignment(parseInt(params.assignmentId));
+  const assignmentId = parseInt(params.assignmentId);
+  const assignment = await getAssignment(assignmentId);
   console.log(assignment);
 
   return (

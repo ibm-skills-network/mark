@@ -5,12 +5,14 @@ import { createWithEqualityFn } from "zustand/traditional";
 
 export type LearnerState = {
   activeAssignmentId: number | undefined;
+  activeAttemptId: number | undefined;
   activeQuestionId: number | undefined;
   questions: QuestionStore[];
 };
 
 export type LearnerActions = {
   setActiveAssignmentId: (id: number) => void;
+  setActiveAttemptId: (id: number) => void;
   setActiveQuestionId: (id: number) => void;
   addQuestion: (question: QuestionStore) => void;
   setQuestion: (question: QuestionStore) => void;
@@ -25,8 +27,10 @@ export const useLearnerStore = createWithEqualityFn<
 >()(
   devtools(
     (set) => ({
-      activeAssignmentId: undefined,
+      activeAssignmentId: null,
       setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
+      activeAttemptId: null,
+      setActiveAttemptId: (id) => set({ activeAttemptId: id }),
       activeQuestionId: 1,
       setActiveQuestionId: (id) => set({ activeQuestionId: id }),
       questions: [],
