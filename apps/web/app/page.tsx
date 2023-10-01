@@ -15,11 +15,11 @@ export default async function Home() {
   // const setLearnerActiveAssignmentId = useLearnerStore(
   //   (state) => state.setActiveAssignmentId
   // );
-  const user = await getUser();
+  const user = (await getUser()) as any;
   if (user?.role === "author") {
     useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/author/${user.assignmentId}`);
-  } else if (user?.role === "learne") {
+  } else if (user?.role === "learner") {
     useLearnerStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/learner/${user.assignmentId}`);
   } else {
