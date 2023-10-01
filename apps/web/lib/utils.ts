@@ -1,10 +1,14 @@
 export function absoluteUrl(path: string) {
-  const base =
-    process.env.NODE_ENV === "production"
-      ? process.env.NEXT_PUBLIC_APP_URL || ""
-      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const base = getBaseUrl();
   return `${base}${path}`;
 }
+
+const getBaseUrl = () => {
+  if (typeof window !== "undefined") return ""; // browser should use relative url
+  if (process.env.NODE_ENV === "production")
+    return `https://mark.staging.skills.network`; // SSR should use production url
+  return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
+};
 
 export function debounce<T extends (...args: unknown[]) => void>(
   func: T,

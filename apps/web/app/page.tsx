@@ -1,33 +1,29 @@
-"use client";
-
+import ErrorPage from "@/components/ErrorPage";
 import { getUser } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { useLearnerStore } from "@/stores/learner";
-import { useRouter } from "next/navigation";
-// import { redirect } from "next/navigation";
-import { useEffect } from "react";
+// import { useRouter } from "next/navigation";
+import { redirect } from "next/navigation";
 
-export default function Home() {
-  const router = useRouter();
+export default async function Home() {
+  // const router = useRouter();
 
-  const setAuthorActiveAssignmentId = useAuthorStore(
-    (state) => state.setActiveAssignmentId
-  );
+  // const setAuthorActiveAssignmentId = useAuthorStore(
+  //   (state) => state.setActiveAssignmentId
+  // );
 
-  const setLearnerActiveAssignmentId = useLearnerStore(
-    (state) => state.setActiveAssignmentId
-  );
-  useEffect(() => {
-    const asyncFunc = async () => {
-      const { role, assignmentId } = await getUser();
-      if (role === "author") {
-        setAuthorActiveAssignmentId(assignmentId);
-        router.push(`/author/${assignmentId}`);
-      } else if (role === "learner") {
-        setLearnerActiveAssignmentId(assignmentId);
-        router.push(`/learner/${assignmentId}`);
-      }
-    };
-    void asyncFunc();
-  }, []);
+  // const setLearnerActiveAssignmentId = useLearnerStore(
+  //   (state) => state.setActiveAssignmentId
+  // );
+  const user = await getUser();
+  if (user?.role === "author") {
+    useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
+    redirect(`/author/${user.assignmentId}`);
+  } else if (user?.role === "learner") {
+    useLearnerStore.setState({ activeAssignmentId: user.assignmentId });
+    redirect(`/learner/${user.assignmentId}`);
+  } else {
+    // show error page
+    return <ErrorPage error="User not found" />;
+  }
 }

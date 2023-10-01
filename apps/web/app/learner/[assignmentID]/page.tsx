@@ -1,3 +1,4 @@
+import ErrorPage from "@/components/ErrorPage";
 import { getAssignment } from "@/lib/talkToBackend";
 import AssignmentOverview from "../(components)/AssignmentOverview";
 
@@ -9,7 +10,10 @@ async function IntroductionPage(props: Props) {
   const { params } = props;
   const assignmentId = parseInt(params.assignmentId);
   const assignment = await getAssignment(assignmentId);
-  console.log(assignment);
+  // go to the error page if the assignment is not found
+  if (!assignment) {
+    return <ErrorPage error={"Assignment not found"} />;
+  }
 
   return (
     <main className="p-24 rounded-lg shadow-md h-full">

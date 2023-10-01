@@ -16,7 +16,7 @@ export default function NotFound() {
             className='text-red-500 drop-shadow-glow animate-flicker'
           /> */}
           <h1 className="mt-8 text-4xl md:text-6xl">Page Not Found</h1>
-          <a href="/">Back to home</a>
+          <a href="/">{"<- Back to home"}</a>
         </div>
       </section>
     </main>

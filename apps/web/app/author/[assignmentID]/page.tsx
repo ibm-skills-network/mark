@@ -1,5 +1,6 @@
 "use client";
 
+import ErrorPage from "@/components/ErrorPage";
 import Title from "@/components/Title";
 import { GradingData } from "@/config/types";
 import { getAssignment, modifyAssignment } from "@/lib/talkToBackend";
@@ -16,6 +17,9 @@ const AuthorIntroduction = ({
 }) => {
   const router = useRouter();
   const [introduction, setIntroduction] = useState("");
+  const [showPage, setShowPage] = useState<"loading" | "error" | "success">(
+    "loading"
+  );
   const [assignmentTitle, setAssignmentTitle] = useAuthorStore((state) => [
     state.assignmentTitle,
     state.setAssignmentTitle,
@@ -56,7 +60,8 @@ const AuthorIntroduction = ({
         });
         setQuestions(assignment.questions || []);
       } else {
-        router.push("/");
+        // if assignment does not exist, show error page
+        setShowPage("error");
       }
     }
     // if (!activeAssignmentId) {
@@ -92,6 +97,12 @@ const AuthorIntroduction = ({
       // TODO: show error message to user
       console.log("error");
     }
+  }
+
+  if (showPage === "error") {
+    return <ErrorPage error="Assignment not found" />;
+  } else if (showPage === "loading") {
+    return <div>Loading...</div>;
   }
 
   return (
