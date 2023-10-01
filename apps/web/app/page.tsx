@@ -19,7 +19,7 @@ export default async function Home() {
   if (user?.role === "author") {
     useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/author/${user.assignmentId}`);
-  } else if (user?.role === "learner") {
+  } else if (user?.role === "learne") {
     useLearnerStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/learner/${user.assignmentId}`);
   } else {
