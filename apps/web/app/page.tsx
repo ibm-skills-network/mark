@@ -2,19 +2,9 @@ import ErrorPage from "@/components/ErrorPage";
 import { getUser } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { useLearnerStore } from "@/stores/learner";
-// import { useRouter } from "next/navigation";
 import { redirect } from "next/navigation";
 
 export default async function Home() {
-  // const router = useRouter();
-
-  // const setAuthorActiveAssignmentId = useAuthorStore(
-  //   (state) => state.setActiveAssignmentId
-  // );
-
-  // const setLearnerActiveAssignmentId = useLearnerStore(
-  //   (state) => state.setActiveAssignmentId
-  // );
   const user = (await getUser()) as any;
   if (user?.role === "author") {
     useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
