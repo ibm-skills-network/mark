@@ -5,7 +5,8 @@ import { useLearnerStore } from "@/stores/learner";
 import { redirect } from "next/navigation";
 
 export default async function Home() {
-  const user = (await getUser()) as any;
+  const user = await getUser();
+
   if (user?.role === "author") {
     useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/author/${user.assignmentId}`);

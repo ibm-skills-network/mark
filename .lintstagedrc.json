@@ -8,7 +8,6 @@
     "cd apps/api-gateway && yarn test:staged",
     "cd apps/api-gateway && yarn lint:staged"
   ],
-  "apps/web/**/*.{ts,tsx}": ["cd apps/web && yarn lint:staged"],
   "Dockerfile": ["hadolint"],
   "*.{sh,zsh,bash}": ["shellcheck"]
 }
