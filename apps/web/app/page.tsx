@@ -10,6 +10,10 @@ export default async function Home() {
   const cookie = headerList.get("cookie");
   console.log("headerList", headerList);
   console.log("cookie", cookie);
+  if (!cookie) {
+    // show error page
+    return <ErrorPage error="cookie not found" />;
+  }
   const user = await getUser(cookie);
 
   if (user?.role === "author") {
