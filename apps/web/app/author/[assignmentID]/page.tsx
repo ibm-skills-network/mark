@@ -69,7 +69,7 @@ const AuthorIntroduction = ({
     if (assignmentId !== undefined && !isNaN(Number(assignmentId))) {
       void InitializeAssignment(parseInt(assignmentId));
     } else {
-      router.push("/");
+      setShowPage("error");
     }
     // }
   }, []);

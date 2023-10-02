@@ -28,6 +28,9 @@ function Component(props: Props) {
     return questions.find((q) => q.id === props.questionId);
   }, [questions, questionId]);
 
+  const attemptsRemaining =
+    question.numRetries - question.questionResponses.length;
+
   const [submitted, setSubmitted] = useState<boolean>(false);
   async function handleSubmit() {
     // setSubmitted(true);
@@ -82,7 +85,9 @@ function Component(props: Props) {
         </div>
         {/* attempts remaining */}
         <div className="text-gray-500 text-base font-medium leading-tight">
-          {question.numRetries} Attempts Remaining
+          {attemptsRemaining === 0
+            ? "No attempts remaining"
+            : `${attemptsRemaining} attempts remaining`}
         </div>
       </div>
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
@@ -90,7 +95,11 @@ function Component(props: Props) {
         <RenderQuestion questionType={question.type} />
       </div>
       <div className="flex justify-center mt-4">
-        <Button className=" " onClick={handleSubmit}>
+        <Button
+          disabled={attemptsRemaining === 0}
+          className="disabled:opacity-50"
+          onClick={handleSubmit}
+        >
           Submit Question
         </Button>
       </div>

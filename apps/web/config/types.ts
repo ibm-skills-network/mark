@@ -176,3 +176,7 @@ export type BaseBackendResponse = {
   success: boolean;
   error?: string;
 };
+
+export interface submitAssignmentResponse extends BaseBackendResponse {
+  grade?: number;
+}

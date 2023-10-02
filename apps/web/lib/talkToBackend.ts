@@ -12,6 +12,7 @@ import type {
   ModifyAssignmentRequest,
   QuestionAttemptRequest,
   QuestionAttemptResponse,
+  submitAssignmentResponse,
   User,
 } from "@config/types";
 
@@ -273,6 +274,39 @@ export async function submitQuestion(
     const { id, feedback, totalPoints } =
       (await res.json()) as QuestionAttemptResponse;
     return { id, feedback, totalPoints };
+  } catch (err) {
+    console.error(err);
+    return undefined;
+  }
+}
+
+/**
+ * Submits an assignment for a given assignment and attempt.
+ */
+export async function submitAssignment(
+  assignmentId: number,
+  attemptId: number
+): Promise<number | undefined> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "PATCH",
+      body: JSON.stringify({ submitted: true }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to submit assignment");
+    }
+    const { success, error, grade } =
+      (await res.json()) as submitAssignmentResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+    return grade;
   } catch (err) {
     console.error(err);
     return undefined;

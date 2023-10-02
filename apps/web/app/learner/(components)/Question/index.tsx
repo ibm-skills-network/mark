@@ -49,8 +49,10 @@ function QuestionPage(props: Props) {
         switch (question.type) {
           case "TEXT":
             // Autofill the text response with the last submission if it exists
-            question.learnerTextResponse = lastSubmission.learnerResponse || "";
+            question.learnerTextResponse =
+              lastSubmission?.learnerResponse || "";
             break;
+          // TODO: handle other types of questions
           case "URL":
             question.learnerUrlResponse = "";
             break;
