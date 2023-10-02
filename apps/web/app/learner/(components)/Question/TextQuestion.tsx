@@ -18,7 +18,7 @@ function TextQuestion(props: Props) {
   //   });
   // }, [activeQuestionId]);
 
-  const maxWords = 5;
+  const maxWords = 500;
   return (
     <MarkdownEditor
       value={questions[activeQuestionId - 1]?.learnerTextResponse || ""}

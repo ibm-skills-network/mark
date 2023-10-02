@@ -26,10 +26,13 @@ export type QuestionAttemptRequest = {
   learnerFileResponse?: File | undefined;
 };
 
+/**
+ * This is the type of the response from the backend when submitting a question attempt
+ */
 export type QuestionAttemptResponse = {
   id: number;
   totalPoints: number;
-  feedback: string[];
+  feedback: Feedback[];
 };
 
 export type QuestionStatus =
@@ -60,6 +63,11 @@ export type Scoring = {
   criteria?: unknown;
 };
 
+type Feedback = {
+  points: number;
+  feedback: string;
+};
+
 /**
  * used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
  */
@@ -71,9 +79,10 @@ type QuestionResponse = {
   id: number;
   assignmentAttemptId: number;
   questionId: number;
+  // This probably needs to be changed when we implement the other question types
   learnerResponse: string;
   points: number;
-  feedback: Record<string, string[]>;
+  feedback: Feedback[];
 };
 export interface BaseQuestion {
   type: QuestionType;
@@ -86,7 +95,7 @@ export interface BaseQuestion {
 
 export interface LearnerGetQuestionResponse extends BaseQuestion {
   id: number;
-  assignmentId: number;
+  // assignmentId: number;
 }
 
 export interface CreateQuestionRequest extends BaseQuestion {

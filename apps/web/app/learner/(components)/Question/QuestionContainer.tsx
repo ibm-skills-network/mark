@@ -1,34 +1,38 @@
 import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { useLearnerStore } from "@/stores/learner";
-import { ComponentPropsWithoutRef, useState } from "react";
+import { ComponentPropsWithoutRef, useMemo, useState } from "react";
 import { twMerge } from "tailwind-merge";
 import Button from "../Button";
 import RenderQuestion from "./RenderQuestion";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
-  question: QuestionStore;
-  questionNumber: number;
-  updateStatus?: (status: QuestionStatus) => void;
+  // question: QuestionStore;
+  // questionNumber: number;
+  // updateStatus?: (status: QuestionStatus) => void;
+  questionId: number;
 }
 
 function Component(props: Props) {
-  const { question, className, questionNumber } = props;
-  const { type, totalPoints } = question;
+  const { className, questionId } = props;
+  // const { type, totalPoints } = question;
 
-  const [activeAssignmentId, activeAttemptId, questions] = useLearnerStore(
-    (state) => [
+  const [activeAssignmentId, activeAttemptId, questions, setQuestion] =
+    useLearnerStore((state) => [
       state.activeAssignmentId,
       state.activeAttemptId,
       state.questions,
-    ]
-  );
+      state.setQuestion,
+    ]);
+  const question = useMemo(() => {
+    return questions.find((q) => q.id === props.questionId);
+  }, [questions, questionId]);
 
   const [submitted, setSubmitted] = useState<boolean>(false);
   async function handleSubmit() {
     // setSubmitted(true);
     // updateStatus("edited");
-    const question = questions[questionNumber - 1];
+    // const question = questions[questionNumber - 1];
     console.log("question", question);
     // todo: show a loading indicator
     const feedback = await submitQuestion(
@@ -45,21 +49,45 @@ function Component(props: Props) {
     );
     console.log("feedback", feedback);
     // TODO: update the question status, and the total points, and the feedback
+
+    // update question in zustand store with the feedback of the new submission
+    // this is also automatically added to the backend so the learner can see
+    // their previous submissions next time they log in
+    setQuestion({
+      ...question,
+      questionResponses: [
+        ...question.questionResponses,
+        {
+          id: feedback.id,
+          points: feedback.feedback[0].points,
+          feedback: feedback.feedback,
+          learnerResponse: question.learnerTextResponse,
+          questionId: question.id,
+          assignmentAttemptId: activeAttemptId,
+        },
+      ],
+    });
   }
 
   return (
-    <section className={twMerge("", className)} key={question.id}>
-      <div className="space-x-1">
-        <span className="text-gray-600 text-xl font-medium leading-tight">
-          Question {questionNumber}:
-        </span>
-        <span className="text-blue-700 text-base font-medium leading-tight">
-          {totalPoints.toFixed(2)} Points
-        </span>
+    <section className={twMerge("", className)}>
+      <div className="flex justify-between">
+        <div className="space-x-1">
+          <span className="text-gray-600 text-xl font-medium leading-tight">
+            Question {questionId}
+          </span>
+          <span className="text-blue-700 text-base font-medium leading-tight">
+            {question.totalPoints.toFixed(2)} Points
+          </span>
+        </div>
+        {/* attempts remaining */}
+        <div className="text-gray-500 text-base font-medium leading-tight">
+          {question.numRetries} Attempts Remaining
+        </div>
       </div>
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
         <p className="mb-4 text-gray-700">{question.question}</p>
-        <RenderQuestion questionType={type} />
+        <RenderQuestion questionType={question.type} />
       </div>
       <div className="flex justify-center mt-4">
         <Button className=" " onClick={handleSubmit}>
