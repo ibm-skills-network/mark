@@ -38,7 +38,6 @@ export class JwtCookieStrategy extends PassportStrategy(
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validate(payload: IJwtPayload): UserSession {
-    //console.log('payload', payload)
     return {
       userId: payload.userID,
       role: payload.role,
