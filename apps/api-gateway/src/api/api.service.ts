@@ -34,7 +34,7 @@ export class ApiService {
   async forwardRequestToDownstreamService(
     forwardingService: DownstreamService,
     request: UserSessionRequest & { originalUrl?: string }
-  ): Promise<unknown> {
+  ): Promise<{ data: string; status: number }> {
     try {
       if (!request.originalUrl) {
         throw new BadRequestException();
@@ -84,8 +84,11 @@ export class ApiService {
       this.logger.info("Forwarding request: ", config);
 
       const response = await axios.request(config);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      return response.data;
+      return {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: response.data,
+        status: response.status,
+      };
     } catch (error) {
       const axiosError = error as AxiosError;
       if (axiosError.isAxiosError && axiosError.response) {
