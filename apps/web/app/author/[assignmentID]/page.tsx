@@ -94,13 +94,12 @@ const AuthorIntroduction = ({
     if (modified) {
       router.push(`/author/${activeAssignmentId}/questions`);
     } else {
-      // TODO: show error message to user
-      console.log("error");
+      setShowPage("error");
     }
   }
 
   if (showPage === "error") {
-    return <ErrorPage error="Assignment not found" />;
+    return <ErrorPage error="Assignment error" />;
   } else if (showPage === "loading") {
     return <div>Loading...</div>;
   }
