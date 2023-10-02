@@ -108,6 +108,21 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     document.documentElement.scrollTop = oldScrollTop; // Reset scroll position
   }
 
+  const numberInputOnWheelPreventChange = (e) => {
+    // Prevent the input value change
+    const eventInput = e as Event
+    const target = eventInput.currentTarget as HTMLInputElement;
+    target.blur();
+  
+    // Prevent the page/container scrolling
+    eventInput.stopPropagation();
+  
+    // Refocus immediately, on the next tick (after the current function is done)
+    const targetInput = eventInput.target as HTMLInputElement
+    setTimeout(() => {
+      targetInput.focus();
+    }, 0)
+  }
   return (
     <div>
       <div
@@ -141,6 +156,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                     maxWidth: "100%",
                     border: "1px solid #D1D5DB", // Add this line to set the border color to gray-300
                   }}
+                  onWheel={numberInputOnWheelPreventChange}
                 />
 
                 <textarea
