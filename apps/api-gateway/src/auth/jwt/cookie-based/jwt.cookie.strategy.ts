@@ -2,7 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { Request } from "express";
 import { ExtractJwt, Strategy } from "passport-jwt";
-import { UserSession } from "../../interfaces/user.session.interface";
+import {
+  UserSession,
+  UserSessionPayload,
+} from "../../interfaces/user.session.interface";
 import { JwtConfigService } from "../jwt.config.service";
 
 interface IRequestWithCookies extends Request {
@@ -11,7 +14,7 @@ interface IRequestWithCookies extends Request {
   };
 }
 
-interface IJwtPayload extends UserSession {
+interface IJwtPayload extends UserSessionPayload {
   iat: number;
   exp: number;
 }
@@ -36,10 +39,10 @@ export class JwtCookieStrategy extends PassportStrategy(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validate(payload: IJwtPayload): UserSession {
     return {
-      userId: payload.userId,
+      userId: payload.userID,
       role: payload.role,
-      groupId: payload.groupId,
-      assignmentId: payload.assignmentId,
+      groupId: payload.groupID,
+      assignmentId: payload.assignmentID,
       gradingCallbackRequired: payload.gradingCallbackRequired,
     };
   }

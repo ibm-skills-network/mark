@@ -13,6 +13,14 @@ export interface UserSession {
   gradingCallbackRequired?: boolean;
 }
 
+export interface UserSessionPayload {
+  userID: string;
+  role: UserRole;
+  assignmentID: number;
+  groupID: string;
+  gradingCallbackRequired?: boolean;
+}
+
 export interface UserSessionRequest extends Request {
   user: UserSession;
 }
