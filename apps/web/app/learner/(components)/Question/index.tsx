@@ -27,15 +27,29 @@ function QuestionPage(props: Props) {
   // store the questions in zustand store
   useEffect(() => {
     const allQuestions: QuestionStore[] = questions
-      .concat(questionsData)
+      // .concat(questionsData)
       .map((question: QuestionStore) => {
-        // TODO: remove this once we have the backend fully integrated
-        // take out the info about previous attempts
+        // get the info about previous attempts
+        const previousAttempts = question.questionResponses.map((response) => ({
+          points: response.points,
+          learnerResponse: response.learnerResponse,
+        }));
+        // get the highest points earned for the question by finding the highest points earned for each response
+        // const earnedPoints = previousAttempts.reduce(
+        //   (highestPoints, response) => {
+        //     return response.points > highestPoints.points
+        //       ? response
+        //       : highestPoints;
+        //   }
+        // );
+        // get the last submission for the question
+        const lastSubmission = previousAttempts.slice(-1)[0];
 
         // add the input field for the question
         switch (question.type) {
           case "TEXT":
-            question.learnerTextResponse = "";
+            // Autofill the text response with the last submission if it exists
+            question.learnerTextResponse = lastSubmission.learnerResponse || "";
             break;
           case "URL":
             question.learnerUrlResponse = "";
@@ -104,9 +118,10 @@ function QuestionPage(props: Props) {
             {questionsStore.map((question, index) => (
               <QuestionContainer
                 key={index}
-                questionNumber={index + 1}
+                // questionNumber={index + 1}
                 className={`${index + 1 === activeQuestionId ? "" : "hidden"} `}
-                question={question}
+                questionId={question.id}
+                // question={question}
               />
             ))}
 
