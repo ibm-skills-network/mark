@@ -15,7 +15,10 @@ export default async function Home() {
     return <ErrorPage error="cookie not found" />;
   }
   const user = await getUser(cookie);
-
+  // assignmentId is Number
+  if (!(user?.assignmentId && !isNaN(user.assignmentId))) {
+    return <ErrorPage error="assignmentId not found" />;
+  }
   if (user?.role === "author") {
     useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/author/${user.assignmentId}`);

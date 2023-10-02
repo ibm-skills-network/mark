@@ -11,10 +11,17 @@ interface Props {}
 
 function LearnerHeader(props: Props) {
   const {} = props;
-  const [activeAssignmentId, activeAttemptId] = useLearnerStore((state) => [
-    state.activeAssignmentId,
-    state.activeAttemptId,
-  ]);
+  const [questions, activeAssignmentId, activeAttemptId] = useLearnerStore(
+    (state) => [
+      state.questions,
+      state.activeAssignmentId,
+      state.activeAttemptId,
+    ]
+  );
+
+  const userSubmittedAnyQuestion = questions.some(
+    (question) => question.questionResponses.length > 0
+  );
 
   async function handleSubmitAssignment() {
     const confirmSubmit = confirm("Are you sure you want to submit?");
@@ -42,7 +49,11 @@ function LearnerHeader(props: Props) {
         </div>
       </div>
       {activeAttemptId && (
-        <Button className="" onClick={handleSubmitAssignment}>
+        <Button
+          disabled={!userSubmittedAnyQuestion}
+          className="disabled:cursor-not-allowed"
+          onClick={handleSubmitAssignment}
+        >
           Submit assignment
         </Button>
       )}

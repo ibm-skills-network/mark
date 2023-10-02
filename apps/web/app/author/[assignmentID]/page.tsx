@@ -15,6 +15,7 @@ const AuthorIntroduction = ({
 }: {
   params: { assignmentId: string };
 }) => {
+  console.log("params", params);
   const router = useRouter();
   const [introduction, setIntroduction] = useState("");
   const [showPage, setShowPage] = useState<"loading" | "error" | "success">(
@@ -64,13 +65,8 @@ const AuthorIntroduction = ({
         setShowPage("error");
       }
     }
-    // if (!activeAssignmentId) {
-    const assignmentId = params.assignmentId;
-    if (assignmentId !== undefined && !isNaN(Number(assignmentId))) {
-      void InitializeAssignment(parseInt(assignmentId));
-    } else {
-      setShowPage("error");
-    }
+    console.log("params_2", params);
+    void InitializeAssignment(parseInt(params.assignmentId));
     // }
   }, []);
 
@@ -99,6 +95,7 @@ const AuthorIntroduction = ({
   }
 
   if (showPage === "error") {
+    console.log("params_3", params);
     return <ErrorPage error="Assignment error" />;
   } else if (showPage === "loading") {
     return <div>Loading...</div>;
