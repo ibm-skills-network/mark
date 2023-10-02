@@ -60,6 +60,7 @@ const AuthorIntroduction = ({
           timeEstimate: assignment.allotedTimeMinutes || 50,
         });
         setQuestions(assignment.questions || []);
+        setShowPage("success");
       } else {
         // if assignment does not exist, show error page
         setShowPage("error");
