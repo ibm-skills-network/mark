@@ -2,10 +2,15 @@ import ErrorPage from "@/components/ErrorPage";
 import { getUser } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { useLearnerStore } from "@/stores/learner";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default async function Home() {
-  const user = await getUser();
+  const headerList = headers();
+  const cookie = headerList.get("cookie");
+  console.log("headerList", headerList);
+  console.log("cookie", cookie);
+  const user = await getUser(cookie);
 
   if (user?.role === "author") {
     useAuthorStore.setState({ activeAssignmentId: user.assignmentId });

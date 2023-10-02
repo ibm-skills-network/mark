@@ -18,11 +18,15 @@ import type {
 /**
  * Calls the backend to see who the user is (author, learner, or admin).
  */
-export async function getUser(): Promise<User | undefined> {
+export async function getUser(cookies: string): Promise<User | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.user, {
       cache: "no-cache",
+      headers: {
+        Cookie: cookies,
+      },
     });
+    console.log("res", res);
 
     if (!res.ok) {
       throw new Error("Failed to fetch user data");
