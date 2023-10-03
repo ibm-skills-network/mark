@@ -27,6 +27,9 @@ function QuestionPage(props: Props) {
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
     (state) => [state.assignmentDetails, state.setAssignmentDetails]
   );
+  const [pageState, setPageState] = useState<
+    "loading" | "success" | "no-questions"
+  >("loading");
 
   useEffect(() => {
     if (!assignmentDetails || assignmentDetails.id !== assignmentId) {
@@ -104,6 +107,11 @@ function QuestionPage(props: Props) {
       questions: allQuestions,
       activeAttemptId: id,
     });
+    if (allQuestions.length) {
+      setPageState("success");
+    } else {
+      setPageState("no-questions");
+    }
   }, []);
 
   // useEffect(
@@ -126,10 +134,16 @@ function QuestionPage(props: Props) {
 
   const isLastQuestion = false;
 
-  if (!questionsStore.length) {
+  if (pageState === "loading") {
     return (
       <div className="col-span-4 flex items-center justify-center h-full">
         <h1>Loading...</h1>
+      </div>
+    );
+  } else if (pageState === "no-questions") {
+    return (
+      <div className="col-span-4 flex items-center justify-center h-full">
+        <h1>No questions found.</h1>
       </div>
     );
   }

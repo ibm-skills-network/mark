@@ -27,8 +27,8 @@ function LearnerHeader(props: Props) {
     const confirmSubmit = confirm("Are you sure you want to submit?");
     if (confirmSubmit) {
       const grade = await submitAssignment(assignmentId, activeAttemptId);
-      alert(`Your grade is ${grade * 100}/100
-${grade >= passingGrade ? "You passed!" : "You failed."}`);
+      alert(`Your grade is ${(grade * 100).toFixed(1)}/100
+  ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     }
   }
 
