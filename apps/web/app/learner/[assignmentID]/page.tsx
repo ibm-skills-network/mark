@@ -1,6 +1,6 @@
 import ErrorPage from "@/components/ErrorPage";
 import { getAssignment } from "@/lib/talkToBackend";
-import AssignmentOverview from "../(components)/AssignmentOverview";
+import AboutTheAssignment from "../(components)/AboutTheAssignment";
 
 interface Props {
   params: { assignmentId: string };
@@ -17,10 +17,7 @@ async function IntroductionPage(props: Props) {
 
   return (
     <main className="p-24 rounded-lg shadow-md h-full">
-      <AssignmentOverview
-        assignment={assignment}
-        assignmentId={params.assignmentId}
-      />
+      <AboutTheAssignment assignment={assignment} />
     </main>
   );
 }

@@ -1,6 +1,6 @@
 import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import { submitQuestion } from "@/lib/talkToBackend";
-import { useLearnerStore } from "@/stores/learner";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
 import { twMerge } from "tailwind-merge";
 import Button from "../Button";
@@ -17,13 +17,14 @@ function Component(props: Props) {
   const { className, questionId } = props;
   // const { type, totalPoints } = question;
 
-  const [activeAssignmentId, activeAttemptId, questions, setQuestion] =
+  const [activeAttemptId, questions, setQuestion] =
     useLearnerStore((state) => [
-      state.activeAssignmentId,
       state.activeAttemptId,
       state.questions,
       state.setQuestion,
     ]);
+  const assignmentId = useAssignmentDetails((state) => state.assignmentDetails?.id);
+
   const question = useMemo(() => {
     return questions.find((q) => q.id === props.questionId);
   }, [questions, questionId]);
@@ -39,7 +40,7 @@ function Component(props: Props) {
     console.log("question", question);
     // todo: show a loading indicator
     const feedback = await submitQuestion(
-      activeAssignmentId,
+      assignmentId,
       activeAttemptId,
       question.id,
       {

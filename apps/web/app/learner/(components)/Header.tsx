@@ -1,24 +1,24 @@
 "use client";
 
 import { submitAssignment } from "@/lib/talkToBackend";
-import { useLearnerStore } from "@/stores/learner";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
-import Breadcrumbs from "./Breadcrumbs";
 import Button from "./Button";
 
 interface Props {}
 
 function LearnerHeader(props: Props) {
   const {} = props;
-  const [questions, activeAssignmentId, activeAttemptId] = useLearnerStore(
-    (state) => [
-      state.questions,
-      state.activeAssignmentId,
-      state.activeAttemptId,
-    ]
+  const [questions, activeAttemptId] = useLearnerStore((state) => [
+    state.questions,
+    state.activeAttemptId,
+  ]);
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails
   );
-
+  const assignmentId = assignmentDetails?.id;
+  const passingGrade = assignmentDetails?.passingGrade;
   const userSubmittedAnyQuestion = questions.some(
     (question) => question.questionResponses.length > 0
   );
@@ -26,8 +26,9 @@ function LearnerHeader(props: Props) {
   async function handleSubmitAssignment() {
     const confirmSubmit = confirm("Are you sure you want to submit?");
     if (confirmSubmit) {
-      const grade = await submitAssignment(activeAssignmentId, activeAttemptId);
-      console.log("grade", grade);
+      const grade = await submitAssignment(assignmentId, activeAttemptId);
+      alert(`Your grade is ${grade * 100}/100
+${grade >= passingGrade ? "You passed!" : "You failed."}`);
     }
   }
 
@@ -51,7 +52,7 @@ function LearnerHeader(props: Props) {
       {activeAttemptId && (
         <Button
           disabled={!userSubmittedAnyQuestion}
-          className="disabled:cursor-not-allowed"
+          className="disabled:opacity-70"
           onClick={handleSubmitAssignment}
         >
           Submit assignment

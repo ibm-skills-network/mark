@@ -2,14 +2,15 @@
 
 import type {
   AssignmentAttemptWithQuestions,
-  QuestionStatus,
   QuestionStore,
 } from "@/config/types";
-import { useLearnerStore } from "@/stores/learner";
+import { getAssignment } from "@/lib/talkToBackend";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { questionsData } from "@config/constants";
 import Button from "@learnerComponents/Button";
-import Overview from "@learnerComponents/Overview";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -20,12 +21,38 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 function QuestionPage(props: Props) {
   const { attempt, assignmentId } = props;
   const { questions, id } = attempt;
+  const router = useRouter();
 
   const questionsStore = useLearnerStore((state) => state.questions);
-  const addQuestion = useLearnerStore((state) => state.addQuestion);
+  const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
+    (state) => [state.assignmentDetails, state.setAssignmentDetails]
+  );
 
-  // store the questions in zustand store
   useEffect(() => {
+    if (!assignmentDetails || assignmentDetails.id !== assignmentId) {
+      // if the current active assignment details are not stored in zustand store, then
+      (async () => {
+        // call the backend to get the assignment details
+        const assignment = await getAssignment(assignmentId);
+        if (assignment) {
+          // if the assignment is found, then store it in zustand store
+          setAssignmentDetails({
+            id: assignment.id,
+            name: assignment.name,
+            numAttempts: assignment.numAttempts,
+            passingGrade: assignment.passingGrade,
+            allotedTimeMinutes: assignment.allotedTimeMinutes,
+          });
+        } else {
+          // if the assignment details are not found, then redirect to the assignment overview page
+          router.push(`/learner/${assignmentId}`);
+        }
+      })().catch((err) => {
+        console.log(err);
+        router.push(`/learner/${assignmentId}`);
+      });
+    }
+    // store the questions in zustand store
     const allQuestions: QuestionStore[] = questions
       // .concat(questionsData)
       .map((question: QuestionStore) => {
@@ -76,7 +103,6 @@ function QuestionPage(props: Props) {
     useLearnerStore.setState({
       questions: allQuestions,
       activeAttemptId: id,
-      activeAssignmentId: assignmentId,
     });
   }, []);
 

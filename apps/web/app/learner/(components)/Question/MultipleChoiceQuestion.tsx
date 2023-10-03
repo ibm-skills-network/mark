@@ -4,7 +4,7 @@ import {
   QuestionStatus,
   QuestionStore,
 } from "@/config/types";
-import { useLearnerStore } from "@/stores/learner";
+import { useLearnerStore, useAssignmentDetails } from "@/stores/learner";
 import { useState } from "react";
 import Button from "../Button";
 import InfoLine from "../InfoLine";
@@ -25,7 +25,9 @@ function TrueFalseQuestion(props: Props) {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);
 
-  const assignmentId = useLearnerStore((state) => state.activeAssignmentId);
+  const assignmentId = useAssignmentDetails(
+    (state) => state.assignmentDetails?.id
+  );
 
   const handleChoiceClick = (choice: boolean) => {
     if (!submitted) {

@@ -1,17 +1,15 @@
-import type { QuestionStore } from "@/config/types";
-import { devtools } from "zustand/middleware";
+import type { assignmentDetailsStore, QuestionStore } from "@/config/types";
+import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 
 export type LearnerState = {
-  activeAssignmentId: number | undefined;
-  activeAttemptId: number | undefined;
-  activeQuestionId: number | undefined;
+  activeAttemptId: number | null;
+  activeQuestionId: number | null;
   questions: QuestionStore[];
 };
 
 export type LearnerActions = {
-  setActiveAssignmentId: (id: number) => void;
   setActiveAttemptId: (id: number) => void;
   setActiveQuestionId: (id: number) => void;
   addQuestion: (question: QuestionStore) => void;
@@ -22,17 +20,24 @@ export type LearnerActions = {
   setAnswerChoice: (learnerAnswerChoice: boolean, questionId?: number) => void;
 };
 
+export type AssignmentDetailsState = {
+  assignmentDetails: assignmentDetailsStore | null;
+};
+
+export type AssignmentDetailsActions = {
+  setAssignmentDetails: (assignmentDetails: assignmentDetailsStore) => void;
+};
+
 export const useLearnerStore = createWithEqualityFn<
   LearnerState & LearnerActions
 >()(
   devtools(
     (set) => ({
-      activeAssignmentId: null,
-      setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
       activeAttemptId: null,
       setActiveAttemptId: (id) => set({ activeAttemptId: id }),
       activeQuestionId: 1,
       setActiveQuestionId: (id) => set({ activeQuestionId: id }),
+      assignmentDetails: null,
       questions: [],
       addQuestion: (question) =>
         set((state) => ({
@@ -80,6 +85,34 @@ export const useLearnerStore = createWithEqualityFn<
     {
       name: "learner",
       enabled: process.env.NODE_ENV === "development",
+    }
+  ),
+  shallow
+);
+
+/**
+ * made this a separate store so I can leverage the persist middleware (to store in sessionStorage)
+ * Purpose: to store the assignment details which are fetched from the backend when the learner
+ * is on the assignment overview page. This reduces the number of requests to the backend.
+ */
+export const useAssignmentDetails = createWithEqualityFn<
+  AssignmentDetailsState & AssignmentDetailsActions
+>()(
+  persist(
+    devtools(
+      (set) => ({
+        assignmentDetails: null,
+        setAssignmentDetails: (assignmentDetails) =>
+          set({ assignmentDetails: assignmentDetails }),
+      }),
+      {
+        name: "learner",
+        enabled: process.env.NODE_ENV === "development",
+      }
+    ),
+    {
+      name: "assignmentDetails",
+      getStorage: () => sessionStorage,
     }
   ),
   shallow

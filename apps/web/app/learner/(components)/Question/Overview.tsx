@@ -1,22 +1,24 @@
-import { useLearnerStore } from "@/stores/learner";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import type { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
-import { ComponentPropsWithoutRef, useEffect, useMemo, useState } from "react";
+import { useMemo, type ComponentPropsWithoutRef } from "react";
+import Timer from "./Timer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 function Overview(props: Props) {
   const {} = props;
 
-  const questionsStore = useLearnerStore((state) => state.questions);
-  const setActiveQuestionId = useLearnerStore(
-    (state) => state.setActiveQuestionId
+  const [questionsStore, setActiveQuestionId] = useLearnerStore((state) => [
+    state.questions,
+    state.setActiveQuestionId,
+  ]);
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails
   );
-
+  const id = assignmentDetails?.id;
+  const allotedTimeMinutes = assignmentDetails?.allotedTimeMinutes;
   // TODO: use the allotedTimeMinutes variable
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(3600);
-  // const [questionStatuses, setQuestionStatuses] = useState<QuestionStatus[]>(
-  //   questionsStore.map(() => "unedited")
-  // );
+
   const questionStatus = useMemo(() => {
     return questionsStore.map((question) => {
       // get the higest points earned for the question by finding the highest points earned for each response
@@ -41,31 +43,17 @@ function Overview(props: Props) {
       }
     });
   }, [questionsStore]);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (secondsRemaining > 0) {
-        setSecondsRemaining(secondsRemaining - 1);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [secondsRemaining]);
-
   return (
     <div className="p-4 border border-gray-300 rounded-lg space-y-4 w-full max-w-xl mx-auto bg-white">
       <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
 
-      <div className="flex items-center space-x-2">
+      {allotedTimeMinutes ? (
+        <Timer timeInSecs={allotedTimeMinutes * 60} assignmentId={id} />
+      ) : (
         <div className="text-gray-600 text-base font-medium leading-tight">
-          Time Remaining:
+          No time limit
         </div>
-        <div className="text-blue-600 text-base font-bold leading-tight">
-          {Math.floor(secondsRemaining / 60)}:
-          {secondsRemaining % 60 < 10
-            ? `0${secondsRemaining % 60}`
-            : secondsRemaining % 60}
-        </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
         {questionStatus.map((question: QuestionStatus, index) => (

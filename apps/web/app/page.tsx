@@ -10,10 +10,10 @@ export default async function Home() {
   const cookie = headerList.get("cookie");
   console.log("headerList", headerList);
   console.log("cookie", cookie);
-  if (!cookie) {
-    // show error page
-    return <ErrorPage error="cookie not found" />;
-  }
+  // if (!cookie) {
+  //   // show error page
+  //   return <ErrorPage error="cookie not found" />;
+  // }
   const user = await getUser(cookie);
   // assignmentId is Number
   if (!(user?.assignmentId && !isNaN(user.assignmentId))) {
@@ -23,7 +23,6 @@ export default async function Home() {
     useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/author/${user.assignmentId}`);
   } else if (user?.role === "learner") {
-    useLearnerStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/learner/${user.assignmentId}`);
   } else {
     // show error page

@@ -171,6 +171,14 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questions: QuestionStore[];
 }
 
+export interface assignmentDetailsStore {
+  allotedTimeMinutes?: number;
+  numAttempts?: number;
+  passingGrade?: number;
+  name: string;
+  id: number;
+}
+
 export type BaseBackendResponse = {
   id: number;
   success: boolean;
