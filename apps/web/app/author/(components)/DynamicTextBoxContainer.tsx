@@ -73,12 +73,12 @@ function DynamicTextBoxContainer() {
   const [isOpen, setIsOpen] = useState(false);
   return (
     <>
-      <div style={{ width: "100%", height: "2vw", background: "white" }}>
+      <div style={{ width: "100%", height: "36px", background: "white" }}>
         <div className="flex gap-4 my-0 justify-end">
           <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}
-            className="inline-flex w-[150px] justify-center gap-x-1.5 rounded-md border-transparent bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-inset ring-gray-300 hover:bg-gray-50"
+            className="inline-flex w-[150px] justify-center gap-x-1.5 border-transparent bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-inset ring-gray-300 hover:bg-gray-50"
             id="menu-button"
             aria-expanded={isOpen} // Set aria-expanded to the value of isOpen
             aria-haspopup="true"
@@ -92,17 +92,21 @@ function DynamicTextBoxContainer() {
             </svg>
           </button>
         </div>
+        
         {isOpen && ( // Render the second div only when isOpen is true
-          <div className="">
+          <div style={{ width: "100%", height: "36px"}}>
             {questions.map((question, index) => (
+              <div key={index} className="flex gap-4 my-0 justify-end">
               <button
                 key={index}
                 type="button"
                 onClick={() => handleScrollToTarget(question.id)}
-                className="bg-white text-black py-2 px-4 rounded w-[150px] hover:bg-gray-300"
+                className="inline-flex w-[150px] justify-center gap-x-1.5 border-transparent bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-inset ring-gray-300 hover:bg-gray-50"
+                style={{ marginLeft: '90vw' }}
               >
-                Click Me {index + 1}
+                Question {index + 1}
               </button>
+              </div>
             ))}
           </div>
         )}
