@@ -73,7 +73,7 @@ function DynamicTextBoxContainer() {
   const [isOpen, setIsOpen] = useState(false);
   return (
     <>
-      <div style={{ width: "100%", height: "36px", background: "white" }}>
+      <div className="sticky top-0 z-[50]" style={{ width: "100%", height: "36px", background: "white" }}>
         <div className="flex gap-4 my-0 justify-end">
           <button
             type="button"
@@ -92,7 +92,6 @@ function DynamicTextBoxContainer() {
             </svg>
           </button>
         </div>
-        
         {isOpen && ( // Render the second div only when isOpen is true
           <div style={{ width: "100%", height: "36px"}}>
             {questions.map((question, index) => (
