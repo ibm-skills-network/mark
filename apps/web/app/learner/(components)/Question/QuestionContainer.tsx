@@ -17,13 +17,14 @@ function Component(props: Props) {
   const { className, questionId } = props;
   // const { type, totalPoints } = question;
 
-  const [activeAttemptId, questions, setQuestion] =
-    useLearnerStore((state) => [
-      state.activeAttemptId,
-      state.questions,
-      state.setQuestion,
-    ]);
-  const assignmentId = useAssignmentDetails((state) => state.assignmentDetails?.id);
+  const [activeAttemptId, questions, setQuestion] = useLearnerStore((state) => [
+    state.activeAttemptId,
+    state.questions,
+    state.setQuestion,
+  ]);
+  const assignmentId = useAssignmentDetails(
+    (state) => state.assignmentDetails?.id
+  );
 
   const question = useMemo(() => {
     return questions.find((q) => q.id === props.questionId);
@@ -86,9 +87,9 @@ function Component(props: Props) {
         </div>
         {/* attempts remaining */}
         <div className="text-gray-500 text-base font-medium leading-tight">
-          {attemptsRemaining === 0
-            ? "No attempts remaining"
-            : `${attemptsRemaining} attempts remaining`}
+          {attemptsRemaining === 1
+            ? "1 attempt remaining"
+            : `${attemptsRemaining || "No"} attempts remaining`}
         </div>
       </div>
       <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
