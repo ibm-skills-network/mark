@@ -80,7 +80,7 @@ function Component(props: Props) {
 
   return (
     <section className={twMerge("flex flex-col gap-y-5", className)}>
-      <div className="flex justify-between">
+      <div className="flex absolute top-0 justify-between">
         <div className="space-x-1">
           <span className="text-gray-600 text-xl font-medium leading-tight">
             Question {questionId}
