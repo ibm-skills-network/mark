@@ -1,4 +1,4 @@
-name: Lint and Release Mark Chart
+name: Lint and Release Helm Chart
 
 on:
   push:
@@ -39,10 +39,10 @@ jobs:
 
       - name: Fetch charts dependencies
         run: |
-          cd chart/mark
+          cd helm-chart/mark
           helm dependency build --skip-refresh
 
       - name: Lint charts
         run: |
-          cd chart/mark
+          cd helm-chart/mark
           helm lint
