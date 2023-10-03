@@ -20,8 +20,6 @@ function TrueFalseQuestion(props: Props) {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);
 
-  const assignmentId = useLearnerStore((state) => state.activeAssignmentId);
-
   const handleChoiceClick = (choice: boolean) => {
     if (!submitted) {
       setSelectedChoice(choice);
