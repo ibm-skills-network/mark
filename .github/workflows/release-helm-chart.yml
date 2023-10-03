@@ -40,7 +40,7 @@ jobs:
       - name: Fetch charts dependencies
         run: |
           cd helm-chart/mark
-          helm dependency build --skip-refresh
+          helm dependency build
 
       - name: Lint charts
         run: |
