@@ -55,7 +55,7 @@ jobs:
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.5.0
         with:
-          config: helm-charts/release-config.yaml
+          config: helm-chart/release-config.yaml
           charts_dir: helm-chart
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
