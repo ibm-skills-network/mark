@@ -9,7 +9,7 @@ interface Props {
 
 async function LearnerLayout(props: Props) {
   const { params } = props;
-  const assignmentId = parseInt(params.assignmentId);
+  const assignmentId = Number(params.assignmentId);
   // check if we have the assignment details in the store
   // if not, redirect to the assignment overview page
   // if (useLearnerStore.getState().assignmentDetails?.id !== assignmentId) {

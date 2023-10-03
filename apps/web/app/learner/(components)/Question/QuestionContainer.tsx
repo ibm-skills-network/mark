@@ -30,6 +30,10 @@ function Component(props: Props) {
     return questions.find((q) => q.id === props.questionId);
   }, [questions, questionId]);
 
+  const mostRecentFeedback = useMemo(() => {
+    return question.questionResponses.slice(-1)[0];
+  }, [question]);
+
   const attemptsRemaining =
     question.numRetries - question.questionResponses.length;
 
@@ -75,7 +79,7 @@ function Component(props: Props) {
   }
 
   return (
-    <section className={twMerge("", className)}>
+    <section className={twMerge("flex flex-col gap-y-5", className)}>
       <div className="flex justify-between">
         <div className="space-x-1">
           <span className="text-gray-600 text-xl font-medium leading-tight">
@@ -92,11 +96,22 @@ function Component(props: Props) {
             : `${attemptsRemaining || "No"} attempts remaining`}
         </div>
       </div>
-      <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
+      <div className="bg-white p-8 rounded-lg border border-gray-300">
         <p className="mb-4 text-gray-700">{question.question}</p>
         <RenderQuestion questionType={question.type} />
       </div>
-      <div className="flex justify-center mt-4">
+      {/* Feedback section */}
+      {mostRecentFeedback && (
+        <div className="bg-green-100 p-5 rounded-lg shadow-sm">
+          <div className="text-gray-500 text-base font-medium leading-tight">
+            Attempt {question.questionResponses.length} of {question.numRetries}
+          </div>
+          <p className="text-green-700 text-center font-medium">
+            {mostRecentFeedback.feedback[0].feedback}
+          </p>
+        </div>
+      )}
+      <div className="flex justify-center">
         <Button
           disabled={attemptsRemaining === 0}
           className="disabled:opacity-50"

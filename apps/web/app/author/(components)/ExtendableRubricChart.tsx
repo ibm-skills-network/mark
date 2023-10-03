@@ -110,19 +110,19 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
 
   const numberInputOnWheelPreventChange = (e) => {
     // Prevent the input value change
-    const eventInput = e as Event
+    const eventInput = e as Event;
     const target = eventInput.currentTarget as HTMLInputElement;
     target.blur();
-  
+
     // Prevent the page/container scrolling
     eventInput.stopPropagation();
-  
+
     // Refocus immediately, on the next tick (after the current function is done)
-    const targetInput = eventInput.target as HTMLInputElement
+    const targetInput = eventInput.target as HTMLInputElement;
     setTimeout(() => {
       targetInput.focus();
-    }, 0)
-  }
+    }, 0);
+  };
   return (
     <div>
       <div
@@ -143,9 +143,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   placeholder={`ex. ${index}`}
                   value={promptOptions[index]?.point || ""}
                   onChange={(event) => {
-                    if (
-                      parseInt(event.target.value) > parseInt(event.target.max)
-                    ) {
+                    if (Number(event.target.value) > Number(event.target.max)) {
                       event.target.value = event.target.max;
                     }
                     handlePromptPoints(index, event.target.value);

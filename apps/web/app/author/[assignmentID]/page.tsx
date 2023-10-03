@@ -67,7 +67,7 @@ const AuthorIntroduction = ({
       }
     }
     console.log("params_2", params);
-    void InitializeAssignment(parseInt(params.assignmentId));
+    void InitializeAssignment(Number(params.assignmentId));
     // }
   }, []);
 

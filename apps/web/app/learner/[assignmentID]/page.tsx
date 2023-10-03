@@ -8,7 +8,7 @@ interface Props {
 
 async function IntroductionPage(props: Props) {
   const { params } = props;
-  const assignmentId = parseInt(params.assignmentId);
+  const assignmentId = Number(params.assignmentId);
   const assignment = await getAssignment(assignmentId);
   // go to the error page if the assignment is not found
   if (!assignment) {
