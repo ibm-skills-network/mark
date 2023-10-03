@@ -156,7 +156,7 @@ function QuestionPage(props: Props) {
         </div>
       ) : (
         <>
-          <div className="col-span-3 -mt-6">
+          <div className="col-span-3">
             {questionsStore.map((question, index) => (
               <QuestionContainer
                 key={index}
