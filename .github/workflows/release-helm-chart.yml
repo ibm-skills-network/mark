@@ -57,3 +57,4 @@ jobs:
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           config: helm-charts/release-config.yaml
+          charts_dir: helm-chart/mark
