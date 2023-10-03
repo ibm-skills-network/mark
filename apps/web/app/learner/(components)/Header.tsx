@@ -22,12 +22,12 @@ function LearnerHeader(props: Props) {
   const userSubmittedAnyQuestion = questions.some(
     (question) => question.questionResponses.length > 0
   );
-
   async function handleSubmitAssignment() {
     const confirmSubmit = confirm("Are you sure you want to submit?");
     if (confirmSubmit) {
-      const grade = await submitAssignment(assignmentId, activeAttemptId);
-      alert(`Your grade is ${(grade * 100).toFixed(1)}/100
+      const grade =
+        (await submitAssignment(assignmentId, activeAttemptId)) * 100;
+      alert(`Your grade is ${grade.toFixed(1)}/100
   ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     }
   }
