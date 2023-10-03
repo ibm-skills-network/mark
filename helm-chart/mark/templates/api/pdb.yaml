@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mark.api.name" . }}
+  labels:
+    {{- include "mark.api.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 10%
+  selector:
+    matchLabels:
+      {{- include "mark.api.labels" . | nindent 6 }}

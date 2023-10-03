@@ -1,0 +1,9 @@
+dependencies:
+- name: lti-gateway
+  repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
+  version: 1.0.1
+- name: sn-common
+  repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
+  version: 1.0.1
+digest: sha256:0e6411c29ed6dd5c2bf7b2de3ae604c7ca92d072fbf154de4725909f6ded8f06
+generated: "2023-09-28T13:12:16.905924-04:00"

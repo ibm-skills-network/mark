@@ -1,0 +1,126 @@
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := include "mark.fullname" . -}}
+{{- if and .Values.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}
+  {{- if not (hasKey .Values.ingress.annotations "kubernetes.io/ingress.class") }}
+  {{- $_ := set .Values.ingress.annotations "kubernetes.io/ingress.class" .Values.ingress.className}}
+  {{- end }}
+{{- end }}
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1
+{{- else if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1beta1
+{{- else -}}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "mark.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if and .Values.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  tls:
+  - hosts:
+    - "{{ .Values.baseDomain }}"
+    {{- if .Values.ingress.tls.secretName }}
+    secretName: {{ .Values.ingress.tls.secretName | quote }}
+    {{- else }}
+    secretName: "{{ $fullName }}-tls"
+    {{- end }}
+  rules:
+  - host: "mark.{{ .Values.baseDomain }}"
+    http:
+      paths:
+      - path: "/"
+        {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+        pathType: Prefix
+        {{- end }}
+        backend:
+          {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+          service:
+            name: {{ .Release.Name }}-ui
+            port: 
+              number: {{ .Values.ui.service.port }}
+          {{- else }}
+          serviceName: {{ .Release.Name }}-ui
+          servicePort: {{ .Values.ui.service.port }}
+          {{- end }}
+  - host: "mark-api.{{ .Values.baseDomain }}"
+    http:
+      paths:
+      - path: "/"
+        {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+        pathType: Prefix
+        {{- end }}
+        backend:
+          {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+          service:
+            name: {{ .Release.Name }}-api-gateway
+            port:
+              number: {{ .Values.apiGateway.service.port }}
+          {{- else }}
+          serviceName: {{ .Release.Name }}-api-gateway
+          servicePort: {{ .Values.apiGateway.service.port }}
+          {{- end }}
+  - host: "mark.{{ .Values.baseDomain }}"
+    http:
+      paths:
+      - path: "/lti/1.1"
+        {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+        pathType: Prefix
+        {{- end }}
+        backend:
+          {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+          service:
+            name: {{ .Release.Name }}-lti-gateway
+            port:
+              number: {{ index .Values "lti-gateway" "service" "port" }}
+          {{- else }}
+          serviceName: {{ .Release.Name }}-lti-gateway
+          servicePort: {{ index .Values "lti-gateway" "service" "port" }}
+          {{- end }}
+{{- end }}
+---
+{{- if .Values.privateIngress.enabled -}}
+{{- $fullName := include "mark.fullname" . -}}
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1
+{{- else if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1beta1
+{{- else -}}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ $fullName }}-private
+  labels:
+    {{- include "mark.labels" . | nindent 4 }}
+spec:
+{{- if and .Values.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
+  ingressClassName: {{ .Values.privateIngress.className }}
+{{- end }}
+  rules:
+  - host: "private-mark-api.{{ .Values.baseDomain }}"
+    http:
+      paths:
+      - path: "/"
+        {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+        pathType: Prefix
+        {{- end }}
+        backend:
+          {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+          service:
+            name: {{ .Release.Name }}-api-gateway
+            port:
+              number: {{ .Values.apiGateway.service.port }}
+          {{- else }}
+          serviceName: {{ .Release.Name }}-api-gateway
+          servicePort: {{ .Values.apiGateway.service.port }}
+          {{- end }}
+{{- end }}
