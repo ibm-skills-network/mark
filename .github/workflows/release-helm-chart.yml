@@ -11,7 +11,31 @@ on:
       - master
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.4.0
+
+      - name: Fetch charts dependencies
+        run: |
+          cd helm-chart/mark
+          helm dependency build
+
+      - name: Lint charts
+        run: |
+          cd helm-chart/mark
+          helm lint
+
   release:
+    if: github.event_name == 'push' # This ensures release only runs on push events, not on pull_request events
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,16 +60,6 @@ jobs:
           TOKEN: ${{ steps.skills-network-bot-app.outputs.token }}
         run: |
           helm repo add --username $USERNAME --password $TOKEN skills-network https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
-
-      - name: Fetch charts dependencies
-        run: |
-          cd helm-chart/mark
-          helm dependency build
-
-      - name: Lint charts
-        run: |
-          cd helm-chart/mark
-          helm lint
 
       - name: Configure Git
         run: |
