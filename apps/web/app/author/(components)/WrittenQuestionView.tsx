@@ -17,6 +17,7 @@ import ExtendableRubricChart from "./ExtendableRubricChart";
 import WordCountComponent from "./WordCountComponent";
 
 interface WrittenQuestionViewProps {
+  questionId: number;
   handleScore: (event: React.ChangeEvent<HTMLInputElement>) => void;
   score: string;
   switchState: string;
@@ -31,6 +32,7 @@ interface WrittenQuestionViewProps {
 
 function WrittenQuestionView(props: WrittenQuestionViewProps) {
   const {
+    questionId,
     handleScore,
     score,
     switchState,
@@ -164,7 +166,10 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       </div> */}
 
       {/* Render the child component and pass the handleMaxPointsChange function as a prop */}
-      <ExtendableRubricChart onMaxPointsChange={handleMaxPointsChange} />
+      <ExtendableRubricChart
+        questionId={questionId}
+        onMaxPointsChange={handleMaxPointsChange}
+      />
 
       {/* {switchState === "b" && (
         // <RubricTable

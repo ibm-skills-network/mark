@@ -1,10 +1,13 @@
+import { useAuthorStore } from "@/stores/author";
 import { useState } from "react";
 
 interface ExtendableRubricChartProps {
+  questionId: number;
   onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
 }
 
 function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
+  const { questionId } = props;
   ////////////////////////////////////////////////
   // state and handle function for the prompt part
   ////////////////////////////////////////////////
@@ -26,6 +29,16 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   // Step 1: State Management
   const [divElements, setDivElements] = useState<number[]>([]);
 
+  const [questions, modifyQuestion, addCriteria, removeCriteria] =
+    useAuthorStore((state) => [
+      state.questions,
+      state.modifyQuestion,
+      state.addCriteria,
+      state.removeCriteria,
+    ]);
+  const { scoring } = questions.find((question) => question.id === questionId);
+  // TODO: I know that this is gonna create bugs in the future (when users refresh)
+  const criteria = scoring?.criteria || [];
   type promptOption = {
     point: string;
     description: string;
@@ -162,7 +175,11 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                     textAreaAdjust(event.target as HTMLElement)
                   }
                   className="p-2 rounded-md ml-[10px] text-black bg-transparent outline-none"
-                  placeholder={`ex. “The question is not legible” `}
+                  placeholder={
+                    index === 0
+                      ? `ex. “The question is not legible” `
+                      : `ex. “The question is legible” `
+                  }
                   value={promptOptions[index]?.description || ""}
                   onChange={(event) =>
                     handleChoiceChangeWrittenQuestion(index, event.target.value)

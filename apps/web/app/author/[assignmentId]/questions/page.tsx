@@ -1,14 +1,16 @@
 import DynamicTextBoxContainer from "@authorComponents/DynamicTextBoxContainer";
 import TextBox from "@authorComponents/Textbox";
 
-interface Props {}
+interface Props {
+  params: { assignmentId: string };
+}
 
 function Component(props: Props) {
-  const {} = props;
+  const { params } = props;
 
   return (
     <div className="">
-      <DynamicTextBoxContainer />
+      <DynamicTextBoxContainer assignmentId={Number(params.assignmentId)} />
     </div>
   );
 }

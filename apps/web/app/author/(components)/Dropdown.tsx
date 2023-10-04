@@ -17,9 +17,6 @@ function classNames(...classes) {
 
 function Dropdown(props: DropdownProps) {
   const { questionType, setQuestionType, questionTypes } = props;
-  console.log(
-    questionTypes.find((type) => type.value === questionType.value)?.label
-  );
   return (
     <div className="w-[19.125rem]">
       <Listbox

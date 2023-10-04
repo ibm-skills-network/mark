@@ -11,6 +11,8 @@ function TextQuestion(props: Props) {
     state.questions,
     state.setTextResponse,
   ]);
+
+  // const maxWords = assignmentDetails?.;
   // useEffect(() => {
   //   useLearnerStore.subscribe((state) => {
   //     console.log("state.questions", state.questions);

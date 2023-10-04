@@ -56,11 +56,16 @@ export type QuestionTypeDropdown = {
   description: string;
 };
 
+export type Criteria = {
+  points: number;
+  description: string;
+};
+
 export type Scoring = {
   type: // | "SINGLE_CRITERIA"
   // | "MULTIPLE_CRITERIA"
   "CRITERIA_BASED" | "LOSS_PER_MISTAKE" | "AI_GRADED";
-  criteria?: unknown;
+  criteria?: Criteria[];
 };
 
 type Feedback = {
@@ -87,7 +92,7 @@ type QuestionResponse = {
 export interface BaseQuestion {
   type: QuestionType;
   totalPoints: number;
-  numRetries?: number;
+  numRetries: number;
   question: string;
   choices?: Choice[];
   questionResponses?: QuestionResponse[];
@@ -106,9 +111,14 @@ export interface CreateQuestionRequest extends BaseQuestion {
   // used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
 }
 
+// TODO: merge this and the one below
 export interface Question extends CreateQuestionRequest {
   id: number;
   assignmentId: number;
+}
+
+export interface QuestionAuthorStore extends Question {
+  alreadyInBackend?: boolean;
 }
 
 /**

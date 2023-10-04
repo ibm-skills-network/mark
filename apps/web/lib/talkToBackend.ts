@@ -16,6 +16,8 @@ import type {
   User,
 } from "@config/types";
 
+// TODO: change the error message to use the error message from the backend
+
 /**
  * Calls the backend to see who the user is (author, learner, or admin).
  */
@@ -131,7 +133,7 @@ export async function getAssignments(): Promise<Assignment[] | undefined> {
 export async function createQuestion(
   assignmentId: number,
   question: CreateQuestionRequest
-): Promise<number> {
+): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
 
   try {
@@ -154,7 +156,46 @@ export async function createQuestion(
     return id;
   } catch (err) {
     console.error(err);
-    return -1;
+    return undefined;
+  }
+}
+
+/**
+ * Updates a question for a given assignment.
+ * @param assignmentId The id of the assignment to update the question for.
+ * @param questionId The id of the question to update.
+ * @param question The question to update.
+ * @returns The id of the updated question.
+ * @throws An error if the request fails.
+ */
+export async function updateQuestion(
+  assignmentId: number,
+  questionId: number,
+  question: CreateQuestionRequest
+): Promise<number | undefined> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(question),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to update question");
+    }
+    const { success, error, id } = (await res.json()) as BaseBackendResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+
+    return id;
+  } catch (err) {
+    console.error(err);
+    return undefined;
   }
 }
 

@@ -1,7 +1,5 @@
 import { createAttempt, getAttempt, getAttempts } from "@/lib/talkToBackend";
-import { useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
-import { redirect } from "next/navigation";
 
 interface Props {
   params: { assignmentId: string };
@@ -10,11 +8,6 @@ interface Props {
 async function LearnerLayout(props: Props) {
   const { params } = props;
   const assignmentId = Number(params.assignmentId);
-  // check if we have the assignment details in the store
-  // if not, redirect to the assignment overview page
-  // if (useLearnerStore.getState().assignmentDetails?.id !== assignmentId) {
-  //   redirect(`/learner/${assignmentId}`);
-  // }
   const listOfAttempts = await getAttempts(assignmentId);
   console.log("listOfAttempts", listOfAttempts);
   // check if there are any attempts that are not submitted and have not expired

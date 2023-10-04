@@ -31,20 +31,19 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
   };
   const numberInputOnWheelPreventChange = (e) => {
     // Prevent the input value change
-    const eventInput = e as Event
+    const eventInput = e as Event;
     const target = eventInput.currentTarget as HTMLInputElement;
     target.blur();
-  
+
     // Prevent the page/container scrolling
     eventInput.stopPropagation();
-  
+
     // Refocus immediately, on the next tick (after the current function is done)
-    const targetInput = eventInput.target as HTMLInputElement
+    const targetInput = eventInput.target as HTMLInputElement;
     setTimeout(() => {
       targetInput.focus();
-    }, 0)
-  }
-
+    }, 0);
+  };
 
   return (
     <div>
@@ -60,9 +59,9 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
           placeholder={`ex. 600`}
           value={textArea1Value}
           onChange={handleTextArea1Change}
-          min={20}
+          min={0}
           max={5000}
-          step={20}
+          step={10}
         />
         <input
           type="number"
@@ -71,9 +70,9 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
           placeholder={`ex. 1200`}
           value={textArea2Value}
           onChange={handleTextArea2Change}
-          min={20}
+          min={1}
           max={5000}
-          step={20}
+          step={10}
         />
       </div>
     </div>

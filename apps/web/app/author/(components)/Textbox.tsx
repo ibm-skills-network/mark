@@ -56,12 +56,12 @@ const singleAnswer = [
 ];
 
 interface TextBoxProps {
-  question: Question;
+  questionId: number;
   onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
 }
 
 function TextBox(props: TextBoxProps) {
-  const { question } = props;
+  const { questionId } = props;
   const [isLearnerView, setIsLearnerView] = useState(false);
   const [displayText, setDisplayText] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -74,18 +74,23 @@ function TextBox(props: TextBoxProps) {
     useState<string[]>([]);
   const [writtenQuestionText, setWrittenQuestionText] = useState("");
   const [
+    questions,
     setQuestions,
     removeQuestion,
     addQuestion,
     activeAssignmentId,
     modifyQuestion,
   ] = useAuthorStore((state) => [
+    state.questions,
     state.setQuestions,
     state.removeQuestion,
     state.addQuestion,
     state.activeAssignmentId,
     state.modifyQuestion,
   ]);
+
+  const question = questions.find((question) => question.id === questionId);
+
   const menuRef = useRef<HTMLDivElement>(null);
   const [choicesWrittenQuestion, setChoicesWrittenQuestion] = useState<
     string[]
@@ -120,7 +125,7 @@ function TextBox(props: TextBoxProps) {
   }, []);
 
   const handleQuestionTextChange = (value: string) => {
-    modifyQuestion(question.id, {
+    modifyQuestion(questionId, {
       question: value,
     });
   };
@@ -230,7 +235,7 @@ function TextBox(props: TextBoxProps) {
       <div className="flex flex-col bg-white transition border-l-8 rounded-md p-10 border-blue-700">
         Question
         <MarkdownEditor
-          value={"" as string}
+          value={question.question}
           setValue={handleQuestionTextChange}
           textareaClassName="!min-h-[6.5rem] !max-h-72"
           className="bg-gray-600"
@@ -266,6 +271,7 @@ function TextBox(props: TextBoxProps) {
         ) : null} */}
         {questionType.value === "TEXT" ? (
           <WrittenQuestionView
+            questionId={questionId}
             onMaxPointsChange={handleMaxPointsChange}
             handleScore={handleScore}
             score={score}

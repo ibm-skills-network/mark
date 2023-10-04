@@ -2,7 +2,7 @@
 
 import ErrorPage from "@/components/ErrorPage";
 import Title from "@/components/Title";
-import { GradingData } from "@/config/types";
+import { GradingData, QuestionAuthorStore } from "@/config/types";
 import { getAssignment, modifyAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { IntroductionSection } from "@authorComponents/IntroductionSection";
@@ -15,7 +15,6 @@ const AuthorIntroduction = ({
 }: {
   params: { assignmentId: string };
 }) => {
-  console.log("params", params);
   const router = useRouter();
   const [introduction, setIntroduction] = useState("");
   const [showPage, setShowPage] = useState<"loading" | "error" | "success">(
@@ -59,14 +58,24 @@ const AuthorIntroduction = ({
           passingGrade: assignment.passingGrade || 50,
           timeEstimate: assignment.allotedTimeMinutes || 50,
         });
-        setQuestions(assignment.questions || []);
+
+        const questionsWithAddedValues = assignment.questions.map(
+          (question: QuestionAuthorStore) => {
+            return {
+              ...question,
+              // and for the questions that the author adds during the
+              // assignment creation process, we set alreadyInBackend to be false for them
+              alreadyInBackend: true,
+            };
+          }
+        );
+        setQuestions(questionsWithAddedValues.sort((a, b) => a.id - b.id));
         setShowPage("success");
       } else {
         // if assignment does not exist, show error page
         setShowPage("error");
       }
     }
-    console.log("params_2", params);
     void InitializeAssignment(Number(params.assignmentId));
     // }
   }, []);
@@ -96,7 +105,6 @@ const AuthorIntroduction = ({
   }
 
   if (showPage === "error") {
-    console.log("params_3", params);
     return <ErrorPage error="Assignment error" />;
   } else if (showPage === "loading") {
     return <div>Loading...</div>;

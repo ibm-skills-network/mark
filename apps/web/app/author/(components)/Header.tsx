@@ -1,5 +1,6 @@
 "use client";
 
+import { createQuestion, updateQuestion } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
@@ -12,17 +13,41 @@ interface Props {}
 function AuthorHeader(props: Props) {
   const {} = props;
   const pathname = usePathname();
-  const assignmentId = pathname.split("/")[2]; // ex: /author/1234/introduction
+  const activeAssignmentId = useAuthorStore(
+    (state) => state.activeAssignmentId
+  );
   const assignmentTitle = useAuthorStore((state) => state.assignmentTitle);
   const updateAssignmentButtonRef = useAuthorStore(
     (state) => state.updateAssignmentButtonRef
   );
-  const questions = useAuthorStore((state) => state.questions);
+  const [questions, modifyQuestion] = useAuthorStore((state) => [
+    state.questions,
+    state.modifyQuestion,
+  ]);
 
   function handlePublishButton() {
     const confirmPublish = confirm("Are you sure you want to publish?");
     if (confirmPublish) {
-      alert("Published!");
+      questions.forEach(async (question) => {
+        // remove values that are not needed in the backend
+        const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
+        console.log("alreadyInBackend", alreadyInBackend, "id", id);
+        if (alreadyInBackend) {
+          // update question if it's already in the backend
+          // TODO: this can be optimized by only sending the data that has changed
+          // and if nothing has changed, don't send anything to the backend
+          // an idea for that is to have a "modified" flag in the question object
+          // or store the original question object in a separate variable
+          const questionId = await updateQuestion(assignmentId, id, dataToSend);
+          console.log("updateQuestion", questionId);
+        } else {
+          // create question if it's not already in the backend
+          console.log("dataToSend", dataToSend, "assignmentId", assignmentId);
+          const questionId = await createQuestion(assignmentId, dataToSend);
+          modifyQuestion(id, { alreadyInBackend: true }); // to handle the case where the user clicks on publish multiple times
+          console.log("createQuestion", questionId);
+        }
+      });
     }
   }
 
@@ -30,12 +55,12 @@ function AuthorHeader(props: Props) {
     {
       id: 1,
       name: "Set Up Intro",
-      href: `/author/${assignmentId}`,
+      href: `/author/${activeAssignmentId}`,
     },
     {
       id: 2,
       name: "Questions & Review",
-      href: `/author/${assignmentId}/questions`,
+      href: `/author/${activeAssignmentId}/questions`,
     },
   ];
 

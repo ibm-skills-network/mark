@@ -61,7 +61,7 @@ export class CreateUpdateQuestionRequestDto {
   @ApiProperty({
     description: "The number of retries allowed for this question.",
     type: Number,
-    required: false,
+    required: true,
   })
   @IsInt()
   numRetries: number;
