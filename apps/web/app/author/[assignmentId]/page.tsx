@@ -76,7 +76,7 @@ const AuthorIntroduction = ({
         setShowPage("error");
       }
     }
-    void InitializeAssignment(Number(params.assignmentId));
+    void InitializeAssignment(~~params.assignmentId);
     // }
   }, []);
 

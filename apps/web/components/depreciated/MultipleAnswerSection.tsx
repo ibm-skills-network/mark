@@ -35,7 +35,7 @@ function Section(props: sectionProps) {
     event: React.FocusEvent<HTMLInputElement>,
     choiceId: string
   ) => {
-    const newPoints = Number(event.target.value);
+    const newPoints = ~~event.target.value;
     const newPointInputs = { ...pointInputs, [choiceId]: newPoints };
     setPointInputs(newPointInputs);
   };

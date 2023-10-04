@@ -103,7 +103,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   };
 
   const maxPoints = promptOptions.reduce((max, option) => {
-    const optionPoints = Number(option.point);
+    const optionPoints = ~~option.point;
     return optionPoints > max ? optionPoints : max;
   }, 0);
 
@@ -156,7 +156,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   placeholder={`ex. ${index}`}
                   value={promptOptions[index]?.point || ""}
                   onChange={(event) => {
-                    if (Number(event.target.value) > Number(event.target.max)) {
+                    if (~~event.target.value > ~~event.target.max) {
                       event.target.value = event.target.max;
                     }
                     handlePromptPoints(index, event.target.value);

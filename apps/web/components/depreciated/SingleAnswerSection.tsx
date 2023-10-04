@@ -32,7 +32,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
   // Add a new function to handle changes to the points input
   const handlePointsChange = (index, value) => {
     // Parse the value as an integer
-    const intValue = Number(value);
+    const intValue = ~~value;
 
     // Check if the value is a positive integer
     if (Number.isInteger(intValue) && intValue >= 0) {

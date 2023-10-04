@@ -23,7 +23,7 @@ function GradingOptionsForm(props: Props) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
-      attempts: Number(e.target.value),
+      attempts: ~~e.target.value,
     }));
   }
 
@@ -31,7 +31,7 @@ function GradingOptionsForm(props: Props) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
-      passingGrade: Number(e.target.value),
+      passingGrade: ~~e.target.value,
     }));
   }
 
@@ -39,7 +39,7 @@ function GradingOptionsForm(props: Props) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
-      timeEstimate: Number(e.target.value),
+      timeEstimate: ~~e.target.value,
     }));
   }
 

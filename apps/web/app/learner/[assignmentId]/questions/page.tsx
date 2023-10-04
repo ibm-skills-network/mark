@@ -7,7 +7,7 @@ interface Props {
 
 async function LearnerLayout(props: Props) {
   const { params } = props;
-  const assignmentId = Number(params.assignmentId);
+  const assignmentId = ~~params.assignmentId;
   const listOfAttempts = await getAttempts(assignmentId);
   console.log("listOfAttempts", listOfAttempts);
   // check if there are any attempts that are not submitted and have not expired

@@ -10,7 +10,7 @@ function Component(props: Props) {
 
   return (
     <div className="">
-      <DynamicTextBoxContainer assignmentId={Number(params.assignmentId)} />
+      <DynamicTextBoxContainer assignmentId={~~params.assignmentId} />
     </div>
   );
 }
