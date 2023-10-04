@@ -18,13 +18,15 @@ import type {
 
 // TODO: change the error message to use the error message from the backend
 
+let Cookie: string;
+
 /**
  * Calls the backend to see who the user is (author, learner, or admin).
  */
 export async function getUser(cookies: string): Promise<User | undefined> {
+  Cookie = cookies;
   try {
     const res = await fetch(BASE_API_ROUTES.user, {
-      cache: "no-cache",
       headers: {
         Cookie: cookies,
       },
@@ -55,6 +57,7 @@ export async function modifyAssignment(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        Cookie,
       },
       body: JSON.stringify(data),
     });
@@ -85,7 +88,9 @@ export async function getAssignment(
 ): Promise<Assignment | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
-      cache: "no-cache",
+      headers: {
+        Cookie,
+      },
     });
 
     if (!res.ok) {
@@ -111,7 +116,11 @@ export async function getAssignment(
  */
 export async function getAssignments(): Promise<Assignment[] | undefined> {
   try {
-    const res = await fetch(BASE_API_ROUTES.assignments);
+    const res = await fetch(BASE_API_ROUTES.assignments, {
+      headers: {
+        Cookie,
+      },
+    });
     if (!res.ok) {
       throw new Error("Failed to fetch assignments");
     }
@@ -141,6 +150,7 @@ export async function createQuestion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Cookie,
       },
       body: JSON.stringify(question),
     });
@@ -180,6 +190,7 @@ export async function updateQuestion(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        Cookie,
       },
       body: JSON.stringify(question),
     });
@@ -212,7 +223,11 @@ export async function getAttempts(
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
 
   try {
-    const res = await fetch(endpointURL);
+    const res = await fetch(endpointURL, {
+      headers: {
+        Cookie,
+      },
+    });
     if (!res.ok) {
       throw new Error("Failed to get attempts");
     }
@@ -238,7 +253,10 @@ export async function createAttempt(
   try {
     const res = await fetch(endpointURL, {
       method: "POST",
-      cache: "no-cache",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie,
+      },
     });
     console.log("res", res);
 
@@ -271,7 +289,11 @@ export async function getAttempt(
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 
   try {
-    const res = await fetch(endpointURL);
+    const res = await fetch(endpointURL, {
+      headers: {
+        Cookie,
+      },
+    });
     if (!res.ok) {
       throw new Error("Failed to get attempt questions");
     }
@@ -299,6 +321,7 @@ export async function submitQuestion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Cookie,
       },
       // remove empty fields
       body: JSON.stringify(requestBody, (key, value) => {
@@ -336,6 +359,7 @@ export async function submitAssignment(
       body: JSON.stringify({ submitted: true }),
       headers: {
         "Content-Type": "application/json",
+        Cookie,
       },
     });
 
