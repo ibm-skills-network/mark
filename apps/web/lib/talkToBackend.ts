@@ -115,6 +115,7 @@ export async function getAssignment(
  * @returns An array of assignments.
  */
 export async function getAssignments(): Promise<Assignment[] | undefined> {
+  console.log("cookie: ", Cookie);
   try {
     const res = await fetch(BASE_API_ROUTES.assignments, {
       headers: {
@@ -221,6 +222,7 @@ export async function getAttempts(
   assignmentId: number
 ): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
+  console.log("cookie getAttempt: ", Cookie);
 
   try {
     const res = await fetch(endpointURL, {
@@ -229,7 +231,9 @@ export async function getAttempts(
       },
     });
     if (!res.ok) {
-      throw new Error("Failed to get attempts");
+      throw new Error(
+        `Failed to call ${endpointURL} with ${res.status}: ${res.toString()}`
+      );
     }
     const attempts = (await res.json()) as AssignmentAttempt[];
     return attempts;
