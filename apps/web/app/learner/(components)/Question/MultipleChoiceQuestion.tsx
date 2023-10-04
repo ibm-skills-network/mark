@@ -4,7 +4,7 @@ import {
   QuestionStatus,
   QuestionStore,
 } from "@/config/types";
-import { useLearnerStore, useAssignmentDetails } from "@/stores/learner";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { useState } from "react";
 import Button from "../Button";
 import InfoLine from "../InfoLine";
