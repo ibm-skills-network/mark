@@ -24,6 +24,19 @@ jobs:
         with:
           version: v3.4.0
 
+      - id: skills-network-bot-app
+        uses: getsentry/action-github-app-token@v1
+        with:
+          app_id: ${{ secrets.SKILLS_NETWORK_BOT_APP_ID }}
+          private_key: ${{ secrets.SKILLS_NETWORK_BOT_PRIVATE_KEY }}
+
+      - name: Add chart repos
+        env:
+          USERNAME: "anything"
+          TOKEN: ${{ steps.skills-network-bot-app.outputs.token }}
+        run: |
+          helm repo add --username $USERNAME --password $TOKEN skills-network https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master    
+
       - name: Fetch charts dependencies
         run: |
           cd helm-chart/mark
