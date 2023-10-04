@@ -35,6 +35,7 @@ export const questionsData: Question[] = [
   {
     id: 1,
     assignmentId: 1,
+    numRetries: 2,
     type: "TEXT",
     totalPoints: 10,
     question: "Describe the key elements of a project charter...",
@@ -70,6 +71,7 @@ export const questionsData: Question[] = [
   {
     id: 4,
     assignmentId: 2,
+    numRetries: 2,
     type: "TRUE_FALSE",
     totalPoints: 3,
     question: "Is the Earth flat?",
@@ -78,12 +80,14 @@ export const questionsData: Question[] = [
   {
     id: 5,
     assignmentId: 2,
+    numRetries: 2,
     type: "URL",
     totalPoints: 8,
     question: "Provide a link to a relevant resource.",
   },
   {
     id: 6,
+    numRetries: 2,
     assignmentId: 3,
     type: "UPLOAD",
     totalPoints: 15,
@@ -119,6 +123,7 @@ export const questionsData: Question[] = [
   },
   {
     id: 10,
+    numRetries: 2,
     assignmentId: 1,
     type: "TRUE_FALSE",
     totalPoints: 3,
