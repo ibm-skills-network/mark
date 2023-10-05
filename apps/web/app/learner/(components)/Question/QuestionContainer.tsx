@@ -80,14 +80,28 @@ function Component(props: Props) {
 
   return (
     <section className={twMerge("flex flex-col gap-y-5 relative", className)}>
-      <div className="flex absolute -top-7 justify-between w-full">
-        <div className="space-x-1">
-          <span className="text-gray-600 text-xl font-medium leading-tight">
-            Question {questionNumber}
-          </span>
-          <span className="text-blue-700 text-base font-medium leading-tight">
-            {question.totalPoints.toFixed(2)} Points
-          </span>
+      <div className="flex absolute -top-8 justify-between w-full">
+        <div className="flex gap-x-1">
+          <p className="text-gray-600 text-xl font-medium leading-tight">
+            Question {questionNumber}:
+          </p>
+          <p className="text-base font-medium leading-tight my-auto">
+            {mostRecentFeedback ? (
+              <span className="text-green-600">
+                Scored{" "}
+                <span className="font-bold">
+                  {Number.isInteger(mostRecentFeedback.points)
+                    ? mostRecentFeedback.points
+                    : mostRecentFeedback.points.toFixed(1)}{" "}
+                </span>
+                out of {question.totalPoints} Points
+              </span>
+            ) : (
+              <span className="text-blue-700">
+                {question.totalPoints} Points
+              </span>
+            )}
+          </p>
         </div>
         {/* attempts remaining */}
         <div className="text-gray-500 text-base font-medium leading-tight">
@@ -103,10 +117,10 @@ function Component(props: Props) {
       {/* Feedback section */}
       {mostRecentFeedback && (
         <div className="bg-green-100 p-5 rounded-lg shadow-sm">
-          <div className="text-gray-500 text-base font-medium leading-tight">
-            Attempt {question.questionResponses.length} of {question.numRetries}
-          </div>
           <p className="text-green-700 text-center font-medium">
+            <span className="font-bold">
+              {mostRecentFeedback.points}/{question.totalPoints}
+            </span>{" "}
             {mostRecentFeedback.feedback[0].feedback}
           </p>
         </div>
