@@ -94,11 +94,11 @@ function Component(props: Props) {
                     ? mostRecentFeedback.points
                     : mostRecentFeedback.points.toFixed(1)}{" "}
                 </span>
-                out of {question.totalPoints} Points
+                out of {question.totalPoints} points
               </span>
             ) : (
               <span className="text-blue-700">
-                {question.totalPoints} Points
+                {question.totalPoints} points
               </span>
             )}
           </p>
