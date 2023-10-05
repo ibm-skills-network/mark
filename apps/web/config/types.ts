@@ -198,3 +198,8 @@ export type BaseBackendResponse = {
 export interface submitAssignmentResponse extends BaseBackendResponse {
   grade?: number;
 }
+
+export type LearnerAssignmentState =
+  | "not-started"
+  | "in-progress"
+  | "completed";

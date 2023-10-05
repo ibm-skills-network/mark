@@ -1,4 +1,8 @@
-import { Assignment, QuestionStore } from "@/config/types";
+import {
+  Assignment,
+  LearnerAssignmentState,
+  QuestionStore,
+} from "@/config/types";
 import Button from "@learnerComponents/Button";
 import Link from "next/link";
 import { type ComponentPropsWithoutRef } from "react";
@@ -6,10 +10,11 @@ import AssignmentMainInfo from "./AssignmentMainInfo";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   assignment: Assignment;
+  assignmentState: LearnerAssignmentState;
 }
 
 function AssignmentOverview(props: Props) {
-  const { assignment } = props;
+  const { assignment, assignmentState } = props;
   const {
     instructions,
     introduction,
@@ -31,9 +36,20 @@ function AssignmentOverview(props: Props) {
           name={name}
           assignmentId={id}
         />
-        <Link href={`/learner/${id}/questions`}>
-          <Button>Begin the Assignment {">"}</Button>
-        </Link>
+        {/* if the assignment is completed, then show the "View Results" button */}
+        {assignmentState === "completed" ? (
+          <Link href={`/learner/${id}/results`}>
+            <Button>View Results {">"}</Button>
+          </Link>
+        ) : (
+          // it's either "not-started" or "in-progress"
+          <Link href={`/learner/${id}/questions`}>
+            <Button>
+              {assignmentState === "in-progress" ? "Resume " : "Begin "}the
+              Assignment
+            </Button>
+          </Link>
+        )}
       </div>
       <div className="border-2 border-gray-400 bg-white p-4">
         {introduction && (
