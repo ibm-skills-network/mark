@@ -18,17 +18,15 @@ import type {
 
 // TODO: change the error message to use the error message from the backend
 
-let Cookie: string;
 
 /**
  * Calls the backend to see who the user is (author, learner, or admin).
  */
-export async function getUser(cookies: string): Promise<User | undefined> {
-  Cookie = cookies;
+export async function getUser(cookies?: string): Promise<User | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.user, {
       headers: {
-        Cookie: cookies,
+        ...(cookies ? { Cookie: cookies } : {})
       },
     });
     console.log("res", res);
@@ -49,7 +47,8 @@ export async function getUser(cookies: string): Promise<User | undefined> {
  */
 export async function modifyAssignment(
   data: ModifyAssignmentRequest,
-  id: number
+  id: number,
+  cookies?: string
 ): Promise<boolean> {
   try {
     //
@@ -57,7 +56,7 @@ export async function modifyAssignment(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {})
       },
       body: JSON.stringify(data),
     });
@@ -84,12 +83,13 @@ export async function modifyAssignment(
  * @throws An error if the user is not authorized to view the assignment.
  */
 export async function getAssignment(
-  id: number
+  id: number,
+  cookies?: string
 ): Promise<Assignment | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
       headers: {
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
 
@@ -114,12 +114,11 @@ export async function getAssignment(
  * Calls the backend to get all assignments.
  * @returns An array of assignments.
  */
-export async function getAssignments(): Promise<Assignment[] | undefined> {
-  console.log("cookie: ", Cookie);
+export async function getAssignments(cookies?: string): Promise<Assignment[] | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments, {
       headers: {
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
     if (!res.ok) {
@@ -142,7 +141,8 @@ export async function getAssignments(): Promise<Assignment[] | undefined> {
  */
 export async function createQuestion(
   assignmentId: number,
-  question: CreateQuestionRequest
+  question: CreateQuestionRequest,
+  cookies?: string
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
 
@@ -151,7 +151,7 @@ export async function createQuestion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
       body: JSON.stringify(question),
     });
@@ -182,7 +182,8 @@ export async function createQuestion(
 export async function updateQuestion(
   assignmentId: number,
   questionId: number,
-  question: CreateQuestionRequest
+  question: CreateQuestionRequest,
+  cookies?: string
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}`;
 
@@ -191,7 +192,7 @@ export async function updateQuestion(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
       body: JSON.stringify(question),
     });
@@ -219,15 +220,16 @@ export async function updateQuestion(
  * @throws An error if the user is not authorized to view the attempts.
  */
 export async function getAttempts(
-  assignmentId: number
+  assignmentId: number,
+  cookies?: string
 ): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
-  console.log("cookie getAttempt: ", Cookie);
+  console.log("cookie getAttempt: ", cookies);
 
   try {
     const res = await fetch(endpointURL, {
       headers: {
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
     if (!res.ok) {
@@ -250,7 +252,8 @@ export async function getAttempts(
  * @throws An error if the request fails.
  */
 export async function createAttempt(
-  assignmentId: number
+  assignmentId: number,
+  cookies?: string
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
   console.log("endpointURL", endpointURL);
@@ -259,7 +262,7 @@ export async function createAttempt(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
     console.log("res", res);
@@ -288,14 +291,15 @@ export async function createAttempt(
  */
 export async function getAttempt(
   assignmentId: number,
-  attemptId: number
+  attemptId: number,
+  cookies?: string
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 
   try {
     const res = await fetch(endpointURL, {
       headers: {
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
     if (!res.ok) {
@@ -316,7 +320,8 @@ export async function submitQuestion(
   assignmentId: number,
   attemptId: number,
   questionId: number,
-  requestBody: QuestionAttemptRequest
+  requestBody: QuestionAttemptRequest,
+  cookies?: string
 ): Promise<QuestionAttemptResponse | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
@@ -325,7 +330,7 @@ export async function submitQuestion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
       // remove empty fields
       body: JSON.stringify(requestBody, (key, value) => {
@@ -353,7 +358,8 @@ export async function submitQuestion(
  */
 export async function submitAssignment(
   assignmentId: number,
-  attemptId: number
+  attemptId: number,
+  cookies?: string
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 
@@ -363,7 +369,7 @@ export async function submitAssignment(
       body: JSON.stringify({ submitted: true }),
       headers: {
         "Content-Type": "application/json",
-        Cookie,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
 
