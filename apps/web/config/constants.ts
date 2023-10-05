@@ -1,5 +1,5 @@
 import { absoluteUrl } from "../lib/utils";
-import type { Question } from "./types";
+import type { Criteria, Question } from "./types";
 
 const BASE_API_PATH = absoluteUrl("/api/v1");
 
@@ -30,6 +30,17 @@ export const BASE_API_ROUTES = {
 // }
 
 // type QuestionData = LongFormQuestionData | MultipleChoiceQuestionData;
+
+export const initialCriteria: Criteria[] = [
+  {
+    points: 0,
+    description: "",
+  },
+  {
+    points: 1,
+    description: "",
+  },
+];
 
 export const questionsData: Question[] = [
   {

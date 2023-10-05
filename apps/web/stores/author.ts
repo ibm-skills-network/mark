@@ -21,9 +21,9 @@ export type AuthorActions = {
   removeQuestion: (question: number) => void;
   modifyQuestion: (questionId: number, modifiedData: OptionalQuestion) => void;
   setAssignmentTitle: (title: string) => void;
-  setCriterias: (criterias: Criteria[]) => void;
-  addCriteria: (criteria: Criteria) => void;
-  removeCriteria: (criteriaIndex: number) => void;
+  setCriterias: (questionId: number, criterias: Criteria[]) => Criteria[];
+  addCriteria: (questionId: number, criteria: Criteria) => void;
+  removeCriteria: (questionId: number, criteriaIndex: number) => void;
 };
 
 export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
@@ -53,41 +53,53 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
               }
         ),
       })),
-    setCriterias: (criterias) => {
+    setCriterias: (questionId, criterias) => {
       set((state) => ({
         questions: state.questions.map((q) => {
-          // if (q.scoring?.type === "CRITERIA_BASED") {
-          return {
-            ...q,
-            criterias,
-          };
-          // }
+          if (q.id === questionId) {
+            return {
+              ...q,
+              scoring: {
+                ...q.scoring,
+                criteria: criterias,
+              },
+            };
+          }
+          return q;
+        }),
+      }));
+      return criterias;
+    },
+    addCriteria: (questionId, criteria) => {
+      set((state) => ({
+        questions: state.questions.map((q) => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              scoring: {
+                ...q.scoring,
+                criteria: [...q.scoring.criteria, criteria],
+              },
+            };
+          }
           return q;
         }),
       }));
     },
-    addCriteria: (criteria) => {
+    removeCriteria: (questionId, criteriaIndex) => {
       set((state) => ({
         questions: state.questions.map((q) => {
-          // if (q.scoring?.type === "CRITERIA_BASED") {
-          return {
-            ...q,
-            criterias: [...q.scoring.criteria, criteria],
-          };
-          // }
-          return q;
-        }),
-      }));
-    },
-    removeCriteria: (criteriaIndex) => {
-      set((state) => ({
-        questions: state.questions.map((q) => {
-          // if (q.scoring?.type === "CRITERIA_BASED") {
-          return {
-            ...q,
-            criterias: q.scoring.criteria.filter((_, i) => i !== criteriaIndex),
-          };
-          // }
+          if (q.id === questionId) {
+            return {
+              ...q,
+              scoring: {
+                ...q.scoring,
+                criteria: q.scoring.criteria.filter(
+                  (_, index) => index !== criteriaIndex
+                ),
+              },
+            };
+          }
           return q;
         }),
       }));

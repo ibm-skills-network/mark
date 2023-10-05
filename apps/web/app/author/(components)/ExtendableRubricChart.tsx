@@ -1,3 +1,4 @@
+import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
 import { useState } from "react";
 
@@ -29,86 +30,59 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   // Step 1: State Management
   const [divElements, setDivElements] = useState<number[]>([]);
 
-  const [questions, modifyQuestion, addCriteria, removeCriteria] =
+  const [questions, modifyQuestion, addCriteria, removeCriteria, setCriterias] =
     useAuthorStore((state) => [
       state.questions,
       state.modifyQuestion,
       state.addCriteria,
       state.removeCriteria,
+      state.setCriterias,
     ]);
   const { scoring } = questions.find((question) => question.id === questionId);
   // TODO: I know that this is gonna create bugs in the future (when users refresh)
-  const criteria = scoring?.criteria || [];
-  type promptOption = {
-    point: string;
-    description: string;
-  };
+  // TODO: this needs to change depending on the question type
+  // for each question, we first try to get the criteria from the question and if it doesn't exist, we create a new one
+  const criterias =
+    scoring?.criteria || setCriterias(questionId, initialCriteria);
   // Initialize the promptOptions state with two default rubric options
-  const initialPromptOptions: promptOption[] = [
-    {
-      point: "0",
-      description: "",
-    },
-    {
-      point: "1",
-      description: "",
-    },
-  ];
 
-  const [promptOptions, setPromptOptions] =
-    useState<promptOption[]>(initialPromptOptions);
+  // const [promptOptions, setPromptOptions] =
+  //   useState<promptOption[]>(initialPromptOptions);
 
   const handleRemoveChoiceWrittenQuestion = (indexToRemove: number) => {
-    // Create a copy of the current state
-    const updatedChoices = [...promptOptions];
-
-    // Remove the element at the specified index
-    updatedChoices.splice(indexToRemove, 1);
-
-    // Update the state with the modified array
-    setPromptOptions(updatedChoices);
+    removeCriteria(questionId, indexToRemove);
   };
 
   const handleChoiceChangeWrittenQuestion = (index: number, value: string) => {
-    // Create a copy of the current state
-    const updatedOptions = [...promptOptions];
-
-    // Update the description of the promptOption at the specified index
-    updatedOptions[index] = { ...updatedOptions[index], description: value };
-
-    // Update the state with the modified array
-    setPromptOptions(updatedOptions);
+    setCriterias(questionId, [
+      ...criterias.slice(0, index),
+      { ...criterias[index], description: value },
+      ...criterias.slice(index + 1),
+    ]);
   };
 
   const handleAddChoiceWrittenQuestion = () => {
-    // Create a copy of the current state
-    const updatedOptions = [...promptOptions];
-
-    // Append a new empty promptOption at the end of updatedOptions
-    updatedOptions.push({ point: "", description: "" });
-
-    // Update the state with the modified array
-    setPromptOptions(updatedOptions);
+    addCriteria(questionId, {
+      points: 0,
+      description: "",
+    });
   };
 
   const handlePromptPoints = (index: number, value: string) => {
-    // Create a copy of the current state
-    const updatedOptions = [...promptOptions];
-
-    // Update the point of the promptOption at the specified index
-    updatedOptions[index] = { ...updatedOptions[index], point: value };
-
-    // Update the state with the modified array
-    setPromptOptions(updatedOptions);
+    setCriterias(questionId, [
+      ...criterias.slice(0, index),
+      { ...criterias[index], points: ~~value },
+      ...criterias.slice(index + 1),
+    ]);
   };
 
-  const maxPoints = promptOptions.reduce((max, option) => {
-    const optionPoints = ~~option.point;
-    return optionPoints > max ? optionPoints : max;
-  }, 0);
+  // const maxPoints = promptOptions.reduce((max, option) => {
+  //   const optionPoints = ~~option.point;
+  //   return optionPoints > max ? optionPoints : max;
+  // }, 0);
 
   // Call the onMaxPointsChange function with the maxPoints value
-  props.onMaxPointsChange(maxPoints);
+  // props.onMaxPointsChange(maxPoints);
 
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
   function textAreaAdjust(element: HTMLElement) {
@@ -146,7 +120,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
             List the conditions for meeting the Criteria of Question
             <span className="absolute -top-1 left-38 text-blue-400">*</span>
           </h1>
-          {promptOptions.map((choice, index) => (
+          {criterias.map((criteria, index) => (
             <div key={index} className="flex items-center mt-[10px]">
               {/* Add input for promptPoints */}
               <div className="flex items-center">
@@ -154,7 +128,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   type="number"
                   className="p-2 border ml-[10px] rounded-md h-[3.256rem] w-[100px] text-gray-700 bg-transparent outline-none"
                   placeholder={`ex. ${index}`}
-                  value={promptOptions[index]?.point || ""}
+                  value={criteria.points}
                   onChange={(event) => {
                     if (~~event.target.value > ~~event.target.max) {
                       event.target.value = event.target.max;
@@ -180,7 +154,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                       ? `ex. “The question is not legible” `
                       : `ex. “The question is legible” `
                   }
-                  value={promptOptions[index]?.description || ""}
+                  value={criteria.description}
                   onChange={(event) =>
                     handleChoiceChangeWrittenQuestion(index, event.target.value)
                   }

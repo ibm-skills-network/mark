@@ -66,6 +66,11 @@ const AuthorIntroduction = ({
               // and for the questions that the author adds during the
               // assignment creation process, we set alreadyInBackend to be false for them
               alreadyInBackend: true,
+              scoring: {
+                // TODO: hardcoded for now but we need to find a way to add the type
+                type: "CRITERIA_BASED",
+                ...question.scoring,
+              },
             };
           }
         );

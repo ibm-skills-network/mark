@@ -2,6 +2,7 @@
 // which are "add new textbox" and "delete"
 "use client";
 
+import { initialCriteria } from "@/config/constants";
 import { getAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/solid";
@@ -54,6 +55,11 @@ function DynamicTextBoxContainer(props: Props) {
                 return {
                   ...question,
                   alreadyInBackend: true,
+                  scoring: {
+                    // TODO: hardcoded for now but we need to find a way to add the type
+                    type: "CRITERIA_BASED",
+                    ...question.scoring,
+                  },
                 };
               })
               .sort((a, b) => a.id - b.id) || []
@@ -68,13 +74,18 @@ function DynamicTextBoxContainer(props: Props) {
   }, []);
   const handleAddTextBox = () => {
     addQuestion({
-      id: questions.slice(-1)[0].id + 1,
+      id: (questions.slice(-1)[0]?.id || 0) + 1,
       assignmentId: activeAssignmentId,
       question: "",
       totalPoints: 0,
-      numRetries: 3,
+      numRetries: 2,
       // TODO: get the type from the dropdown
       type: "TEXT",
+      alreadyInBackend: false,
+      scoring: {
+        type: "CRITERIA_BASED",
+        criteria: initialCriteria,
+      },
     });
     // setScrollTargets((prevTargets) => {
     //   const newTargets: number[] = [

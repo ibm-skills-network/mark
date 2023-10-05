@@ -32,6 +32,9 @@ function AuthorHeader(props: Props) {
         // remove values that are not needed in the backend
         const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
         console.log("alreadyInBackend", alreadyInBackend, "id", id);
+        // conclude the total points of the question by taking the last element of the criteria array
+        dataToSend.totalPoints =
+          dataToSend.scoring?.criteria?.slice(-1)[0].points || 0;
         if (alreadyInBackend) {
           // update question if it's already in the backend
           // TODO: this can be optimized by only sending the data that has changed
