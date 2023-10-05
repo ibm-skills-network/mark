@@ -1,8 +1,4 @@
-import {
-  Assignment,
-  LearnerAssignmentState,
-  QuestionStore,
-} from "@/config/types";
+import { Assignment, LearnerAssignmentState } from "@/config/types";
 import Button from "@learnerComponents/Button";
 import Link from "next/link";
 import { type ComponentPropsWithoutRef } from "react";

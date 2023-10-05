@@ -7,6 +7,7 @@ import Title from "@components/Title";
 import { EyeIcon } from "@heroicons/react/outline";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 
 interface Props {}
 
@@ -51,6 +52,7 @@ function AuthorHeader(props: Props) {
           console.log("createQuestion", questionId);
         }
       });
+      toast.success("Assignment published!");
     }
   }
 
