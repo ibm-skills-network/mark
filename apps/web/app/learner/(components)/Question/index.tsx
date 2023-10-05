@@ -6,7 +6,6 @@ import type {
 } from "@/config/types";
 import { getAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
-import { questionsData } from "@config/constants";
 import Button from "@learnerComponents/Button";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
@@ -103,6 +102,7 @@ function QuestionPage(props: Props) {
         }
         return question;
       });
+
     useLearnerStore.setState({
       questions: allQuestions,
       activeAttemptId: id,
@@ -122,10 +122,9 @@ function QuestionPage(props: Props) {
   //   []
   // );
 
-  const [activeQuestionId, setActiveQuestionId] = useLearnerStore((state) => [
-    state.activeQuestionId,
-    state.setActiveQuestionId,
-  ]);
+  const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
+    (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber]
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
@@ -160,8 +159,10 @@ function QuestionPage(props: Props) {
             {questionsStore.map((question, index) => (
               <QuestionContainer
                 key={index}
-                // questionNumber={index + 1}
-                className={`${index + 1 === activeQuestionId ? "" : "hidden"} `}
+                questionNumber={index + 1}
+                className={`${
+                  index + 1 === activeQuestionNumber ? "" : "hidden"
+                } `}
                 questionId={question.id}
                 // question={question}
               />
@@ -169,12 +170,11 @@ function QuestionPage(props: Props) {
 
             <div className="flex justify-between mt-4">
               <Button
-                onClick={() => setActiveQuestionId(activeQuestionId - 1)}
-                style={{
-                  opacity: activeQuestionId === 0 ? 0 : 1,
-                  cursor: activeQuestionId === 0 ? "default" : "pointer",
-                }}
-                disabled={activeQuestionId === 0}
+                onClick={() =>
+                  setActiveQuestionNumber(activeQuestionNumber - 1)
+                }
+                disabled={activeQuestionNumber === 1}
+                className="disabled:invisible"
               >
                 Previous
               </Button>
@@ -188,8 +188,11 @@ function QuestionPage(props: Props) {
                 </Button>
               ) : (
                 <Button
-                  onClick={() => setActiveQuestionId(activeQuestionId + 1)}
-                  disabled={activeQuestionId === questionsData.length - 1}
+                  onClick={() =>
+                    setActiveQuestionNumber(activeQuestionNumber + 1)
+                  }
+                  disabled={activeQuestionNumber === questions.length}
+                  className="disabled:invisible"
                 >
                   Next
                 </Button>

@@ -7,13 +7,15 @@ interface Props {}
 
 function UploadQuestion(props: Props) {
   const {} = props;
-  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+  const activeQuestionNumber = useLearnerStore(
+    (state) => state.activeQuestionNumber
+  );
 
   const [questions, setTextResponse] = useLearnerStore((state) => [
     state.questions,
     state.setTextResponse,
   ]);
-  const { question, id } = questions[activeQuestionId - 1];
+  const { question, id } = questions[activeQuestionNumber - 1];
 
   const [file, setFile] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);

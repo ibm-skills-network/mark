@@ -13,13 +13,15 @@ interface Props {}
 
 function TrueFalseQuestion(props: Props) {
   const {} = props;
-  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+  const activeQuestionNumber = useLearnerStore(
+    (state) => state.activeQuestionNumber
+  );
 
   const [questions, setTextResponse] = useLearnerStore((state) => [
     state.questions,
     state.setTextResponse,
   ]);
-  const { question, id } = questions[activeQuestionId - 1];
+  const { question, id } = questions[activeQuestionNumber - 1];
 
   const [selectedChoice, setSelectedChoice] = useState<boolean | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);

@@ -8,13 +8,13 @@ import RenderQuestion from "./RenderQuestion";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   // question: QuestionStore;
-  // questionNumber: number;
+  questionNumber: number;
   // updateStatus?: (status: QuestionStatus) => void;
   questionId: number;
 }
 
 function Component(props: Props) {
-  const { className, questionId } = props;
+  const { className, questionId, questionNumber } = props;
   // const { type, totalPoints } = question;
 
   const [activeAttemptId, questions, setQuestion] = useLearnerStore((state) => [
@@ -83,7 +83,7 @@ function Component(props: Props) {
       <div className="flex absolute -top-7 justify-between w-full">
         <div className="space-x-1">
           <span className="text-gray-600 text-xl font-medium leading-tight">
-            Question {questionId}
+            Question {questionNumber}
           </span>
           <span className="text-blue-700 text-base font-medium leading-tight">
             {question.totalPoints.toFixed(2)} Points

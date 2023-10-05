@@ -18,7 +18,6 @@ import type {
 
 // TODO: change the error message to use the error message from the backend
 
-
 /**
  * Calls the backend to see who the user is (author, learner, or admin).
  */
@@ -26,7 +25,7 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.user, {
       headers: {
-        ...(cookies ? { Cookie: cookies } : {})
+        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
     console.log("res", res);
@@ -56,7 +55,7 @@ export async function modifyAssignment(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {})
+        ...(cookies ? { Cookie: cookies } : {}),
       },
       body: JSON.stringify(data),
     });
@@ -114,7 +113,9 @@ export async function getAssignment(
  * Calls the backend to get all assignments.
  * @returns An array of assignments.
  */
-export async function getAssignments(cookies?: string): Promise<Assignment[] | undefined> {
+export async function getAssignments(
+  cookies?: string
+): Promise<Assignment[] | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments, {
       headers: {

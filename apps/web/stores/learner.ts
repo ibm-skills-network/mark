@@ -5,13 +5,13 @@ import { createWithEqualityFn } from "zustand/traditional";
 
 export type LearnerState = {
   activeAttemptId: number | null;
-  activeQuestionId: number | null;
+  activeQuestionNumber: number | null;
   questions: QuestionStore[];
 };
 
 export type LearnerActions = {
   setActiveAttemptId: (id: number) => void;
-  setActiveQuestionId: (id: number) => void;
+  setActiveQuestionNumber: (id: number) => void;
   addQuestion: (question: QuestionStore) => void;
   setQuestion: (question: QuestionStore) => void;
   setTextResponse: (learnerTextResponse: string, questionId?: number) => void;
@@ -35,8 +35,8 @@ export const useLearnerStore = createWithEqualityFn<
     (set) => ({
       activeAttemptId: null,
       setActiveAttemptId: (id) => set({ activeAttemptId: id }),
-      activeQuestionId: 1,
-      setActiveQuestionId: (id) => set({ activeQuestionId: id }),
+      activeQuestionNumber: 1,
+      setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
       assignmentDetails: null,
       questions: [],
       addQuestion: (question) =>
@@ -52,7 +52,8 @@ export const useLearnerStore = createWithEqualityFn<
       setTextResponse: (learnerTextResponse, questionId) =>
         set((state) => ({
           questions: state.questions?.map((q) => {
-            return q.id === (questionId || state.activeQuestionId)
+            return q.id ===
+              (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerTextResponse }
               : q;
           }),
@@ -60,7 +61,8 @@ export const useLearnerStore = createWithEqualityFn<
       setURLResponse: (learnerUrlResponse, questionId) =>
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === (questionId || state.activeQuestionId)
+            q.id ===
+            (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerUrlResponse }
               : q
           ),
@@ -68,7 +70,8 @@ export const useLearnerStore = createWithEqualityFn<
       setChoices: (learnerChoices, questionId) =>
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === (questionId || state.activeQuestionId)
+            q.id ===
+            (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerChoices }
               : q
           ),
@@ -76,11 +79,13 @@ export const useLearnerStore = createWithEqualityFn<
       setAnswerChoice: (learnerAnswerChoice, questionId) =>
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === (questionId || state.activeQuestionId)
+            q.id ===
+            (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerAnswerChoice }
               : q
           ),
         })),
+      // getActiveQuestionNumber:
     }),
     {
       name: "learner",

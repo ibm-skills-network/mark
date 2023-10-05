@@ -5,7 +5,9 @@ interface Props {}
 
 function TextQuestion(props: Props) {
   const {} = props;
-  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+  const activeQuestionNumber = useLearnerStore(
+    (state) => state.activeQuestionNumber
+  );
 
   const [questions, setTextResponse] = useLearnerStore((state) => [
     state.questions,
@@ -16,15 +18,15 @@ function TextQuestion(props: Props) {
   // useEffect(() => {
   //   useLearnerStore.subscribe((state) => {
   //     console.log("state.questions", state.questions);
-  //     setText(state.questions[activeQuestionId - 1]?.learnerTextResponse);
+  //     setText(state.questions[activeQuestionNumber - 1]?.learnerTextResponse);
   //   });
-  // }, [activeQuestionId]);
+  // }, [activeQuestionNumber]);
 
   // TODO: get this from the backend
   const maxWords = 1000;
   return (
     <MarkdownEditor
-      value={questions[activeQuestionId - 1]?.learnerTextResponse || ""}
+      value={questions[activeQuestionNumber - 1]?.learnerTextResponse || ""}
       // update status
       setValue={(value) => setTextResponse(value)}
       maxWords={maxWords}

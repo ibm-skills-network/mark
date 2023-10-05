@@ -7,13 +7,15 @@ interface Props {}
 
 function URLQuestion(props: Props) {
   const {} = props;
-  const activeQuestionId = useLearnerStore((state) => state.activeQuestionId);
+  const activeQuestionNumber = useLearnerStore(
+    (state) => state.activeQuestionNumber
+  );
 
   const [questions, setTextResponse] = useLearnerStore((state) => [
     state.questions,
     state.setTextResponse,
   ]);
-  const { question, id } = questions[activeQuestionId - 1];
+  const { question, id } = questions[activeQuestionNumber - 1];
   const [url, setURL] = useState<string>("");
 
   const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {

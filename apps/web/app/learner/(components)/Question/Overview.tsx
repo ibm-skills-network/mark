@@ -8,9 +8,9 @@ interface Props extends ComponentPropsWithoutRef<"div"> {}
 function Overview(props: Props) {
   const {} = props;
 
-  const [questionsStore, setActiveQuestionId] = useLearnerStore((state) => [
+  const [questionsStore, setActiveQuestionNumber] = useLearnerStore((state) => [
     state.questions,
-    state.setActiveQuestionId,
+    state.setActiveQuestionNumber,
   ]);
   const assignmentDetails = useAssignmentDetails(
     (state) => state.assignmentDetails
@@ -59,7 +59,7 @@ function Overview(props: Props) {
         {questionStatus.map((question: QuestionStatus, index) => (
           <button
             key={index}
-            onClick={() => setActiveQuestionId(index + 1)}
+            onClick={() => setActiveQuestionNumber(index + 1)}
             className={`p-2 border rounded-lg text-center cursor-pointer focus:outline-none 
               ${question === "correct" ? "bg-green-100 border-green-500" : ""}
               ${question === "incorrect" ? "bg-red-100 border-red-500" : ""}
