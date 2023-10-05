@@ -47,17 +47,16 @@ function Overview(props: Props) {
     });
   }, [questionsStore]);
   return (
-    <div className="p-4 border border-gray-300 rounded-lg space-y-4 w-64 max-w-xl bg-white">
-      <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
-
+    <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 w-64 max-w-xl bg-white">
       {allotedTimeMinutes ? (
         <Timer timeInSecs={allotedTimeMinutes * 60} assignmentId={id} />
       ) : (
-        <div className="text-gray-600 text-base font-medium leading-tight">
-          No time limit
-        </div>
+        <div className="text-gray-600 leading-tight">No time limit</div>
       )}
 
+      <hr className="border-gray-300 -mx-4" />
+
+      <h3 className="text-gray-600 leading-tight">Breakdown</h3>
       <div className="grid gap-1.5 grid-cols-5">
         {questionStatus.map((question: QuestionStatus, index) => (
           <button
