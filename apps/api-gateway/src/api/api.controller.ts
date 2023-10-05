@@ -49,6 +49,21 @@ export class ApiController {
     return response.status(apiResponse.status).send(apiResponse.data);
   }
 
+  @All("/admin/*")
+  @UseGuards(DynamicJwtBearerTokenAuthGuard)
+  @ApiOperation({ summary: "Handle API requests for the Mark Admin API" })
+  @ApiBadRequestResponse({ description: "Bad request" })
+  async handleAdminApiRequests(
+    @Req() request: UserSessionRequest,
+    @Res() response: Response
+  ) {
+    const apiResponse = await this.apiService.forwardRequestToDownstreamService(
+      DownstreamService.MARK_API,
+      request
+    );
+    return response.status(apiResponse.status).send(apiResponse.data);
+  }
+
   @All("/*")
   @UseGuards(DynamicJwtCookieAuthGuard)
   @ApiOperation({ summary: "Handle API requests for the Mark API" })
