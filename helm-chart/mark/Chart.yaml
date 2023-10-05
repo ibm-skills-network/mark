@@ -25,7 +25,7 @@ appVersion: "1.0.0"
 
 dependencies:
   - name: lti-gateway
-    version: 1.0.1
+    version: 1.0.2
     repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
   - name: sn-common
     repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
