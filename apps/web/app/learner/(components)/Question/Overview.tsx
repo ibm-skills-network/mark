@@ -1,6 +1,7 @@
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import type { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
 import { useMemo, type ComponentPropsWithoutRef } from "react";
+import { twMerge } from "tailwind-merge";
 import Timer from "./Timer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
@@ -8,10 +9,12 @@ interface Props extends ComponentPropsWithoutRef<"div"> {}
 function Overview(props: Props) {
   const {} = props;
 
-  const [questionsStore, setActiveQuestionNumber] = useLearnerStore((state) => [
-    state.questions,
-    state.setActiveQuestionNumber,
-  ]);
+  const [questionsStore, activeQuestionNumber, setActiveQuestionNumber] =
+    useLearnerStore((state) => [
+      state.questions,
+      state.activeQuestionNumber,
+      state.setActiveQuestionNumber,
+    ]);
   const assignmentDetails = useAssignmentDetails(
     (state) => state.assignmentDetails
   );
@@ -44,7 +47,7 @@ function Overview(props: Props) {
     });
   }, [questionsStore]);
   return (
-    <div className="p-4 border border-gray-300 rounded-lg space-y-4 w-full max-w-xl mx-auto bg-white">
+    <div className="p-4 border border-gray-300 rounded-lg space-y-4 w-64 max-w-xl bg-white">
       <h3 className="mb-4 text-lg font-bold text-center">Exam Overview</h3>
 
       {allotedTimeMinutes ? (
@@ -55,37 +58,27 @@ function Overview(props: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid gap-1.5 grid-cols-5">
         {questionStatus.map((question: QuestionStatus, index) => (
           <button
             key={index}
             onClick={() => setActiveQuestionNumber(index + 1)}
-            className={`p-2 border rounded-lg text-center cursor-pointer focus:outline-none 
-              ${question === "correct" ? "bg-green-100 border-green-500" : ""}
-              ${question === "incorrect" ? "bg-red-100 border-red-500" : ""}
-              ${
-                question === "partiallyCorrect"
-                  ? "bg-yellow-100 border-yellow-500"
-                  : ""
-              }
-              ${question === "edited" ? "bg-gray-100 border-gray-300" : ""}
-              ${question === "unedited" ? "bg-white-100 border-white-300" : ""}
-            `}
+            className={twMerge(
+              "p-0.5 w-10 h-14 border rounded-md text-center grid grid-rows-2 cursor-pointer focus:outline-none",
+              question === "edited" ? "bg-indigo-100" : "bg-gray-100",
+              index === activeQuestionNumber - 1
+                ? "border-blue-700 text-blue-700 bg-blue-100"
+                : "border-gray-400 text-gray-500"
+            )}
           >
-            <div className="text-sm font-medium">{index + 1}</div>
+            <div className="leading-5 font-bold my-auto">{index + 1}</div>
 
-            {question === "correct" && (
-              <div className="text-green-600 mt-1">✓</div>
-            )}
-            {question === "incorrect" && (
-              <div className="text-red-600 mt-1">✗</div>
-            )}
+            {question === "correct" && <div className="text-green-600">✓</div>}
+            {question === "incorrect" && <div className="text-red-600">✗</div>}
             {question === "partiallyCorrect" && (
-              <div className="text-orange-600 mt-1">✓✗</div>
+              <div className="text-orange-500">✓</div>
             )}
-            {question === "edited" && (
-              <div className="text-gray-600 mt-1">-</div>
-            )}
+            {/* {question === "edited" && <div className="text-gray-600">-</div>} */}
           </button>
         ))}
       </div>

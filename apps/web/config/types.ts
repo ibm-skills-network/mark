@@ -36,6 +36,7 @@ export type QuestionAttemptResponse = {
 };
 
 export type QuestionStatus =
+  | "active"
   | "correct"
   | "incorrect"
   | "partiallyCorrect"

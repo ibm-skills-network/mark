@@ -92,10 +92,10 @@ function QuestionPage(props: Props) {
             question.learnerChoices = [];
             break;
           case "TRUE_FALSE":
-            question.learnerAnswerChoice = undefined;
+            question.learnerAnswerChoice = null;
             break;
           case "UPLOAD":
-            question.learnerFileResponse = undefined;
+            question.learnerFileResponse = null;
             break;
           default:
             break;
@@ -148,14 +148,14 @@ function QuestionPage(props: Props) {
   }
 
   return (
-    <>
+    <div className="flex gap-x-5">
       {submittedSuccessfully ? (
-        <div className="col-span-4 flex items-center justify-center h-full">
+        <div className="flex items-center justify-center h-full">
           <h1>Thank you for your attempt!</h1>
         </div>
       ) : (
         <>
-          <div className="col-span-3">
+          <div className="flex-1">
             {questionsStore.map((question, index) => (
               <QuestionContainer
                 key={index}
@@ -199,7 +199,7 @@ function QuestionPage(props: Props) {
               )}
             </div>
           </div>
-          <div className="col-span-1">
+          <div className="">
             <Overview />
           </div>
 
@@ -222,7 +222,7 @@ function QuestionPage(props: Props) {
           )} */}
         </>
       )}
-    </>
+    </div>
   );
 }
 

@@ -29,7 +29,7 @@ async function LearnerLayout(props: Props) {
   const attempt = await getAttempt(assignmentId, attemptId, cookie);
   console.log("attempt", attempt);
   return (
-    <main className="p-24 grid grid-cols-4 gap-x-5">
+    <main className="p-24">
       <QuestionPage attempt={attempt} assignmentId={assignmentId} />
     </main>
   );
