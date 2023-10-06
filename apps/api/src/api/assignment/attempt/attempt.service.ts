@@ -295,6 +295,7 @@ export class AttemptService {
         id: question.id,
         totalPoints: question.totalPoints,
         numRetries: question.numRetries,
+        maxWords: question.maxWords,
         type: question.type,
         question: question.question,
         choices: question.choices ? Object.keys(question.choices) : undefined,
