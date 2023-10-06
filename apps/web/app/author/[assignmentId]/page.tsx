@@ -28,9 +28,10 @@ const AuthorIntroduction = ({
   const [instructions, setInstructions] = useState("");
   const [grading, setGrading] = useState<GradingData>({
     graded: true,
+    questionRetries: 1,
     attempts: 1,
-    passingGrade: 50,
-    timeEstimate: 50,
+    passingGrade: null,
+    timeEstimate: null,
   });
 
   const [activeAssignmentId, setActiveAssignmentId] = useAuthorStore(
@@ -52,12 +53,15 @@ const AuthorIntroduction = ({
         setAssignmentTitle(assignment.name || "Introduction");
         setIntroduction(assignment.introduction || "");
         setInstructions(assignment.instructions || "");
-        setGrading({
-          graded: assignment.graded || true,
-          attempts: assignment.numAttempts || 1,
-          passingGrade: assignment.passingGrade || 50,
-          timeEstimate: assignment.allotedTimeMinutes || 50,
-        });
+        setGrading((oldGrading) => ({
+          ...oldGrading,
+          // only change the values that are not null or undefined
+          graded: assignment.graded ?? oldGrading.graded,
+          attempts: assignment.numAttempts ?? oldGrading.attempts,
+          passingGrade: assignment.passingGrade ?? oldGrading.passingGrade,
+          timeEstimate:
+            assignment.allotedTimeMinutes ?? oldGrading.timeEstimate,
+        }));
 
         const questionsWithAddedValues = assignment.questions.map(
           (question: QuestionAuthorStore) => {
@@ -103,7 +107,9 @@ const AuthorIntroduction = ({
     }
     const modified = await modifyAssignment(assignment, activeAssignmentId);
     if (modified) {
-      router.push(`/author/${activeAssignmentId}/questions`);
+      router.push(
+        `/author/${activeAssignmentId}/questions?defaultQuestionRetries=${grading.questionRetries}`
+      );
     } else {
       setShowPage("error");
     }

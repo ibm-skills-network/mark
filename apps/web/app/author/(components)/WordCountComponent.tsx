@@ -46,35 +46,23 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
   };
 
   return (
-    <div>
-      <p>
+    <div className="flex flex-col gap-y-1">
+      <label className="font-medium leading-5">
         {mainText}
         <span className="text-gray-600">(Optional){optionalText}</span>
-      </p>
-      <div>
-        <input
-          type="number"
-          onWheel={numberInputOnWheelPreventChange}
-          className="rounded-md w-[9.17381rem] h-[3.53331rem] text-1.5xl border-gray-300"
-          placeholder={`ex. 600`}
-          value={textArea1Value}
-          onChange={handleTextArea1Change}
-          min={0}
-          max={5000}
-          step={10}
-        />
-        <input
-          type="number"
-          className="rounded-md ml-[30px] mt-[10px] mb-[30px] w-[9.17381rem] h-[3.53331rem] border-gray-300"
-          onWheel={numberInputOnWheelPreventChange}
-          placeholder={`ex. 1200`}
-          value={textArea2Value}
-          onChange={handleTextArea2Change}
-          min={1}
-          max={5000}
-          step={10}
-        />
-      </div>
+      </label>
+
+      <input
+        type="number"
+        className="rounded-md h-12 p-4 w-full border-gray-300 shadow-sm placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500"
+        onWheel={numberInputOnWheelPreventChange}
+        placeholder={`ex. 250`}
+        value={textArea2Value}
+        onChange={handleTextArea2Change}
+        min={1}
+        max={5000}
+        step={10}
+      />
     </div>
   );
 };

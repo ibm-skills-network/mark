@@ -11,10 +11,11 @@ import TextBox from "./Textbox";
 
 interface Props {
   assignmentId: number;
+  defaultQuestionRetries: number;
 }
 function DynamicTextBoxContainer(props: Props) {
-  const { assignmentId } = props;
-  const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
+  const { assignmentId, defaultQuestionRetries } = props;
+  // const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
 
   // click me button for textboxes
   // const [scrollTargets, setScrollTargets] = useState([]); // Keep track of scroll targets for each textbox
@@ -78,7 +79,7 @@ function DynamicTextBoxContainer(props: Props) {
       assignmentId: activeAssignmentId,
       question: "",
       totalPoints: 0,
-      numRetries: 2,
+      numRetries: defaultQuestionRetries || 1,
       // TODO: get the type from the dropdown
       type: "TEXT",
       alreadyInBackend: false,

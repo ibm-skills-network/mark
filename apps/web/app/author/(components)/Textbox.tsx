@@ -232,15 +232,17 @@ function TextBox(props: TextBoxProps) {
           ) : null}
         </div>
       ) : ( */}
-      <div className="flex flex-col bg-white transition border-l-8 rounded-md p-10 border-blue-700">
-        Question
-        <MarkdownEditor
-          value={question.question}
-          setValue={handleQuestionTextChange}
-          textareaClassName="!min-h-[6.5rem] !max-h-72"
-          className="bg-gray-600"
-        />
-        <div className="text-black font-inter leading-5 mr-2 h-4 mt-5">
+      <div className="flex flex-col bg-white transition border-l-8 rounded-md py-10 px-12 border-blue-700 gap-y-4">
+        <div className="flex flex-col gap-y-1">
+          Question
+          <MarkdownEditor
+            value={question.question}
+            setValue={handleQuestionTextChange}
+            textareaClassName="!min-h-[6.5rem] !max-h-72"
+            className="bg-gray-600"
+          />
+        </div>
+        {/* <div className="text-black font-inter leading-5 mr-2 h-4 mt-5">
           Question Type
         </div>
         <div className="my-5">
@@ -249,7 +251,7 @@ function TextBox(props: TextBoxProps) {
             setQuestionType={setQuestionType}
             questionTypes={questionTypes}
           />
-        </div>
+        </div> */}
         {/* {questionType === questionTypes[0] ? (
           <SingleAnswerSection
             choices={question.choices}

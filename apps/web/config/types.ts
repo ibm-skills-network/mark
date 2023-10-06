@@ -140,6 +140,7 @@ export interface GetQuestionResponse extends Question {
 
 export type GradingData = {
   graded: boolean;
+  questionRetries: number;
   timeEstimate: number;
   passingGrade: number;
   attempts: number;

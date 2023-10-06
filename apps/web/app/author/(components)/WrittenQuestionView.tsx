@@ -11,6 +11,7 @@
 //   PencilIcon,
 //   ViewListIcon,
 // } from "@heroicons/react/solid";
+import { useAuthorStore } from "@/stores/author";
 import { useState } from "react";
 import RubricTable from "../../../components/depreciated/RubricTable";
 import ExtendableRubricChart from "./ExtendableRubricChart";
@@ -43,6 +44,8 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     handleAddChoiceWrittenQuestion,
     // initialRubrics,
   } = props;
+
+  const questions = useAuthorStore((state) => state.questions);
 
   // COMMENT: here's the state and helper function we use to control the row of the rubric table
   // const [rubrics, setRubrics] = useState(initialRubrics);
@@ -83,11 +86,27 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     setParentMaxPoints(maxPoints);
   };
   props.onMaxPointsChange(parentMaxPoints);
-
+  console.log("questions", questions);
   return (
-    <div className="mt-4">
-      <WordCountComponent text="Minimum & Maximum Word Count  " />
-      <div className="bg-indigo-100 -mx-10 px-8 mt-4 flex gap-x-4 py-4">
+    <>
+      <div className="grid grid-cols-2 gap-x-16">
+        <WordCountComponent text="Maximum Word Count  " />
+        <div className="flex flex-col gap-y-1">
+          <label className="font-medium leading-5">
+            <span className="text-gray-800">Number of Retries</span>{" "}
+            {/* <span className="text-gray-500">( */}
+          </label>
+          <input
+            type="number"
+            className="border border-gray-300 rounded-md h-12 p-4 w-full placeholder-gray-400"
+            placeholder="ex. 2"
+            min={0}
+            // onChange={handleTimeEstimateChange}
+            value={questions[questionId - 1].numRetries}
+          />
+        </div>
+      </div>
+      <div className="bg-indigo-100 -mx-12 px-8 flex gap-x-4 py-4">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="65"
@@ -179,7 +198,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
         //   setRubrics={setRubrics}
         // />
       )} */}
-    </div>
+    </>
   );
 }
 export default WrittenQuestionView;

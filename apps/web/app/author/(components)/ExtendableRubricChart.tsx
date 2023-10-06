@@ -63,7 +63,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
 
   const handleAddChoiceWrittenQuestion = () => {
     addCriteria(questionId, {
-      points: 0,
+      points: criterias.slice(-1)[0].points + 1 || 0,
       description: "",
     });
   };
@@ -111,66 +111,59 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     }, 0);
   };
   return (
-    <div>
-      <div
-        className={`relative flex flex-col pl-2 mt-[30px] rounded-md p-4 mx-auto my-auto bg-white border border-transparent`}
-      >
-        <div>
-          <h1 className="text-base font-normal mt-[10px] leading-6 text-gray-900 relative">
-            List the conditions for meeting the Criteria of Question
-            <span className="absolute -top-1 left-38 text-blue-400">*</span>
-          </h1>
+    <div
+      className={`relative flex flex-col pl-2 rounded-md p-4 mx-auto bg-white border border-transparent`}
+    >
+      <div>
+        <h1 className="text-base font-normal pb-1 leading-6 text-gray-900 relative after:text-blue-400 after:content-['*']">
+          List the conditions for meeting the Criteria of Question
+        </h1>
+        <ul className="flex flex-col gap-y-4">
           {criterias.map((criteria, index) => (
-            <div key={index} className="flex items-center mt-[10px]">
+            <li key={index} className="flex items-center gap-x-2">
               {/* Add input for promptPoints */}
-              <div className="flex items-center">
-                <input
-                  type="number"
-                  className="p-2 border ml-[10px] rounded-md h-[3.256rem] w-[100px] text-gray-700 bg-transparent outline-none"
-                  placeholder={`ex. ${index}`}
-                  value={criteria.points}
-                  onChange={(event) => {
-                    if (~~event.target.value > ~~event.target.max) {
-                      event.target.value = event.target.max;
-                    }
-                    handlePromptPoints(index, event.target.value);
-                  }}
-                  min={1}
-                  max={100}
-                  style={{
-                    maxWidth: "100%",
-                    border: "1px solid #D1D5DB", // Add this line to set the border color to gray-300
-                  }}
-                  onWheel={numberInputOnWheelPreventChange}
-                />
+              <input
+                type="number"
+                className="p-2 shadow-sm border border-gray-300 rounded-md h-[3.256rem] w-[100px] text-gray-700 bg-transparent outline-none"
+                placeholder={`ex. ${index}`}
+                value={criteria.points}
+                onChange={(event) => {
+                  if (~~event.target.value > ~~event.target.max) {
+                    event.target.value = event.target.max;
+                  }
+                  handlePromptPoints(index, event.target.value);
+                }}
+                // the previous' value is the min value of this input
+                min={criterias.slice(-1)[0].points + 1 || 0}
+                max={100}
+                style={{
+                  maxWidth: "100%",
+                }}
+                onWheel={numberInputOnWheelPreventChange}
+              />
 
-                <textarea
-                  onKeyUp={(event) =>
-                    textAreaAdjust(event.target as HTMLElement)
-                  }
-                  className="p-2 rounded-md ml-[10px] text-black bg-transparent outline-none"
-                  placeholder={
-                    index === 0
-                      ? `ex. “The question is not legible” `
-                      : `ex. “The question is legible” `
-                  }
-                  value={criteria.description}
-                  onChange={(event) =>
-                    handleChoiceChangeWrittenQuestion(index, event.target.value)
-                  }
-                  style={{
-                    width: "800px",
-                    height: "3.256rem",
-                    overflow: "hidden",
-                    resize: "none",
-                    paddingRight: "8%", // Add this line
-                    border: "1px solid #D1D5DB", // Add this line to set the border color to gray-300
-                  }}
-                />
-              </div>
+              <textarea
+                onKeyUp={(event) => textAreaAdjust(event.target as HTMLElement)}
+                className="py-2 border border-gray-300 shadow-sm pl-2 pr-10 rounded-md text-black outline-none placeholder-gray-400"
+                placeholder={
+                  index === 0
+                    ? `ex. “The question is not legible” `
+                    : `ex. “The question is legible” `
+                }
+                value={criteria.description}
+                onChange={(event) =>
+                  handleChoiceChangeWrittenQuestion(index, event.target.value)
+                }
+                style={{
+                  width: "800px",
+                  height: "3.256rem",
+                  overflow: "hidden",
+                  resize: "none",
+                }}
+              />
 
               <button
-                className="ml-[-60px] text-red-600"
+                className="absolute text-red-600 right-7"
                 onClick={() => handleRemoveChoiceWrittenQuestion(index)}
               >
                 <svg
@@ -189,11 +182,10 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   />
                 </svg>
               </button>
-            </div>
+            </li>
           ))}
-
           <button
-            className="bg-gray-100 w-[70px] text-black p-2 rounded-md mt-2 flex items-center justify-center"
+            className="bg-gray-100 text-black p-2 rounded-md flex items-center justify-center"
             onClick={() => handleAddChoiceWrittenQuestion()}
           >
             {/* {Add Option} */}
@@ -213,7 +205,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
               />
             </svg>
           </button>
-        </div>
+        </ul>
       </div>
     </div>
   );
