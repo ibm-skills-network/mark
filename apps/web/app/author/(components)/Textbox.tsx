@@ -57,7 +57,6 @@ const singleAnswer = [
 
 interface TextBoxProps {
   questionId: number;
-  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
 }
 
 function TextBox(props: TextBoxProps) {
@@ -108,7 +107,6 @@ function TextBox(props: TextBoxProps) {
   const handleMaxPointsChange = (maxPoints: number) => {
     setParentMaxPoints(maxPoints);
   };
-  props.onMaxPointsChange(parentMaxPoints);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {

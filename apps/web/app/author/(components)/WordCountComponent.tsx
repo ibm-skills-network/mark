@@ -47,9 +47,9 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
 
   return (
     <div className="flex flex-col gap-y-1">
-      <label className="font-medium leading-5">
+      <label className="font-medium leading-5 text-gray-800">
         {mainText}
-        <span className="text-gray-600">(Optional){optionalText}</span>
+        <span className="text-gray-500">(Optional){optionalText}</span>
       </label>
 
       <input

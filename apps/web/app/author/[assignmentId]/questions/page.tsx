@@ -10,7 +10,7 @@ function Component(props: Props) {
   const { params, searchParams } = props;
 
   return (
-    <div className="">
+    <div className="overflow-auto">
       <DynamicTextBoxContainer
         assignmentId={~~params.assignmentId}
         defaultQuestionRetries={~~searchParams.defaultQuestionRetries}

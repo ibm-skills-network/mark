@@ -86,17 +86,13 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     setParentMaxPoints(maxPoints);
   };
   props.onMaxPointsChange(parentMaxPoints);
-  console.log("questions", questions);
   return (
     <>
       <div className="grid grid-cols-2 gap-x-16">
         <WordCountComponent text="Maximum Word Count  " />
         <div className="flex flex-col gap-y-1">
-          <label className="font-medium leading-5">
-            <span className="text-gray-800">
+          <label className="font-medium leading-5 text-gray-800">
               Number of Retries Per Submission
-            </span>{" "}
-            {/* <span className="text-gray-500">( */}
           </label>
           <input
             type="number"

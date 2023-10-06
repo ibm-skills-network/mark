@@ -87,7 +87,7 @@ function AuthorHeader(props: Props) {
   }
 
   return (
-    <header className="border-b border-gray-300 w-full px-6 py-6 bg-white justify-between gap-x-16 grid grid-cols-4">
+    <header className="fixed border-b border-gray-300 w-full px-6 py-6 bg-white justify-between gap-x-16 grid grid-cols-4 z-50">
       <div className="flex">
         <div className="flex flex-col justify-center pr-4">
           <SNIcon />
