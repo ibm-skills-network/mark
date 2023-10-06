@@ -92,14 +92,15 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
         <WordCountComponent text="Maximum Word Count  " />
         <div className="flex flex-col gap-y-1">
           <label className="font-medium leading-5 text-gray-800">
-              Number of Retries Per Submission
+            Number of Retries Per Submission
           </label>
           <input
             type="number"
             className="border border-gray-300 rounded-md h-12 p-4 w-full placeholder-gray-400"
             placeholder="ex. 2"
             min={0}
-            // onChange={handleTimeEstimateChange}
+            // TODO: add onChange
+            // onChange={
             value={questions.find((q) => q.id === questionId).numRetries}
           />
         </div>

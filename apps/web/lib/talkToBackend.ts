@@ -214,6 +214,40 @@ export async function updateQuestion(
 }
 
 /**
+ * Deletes a question for a given assignment.
+ */
+export async function deleteQuestion(
+  assignmentId: number,
+  questionId: number,
+  cookies?: string
+): Promise<boolean> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to delete question");
+    }
+    const { success, error } = (await res.json()) as BaseBackendResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+/**
  * Gets a list of attempts for a given assignment.
  * @param assignmentId The id of the assignment to get attempts for.
  * @returns An array of attempts.

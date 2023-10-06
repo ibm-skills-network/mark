@@ -58,6 +58,7 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
         onWheel={numberInputOnWheelPreventChange}
         placeholder={`ex. 250`}
         value={textArea2Value}
+        // TODO: send to backend
         onChange={handleTextArea2Change}
         min={1}
         max={5000}

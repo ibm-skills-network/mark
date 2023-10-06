@@ -3,10 +3,11 @@
 "use client";
 
 import { initialCriteria } from "@/config/constants";
-import { getAssignment } from "@/lib/talkToBackend";
+import { deleteQuestion, getAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/solid";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import TextBox from "./Textbox";
 
 interface Props {
@@ -96,14 +97,22 @@ function DynamicTextBoxContainer(props: Props) {
     // });
   };
 
-  const handleDeleteTextBox = (questionId: number) => {
-    // Remove the textbox and its scroll target
-    removeQuestion(questionId);
-
-    // setScrollTargets((prevTargets: number[]) =>
-    //   prevTargets.filter((target) => target !== questionId)
-    // );
-  };
+  async function handleDeleteTextBox(
+    questionId: number,
+    alreadyInBackend: boolean
+  ) {
+    // call the backend to delete the question if it came from the backend
+    let success = true; // by default we assume that the question is not from the backend
+    if (alreadyInBackend) {
+      success = await deleteQuestion(assignmentId, questionId);
+    }
+    if (success) {
+      removeQuestion(questionId);
+      toast.success("Question deleted!");
+    } else {
+      toast.error("Failed to delete question");
+    }
+  }
   const handleScrollToTarget = (questionId: number) => {
     if (typeof questionId !== "number") {
       throw new Error("questionId must be a string");
@@ -216,7 +225,9 @@ function DynamicTextBoxContainer(props: Props) {
               <button
                 disabled={questions.length <= 1}
                 className="sticky top-14 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => handleDeleteTextBox(question.id)}
+                onClick={() =>
+                  handleDeleteTextBox(question.id, question.alreadyInBackend)
+                }
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
