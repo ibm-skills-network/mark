@@ -134,6 +134,31 @@ app.kubernetes.io/name: {{ include "mark.lti-credentials-manager.name" . }}
 {{- end }}
 
 {{/*
+Ingress labels
+*/}}
+{{- define "mark.ingress.name" -}}
+{{- printf "%s-%s" (include "mark.fullname" .) "ingress" | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "mark.ingress.labels" -}}
+app.kubernetes.io/name: {{ include "mark.ingress.name" . }}
+{{ include "mark.selectorLabels" . }}
+{{- end }}
+
+
+{{/*
+Private ingress labels
+*/}}
+{{- define "mark.private-ingress.name" -}}
+{{- printf "%s-%s" (include "mark.fullname" .) "private-ingress" | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "mark.private-ingress.labels" -}}
+app.kubernetes.io/name: {{ include "mark.private-ingress.name" . }}
+{{ include "mark.selectorLabels" . }}
+{{- end }}
+
+{{/*
 Topology spread constraints to schedule pods across AZs
 */}}
 {{- define "mark.lti-credentials-manager.topologySpreadConstraints" -}}

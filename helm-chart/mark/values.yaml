@@ -151,4 +151,7 @@ serviceAccount:
 linkerd:
   enabled: false
 
-baseDomain: ""    
+baseDomain: ""
+
+networkPolicy:
+  enabled: true

@@ -1,0 +1,174 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# Deny all by default
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---   
+# For lti-gateway: allow all ingress and egress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lti-gateway-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}-lti-gateway
+  ingress:
+    - ports:
+      - protocol: TCP
+        port: {{ index .Values "lti-gateway" "service" "port" }}
+  egress:
+    - {} # Allow all egress traffic
+  policyTypes:
+    - Ingress
+    - Egress
+---
+
+# For api-gateway: allow ingress traffic from ingress and egress traffic to mark-api and lti-credentials-manager only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+  ingress:
+    - from:
+      - ports:
+        - protocol: TCP
+          port: {{ .Values.apiGateway.service.port }}
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api.labels" $ | nindent 12 }}
+      - podSelector:
+          matchLabels:
+            {{- include "mark.lti-credentials-manager.labels" $ | nindent 12 }}      
+  policyTypes:
+    - Ingress
+    - Egress    
+
+# For mark-ui: allow ingress traffic from ingress and egress traffic to api-gateway only
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mark-ui-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.ui.labels" $ | nindent 6 }}
+  ingress:
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.ui.service.port }}      
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+  policyTypes:
+  - Ingress
+  - Egress          
+
+# For mark-api: allow traffic from and to api-gateway only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mark-api-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.api.labels" $ | nindent 6 }}
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+      - ports:
+        - protocol: TCP
+          port: {{ .Values.api.service.port }}      
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+  policyTypes:
+  - Ingress
+  - Egress             
+
+# For lti-credentials-manager: allow traffic from api-gateway only and block all egress traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lti-credentials-manager-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.lti-credentials-manager.labels" $ | nindent 6 }}
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+      - ports:
+        - protocol: TCP
+          port: {{ .Values.ltiCredentialsManager.service.port }}         
+  egress: [] # Block all egress traffic
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Allow all pods to send DNS query
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-dns
+spec:
+  podSelector: {}
+  egress:
+    - ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+  policyTypes:
+    - Egress
+
+---
+# Allow ingress and egress to control-plane traffic
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-control-plane-traffic
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: linkerd
+      ports:
+      - port: 4143
+        protocol: TCP
+      - port: 4191
+        protocol: TCP
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: linkerd
+  policyTypes:
+    - Ingress
+    - Egress
+{{- end }}
+

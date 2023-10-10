@@ -14,9 +14,9 @@ apiVersion: extensions/v1beta1
 {{- end }}
 kind: Ingress
 metadata:
-  name: {{ $fullName }}
+  name: {{ include "mark.ingress.name" $ }}
   labels:
-    {{- include "mark.labels" . | nindent 4 }}
+    {{- include "mark.ingress.labels" $ | nindent 6 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -98,9 +98,9 @@ apiVersion: extensions/v1beta1
 {{- end }}
 kind: Ingress
 metadata:
-  name: {{ $fullName }}-private
+  name: {{ include "mark.private-ingress.name" $ }}
   labels:
-    {{- include "mark.labels" . | nindent 4 }}
+    {{- include "mark.private-ingress.labels" $ | nindent 6 }}
 spec:
 {{- if and .Values.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
   ingressClassName: {{ .Values.privateIngress.className }}
