@@ -38,7 +38,8 @@ export class UpdateAssignmentRequestDto {
   graded: boolean;
 
   @ApiProperty({
-    description: "The number of attempts made on the assignment.",
+    description:
+      "The max number of attempts allowed for this assignment. (null means unlimited attempts)",
     type: Number,
     required: false,
   })
@@ -47,7 +48,8 @@ export class UpdateAssignmentRequestDto {
   numAttempts: number | null;
 
   @ApiProperty({
-    description: "The allotted time for the assignment.",
+    description:
+      "The allotted time for the assignment. (null means unlimited time)",
     type: Number,
     required: false,
   })

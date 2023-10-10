@@ -67,11 +67,12 @@ class AssignmentAttemptQuestions {
   totalPoints: number;
 
   @ApiProperty({
-    description: "The number of retries allowed for the assignment.",
+    description:
+      "The number of retries allowed for the assignment. (null means unlimited retries)",
     type: Number,
     required: false,
   })
-  numRetries: number;
+  numRetries: number | null;
 
   @ApiProperty({
     description: "Type of the question.",
