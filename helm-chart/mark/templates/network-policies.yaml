@@ -25,7 +25,7 @@ spec:
       - protocol: TCP
         port: {{ index .Values "lti-gateway" "service" "port" }}
   egress:
-    - {} # Allow all egress traffic
+    - {} # Allow all egress traffic (lti-gateway might need to send the LTI grades back to lms like Coursera)
   policyTypes:
     - Ingress
     - Egress
