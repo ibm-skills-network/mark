@@ -76,7 +76,7 @@ model Assignment {
 model Question {
   id           Int          @id @default(autoincrement())         /// Unique identifier for the question
   totalPoints  Int                                                /// Total points that can be scored for the question
-  numRetries   Int                                                /// Max number of times a student can retry a question
+  numRetries   Int?                                               /// Max number of times a student can retry a question
   type         QuestionType                                       /// Type of question
   question     String                                             /// The text of the question
   maxWords     Int?                                               /// optional maximum number of words allowed for a written response type question
