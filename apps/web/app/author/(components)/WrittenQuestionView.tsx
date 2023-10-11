@@ -109,7 +109,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
             className="border border-gray-300 rounded-md h-12 px-4 w-full"
             name="attempts"
             onChange={handleQuestionRetryChange}
-            value={question?.numRetries}
+            value={question?.numRetries || -1}
           >
             <option value={1}>1</option>
             <option value={2}>2</option>
