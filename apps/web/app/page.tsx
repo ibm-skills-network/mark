@@ -9,10 +9,11 @@ export default async function Home() {
   const cookie = headerList.get("cookie");
   console.log("headerList", headerList);
   console.log("cookie", cookie);
-  // if (!cookie) {
-  //   // show error page
-  //   return <ErrorPage error="cookie not found" />;
-  // }
+  if (!cookie && process.env.NODE_ENV === "production") {
+    // that means the user is not logged in/cookie expired
+    // TODO: do nothing and show the marketing page
+    redirect("https://skills.network");
+  }
   const user = await getUser(cookie);
   // assignmentId is Number
   if (!(user?.assignmentId && !isNaN(user.assignmentId))) {
