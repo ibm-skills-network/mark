@@ -43,33 +43,57 @@ function DynamicTextBoxContainer(props: Props) {
   useEffect(() => {
     // check if we have the assignment details in the store
     // if not, call the backend to get the assignment details
+    console.log("assignmentId", assignmentId);
     if (assignmentId !== activeAssignmentId) {
       (async () => {
         const assignment = await getAssignment(assignmentId);
+        console.log("assignment", assignment);
         if (assignment) {
           setActiveAssignmentId(assignmentId);
           // update the state of the introduction page with the assignment details from the backend
           setAssignmentTitle(assignment.name || "Untitled Assignment");
-          setQuestions(
-            assignment.questions
-              ?.map((question) => {
-                return {
-                  ...question,
-                  alreadyInBackend: true,
-                  scoring: {
-                    // TODO: hardcoded for now but we need to find a way to add the type
-                    type: "CRITERIA_BASED",
-                    ...question.scoring,
-                  },
-                };
-              })
-              .sort((a, b) => a.id - b.id) || []
-          );
+          const questions = assignment.questions?.map((question) => {
+            return {
+              ...question,
+              alreadyInBackend: true,
+              scoring: {
+                // TODO: hardcoded for now but we need to find a way to add the type
+                type: "CRITERIA_BASED",
+                ...question.scoring,
+              },
+            };
+          });
+          if (questions?.length > 0) {
+            // if there are questions, sort them by id and set them in the store
+            const sortedQuestions = questions?.sort((a, b) => a.id - b.id);
+            setQuestions(sortedQuestions);
+          } else {
+            console.log("no questions");
+          }
         } else {
           //
+          console.log("assignment not found");
         }
       })().catch((err) => {
         console.log("err", err);
+      });
+    }
+    //  if there are no questions, add one question to the store
+    console.log("questions", questions);
+    if (questions.length === 0) {
+      console.log("adding question", questions);
+      addQuestion({
+        id: 0,
+        assignmentId: activeAssignmentId,
+        question: "",
+        totalPoints: 0,
+        numRetries: defaultQuestionRetries || 1,
+        type: "TEXT",
+        alreadyInBackend: false,
+        scoring: {
+          type: "CRITERIA_BASED",
+          criteria: initialCriteria,
+        },
       });
     }
   }, []);
@@ -193,11 +217,7 @@ function DynamicTextBoxContainer(props: Props) {
           </div>
         )}
       </div>
-
-      <p className="text-center text-gray-500 text-base leading-5 my-8">
-        Begin writing the questions for your assignment below.
-      </p>
-      <div className="mb-24 flex flex-col gap-y-20">
+      <div className="my-24 flex flex-col gap-y-20">
         {/* TODO: make this into a component */}
         {questions.map((question, index) => {
           const questionMaxPoints =

@@ -19,29 +19,11 @@ import WordCountComponent from "./WordCountComponent";
 
 interface WrittenQuestionViewProps {
   questionId: number;
-  handleScore: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  score: string;
-  switchState: string;
-  setSwitchState: React.Dispatch<React.SetStateAction<string>>;
-  choicesWrittenQuestion: string[];
-  handleChoiceChangeWrittenQuestion: (index: number, value: string) => void;
-  handleRemoveChoiceWrittenQuestion: (index: number) => void;
-  handleAddChoiceWrittenQuestion: () => void;
-  initialRubrics: any;
-  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
 }
 
 function WrittenQuestionView(props: WrittenQuestionViewProps) {
   const {
     questionId,
-    handleScore,
-    score,
-    switchState,
-    setSwitchState,
-    handleChoiceChangeWrittenQuestion,
-    choicesWrittenQuestion,
-    handleRemoveChoiceWrittenQuestion,
-    handleAddChoiceWrittenQuestion,
     // initialRubrics,
   } = props;
 
@@ -96,7 +78,6 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
   const handleMaxPointsChange = (maxPoints: number) => {
     setParentMaxPoints(maxPoints);
   };
-  props.onMaxPointsChange(parentMaxPoints);
   return (
     <>
       <div className="grid grid-cols-2 gap-x-16">

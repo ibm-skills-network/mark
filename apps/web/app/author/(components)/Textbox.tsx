@@ -270,23 +270,7 @@ function TextBox(props: TextBoxProps) {
           />
         ) : null} */}
         {questionType.value === "TEXT" ? (
-          <WrittenQuestionView
-            questionId={questionId}
-            onMaxPointsChange={handleMaxPointsChange}
-            handleScore={handleScore}
-            score={score}
-            switchState={switchState}
-            setSwitchState={setSwitchState}
-            choicesWrittenQuestion={choicesWrittenQuestion}
-            handleChoiceChangeWrittenQuestion={
-              handleChoiceChangeWrittenQuestion
-            }
-            handleRemoveChoiceWrittenQuestion={
-              handleRemoveChoiceWrittenQuestion
-            }
-            handleAddChoiceWrittenQuestion={handleAddChoiceWrittenQuestion}
-            initialRubrics={initialRubrics}
-          />
+          <WrittenQuestionView questionId={questionId} />
         ) : null}
       </div>
     </div>

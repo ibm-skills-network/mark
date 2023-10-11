@@ -46,7 +46,6 @@ const AuthorIntroduction = ({
     async function InitializeAssignment(assignmentId: number) {
       const assignment = await getAssignment(assignmentId);
       if (assignment) {
-        console.log(assignment);
         // if assignment exists, set it as the active assignment
         setActiveAssignmentId(assignmentId);
         // update the state of the introduction page with the assignment details from the backend
@@ -78,6 +77,7 @@ const AuthorIntroduction = ({
             };
           }
         );
+        console.log(questionsWithAddedValues);
         setQuestions(questionsWithAddedValues.sort((a, b) => a.id - b.id));
         setShowPage("success");
       } else {
