@@ -8,7 +8,7 @@ export default function RootLayout({
   return (
     <>
       <Header />
-      <div className="bg-blue-50 flex flex-col flex-1 pt-[7.3125rem] h-screen overflow-auto">
+      <div className="bg-blue-50 flex flex-col flex-1 pt-36 h-screen overflow-auto">
         {children}
       </div>
     </>
