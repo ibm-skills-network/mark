@@ -97,7 +97,7 @@ spec:
             name: apps-postgres
         podSelector:
           matchLabels:
-            name: apps-postgres-pgbouncer              
+            app.kubernetes.io/name: apps-postgres-pgbouncer              
   policyTypes:
   - Ingress
   - Egress             
