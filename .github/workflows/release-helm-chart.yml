@@ -48,7 +48,7 @@ jobs:
           helm lint
 
   release:
-    
+    if: github.event_name == 'push' # This ensures release only runs on push events, not on pull_request events
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
