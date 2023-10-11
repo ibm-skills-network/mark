@@ -12,7 +12,7 @@ spec:
   ingress:
     - ports:
       - protocol: TCP
-        port: {{ index .Values "lti-gateway" "service" "port" }}
+        port: {{ index .Values "lti-gateway" "containerPort" }}
   egress:
     - {} # Allow all egress traffic (lti-gateway might need to send the LTI grades back to lms like Coursera)
   policyTypes:
@@ -32,7 +32,7 @@ spec:
   ingress:
     - ports:
       - protocol: TCP
-        port: {{ .Values.apiGateway.service.port }}
+        port: {{ .Values.apiGateway.containerPort }}
   egress:
     - to:
       - podSelector:
@@ -58,7 +58,7 @@ spec:
   ingress:
     - ports:
       - protocol: TCP
-        port: {{ .Values.ui.service.port }}      
+        port: {{ .Values.ui.containerPort }}      
   egress:
     - to:
       - podSelector:
@@ -84,7 +84,7 @@ spec:
             {{- include "mark.api-gateway.labels" $ | nindent 12 }}
       - ports:
         - protocol: TCP
-          port: {{ .Values.api.service.port }}      
+          port: {{ .Values.api.containerPort }}      
   egress:
     - to:
       - podSelector:
@@ -110,7 +110,7 @@ spec:
             {{- include "mark.api-gateway.labels" $ | nindent 12 }}
     - ports:
       - protocol: TCP
-        port: {{ .Values.ltiCredentialsManager.service.port }}         
+        port: {{ .Values.ltiCredentialsManager.containerPort }}         
   egress: [] # Block all egress traffic
   policyTypes:
   - Ingress
