@@ -1,15 +1,4 @@
 {{- if .Values.networkPolicy.enabled }}
----
-# Deny all by default
-kind: NetworkPolicy
-apiVersion: networking.k8s.io/v1
-metadata:
-  name: default-deny-all
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
 ---   
 # For lti-gateway: allow all ingress and egress traffic
 apiVersion: networking.k8s.io/v1
@@ -41,10 +30,9 @@ spec:
     matchLabels:
       {{- include "mark.api-gateway.labels" $ | nindent 12 }}
   ingress:
-    - from:
-      - ports:
-        - protocol: TCP
-          port: {{ .Values.apiGateway.service.port }}
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.apiGateway.service.port }}
   egress:
     - to:
       - podSelector:
@@ -120,14 +108,14 @@ spec:
       - podSelector:
           matchLabels:
             {{- include "mark.api-gateway.labels" $ | nindent 12 }}
-      - ports:
-        - protocol: TCP
-          port: {{ .Values.ltiCredentialsManager.service.port }}         
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.ltiCredentialsManager.service.port }}         
   egress: [] # Block all egress traffic
   policyTypes:
   - Ingress
   - Egress
----
+---    
 # Allow all pods to send DNS query
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -143,7 +131,6 @@ spec:
         port: 53
   policyTypes:
     - Egress
-
 ---
 # Allow ingress and egress to control-plane traffic
 kind: NetworkPolicy
@@ -170,5 +157,16 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+---
+# Deny all by default
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress    
 {{- end }}
 
