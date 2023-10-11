@@ -36,6 +36,9 @@ function AuthorHeader(props: Props) {
         // conclude the total points of the question by taking the last element of the criteria array
         dataToSend.totalPoints =
           dataToSend.scoring?.criteria?.slice(-1)[0].points || 0;
+        // if numRetries is -1 (unlimited), set it to null
+        const unlimitedRetries = dataToSend.numRetries === -1;
+        dataToSend.numRetries = unlimitedRetries ? null : dataToSend.numRetries;
         if (alreadyInBackend) {
           // update question if it's already in the backend
           // TODO: this can be optimized by only sending the data that has changed

@@ -45,7 +45,18 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     // initialRubrics,
   } = props;
 
-  const questions = useAuthorStore((state) => state.questions);
+  const [questions, modifyQuestion] = useAuthorStore((state) => [
+    state.questions,
+    state.modifyQuestion,
+  ]);
+
+  const question = questions.find((question) => question.id === questionId);
+
+  function handleQuestionRetryChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    modifyQuestion(questionId, {
+      numRetries: ~~e.target.value,
+    });
+  }
 
   // COMMENT: here's the state and helper function we use to control the row of the rubric table
   // const [rubrics, setRubrics] = useState(initialRubrics);
@@ -94,15 +105,19 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
           <label className="font-medium leading-5 text-gray-800">
             Number of Retries Per Submission
           </label>
-          <input
-            type="number"
-            className="border border-gray-300 rounded-md h-12 p-4 w-full placeholder-gray-400"
-            placeholder="ex. 2"
-            min={0}
-            // TODO: add onChange
-            // onChange={
-            value={questions.find((q) => q.id === questionId).numRetries}
-          />
+          <select
+            className="border border-gray-300 rounded-md h-12 px-4 w-full"
+            name="attempts"
+            onChange={handleQuestionRetryChange}
+            value={question?.numRetries}
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+            <option value={4}>4</option>
+            <option value={5}>5</option>
+            <option value={-1}>unlimited</option>
+          </select>
         </div>
       </div>
       <div className="bg-indigo-100 -mx-12 px-8 flex gap-x-4 py-4">

@@ -103,6 +103,7 @@ function GradingOptionsForm(props: Props) {
           className="border border-gray-300 rounded-md h-12 p-4 w-full"
           placeholder="ex. 60"
           min={0}
+          step={5}
           onChange={handleTimeEstimateChange}
           value={timeEstimate}
         />
@@ -137,6 +138,7 @@ function GradingOptionsForm(props: Props) {
           className="border border-gray-300 rounded-md h-12 p-4 w-full"
           placeholder="ex. 50"
           min={0}
+          step={5}
           onChange={handlePassingGradeChange}
           value={passingGrade}
         />
@@ -160,6 +162,7 @@ function GradingOptionsForm(props: Props) {
           <option value={3}>3</option>
           <option value={4}>4</option>
           <option value={5}>5</option>
+          <option value={-1}>unlimited</option>
         </select>
       </div>
     </div>

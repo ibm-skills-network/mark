@@ -30,8 +30,8 @@ const AuthorIntroduction = ({
     graded: true,
     questionRetries: 1,
     attempts: 1,
-    passingGrade: null,
-    timeEstimate: null,
+    passingGrade: 60,
+    timeEstimate: 30,
   });
 
   const [activeAssignmentId, setActiveAssignmentId] = useAuthorStore(
