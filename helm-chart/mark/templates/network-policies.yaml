@@ -8,7 +8,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: {{ .Release.Name }}-lti-gateway
+      app.kubernetes.io/name: lti-gateway
   ingress:
     - ports:
       - protocol: TCP
@@ -44,13 +44,13 @@ spec:
   policyTypes:
     - Ingress
     - Egress    
+---    
 
 # For mark-ui: allow ingress traffic from ingress and egress traffic to api-gateway only
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: mark-ui-policy
+  name: ui-policy
 spec:
   podSelector:
     matchLabels:
@@ -67,12 +67,13 @@ spec:
   policyTypes:
   - Ingress
   - Egress          
+---
 
-# For mark-api: allow ingress traffic from api-gateway only and allow egress traffic to lti-gateway only.
+# For mark-api: allow ingress traffic from api-gateway only and allow egress traffic to lti-gateway and to port 5432 (for postgres db).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: mark-api-policy
+  name: api-policy
 spec:
   podSelector:
     matchLabels:
@@ -82,17 +83,25 @@ spec:
       - podSelector:
           matchLabels:
             {{- include "mark.api-gateway.labels" $ | nindent 12 }}
-      - ports:
-        - protocol: TCP
-          port: {{ .Values.api.containerPort }}      
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.api.containerPort }}      
   egress:
     - to:
       - podSelector:
           matchLabels:
-            app: {{ .Release.Name }}-lti-gateway
+            app.kubernetes.io/name: lti-gateway
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            name: apps-postgres-pgbouncer              
   policyTypes:
   - Ingress
   - Egress             
+---
 
 # For lti-credentials-manager: allow traffic from api-gateway only and block all egress traffic.
 apiVersion: networking.k8s.io/v1
@@ -111,11 +120,19 @@ spec:
     - ports:
       - protocol: TCP
         port: {{ .Values.ltiCredentialsManager.containerPort }}         
-  egress: [] # Block all egress traffic
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apps-postgres-pgbouncer 
   policyTypes:
   - Ingress
   - Egress
 ---    
+
 # Allow all pods to send DNS query
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -132,6 +149,7 @@ spec:
   policyTypes:
     - Egress
 ---
+
 # Allow ingress and egress to control-plane traffic
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
@@ -158,6 +176,7 @@ spec:
     - Ingress
     - Egress
 ---
+
 # Deny all by default
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
