@@ -13,9 +13,9 @@
 // } from "@heroicons/react/solid";
 import { useAuthorStore } from "@/stores/author";
 import { useState } from "react";
-import RubricTable from "../../../components/depreciated/RubricTable";
-import ExtendableRubricChart from "./ExtendableRubricChart";
-import WordCountComponent from "./WordCountComponent";
+import RubricTable from "../../../../components/depreciated/RubricTable";
+import ExtendableRubricChart from "../ExtendableRubricChart";
+import WordCountComponent from "../WordCountComponent";
 
 interface WrittenQuestionViewProps {
   questionId: number;

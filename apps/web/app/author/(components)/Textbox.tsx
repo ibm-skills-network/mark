@@ -1,15 +1,12 @@
 "use client";
 
-import type {
-  Choice,
-  QuestionType,
-  QuestionTypeDropdown,
-} from "@/config/types";
+import Dropdown from "@/components/Dropdown";
+import type { QuestionType, QuestionTypeDropdown } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
-import Dropdown from "@authorComponents/Dropdown";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { useEffect, useRef, useState } from "react";
-import WrittenQuestionView from "./WrittenQuestionView";
+import MultipleAnswerSection from "./QuestionTypes/MultipleAnswerSection";
+import WrittenQuestionView from "./QuestionTypes/WrittenQuestionView";
 
 const questionTypes = [
   {
@@ -42,14 +39,6 @@ function TextBox(props: TextBoxProps) {
   const [isLearnerView, setIsLearnerView] = useState(false);
   const [displayText, setDisplayText] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedChoiceSingleCorrect, setSelectedChoiceSingleCorrect] =
-    useState<string | null>(null);
-  const [choicesMultipleAnswers, setChoicesMultipleAnswers] = useState<
-    Choice[]
-  >([]);
-  const [selectedChoicesMultipleAnswers, setSelectedChoicesMultipleAnswers] =
-    useState<string[]>([]);
-  const [writtenQuestionText, setWrittenQuestionText] = useState("");
   const [
     questions,
     setQuestions,
@@ -213,27 +202,23 @@ function TextBox(props: TextBoxProps) {
             questionTypes={questionTypes}
           />
         </div>
-        {/* {questionType === questionTypes[0] ? (
-          <SingleAnswerSection
-            choices={question.choices}
-            selectedChoiceSingleCorrect={selectedChoiceSingleCorrect}
-            handleChoiceToggleSingleCorrect={handleChoiceToggleSingleCorrect}
-            handleChoiceChangeSingleCorrect={handleChoiceChangeSingleCorrect}
-            setChoicesSingleCorrect={setChoicesSingleCorrect}
-          />
-        ) : null}
-        {questionType === questionTypes[1] ? (
-          <MultipleAnswerSection
-            choices={question.choices}
-            selectedChoices={selectedChoicesMultipleAnswers}
-            setChoices={setChoicesMultipleAnswers}
-            handleChoiceToggle={handleChoiceToggleMultipleAnswers}
-            handleChoiceChange={handleChoiceChangeMultipleAnswers}
-            setSelectedChoices={setSelectedChoicesMultipleAnswers}
-          />
-        ) : null} */}
-        {question.type === "TEXT" || question.type === "URL" ? (
+        {question.type === questionTypes[0].value ||
+        question.type === questionTypes[1].value ? (
           <WrittenQuestionView questionId={questionId} />
+        ) : null}
+
+        {/* {questionType === questionTypes[0] ? (
+            <SingleAnswerSection
+              choices={question.choices}
+              selectedChoiceSingleCorrect={selectedChoiceSingleCorrect}
+              handleChoiceToggleSingleCorrect={handleChoiceToggleSingleCorrect}
+              handleChoiceChangeSingleCorrect={handleChoiceChangeSingleCorrect}
+              setChoicesSingleCorrect={setChoicesSingleCorrect}
+            />
+          ) : null} */}
+
+        {question.type === questionTypes[3].value ? (
+          <MultipleAnswerSection questionId={questionId} />
         ) : null}
       </div>
     </div>

@@ -77,10 +77,11 @@ type Feedback = {
 /**
  * used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
  */
-export type Choice = {
-  // key value pair
+export type Choices = {
+  // key value pair of a string and a boolean
   [option: string]: boolean;
 };
+
 type QuestionResponse = {
   id: number;
   assignmentAttemptId: number;
@@ -95,7 +96,7 @@ export interface BaseQuestion {
   totalPoints: number;
   numRetries: number;
   question: string;
-  choices?: Choice[];
+  choices?: Choices;
   questionResponses?: QuestionResponse[];
 }
 
@@ -143,7 +144,7 @@ export type GradingData = {
   questionRetries: number;
   timeEstimate: number;
   passingGrade: number;
-  attempts: number;
+  numAttempts?: number;
 };
 
 export type ModifyAssignmentRequest = {

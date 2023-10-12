@@ -9,7 +9,7 @@ interface Props extends React.ComponentPropsWithoutRef<"div"> {
 function GradingOptionsForm(props: Props) {
   const { value, setValue } = props;
 
-  const { graded, attempts, passingGrade, timeEstimate } = value;
+  const { graded, numAttempts, passingGrade, timeEstimate } = value;
 
   function handleGradedChange(e: React.ChangeEvent<HTMLInputElement>) {
     // e.preventDefault();
@@ -117,7 +117,7 @@ function GradingOptionsForm(props: Props) {
           name="attempts"
           id="attempts"
           onChange={handleAttemptChange}
-          value={attempts}
+          value={numAttempts || -1}
         >
           <option value={1}>1</option>
           <option value={2}>2</option>
@@ -155,7 +155,7 @@ function GradingOptionsForm(props: Props) {
           name="attempts"
           id="attempts"
           onChange={handleQuestionRetryChange}
-          value={value.questionRetries}
+          value={value.questionRetries || -1}
         >
           <option value={1}>1</option>
           <option value={2}>2</option>

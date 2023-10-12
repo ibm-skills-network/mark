@@ -2,7 +2,11 @@
 
 import ErrorPage from "@/components/ErrorPage";
 import Title from "@/components/Title";
-import { GradingData, QuestionAuthorStore } from "@/config/types";
+import {
+  GradingData,
+  ModifyAssignmentRequest,
+  QuestionAuthorStore,
+} from "@/config/types";
 import { getAssignment, modifyAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { IntroductionSection } from "@authorComponents/IntroductionSection";
@@ -29,7 +33,7 @@ const AuthorIntroduction = ({
   const [grading, setGrading] = useState<GradingData>({
     graded: true,
     questionRetries: 1,
-    attempts: 1,
+    numAttempts: -1,
     passingGrade: 60,
     timeEstimate: 30,
   });
@@ -56,7 +60,7 @@ const AuthorIntroduction = ({
           ...oldGrading,
           // only change the values that are not null or undefined
           graded: assignment.graded ?? oldGrading.graded,
-          attempts: assignment.numAttempts ?? oldGrading.attempts,
+          numAttempts: assignment.numAttempts ?? oldGrading.numAttempts,
           passingGrade: assignment.passingGrade ?? oldGrading.passingGrade,
           timeEstimate:
             assignment.allotedTimeMinutes ?? oldGrading.timeEstimate,
@@ -94,7 +98,7 @@ const AuthorIntroduction = ({
    * and redirects to the questions page
    * */
   async function updateAssignment() {
-    const assignment = {
+    const assignment: ModifyAssignmentRequest = {
       allotedTimeMinutes: grading.timeEstimate,
       instructions: instructions,
       introduction: introduction,
@@ -102,9 +106,8 @@ const AuthorIntroduction = ({
       passingGrade: grading.passingGrade,
     };
     // if attempts is -1, it means unlimited attempts, so we don't send that to the backend(default is unlimited)
-    if (grading.attempts !== -1) {
-      assignment["numAttempts"] = grading.attempts;
-    }
+    const unlimitedAttempts = grading.numAttempts === -1;
+    assignment.numAttempts = unlimitedAttempts ? null : grading.numAttempts;
     const modified = await modifyAssignment(assignment, activeAssignmentId);
     if (modified) {
       router.push(

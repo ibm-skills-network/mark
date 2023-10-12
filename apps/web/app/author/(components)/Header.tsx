@@ -46,6 +46,7 @@ function AuthorHeader(props: Props) {
         // if numRetries is -1 (unlimited), set it to null
         const unlimitedRetries = dataToSend.numRetries === -1;
         dataToSend.numRetries = unlimitedRetries ? null : dataToSend.numRetries;
+        console.log("dataToSend", dataToSend.numRetries);
         if (alreadyInBackend) {
           // update question if it's already in the backend
           // TODO: this can be optimized by only sending the data that has changed
@@ -178,7 +179,7 @@ function AuthorHeader(props: Props) {
           </button>
         </div>
       </header>
-      {/* breakdown */}
+      {/* table of contents */}
       <div className="w-full">
         <div className="flex gap-4 my-0 justify-end bg-white border-b border-gray-300">
           <button
@@ -203,7 +204,7 @@ function AuthorHeader(props: Props) {
                 fill="black"
               />
             </svg>
-            Breakdown
+            Questions
             <svg
               className="-mr-1 h-5 w-5 text-blue-700 group-hover:translate-y-0.5 transition-transform ease-in-out"
               viewBox="0 0 20 20"

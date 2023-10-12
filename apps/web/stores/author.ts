@@ -1,4 +1,4 @@
-import type { Criteria, QuestionAuthorStore } from "@/config/types";
+import type { Choices, Criteria, QuestionAuthorStore } from "@/config/types";
 import { createRef, type RefObject } from "react";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
@@ -24,6 +24,15 @@ export type AuthorActions = {
   setCriterias: (questionId: number, criterias: Criteria[]) => Criteria[];
   addCriteria: (questionId: number, criteria: Criteria) => void;
   removeCriteria: (questionId: number, criteriaIndex: number) => void;
+  setChoices: (questionId: number, choices: Choices) => void;
+  addChoice: (questionId: number, choice: string) => void;
+  removeChoice: (questionId: number, choice: string) => void;
+  toggleChoice: (questionId: number, choice: string) => void;
+  modifyChoice: (
+    questionId: number,
+    choiceIndex: number,
+    modifiedData: string
+  ) => void;
 };
 
 export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
@@ -99,6 +108,89 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
                 ),
               },
             };
+          }
+          return q;
+        }),
+      }));
+    },
+    setChoices: (questionId, choices) => {
+      set((state) => ({
+        questions: state.questions.map((q) => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              choices,
+            };
+          }
+          return q;
+        }),
+      }));
+    },
+    addChoice: (questionId, choice) => {
+      set((state) => ({
+        questions: state.questions.map((q) => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              choices: {
+                ...q.choices,
+                [choice]: false,
+              },
+            };
+          }
+          return q;
+        }),
+      }));
+    },
+    removeChoice: (questionId, choice) => {
+      set((state) => ({
+        questions: state.questions.map((q) => {
+          if (q.id === questionId) {
+            const { [choice]: _, ...choices } = q.choices;
+            return {
+              ...q,
+              choices,
+            };
+          }
+          return q;
+        }),
+      }));
+    },
+    toggleChoice: (questionId, choice) => {
+      set((state) => ({
+        questions: state.questions.map((q) => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              choices: {
+                ...q.choices,
+                [choice]: !q.choices[choice],
+              },
+            };
+          }
+          return q;
+        }),
+      }));
+    },
+    modifyChoice: (questionId, choiceIndex, modifiedData) => {
+      set((state) => ({
+        questions: state.questions.map((q) => {
+          if (q.id === questionId) {
+            const choices = Object.entries(q.choices);
+            choices.map(([choice, isCorrect], index) => {
+              if (index === choiceIndex) {
+                const { [choice]: _, ...choices } = q.choices;
+                console.log(choices);
+                console.log(modifiedData);
+                return {
+                  ...q,
+                  choices: {
+                    ...choices,
+                    [modifiedData]: isCorrect,
+                  },
+                };
+              }
+            });
           }
           return q;
         }),

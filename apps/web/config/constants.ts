@@ -58,12 +58,7 @@ export const questionsData: Question[] = [
     totalPoints: 5,
     numRetries: 2,
     question: "Choose the correct option. What is 5 + 5?",
-    choices: [
-      { "10": true },
-      { "15": false },
-      { "-10": false },
-      { "-15": false },
-    ],
+    choices: { "10": true, "15": false, "-10": false, "-15": false },
   },
   {
     id: 3,
@@ -72,12 +67,13 @@ export const questionsData: Question[] = [
     numRetries: 2,
     totalPoints: 5,
     question: "Which of the following is NOT a programming language?",
-    choices: [
-      { Python: true },
-      { Java: true },
-      { HTML: false },
-      { "C++": true },
-    ],
+    choices: {
+      Java: false,
+      Python: false,
+      "C++": false,
+      "C#": false,
+      "C-": true,
+    },
   },
   {
     id: 4,
@@ -111,12 +107,13 @@ export const questionsData: Question[] = [
     totalPoints: 5,
     numRetries: 2,
     question: "Which one is not an OOP principle?",
-    choices: [
-      { Encapsulation: false },
-      { Inheritance: false },
-      { Multithreading: true },
-      { Polymorphism: false },
-    ],
+    choices: {
+      Encapsulation: false,
+      Inheritance: false,
+      Abstraction: false,
+      Polymorphism: false,
+      Composition: true,
+    },
   },
   {
     id: 8,
@@ -125,12 +122,13 @@ export const questionsData: Question[] = [
     numRetries: 2,
     totalPoints: 5,
     question: "Select all relational database systems:",
-    choices: [
-      { MySQL: true },
-      { Oracle: true },
-      { Photoshop: false },
-      { PostgreSQL: true },
-    ],
+    choices: {
+      MySQL: false,
+      MongoDB: false,
+      PostgreSQL: false,
+      SQLite: false,
+      Oracle: true,
+    },
   },
   {
     id: 10,
