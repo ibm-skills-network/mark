@@ -20,7 +20,7 @@ spec:
     - Egress
 ---
 
-# For api-gateway: allow ingress traffic from ingress and egress traffic to mark-api and lti-credentials-manager only
+# For mark-api-gateway: allow ingress traffic from ingress and egress traffic to mark-api and lti-credentials-manager only
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -97,13 +97,16 @@ spec:
             name: apps-postgres
         podSelector:
           matchLabels:
-            app.kubernetes.io/name: apps-postgres-pgbouncer              
+            app.kubernetes.io/name: apps-postgres-pgbouncer
+    - ports: # Permit outbound traffic on port 443, enabling the application to initiate API requests to external services like OpenAI.
+      - protocol: TCP
+        port: 443                      
   policyTypes:
   - Ingress
   - Egress             
 ---
 
-# For lti-credentials-manager: allow traffic from api-gateway only and block all egress traffic.
+# For mark-lti-credentials-manager: allow traffic from api-gateway only and block all egress traffic.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
