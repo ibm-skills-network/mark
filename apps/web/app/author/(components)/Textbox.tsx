@@ -1,60 +1,38 @@
 "use client";
 
-import type { Choice, Question, QuestionTypeDropdown } from "@/config/types";
+import type {
+  Choice,
+  QuestionType,
+  QuestionTypeDropdown,
+} from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import Dropdown from "@authorComponents/Dropdown";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { useEffect, useRef, useState } from "react";
 import WrittenQuestionView from "./WrittenQuestionView";
 
-//////////////////Answer Type////////////////////////////////////////
 const questionTypes = [
-  // {
-  //   label: "Single Answer",
-  //   description: "This multiple choice should have exactly one answer.",
-  //   value: "SINGLE_CORRECT"
-  // },
-  // {
-  //   label: "Multiple Answer",
-  //   description: "This multiple choice can have zero or more than one answer",
-  //   value: "MULTIPLE_CORRECT"
-  // },
   {
     label: "Text",
     description: "This question has a written answer",
     value: "TEXT",
   },
+  {
+    label: "Url",
+    description: "This question has a written answer",
+    value: "URL",
+  },
+  {
+    label: "Single Answer",
+    description: "This multiple choice should have exactly one answer.",
+    value: "SINGLE_CORRECT",
+  },
+  {
+    label: "Multiple Answer",
+    description: "This multiple choice can have zero or more than one answer",
+    value: "MULTIPLE_CORRECT",
+  },
 ] as QuestionTypeDropdown[];
-function classNames(...classes) {
-  return classes.filter(Boolean).join(" ");
-}
-
-const initialRubrics = [
-  {
-    criteria: "",
-    judgement: "",
-    rate: "",
-    weight: "",
-  },
-  // More rubrics ...
-];
-
-//////////////////////////Single Multiple Choice Type////////////////////////////////////////////
-const singleAnswer = [
-  {
-    name: "Public access",
-    description: "This project would be available to anyone who has the link",
-  },
-  {
-    name: "Private to Project Members",
-    description: "Only members of this project would be able to access",
-  },
-  {
-    name: "Private to you",
-    description: "You are the only one able to access this project",
-  },
-];
-
 interface TextBoxProps {
   questionId: number;
 }
@@ -94,19 +72,6 @@ function TextBox(props: TextBoxProps) {
   const [choicesWrittenQuestion, setChoicesWrittenQuestion] = useState<
     string[]
   >([]);
-  const [score, setScore] = useState("");
-  const [switchState, setSwitchState] = useState("a");
-  const [questionType, setQuestionType] = useState<QuestionTypeDropdown>(
-    questionTypes[0]
-  ); // use this the change the state of the answer type (single multiple written)
-
-  // this is used to pass maxpoints from written question view to text box
-  const [parentMaxPoints, setParentMaxPoints] = useState<number | null>(null);
-
-  // Define a function to receive the maxPoints value from the child component
-  const handleMaxPointsChange = (maxPoints: number) => {
-    setParentMaxPoints(maxPoints);
-  };
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -127,6 +92,12 @@ function TextBox(props: TextBoxProps) {
       question: value,
     });
   };
+  function setQuestionType(questionType: QuestionType) {
+    modifyQuestion(questionId, {
+      type: questionType,
+    });
+  }
+  console.log(question.type);
 
   // const handleDisplayText = () => {
   //   setDisplayText(inputText);
@@ -196,12 +167,6 @@ function TextBox(props: TextBoxProps) {
     const updatedChoices = choicesWrittenQuestion.filter((_, i) => i !== index);
     setChoicesWrittenQuestion(updatedChoices);
   };
-
-  const handleScore = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newScore = event.target.value;
-    setScore(newScore);
-  };
-
   return (
     <div className={`relative flex flex-col flex-1 max-w-6xl rounded-md`}>
       {/* Toggle view button */}
@@ -231,7 +196,7 @@ function TextBox(props: TextBoxProps) {
         </div>
       ) : ( */}
       <div className="flex flex-col bg-white transition border-l-8 rounded-md py-10 px-12 border-blue-700 gap-y-4">
-        <div className="flex flex-col gap-y-1">
+        <div className="flex flex-col gap-y-2">
           Question
           <MarkdownEditor
             value={question.question}
@@ -240,16 +205,14 @@ function TextBox(props: TextBoxProps) {
             className="bg-gray-600"
           />
         </div>
-        {/* <div className="text-black font-inter leading-5 mr-2 h-4 mt-5">
-          Question Type
-        </div>
-        <div className="my-5">
+        <div className="flex flex-col gap-y-1">
+          <p className="text-black font-inter leading-5">Question Type</p>
           <Dropdown
-            questionType={questionType}
+            questionType={question.type}
             setQuestionType={setQuestionType}
             questionTypes={questionTypes}
           />
-        </div> */}
+        </div>
         {/* {questionType === questionTypes[0] ? (
           <SingleAnswerSection
             choices={question.choices}
@@ -269,7 +232,7 @@ function TextBox(props: TextBoxProps) {
             setSelectedChoices={setSelectedChoicesMultipleAnswers}
           />
         ) : null} */}
-        {questionType.value === "TEXT" ? (
+        {question.type === "TEXT" || question.type === "URL" ? (
           <WrittenQuestionView questionId={questionId} />
         ) : null}
       </div>
