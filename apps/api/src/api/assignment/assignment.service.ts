@@ -72,7 +72,10 @@ export class AssignmentService {
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
-      data: replaceAssignmentDto,
+      data: {
+        ...this.createEmptyDto(),
+        ...replaceAssignmentDto,
+      },
     });
 
     return {
@@ -93,6 +96,18 @@ export class AssignmentService {
     return {
       id: result.id,
       success: true,
+    };
+  }
+
+  private createEmptyDto(): Partial<ReplaceAssignmentRequestDto> {
+    /* eslint-disable unicorn/no-null */
+    return {
+      instructions: null,
+      numAttempts: null,
+      allotedTimeMinutes: null,
+      attemptsPerTimeRange: null,
+      attemptsTimeRangeHours: null,
+      displayOrder: null,
     };
   }
 }

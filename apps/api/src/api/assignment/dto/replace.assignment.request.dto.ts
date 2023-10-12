@@ -27,7 +27,7 @@ export class ReplaceAssignmentRequestDto {
   })
   @IsOptional()
   @IsString()
-  instructions: string;
+  instructions: string | null;
 
   @ApiProperty({
     description: "Is the assignment graded or not.",
@@ -92,5 +92,5 @@ export class ReplaceAssignmentRequestDto {
   })
   @IsOptional()
   @IsEnum(AssignmentQuestionDisplayOrder)
-  displayOrder: AssignmentQuestionDisplayOrder;
+  displayOrder: AssignmentQuestionDisplayOrder | null;
 }
