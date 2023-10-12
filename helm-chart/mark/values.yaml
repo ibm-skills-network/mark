@@ -113,6 +113,7 @@ ltiCredentialsManager:
   affinity: {}
   accessKey: ""
   secretKey: ""
+  secretKeyBase: ""
   env:
     DB_NAME: "mark-lti"
     MALLOC_ARENA_MAX: "2"
