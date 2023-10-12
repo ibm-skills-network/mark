@@ -8,8 +8,8 @@ export function absoluteUrl(path: string) {
 
 const getBaseUrl = () => {
   if (typeof window !== "undefined") return ""; // browser should use relative url
-  if (process.env.NODE_ENV === "production")
-    return `https://mark.staging.skills.network`; // SSR should use production url
+  if (process.env.NODE_ENV === "production") //if next server wants to get the base url
+    return `http://mark-api-gateway`; // SSR should use production url
   return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
 };
 
