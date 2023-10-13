@@ -1,9 +1,11 @@
+import Loading from "@components/Loading";
+
 interface Props {}
 
-function Loading(props: Props) {
+function LoadingPage(props: Props) {
   const {} = props;
 
-  return <div className="">Loading...</div>;
+  return <Loading />;
 }
 
-export default Loading;
+export default LoadingPage;

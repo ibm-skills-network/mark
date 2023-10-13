@@ -1,6 +1,7 @@
 "use client";
 
 import ErrorPage from "@/components/ErrorPage";
+import Loading from "@/components/Loading";
 import Title from "@/components/Title";
 import {
   GradingData,
@@ -121,7 +122,7 @@ const AuthorIntroduction = ({
   if (showPage === "error") {
     return <ErrorPage error="Assignment error" />;
   } else if (showPage === "loading") {
-    return <div>Loading...</div>;
+    return <Loading />;
   }
 
   return (

@@ -1,5 +1,6 @@
 "use client";
 
+import Loading from "@/components/Loading";
 import type {
   AssignmentAttemptWithQuestions,
   QuestionStore,
@@ -134,11 +135,7 @@ function QuestionPage(props: Props) {
   const isLastQuestion = false;
 
   if (pageState === "loading") {
-    return (
-      <div className="col-span-4 flex items-center justify-center h-full">
-        <h1>Loading...</h1>
-      </div>
-    );
+    return <Loading />;
   } else if (pageState === "no-questions") {
     return (
       <div className="col-span-4 flex items-center justify-center h-full">
