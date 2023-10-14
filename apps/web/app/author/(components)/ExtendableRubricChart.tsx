@@ -176,9 +176,9 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
                   <path
                     d="M6 18.5L18 6.5M6 6.5L18 18.5"
                     stroke="#FCA5A5"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                 </svg>
               </button>

@@ -25,7 +25,7 @@ export type AuthorActions = {
   addCriteria: (questionId: number, criteria: Criteria) => void;
   removeCriteria: (questionId: number, criteriaIndex: number) => void;
   setChoices: (questionId: number, choices: Choices) => void;
-  addChoice: (questionId: number, choice: string) => void;
+  addChoice: (questionId: number, choice?: string) => void;
   removeChoice: (questionId: number, choice: string) => void;
   toggleChoice: (questionId: number, choice: string) => void;
   modifyChoice: (
@@ -36,7 +36,7 @@ export type AuthorActions = {
 };
 
 export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
-  (set) => ({
+  (set, get) => ({
     activeAssignmentId: null,
     setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
     questions: [],
@@ -126,16 +126,14 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
         }),
       }));
     },
-    addChoice: (questionId, choice) => {
+    addChoice: (questionId, choice = "") => {
       set((state) => ({
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
+            const newMapWithAddedChoice = new Map(q.choices).set(choice, false);
             return {
               ...q,
-              choices: {
-                ...q.choices,
-                [choice]: false,
-              },
+              choices: newMapWithAddedChoice,
             };
           }
           return q;
@@ -146,7 +144,9 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
       set((state) => ({
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
-            const { [choice]: _, ...choices } = q.choices;
+            // const { [choice]: _, ...choices } = q.choices;
+            const choices = q.choices;
+            choices.delete(choice);
             return {
               ...q,
               choices,
@@ -175,23 +175,41 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
     modifyChoice: (questionId, choiceIndex, modifiedData) => {
       set((state) => ({
         questions: state.questions.map((q) => {
+          console.log(q.id, questionId);
           if (q.id === questionId) {
-            const choices = Object.entries(q.choices);
-            choices.map(([choice, isCorrect], index) => {
-              if (index === choiceIndex) {
-                const { [choice]: _, ...choices } = q.choices;
-                console.log(choices);
-                console.log(modifiedData);
-                return {
-                  ...q,
-                  choices: {
-                    ...choices,
-                    [modifiedData]: isCorrect,
-                  },
-                };
+            // convert choices object to a list of key value pairs
+            // const choices = Object.entries(q.choices);
+            // // for each choice, if the index matches the choiceIndex, replace the choice with the modifiedData
+            // const newChoices = choices.map(([choice, isCorrect], index) => {
+            //   if (index === choiceIndex) {
+            //     return [modifiedData, isCorrect];
+            //   }
+            //   // otherwise, keep the choice the same
+            //   return [choice, isCorrect];
+            // });
+            // // convert back to object
+            // const newChoicesObj = Object.fromEntries(newChoices) as Choices;
+            // return {
+            //   ...q,
+            //   choices: newChoicesObj,
+            // };
+            const choices = q.choices;
+            let index = 0;
+            // for each choice, if the index matches the choiceIndex, replace the choice with the modifiedData
+            choices.forEach((isCorrect, choice) => {
+              if (choiceIndex === index) {
+                // remove the old choice
+                choices.delete(choice);
+                choices.set(modifiedData, isCorrect);
               }
+              index++;
             });
+            return {
+              ...q,
+              choices,
+            };
           }
+          // if the question id doesn't match, return the question as is
           return q;
         }),
       }));

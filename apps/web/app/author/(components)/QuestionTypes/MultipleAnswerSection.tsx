@@ -28,37 +28,38 @@ function Section(props: sectionProps) {
     state.modifyChoice,
   ]);
 
+  const question = questions.find((question) => question.id === questionId);
+  const { choices } = question;
+  useEffect(() => {
+    // if choices is empty, add a default choice
+    if (!choices) {
+      setChoices(
+        questionId,
+        new Map([
+          ["this is a default option", true],
+          ["another one", false],
+          ["and another one", false],
+        ])
+      );
+    }
+  }, []);
+
   function handleChoiceToggle(choiceId: string) {
     toggleChoice(questionId, choiceId);
   }
 
-  function handleChoiceChange(index: number, value: string) {
-    console.log("handleChoiceChange", index, value);
-    modifyChoice(questionId, index, value);
+  function handleChoiceChange(choiceId: number, value: string) {
+    console.log("handleChoiceChange", choiceId, value);
+    modifyChoice(questionId, choiceId, value);
   }
 
   function handleAddChoice() {
-    addChoice(questionId, "");
+    addChoice(questionId);
   }
 
   function handleRemoveChoice(choice: string) {
     removeChoice(questionId, choice);
   }
-
-  const question = questions.find((question) => question.id === questionId);
-  const { choices } = question;
-  useEffect(() => {
-    // if choices is empty, add a default choice
-    console.log(choices);
-    if (!choices) {
-      setChoices(questionId, {
-        "This is a default choice": true,
-        "This is another default choice": false,
-        "One last default choice": true,
-      });
-    }
-    console.log(choices);
-  }, []);
 
   const [pointInputs, setPointInputs] = useState<{ [id: string]: number }>({});
 
@@ -82,11 +83,14 @@ function Section(props: sectionProps) {
   if (!choices) {
     return null;
   }
+  // convert the choices map to an array of [choice, isChecked] tuples
+  // const choicesEntries = Array.from(choices.entries());
 
   return (
     <div className="mt-4">
       <p>Choices</p>
-      {Object.entries(choices)?.map(([choice, isChecked], index) => (
+      {/* Turn the choices map into an array of [choice, isChecked] tuples */}
+      {Array.from(choices).map(([choice, isChecked], index) => (
         <Choice
           key={index}
           index={index}

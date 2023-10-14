@@ -53,6 +53,13 @@ function DynamicTextBoxContainer(props: Props) {
           const questions = assignment.questions?.map((question) => {
             return {
               ...question,
+              // turn the choices into a map
+              choices: new Map(
+                // turn the choices object into an array of key value arrays (entries) and then turn that into a map
+                Object.entries(question.choices || {}).map(
+                  ([choice, isCorrect]) => [choice, isCorrect]
+                )
+              ),
               alreadyInBackend: true,
               scoring: {
                 // TODO: hardcoded for now but we need to find a way to add the type

@@ -77,10 +77,7 @@ type Feedback = {
 /**
  * used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
  */
-export type Choices = {
-  // key value pair of a string and a boolean
-  [option: string]: boolean;
-};
+export type Choices = Map<string, boolean>;
 
 type QuestionResponse = {
   id: number;
