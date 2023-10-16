@@ -130,7 +130,8 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
       set((state) => ({
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
-            const newMapWithAddedChoice = new Map(q.choices).set(choice, false);
+            const choices = q.choices;
+            const newMapWithAddedChoice = choices.set(choice, false);
             return {
               ...q,
               choices: newMapWithAddedChoice,
@@ -145,7 +146,7 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
             // const { [choice]: _, ...choices } = q.choices;
-            const choices = q.choices;
+            const choices = new Map(q.choices);
             choices.delete(choice);
             return {
               ...q,
@@ -160,12 +161,10 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
       set((state) => ({
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
+            const choices = new Map(q.choices);
             return {
               ...q,
-              choices: {
-                ...q.choices,
-                [choice]: !q.choices[choice],
-              },
+              choices: choices.set(choice, !choices.get(choice)),
             };
           }
           return q;
@@ -193,7 +192,7 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
             //   ...q,
             //   choices: newChoicesObj,
             // };
-            const choices = q.choices;
+            const choices = new Map(q.choices);
             let index = 0;
             // for each choice, if the index matches the choiceIndex, replace the choice with the modifiedData
             choices.forEach((isCorrect, choice) => {
