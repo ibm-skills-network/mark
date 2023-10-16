@@ -14,6 +14,8 @@ function Component(props: Props) {
   const { index, choice, isChecked, toggleChoice, modifyChoice, removeChoice } =
     props;
 
+  const [isInputMode, setIsInputMode] = useState(false);
+
   function handleChoiceTextChange(
     event: React.ChangeEvent<HTMLTextAreaElement>
   ) {
@@ -67,7 +69,7 @@ function Component(props: Props) {
         </svg>
       </button>
       {/* TODO: Add points support */}
-      {/* <div className="ml-[5px]">
+      <div className="ml-[5px]">
         {isInputMode ? (
           <input
             className="w-[80px]"
@@ -77,7 +79,7 @@ function Component(props: Props) {
           />
         ) : (
           <button
-            onClick={() => handleButtonClick(choiceId)}
+            // onClick={() => handleButtonClick(choiceId)}
             style={{
               color: isChecked ? "blue-700" : "gray-700",
               borderColor: "transparent",
@@ -89,7 +91,7 @@ function Component(props: Props) {
             {0} points
           </button>
         )}
-      </div> */}
+      </div>
     </div>
   );
 }

@@ -63,11 +63,10 @@ function Section(props: sectionProps) {
 
   const [pointInputs, setPointInputs] = useState<{ [id: string]: number }>({});
 
-  const [isInputMode, setIsInputMode] = useState(false);
   const [points, setPoints] = useState(0);
 
   const handleButtonClick = (choiceId: string) => {
-    setIsInputMode(true);
+    // setIsInputMode(true);
     setPoints(pointInputs[choiceId] || 0); // Set points based on existing value or default to 0
   };
 
