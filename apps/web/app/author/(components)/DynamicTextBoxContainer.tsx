@@ -168,7 +168,7 @@ function DynamicTextBoxContainer(props: Props) {
                 <div className="inline-flex mx-auto rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold">
                   {index + 1}
                 </div>
-                <div className="text-blue-700">
+                <div className="text-blue-700 w-16 whitespace-nowrap">
                   {questionMaxPoints
                     ? questionMaxPoints === 1
                       ? `${questionMaxPoints} point`
