@@ -53,13 +53,7 @@ function DynamicTextBoxContainer(props: Props) {
           const questions = assignment.questions?.map((question) => {
             return {
               ...question,
-              // turn the choices into a map
-              choices: new Map(
-                // turn the choices object into an array of key value arrays (entries) and then turn that into a map
-                Object.entries(question.choices || {}).map(
-                  ([choice, isCorrect]) => [choice, isCorrect]
-                )
-              ),
+              // choices:
               alreadyInBackend: true,
               scoring: {
                 // TODO: hardcoded for now but we need to find a way to add the type
@@ -131,16 +125,15 @@ function DynamicTextBoxContainer(props: Props) {
     alreadyInBackend: boolean
   ) {
     // call the backend to delete the question if it came from the backend
-    let success = true; // by default we assume that the question is not from the backend
     if (alreadyInBackend) {
-      success = await deleteQuestion(assignmentId, questionId);
+      const success = await deleteQuestion(assignmentId, questionId);
+      if (success) {
+        removeQuestion(questionId);
+        toast.success("Question deleted!");
+        return;
+      }
     }
-    if (success) {
-      removeQuestion(questionId);
-      toast.success("Question deleted!");
-    } else {
-      toast.error("Failed to delete question");
-    }
+    toast.error("Failed to delete question");
   }
   const handleScrollToTarget = (questionId: number) => {
     if (typeof questionId !== "number") {
@@ -161,8 +154,14 @@ function DynamicTextBoxContainer(props: Props) {
       <div className="my-24 flex flex-col gap-y-20">
         {/* TODO: make this into a component */}
         {questions.map((question, index) => {
-          const questionMaxPoints =
-            question.scoring?.criteria?.slice(-1)[0].points;
+          let questionMaxPoints: number;
+          if (question.type === "TEXT") {
+            questionMaxPoints = question.scoring?.criteria?.slice(-1)[0].points;
+          } else {
+            questionMaxPoints = question.totalPoints;
+          }
+          console.log("question", question);
+
           return (
             <section key={index} className="flex gap-x-4 mx-auto">
               <div className="sticky top-14 flex h-full flex-col gap-y-2">

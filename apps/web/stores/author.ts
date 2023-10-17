@@ -134,11 +134,12 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
       set((state) => ({
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
-            const choices = q.choices;
-            const newMapWithAddedChoice = choices.set(choice, false);
             return {
               ...q,
-              choices: newMapWithAddedChoice,
+              choices: {
+                ...q.choices,
+                [choice]: false,
+              },
             };
           }
           return q;
@@ -149,9 +150,7 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
       set((state) => ({
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
-            // const { [choice]: _, ...choices } = q.choices;
-            const choices = new Map(q.choices);
-            choices.delete(choice);
+            const { [choice]: _, ...choices } = q.choices;
             return {
               ...q,
               choices,
@@ -165,10 +164,12 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
       set((state) => ({
         questions: state.questions.map((q) => {
           if (q.id === questionId) {
-            const choices = new Map(q.choices);
             return {
               ...q,
-              choices: choices.set(choice, !choices.get(choice)),
+              choices: {
+                ...q.choices,
+                [choice]: !q.choices[choice],
+              },
             };
           }
           return q;
@@ -178,41 +179,20 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
     modifyChoice: (questionId, choiceIndex, modifiedData) => {
       set((state) => ({
         questions: state.questions.map((q) => {
-          console.log(q.id, questionId);
           if (q.id === questionId) {
-            // convert choices object to a list of key value pairs
-            // const choices = Object.entries(q.choices);
-            // // for each choice, if the index matches the choiceIndex, replace the choice with the modifiedData
-            // const newChoices = choices.map(([choice, isCorrect], index) => {
-            //   if (index === choiceIndex) {
-            //     return [modifiedData, isCorrect];
-            //   }
-            //   // otherwise, keep the choice the same
-            //   return [choice, isCorrect];
-            // });
-            // // convert back to object
-            // const newChoicesObj = Object.fromEntries(newChoices) as Choices;
-            // return {
-            //   ...q,
-            //   choices: newChoicesObj,
-            // };
-            const choices = new Map(q.choices);
-            let index = 0;
-            // for each choice, if the index matches the choiceIndex, replace the choice with the modifiedData
-            choices.forEach((isCorrect, choice) => {
-              if (choiceIndex === index) {
-                // remove the old choice
-                choices.delete(choice);
-                choices.set(modifiedData, isCorrect);
+            const choices = Object.entries(q.choices).map(
+              ([choice, value], index) => {
+                if (index === choiceIndex) {
+                  return [modifiedData, value];
+                }
+                return [choice, value];
               }
-              index++;
-            });
+            );
             return {
               ...q,
-              choices,
+              choices: Object.fromEntries(choices) as Choices,
             };
           }
-          // if the question id doesn't match, return the question as is
           return q;
         }),
       }));

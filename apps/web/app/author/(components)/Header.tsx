@@ -48,8 +48,6 @@ function AuthorHeader(props: Props) {
         dataToSend.totalPoints =
           dataToSend.scoring?.criteria?.slice(-1)[0].points || 0;
       } else if (dataToSend.type === "MULTIPLE_CORRECT") {
-        // turn the choices map into an object
-        dataToSend.choices = Object.fromEntries(dataToSend.choices);
         console.log("dataToSend.choices", dataToSend.choices);
         dataToSend.scoring = null; // scoring is not needed for multiple correct
       }

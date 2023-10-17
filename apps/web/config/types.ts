@@ -77,7 +77,7 @@ type Feedback = {
 /**
  * used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
  */
-export type Choices = Map<string, boolean>;
+export type Choices = Record<string, boolean>;
 
 type QuestionResponse = {
   id: number;

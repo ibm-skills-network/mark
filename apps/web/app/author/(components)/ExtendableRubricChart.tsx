@@ -4,7 +4,6 @@ import { useState } from "react";
 
 interface ExtendableRubricChartProps {
   questionId: number;
-  onMaxPointsChange: (maxPoints: number) => void; // Define the onMaxPointsChange prop
 }
 
 function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
@@ -23,9 +22,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
     updatedInputValues[divKey] = event.target.value;
     setInputValues(updatedInputValues);
   };
-
-  ////////////////////////////////////////////////
-  ////////////////////////////////////////////////
 
   // Step 1: State Management
   const [divElements, setDivElements] = useState<number[]>([]);
@@ -75,14 +71,6 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
       ...criterias.slice(index + 1),
     ]);
   };
-
-  // const maxPoints = promptOptions.reduce((max, option) => {
-  //   const optionPoints = ~~option.point;
-  //   return optionPoints > max ? optionPoints : max;
-  // }, 0);
-
-  // Call the onMaxPointsChange function with the maxPoints value
-  // props.onMaxPointsChange(maxPoints);
 
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
   function textAreaAdjust(element: HTMLElement) {

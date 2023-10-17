@@ -38,14 +38,11 @@ function Section(props: sectionProps) {
   useEffect(() => {
     // if choices is empty, add a default choice
     if (!choices) {
-      setChoices(
-        questionId,
-        new Map([
-          ["this is a default option", true],
-          ["another one", false],
-          ["and another one", false],
-        ])
-      );
+      setChoices(questionId, {
+        "this is a default choice": true,
+        "this is another default choice": false,
+        "this is a third default choice": false,
+      });
     }
   }, []);
 
@@ -112,8 +109,8 @@ function Section(props: sectionProps) {
         />
       </div>
       <p className="font-medium leading-5 text-gray-800">Choices</p>
-      {/* Turn the choices map into an array of [choice, isChecked] tuples */}
-      {Array.from(choices).map(([choice, isChecked], index) => (
+      {/* loop throug the key value object */}
+      {Object.entries(choices).map(([choice, isChecked], index) => (
         <Choice
           key={index}
           index={index}
