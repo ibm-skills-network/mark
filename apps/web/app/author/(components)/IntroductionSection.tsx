@@ -19,7 +19,7 @@ const titleToDescription = {
   Introduction:
     "Write a short summary of the learning goals of this assignment and what learners will be required to do",
   Instructions:
-    "Write specific instructions for students to follow when submitting their assignment. Or remind them to follow a certain format before submitting",
+    "Write specific instructions for learners to follow when submitting their assignment. Or remind them to follow a certain format before submitting",
   Grading:
     "Select the options that you want to apply to your assignment, you can come back and change these anytime",
   "Add Additional Files":

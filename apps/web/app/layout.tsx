@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Mark",
-  description: "Grade your students' work with the power of AI.",
+  description: "Grade your learners' work with the power of AI.",
 };
 
 export default function RootLayout({
@@ -17,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className + "flex flex-col"}>
+      <body className={inter.className + ""}>
         <Toaster richColors position="top-center" />
         {children}
       </body>

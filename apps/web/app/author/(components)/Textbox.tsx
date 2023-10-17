@@ -4,7 +4,7 @@ import Dropdown from "@/components/Dropdown";
 import type { QuestionType, QuestionTypeDropdown } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
-import { useEffect, useRef, useState } from "react";
+import { ComponentPropsWithoutRef, useEffect, useRef, useState } from "react";
 import MultipleAnswerSection from "./QuestionTypes/MultipleAnswerSection";
 import WrittenQuestionView from "./QuestionTypes/WrittenQuestionView";
 
@@ -30,12 +30,12 @@ const questionTypes = [
     value: "MULTIPLE_CORRECT",
   },
 ] as QuestionTypeDropdown[];
-interface TextBoxProps {
+interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
   questionId: number;
 }
 
 function TextBox(props: TextBoxProps) {
-  const { questionId } = props;
+  const { questionId, ...rest } = props;
   const [isLearnerView, setIsLearnerView] = useState(false);
   const [displayText, setDisplayText] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -84,9 +84,13 @@ function TextBox(props: TextBoxProps) {
   function setQuestionType(questionType: QuestionType) {
     modifyQuestion(questionId, {
       type: questionType,
+      // if question type is multiple choice, we need to set the scoring to null
+      scoring:
+        questionType === "MULTIPLE_CORRECT" || questionType === "SINGLE_CORRECT"
+          ? null
+          : question.scoring,
     });
   }
-  console.log(question.type);
 
   // const handleDisplayText = () => {
   //   setDisplayText(inputText);
@@ -157,7 +161,10 @@ function TextBox(props: TextBoxProps) {
     setChoicesWrittenQuestion(updatedChoices);
   };
   return (
-    <div className={`relative flex flex-col flex-1 max-w-6xl rounded-md`}>
+    <div
+      {...rest}
+      className={`relative flex flex-col flex-1 w-[64rem] rounded-md bg-white transition border-l-8 py-10 px-12 border-blue-700 gap-y-4`}
+    >
       {/* Toggle view button */}
       {/* <button
         className="w-52 rounded-md bg-indigo-50 px-3.5 py-2.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-100 ml-[380px]"
@@ -184,30 +191,29 @@ function TextBox(props: TextBoxProps) {
           ) : null}
         </div>
       ) : ( */}
-      <div className="flex flex-col bg-white transition border-l-8 rounded-md py-10 px-12 border-blue-700 gap-y-4">
-        <div className="flex flex-col gap-y-2">
-          Question
-          <MarkdownEditor
-            value={question.question}
-            setValue={handleQuestionTextChange}
-            textareaClassName="!min-h-[6.5rem] !max-h-72"
-            className="bg-gray-600"
-          />
-        </div>
-        <div className="flex flex-col gap-y-1">
-          <p className="text-black font-inter leading-5">Question Type</p>
-          <Dropdown
-            questionType={question.type}
-            setQuestionType={setQuestionType}
-            questionTypes={questionTypes}
-          />
-        </div>
-        {question.type === questionTypes[0].value ||
-        question.type === questionTypes[1].value ? (
-          <WrittenQuestionView questionId={questionId} />
-        ) : null}
+      <div className="flex flex-col gap-y-2">
+        Question
+        <MarkdownEditor
+          value={question.question}
+          setValue={handleQuestionTextChange}
+          textareaClassName="!min-h-[6.5rem] !max-h-72"
+          className="bg-gray-600"
+        />
+      </div>
+      <div className="flex flex-col gap-y-1">
+        <p className="text-black font-inter leading-5">Question Type</p>
+        <Dropdown
+          questionType={question.type}
+          setQuestionType={setQuestionType}
+          questionTypes={questionTypes}
+        />
+      </div>
+      {question.type === questionTypes[0].value ||
+      question.type === questionTypes[1].value ? (
+        <WrittenQuestionView questionId={questionId} />
+      ) : null}
 
-        {/* {questionType === questionTypes[0] ? (
+      {/* {questionType === questionTypes[0] ? (
             <SingleAnswerSection
               choices={question.choices}
               selectedChoiceSingleCorrect={selectedChoiceSingleCorrect}
@@ -217,10 +223,9 @@ function TextBox(props: TextBoxProps) {
             />
           ) : null} */}
 
-        {question.type === questionTypes[3].value ? (
-          <MultipleAnswerSection questionId={questionId} />
-        ) : null}
-      </div>
+      {question.type === questionTypes[3].value ? (
+        <MultipleAnswerSection questionId={questionId} />
+      ) : null}
     </div>
   );
 }

@@ -91,7 +91,7 @@ function DynamicTextBoxContainer(props: Props) {
         id: 0,
         assignmentId: activeAssignmentId,
         question: "",
-        totalPoints: 0,
+        totalPoints: 1,
         numRetries: defaultQuestionRetries || 1,
         type: "TEXT",
         alreadyInBackend: false,
@@ -107,7 +107,7 @@ function DynamicTextBoxContainer(props: Props) {
       id: (questions.slice(-1)[0]?.id || 0) + 1,
       assignmentId: activeAssignmentId,
       question: "",
-      totalPoints: 0,
+      totalPoints: 1,
       numRetries: defaultQuestionRetries || 1,
       // TODO: get the type from the dropdown
       type: "TEXT",
@@ -177,9 +177,8 @@ function DynamicTextBoxContainer(props: Props) {
                     : "0 points"}
                 </div>
               </div>
-              <div id={`textbox-${question.id}`}>
-                <TextBox questionId={question.id} />
-              </div>
+              <TextBox id={`textbox-${question.id}`} questionId={question.id} />
+
               {/* Display the maxPoints value received from the child component */}
 
               {/* Delete question button */}

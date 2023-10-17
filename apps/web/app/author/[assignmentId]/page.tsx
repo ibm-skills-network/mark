@@ -14,7 +14,7 @@ function Component(props: Props) {
   const { assignmentId } = params;
   // DON'T USE ~~ TO CONVERT TO INT, CAUSES THE NUMBER TO BECOME SMALLER THAN IT SHOULD BE
   const submissionTimeInt = parseInt(submissionTime);
-  console.log("submissionTime", parseInt(submissionTime));
+  console.log("submissionTime", submissionTimeInt);
   console.log("date now", Date.now());
   console.log("difference", Date.now() - submissionTimeInt);
   console.log("is within", Date.now() - submissionTimeInt < 10000);

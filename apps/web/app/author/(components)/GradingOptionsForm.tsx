@@ -86,7 +86,7 @@ function GradingOptionsForm(props: Props) {
           <label htmlFor="ungraded" className="font-medium leading-5">
             Practice or Ungraded
           </label>
-          <p className="text-gray-500 text-sm">
+          <p className="text-gray-500">
             This assignment will not count towards the grade total for the
             student in the course.
           </p>

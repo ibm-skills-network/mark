@@ -23,32 +23,25 @@ function Component(props: Props) {
   }
 
   return (
-    <div key={index} className="flex items-center mb-[5px]">
+    <div key={index} className="flex items-center gap-x-4">
       <input
         type="checkbox"
         id={index.toString()}
         checked={isChecked}
         onChange={() => toggleChoice(choice)}
       />
-      <div className="ml-2">
-        {" "}
+      <div className="pl-2">
         {/* Add margin to create space */}
         {String.fromCharCode(65 + index)}.
       </div>
       <textarea
-        className="w-[800px] p-2 border-transparent mb-[10px] rounded-md text-black bg-transparent outline-none" // Removed 'border ml-2' and added 'w-full'
+        className="w-full border border-gray-300 resize-y overflow-hidden p-2 rounded-md text-black outline-none"
         placeholder={`Choice ${index + 1}`}
         value={choice}
         onChange={handleChoiceTextChange}
-        style={{
-          height: "2.0rem", // Changed 'height' to 'minHeight'
-          maxWidth: "100%",
-          overflow: "hidden",
-          resize: "vertical",
-        }}
       />
       <button
-        className="ml-2 text-red-600"
+        className=" text-red-600"
         onClick={() => {
           removeChoice(choice);
         }}
@@ -68,30 +61,6 @@ function Component(props: Props) {
           />
         </svg>
       </button>
-      {/* TODO: Add points support */}
-      <div className="ml-[5px]">
-        {isInputMode ? (
-          <input
-            className="w-[80px]"
-            type="number"
-            autoFocus
-            onBlur={() => setIsInputMode(false)}
-          />
-        ) : (
-          <button
-            // onClick={() => handleButtonClick(choiceId)}
-            style={{
-              color: isChecked ? "blue-700" : "gray-700",
-              borderColor: "transparent",
-              backgroundColor: "transparent",
-              cursor: isChecked ? "pointer" : "not-allowed", // Set cursor based on checkbox state
-            }}
-            disabled={!isChecked} // Disable button when checkbox is not checked
-          >
-            {0} points
-          </button>
-        )}
-      </div>
     </div>
   );
 }

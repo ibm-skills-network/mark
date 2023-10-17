@@ -2,7 +2,8 @@
 
 import type { Choices } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, type ChangeEvent } from "react";
+import QuestionNumberOfRetries from "../QuestionNumberOfRetries";
 import Choice from "./Choice";
 
 interface sectionProps {
@@ -14,22 +15,26 @@ function Section(props: sectionProps) {
 
   const [
     questions,
+    modifyQuestion,
     addChoice,
     removeChoice,
     setChoices,
     toggleChoice,
     modifyChoice,
+    setPoints,
   ] = useAuthorStore((state) => [
     state.questions,
+    state.modifyQuestion,
     state.addChoice,
     state.removeChoice,
     state.setChoices,
     state.toggleChoice,
     state.modifyChoice,
+    state.setPoints,
   ]);
 
   const question = questions.find((question) => question.id === questionId);
-  const { choices } = question;
+  const { choices, totalPoints: points, numRetries: retries } = question;
   useEffect(() => {
     // if choices is empty, add a default choice
     if (!choices) {
@@ -61,23 +66,15 @@ function Section(props: sectionProps) {
     removeChoice(questionId, choice);
   }
 
-  const [pointInputs, setPointInputs] = useState<{ [id: string]: number }>({});
+  function handleChangePoints(e: ChangeEvent<HTMLInputElement>) {
+    setPoints(questionId, parseInt(e.target.value));
+  }
 
-  const [points, setPoints] = useState(0);
-
-  const handleButtonClick = (choiceId: string) => {
-    // setIsInputMode(true);
-    setPoints(pointInputs[choiceId] || 0); // Set points based on existing value or default to 0
-  };
-
-  const handleInputBlur = (
-    event: React.FocusEvent<HTMLInputElement>,
-    choiceId: string
-  ) => {
-    const newPoints = ~~event.target.value;
-    const newPointInputs = { ...pointInputs, [choiceId]: newPoints };
-    setPointInputs(newPointInputs);
-  };
+  function handleNumberOfRetriesChange(e: ChangeEvent<HTMLSelectElement>) {
+    modifyQuestion(questionId, {
+      numRetries: ~~e.target.value,
+    });
+  }
 
   if (!choices) {
     return null;
@@ -86,8 +83,35 @@ function Section(props: sectionProps) {
   // const choicesEntries = Array.from(choices.entries());
 
   return (
-    <div className="mt-4">
-      <p>Choices</p>
+    <div className="pt-4 flex flex-col gap-y-2">
+      <div className="flex gap-x-6">
+        <div className="">
+          <label htmlFor="" className="font-medium leading-5 text-gray-800">
+            Points
+          </label>
+          <div className="flex items-center !ring-blue-600 hover:ring-1 rounded-lg pr-3">
+            <input
+              type="number"
+              className="form-input w-[4.25rem] border-none !ring-0 rounded-l-lg bg-inherit focus:outline-none"
+              value={points}
+              onChange={handleChangePoints}
+              min={1}
+            />
+            <input
+              type="range"
+              className="focus:outline-none"
+              value={points}
+              onChange={handleChangePoints}
+              min={1}
+            />
+          </div>
+        </div>
+        <QuestionNumberOfRetries
+          retries={retries}
+          handleRetryChange={handleNumberOfRetriesChange}
+        />
+      </div>
+      <p className="font-medium leading-5 text-gray-800">Choices</p>
       {/* Turn the choices map into an array of [choice, isChecked] tuples */}
       {Array.from(choices).map(([choice, isChecked], index) => (
         <Choice
@@ -103,7 +127,7 @@ function Section(props: sectionProps) {
       <div className="">
         <button
           type="button"
-          className="rounded-full w-[160px] bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
+          className="rounded-full bg-white px-5 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
           onClick={handleAddChoice}
         >
           <div className="flex items-center">
@@ -122,7 +146,6 @@ function Section(props: sectionProps) {
             <span
               style={{
                 fontSize: "0.8rem",
-                marginLeft: "0.5rem",
                 whiteSpace: "nowrap", // Prevent text from wrapping
                 display: "inline-block", // Ensure it stays on one line
               }}
@@ -132,7 +155,7 @@ function Section(props: sectionProps) {
           </div>
         </button>
       </div>
-      <div>
+      {/* <div>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
@@ -149,7 +172,7 @@ function Section(props: sectionProps) {
         </svg>
         Warning: in multiple answer - multiple choice, one or more than one
         wrong choice in answer would cause 0 points in this question.
-      </div>
+      </div> */}
     </div>
   );
 }

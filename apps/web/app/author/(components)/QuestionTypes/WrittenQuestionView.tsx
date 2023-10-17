@@ -12,9 +12,10 @@
 //   ViewListIcon,
 // } from "@heroicons/react/solid";
 import { useAuthorStore } from "@/stores/author";
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import RubricTable from "../../../../components/depreciated/RubricTable";
 import ExtendableRubricChart from "../ExtendableRubricChart";
+import QuestionNumberOfRetries from "../QuestionNumberOfRetries";
 import WordCountComponent from "../WordCountComponent";
 
 interface WrittenQuestionViewProps {
@@ -34,7 +35,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
 
   const question = questions.find((question) => question.id === questionId);
 
-  function handleQuestionRetryChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  function handleQuestionRetryChange(e: ChangeEvent<HTMLSelectElement>) {
     modifyQuestion(questionId, {
       numRetries: ~~e.target.value,
     });
@@ -70,38 +71,16 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
   //   const updatedRubrics = rubrics.filter((_, i) => i !== index);
   //   setRubrics(updatedRubrics);
   // };
-
-  // this code is used to handle maxPoints passed from extendable rubric chart, so we can print points on the top left
-  const [parentMaxPoints, setParentMaxPoints] = useState<number | null>(null);
-
-  // Define a function to receive the maxPoints value from the child component
-  const handleMaxPointsChange = (maxPoints: number) => {
-    setParentMaxPoints(maxPoints);
-  };
   return (
     <>
       <div className="grid grid-cols-2 gap-x-16">
-        <WordCountComponent text="Maximum Word Count  " />
-        <div className="flex flex-col gap-y-1">
-          <label className="font-medium leading-5 text-gray-800">
-            Number of Retries Per Submission
-          </label>
-          <select
-            className="border border-gray-300 rounded-md h-12 px-4 w-full"
-            name="attempts"
-            onChange={handleQuestionRetryChange}
-            value={question?.numRetries || -1}
-          >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
-            <option value={4}>4</option>
-            <option value={5}>5</option>
-            <option value={-1}>unlimited</option>
-          </select>
-        </div>
+        <WordCountComponent text="Maximum Word Count " />
+        <QuestionNumberOfRetries
+          retries={question?.numRetries || -1}
+          handleRetryChange={handleQuestionRetryChange}
+        />
       </div>
-      <div className="bg-indigo-100 -mx-12 px-8 flex gap-x-4 py-4">
+      <div className="bg-indigo-100 px-8 flex gap-x-4 py-4 -mx-12">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="65"
@@ -130,7 +109,6 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
           <div
             className=""
             style={{
-              width: 900,
               color: "#4B5563",
               textAlign: "left",
               fontSize: 13.17,
@@ -180,10 +158,10 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       </div> */}
 
       {/* Render the child component and pass the handleMaxPointsChange function as a prop */}
-      <ExtendableRubricChart
+      {/* <ExtendableRubricChart
         questionId={questionId}
         onMaxPointsChange={handleMaxPointsChange}
-      />
+      /> */}
 
       {/* {switchState === "b" && (
         // <RubricTable

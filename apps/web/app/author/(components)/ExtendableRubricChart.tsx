@@ -112,13 +112,13 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   };
   return (
     <div
-      className={`relative flex flex-col pl-2 rounded-md p-4 mx-auto bg-white border border-transparent`}
+      className={`relative flex flex-col rounded-md bg-white border border-transparent`}
     >
       <div>
         <h1 className="text-base font-normal pb-1 leading-6 text-gray-900 relative after:text-blue-400 after:content-['*']">
           List the conditions for meeting the Criteria of Question
         </h1>
-        <ul className="flex flex-col gap-y-4">
+        <ul className="flex flex-col gap-4">
           {criterias.map((criteria, index) => (
             <li key={index} className="flex items-center gap-x-2">
               {/* Add input for promptPoints */}
@@ -144,7 +144,7 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
 
               <textarea
                 onKeyUp={(event) => textAreaAdjust(event.target as HTMLElement)}
-                className="py-2 border border-gray-300 shadow-sm pl-2 pr-10 rounded-md text-black outline-none placeholder-gray-400"
+                className="py-2 border flex-1 border-gray-300 shadow-sm pl-2 pr-10 rounded-md text-black outline-none placeholder-gray-400"
                 placeholder={
                   index === 0
                     ? `ex. “The question is not legible” `

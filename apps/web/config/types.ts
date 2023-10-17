@@ -93,7 +93,6 @@ export interface BaseQuestion {
   totalPoints: number;
   numRetries: number;
   question: string;
-  choices?: Choices;
   questionResponses?: QuestionResponse[];
 }
 
@@ -103,11 +102,13 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
 }
 
 export interface CreateQuestionRequest extends BaseQuestion {
+  // used if question type is TEXT
   scoring?: Scoring;
   maxWords?: number;
   // used if question type is TRUE_FALSE
   answer?: boolean;
   // used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
+  choices?: Choices;
 }
 
 // TODO: merge this and the one below

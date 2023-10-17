@@ -48,11 +48,10 @@ function AuthorHeader(props: Props) {
         dataToSend.totalPoints =
           dataToSend.scoring?.criteria?.slice(-1)[0].points || 0;
       } else if (dataToSend.type === "MULTIPLE_CORRECT") {
-        // if question is multiple choice, conclude the total points by summing up the points of all choices
-        // dataToSend.totalPoints = dataToSend.choices.reduce(
-        //   (total, choice) => total + choice.points,
-        //   0
-        // );
+        // turn the choices map into an object
+        dataToSend.choices = Object.fromEntries(dataToSend.choices);
+        console.log("dataToSend.choices", dataToSend.choices);
+        dataToSend.scoring = null; // scoring is not needed for multiple correct
       }
       // if numRetries is -1 (unlimited), set it to null
       const unlimitedRetries = dataToSend.numRetries === -1;
@@ -93,12 +92,12 @@ function AuthorHeader(props: Props) {
   const steps = [
     {
       id: 1,
-      name: "Set Up Intro",
+      name: "Set up your assignment",
       href: `/author/${activeAssignmentId}`,
     },
     {
       id: 2,
-      name: "Questions & Review",
+      name: "Create questions",
       href: `/author/${activeAssignmentId}/questions`,
     },
   ];
@@ -108,7 +107,7 @@ function AuthorHeader(props: Props) {
     return currentStep?.id;
   }
 
-  function handleIncompleteClick(id) {
+  function handleIncompleteClick(id: number) {
     // when clicking on step 2, it will click the update button located in the bottom of the page
     // if (id === 2) updateAssignmentButtonRef.current?.click();
     switch (id) {

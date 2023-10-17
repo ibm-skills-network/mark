@@ -5,9 +5,9 @@ import { createWithEqualityFn } from "zustand/traditional";
 
 export type AuthorState = {
   activeAssignmentId?: number | null;
-  questions: QuestionAuthorStore[];
   assignmentTitle: string;
   updateAssignmentButtonRef: RefObject<HTMLButtonElement>;
+  questions: QuestionAuthorStore[];
 };
 
 type OptionalQuestion = {
@@ -17,10 +17,10 @@ type OptionalQuestion = {
 export type AuthorActions = {
   setActiveAssignmentId: (id: number) => void;
   setQuestions: (questions: QuestionAuthorStore[]) => void;
+  setAssignmentTitle: (title: string) => void;
   addQuestion: (question: QuestionAuthorStore) => void;
   removeQuestion: (question: number) => void;
   modifyQuestion: (questionId: number, modifiedData: OptionalQuestion) => void;
-  setAssignmentTitle: (title: string) => void;
   setCriterias: (questionId: number, criterias: Criteria[]) => Criteria[];
   addCriteria: (questionId: number, criteria: Criteria) => void;
   removeCriteria: (questionId: number, criteriaIndex: number) => void;
@@ -33,12 +33,16 @@ export type AuthorActions = {
     choiceIndex: number,
     modifiedData: string
   ) => void;
+  setPoints: (questionId: number, points: number) => void;
 };
 
 export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
   (set, get) => ({
     activeAssignmentId: null,
     setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
+    assignmentTitle: "",
+    setAssignmentTitle: (title) => set({ assignmentTitle: title }),
+    updateAssignmentButtonRef: createRef<HTMLButtonElement>(),
     questions: [],
     setQuestions: (questions) => set({ questions }),
     addQuestion: (question) =>
@@ -213,9 +217,19 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
         }),
       }));
     },
-    assignmentTitle: "",
-    setAssignmentTitle: (title) => set({ assignmentTitle: title }),
-    updateAssignmentButtonRef: createRef<HTMLButtonElement>(),
+    setPoints: (questionId, points) => {
+      set((state) => ({
+        questions: state.questions.map((q) => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              totalPoints: points,
+            };
+          }
+          return q;
+        }),
+      }));
+    },
   }),
   shallow
 );

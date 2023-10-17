@@ -46,7 +46,7 @@ function Dropdown(props: DropdownProps) {
   }, []);
 
   return (
-    <div className="relative w-full max-w-[16rem]" ref={dropdownRef}>
+    <div className="relative max-w-[16rem]" ref={dropdownRef}>
       <Tooltip distance={0} content="" disabled={true}>
         <button
           type="button"
