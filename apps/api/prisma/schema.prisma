@@ -60,6 +60,7 @@ model Assignment {
   name            String                                                        /// Name of the assignment
   introduction    String?                                                       /// Introduction Paragraph for the assignment
   instructions    String?                                                       /// Instructions for the assignment
+  gradingCriteriaOverview    String?                                            /// Grading Criteria for the assignment
   type            AssignmentType                                                /// Type of assignment
   graded          Boolean?                                                      /// Is the assignment graded or not
   numAttempts     Int?                                                          /// Max number of times a learner can attempt the assignment

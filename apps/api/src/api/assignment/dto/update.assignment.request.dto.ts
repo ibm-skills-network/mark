@@ -29,6 +29,15 @@ export class UpdateAssignmentRequestDto {
   instructions: string | null;
 
   @ApiProperty({
+    description: "The grading criteria overiew for the assignment.",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  gradingCriteriaOverview: string | null;
+
+  @ApiProperty({
     description: "Is the assignment graded or not.",
     type: Boolean,
     required: false,
