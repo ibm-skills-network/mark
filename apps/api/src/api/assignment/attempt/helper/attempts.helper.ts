@@ -3,25 +3,39 @@ import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import mammoth from "mammoth";
-import { TextBasedQuestionResponseModel } from "../../../llm/model/text.based.question.response.model";
+import { ChoiceBasedQuestionResponseModel } from "../../../../api/llm/model/choice.based.question.response.model";
+import { TextBasedQuestionResponseModel } from "../../../../api/llm/model/text.based.question.response.model";
+import { TrueFalseBasedQuestionResponseModel } from "../../../../api/llm/model/true.false.based.question.response.model";
+import { UrlBasedQuestionResponseModel } from "../../../../api/llm/model/url.based.question.response.model";
 import { CreateQuestionResponseAttemptRequestDto } from "../dto/question-response/create.question.response.attempt.request.dto";
-import { TextBasedFeedbackDto } from "../dto/question-response/create.question.response.attempt.response.dto";
+import {
+  ChoiceBasedFeedbackDto,
+  CreateQuestionResponseAttemptResponseDto,
+  GeneralFeedbackDto,
+} from "../dto/question-response/create.question.response.attempt.response.dto";
 
 interface UploadedFile {
   originalname: string;
   buffer: Buffer;
 }
 
-// Create a new class
 export const AttemptHelper = {
-  // Converts TextBasedQuestionResponseModel to TextBasedFeedbackDto
-  toTextBasedFeedbackDto(
-    model: TextBasedQuestionResponseModel
-  ): TextBasedFeedbackDto {
-    const dto = new TextBasedFeedbackDto();
-    dto.points = model.points;
-    dto.feedback = model.feedback;
-    return dto;
+  assignFeedbackToResponse(
+    model:
+      | UrlBasedQuestionResponseModel
+      | TextBasedQuestionResponseModel
+      | ChoiceBasedQuestionResponseModel
+      | TrueFalseBasedQuestionResponseModel,
+    responseDto: CreateQuestionResponseAttemptResponseDto
+  ) {
+    responseDto.totalPoints = model.points;
+    if (model instanceof ChoiceBasedQuestionResponseModel) {
+      responseDto.feedback = model.feedback as ChoiceBasedFeedbackDto[];
+    } else {
+      const generalFeedbackDto = new GeneralFeedbackDto();
+      generalFeedbackDto.feedback = model.feedback;
+      responseDto.feedback = [generalFeedbackDto];
+    }
   },
 
   async validateAndGetTextResponse(
@@ -35,17 +49,6 @@ export const AttemptHelper = {
         );
       }
       return createQuestionResponseAttemptRequestDto.learnerTextResponse;
-    }
-
-    if (questionType === QuestionType.URL) {
-      if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
-        throw new BadRequestException(
-          "Expected a url-based response (learnerUrlResponse), but did not receive one."
-        );
-      }
-      return await this.fetchPlainTextFromUrl(
-        createQuestionResponseAttemptRequestDto.learnerUrlResponse
-      );
     }
 
     if (questionType === QuestionType.UPLOAD) {
@@ -75,13 +78,26 @@ export const AttemptHelper = {
     throw new BadRequestException("Unexpected question type received.");
   },
 
-  async fetchPlainTextFromUrl(url: string): Promise<string> {
+  async fetchPlainTextFromUrl(
+    url: string
+  ): Promise<{ body: string; isFunctional: boolean }> {
     try {
       const response = await axios.get<string>(url);
       const $ = cheerio.load(response.data);
-      return $("body").text().trim(); // Extracts plain text from the body of the webpage
-    } catch {
-      throw new BadRequestException(`Unable to fetch or parse the URL: ${url}`);
+
+      // Remove script tags and other potentially irrelevant elements
+      $("script, style, noscript, iframe, noembed, embed, object").remove();
+
+      const plainText = $("body")
+        .text()
+        .trim() // remove spaces from start and end
+        // eslint-disable-next-line unicorn/prefer-string-replace-all
+        .replace(/\s+/g, " "); // replace multiple spaces with a single space
+
+      return { body: plainText, isFunctional: true };
+    } catch (error) {
+      console.error(`Unable to fetch or parse the URL: ${url}`, error);
+      return { body: "", isFunctional: false };
     }
   },
 };

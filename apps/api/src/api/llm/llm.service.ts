@@ -15,14 +15,14 @@ import {
 import { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
 import { TextBasedQuestionResponseModel } from "./model/text.based.question.response.model";
 import { TrueFalseBasedQuestionEvaluateModel } from "./model/true.false.based.question.evaluate.model";
-import {
-  TrueFalseBasedQuestionResponseModel,
-  TrueFalseChoiceBasedFeedback,
-} from "./model/true.false.based.question.response.model";
+import { TrueFalseBasedQuestionResponseModel } from "./model/true.false.based.question.response.model";
+import { UrlBasedQuestionEvaluateModel } from "./model/url.based.question.evaluate.model";
+import { UrlBasedQuestionResponseModel } from "./model/url.based.question.response.model";
 import {
   feedbackChoiceBasedQuestionLlmTemplate,
   feedbackTrueFalseBasedQuestionLlmTemplate,
   gradeTextBasedQuestionLlmTemplate,
+  gradeUrlBasedQuestionLlmTemplate,
 } from "./templates";
 
 @Injectable()
@@ -60,20 +60,18 @@ export class LlmService {
     }
 
     const parser = StructuredOutputParser.fromZodSchema(
-      z.array(
-        z
-          .object({
-            choice: z
-              .boolean()
-              .describe(
-                "The choice selected by the learner (can be either true or false)"
-              ),
-            feedback: z
-              .string()
-              .describe("Feedback provided for the learner's choice"),
-          })
-          .describe("Feedback for each choice made by the learner")
-      )
+      z
+        .object({
+          choice: z
+            .boolean()
+            .describe(
+              "The choice selected by the learner (can be either true or false)"
+            ),
+          feedback: z
+            .string()
+            .describe("Feedback provided for the learner's choice"),
+        })
+        .describe("Feedback for the choice made by the learner")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -92,14 +90,11 @@ export class LlmService {
     const input = await prompt.format({});
     const response = await this.llm.call(input);
 
-    const trueFalseChoiceBasedFeedback = (await parser.parse(
+    const trueFalseBasedQuestionResponseModel = (await parser.parse(
       response
-    )) as TrueFalseChoiceBasedFeedback[];
+    )) as TrueFalseBasedQuestionResponseModel;
 
-    return new TrueFalseBasedQuestionResponseModel(
-      pointsEarned,
-      trueFalseChoiceBasedFeedback
-    );
+    return trueFalseBasedQuestionResponseModel;
   }
 
   async gradeChoiceBasedQuestion(
@@ -161,7 +156,7 @@ export class LlmService {
 
   async gradeTextBasedQuestion(
     textBasedQuestionEvaluateModel: TextBasedQuestionEvaluateModel
-  ): Promise<TextBasedQuestionResponseModel[]> {
+  ): Promise<TextBasedQuestionResponseModel> {
     const {
       question,
       learnerResponse,
@@ -181,19 +176,15 @@ export class LlmService {
 
     const parser = StructuredOutputParser.fromZodSchema(
       z
-        .array(
-          z.object({
-            points: z.number().describe("Points awarded based on the criteria"),
-            feedback: z
-              .string()
-              .describe(
-                "Feedback for the learner based on their response to the criteria"
-              ),
-          })
-        )
-        .describe(
-          "Array of grading data for each criterion or the question as a whole"
-        )
+        .object({
+          points: z.number().describe("Points awarded based on the criteria"),
+          feedback: z
+            .string()
+            .describe(
+              "Feedback for the learner based on their response to the criteria"
+            ),
+        })
+        .describe("Object representing points and feedback")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -216,8 +207,70 @@ export class LlmService {
 
     const textBasedQuestionResponseModel = (await parser.parse(
       response
-    )) as TextBasedQuestionResponseModel[];
+    )) as TextBasedQuestionResponseModel;
 
     return textBasedQuestionResponseModel;
+  }
+
+  async gradeUrlBasedQuestion(
+    urlBasedQuestionEvaluateModel: UrlBasedQuestionEvaluateModel
+  ): Promise<UrlBasedQuestionResponseModel> {
+    const {
+      question,
+      urlProvided,
+      isUrlFunctional,
+      urlBody,
+      totalPoints,
+      scoringCriteriaType,
+      scoringCriteria,
+    } = urlBasedQuestionEvaluateModel;
+
+    // Since question and scoring criteria are also validated with guard rails, only validate learnerResponse
+    const validateLearnerResponse = await this.applyGuardRails(urlProvided);
+    if (!validateLearnerResponse) {
+      throw new HttpException(
+        "Learner response validation failed",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const parser = StructuredOutputParser.fromZodSchema(
+      z
+        .object({
+          points: z.number().describe("Points awarded based on the criteria"),
+          feedback: z
+            .string()
+            .describe(
+              "Feedback for the learner based on their response to the criteria"
+            ),
+        })
+        .describe("Object representing points and feedback")
+    );
+
+    const formatInstructions = parser.getFormatInstructions();
+
+    const prompt = new PromptTemplate({
+      template: gradeUrlBasedQuestionLlmTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question: question,
+        url_provided: urlProvided,
+        url_body: urlBody,
+        is_url_functional: isUrlFunctional ? "funtional" : "not functional",
+        total_points: totalPoints.toString(),
+        scoring_type: scoringCriteriaType,
+        scoring_criteria: JSON.stringify(scoringCriteria),
+        format_instructions: formatInstructions,
+      },
+    });
+
+    const input = await prompt.format({});
+    const response = await this.llm.call(input);
+
+    const urlBasedQuestionResponseModel = (await parser.parse(
+      response
+    )) as UrlBasedQuestionResponseModel;
+
+    return urlBasedQuestionResponseModel;
   }
 }

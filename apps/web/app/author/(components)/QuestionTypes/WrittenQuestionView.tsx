@@ -158,9 +158,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       </div> */}
 
       {/* Render the child component and pass the handleMaxPointsChange function as a prop */}
-      <ExtendableRubricChart
-        questionId={questionId}
-      />
+      <ExtendableRubricChart questionId={questionId} />
 
       {/* {switchState === "b" && (
         // <RubricTable

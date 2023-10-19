@@ -1,3 +1,25 @@
+export const gradeUrlBasedQuestionLlmTemplate = `As an experienced grader with over a decade of expertise, your task is to evaluate and grade a response to a question following the provided guidelines.
+
+The response type is a url and I am going to provide you with the url and its text body (if it's a functional url)
+
+The question is "{question}".\n The url provided by the learner is "{url_provided}". 
+
+The url provided is "{is_url_functional}".
+The body of the url fetched is: "{url_body}".
+
+The question offers a maximum of {total_points} points, utilizes a scoring method of {scoring_type}, and follows the scoring criteria presented in the JSON format as follows: {scoring_criteria}. 
+
+Based on these parameters, assign points and provide constructive feedback:
+
+1. If the scoring type is "CRITERIA_BASED", you are to evaluate the learner's response against the provided list of criteria in a sequential manner. Remember, all criteria are sequential and build on top of each other. The task is to find that one criterion which perfectly encapsulates the learner's actions. Do not split points across multiple criteria. Instead, you should aim to select the single criterion that best represents the learner's response. If you find that the learner's actions fit between two criteria (e.g., one criterion awards 5 points and the next awards 7 points, but the learner's answer seems to fit the 6 points range), interpolate and choose the closest match based on your expertise. Once you have selected the most appropriate criterion, award the corresponding points and provide detailed feedback that reflects how the learner performed in regard to that specific criterion. Your feedback should be constructive, guiding the learner on how they can improve or maintain their current performance level.
+
+2. If the scoring type is "AI_GRADED", use your analytical capabilities to comprehensively assess the response. Based on your assessment, allocate points out of the possible {total_points}. Provide feedback detailing the quality of the learner's answer and the rationale behind the points awarded.
+
+Ensure your feedback is constructive, helping the learner grasp their mistakes and learn from them. The overarching goal is to assist the learner in achieving the full point value in subsequent attempts. Speak to the learner directly in the first person, as if you are a grader communicating feedback. Make sure to add some context about the url contents.
+
+{format_instructions}
+`;
+
 export const gradeTextBasedQuestionLlmTemplate = `As an experienced grader with over a decade of expertise, your task is to evaluate and grade a response to a question following the provided guidelines.
 
 The question is "{question}".\n The learner's response is "{learner_response}". 

@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import { TrueFalseBasedQuestionEvaluateModel } from "../../../api/llm/model/true.false.based.question.evaluate.model";
+import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
   UserRole,
   UserSession,
@@ -34,7 +35,11 @@ import {
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
-import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
+import {
+  ChoiceBasedFeedbackDto,
+  CreateQuestionResponseAttemptResponseDto,
+  GeneralFeedbackDto,
+} from "./dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
 
 @Injectable()
@@ -348,95 +353,104 @@ export class AttemptService {
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     let learnerResponse: string;
-    // Grade Text Based Questions
-    if (
-      question.type === QuestionType.TEXT ||
-      question.type === QuestionType.UPLOAD ||
-      question.type === QuestionType.URL
-    ) {
-      learnerResponse = await AttemptHelper.validateAndGetTextResponse(
-        question.type,
-        createQuestionResponseAttemptRequestDto
-      );
 
-      const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
-        question.question,
-        learnerResponse,
-        question.totalPoints,
-        question.scoring?.type ?? "",
-        question.scoring?.criteria ?? {}
-      );
-
-      const models = await this.llmService.gradeTextBasedQuestion(
-        textBasedQuestionEvaluateModel
-      );
-
-      // map from model to response DTO
-      responseDto.totalPoints = models.reduce(
-        (sum, model) => sum + model.points,
-        0
-      );
-      responseDto.feedback = models.map((element) =>
-        AttemptHelper.toTextBasedFeedbackDto(element)
-      );
-    }
-
-    // Grade True False Questions
-    else if (question.type === QuestionType.TRUE_FALSE) {
-      if (!createQuestionResponseAttemptRequestDto.learnerAnswerChoice) {
-        throw new BadRequestException(
-          "Expected a true-false-based response (learnerAnswerChoice), but did not receive one."
+    switch (question.type) {
+      case QuestionType.TEXT:
+      case QuestionType.UPLOAD: {
+        learnerResponse = await AttemptHelper.validateAndGetTextResponse(
+          question.type,
+          createQuestionResponseAttemptRequestDto
         );
+        const textBasedQuestionEvaluateModel =
+          new TextBasedQuestionEvaluateModel(
+            question.question,
+            learnerResponse,
+            question.totalPoints,
+            question.scoring?.type ?? "",
+            question.scoring?.criteria ?? {}
+          );
+        const model = await this.llmService.gradeTextBasedQuestion(
+          textBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        break;
       }
-
-      const trueFalseBasedQuestionEvaluateModel =
-        new TrueFalseBasedQuestionEvaluateModel(
-          question.question,
-          question.answer,
-          createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
-          question.totalPoints
+      case QuestionType.URL: {
+        if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
+          throw new BadRequestException(
+            "Expected a url-based response (learnerUrlResponse), but did not receive one."
+          );
+        }
+        const urlFetchResponse = await AttemptHelper.fetchPlainTextFromUrl(
+          createQuestionResponseAttemptRequestDto.learnerUrlResponse
         );
-
-      const model = await this.llmService.gradeTrueFalseBasedQuestion(
-        trueFalseBasedQuestionEvaluateModel
-      );
-
-      // map from model to respons DTO
-      responseDto.totalPoints = model.points;
-      responseDto.feedback = model.feedback;
-      learnerResponse = JSON.stringify(
-        createQuestionResponseAttemptRequestDto.learnerAnswerChoice
-      );
-    }
-
-    //Grade Choice Based Questions
-    else {
-      if (!createQuestionResponseAttemptRequestDto.learnerChoices) {
-        throw new BadRequestException(
-          "Expected a choice-based response (learnerChoices), but did not receive one."
-        );
-      }
-
-      const choiceBasedQuestionEvaluateModel =
-        new ChoiceBasedQuestionEvaluateModel(
+        const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
           question.question,
-          question.choices ?? {},
-          createQuestionResponseAttemptRequestDto.learnerChoices,
+          createQuestionResponseAttemptRequestDto.learnerUrlResponse,
+          urlFetchResponse.isFunctional,
+          urlFetchResponse.body,
           question.totalPoints,
-          question.scoring?.type,
-          question.scoring?.criteria ?? undefined
+          question.scoring?.type ?? "",
+          question.scoring?.criteria ?? {}
         );
-
-      const model = await this.llmService.gradeChoiceBasedQuestion(
-        choiceBasedQuestionEvaluateModel
-      );
-
-      // map from model to respons DTO
-      responseDto.totalPoints = model.points;
-      responseDto.feedback = model.feedback;
-      learnerResponse = JSON.stringify(
-        createQuestionResponseAttemptRequestDto.learnerChoices
-      );
+        const model = await this.llmService.gradeUrlBasedQuestion(
+          urlBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        learnerResponse =
+          createQuestionResponseAttemptRequestDto.learnerUrlResponse;
+        break;
+      }
+      case QuestionType.TRUE_FALSE: {
+        if (!createQuestionResponseAttemptRequestDto.learnerAnswerChoice) {
+          throw new BadRequestException(
+            "Expected a true-false-based response (learnerAnswerChoice), but did not receive one."
+          );
+        }
+        const trueFalseBasedQuestionEvaluateModel =
+          new TrueFalseBasedQuestionEvaluateModel(
+            question.question,
+            question.answer,
+            createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
+            question.totalPoints
+          );
+        const model = await this.llmService.gradeTrueFalseBasedQuestion(
+          trueFalseBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        learnerResponse = JSON.stringify(
+          createQuestionResponseAttemptRequestDto.learnerAnswerChoice
+        );
+        break;
+      }
+      case QuestionType.SINGLE_CORRECT:
+      case QuestionType.MULTIPLE_CORRECT: {
+        if (!createQuestionResponseAttemptRequestDto.learnerChoices) {
+          throw new BadRequestException(
+            "Expected a choice-based response (learnerChoices), but did not receive one."
+          );
+        }
+        const choiceBasedQuestionEvaluateModel =
+          new ChoiceBasedQuestionEvaluateModel(
+            question.question,
+            question.choices ?? {},
+            createQuestionResponseAttemptRequestDto.learnerChoices,
+            question.totalPoints,
+            question.scoring?.type,
+            question.scoring?.criteria ?? undefined
+          );
+        const model = await this.llmService.gradeChoiceBasedQuestion(
+          choiceBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        learnerResponse = JSON.stringify(
+          createQuestionResponseAttemptRequestDto.learnerChoices
+        );
+        break;
+      }
+      default: {
+        throw new Error("Invalid question type provided.");
+      }
     }
 
     // create a question response record in db
