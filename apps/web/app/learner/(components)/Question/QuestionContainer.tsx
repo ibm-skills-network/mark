@@ -68,7 +68,8 @@ function Component(props: Props) {
         ...question.questionResponses,
         {
           id: feedback.id,
-          points: feedback.feedback[0].points,
+          //TODO: make sure this is the right var
+          points: feedback.totalPoints,
           feedback: feedback.feedback,
           learnerResponse: question.learnerTextResponse,
           questionId: question.id,
