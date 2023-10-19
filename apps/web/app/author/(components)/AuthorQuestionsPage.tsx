@@ -135,6 +135,7 @@ function AuthorQuestionsPage(props: Props) {
       }
     } else {
       removeQuestion(questionId);
+      return;
     }
     toast.error("Failed to delete question");
   }

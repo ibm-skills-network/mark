@@ -62,6 +62,7 @@ const AuthorIntroduction = (props: Props) => {
         setAssignmentTitle(assignment.name || "Untitiled assignment");
         setIntroduction(assignment.introduction || "");
         setInstructions(assignment.instructions || "");
+        setGradingCriteriaOverview(assignment.gradingCriteriaOverview || "");
         setGrading((oldGrading) => ({
           ...oldGrading,
           // only change the values that are not null or undefined
@@ -108,6 +109,7 @@ const AuthorIntroduction = (props: Props) => {
       allotedTimeMinutes: grading.timeEstimate,
       instructions: instructions,
       introduction: introduction,
+      gradingCriteriaOverview: gradingCriteriaOverview,
       graded: grading.graded,
       passingGrade: grading.passingGrade,
     };
