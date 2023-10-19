@@ -8,6 +8,7 @@ interface Props extends ComponentPropsWithoutRef<"section"> {}
 function SuccessPage(props: Props) {
   const {} = props;
   const pathname = usePathname();
+  const courseId = 400;
 
   return (
     <section className="flex flex-col items-center justify-center w-full h-full gap-y-6">
@@ -28,12 +29,13 @@ function SuccessPage(props: Props) {
             Back to Assignment
           </div>
         </Link>
-        <button className="px-4 py-2 bg-blue-700 rounded-md shadow justify-end items-center gap-2.5 flex">
+        <Link
+          href={`https://author.skills.network/courses/${courseId}?show=assignments`}
+          className="px-4 py-2 bg-blue-700 rounded-md shadow justify-end items-center gap-2.5 flex"
+        >
           <ExitIcon className="w-6 h-6 text-white" />
-          <div className="text-white text-base font-medium">
-            Exit Assignment
-          </div>
-        </button>
+          <div className="text-white text-base font-medium">Back to course</div>
+        </Link>
       </div>
     </section>
   );

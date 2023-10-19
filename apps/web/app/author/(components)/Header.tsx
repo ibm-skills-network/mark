@@ -1,6 +1,5 @@
 "use client";
 
-import { get } from "http";
 import { createQuestion, updateQuestion } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
@@ -39,9 +38,11 @@ function AuthorHeader(props: Props) {
     if (!confirmPublish) {
       return;
     }
-    const promises = questions.map(async (question) => {
+    const promises = questions.map(async (question, index) => {
+      const questionNumber = index + 1;
       // remove values that are not needed in the backend
       const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
+      dataToSend.number = questionNumber;
       console.log("alreadyInBackend", alreadyInBackend, "id", id);
       // conclude the total points of the question by taking the last element of the criteria array if question is TEXT or URL
       if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
@@ -66,8 +67,8 @@ function AuthorHeader(props: Props) {
       } else {
         // create question if it's not already in the backend
         questionId = await createQuestion(assignmentId, dataToSend);
-        // to handle the case where the user clicks on publish multiple times
-        modifyQuestion(questionId, { alreadyInBackend: true });
+        // to handle the case where the user clicks on publish multiple times (deprecated)
+        // modifyQuestion(questionId, { alreadyInBackend: true });
       }
       return questionId;
     });
@@ -186,9 +187,9 @@ function AuthorHeader(props: Props) {
               type="button"
               disabled={!enablePublishButton}
               onClick={handlePublishButton}
-              className="inline-flex leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed"
+              className="inline-flex leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 enabled:hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:opacity-50"
             >
-              Publish
+              Save & Publish
             </button>
           )}
 

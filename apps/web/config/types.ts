@@ -70,7 +70,9 @@ export type Scoring = {
 };
 
 type Feedback = {
-  points: number;
+  // for mcq only
+  choice: string;
+  // for all
   feedback: string;
 };
 
@@ -113,8 +115,12 @@ export interface CreateQuestionRequest extends BaseQuestion {
 
 // TODO: merge this and the one below
 export interface Question extends CreateQuestionRequest {
+  // id only exists in auestions that came from the backend
+  // Questions that users add during a session before saving/publishing
+  // will have no id
   id: number;
   assignmentId: number;
+  number?: number;
 }
 
 export interface QuestionAuthorStore extends Question {
@@ -148,6 +154,7 @@ export type GradingData = {
 export type ModifyAssignmentRequest = {
   introduction?: string;
   instructions?: string;
+  gradingCriteriaOverview?: string;
   graded?: boolean;
   numAttempts?: number;
   allotedTimeMinutes?: number;

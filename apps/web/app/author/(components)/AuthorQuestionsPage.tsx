@@ -8,13 +8,13 @@ import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/solid";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import TextBox from "./Textbox";
+import QuestionWrapper from "./QuestionWrapper";
 
 interface Props {
   assignmentId: number;
   defaultQuestionRetries: number;
 }
-function DynamicTextBoxContainer(props: Props) {
+function AuthorQuestionsPage(props: Props) {
   const { assignmentId, defaultQuestionRetries } = props;
   // const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
 
@@ -50,7 +50,7 @@ function DynamicTextBoxContainer(props: Props) {
           setActiveAssignmentId(assignmentId);
           // update the state of the introduction page with the assignment details from the backend
           setAssignmentTitle(assignment.name || "Untitled Assignment");
-          const questions = assignment.questions?.map((question) => {
+          const questions = assignment.questions?.map((question, index) => {
             return {
               ...question,
               // choices:
@@ -82,7 +82,7 @@ function DynamicTextBoxContainer(props: Props) {
     if (questions.length === 0) {
       console.log("adding question", questions);
       addQuestion({
-        id: 0,
+        id: 1,
         assignmentId: activeAssignmentId,
         question: "",
         totalPoints: 1,
@@ -98,12 +98,12 @@ function DynamicTextBoxContainer(props: Props) {
   }, []);
   const handleAddTextBox = () => {
     addQuestion({
-      id: (questions.slice(-1)[0]?.id || 0) + 1,
+      id: (questions.slice(-1)[0]?.id || 1) + 1,
       assignmentId: activeAssignmentId,
       question: "",
       totalPoints: 1,
       numRetries: defaultQuestionRetries || 1,
-      // TODO: get the type from the dropdown
+      // TODO: have different buttons so that users can easily add other type of questions
       type: "TEXT",
       alreadyInBackend: false,
       scoring: {
@@ -121,8 +121,9 @@ function DynamicTextBoxContainer(props: Props) {
   };
 
   async function handleDeleteTextBox(
-    questionId: number,
-    alreadyInBackend: boolean
+    alreadyInBackend: boolean,
+    // questionNumber?: number,
+    questionId: number
   ) {
     // call the backend to delete the question if it came from the backend
     if (alreadyInBackend) {
@@ -132,6 +133,8 @@ function DynamicTextBoxContainer(props: Props) {
         toast.success("Question deleted!");
         return;
       }
+    } else {
+      removeQuestion(questionId);
     }
     toast.error("Failed to delete question");
   }
@@ -154,6 +157,7 @@ function DynamicTextBoxContainer(props: Props) {
       <div className="my-24 flex flex-col gap-y-20">
         {/* TODO: make this into a component */}
         {questions.map((question, index) => {
+          const questionNumber = index + 1;
           let questionMaxPoints: number;
           if (question.type === "TEXT") {
             questionMaxPoints = question.scoring?.criteria?.slice(-1)[0].points;
@@ -163,11 +167,12 @@ function DynamicTextBoxContainer(props: Props) {
           console.log("question", question);
 
           return (
-            <section key={index} className="flex gap-x-4 mx-auto">
+            <section key={questionNumber} className="flex gap-x-4 mx-auto">
               <div className="sticky top-14 flex h-full flex-col gap-y-2">
                 <div className="inline-flex mx-auto rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold">
-                  {index + 1}
+                  {questionNumber}
                 </div>
+                {/* Display the maxPoints value received from the child component */}
                 <div className="text-blue-700 w-16 whitespace-nowrap">
                   {questionMaxPoints
                     ? questionMaxPoints === 1
@@ -176,16 +181,21 @@ function DynamicTextBoxContainer(props: Props) {
                     : "0 points"}
                 </div>
               </div>
-              <TextBox id={`textbox-${question.id}`} questionId={question.id} />
-
-              {/* Display the maxPoints value received from the child component */}
+              <QuestionWrapper
+                id={`textbox-${question.id}`}
+                questionId={question.id}
+              />
 
               {/* Delete question button */}
               <button
                 disabled={questions.length <= 1}
                 className="sticky top-14 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() =>
-                  handleDeleteTextBox(question.id, question.alreadyInBackend)
+                  handleDeleteTextBox(
+                    question.alreadyInBackend,
+                    // question.number,
+                    question.id
+                  )
                 }
               >
                 <svg
@@ -220,4 +230,4 @@ function DynamicTextBoxContainer(props: Props) {
   );
 }
 
-export default DynamicTextBoxContainer;
+export default AuthorQuestionsPage;

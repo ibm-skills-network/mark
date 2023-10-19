@@ -84,7 +84,7 @@ function GradingOptionsForm(props: Props) {
         />
         <div className="space-y-2">
           <label htmlFor="ungraded" className="font-medium leading-5">
-            Practice or Ungraded
+            Practice or Ungraded Assignment
           </label>
           <p className="text-gray-500">
             This assignment will not count towards the grade total for the
@@ -92,6 +92,9 @@ function GradingOptionsForm(props: Props) {
           </p>
         </div>
       </div>
+
+      {/* a border that has a corner that thins out */}
+      <div className="col-span-2 h-0.5 bg-gradient-to-r from-transparent via-gray-300 via-50%"></div>
 
       <div className="flex flex-col gap-y-2">
         <label htmlFor="passingGrade" className="font-medium leading-5">

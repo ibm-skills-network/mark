@@ -10,8 +10,11 @@ import {
 } from "@/config/types";
 import { getAssignment, modifyAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
-import { IntroductionSection } from "@authorComponents/IntroductionSection";
-import { ExclamationCircleIcon } from "@heroicons/react/outline";
+import IntroductionSection from "@authorComponents/IntroductionSection";
+import {
+  ChevronRightIcon,
+  ExclamationCircleIcon,
+} from "@heroicons/react/outline";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -39,6 +42,7 @@ const AuthorIntroduction = (props: Props) => {
     passingGrade: 60,
     timeEstimate: 30,
   });
+  const [gradingCriteriaOverview, setGradingCriteriaOverview] = useState("");
 
   const [activeAssignmentId, setActiveAssignmentId] = useAuthorStore(
     (state) => [state.activeAssignmentId, state.setActiveAssignmentId]
@@ -55,7 +59,7 @@ const AuthorIntroduction = (props: Props) => {
         // if assignment exists, set it as the active assignment
         setActiveAssignmentId(assignmentId);
         // update the state of the introduction page with the assignment details from the backend
-        setAssignmentTitle(assignment.name || "Introduction");
+        setAssignmentTitle(assignment.name || "Untitiled assignment");
         setIntroduction(assignment.introduction || "");
         setInstructions(assignment.instructions || "");
         setGrading((oldGrading) => ({
@@ -127,23 +131,27 @@ const AuthorIntroduction = (props: Props) => {
   }
   return (
     <>
-      {" "}
       <Title
         text={assignmentTitle}
         className="text-gray-900 text-4xl leading-10 font-extrabold"
       />
       <IntroductionSection
-        title="Introduction"
+        sectionId="introduction"
         value={introduction}
         setValue={setIntroduction}
       />
       <IntroductionSection
-        title="Instructions"
+        sectionId="instructions"
         value={instructions}
         setValue={setInstructions}
       />
       <IntroductionSection
-        title="Grading"
+        sectionId="overview"
+        value={gradingCriteriaOverview}
+        setValue={setGradingCriteriaOverview}
+      />
+      <IntroductionSection
+        sectionId="grading"
         value={grading}
         setValue={setGrading}
       />
@@ -158,10 +166,11 @@ const AuthorIntroduction = (props: Props) => {
         </p>
         <button
           ref={updateAssignmentButtonRef}
-          className="mt-4 px-9 py-2 bg-blue-700 text-white shadow-md rounded-md"
+          className="mt-4 group flex gap-x-1 items-center pl-4 pr-3 py-2 bg-blue-700 text-white shadow-md rounded-md"
           onClick={updateAssignment}
         >
-          Next
+          Add Questions
+          <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />
         </button>
       </footer>
     </>

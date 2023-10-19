@@ -14,7 +14,7 @@ function Component(props: Props) {
         Number of Retries Per Submission
       </label>
       <select
-        className="border border-gray-300 rounded-md px-4 py-3"
+        className="border border-gray-300 shadow-sm rounded-md px-4 py-3"
         name="attempts"
         value={retries}
         onChange={handleRetryChange}

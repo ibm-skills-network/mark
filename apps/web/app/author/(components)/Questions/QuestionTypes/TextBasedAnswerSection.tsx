@@ -12,21 +12,18 @@
 //   ViewListIcon,
 // } from "@heroicons/react/solid";
 import { useAuthorStore } from "@/stores/author";
-import { useState, type ChangeEvent } from "react";
-import RubricTable from "../../../../components/depreciated/RubricTable";
-import ExtendableRubricChart from "../ExtendableRubricChart";
-import QuestionNumberOfRetries from "../QuestionNumberOfRetries";
-import WordCountComponent from "../WordCountComponent";
+import { type ChangeEvent } from "react";
+import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
+import WordCountComponent from "../../WordCountComponent";
+import ExtendableRubricChart from "../Rubric";
 
-interface WrittenQuestionViewProps {
+interface TextBasedAnswerSectionProps {
   questionId: number;
+  isUrl?: boolean;
 }
 
-function WrittenQuestionView(props: WrittenQuestionViewProps) {
-  const {
-    questionId,
-    // initialRubrics,
-  } = props;
+function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
+  const { questionId, isUrl = false } = props;
 
   const [questions, modifyQuestion] = useAuthorStore((state) => [
     state.questions,
@@ -74,11 +71,11 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
   return (
     <>
       <div className="grid grid-cols-2 gap-x-16">
-        <WordCountComponent text="Maximum Word Count " />
         <QuestionNumberOfRetries
           retries={question?.numRetries || -1}
           handleRetryChange={handleQuestionRetryChange}
         />
+        {!isUrl && <WordCountComponent text="Maximum Word Count " />}
       </div>
       <div className="bg-indigo-100 px-8 flex gap-x-4 py-4 -mx-12">
         <svg
@@ -171,4 +168,4 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
     </>
   );
 }
-export default WrittenQuestionView;
+export default TextBasedAnswerSection;

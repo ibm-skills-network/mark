@@ -1,5 +1,5 @@
-import DynamicTextBoxContainer from "@authorComponents/DynamicTextBoxContainer";
-import TextBox from "@authorComponents/Textbox";
+import AuthorQuestionsPage from "@/app/author/(components)/AuthorQuestionsPage";
+import TextBox from "@/app/author/(components)/QuestionWrapper";
 import { useRouter } from "next/router";
 
 interface Props {
@@ -12,7 +12,7 @@ function Component(props: Props) {
   const { defaultQuestionRetries } = searchParams;
   return (
     <div className="overflow-auto">
-      <DynamicTextBoxContainer
+      <AuthorQuestionsPage
         assignmentId={~~params.assignmentId}
         defaultQuestionRetries={~~defaultQuestionRetries}
       />

@@ -3,7 +3,7 @@
 import type { Choices } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import React, { useEffect, useState, type ChangeEvent } from "react";
-import QuestionNumberOfRetries from "../QuestionNumberOfRetries";
+import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import Choice from "./Choice";
 
 interface sectionProps {

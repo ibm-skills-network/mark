@@ -1,31 +1,13 @@
 import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
-import { useState } from "react";
 
-interface ExtendableRubricChartProps {
+interface Rubric {
   questionId: number;
 }
 
-function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
+function Rubric(props: Rubric) {
   const { questionId } = props;
-  ////////////////////////////////////////////////
-  // state and handle function for the prompt part
-  ////////////////////////////////////////////////
-  const [inputValues, setInputValues] = useState<string[]>([]);
-
-  // Function to handle input changes and update the state
-  const handleInputChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-    divKey: number
-  ) => {
-    const updatedInputValues = [...inputValues];
-    updatedInputValues[divKey] = event.target.value;
-    setInputValues(updatedInputValues);
-  };
-
   // Step 1: State Management
-  const [divElements, setDivElements] = useState<number[]>([]);
-
   const [questions, modifyQuestion, addCriteria, removeCriteria, setCriterias] =
     useAuthorStore((state) => [
       state.questions,
@@ -199,4 +181,4 @@ function ExtendableRubricChartProps(props: ExtendableRubricChartProps) {
   );
 }
 
-export default ExtendableRubricChartProps;
+export default Rubric;

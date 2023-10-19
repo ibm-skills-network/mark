@@ -4,6 +4,7 @@ import { GradingData } from "@/config/types";
 import {
   ComponentPropsWithoutRef,
   ElementType,
+  useMemo,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -15,45 +16,60 @@ import {
   IntroductionIcon,
 } from "./IntroductionSvgs";
 
-const titleToDescription = {
-  Introduction:
-    "Write a short summary of the learning goals of this assignment and what learners will be required to do",
-  Instructions:
-    "Write specific instructions for learners to follow when submitting their assignment. Or remind them to follow a certain format before submitting",
-  Grading:
-    "Select the options that you want to apply to your assignment, you can come back and change these anytime",
-  "Add Additional Files":
-    "Add any additional files the student may need to interact with when taking the assignment",
-} as const as Record<string, string>;
+const titleToDescription = [
+  {
+    sectionId: "introduction",
+    title: "Short Summary of The Learning Goals",
+    description:
+      "Write a short summary of the learning goals of this assignment and what learners will be required to do",
+    svg: <IntroductionIcon />,
+  },
+  {
+    sectionId: "instructions",
+    title: "Instructions for learners",
+    description:
+      "Write specific instructions for learners to follow when submitting their assignment. Or remind them to follow a certain format before submitting",
+    svg: <InstructionIcon />,
+  },
+  {
+    sectionId: "grading",
+    title: "Grading",
+    description:
+      "Select the options that you want to apply to your assignment, you can come back and change these anytime",
+    svg: <GradingIcon />,
+  },
+  {
+    sectionId: "overview",
+    title: "Grading Criteria Overview",
+    description:
+      "Provide a brief explanation on how the assignment will be graded",
+    svg: <GradingIcon />,
+  },
+] as const;
 
-const titleToSvg = {
-  Introduction: <IntroductionIcon />,
-  Instructions: <InstructionIcon />,
-  Grading: <GradingIcon />,
-} as const as Record<string, JSX.Element>;
-export function IntroductionSection<T extends ElementType = "section">({
-  as,
-  className,
-  title,
-  value,
-  setValue,
-  ...props
-}: Omit<ComponentPropsWithoutRef<T>, "as" | "className"> & {
-  as?: T;
-  className?: string;
-  title: string;
-  value: unknown;
-  setValue: Dispatch<SetStateAction<unknown>>;
-  [key: string]: unknown;
-}) {
+export function IntroductionsectionId<T extends ElementType = "section">(
+  props: Omit<ComponentPropsWithoutRef<T>, "as" | "className"> & {
+    as?: T;
+    className?: string;
+    sectionId: string;
+    value: unknown;
+    setValue: Dispatch<SetStateAction<unknown>>;
+    [key: string]: unknown;
+  }
+) {
+  const { as, className, sectionId, value, setValue, ...rest } = props;
   const Component = as ?? "section";
-  const description = titleToDescription[title];
-  const svg = titleToSvg[title];
+  const section = useMemo(() => {
+    return titleToDescription.find(
+      (section) => section.sectionId === sectionId
+    );
+  }, [sectionId]);
+  const { title, description, svg } = section;
   return (
     <Component
       className={twMerge("group relative flex flex-col items-start", className)}
-      id={title.toLowerCase()}
-      {...props}
+      id={sectionId.toLowerCase()}
+      {...rest}
     >
       <div className="flex items-center bg-gray-50 rounded-t-lg border-t border-l border-r border-gray-300 w-full min-h-[6.5rem] px-12 2xl:px-14">
         <div className="w-12 mr-6">{svg}</div>
@@ -63,7 +79,9 @@ export function IntroductionSection<T extends ElementType = "section">({
         </div>
       </div>
       <div className="w-full border rounded-b-lg border-gray-300 bg-white px-12 2xl:px-14 py-8">
-        {title === "Introduction" || title === "Instructions" ? (
+        {sectionId === "introduction" ||
+        sectionId === "instructions" ||
+        sectionId === "overview" ? (
           <MarkdownEditor
             value={value as string}
             setValue={setValue}
@@ -81,4 +99,4 @@ export function IntroductionSection<T extends ElementType = "section">({
   );
 }
 
-export default IntroductionSection;
+export default IntroductionsectionId;

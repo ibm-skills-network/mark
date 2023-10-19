@@ -1,6 +1,6 @@
 "use client";
 
-import AssignmentForm from "../(components)/AssignmentForm";
+import AssignmentForm from "../(components)/AssignmentDetailsForm";
 import SuccessPage from "../(components)/SuccessPage";
 
 interface Props {

@@ -5,8 +5,8 @@ import type { QuestionType, QuestionTypeDropdown } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { ComponentPropsWithoutRef, useEffect, useRef, useState } from "react";
-import MultipleAnswerSection from "./QuestionTypes/MultipleAnswerSection";
-import WrittenQuestionView from "./QuestionTypes/WrittenQuestionView";
+import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
+import TextBasedAnswerSection from "./Questions/QuestionTypes/TextBasedAnswerSection";
 
 const questionTypes = [
   {
@@ -19,13 +19,13 @@ const questionTypes = [
     description: "This question has a written answer",
     value: "URL",
   },
+  // {
+  //   label: "Single Answer",
+  //   description: "This multiple choice should have exactly one answer.",
+  //   value: "SINGLE_CORRECT",
+  // },
   {
-    label: "Single Answer",
-    description: "This multiple choice should have exactly one answer.",
-    value: "SINGLE_CORRECT",
-  },
-  {
-    label: "Multiple Answer",
+    label: "Multiple Choice",
     description: "This multiple choice can have zero or more than one answer",
     value: "MULTIPLE_CORRECT",
   },
@@ -34,7 +34,7 @@ interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
   questionId: number;
 }
 
-function TextBox(props: TextBoxProps) {
+function QuestionWrapper(props: TextBoxProps) {
   const { questionId, ...rest } = props;
   const [isLearnerView, setIsLearnerView] = useState(false);
   const [displayText, setDisplayText] = useState("");
@@ -92,74 +92,6 @@ function TextBox(props: TextBoxProps) {
     });
   }
 
-  // const handleDisplayText = () => {
-  //   setDisplayText(inputText);
-  // };
-
-  // const handleMenuToggle = () => {
-  //   setIsMenuOpen((prevIsMenuOpen) => !prevIsMenuOpen);
-  // };
-
-  // const handleQuestionTypeSelect = (questionType: QuestionType) => {
-  //   setSelectedQuestionType(questionType);
-  //   setIsMenuOpen(false);
-  //   setChoicesSingleCorrect([]);
-  //   setSelectedChoiceSingleCorrect(null);
-  //   setWrittenQuestionText("");
-  // };
-
-  // const handleChoiceChangeSingleCorrect = (index: number, value: string) => {
-  //   const updatedChoices = [...choicesSingleCorrect];
-  //   updatedChoices[index] = value;
-  //   setChoicesSingleCorrect(updatedChoices);
-  // };
-
-  // const handleChoiceToggleSingleCorrect = (index: number) => {
-  //   setSelectedChoiceSingleCorrect((prevSelectedChoice) => {
-  //     return prevSelectedChoice === choicesSingleCorrect[index]
-  //       ? null
-  //       : choicesSingleCorrect[index];
-  //   });
-  // };
-
-  // const handleChoiceToggleMultipleAnswers = (choice: string) => {
-  //   setSelectedChoicesMultipleAnswers((prevSelectedChoices) => {
-  //     if (prevSelectedChoices.includes(choice)) {
-  //       return prevSelectedChoices.filter(
-  //         (selectedChoice) => selectedChoice !== choice
-  //       );
-  //     } else {
-  //       return [...prevSelectedChoices, choice];
-  //     }
-  //   });
-  // };
-
-  // const handleChoiceChangeMultipleAnswers = (index: number, value: string) => {
-  //   const updatedChoices = [...choicesMultipleAnswers];
-  //   updatedChoices[index] = value;
-  //   setChoicesMultipleAnswers(updatedChoices);
-  // };
-
-  // const handleWrittenQuestionChange = (
-  //   event: React.ChangeEvent<HTMLInputElement>
-  // ) => {
-  //   setWrittenQuestionText(event.target.value);
-  // };
-
-  const handleChoiceChangeWrittenQuestion = (index: number, value: string) => {
-    const updatedChoices = [...choicesWrittenQuestion];
-    updatedChoices[index] = value;
-    setChoicesWrittenQuestion(updatedChoices);
-  };
-
-  const handleAddChoiceWrittenQuestion = () => {
-    setChoicesWrittenQuestion([...choicesWrittenQuestion, ""]);
-  };
-
-  const handleRemoveChoiceWrittenQuestion = (index: number) => {
-    const updatedChoices = choicesWrittenQuestion.filter((_, i) => i !== index);
-    setChoicesWrittenQuestion(updatedChoices);
-  };
   return (
     <div
       {...rest}
@@ -201,7 +133,7 @@ function TextBox(props: TextBoxProps) {
         />
       </div>
       <div className="flex flex-col gap-y-1">
-        <p className="text-black font-inter leading-5">Question Type</p>
+        <p className="text-black font-inter leading-5">Answer Type</p>
         <Dropdown
           questionType={question.type}
           setQuestionType={setQuestionType}
@@ -210,7 +142,10 @@ function TextBox(props: TextBoxProps) {
       </div>
       {question.type === questionTypes[0].value ||
       question.type === questionTypes[1].value ? (
-        <WrittenQuestionView questionId={questionId} />
+        <TextBasedAnswerSection
+          questionId={questionId}
+          isUrl={question.type === questionTypes[1].value}
+        />
       ) : null}
 
       {/* {questionType === questionTypes[0] ? (
@@ -223,11 +158,11 @@ function TextBox(props: TextBoxProps) {
             />
           ) : null} */}
 
-      {question.type === questionTypes[3].value ? (
+      {question.type === questionTypes[2].value ? (
         <MultipleAnswerSection questionId={questionId} />
       ) : null}
     </div>
   );
 }
 
-export default TextBox;
+export default QuestionWrapper;
