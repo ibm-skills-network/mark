@@ -160,8 +160,10 @@ function AuthorQuestionsPage(props: Props) {
         {questions.map((question, index) => {
           const questionNumber = index + 1;
           let questionMaxPoints: number;
-          if (question.type === "TEXT") {
-            questionMaxPoints = question.scoring?.criteria?.slice(-1)[0].points;
+          if (question.type === "TEXT" || question.type === "URL") {
+            questionMaxPoints = Math.max(
+              ...question.scoring.criteria.map((criteria) => criteria.points)
+            );
           } else {
             questionMaxPoints = question.totalPoints;
           }

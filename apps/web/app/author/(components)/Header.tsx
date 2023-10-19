@@ -7,7 +7,7 @@ import Title from "@components/Title";
 import { EyeIcon } from "@heroicons/react/outline";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 interface Props {}
@@ -31,7 +31,49 @@ function AuthorHeader(props: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
   // check if all questions have been filled out
-  const enablePublishButton = questions.every((question) => question.question);
+  const enablePublishButton = useMemo(() => {
+    // TODO: show a custom error message for each case
+    return questions.every((question) => {
+      const { type, question: questionText, choices, scoring } = question;
+      const questionTextFilledOut = questionText?.trim().length > 0;
+      if (type === "URL" || type === "TEXT") {
+        //criteria needs to be filled out
+        const criteriaFilledOut =
+          scoring?.criteria?.length > 0 &&
+          scoring?.criteria?.every((criterion) => {
+            return criterion.description?.trim().length > 0;
+          });
+        if (!criteriaFilledOut) {
+          // disable publish button if criteria is not filled out
+          return false;
+        }
+      }
+      // if type is multiple correct, check if there are at least 2 choices
+      if (type === "MULTIPLE_CORRECT") {
+        if (!choices) {
+          // disable publish button if choices is not filled out
+          return false;
+        }
+        const keys = Object.keys(choices);
+        const choicesFilledOut = keys.every((key) => {
+          return key?.trim().length > 0;
+        });
+        const isTwoOrMoreChoices = keys.length >= 2;
+        const isAtLeastOneCorrectChoice = keys.some((key) => {
+          return choices[key];
+        });
+        if (
+          !choicesFilledOut ||
+          !isTwoOrMoreChoices ||
+          !isAtLeastOneCorrectChoice
+        ) {
+          // disable publish button if choices requirements is not satisfied
+          return false;
+        }
+      }
+      return questionTextFilledOut;
+    });
+  }, [questions]);
 
   async function handlePublishButton() {
     const confirmPublish = confirm("Are you sure you want to publish?");
