@@ -35,11 +35,7 @@ import {
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
-import {
-  ChoiceBasedFeedbackDto,
-  CreateQuestionResponseAttemptResponseDto,
-  GeneralFeedbackDto,
-} from "./dto/question-response/create.question.response.attempt.response.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
 
 @Injectable()
