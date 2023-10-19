@@ -284,7 +284,13 @@ export class AttemptService {
 
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
-      select: { questions: true },
+      select: {
+        questions: {
+          orderBy: {
+            number: "asc",
+          },
+        },
+      },
     });
 
     const questions = assignment.questions.map((question) => {
@@ -294,6 +300,7 @@ export class AttemptService {
 
       return {
         id: question.id,
+        number: question.number,
         totalPoints: question.totalPoints,
         numRetries: question.numRetries,
         maxWords: question.maxWords,

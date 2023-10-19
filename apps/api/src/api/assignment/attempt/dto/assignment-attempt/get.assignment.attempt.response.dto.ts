@@ -60,6 +60,13 @@ class AssignmentAttemptQuestions {
   id: number;
 
   @ApiProperty({
+    description: "The question number.",
+    type: Number,
+    required: true,
+  })
+  number: number;
+
+  @ApiProperty({
     description: "Total points for the question.",
     type: Number,
     required: true,

@@ -76,6 +76,7 @@ model Assignment {
 /// The Question model represents a question in an assignment
 model Question {
   id           Int          @id @default(autoincrement())         /// Unique identifier for the question
+  number       Int                                                /// Represents the question number in an assignment (to keep track of ordering)
   totalPoints  Int                                                /// Total points that can be scored for the question
   numRetries   Int?                                               /// Max number of times a student can retry a question
   type         QuestionType                                       /// Type of question
@@ -86,6 +87,7 @@ model Question {
   answer       Boolean?                                           /// The correct answer for the question (used for auto grading)
   assignmentId Int                                                /// The ID of the assignment to which the question belongs
   assignment   Assignment   @relation(fields: [assignmentId], references: [id])   /// The assignment to which the question belongs
+  @@unique([number, assignmentId])
 }
 
 /// This model represents an assignment attempt by a learner

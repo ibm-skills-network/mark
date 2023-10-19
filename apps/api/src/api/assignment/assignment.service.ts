@@ -25,7 +25,15 @@ export class AssignmentService {
 
     const result = await this.prisma.assignment.findUnique({
       where: { id },
-      include: { questions: includeQuestions },
+      include: {
+        questions: includeQuestions
+          ? {
+              orderBy: {
+                number: "asc",
+              },
+            }
+          : false,
+      },
     });
 
     if (!result) {
