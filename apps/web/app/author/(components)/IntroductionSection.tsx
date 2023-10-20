@@ -22,6 +22,8 @@ const titleToDescription = [
     title: "Short Summary of The Learning Goals",
     description:
       "Write a short summary of the learning goals of this assignment and what learners will be required to do",
+    placeholder:
+      "Write your introduction here. E.g “This assignment provides an introduction to the topic of climate change...”",
     svg: <IntroductionIcon />,
   },
   {
@@ -29,12 +31,15 @@ const titleToDescription = [
     title: "Instructions for learners",
     description:
       "Text you write here will be guidance for the learner, whether it's assignment instructions or a format reminder for submission",
+    placeholder:
+      "Write your specific instructions here. E.g “Cite your sources at the end of every short answer.”",
     svg: <InstructionIcon />,
   },
   {
     sectionId: "grading",
     title: "Grading",
     description: "Select the options that you want to apply to your assignment",
+    placeholder: "",
     svg: <GradingIcon />,
   },
   {
@@ -42,6 +47,8 @@ const titleToDescription = [
     title: "Grading Criteria Overview",
     description:
       "Provide a brief explanation on how the assignment will be graded",
+    placeholder:
+      "E.g “1. State the country that is most affected by climate change (1 pt)...”",
     svg: <GradingIcon />,
   },
 ] as const;
@@ -63,7 +70,7 @@ export function IntroductionsectionId<T extends ElementType = "section">(
       (section) => section.sectionId === sectionId
     );
   }, [sectionId]);
-  const { title, description, svg } = section;
+  const { title, description, svg, placeholder } = section;
   return (
     <Component
       className={twMerge("group relative flex flex-col items-start", className)}
@@ -84,6 +91,7 @@ export function IntroductionsectionId<T extends ElementType = "section">(
           <MarkdownEditor
             value={value as string}
             setValue={setValue}
+            placeholder={placeholder}
             textareaClassName="!min-h-[6.5rem] !max-h-72"
             className=""
           />

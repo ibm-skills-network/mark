@@ -45,7 +45,7 @@ function MarkdownEditor(props: Props) {
           className + " rounded-md border border-gray-300 overflow-hidden"
         }
         markdownClass={twMerge(
-          "focus:ring-0 focus:ring-offset-0",
+          "focus:ring-0 focus:ring-offset-0 placeholder-gray-400 !text-base",
           textareaClassName
         )}
         placeholder={placeholder}
