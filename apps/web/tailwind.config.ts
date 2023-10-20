@@ -11,6 +11,8 @@ const config: Config = {
     "left-[0rem]",
     "bottom-[1rem]",
     "left-[1rem]",
+    "bottom-[1.5rem]",
+    "left-[1.5rem]",
     "bottom-[2rem]",
     "left-[2rem]",
     {

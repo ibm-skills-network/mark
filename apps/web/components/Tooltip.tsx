@@ -17,7 +17,7 @@ const Tooltip: FC<Props> = (props) => {
     delay = 500,
     children,
     disabled = false,
-    distance = 1,
+    distance = 1.5,
     className,
     ...restOfProps
   } = props;
