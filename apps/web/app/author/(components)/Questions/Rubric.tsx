@@ -105,7 +105,7 @@ function Rubric(props: Rubric) {
                   handlePromptPoints(index, event.target.value);
                 }}
                 // the previous' value is the min value of this input
-                min={criterias.at(-1).points + 1 || 0}
+                min={criterias[index - 1]?.points + 1 || 0}
                 max={100}
                 style={{
                   maxWidth: "100%",
