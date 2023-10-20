@@ -1,4 +1,4 @@
-import usePersistentCountdown from "@/hooks/usePersistentCountdown";
+import usePersistentCountdown from "@/hooks/use-persistent-countdown";
 import { useLearnerStore } from "@/stores/learner";
 import { type ComponentPropsWithoutRef } from "react";
 

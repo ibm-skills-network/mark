@@ -4,7 +4,7 @@ import { createQuestion, updateQuestion } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
-import { EyeIcon } from "@heroicons/react/outline";
+import { EyeIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";

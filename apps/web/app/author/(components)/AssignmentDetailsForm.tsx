@@ -8,13 +8,14 @@ import {
   ModifyAssignmentRequest,
   QuestionAuthorStore,
 } from "@/config/types";
+import useBeforeUnload from "@/hooks/use-before-unload";
 import { getAssignment, modifyAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import IntroductionSection from "@authorComponents/IntroductionSection";
 import {
   ChevronRightIcon,
   ExclamationCircleIcon,
-} from "@heroicons/react/outline";
+} from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -25,6 +26,9 @@ interface Props {
 const AuthorIntroduction = (props: Props) => {
   const { assignmentId } = props;
   const router = useRouter();
+  useBeforeUnload(
+    "Are you sure you want to leave this page? You will lose any unsaved changes."
+  );
   const [introduction, setIntroduction] = useState("");
   const [showPage, setShowPage] = useState<"loading" | "error" | "success">(
     "loading"

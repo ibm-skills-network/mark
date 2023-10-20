@@ -3,9 +3,11 @@
 "use client";
 
 import { initialCriteria } from "@/config/constants";
+import useBeforeUnload from "@/hooks/use-before-unload";
 import { deleteQuestion, getAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
-import { PlusIcon } from "@heroicons/react/solid";
+import { PlusIcon } from "@heroicons/react/24/solid";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import QuestionWrapper from "./QuestionWrapper";
@@ -16,6 +18,10 @@ interface Props {
 }
 function AuthorQuestionsPage(props: Props) {
   const { assignmentId, defaultQuestionRetries } = props;
+  const router = useRouter();
+  useBeforeUnload(
+    "Are you sure you want to leave this page? You will lose any unsaved changes."
+  );
   // const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
 
   // click me button for textboxes
@@ -70,8 +76,8 @@ function AuthorQuestionsPage(props: Props) {
             console.log("no questions");
           }
         } else {
-          //
-          console.log("assignment not found");
+          toast.error("Failed to get assignment details");
+          router.push("/");
         }
       })().catch((err) => {
         console.log("err", err);

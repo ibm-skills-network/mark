@@ -35,13 +35,15 @@ function Section(props: sectionProps) {
 
   const question = questions.find((question) => question.id === questionId);
   const { choices, totalPoints: points, numRetries: retries } = question;
+  // keys are the choices, values are booleans
+  const keys = Object.keys(choices);
+  const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
+
   useEffect(() => {
     // if choices is empty, add a default choice
     if (!choices) {
       setChoices(questionId, {
-        "this is a default choice": true,
-        "this is another default choice": false,
-        "this is a third default choice": false,
+        "": false,
       });
     }
   }, []);
@@ -124,7 +126,8 @@ function Section(props: sectionProps) {
       <div className="">
         <button
           type="button"
-          className="rounded-full bg-white px-5 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200"
+          disabled={disableAddChoice}
+          className="rounded-full bg-white px-5 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200 disabled:opacity-60 transition"
           onClick={handleAddChoice}
         >
           <div className="flex items-center">
