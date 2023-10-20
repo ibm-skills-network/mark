@@ -36,19 +36,19 @@ const titleToDescription = [
     svg: <InstructionIcon />,
   },
   {
-    sectionId: "grading",
-    title: "Grading",
-    description: "Select the options that you want to apply to your assignment",
-    placeholder: "",
-    svg: <GradingIcon />,
-  },
-  {
     sectionId: "overview",
     title: "Grading Criteria Overview",
     description:
       "Provide a brief explanation on how the assignment will be graded",
     placeholder:
       "E.g “1. State the country that is most affected by climate change (1 pt)...”",
+    svg: <GradingIcon />,
+  },
+  {
+    sectionId: "grading",
+    title: "Grading",
+    description: "Select the options that you want to apply to your assignment",
+    placeholder: "",
     svg: <GradingIcon />,
   },
 ] as const;

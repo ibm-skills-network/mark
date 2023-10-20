@@ -1,6 +1,4 @@
 import AuthorQuestionsPage from "@/app/author/(components)/AuthorQuestionsPage";
-import TextBox from "@/app/author/(components)/QuestionWrapper";
-import { useRouter } from "next/router";
 
 interface Props {
   params: { assignmentId: string };

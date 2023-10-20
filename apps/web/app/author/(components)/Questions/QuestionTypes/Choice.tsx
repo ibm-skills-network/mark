@@ -1,4 +1,3 @@
-import { useAuthorStore } from "@/stores/author";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useState, type ComponentPropsWithoutRef } from "react";
 
@@ -14,8 +13,6 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 function Component(props: Props) {
   const { index, choice, isChecked, toggleChoice, modifyChoice, removeChoice } =
     props;
-
-  const [isInputMode, setIsInputMode] = useState(false);
 
   function handleChoiceTextChange(event: React.ChangeEvent<HTMLInputElement>) {
     modifyChoice(index, event.target.value);

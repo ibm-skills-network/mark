@@ -15,7 +15,6 @@ const config: Config = {
     "left-[2rem]",
     {
       pattern: /delay-(100|200|300|500)/,
-      variants: [],
     },
   ],
   theme: {

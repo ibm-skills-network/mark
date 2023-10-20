@@ -1,9 +1,11 @@
 "use client";
 
 import Dropdown from "@/components/Dropdown";
+import Tooltip from "@/components/Tooltip";
 import type { QuestionType, QuestionTypeDropdown } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { ComponentPropsWithoutRef, useEffect, useRef, useState } from "react";
 import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
 import TextBasedAnswerSection from "./Questions/QuestionTypes/TextBasedAnswerSection";
@@ -134,7 +136,12 @@ function QuestionWrapper(props: TextBoxProps) {
         />
       </div>
       <div className="flex flex-col gap-y-1">
-        <p className="text-black font-inter leading-5">Response Type</p>
+        <p className="leading-5 flex gap-x-1">
+          Response Type
+          <Tooltip content="Choose how you want the learner to answer your question.">
+            <InformationCircleIcon className="w-5 inline-block text-blue-500" />
+          </Tooltip>
+        </p>
         <Dropdown
           questionType={question.type}
           setQuestionType={setQuestionType}
