@@ -1,4 +1,5 @@
 import { useAuthorStore } from "@/stores/author";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useState, type ComponentPropsWithoutRef } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -16,26 +17,21 @@ function Component(props: Props) {
 
   const [isInputMode, setIsInputMode] = useState(false);
 
-  function handleChoiceTextChange(
-    event: React.ChangeEvent<HTMLTextAreaElement>
-  ) {
+  function handleChoiceTextChange(event: React.ChangeEvent<HTMLInputElement>) {
     modifyChoice(index, event.target.value);
   }
 
   return (
-    <div key={index} className="flex items-center gap-x-4">
+    <div key={index} className="flex items-center gap-x-1.5">
       <input
         type="checkbox"
+        className="rounded"
         id={index.toString()}
         checked={isChecked}
         onChange={() => toggleChoice(choice)}
       />
-      <div className="pl-2">
-        {/* Add margin to create space */}
-        {String.fromCharCode(65 + index)}.
-      </div>
-      <textarea
-        className="w-full border border-gray-300 resize-y overflow-hidden p-2 rounded-md text-black outline-none"
+      <input
+        className="w-full overflow-hidden border-transparent focus:!border-transparent transition focus:!border-b-gray-300 !ring-0 p-2 text-black outline-none"
         placeholder={`Choice ${index + 1}`}
         value={choice}
         onChange={handleChoiceTextChange}
@@ -46,20 +42,7 @@ function Component(props: Props) {
           removeChoice(choice);
         }}
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth="1.5"
-          stroke="currentColor"
-          className="w-6 h-6"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M12 9.75L14.25 12m0 0l2.25 2.25M14.25 12l2.25-2.25M14.25 12L12 14.25m-2.58 4.92l-6.375-6.375a1.125 1.125 0 010-1.59L9.42 4.83c.211-.211.498-.33.796-.33H19.5a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25h-9.284c-.298 0-.585-.119-.796-.33z"
-          />
-        </svg>
+        <XMarkIcon className="w-6" />
       </button>
     </div>
   );

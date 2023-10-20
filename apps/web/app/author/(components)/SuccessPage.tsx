@@ -30,7 +30,7 @@ function SuccessPage(props: Props) {
           </div>
         </Link>
         <Link
-          href={`https://author.skills.network/courses/${courseId}?show=assignments`}
+          href={`https://author.skills.network/courses`}
           className="px-4 py-2 bg-blue-700 rounded-md shadow justify-end items-center gap-2.5 flex"
         >
           <ExitIcon className="w-6 h-6 text-white" />

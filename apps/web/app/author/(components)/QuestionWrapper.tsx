@@ -133,7 +133,7 @@ function QuestionWrapper(props: TextBoxProps) {
         />
       </div>
       <div className="flex flex-col gap-y-1">
-        <p className="text-black font-inter leading-5">Answer Type</p>
+        <p className="text-black font-inter leading-5">Response Type</p>
         <Dropdown
           questionType={question.type}
           setQuestionType={setQuestionType}

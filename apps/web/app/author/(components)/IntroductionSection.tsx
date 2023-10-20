@@ -28,14 +28,13 @@ const titleToDescription = [
     sectionId: "instructions",
     title: "Instructions for learners",
     description:
-      "Write specific instructions for learners to follow when submitting their assignment. Or remind them to follow a certain format before submitting",
+      "Text you write here will be guidance for the learner, whether it's assignment instructions or a format reminder for submission",
     svg: <InstructionIcon />,
   },
   {
     sectionId: "grading",
     title: "Grading",
-    description:
-      "Select the options that you want to apply to your assignment, you can come back and change these anytime",
+    description: "Select the options that you want to apply to your assignment",
     svg: <GradingIcon />,
   },
   {

@@ -5,6 +5,19 @@ const config: Config = {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  safelist: [
+    // for the tooltip
+    "bottom-[0rem]",
+    "left-[0rem]",
+    "bottom-[1rem]",
+    "left-[1rem]",
+    "bottom-[2rem]",
+    "left-[2rem]",
+    {
+      pattern: /delay-(100|200|300|500)/,
+      variants: [],
+    },
+  ],
   theme: {
     extend: {
       backgroundImage: {

@@ -35,10 +35,6 @@ function Section(props: sectionProps) {
 
   const question = questions.find((question) => question.id === questionId);
   const { choices, totalPoints: points, numRetries: retries } = question;
-  // keys are the choices, values are booleans
-  const keys = Object.keys(choices);
-  const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
-
   useEffect(() => {
     // if choices is empty, add a default choice
     if (!choices) {
@@ -47,6 +43,12 @@ function Section(props: sectionProps) {
       });
     }
   }, []);
+  if (!choices) {
+    return null;
+  }
+  // keys are the choices, values are booleans
+  const keys = Object.keys(choices);
+  const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
 
   function handleChoiceToggle(choiceId: string) {
     toggleChoice(questionId, choiceId);
@@ -73,10 +75,6 @@ function Section(props: sectionProps) {
     modifyQuestion(questionId, {
       numRetries: ~~e.target.value,
     });
-  }
-
-  if (!choices) {
-    return null;
   }
   // convert the choices map to an array of [choice, isChecked] tuples
   // const choicesEntries = Array.from(choices.entries());
@@ -127,7 +125,7 @@ function Section(props: sectionProps) {
         <button
           type="button"
           disabled={disableAddChoice}
-          className="rounded-full bg-white px-5 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200 disabled:opacity-60 transition"
+          className="rounded-full bg-white px-5 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200 disabled:opacity-50 transition"
           onClick={handleAddChoice}
         >
           <div className="flex items-center">

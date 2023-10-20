@@ -80,7 +80,7 @@ module.exports = {
     "dist/",
     "node_modules/",
     ".turbo",
-    "tailwind.config.js",
+    "tailwind.config.ts",
     "postcss.config.js",
     ".eslintrc.cjs",
     "**/depreciated/*",

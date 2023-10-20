@@ -1,4 +1,6 @@
+import Tooltip from "@/components/Tooltip";
 import type { GradingData } from "@config/types";
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { type Dispatch, type SetStateAction } from "react";
 
 interface Props extends React.ComponentPropsWithoutRef<"div"> {
@@ -83,7 +85,10 @@ function GradingOptionsForm(props: Props) {
           onChange={handleGradedChange}
         />
         <div className="space-y-2">
-          <label htmlFor="ungraded" className="font-medium leading-5">
+          <label
+            htmlFor="ungraded"
+            className="font-medium leading-5 items-center"
+          >
             Practice or Ungraded Assignment
           </label>
           <p className="text-gray-500">
@@ -97,8 +102,11 @@ function GradingOptionsForm(props: Props) {
       <div className="col-span-2 h-0.5 bg-gradient-to-r from-transparent via-gray-300 via-50%"></div>
 
       <div className="flex flex-col gap-y-2">
-        <label htmlFor="passingGrade" className="font-medium leading-5">
-          <span className="text-gray-800">Time Estimate</span>{" "}
+        <label
+          htmlFor="passingGrade"
+          className="font-medium leading-5 flex gap-x-1"
+        >
+          Time Estimate
           <span className="text-gray-500">(minutes)</span>
         </label>
         <input
@@ -112,8 +120,14 @@ function GradingOptionsForm(props: Props) {
         />
       </div>
       <div className="flex flex-col gap-y-2">
-        <label htmlFor="attempts" className="font-medium leading-5">
-          <span className="text-gray-800">Assignment Submissions Allowed</span>
+        <label
+          htmlFor="attempts"
+          className="font-medium leading-5 flex gap-x-1"
+        >
+          Assignment Submissions Allowed
+          <Tooltip content="The number of times a student can submit this assignment.">
+            <InformationCircleIcon className="w-5 inline-block text-blue-500" />
+          </Tooltip>
         </label>
         <select
           className="border border-gray-300 rounded-md h-12 px-4 w-full"
@@ -132,8 +146,11 @@ function GradingOptionsForm(props: Props) {
       </div>
 
       <div className="flex flex-col gap-y-2">
-        <label htmlFor="passingGrade" className="font-medium leading-5">
-          <span className="text-gray-800">Passing Grade</span>{" "}
+        <label
+          htmlFor="passingGrade"
+          className="font-medium leading-5 flex gap-x-1"
+        >
+          Passing Grade
           <span className="text-gray-500">(%)</span>
         </label>
         <input
@@ -148,10 +165,14 @@ function GradingOptionsForm(props: Props) {
       </div>
 
       <div className="flex flex-col gap-y-2">
-        <label htmlFor="attempts" className="font-medium leading-5">
-          <span className="text-gray-800">
-            Default Attempts for Each Question
-          </span>
+        <label
+          htmlFor="attempts"
+          className="font-medium leading-5 flex gap-x-1"
+        >
+          Default Attempts for Each Question
+          <Tooltip content="the default number of times a student can retry each question in one submission">
+            <InformationCircleIcon className="w-5 inline-block text-blue-500" />
+          </Tooltip>
         </label>
         <select
           className="border border-gray-300 rounded-md h-12 px-4 w-full"

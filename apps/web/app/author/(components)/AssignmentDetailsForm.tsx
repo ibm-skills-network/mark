@@ -162,14 +162,6 @@ const AuthorIntroduction = (props: Props) => {
         setValue={setGrading}
       />
       <footer className="mx-auto items-center flex flex-col">
-        <ExclamationCircleIcon
-          className="w-9 h-9 text-gray-400 "
-          strokeWidth={1.5}
-        />
-        <p className="max-w-xl text-gray-500 text-center mt-1">
-          To avoid confusion for your learners, please ensure that all important
-          parts of the assignment are properly filled out.
-        </p>
         <button
           ref={updateAssignmentButtonRef}
           className="mt-4 group flex gap-x-1 items-center pl-4 pr-3 py-2 bg-blue-700 text-white shadow-md rounded-md"

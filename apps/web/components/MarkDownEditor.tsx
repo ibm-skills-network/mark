@@ -7,13 +7,21 @@ import { twMerge } from "tailwind-merge";
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
   setValue: (value: string) => void;
+  placeholder?: string;
   textareaClassName?: string;
   maxWords?: number; // Introduced maxWords prop for word limit
 }
 
 function MarkdownEditor(props: Props) {
-  const { value, setValue, className, style, textareaClassName, maxWords } =
-    props;
+  const {
+    value,
+    setValue,
+    className,
+    style,
+    textareaClassName,
+    maxWords,
+    placeholder = "Write your question here...",
+  } = props;
   const mdParser = new MarkdownIt();
 
   const [wordCount, setWordCount] = useState<number>(
@@ -40,6 +48,7 @@ function MarkdownEditor(props: Props) {
           "focus:ring-0 focus:ring-offset-0",
           textareaClassName
         )}
+        placeholder={placeholder}
         value={value}
         style={{ ...style }}
         renderHTML={(text) => mdParser.render(text)}

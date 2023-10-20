@@ -1,5 +1,6 @@
 import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 
 interface Rubric {
   questionId: number;
@@ -133,24 +134,10 @@ function Rubric(props: Rubric) {
               />
 
               <button
-                className="absolute text-red-600 right-7"
+                className="absolute text-red-400 right-4"
                 onClick={() => handleRemoveChoiceWrittenQuestion(index)}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="25"
-                  viewBox="0 0 24 25"
-                  fill="none"
-                >
-                  <path
-                    d="M6 18.5L18 6.5M6 6.5L18 18.5"
-                    stroke="#FCA5A5"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <XMarkIcon className="w-6" />
               </button>
             </li>
           ))}
