@@ -1,6 +1,7 @@
 import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { WheelEventHandler } from "react";
 
 interface Rubric {
   questionId: number;
@@ -66,21 +67,6 @@ function Rubric(props: Rubric) {
     document.documentElement.scrollTop = oldScrollTop; // Reset scroll position
   }
 
-  const numberInputOnWheelPreventChange = (e) => {
-    // Prevent the input value change
-    const eventInput = e as Event;
-    const target = eventInput.currentTarget as HTMLInputElement;
-    target.blur();
-
-    // Prevent the page/container scrolling
-    eventInput.stopPropagation();
-
-    // Refocus immediately, on the next tick (after the current function is done)
-    const targetInput = eventInput.target as HTMLInputElement;
-    setTimeout(() => {
-      targetInput.focus();
-    }, 0);
-  };
   return (
     <div
       className={`relative flex flex-col rounded-md bg-white border border-transparent`}
@@ -95,7 +81,7 @@ function Rubric(props: Rubric) {
               {/* Add input for promptPoints */}
               <input
                 type="number"
-                className="p-2 shadow-sm border border-gray-300 rounded-md h-[3.256rem] w-[100px] text-gray-700 bg-transparent outline-none"
+                className="p-2 shadow-sm border border-gray-300 rounded-md h-12 w-[100px] text-gray-700 bg-transparent outline-none"
                 placeholder={`ex. ${index}`}
                 value={criteria.points}
                 onChange={(event) => {
@@ -107,15 +93,11 @@ function Rubric(props: Rubric) {
                 // the previous' value is the min value of this input
                 min={criterias[index - 1]?.points + 1 || 0}
                 max={100}
-                style={{
-                  maxWidth: "100%",
-                }}
-                onWheel={numberInputOnWheelPreventChange}
               />
 
               <textarea
                 onKeyUp={(event) => textAreaAdjust(event.target as HTMLElement)}
-                className="py-2 border flex-1 border-gray-300 shadow-sm pl-2 pr-10 rounded-md text-black outline-none placeholder-gray-400"
+                className="py-2 border flex-1 border-gray-300 shadow-sm pl-2 h-12 resize-none pr-10 rounded-md text-black outline-none placeholder-gray-400"
                 placeholder={
                   index === 0
                     ? `ex. “The question is not legible” `
@@ -125,12 +107,12 @@ function Rubric(props: Rubric) {
                 onChange={(event) =>
                   handleChoiceChangeWrittenQuestion(index, event.target.value)
                 }
-                style={{
-                  width: "800px",
-                  height: "3.256rem",
-                  overflow: "hidden",
-                  resize: "none",
-                }}
+                // style={{
+                //   width: "800px",
+                //   height: "3.256rem",
+                //   overflow: "hidden",
+                //   resize: "none",
+                // }}
               />
 
               <button
