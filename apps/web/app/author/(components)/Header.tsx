@@ -89,7 +89,7 @@ function AuthorHeader(props: Props) {
       // conclude the total points of the question by taking the last element of the criteria array if question is TEXT or URL
       if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
         dataToSend.totalPoints =
-          dataToSend.scoring?.criteria?.slice(-1)[0].points || 0;
+          dataToSend.scoring?.criteria?.at(-1).points || 0;
       } else if (dataToSend.type === "MULTIPLE_CORRECT") {
         console.log("dataToSend.choices", dataToSend.choices);
         dataToSend.scoring = null; // scoring is not needed for multiple correct

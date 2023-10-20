@@ -104,7 +104,7 @@ function AuthorQuestionsPage(props: Props) {
   }, []);
   const handleAddTextBox = () => {
     addQuestion({
-      id: (questions.slice(-1)[0]?.id || 1) + 1,
+      id: (questions.at(-1)?.id || 1) + 1,
       assignmentId: activeAssignmentId,
       question: "",
       totalPoints: 1,

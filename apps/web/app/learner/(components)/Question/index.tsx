@@ -73,7 +73,7 @@ function QuestionPage(props: Props) {
         //   }
         // );
         // get the last submission for the question
-        const lastSubmission = previousAttempts.slice(-1)[0];
+        const lastSubmission = previousAttempts.at(-1);
 
         // add the input field for the question
         switch (question.type) {

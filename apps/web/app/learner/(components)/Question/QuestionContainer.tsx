@@ -31,7 +31,7 @@ function Component(props: Props) {
   }, [questions, questionId]);
 
   const mostRecentFeedback = useMemo(() => {
-    return question.questionResponses.slice(-1)[0];
+    return question.questionResponses.at(-1);
   }, [question]);
 
   const attemptsRemaining =

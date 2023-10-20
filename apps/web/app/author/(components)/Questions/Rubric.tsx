@@ -42,7 +42,7 @@ function Rubric(props: Rubric) {
 
   const handleAddChoiceWrittenQuestion = () => {
     addCriteria(questionId, {
-      points: criterias.slice(-1)[0].points + 1 || 0,
+      points: criterias.at(-1).points + 1 || 0,
       description: "",
     });
   };
@@ -105,7 +105,7 @@ function Rubric(props: Rubric) {
                   handlePromptPoints(index, event.target.value);
                 }}
                 // the previous' value is the min value of this input
-                min={criterias.slice(-1)[0].points + 1 || 0}
+                min={criterias.at(-1).points + 1 || 0}
                 max={100}
                 style={{
                   maxWidth: "100%",
