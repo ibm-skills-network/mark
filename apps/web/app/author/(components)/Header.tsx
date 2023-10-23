@@ -90,7 +90,7 @@ function AuthorHeader(props: Props) {
       if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
         dataToSend.totalPoints =
           dataToSend.scoring?.criteria?.at(-1).points || 0;
-        // remove id from criteria
+        // remove id from criteria since it's not needed in the backend
         dataToSend.scoring?.criteria?.forEach((criteria) => {
           delete criteria.id;
         });

@@ -74,6 +74,7 @@ function AuthorQuestionsPage(props: Props) {
                 scoring: {
                   // TODO: hardcoded for now but we need to find a way to add the type
                   type: "CRITERIA_BASED",
+                  // adding the id to the criteria so that we can use it as the key in the loop
                   criteria: criteriaWithId || initialCriteria,
                 },
               };
