@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentQuestionDisplayOrder } from "@prisma/client";
 import {
+  IsArray,
   IsBoolean,
   IsDefined,
   IsEnum,
@@ -102,4 +103,22 @@ export class ReplaceAssignmentRequestDto {
   @IsOptional()
   @IsEnum(AssignmentQuestionDisplayOrder)
   displayOrder: AssignmentQuestionDisplayOrder | null;
+
+  @ApiProperty({
+    description: "Is the assignment published or not.",
+    type: Boolean,
+    required: true,
+  })
+  @IsDefined()
+  @IsBoolean()
+  published: boolean;
+
+  @ApiProperty({
+    description: "Array of questionIds used for ordering of the questions",
+    type: [Number],
+    required: false,
+  })
+  @IsDefined()
+  @IsArray()
+  questionOrder: number[];
 }
