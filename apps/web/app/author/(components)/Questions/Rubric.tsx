@@ -47,9 +47,9 @@ function Rubric(props: Rubric) {
       id:
         (criterias?.reduce(
           (maxId, criteria) => Math.max(criteria.id, maxId),
-          -1
-        ) ?? 0) + 1,
-      points: criterias.at(-1)?.points + 1 ?? 0,
+          0
+        ) || 0) + 1,
+      points: criterias.at(-1)?.points + 1 || 0,
       description: "",
     });
   };
