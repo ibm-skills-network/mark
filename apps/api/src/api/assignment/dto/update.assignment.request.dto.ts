@@ -101,4 +101,13 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsEnum(AssignmentQuestionDisplayOrder)
   displayOrder: AssignmentQuestionDisplayOrder | null;
+
+  @ApiProperty({
+    description: "Is the assignment published or not.",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  published: boolean;
 }

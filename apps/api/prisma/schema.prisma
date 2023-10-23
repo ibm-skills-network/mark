@@ -71,6 +71,7 @@ model Assignment {
   displayOrder    AssignmentQuestionDisplayOrder?                               /// The order in which the assignment is displayed
   questions       Question[]                                                    /// The list of questions in the assignment
   groups          AssignmentGroup[]                                             /// List of groups associated with the assignment
+  published       Boolean                                                       /// Is the assignment published or not
 }
 
 /// The Question model represents a question in an assignment

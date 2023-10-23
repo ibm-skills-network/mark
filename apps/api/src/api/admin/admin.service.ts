@@ -34,6 +34,7 @@ export class AdminService {
     const newAssignmentData = {
       ...assignment,
       id: undefined,
+      published: false,
       questions: {
         createMany: {
           data: assignment.questions.map((question) => ({
@@ -143,6 +144,7 @@ export class AdminService {
       data: {
         name: createAssignmentRequestDto.name,
         type: createAssignmentRequestDto.type,
+        published: false,
         groups: {
           create: [
             {
