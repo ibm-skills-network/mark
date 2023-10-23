@@ -1,7 +1,7 @@
 "use client";
 
-import type { Choices } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import React, { useEffect, useState, type ChangeEvent } from "react";
 import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import Choice from "./Choice";
@@ -43,6 +43,7 @@ function Section(props: sectionProps) {
       });
     }
   }, []);
+  const [parent, enableAnimations] = useAutoAnimate();
   if (!choices) {
     return null;
   }
@@ -108,19 +109,21 @@ function Section(props: sectionProps) {
           handleRetryChange={handleNumberOfRetriesChange}
         />
       </div>
-      <p className="font-medium leading-5 text-gray-800">Choices</p>
+      <label className="font-medium leading-5 text-gray-800">Choices</label>
       {/* loop throug the key value object */}
-      {Object.entries(choices).map(([choice, isChecked], index) => (
-        <Choice
-          key={index}
-          index={index}
-          choice={choice}
-          isChecked={isChecked}
-          modifyChoice={handleChoiceChange}
-          toggleChoice={handleChoiceToggle}
-          removeChoice={handleRemoveChoice}
-        />
-      ))}
+      <ul ref={parent} className="">
+        {Object.entries(choices).map(([choice, isChecked], index) => (
+          <Choice
+            key={index}
+            index={index}
+            choice={choice}
+            isChecked={isChecked}
+            modifyChoice={handleChoiceChange}
+            toggleChoice={handleChoiceToggle}
+            removeChoice={handleRemoveChoice}
+          />
+        ))}
+      </ul>
       <div className="">
         <button
           type="button"

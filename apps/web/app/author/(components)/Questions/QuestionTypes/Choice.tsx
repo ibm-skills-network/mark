@@ -1,7 +1,7 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useState, type ComponentPropsWithoutRef } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {
+interface Props extends ComponentPropsWithoutRef<"li"> {
   index: number;
   choice: string;
   isChecked: boolean;
@@ -19,7 +19,7 @@ function Component(props: Props) {
   }
 
   return (
-    <div key={index} className="flex items-center gap-x-1.5">
+    <li key={index} className="flex items-center gap-x-1.5">
       <input
         type="checkbox"
         className="rounded"
@@ -41,7 +41,7 @@ function Component(props: Props) {
       >
         <XMarkIcon className="w-6" />
       </button>
-    </div>
+    </li>
   );
 }
 
