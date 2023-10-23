@@ -80,8 +80,48 @@ function AuthorHeader(props: Props) {
     if (!confirmPublish) {
       return;
     }
-    const promises = questions.map(async (question, index) => {
-      const questionNumber = index + 1;
+    // const promises = questions.map(async (question, index) => {
+    //   const questionNumber = index + 1;
+    //   // remove values that are not needed in the backend
+    //   const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
+    //   dataToSend.number = questionNumber;
+    //   console.log("alreadyInBackend", alreadyInBackend, "id", id);
+    //   // conclude the total points of the question by taking the last element of the criteria array if question is TEXT or URL
+    //   if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
+    //     dataToSend.totalPoints =
+    //       dataToSend.scoring?.criteria?.at(-1).points || 0;
+    //     // remove id from criteria since it's not needed in the backend
+    //     dataToSend.scoring?.criteria?.forEach((criteria) => {
+    //       delete criteria.id;
+    //     });
+    //   } else if (dataToSend.type === "MULTIPLE_CORRECT") {
+    //     console.log("dataToSend.choices", dataToSend.choices);
+    //     dataToSend.scoring = null; // scoring is not needed for multiple correct
+    //   }
+    //   // if numRetries is -1 (unlimited), set it to null
+    //   const unlimitedRetries = dataToSend.numRetries === -1;
+    //   dataToSend.numRetries = unlimitedRetries ? null : dataToSend.numRetries;
+    //   console.log("dataToSend", dataToSend.numRetries);
+    //   let questionId: number; // reset questionId
+    //   if (alreadyInBackend) {
+    //     // update question if it's already in the backend
+    //     // TODO: this can be optimized by only sending the data that has changed
+    //     // and if nothing has changed, don't send anything to the backend
+    //     // an idea for that is to have a "modified" flag in the question object
+    //     // or store the original question object in a separate variable
+    //     questionId = await updateQuestion(assignmentId, id, dataToSend);
+    //   } else {
+    //     // create question if it's not already in the backend
+    //     questionId = await createQuestion(assignmentId, dataToSend);
+    //     // to handle the case where the user clicks on publish multiple times (deprecated)
+    //     // modifyQuestion(questionId, { alreadyInBackend: true });
+    //   }
+    //   return questionId;
+    // });
+    let allPromisesFulfilled = true;
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i];
+      const questionNumber = i + 1;
       // remove values that are not needed in the backend
       const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
       dataToSend.number = questionNumber;
@@ -116,13 +156,16 @@ function AuthorHeader(props: Props) {
         // to handle the case where the user clicks on publish multiple times (deprecated)
         // modifyQuestion(questionId, { alreadyInBackend: true });
       }
-      return questionId;
-    });
-    const results = await Promise.allSettled(promises); // wait for all promises to resolve
+      if (!questionId) {
+        allPromisesFulfilled = false;
+      }
+      console.log("questionId", questionId);
+    }
+    // const results = await Promise.allSettled(promises); // wait for all promises to resolve
     // only redirect if all promises are fulfilled and have a value(questionId from the backend)
-    const allPromisesFulfilled = results.every(
-      (result) => result.status === "fulfilled" && result.value
-    );
+    // const allPromisesFulfilled = results.every(
+    //   (result) => result.status === "fulfilled" && result.value
+    // );
     if (allPromisesFulfilled) {
       const currentTime = Date.now();
       console.log("currentTime", currentTime);
