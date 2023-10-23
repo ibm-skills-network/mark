@@ -6,6 +6,7 @@ export class AssignmentAttemptResponseDto {
     description: "The unique Id of the AssignmentAttempt",
     type: Number,
     example: 1,
+    required: true,
   })
   id: number;
 
@@ -13,6 +14,7 @@ export class AssignmentAttemptResponseDto {
     description: "The Id of the assignment that this attempt corresponds to",
     type: Number,
     example: 2,
+    required: true,
   })
   assignmentId: number;
 
@@ -58,13 +60,6 @@ class AssignmentAttemptQuestions {
     required: true,
   })
   id: number;
-
-  @ApiProperty({
-    description: "The question number.",
-    type: Number,
-    required: true,
-  })
-  number: number;
 
   @ApiProperty({
     description: "Total points for the question.",

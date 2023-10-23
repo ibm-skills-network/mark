@@ -29,6 +29,7 @@ CREATE TABLE "Assignment" (
     "name" TEXT NOT NULL,
     "introduction" TEXT,
     "instructions" TEXT,
+    "gradingCriteriaOverview" TEXT,
     "type" "AssignmentType" NOT NULL,
     "graded" BOOLEAN,
     "numAttempts" INTEGER,
@@ -37,6 +38,8 @@ CREATE TABLE "Assignment" (
     "attemptsTimeRangeHours" INTEGER,
     "passingGrade" INTEGER,
     "displayOrder" "AssignmentQuestionDisplayOrder",
+    "questionOrder" INTEGER[],
+    "published" BOOLEAN NOT NULL,
 
     CONSTRAINT "Assignment_pkey" PRIMARY KEY ("id")
 );
@@ -45,7 +48,7 @@ CREATE TABLE "Assignment" (
 CREATE TABLE "Question" (
     "id" SERIAL NOT NULL,
     "totalPoints" INTEGER NOT NULL,
-    "numRetries" INTEGER NOT NULL,
+    "numRetries" INTEGER,
     "type" "QuestionType" NOT NULL,
     "question" TEXT NOT NULL,
     "maxWords" INTEGER,

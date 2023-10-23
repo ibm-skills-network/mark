@@ -1,9 +1,12 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentQuestionDisplayOrder } from "@prisma/client";
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
 } from "class-validator";
@@ -110,4 +113,15 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsBoolean()
   published: boolean;
+
+  @ApiProperty({
+    description: "Array of questionIds used for ordering of the questions",
+    type: [Number],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsNumber({}, { each: true })
+  questionOrder: number[];
 }

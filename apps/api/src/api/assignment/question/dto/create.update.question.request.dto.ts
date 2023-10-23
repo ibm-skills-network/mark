@@ -50,15 +50,6 @@ export class Scoring {
 
 export class CreateUpdateQuestionRequestDto {
   @ApiProperty({
-    description: "Represents the question no for ordering.",
-    type: Number,
-    required: true,
-  })
-  @IsNotEmpty()
-  @IsInt()
-  number: number;
-
-  @ApiProperty({
     description: "Total points for the question.",
     type: Number,
     required: true,

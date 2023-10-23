@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   UserRole,
   UserSession,
@@ -25,28 +29,39 @@ export class AssignmentService {
 
     const result = await this.prisma.assignment.findUnique({
       where: { id },
-      include: {
-        questions: includeQuestions
-          ? {
-              orderBy: {
-                number: "asc",
-              },
-            }
-          : false,
-      },
+      include: { questions: includeQuestions },
     });
 
     if (!result) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
-    // If learner then get rid of irrelevant/sensitive fields like questions and displayOrder
+    // If learner then get rid of irrelevant/sensitive fields like questions, displayOrder and questionOrder
     if (userSession.role === UserRole.LEARNER) {
       delete result["displayOrder"];
+      delete result["questionOrder"];
       return {
         ...result,
         success: true,
       } as LearnerGetAssignmentResponseDto;
+    }
+
+    // sort the questions
+    if (result.questions && result.questionOrder) {
+      result.questions.sort((a, b) => {
+        // Get the index of each question based on the questionOrder array
+        const indexA = result.questionOrder.indexOf(a.id);
+        const indexB = result.questionOrder.indexOf(b.id);
+
+        // Sort based on the index
+        if (indexA < indexB) {
+          return -1;
+        }
+        if (indexA > indexB) {
+          return 1;
+        }
+        return 0;
+      });
     }
 
     return {
@@ -96,6 +111,13 @@ export class AssignmentService {
     id: number,
     updateAssignmentDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
+    //emforce questionOrder when publishing
+    if (updateAssignmentDto.published && !updateAssignmentDto.questionOrder) {
+      throw new BadRequestException(
+        "Expected questionOrder when publishing the assignment."
+      );
+    }
+
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,

@@ -284,14 +284,23 @@ export class AttemptService {
 
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
-      select: {
-        questions: {
-          orderBy: {
-            number: "asc",
-          },
-        },
-      },
+      select: { questions: true, questionOrder: true },
     });
+
+    // Apply the sorting based on questionOrder
+    if (assignment.questions && assignment.questionOrder) {
+      assignment.questions.sort((a, b) => {
+        const indexA = assignment.questionOrder.indexOf(a.id);
+        const indexB = assignment.questionOrder.indexOf(b.id);
+        if (indexA < indexB) {
+          return -1;
+        }
+        if (indexA > indexB) {
+          return 1;
+        }
+        return 0;
+      });
+    }
 
     const questions = assignment.questions.map((question) => {
       const correspondingResponses = assignmentAttempt.questionResponses.filter(
@@ -300,7 +309,6 @@ export class AttemptService {
 
       return {
         id: question.id,
-        number: question.number,
         totalPoints: question.totalPoints,
         numRetries: question.numRetries,
         maxWords: question.maxWords,
