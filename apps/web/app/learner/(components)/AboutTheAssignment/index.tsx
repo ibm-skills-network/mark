@@ -1,4 +1,5 @@
 import { Assignment, LearnerAssignmentState } from "@/config/types";
+import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Button from "@learnerComponents/Button";
 import Link from "next/link";
 import { type ComponentPropsWithoutRef } from "react";
@@ -23,7 +24,7 @@ function AssignmentOverview(props: Props) {
 
   return (
     <>
-      <div className="border-2 p-4 flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-4">
         {/* data passed here will also be stored in zustand store (possible to do that there because it's client-side rendered) */}
         <AssignmentMainInfo
           allotedTimeMinutes={allotedTimeMinutes}
@@ -40,14 +41,15 @@ function AssignmentOverview(props: Props) {
         ) : (
           // it's either "not-started" or "in-progress"
           <Link href={`/learner/${id}/questions`}>
-            <Button>
+            <Button className="group flex gap-x-2">
               {assignmentState === "in-progress" ? "Resume " : "Begin "}the
               Assignment
+              <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />
             </Button>
           </Link>
         )}
       </div>
-      <div className="border-2 border-gray-400 bg-white p-4">
+      <div className="border border-gray-300 rounded-lg bg-white p-4">
         {introduction && (
           <>
             <h3 className="text-xl font-semibold text-gray-800 mb-4">

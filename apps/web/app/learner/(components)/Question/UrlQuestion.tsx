@@ -47,21 +47,16 @@ function URLQuestion(props: Props) {
   };
 
   return (
-    <>
-      <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
-        <InfoLine text={question} />
-        <input
-          type="text"
-          placeholder="Enter website URL"
-          value={url}
-          onChange={handleURLChange}
-          className="w-full p-2 mt-4 border rounded"
-        />
-      </div>
-      <Button onClick={handleSubmit} disabled={!url}>
-        Submit Question
-      </Button>
-    </>
+    <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
+      <InfoLine text={question} />
+      <input
+        type="text"
+        placeholder="Enter website URL"
+        value={url}
+        onChange={handleURLChange}
+        className="w-full p-2 mt-4 border rounded"
+      />
+    </div>
   );
 }
 

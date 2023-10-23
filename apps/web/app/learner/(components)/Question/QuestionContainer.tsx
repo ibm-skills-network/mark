@@ -1,4 +1,3 @@
-import type { Question, QuestionStatus, QuestionStore } from "@/config/types";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
