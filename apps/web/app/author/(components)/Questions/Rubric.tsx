@@ -44,8 +44,12 @@ function Rubric(props: Rubric) {
 
   const handleAddChoiceWrittenQuestion = () => {
     addCriteria(questionId, {
-      id: criterias.length + 1,
-      points: criterias.at(-1)?.points + 1 || 0,
+      id:
+        (criterias?.reduce(
+          (maxId, criteria) => Math.max(criteria.id, maxId),
+          -1
+        ) ?? 0) + 1,
+      points: criterias.at(-1)?.points + 1 ?? 0,
       description: "",
     });
   };
@@ -58,7 +62,13 @@ function Rubric(props: Rubric) {
     ];
     setCriterias(
       questionId,
-      newCriterias.sort((a, b) => a.points - b.points)
+      // sort by points then by id (increasing)
+      newCriterias.sort((a, b) => {
+        if (a.points === b.points) {
+          return a.id - b.id;
+        }
+        return a.points - b.points;
+      })
     );
   };
 
