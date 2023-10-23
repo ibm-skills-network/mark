@@ -1,4 +1,3 @@
-// hooks/useBeforeUnload.ts
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 interface BeforeUnloadHook {

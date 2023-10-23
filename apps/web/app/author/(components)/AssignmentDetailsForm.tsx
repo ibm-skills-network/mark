@@ -12,10 +12,7 @@ import useBeforeUnload from "@/hooks/use-before-unload";
 import { getAssignment, modifyAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import IntroductionSection from "@authorComponents/IntroductionSection";
-import {
-  ChevronRightIcon,
-  ExclamationCircleIcon,
-} from "@heroicons/react/24/outline";
+import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 

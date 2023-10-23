@@ -2,7 +2,6 @@ import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { useEffect } from "react";
 
 interface Rubric {
   questionId: number;
