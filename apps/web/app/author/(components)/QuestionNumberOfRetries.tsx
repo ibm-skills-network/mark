@@ -16,7 +16,7 @@ function Component(props: Props) {
       <select
         className="border border-gray-300 shadow-sm rounded-md px-4 py-3"
         name="attempts"
-        value={retries}
+        value={retries || -1}
         onChange={handleRetryChange}
       >
         <option value={1}>1</option>
