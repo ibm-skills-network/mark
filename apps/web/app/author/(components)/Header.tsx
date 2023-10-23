@@ -90,6 +90,10 @@ function AuthorHeader(props: Props) {
       if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
         dataToSend.totalPoints =
           dataToSend.scoring?.criteria?.at(-1).points || 0;
+        // remove id from criteria
+        dataToSend.scoring?.criteria?.forEach((criteria) => {
+          delete criteria.id;
+        });
       } else if (dataToSend.type === "MULTIPLE_CORRECT") {
         console.log("dataToSend.choices", dataToSend.choices);
         dataToSend.scoring = null; // scoring is not needed for multiple correct

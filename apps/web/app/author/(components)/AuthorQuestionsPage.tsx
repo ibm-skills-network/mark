@@ -3,6 +3,7 @@
 "use client";
 
 import { initialCriteria } from "@/config/constants";
+import { QuestionAuthorStore } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { deleteQuestion, getAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
@@ -56,18 +57,28 @@ function AuthorQuestionsPage(props: Props) {
           setActiveAssignmentId(assignmentId);
           // update the state of the introduction page with the assignment details from the backend
           setAssignmentTitle(assignment.name || "Untitled Assignment");
-          const questions = assignment.questions?.map((question, index) => {
-            return {
-              ...question,
-              // choices:
-              alreadyInBackend: true,
-              scoring: {
-                // TODO: hardcoded for now but we need to find a way to add the type
-                type: "CRITERIA_BASED",
-                ...question.scoring,
-              },
-            };
-          });
+          const questions: QuestionAuthorStore[] = assignment.questions?.map(
+            (question) => {
+              const criteriaWithId = question.scoring?.criteria?.map(
+                (criteria, index) => {
+                  return {
+                    ...criteria,
+                    id: index + 1,
+                  };
+                }
+              );
+              return {
+                ...question,
+                // choices:
+                alreadyInBackend: true,
+                scoring: {
+                  // TODO: hardcoded for now but we need to find a way to add the type
+                  type: "CRITERIA_BASED",
+                  criteria: criteriaWithId || initialCriteria,
+                },
+              };
+            }
+          );
           if (questions?.length > 0) {
             // if there are questions, sort them by id and set them in the store
             const sortedQuestions = questions?.sort((a, b) => a.id - b.id);
