@@ -82,7 +82,9 @@ function AuthorQuestionsPage(props: Props) {
           );
           if (questions?.length > 0) {
             // if there are questions, sort them by id and set them in the store
-            const sortedQuestions = questions?.sort((a, b) => a.id - b.id);
+            const sortedQuestions = questions?.sort(
+              (a, b) => a.number - b.number // from smallest to largest
+            );
             setQuestions(sortedQuestions);
           } else {
             console.log("no questions");
