@@ -58,6 +58,7 @@ export type QuestionTypeDropdown = {
 };
 
 export type Criteria = {
+  id: number;
   points: number;
   description: string;
 };

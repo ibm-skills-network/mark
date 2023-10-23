@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@faker-js/faker": "^8.0.2",
+    "@formkit/auto-animate": "^0.8.0",
     "@fortawesome/fontawesome-svg-core": "^6.4.2",
     "@fortawesome/free-solid-svg-icons": "^6.4.2",
     "@fortawesome/react-fontawesome": "^0.2.0",

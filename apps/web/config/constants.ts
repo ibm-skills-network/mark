@@ -33,10 +33,12 @@ export const BASE_API_ROUTES = {
 
 export const initialCriteria: Criteria[] = [
   {
+    id: 1,
     points: 0,
     description: "",
   },
   {
+    id: 2,
     points: 1,
     description: "",
   },

@@ -1,7 +1,8 @@
 import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { WheelEventHandler } from "react";
+import { useEffect } from "react";
 
 interface Rubric {
   questionId: number;
@@ -28,32 +29,37 @@ function Rubric(props: Rubric) {
 
   // const [promptOptions, setPromptOptions] =
   //   useState<promptOption[]>(initialPromptOptions);
-
   const handleRemoveChoiceWrittenQuestion = (indexToRemove: number) => {
     removeCriteria(questionId, indexToRemove);
   };
 
   const handleChoiceChangeWrittenQuestion = (index: number, value: string) => {
-    setCriterias(questionId, [
+    const newCriterias = [
       ...criterias.slice(0, index),
       { ...criterias[index], description: value },
       ...criterias.slice(index + 1),
-    ]);
+    ];
+    setCriterias(questionId, newCriterias);
   };
 
   const handleAddChoiceWrittenQuestion = () => {
     addCriteria(questionId, {
-      points: criterias.at(-1).points + 1 || 0,
+      id: criterias.length + 1,
+      points: criterias.at(-1)?.points + 1 || 0,
       description: "",
     });
   };
 
   const handlePromptPoints = (index: number, value: string) => {
-    setCriterias(questionId, [
+    const newCriterias = [
       ...criterias.slice(0, index),
       { ...criterias[index], points: ~~value },
       ...criterias.slice(index + 1),
-    ]);
+    ];
+    setCriterias(
+      questionId,
+      newCriterias.sort((a, b) => a.points - b.points)
+    );
   };
 
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
@@ -66,6 +72,7 @@ function Rubric(props: Rubric) {
 
     document.documentElement.scrollTop = oldScrollTop; // Reset scroll position
   }
+  const [parent, enableAnimations] = useAutoAnimate();
 
   return (
     <div
@@ -75,9 +82,9 @@ function Rubric(props: Rubric) {
         <h1 className="text-base font-normal pb-1 leading-6 text-gray-900 relative after:text-blue-400 after:content-['*']">
           List the conditions for meeting the Criteria of Question
         </h1>
-        <ul className="flex flex-col gap-4">
+        <ul ref={parent} className="flex flex-col gap-4">
           {criterias.map((criteria, index) => (
-            <li key={index} className="flex items-center gap-x-2">
+            <li key={criteria.id} className="flex items-center gap-x-2">
               {/* Add input for promptPoints */}
               <input
                 type="number"
