@@ -5,11 +5,11 @@ import Loading from "@/components/Loading";
 import Title from "@/components/Title";
 import {
   GradingData,
-  ModifyAssignmentRequest,
   QuestionAuthorStore,
+  ReplaceAssignmentRequest,
 } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
-import { getAssignment, modifyAssignment } from "@/lib/talkToBackend";
+import { getAssignment, replaceAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import IntroductionSection from "@authorComponents/IntroductionSection";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
@@ -105,19 +105,21 @@ const AuthorIntroduction = (props: Props) => {
    * Updates the assignment with the details from the introduction page
    * and redirects to the questions page
    * */
-  async function updateAssignment() {
-    const assignment: ModifyAssignmentRequest = {
+  async function handleGoToQuestions() {
+    const assignment: ReplaceAssignmentRequest = {
       allotedTimeMinutes: grading.timeEstimate,
       instructions: instructions,
       introduction: introduction,
       gradingCriteriaOverview: gradingCriteriaOverview,
       graded: grading.graded,
       passingGrade: grading.passingGrade,
+      published: false,
+      questionOrder: [],
     };
     // if attempts is -1, it means unlimited attempts, so we don't send that to the backend(default is unlimited)
     const unlimitedAttempts = grading.numAttempts === -1;
     assignment.numAttempts = unlimitedAttempts ? null : grading.numAttempts;
-    const modified = await modifyAssignment(assignment, activeAssignmentId);
+    const modified = await replaceAssignment(assignment, activeAssignmentId);
     if (modified) {
       router.push(
         `/author/${activeAssignmentId}/questions?defaultQuestionRetries=${grading.questionRetries}`
@@ -162,7 +164,7 @@ const AuthorIntroduction = (props: Props) => {
         <button
           ref={updateAssignmentButtonRef}
           className="mt-4 group flex gap-x-1 items-center pl-4 pr-3 py-2 bg-blue-700 text-white shadow-md rounded-md"
-          onClick={updateAssignment}
+          onClick={handleGoToQuestions}
         >
           Add Questions
           <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />

@@ -54,7 +54,7 @@ const WordCountComponent: React.FC<WordCountComponentProps> = ({ text }) => {
 
       <input
         type="number"
-        className="rounded-md py-3 px-4 border-gray-300 shadow-sm placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500"
+        className="rounded-md transition py-3 px-4 border-gray-300 shadow-sm placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
         onWheel={numberInputOnWheelPreventChange}
         placeholder={`ex. 250`}
         value={textArea2Value}

@@ -152,20 +152,20 @@ export type GradingData = {
   numAttempts?: number;
 };
 
-export type ModifyAssignmentRequest = {
-  introduction?: string;
+export type ReplaceAssignmentRequest = {
+  introduction: string;
   instructions?: string;
   gradingCriteriaOverview?: string;
-  graded?: boolean;
+  graded: boolean;
   numAttempts?: number;
   allotedTimeMinutes?: number;
-  passingGrade?: number;
+  passingGrade: number;
   displayOrder?: "DEFINED" | "RANDOM";
-  published?: boolean;
-  questionOrder?: number[];
+  published: boolean;
+  questionOrder: number[];
 };
 
-export interface Assignment extends ModifyAssignmentRequest {
+export interface Assignment extends ReplaceAssignmentRequest {
   id: number;
   name?: string;
   type?: "AI_GRADED" | "MANUAL";
@@ -215,3 +215,7 @@ export type LearnerAssignmentState =
   | "not-started"
   | "in-progress"
   | "completed";
+
+export type MakePropertiesOptional<T> = {
+  [K in keyof T]?: T[K];
+};

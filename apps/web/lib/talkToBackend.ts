@@ -9,9 +9,10 @@ import type {
   BaseBackendResponse,
   CreateQuestionRequest,
   GetAssignmentResponse,
-  ModifyAssignmentRequest,
+  MakePropertiesOptional,
   QuestionAttemptRequest,
   QuestionAttemptResponse,
+  ReplaceAssignmentRequest,
   submitAssignmentResponse,
   User,
 } from "@config/types";
@@ -44,8 +45,8 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
 /**
  * Calls the backend to modify an assignment.
  */
-export async function modifyAssignment(
-  data: ModifyAssignmentRequest,
+export async function replaceAssignment(
+  data: ReplaceAssignmentRequest,
   id: number,
   cookies?: string
 ): Promise<boolean> {
@@ -60,7 +61,38 @@ export async function modifyAssignment(
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      throw new Error("Failed to create assignment");
+      throw new Error("Failed to replace assignment");
+    }
+    const { success, error } = (await res.json()) as BaseBackendResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+/**
+ * Calls the backend to update an assignment.
+ */
+export async function updateAssignment(
+  data: MakePropertiesOptional<ReplaceAssignmentRequest>,
+  id: number,
+  cookies?: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      throw new Error("Failed to update assignment");
     }
     const { success, error } = (await res.json()) as BaseBackendResponse;
     if (!success) {
@@ -180,7 +212,7 @@ export async function createQuestion(
  * @returns The id of the updated question.
  * @throws An error if the request fails.
  */
-export async function updateQuestion(
+export async function replaceQuestion(
   assignmentId: number,
   questionId: number,
   question: CreateQuestionRequest,

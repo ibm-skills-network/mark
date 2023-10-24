@@ -3,14 +3,19 @@
 "use client";
 
 import { initialCriteria } from "@/config/constants";
-import { QuestionAuthorStore } from "@/config/types";
+import { CreateQuestionRequest, QuestionAuthorStore } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
-import { deleteQuestion, getAssignment } from "@/lib/talkToBackend";
+import {
+  createQuestion,
+  deleteQuestion,
+  getAssignment,
+} from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/24/solid";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { twMerge } from "tailwind-merge";
 import QuestionWrapper from "./QuestionWrapper";
 
 interface Props {
@@ -99,46 +104,40 @@ function AuthorQuestionsPage(props: Props) {
     }
     //  if there are no questions, add one question to the store
     console.log("questions", questions);
-    if (questions.length === 0) {
-      console.log("adding question", questions);
-      addQuestion({
-        id: 1,
-        assignmentId: activeAssignmentId,
-        question: "",
-        totalPoints: 1,
-        numRetries: defaultQuestionRetries || 1,
-        type: "TEXT",
-        alreadyInBackend: false,
-        scoring: {
-          type: "CRITERIA_BASED",
-          criteria: initialCriteria,
-        },
-      });
-    }
   }, []);
-  const handleAddTextBox = () => {
-    addQuestion({
-      id: (questions.at(-1)?.id || 1) + 1,
-      assignmentId: activeAssignmentId,
-      question: "",
+  async function handleAddTextBox() {
+    const question: CreateQuestionRequest = {
+      question: " ",
       totalPoints: 1,
       numRetries: defaultQuestionRetries || 1,
       // TODO: have different buttons so that users can easily add other type of questions
       type: "TEXT",
-      alreadyInBackend: false,
       scoring: {
         type: "CRITERIA_BASED",
         criteria: initialCriteria,
       },
+    };
+    const questionId = await createQuestion(assignmentId, question);
+    addQuestion({
+      ...question,
+      question: "",
+      id: questionId,
+      alreadyInBackend: true,
+      assignmentId: assignmentId,
     });
-    // setScrollTargets((prevTargets) => {
-    //   const newTargets: number[] = [
-    //     ...(prevTargets as number[]),
-    //     questions.length + 1,
-    //   ];
-    //   return newTargets;
-    // });
-  };
+    // scroll to the bottom of the page
+    window.scrollTo({
+      top: document.body.scrollHeight,
+      behavior: "smooth",
+    });
+  }
+  // setScrollTargets((prevTargets) => {
+  //   const newTargets: number[] = [
+  //     ...(prevTargets as number[]),
+  //     questions.length + 1,
+  //   ];
+  //   return newTargets;
+  // });
 
   async function handleDeleteTextBox(
     alreadyInBackend: boolean,
@@ -159,23 +158,22 @@ function AuthorQuestionsPage(props: Props) {
     }
     toast.error("Failed to delete question");
   }
-  const handleScrollToTarget = (questionId: number) => {
-    if (typeof questionId !== "number") {
-      throw new Error("questionId must be a string");
-    }
-
-    // Scroll to the specified target
-    const targetElement = document.getElementById(`textbox-${questionId}`);
-    if (targetElement) {
-      targetElement.scrollIntoView({ behavior: "smooth" });
-    }
-  };
 
   // TODO: duplicate feat
 
   return (
     <>
-      <div className="my-24 flex flex-col gap-y-20">
+      {questions.length === 0 && (
+        <p className="text-center text-gray-500 text-base leading-5 my-12">
+          Begin writing the questions for your assignment below.
+        </p>
+      )}
+      <div
+        className={twMerge(
+          "flex flex-col gap-y-20",
+          questions.length === 0 ? "mb-24" : "my-24"
+        )}
+      >
         {/* TODO: make this into a component */}
         {questions.map((question, index) => {
           const questionNumber = index + 1;
@@ -205,7 +203,7 @@ function AuthorQuestionsPage(props: Props) {
                 </div>
               </div>
               <QuestionWrapper
-                id={`textbox-${question.id}`}
+                id={`question-${question.id}`}
                 questionId={question.id}
               />
 
@@ -214,11 +212,7 @@ function AuthorQuestionsPage(props: Props) {
                 disabled={questions.length <= 1}
                 className="sticky top-14 inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() =>
-                  handleDeleteTextBox(
-                    question.alreadyInBackend,
-                    // question.number,
-                    question.id
-                  )
+                  handleDeleteTextBox(question.alreadyInBackend, question.id)
                 }
               >
                 <svg
