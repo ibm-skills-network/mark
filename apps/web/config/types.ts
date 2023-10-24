@@ -161,6 +161,8 @@ export type ModifyAssignmentRequest = {
   allotedTimeMinutes?: number;
   passingGrade?: number;
   displayOrder?: "DEFINED" | "RANDOM";
+  published?: boolean;
+  questionOrder?: number[];
 };
 
 export interface Assignment extends ModifyAssignmentRequest {
@@ -209,6 +211,7 @@ export interface submitAssignmentResponse extends BaseBackendResponse {
 }
 
 export type LearnerAssignmentState =
+  | "not-published"
   | "not-started"
   | "in-progress"
   | "completed";

@@ -1,3 +1,4 @@
+import Error from "@/components/ErrorPage";
 import { createAttempt, getAttempt, getAttempts } from "@/lib/talkToBackend";
 import QuestionPage from "@learnerComponents/Question";
 import { headers } from "next/headers";
@@ -13,6 +14,10 @@ async function LearnerLayout(props: Props) {
   const assignmentId = ~~params.assignmentId;
   const listOfAttempts = await getAttempts(assignmentId, cookie);
   console.log("listOfAttempts", listOfAttempts);
+  if (!listOfAttempts) {
+    return <Error error={"Assignment not found"} />;
+  }
+
   // check if there are any attempts that are not submitted and have not expired
   const unsubmittedAssignment = listOfAttempts.find(
     (attempt) =>

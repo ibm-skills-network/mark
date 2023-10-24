@@ -39,7 +39,7 @@ async function IntroductionPage(props: Props) {
   }
 
   return (
-    <main className="p-20 flex flex-col gap-y-10">
+    <main className="p-20 flex flex-col gap-y-14">
       <AboutTheAssignment
         assignment={assignment}
         assignmentState={assignmentState}

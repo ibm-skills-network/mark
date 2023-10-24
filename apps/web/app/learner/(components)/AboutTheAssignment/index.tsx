@@ -1,3 +1,4 @@
+import Tooltip from "@/components/Tooltip";
 import { Assignment, LearnerAssignmentState } from "@/config/types";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Button from "@learnerComponents/Button";
@@ -15,6 +16,7 @@ function AssignmentOverview(props: Props) {
   const {
     instructions,
     introduction,
+    gradingCriteriaOverview,
     allotedTimeMinutes,
     numAttempts,
     passingGrade,
@@ -24,7 +26,7 @@ function AssignmentOverview(props: Props) {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center">
         {/* data passed here will also be stored in zustand store (possible to do that there because it's client-side rendered) */}
         <AssignmentMainInfo
           allotedTimeMinutes={allotedTimeMinutes}
@@ -40,35 +42,53 @@ function AssignmentOverview(props: Props) {
           </Link>
         ) : (
           // it's either "not-started" or "in-progress"
-          <Link href={`/learner/${id}/questions`}>
-            <Button className="group flex gap-x-2">
-              {assignmentState === "in-progress" ? "Resume " : "Begin "}the
-              Assignment
-              <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />
-            </Button>
-          </Link>
+          <Tooltip
+            className=""
+            distance={3}
+            disabled={assignmentState !== "not-published"}
+            content="This assignment has not been published yet."
+          >
+            <Link href={`/learner/${id}/questions`}>
+              <Button
+                className="group flex gap-x-2"
+                disabled={assignmentState === "not-published"}
+              >
+                {assignmentState === "in-progress" ? "Resume " : "Begin "}the
+                Assignment
+                <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200 disabled:opacity-50" />
+              </Button>
+            </Link>
+          </Tooltip>
         )}
       </div>
-      <div className="border border-gray-300 rounded-lg bg-white p-4">
+      <div className="border border-gray-300 rounded-lg bg-white p-4 flex flex-col gap-y-4">
         {introduction && (
           <>
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+            <h3 className="text-xl font-semibold text-gray-800">
               About this Assignment
             </h3>
-            <p className="text-gray-600 mb-4">{introduction}</p>
+            <p className="text-gray-600">{introduction}</p>
           </>
         )}
         {instructions && (
           <>
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+            <h3 className="text-xl font-semibold text-gray-800">
               Instructions
             </h3>
-            <p className="text-gray-600 mb-4">{instructions}</p>
+            <p className="text-gray-600">{instructions}</p>
+          </>
+        )}
+        {gradingCriteriaOverview && (
+          <>
+            <h3 className="text-xl font-semibold text-gray-800">
+              Grading Criteria
+            </h3>
+            <p className="text-gray-600">{gradingCriteriaOverview}</p>
           </>
         )}
         {!introduction && !instructions && (
-          <p className="text-gray-600 mb-4">
-            No instructions or introduction provided for this assignment.
+          <p className="text-gray-600">
+            No information has been provided for this assignment.
           </p>
         )}
       </div>

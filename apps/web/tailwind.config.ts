@@ -15,6 +15,10 @@ const config: Config = {
     "left-[1.5rem]",
     "bottom-[2rem]",
     "left-[2rem]",
+    "bottom-[2.5rem]",
+    "left-[2.5rem]",
+    "bottom-[3rem]",
+    "left-[3rem]",
     {
       pattern: /delay-(100|200|300|500)/,
     },
