@@ -137,9 +137,11 @@ export class AdminController {
   @ApiParam({ name: "id", required: true })
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
-  deleteAssignment(
-    @Param("id") id: number
-  ): Promise<BaseAssignmentResponseDto> {
-    return this.adminService.removeAssignment(Number(id));
+  deleteAssignment(@Param("id") id: number): BaseAssignmentResponseDto {
+    return {
+      id: id,
+      success: true,
+    };
+    //return this.adminService.removeAssignment(Number(id));
   }
 }
