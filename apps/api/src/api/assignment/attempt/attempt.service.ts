@@ -6,7 +6,8 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { QuestionType } from "@prisma/client";
+import { QuestionResponse, QuestionType } from "@prisma/client";
+import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { TrueFalseBasedQuestionEvaluateModel } from "../../../api/llm/model/true.false.based.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
@@ -289,17 +290,11 @@ export class AttemptService {
 
     // Apply the sorting based on questionOrder
     if (assignment.questions && assignment.questionOrder) {
-      assignment.questions.sort((a, b) => {
-        const indexA = assignment.questionOrder.indexOf(a.id);
-        const indexB = assignment.questionOrder.indexOf(b.id);
-        if (indexA < indexB) {
-          return -1;
-        }
-        if (indexA > indexB) {
-          return 1;
-        }
-        return 0;
-      });
+      assignment.questions.sort(
+        (a, b) =>
+          assignment.questionOrder.indexOf(a.id) -
+          assignment.questionOrder.indexOf(b.id)
+      );
     }
 
     const questions = assignment.questions.map((question) => {
@@ -365,6 +360,12 @@ export class AttemptService {
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     let learnerResponse: string;
 
+    const assignmentContext = await this.getAssignmentContext(
+      assignmentAttempt.assignmentId,
+      question.id,
+      assignmentAttemptId
+    );
+
     switch (question.type) {
       case QuestionType.TEXT:
       case QuestionType.UPLOAD: {
@@ -375,6 +376,8 @@ export class AttemptService {
         const textBasedQuestionEvaluateModel =
           new TextBasedQuestionEvaluateModel(
             question.question,
+            assignmentContext.questionAnswerContext,
+            assignmentContext.assignmentInstructions,
             learnerResponse,
             question.totalPoints,
             question.scoring?.type ?? "",
@@ -397,6 +400,8 @@ export class AttemptService {
         );
         const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
           question.question,
+          assignmentContext.questionAnswerContext,
+          assignmentContext.assignmentInstructions,
           createQuestionResponseAttemptRequestDto.learnerUrlResponse,
           urlFetchResponse.isFunctional,
           urlFetchResponse.body,
@@ -421,6 +426,8 @@ export class AttemptService {
         const trueFalseBasedQuestionEvaluateModel =
           new TrueFalseBasedQuestionEvaluateModel(
             question.question,
+            assignmentContext.questionAnswerContext,
+            assignmentContext.assignmentInstructions,
             question.answer,
             createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
             question.totalPoints
@@ -444,6 +451,8 @@ export class AttemptService {
         const choiceBasedQuestionEvaluateModel =
           new ChoiceBasedQuestionEvaluateModel(
             question.question,
+            assignmentContext.questionAnswerContext,
+            assignmentContext.assignmentInstructions,
             question.choices ?? {},
             createQuestionResponseAttemptRequestDto.learnerChoices,
             question.totalPoints,
@@ -503,5 +512,90 @@ export class AttemptService {
         assignmentAttemptId: assignmentAttemptId,
       },
     });
+  }
+
+  async getAssignmentContext(
+    assignmentId: number,
+    questionId: number,
+    assignmentAttemptId: number
+  ): Promise<{
+    assignmentInstructions: string;
+    questionAnswerContext: QuestionAnswerContext[];
+  }> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: { instructions: true },
+    });
+
+    // 1. Fetch the gradingContextQuestionIds for the given question.
+    const question = await this.prisma.question.findUnique({
+      where: { id: questionId },
+      select: { gradingContextQuestionIds: true },
+    });
+
+    if (!question) {
+      throw new Error("Question not found.");
+    }
+
+    // 2. Using the fetched gradingContextQuestionIds, retrieve all those questions.
+    const contextQuestions = await this.prisma.question.findMany({
+      where: {
+        id: {
+          in: question.gradingContextQuestionIds,
+        },
+      },
+      select: { id: true, question: true, type: true },
+    });
+
+    // 3. Fetch all responses for the context questions at once.
+    const allResponses = await this.prisma.questionResponse.findMany({
+      where: {
+        assignmentAttemptId: assignmentAttemptId,
+        questionId: {
+          in: question.gradingContextQuestionIds,
+        },
+      },
+      orderBy: {
+        id: "desc", // This ensures that the latest responses come first.
+      },
+    });
+
+    // Group responses by questionId to quickly look up the latest response for each question.
+    const groupedResponses: { [key: number]: QuestionResponse } = {};
+
+    for (const response of allResponses) {
+      if (!groupedResponses[response.questionId]) {
+        groupedResponses[response.questionId] = response; // store the latest response (since we ordered them in descending order)
+      }
+    }
+
+    // 4. Construct the QuestionAnswerContext model array with the added functionality.
+    const questionsAnswersContext: QuestionAnswerContext[] = [];
+    for (const contextQuestion of contextQuestions) {
+      let learnerResponse =
+        groupedResponses[contextQuestion.id]?.learnerResponse || "";
+
+      // Check if the question type is URL and then fetch plain text from the URL.
+      if (contextQuestion.type === "URL" && learnerResponse) {
+        const urlContent = await AttemptHelper.fetchPlainTextFromUrl(
+          learnerResponse
+        );
+        learnerResponse = JSON.stringify({
+          url: learnerResponse,
+          ...urlContent,
+        });
+      }
+
+      questionsAnswersContext.push({
+        question: contextQuestion.question,
+        answer: learnerResponse,
+      });
+    }
+
+    // 5. Return the assignment instructions and the QuestionAnswerContext array.
+    return {
+      assignmentInstructions: assignment?.instructions || "",
+      questionAnswerContext: questionsAnswersContext,
+    };
   }
 }

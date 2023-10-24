@@ -1,4 +1,11 @@
-export class UrlBasedQuestionEvaluateModel {
+import {
+  BaseQuestionEvaluateModel,
+  QuestionAnswerContext,
+} from "./base.question.evaluate.model";
+
+export class UrlBasedQuestionEvaluateModel
+  implements BaseQuestionEvaluateModel
+{
   readonly question: string;
   readonly urlProvided: string;
   readonly isUrlFunctional: boolean;
@@ -6,9 +13,13 @@ export class UrlBasedQuestionEvaluateModel {
   readonly totalPoints: number;
   readonly scoringCriteriaType: string;
   readonly scoringCriteria: object;
+  readonly previousQuestionsAnswersContext: QuestionAnswerContext[];
+  readonly assignmentInstrctions: string;
 
   constructor(
     question: string,
+    previousQuestionsAnswersContext: QuestionAnswerContext[],
+    assignmentInstrctions: string,
     urlProvided: string,
     isUrlFunctional: boolean,
     urlBody: string,
@@ -17,6 +28,8 @@ export class UrlBasedQuestionEvaluateModel {
     scoringCriteria: object
   ) {
     this.question = question;
+    this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
+    this.assignmentInstrctions = assignmentInstrctions;
     this.urlProvided = urlProvided;
     this.isUrlFunctional = isUrlFunctional;
     this.urlBody = urlBody;

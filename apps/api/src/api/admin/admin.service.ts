@@ -190,7 +190,6 @@ export class AdminService {
     id: number,
     updateAssignmentDto: AdminUpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
-    console.log(updateAssignmentDto);
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,

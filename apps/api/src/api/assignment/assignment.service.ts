@@ -8,6 +8,7 @@ import {
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../prisma.service";
+import { LlmService } from "../llm/llm.service";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import {
   AssignmentResponseDto,
@@ -19,7 +20,10 @@ import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto"
 
 @Injectable()
 export class AssignmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llmService: LlmService
+  ) {}
 
   async findOne(
     id: number,
@@ -48,20 +52,11 @@ export class AssignmentService {
 
     // sort the questions
     if (result.questions && result.questionOrder) {
-      result.questions.sort((a, b) => {
-        // Get the index of each question based on the questionOrder array
-        const indexA = result.questionOrder.indexOf(a.id);
-        const indexB = result.questionOrder.indexOf(b.id);
-
-        // Sort based on the index
-        if (indexA < indexB) {
-          return -1;
-        }
-        if (indexA > indexB) {
-          return 1;
-        }
-        return 0;
-      });
+      result.questions.sort(
+        (a, b) =>
+          result.questionOrder.indexOf(a.id) -
+          result.questionOrder.indexOf(b.id)
+      );
     }
 
     return {
@@ -112,9 +107,16 @@ export class AssignmentService {
     updateAssignmentDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     //emforce questionOrder when publishing
-    if (updateAssignmentDto.published && !updateAssignmentDto.questionOrder) {
-      throw new BadRequestException(
-        "Expected questionOrder when publishing the assignment."
+    if (updateAssignmentDto.published) {
+      if (!updateAssignmentDto.questionOrder) {
+        throw new BadRequestException(
+          "Expected questionOrder when publishing the assignment."
+        );
+      }
+      // Generate grading context for questions when publishing the assignment
+      await this.handleQuestionGradingContext(
+        id,
+        updateAssignmentDto.questionOrder
       );
     }
 
@@ -129,6 +131,7 @@ export class AssignmentService {
     };
   }
 
+  // private methods
   private createEmptyDto(): Partial<ReplaceAssignmentRequestDto> {
     /* eslint-disable unicorn/no-null */
     return {
@@ -139,5 +142,42 @@ export class AssignmentService {
       attemptsTimeRangeHours: null,
       displayOrder: null,
     };
+  }
+
+  private async handleQuestionGradingContext(
+    assignmentId: number,
+    questionOrder: number[]
+  ) {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: { questions: true },
+    });
+
+    const questionsForGradingContext = assignment.questions
+      .sort((a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id))
+      .map((q) => ({
+        id: q.id,
+        questionText: q.question,
+      }));
+
+    const questionGradingContextMap =
+      await this.llmService.generateQuestionGradingContext(
+        questionsForGradingContext
+      );
+
+    const updates = [];
+
+    for (const [questionId, gradingContextQuestionIds] of Object.entries(
+      questionGradingContextMap
+    )) {
+      updates.push(
+        this.prisma.question.update({
+          where: { id: Number.parseInt(questionId) },
+          data: { gradingContextQuestionIds },
+        })
+      );
+    }
+
+    await Promise.all(updates);
   }
 }

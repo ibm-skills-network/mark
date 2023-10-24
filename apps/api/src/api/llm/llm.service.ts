@@ -21,6 +21,7 @@ import { UrlBasedQuestionResponseModel } from "./model/url.based.question.respon
 import {
   feedbackChoiceBasedQuestionLlmTemplate,
   feedbackTrueFalseBasedQuestionLlmTemplate,
+  generateQuestionsGradingContext,
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
 } from "./templates";
@@ -28,11 +29,13 @@ import {
 @Injectable()
 export class LlmService {
   private readonly logger: Logger;
-  private llm: BaseLLM;
+  private llmGpt3: BaseLLM;
+  private llmGpt4: BaseLLM;
 
   constructor(@Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger) {
     this.logger = parentLogger.child({ context: LlmService.name });
-    this.llm = new OpenAI({ temperature: 0.5, modelName: "gpt-3.5-turbo" });
+    this.llmGpt3 = new OpenAI({ temperature: 0.5, modelName: "gpt-3.5-turbo" });
+    this.llmGpt4 = new OpenAI({ temperature: 0.5, modelName: "gpt-4" });
   }
 
   async applyGuardRails(message: string): Promise<boolean> {
@@ -47,6 +50,48 @@ export class LlmService {
       "Text was found that violates OpenAI's content policy."
     );
   }
+
+  async generateQuestionGradingContext(
+    questions: { id: number; questionText: string }[]
+  ): Promise<Record<number, number[]>> {
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.array(
+        z
+          .object({
+            questionId: z.number().describe("The id of the question"),
+            contextQuestions: z
+              .array(z.number())
+              .describe(
+                "The ids of all the questions that this question depends upon contextually"
+              ),
+          })
+          .describe(
+            "Array of objects, where each object represents a question and its contextual dependencies."
+          )
+      )
+    );
+
+    const formatInstructions = parser.getFormatInstructions();
+
+    const prompt = new PromptTemplate({
+      template: generateQuestionsGradingContext,
+      inputVariables: [],
+      partialVariables: {
+        questions_json_array: JSON.stringify(questions),
+        format_instructions: formatInstructions,
+      },
+    });
+
+    const input = await prompt.format({});
+    const response = await this.llmGpt4.call(input);
+    const parsedResponse = await parser.parse(response);
+    const gradingContextQuestionMap: Record<number, number[]> = {};
+    for (const item of parsedResponse) {
+      gradingContextQuestionMap[item.questionId] = item.contextQuestions;
+    }
+    return gradingContextQuestionMap;
+  }
+
   async gradeTrueFalseBasedQuestion(
     trueFalseBasedQuestionEvaluateModel: TrueFalseBasedQuestionEvaluateModel
   ): Promise<TrueFalseBasedQuestionResponseModel> {
@@ -88,7 +133,7 @@ export class LlmService {
     });
 
     const input = await prompt.format({});
-    const response = await this.llm.call(input);
+    const response = await this.llmGpt3.call(input);
 
     const trueFalseBasedQuestionResponseModel = (await parser.parse(
       response
@@ -102,8 +147,13 @@ export class LlmService {
   ): Promise<ChoiceBasedQuestionResponseModel> {
     // TODO: Handle loss per mistake
 
-    const { question, learnerChoices, validChoices } =
-      choiceBasedQuestionEvaluateModel;
+    const {
+      question,
+      learnerChoices,
+      validChoices,
+      previousQuestionsAnswersContext,
+      assignmentInstrctions,
+    } = choiceBasedQuestionEvaluateModel;
 
     // Initialize score count
     let pointsEarned = 0;
@@ -135,6 +185,10 @@ export class LlmService {
       inputVariables: [],
       partialVariables: {
         question: question,
+        assignment_instructions: assignmentInstrctions,
+        previous_questions_and_answers: JSON.stringify(
+          previousQuestionsAnswersContext
+        ),
         learner_choices: JSON.stringify(learnerChoices),
         valid_choices: JSON.stringify(validChoices),
         format_instructions: formatInstructions,
@@ -142,7 +196,7 @@ export class LlmService {
     });
 
     const input = await prompt.format({});
-    const response = await this.llm.call(input);
+    const response = await this.llmGpt3.call(input);
 
     const choiceBasedFeedback = (await parser.parse(
       response
@@ -163,6 +217,8 @@ export class LlmService {
       totalPoints,
       scoringCriteriaType,
       scoringCriteria,
+      previousQuestionsAnswersContext,
+      assignmentInstrctions,
     } = textBasedQuestionEvaluateModel;
 
     // Since question and scoring criteria are also validated with guard rails, only validate learnerResponse
@@ -194,6 +250,10 @@ export class LlmService {
       inputVariables: [],
       partialVariables: {
         question: question,
+        assignment_instructions: assignmentInstrctions,
+        previous_questions_and_answers: JSON.stringify(
+          previousQuestionsAnswersContext
+        ),
         learner_response: learnerResponse,
         total_points: totalPoints.toString(),
         scoring_type: scoringCriteriaType,
@@ -203,7 +263,7 @@ export class LlmService {
     });
 
     const input = await prompt.format({});
-    const response = await this.llm.call(input);
+    const response = await this.llmGpt3.call(input);
 
     const textBasedQuestionResponseModel = (await parser.parse(
       response
@@ -223,6 +283,8 @@ export class LlmService {
       totalPoints,
       scoringCriteriaType,
       scoringCriteria,
+      previousQuestionsAnswersContext,
+      assignmentInstrctions,
     } = urlBasedQuestionEvaluateModel;
 
     // Since question and scoring criteria are also validated with guard rails, only validate learnerResponse
@@ -254,6 +316,10 @@ export class LlmService {
       inputVariables: [],
       partialVariables: {
         question: question,
+        assignment_instructions: assignmentInstrctions,
+        previous_questions_and_answers: JSON.stringify(
+          previousQuestionsAnswersContext
+        ),
         url_provided: urlProvided,
         url_body: urlBody,
         is_url_functional: isUrlFunctional ? "funtional" : "not functional",
@@ -265,7 +331,7 @@ export class LlmService {
     });
 
     const input = await prompt.format({});
-    const response = await this.llm.call(input);
+    const response = await this.llmGpt3.call(input);
 
     const urlBasedQuestionResponseModel = (await parser.parse(
       response
