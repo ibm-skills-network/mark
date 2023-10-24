@@ -75,13 +75,8 @@ function Rubric(props: Rubric) {
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
   function textAreaAdjust(e: KeyboardEvent<HTMLTextAreaElement>) {
     const element = e.target as HTMLTextAreaElement;
-    const offset = element.offsetHeight - element.clientHeight;
-    const oldScrollTop = document.documentElement.scrollTop; // Save old scroll position
-
     element.style.height = "auto";
-    element.style.height = `${element.scrollHeight + offset}px`;
-
-    document.documentElement.scrollTop = oldScrollTop; // Reset scroll position
+    element.style.height = `${element.scrollHeight}px`;
   }
   const [parent, enableAnimations] = useAutoAnimate();
 
@@ -99,7 +94,7 @@ function Rubric(props: Rubric) {
               {/* Add input for promptPoints */}
               <input
                 type="number"
-                className="p-2 shadow-sm border border-gray-300 rounded-md h-12 w-[100px] text-gray-700 bg-transparent outline-none"
+                className="p-2 transition shadow-sm border border-gray-300 rounded-md h-12 w-[100px] text-gray-700 bg-transparent outline-none"
                 placeholder={`ex. ${index}`}
                 value={criteria.points}
                 onChange={(event) => {
@@ -109,13 +104,14 @@ function Rubric(props: Rubric) {
                   handlePromptPoints(index, event.target.value);
                 }}
                 // the previous' value is the min value of this input
-                min={criterias[index - 1]?.points + 1 || 0}
+                // min={criterias[index - 1]?.points + 1 || 0}
+                min={0}
                 max={100}
               />
 
               <textarea
                 onKeyDown={(e) => textAreaAdjust(e)}
-                className="py-2 border flex-1 border-gray-300 shadow-sm pl-2 h-12 resize-none pr-10 rounded-md text-black outline-none placeholder-gray-400"
+                className="transition py-2 border flex-1 border-gray-300 shadow-sm pl-2 h-12 max-h-60 resize-none pr-10 rounded-md text-black outline-none placeholder-gray-400"
                 placeholder={
                   index === 0
                     ? `ex. “The question is not legible” `
