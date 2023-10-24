@@ -86,7 +86,7 @@ function AssignmentOverview(props: Props) {
             <p className="text-gray-600">{gradingCriteriaOverview}</p>
           </>
         )}
-        {!introduction && !instructions && (
+        {!introduction && !instructions && !gradingCriteriaOverview && (
           <p className="text-gray-600">
             No information has been provided for this assignment.
           </p>

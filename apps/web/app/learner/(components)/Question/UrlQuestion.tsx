@@ -1,36 +1,30 @@
 import { useLearnerStore } from "@/stores/learner";
-import { useState } from "react";
-import Button from "../Button";
-import InfoLine from "../InfoLine";
+import { useState, type ComponentPropsWithoutRef } from "react";
+import { twMerge } from "tailwind-merge";
 
-interface Props {}
+interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 function URLQuestion(props: Props) {
-  const {} = props;
+  const { className, ...restOfProps } = props;
   const activeQuestionNumber = useLearnerStore(
     (state) => state.activeQuestionNumber
   );
 
-  const [questions, setTextResponse] = useLearnerStore((state) => [
+  const [questions, setURLResponse] = useLearnerStore((state) => [
     state.questions,
-    state.setTextResponse,
+    state.setURLResponse,
   ]);
-  const { question, id } = questions[activeQuestionNumber - 1];
-  const [url, setURL] = useState<string>("");
+  const {
+    question,
+    id,
+    learnerUrlResponse: url,
+  } = questions[activeQuestionNumber - 1];
+  const [validURL, setValidURL] = useState<boolean>(true);
 
   const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setURL(e.target.value);
-  };
-
-  const handleSubmit = () => {
-    if (validateURL(url)) {
-      // updateStatus("edited");
-      // if (onURLSubmit) {
-      //   onURLSubmit(url);
-      // }
-    } else {
-      alert("Please enter a valid URL.");
-    }
+    const newUrl = e.target.value;
+    setURLResponse(newUrl, id);
+    setValidURL(newUrl ? validateURL(url) : true);
   };
 
   const validateURL = (str: string) => {
@@ -47,16 +41,17 @@ function URLQuestion(props: Props) {
   };
 
   return (
-    <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
-      <InfoLine text={question} />
-      <input
-        type="text"
-        placeholder="Enter website URL"
-        value={url}
-        onChange={handleURLChange}
-        className="w-full p-2 mt-4 border rounded"
-      />
-    </div>
+    <input
+      type="text"
+      className={twMerge(
+        "w-full p-2 mt-4 border rounded",
+        !validURL ? "border-red-500" : "border-gray-300",
+        className
+      )}
+      value={url}
+      placeholder="Enter website URL"
+      onChange={handleURLChange}
+    />
   );
 }
 

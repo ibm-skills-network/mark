@@ -14,7 +14,6 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
 
 function Component(props: Props) {
   const { className, questionId, questionNumber } = props;
-  // const { type, totalPoints } = question;
 
   const [activeAttemptId, questions, setQuestion] = useLearnerStore((state) => [
     state.activeAttemptId,
@@ -28,13 +27,22 @@ function Component(props: Props) {
   const question = useMemo(() => {
     return questions.find((q) => q.id === props.questionId);
   }, [questions, questionId]);
+  const {
+    id,
+    type,
+    totalPoints,
+    numRetries,
+    questionResponses,
+    question: questionText,
+  } = question;
 
   const mostRecentFeedback = useMemo(() => {
     return question.questionResponses.at(-1);
   }, [question]);
 
-  const attemptsRemaining =
-    question.numRetries - question.questionResponses.length;
+  const attemptsRemaining = numRetries
+    ? numRetries - questionResponses.length
+    : -1;
 
   const [submitted, setSubmitted] = useState<boolean>(false);
   async function handleSubmit() {
@@ -43,18 +51,13 @@ function Component(props: Props) {
     // const question = questions[questionNumber - 1];
     console.log("question", question);
     // todo: show a loading indicator
-    const feedback = await submitQuestion(
-      assignmentId,
-      activeAttemptId,
-      question.id,
-      {
-        learnerTextResponse: question.learnerTextResponse || null,
-        learnerUrlResponse: question.learnerUrlResponse || null,
-        learnerChoices: question.learnerChoices || null,
-        learnerAnswerChoice: question.learnerAnswerChoice || null,
-        learnerFileResponse: question.learnerFileResponse || null,
-      }
-    );
+    const feedback = await submitQuestion(assignmentId, activeAttemptId, id, {
+      learnerTextResponse: question.learnerTextResponse || null,
+      learnerUrlResponse: question.learnerUrlResponse || null,
+      learnerChoices: question.learnerChoices || null,
+      learnerAnswerChoice: question.learnerAnswerChoice || null,
+      learnerFileResponse: question.learnerFileResponse || null,
+    });
     console.log("feedback", feedback);
     // TODO: update the question status, and the total points, and the feedback
 
@@ -94,32 +97,37 @@ function Component(props: Props) {
                     ? mostRecentFeedback.points
                     : mostRecentFeedback.points.toFixed(1)}{" "}
                 </span>
-                out of {question.totalPoints} points
+                out of {totalPoints} points
               </span>
             ) : (
-              <span className="text-blue-700">
-                {question.totalPoints} points
-              </span>
+              <span className="text-blue-700">{totalPoints} points</span>
             )}
           </p>
         </div>
         {/* attempts remaining */}
         <div className="text-gray-500 text-base font-medium leading-tight">
-          {attemptsRemaining === 1
-            ? "1 attempt remaining"
-            : `${attemptsRemaining || "No"} attempts remaining`}
+          {attemptsRemaining > 1 ||
+            (attemptsRemaining === 0 && (
+              <span>{attemptsRemaining} attempts remaining</span>
+            ))}
+          {attemptsRemaining === 1 ? (
+            <span>1 attempt remaining</span>
+          ) : (
+            // attempts remaining is -1 if there are unlimited attempts
+            <span>Unlimited attempts</span>
+          )}
         </div>
       </div>
       <div className="bg-white p-8 rounded-lg border border-gray-300">
-        <p className="mb-4 text-gray-700">{question.question}</p>
-        <RenderQuestion questionType={question.type} />
+        <p className="mb-4 text-gray-700">{questionText}</p>
+        <RenderQuestion questionType={type} />
       </div>
       {/* Feedback section */}
       {mostRecentFeedback && (
         <div className="bg-green-100 p-5 rounded-lg shadow-sm">
           <p className="text-green-700 text-center font-medium">
             <span className="font-bold">
-              {mostRecentFeedback.points}/{question.totalPoints}
+              {mostRecentFeedback.points}/{totalPoints}
             </span>{" "}
             {mostRecentFeedback.feedback[0].feedback}
           </p>

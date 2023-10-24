@@ -111,7 +111,7 @@ function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
               fontSize: 13.17,
             }}
           >
-            Set up a rubric to define how the paragraph should be graded. MARK
+            Set up a criteria to define how the paragraph should be graded. MARK
             handles grading, saving you time. Learner submit paragraphs, and
             MARK provides feedback and grades based on the rubric.
           </div>
