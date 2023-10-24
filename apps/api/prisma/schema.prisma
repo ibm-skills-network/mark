@@ -47,11 +47,11 @@ model Group {
 
 /// The AssignmentGroup model represents the many-to-many relationship between Assignments and Groups
 model AssignmentGroup {
-  assignment       Assignment     @relation(fields: [assignmentId], references: [id])     /// The associated Assignment model
-  assignmentId     Int                                                                    /// Relation scalar field  (used in the `@relation` attribute above)
-  group            Group @relation(fields: [groupId], references: [id])                   /// The associated Group model
-  groupId          String                                                                 /// Relation scalar field  (used in the `@relation` attribute above)
-  @@id([assignmentId, groupId])                                                           /// Unique identifier for the relationship
+  assignment       Assignment     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)    /// The associated Assignment model
+  assignmentId     Int                                                                                      /// Relation scalar field  (used in the `@relation` attribute above)
+  group            Group @relation(fields: [groupId], references: [id])                                     /// The associated Group model
+  groupId          String                                                                                   /// Relation scalar field  (used in the `@relation` attribute above)
+  @@id([assignmentId, groupId])                                                                             /// Unique identifier for the relationship
 }
 
 /// The Assignment model represents a particular assignment
@@ -82,12 +82,13 @@ model Question {
   numRetries   Int?                                               /// Max number of times a student can retry a question
   type         QuestionType                                       /// Type of question
   question     String                                             /// The text of the question
-  maxWords     Int?                                               /// optional maximum number of words allowed for a written response type question
+  maxWords     Int?                                               /// Optional maximum number of words allowed for a written response type question
   scoring      Json?                                              /// Scoring details for the question, stored as JSON
   choices      Json?                                              /// Possible choices for the question, stored as JSON
   answer       Boolean?                                           /// The correct answer for the question (used for auto grading)
   assignmentId Int                                                /// The ID of the assignment to which the question belongs
-  assignment   Assignment   @relation(fields: [assignmentId], references: [id])   /// The assignment to which the question belongs
+  assignment   Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)                    /// The assignment to which the question belongs
+  gradingContextQuestionIds Int[]                                 /// List of question Ids that are used as contextual questions when auto grading this question
 }
 
 /// This model represents an assignment attempt by a learner

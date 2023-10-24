@@ -56,6 +56,7 @@ CREATE TABLE "Question" (
     "choices" JSONB,
     "answer" BOOLEAN,
     "assignmentId" INTEGER NOT NULL,
+    "gradingContextQuestionIds" INTEGER[],
 
     CONSTRAINT "Question_pkey" PRIMARY KEY ("id")
 );
@@ -89,13 +90,13 @@ CREATE TABLE "QuestionResponse" (
 CREATE UNIQUE INDEX "Group_id_key" ON "Group"("id");
 
 -- AddForeignKey
-ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Question" ADD CONSTRAINT "Question_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Question" ADD CONSTRAINT "Question_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "QuestionResponse" ADD CONSTRAINT "QuestionResponse_assignmentAttemptId_fkey" FOREIGN KEY ("assignmentAttemptId") REFERENCES "AssignmentAttempt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
