@@ -2,7 +2,7 @@ import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { type KeyboardEventHandler } from "react";
+import { type KeyboardEvent } from "react";
 
 interface Rubric {
   questionId: number;
@@ -73,7 +73,7 @@ function Rubric(props: Rubric) {
   };
 
   // This function is used to auto adjust the height of the textarea when the user types multiple lines of text
-  function textAreaAdjust(e: KeyboardEventHandler<HTMLTextAreaElement>) {
+  function textAreaAdjust(e: KeyboardEvent<HTMLTextAreaElement>) {
     const element = e.target as HTMLTextAreaElement;
     const offset = element.offsetHeight - element.clientHeight;
     const oldScrollTop = document.documentElement.scrollTop; // Save old scroll position
@@ -114,7 +114,7 @@ function Rubric(props: Rubric) {
               />
 
               <textarea
-                onKeyDown={textAreaAdjust}
+                onKeyDown={(e) => textAreaAdjust(e)}
                 className="py-2 border flex-1 border-gray-300 shadow-sm pl-2 h-12 resize-none pr-10 rounded-md text-black outline-none placeholder-gray-400"
                 placeholder={
                   index === 0
