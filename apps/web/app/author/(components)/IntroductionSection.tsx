@@ -19,7 +19,7 @@ import {
 const titleToDescription = [
   {
     sectionId: "introduction",
-    title: "Short Summary of The Learning Goals",
+    title: "Overview of Assignment",
     description:
       "Write a short summary of the learning goals of this assignment and what learners will be required to do",
     placeholder:
@@ -93,7 +93,7 @@ export function IntroductionsectionId<T extends ElementType = "section">(
             setValue={setValue}
             placeholder={placeholder}
             textareaClassName="!min-h-[6.5rem] !max-h-72"
-            className=""
+            className=" h-60"
           />
         ) : (
           <GradingOptionsForm

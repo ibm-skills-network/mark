@@ -139,7 +139,7 @@ function Component(props: Props) {
           className="disabled:opacity-50"
           onClick={handleSubmit}
         >
-          Submit Question
+          Submit Response
         </Button>
       </div>
     </section>

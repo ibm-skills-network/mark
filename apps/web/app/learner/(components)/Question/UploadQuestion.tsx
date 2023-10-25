@@ -80,7 +80,7 @@ function UploadQuestion(props: Props) {
 
       {/* Submit Button */}
       <div className="flex justify-center mt-4">
-        <Button onClick={handleSubmit}>Submit Question</Button>
+        <Button onClick={handleSubmit}>Submit Response</Button>
       </div>
 
       {submitted && (

@@ -142,7 +142,7 @@ function TrueFalseQuestion(props: Props) {
                 : "hover:bg-indigo-500"
             }
           >
-            Submit Question
+            Submit Response
           </Button>
         </div>
       </div>

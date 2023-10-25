@@ -26,6 +26,7 @@ function TextQuestion(props: Props) {
   const maxWords = 1000;
   return (
     <MarkdownEditor
+      className=" h-60"
       value={questions[activeQuestionNumber - 1]?.learnerTextResponse || ""}
       // update status
       setValue={(value) => setTextResponse(value)}

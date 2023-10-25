@@ -94,13 +94,18 @@ type QuestionResponse = {
 export interface BaseQuestion {
   type: QuestionType;
   totalPoints: number;
-  numRetries: number;
+  numRetries?: number;
   question: string;
   questionResponses?: QuestionResponse[];
 }
 
 export interface LearnerGetQuestionResponse extends BaseQuestion {
   id: number;
+  // for TEXT only, otherwise null
+  maxWords?: number;
+  // for SINGLE_CORRECT or MULTIPLE_CORRECT only, otherwise null
+  choices?: string[];
+
   // assignmentId: number;
 }
 
@@ -121,7 +126,6 @@ export interface Question extends CreateQuestionRequest {
   // will have no id
   id: number;
   assignmentId: number;
-  number?: number;
 }
 
 export interface QuestionAuthorStore extends Question {
