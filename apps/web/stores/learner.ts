@@ -17,6 +17,8 @@ export type LearnerActions = {
   setTextResponse: (learnerTextResponse: string, questionId?: number) => void;
   setURLResponse: (learnerUrlResponse: string, questionId?: number) => void;
   setChoices: (learnerChoices: string[], questionId?: number) => void;
+  addChoice: (learnerChoice: string, questionId?: number) => void;
+  removeChoice: (learnerChoice: string, questionId?: number) => void;
   setAnswerChoice: (learnerAnswerChoice: boolean, questionId?: number) => void;
 };
 
@@ -73,6 +75,32 @@ export const useLearnerStore = createWithEqualityFn<
             q.id ===
             (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerChoices }
+              : q
+          ),
+        })),
+      addChoice: (learnerChoice, questionId) =>
+        set((state) => ({
+          questions: state.questions?.map((q) =>
+            q.id ===
+            (questionId || state.questions[state.activeQuestionNumber - 1].id)
+              ? {
+                  ...q,
+                  learnerChoices: [...(q.learnerChoices ?? []), learnerChoice],
+                }
+              : q
+          ),
+        })),
+      removeChoice: (learnerChoice, questionId) =>
+        set((state) => ({
+          questions: state.questions?.map((q) =>
+            q.id ===
+            (questionId || state.questions[state.activeQuestionNumber - 1].id)
+              ? {
+                  ...q,
+                  learnerChoices: q.learnerChoices?.filter(
+                    (c) => c !== learnerChoice
+                  ),
+                }
               : q
           ),
         })),
