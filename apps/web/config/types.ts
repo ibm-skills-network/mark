@@ -190,6 +190,7 @@ export type AssignmentAttempt = {
   // The DateTime at which the attempt window ends (can no longer submit it)
   // example: 2023-12-31T23:59:59Z
   expiresAt?: string;
+  createdAt?: string;
 };
 
 export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {

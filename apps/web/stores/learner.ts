@@ -6,6 +6,7 @@ import { createWithEqualityFn } from "zustand/traditional";
 export type LearnerState = {
   activeAttemptId: number | null;
   activeQuestionNumber: number | null;
+  expiresAt?: string;
   questions: QuestionStore[];
 };
 

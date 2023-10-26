@@ -20,7 +20,7 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 
 function QuestionPage(props: Props) {
   const { attempt, assignmentId } = props;
-  const { questions, id } = attempt;
+  const { questions, id, expiresAt } = attempt;
   const router = useRouter();
 
   const questionsStore = useLearnerStore((state) => state.questions);
@@ -107,6 +107,7 @@ function QuestionPage(props: Props) {
     useLearnerStore.setState({
       questions: allQuestions,
       activeAttemptId: id,
+      expiresAt: expiresAt,
     });
     if (allQuestions.length) {
       setPageState("success");
