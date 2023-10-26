@@ -1,0 +1,55 @@
+{{- if .Values.api.enabled }}
+{{- with .Values.api }}
+{{- if .enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mark.api.name" $ }}-migration
+  labels:
+    {{- include "mark.api.labels" $ | nindent 4 }}
+spec:
+  template:
+    metadata:
+      {{- with .podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mark.api.labels" $ | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        {{- include "mark.imagePullSecrets" $ | nindent 8 }}
+      serviceAccountName: {{ include "mark.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml .podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ include "mark.api.name" $ }}-migration-container
+          securityContext:
+            {{- toYaml .securityContext | nindent 12 }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          command: ["/bin/sh", "-c"] # Override the command
+          args: ["migrate.sh"]
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ include "mark.api.name" $ }}-config
+          - secretRef:
+              name: {{ include "mark.api.name" $ }}-secrets  
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
