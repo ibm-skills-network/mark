@@ -86,10 +86,12 @@ function AuthorQuestionsPage(props: Props) {
             }
           );
           if (questions?.length > 0) {
-            // if there are questions, sort them by id and set them in the store
-            const sortedQuestions = questions?.sort(
-              (a, b) => a.number - b.number // from smallest to largest
-            );
+            // if there are questions, then add them to the store
+            // if the assignment has questionOrder, then it's already sorted from the backend, otherwise sort it by id
+            const sortedQuestions =
+              assignment?.questionOrder.length > 0
+                ? questions
+                : questions.sort((a, b) => a.id - b.id);
             setQuestions(sortedQuestions);
           } else {
             console.log("no questions");
