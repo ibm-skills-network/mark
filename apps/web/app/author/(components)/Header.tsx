@@ -1,5 +1,6 @@
 "use client";
 
+import Spinner from "@/components/svgs/Spinner";
 import { replaceQuestion, updateAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
@@ -16,7 +17,6 @@ function AuthorHeader(props: Props) {
   const {} = props;
   const pathname = usePathname();
   const router = useRouter();
-  const [publishing, setPublishing] = useState(false);
   const activeAssignmentId = useAuthorStore(
     (state) => state.activeAssignmentId
   );
@@ -30,9 +30,10 @@ function AuthorHeader(props: Props) {
   ]);
 
   const [isOpen, setIsOpen] = useState(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
 
   // check if all questions have been filled out
-  const enablePublishButton = useMemo(() => {
+  const questionsAreReadyToBePublished = useMemo(() => {
     // TODO: show a custom error message for each case
     return questions.every((question) => {
       const { type, question: questionText, choices, scoring } = question;
@@ -81,7 +82,7 @@ function AuthorHeader(props: Props) {
     // if (!confirmPublish) {
     //   return;
     // }
-    setPublishing(true);
+    setSubmitting(true);
     const promises = questions.map(async (question, index) => {
       // remove values that are not needed in the backend
       const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
@@ -136,6 +137,7 @@ function AuthorHeader(props: Props) {
       if (!updated) {
         toast.error(`Questions were updated but assignment failed to publish.`);
       }
+      setSubmitting(false);
       const currentTime = Date.now();
       console.log("currentTime", currentTime);
       router.push(
@@ -255,11 +257,11 @@ function AuthorHeader(props: Props) {
           {getCurrentId() === 2 && (
             <button
               type="button"
-              disabled={!enablePublishButton}
+              disabled={!questionsAreReadyToBePublished || submitting}
               onClick={handlePublishButton}
-              className="inline-flex leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 enabled:hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:opacity-50"
+              className="inline-flex transition-all leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 enabled:hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:opacity-50"
             >
-              Save & Publish
+              {submitting ? <Spinner className="w-8" /> : "Save & Publish"}
             </button>
           )}
 
