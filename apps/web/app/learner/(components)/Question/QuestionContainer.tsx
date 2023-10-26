@@ -1,3 +1,4 @@
+import Spinner from "@/components/svgs/Spinner";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
@@ -45,8 +46,9 @@ function Component(props: Props) {
     : -1;
 
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
   async function handleSubmit() {
-    // setSubmitted(true);
+    setSubmitting(true);
     // updateStatus("edited");
     // const question = questions[questionNumber - 1];
     console.log("question", question);
@@ -58,6 +60,7 @@ function Component(props: Props) {
       learnerAnswerChoice: question.learnerAnswerChoice || null,
       learnerFileResponse: question.learnerFileResponse || null,
     });
+    setSubmitting(false);
     console.log("feedback", feedback);
     // TODO: update the question status, and the total points, and the feedback
 
@@ -106,11 +109,9 @@ function Component(props: Props) {
         </div>
         {/* attempts remaining */}
         <div className="text-gray-500 text-base font-medium leading-tight">
-          {attemptsRemaining > 1 ||
-            (attemptsRemaining === 0 && (
-              <span>{attemptsRemaining} attempts remaining</span>
-            ))}
-          {attemptsRemaining === 1 ? (
+          {attemptsRemaining > 1 || attemptsRemaining === 0 ? (
+            <span>{attemptsRemaining} attempts remaining</span>
+          ) : attemptsRemaining === 1 ? (
             <span>1 attempt remaining</span>
           ) : (
             // attempts remaining is -1 if there are unlimited attempts
@@ -135,11 +136,11 @@ function Component(props: Props) {
       )}
       <div className="flex justify-center">
         <Button
-          disabled={attemptsRemaining === 0}
+          disabled={attemptsRemaining === 0 || submitting}
           className="disabled:opacity-50"
           onClick={handleSubmit}
         >
-          Submit Response
+          {submitting ? <Spinner className="w-7 h-7" /> : "Submit Response"}
         </Button>
       </div>
     </section>

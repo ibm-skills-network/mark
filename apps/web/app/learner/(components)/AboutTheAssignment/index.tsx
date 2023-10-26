@@ -3,7 +3,7 @@ import { Assignment, LearnerAssignmentState } from "@/config/types";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Button from "@learnerComponents/Button";
 import Link from "next/link";
-import { type ComponentPropsWithoutRef } from "react";
+import { type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import AssignmentMainInfo from "./AssignmentMainInfo";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -11,7 +11,7 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
   assignmentState: LearnerAssignmentState;
 }
 
-function AssignmentOverview(props: Props) {
+function AboutTheAssignment(props: Props) {
   const { assignment, assignmentState } = props;
   const {
     instructions,
@@ -23,6 +23,11 @@ function AssignmentOverview(props: Props) {
     name,
     id,
   } = assignment;
+
+  function handleViewResults(e: MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    console.log("view results");
+  }
 
   return (
     <>
@@ -37,9 +42,10 @@ function AssignmentOverview(props: Props) {
         />
         {/* if the assignment is completed, then show the "View Results" button */}
         {assignmentState === "completed" ? (
-          <Link href={`/learner/${id}/results`}>
-            <Button>View Results {">"}</Button>
-          </Link>
+          <Button className="group flex gap-x-2" onClick={handleViewResults}>
+            View Results
+            <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200 disabled:opacity-50" />
+          </Button>
         ) : (
           // it's either "not-started" or "in-progress"
           <Tooltip
@@ -96,4 +102,4 @@ function AssignmentOverview(props: Props) {
   );
 }
 
-export default AssignmentOverview;
+export default AboutTheAssignment;
