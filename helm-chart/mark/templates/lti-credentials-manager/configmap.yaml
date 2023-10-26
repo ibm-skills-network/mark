@@ -1,0 +1,16 @@
+{{- if .Values.ltiCredentialsManager.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mark.lti-credentials-manager.name" $ }}
+  annotations: {{- include "mark.install-first.annotations" $ | nindent 4 }}
+data:
+{{- with .Values.postgres }}
+  PG_HOST: {{ .hostname | quote }}
+  PG_PORT: {{ .port | quote }}
+{{- end }}
+{{- range $name, $value := .Values.ltiCredentialsManager.env }}
+  {{ $name }}: {{ $value | quote }}
+{{- end }}
+{{- end }}
