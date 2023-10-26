@@ -39,7 +39,7 @@ RUN apk add --no-cache dumb-init~=1 postgresql-client
 COPY --chown=node:node --from=sourcer $DIR/apps/api/dist ./dist
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 COPY --chown=node:node --from=sourcer $DIR/prisma ./prisma
-COPY --chown=node:node --from=sourcer $DIR/apps/api/entrypoint.sh ./entrypoint.sh
+COPY --chown=node:node --from=sourcer $DIR/apps/api/migrate.sh ./migrate.sh
 COPY --chown=node:node --from=sourcer $DIR/apps/api/ensureDb.js ./ensureDb.js
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "dist/main.js"]
