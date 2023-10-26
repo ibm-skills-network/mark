@@ -4,6 +4,7 @@ import { submitAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
+import { useEffect, useState } from "react";
 import Button from "./Button";
 
 interface Props {}
@@ -19,6 +20,12 @@ function LearnerHeader(props: Props) {
   );
   const assignmentId = assignmentDetails?.id;
   const passingGrade = assignmentDetails?.passingGrade;
+  const [title, setTitle] = useState<string>("Auto-Graded Assignment");
+  useEffect(() => {
+    if (assignmentDetails) {
+      setTitle(assignmentDetails.name);
+    }
+  }, []);
   const userSubmittedAnyQuestion = questions.some(
     (question) => question.questionResponses.length > 0
   );
@@ -39,10 +46,7 @@ function LearnerHeader(props: Props) {
           <SNIcon />
         </div>
         <div>
-          <Title
-            text="Auto-Graded Assignment Creator"
-            className="text-lg font-semibold"
-          />
+          <Title text={title} className="text-lg font-semibold" />
           {/* TODO: add back when needed */}
           {/* <div>
             <Breadcrumbs />
