@@ -2,6 +2,7 @@ import useCountdown from "@/hooks/use-countdown";
 import { useLearnerStore } from "@/stores/learner";
 import { type ComponentPropsWithoutRef } from "react";
 import { twMerge } from "tailwind-merge";
+import TimerExpiredModal from "../TimerExpiredModal";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   timeInSecs: number;
@@ -40,11 +41,7 @@ function Timer(props: Props) {
         {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}
       </div>
       {/* show a modal that tells the user that they cannot submit any more questions */}
-      {timerExpired && (
-        <div className="fixed text-red-500 text-base font-medium leading-tight">
-          Time Expired
-        </div>
-      )}
+      {timerExpired && <TimerExpiredModal />}
     </div>
   );
 }
