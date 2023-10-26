@@ -4,6 +4,7 @@ import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Button from "@learnerComponents/Button";
 import Link from "next/link";
 import { type ComponentPropsWithoutRef, type MouseEvent } from "react";
+import ReactMarkdown from "react-markdown";
 import AssignmentMainInfo from "./AssignmentMainInfo";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -81,7 +82,9 @@ function AboutTheAssignment(props: Props) {
             <h3 className="text-xl font-semibold text-gray-800">
               Instructions
             </h3>
-            <p className="text-gray-600">{instructions}</p>
+            <ReactMarkdown className="text-gray-600">
+              {instructions}
+            </ReactMarkdown>
           </>
         )}
         {gradingCriteriaOverview && (
@@ -89,13 +92,15 @@ function AboutTheAssignment(props: Props) {
             <h3 className="text-xl font-semibold text-gray-800">
               Grading Criteria
             </h3>
-            <p className="text-gray-600">{gradingCriteriaOverview}</p>
+            <ReactMarkdown className="text-gray-600">
+              {gradingCriteriaOverview}
+            </ReactMarkdown>
           </>
         )}
         {!introduction && !instructions && !gradingCriteriaOverview && (
-          <p className="text-gray-600">
+          <ReactMarkdown className="text-gray-600">
             No information has been provided for this assignment.
-          </p>
+          </ReactMarkdown>
         )}
       </div>
     </>

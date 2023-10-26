@@ -2,6 +2,8 @@ import Spinner from "@/components/svgs/Spinner";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
 import Button from "../Button";
 import RenderQuestion from "./RenderQuestion";
@@ -51,7 +53,6 @@ function Component(props: Props) {
     setSubmitting(true);
     // updateStatus("edited");
     // const question = questions[questionNumber - 1];
-    console.log("question", question);
     // todo: show a loading indicator
     const feedback = await submitQuestion(assignmentId, activeAttemptId, id, {
       learnerTextResponse: question.learnerTextResponse || null,
@@ -61,8 +62,10 @@ function Component(props: Props) {
       learnerFileResponse: question.learnerFileResponse || null,
     });
     setSubmitting(false);
-    console.log("feedback", feedback);
-    // TODO: update the question status, and the total points, and the feedback
+    if (!feedback) {
+      toast.error("Could not submit question, Mark will be back soon!");
+      return;
+    }
 
     // update question in zustand store with the feedback of the new submission
     // this is also automatically added to the backend so the learner can see
@@ -120,7 +123,9 @@ function Component(props: Props) {
         </div>
       </div>
       <div className="bg-white p-8 rounded-lg border border-gray-300">
-        <p className="mb-4 text-gray-700">{questionText}</p>
+        <ReactMarkdown className="mb-4 text-gray-700">
+          {questionText}
+        </ReactMarkdown>
         <RenderQuestion questionType={type} />
       </div>
       {/* Feedback section */}
