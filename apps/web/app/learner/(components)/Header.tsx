@@ -4,13 +4,16 @@ import { submitAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import Breadcrumbs from "./Breadcrumbs";
 import Button from "./Button";
 
 interface Props {}
 
 function LearnerHeader(props: Props) {
   const {} = props;
+  const pathname = usePathname();
   const [questions, activeAttemptId] = useLearnerStore((state) => [
     state.questions,
     state.activeAttemptId,
@@ -47,10 +50,18 @@ function LearnerHeader(props: Props) {
         </div>
         <div>
           <Title text={title} className="text-lg font-semibold" />
-          {/* TODO: add back when needed */}
-          {/* <div>
-            <Breadcrumbs />
-          </div> */}
+          {pathname.includes("questions") && (
+            <Breadcrumbs
+              homeHref={pathname.replace(/\/questions.*/, "")}
+              pages={[
+                {
+                  name: "Questions",
+                  href: pathname,
+                  current: true,
+                },
+              ]}
+            />
+          )}
         </div>
       </div>
       {activeAttemptId && (

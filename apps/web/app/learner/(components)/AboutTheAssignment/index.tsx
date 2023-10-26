@@ -41,7 +41,7 @@ function AboutTheAssignment(props: Props) {
           name={name}
           assignmentId={id}
         />
-        {/* if the assignment is completed, then show the "View Results" button */}
+        {/* if the assignment is completed(no more attempts), then show the "View Results" button */}
         {assignmentState === "completed" ? (
           <Button className="group flex gap-x-2" onClick={handleViewResults}>
             View Results
@@ -74,7 +74,9 @@ function AboutTheAssignment(props: Props) {
             <h3 className="text-xl font-semibold text-gray-800">
               About this Assignment
             </h3>
-            <p className="text-gray-600">{introduction}</p>
+            <ReactMarkdown className="text-gray-600">
+              {introduction}
+            </ReactMarkdown>
           </>
         )}
         {instructions && (
