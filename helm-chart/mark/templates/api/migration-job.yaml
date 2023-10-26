@@ -10,6 +10,9 @@ metadata:
   annotations:
   {{- include "mark.migrations.annotations" $ | nindent 4}}
 spec:
+  parallelism: 1
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 100
   template:
     metadata:
       {{- with .podAnnotations }}
@@ -19,29 +22,48 @@ spec:
       labels:
         {{- include "mark.api.labels" $ | nindent 8 }}
     spec:
-      parallelism: 1
-      backoffLimit: 6
-      restartPolicy: Never
       imagePullSecrets:
         {{- include "mark.imagePullSecrets" $ | nindent 8 }}
       serviceAccountName: {{ include "mark.serviceAccountName" $ }}
       securityContext:
         {{- toYaml .podSecurityContext | nindent 8 }}
+      restartPolicy: Never
+      {{- if $.Values.linkerd.enabled }}
+      volumes:
+        {{- include "sn-common.linkerd-await.volume" . | nindent 12 }}
+      initContainers:
+        {{- include "sn-common.linkerd-await.initContainer" . | nindent 12 }}
+      {{- end }}
       containers:
         - name: {{ include "mark.api.name" $ }}-migration-container
           securityContext:
             {{- toYaml .securityContext | nindent 12 }}
-          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
-          imagePullPolicy: {{ .image.pullPolicy }}
-          command: ["/bin/sh", "-c"] # Override the command
-          args: ["/usr/src/app/migrate.sh"]
+          {{- with .image }}
+          image: "{{ .repository }}:{{ .tag }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
           resources:
             {{- toYaml .resources | nindent 12 }}
           envFrom:
-          - configMapRef:
-              name: {{ include "mark.api.name" $ }}-config
-          - secretRef:
-              name: {{ include "mark.api.name" $ }}-secrets  
+            - configMapRef:
+                name: {{ include "mark.api.name" $ }}-config
+            - secretRef:
+                name: {{ include "mark.api.name" $ }}-secrets
+          {{- if $.Values.linkerd.enabled }}
+          volumeMounts:
+            {{- include "sn-common.linkerd-await.volumeMount" . | nindent 16 }}
+          command:
+            - /linkerd-await/linkerd-await
+            - --shutdown
+            - --
+          args:
+          {{- else }}
+          command:
+          {{- end }}
+            - /bin/sh
+            - -c
+          args: ["/usr/src/app/migrate.sh"]
+          
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
