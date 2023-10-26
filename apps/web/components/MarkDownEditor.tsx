@@ -1,5 +1,5 @@
-import MarkdownIt from "markdown-it";
 import { useState, type ComponentPropsWithoutRef } from "react";
+import ReactMarkdown from "react-markdown";
 import MdEditor from "react-markdown-editor-lite";
 import "react-markdown-editor-lite/lib/index.css";
 import { twMerge } from "tailwind-merge";
@@ -17,12 +17,10 @@ function MarkdownEditor(props: Props) {
     value,
     setValue,
     className,
-    style,
     textareaClassName,
     maxWords,
     placeholder = "Write your question here...",
   } = props;
-  const mdParser = new MarkdownIt();
 
   const [wordCount, setWordCount] = useState<number>(
     value?.split(/\s+/).filter(Boolean).length ?? 0
@@ -39,7 +37,7 @@ function MarkdownEditor(props: Props) {
   };
 
   return (
-    <div>
+    <>
       <MdEditor
         className={
           className + " rounded-md border border-gray-300 overflow-hidden"
@@ -50,8 +48,7 @@ function MarkdownEditor(props: Props) {
         )}
         placeholder={placeholder}
         value={value}
-        style={{ ...style }}
-        renderHTML={(text) => mdParser.render(text)}
+        renderHTML={(text) => <ReactMarkdown>{text}</ReactMarkdown>}
         onChange={handleEditorChange}
         view={{ menu: true, md: true, html: false }}
       />
@@ -66,7 +63,7 @@ function MarkdownEditor(props: Props) {
           Words: {wordCount} / {maxWords}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
 
