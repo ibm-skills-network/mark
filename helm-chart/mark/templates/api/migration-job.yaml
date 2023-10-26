@@ -34,7 +34,7 @@ spec:
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           command: ["/bin/sh", "-c"] # Override the command
-          args: ["migrate.sh"]
+          args: ["/usr/src/app/migrate.sh"]
           resources:
             {{- toYaml .resources | nindent 12 }}
           envFrom:
