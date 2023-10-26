@@ -49,7 +49,7 @@ function Overview(props: Props) {
   return (
     <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 w-64 max-w-xl bg-white">
       {allotedTimeMinutes ? (
-        <Timer timeInSecs={allotedTimeMinutes * 60} assignmentId={id} />
+        <Timer />
       ) : (
         <div className="text-gray-600 leading-tight">No time limit</div>
       )}

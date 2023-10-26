@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 interface CountdownResult {
   countdown: number;
-  timerExpired: boolean;
+  // timerExpired: boolean;
 }
 
 /**
@@ -12,20 +12,17 @@ interface CountdownResult {
  */
 const useCountdown = (expiresAt: number): CountdownResult => {
   const [countdown, setCountdown] = useState(expiresAt - Date.now());
-  const [timerExpired, setTimerExpired] = useState(false);
+  // const [timerExpired, setTimerExpired] = useState(false);
 
   useEffect(() => {
     if (!expiresAt) return;
     const interval = setInterval(() => {
       const now = Date.now();
       if (now >= expiresAt) {
-        console.log(now, expiresAt);
         // if the current time is past the expiration time
         clearInterval(interval);
-        setTimerExpired(true);
+        // setTimerExpired(true);
       } else {
-        console.log(now, expiresAt);
-        console.log(expiresAt - now);
         setCountdown(expiresAt - now);
       }
     }, 1000);
@@ -33,7 +30,7 @@ const useCountdown = (expiresAt: number): CountdownResult => {
     return () => clearInterval(interval);
   }, [expiresAt]);
 
-  return { countdown, timerExpired };
+  return { countdown };
 };
 
 export default useCountdown;

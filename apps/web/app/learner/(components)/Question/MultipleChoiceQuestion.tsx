@@ -119,7 +119,8 @@ function TrueFalseQuestion(props: Props) {
   return (
     <>
       {choices.map((choice, index) => {
-        const isChoiceCorrect = index % 2 === 0;
+        // TODO: resolve this when backend is ready for it
+        const isChoiceCorrect = false;
         console.log("isChoiceCorrect", isChoiceCorrect);
         console.log("learnerChoices", learnerChoices);
         return (

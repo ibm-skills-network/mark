@@ -1,9 +1,17 @@
-import { use, type ComponentPropsWithoutRef, type FC } from "react";
+import { useAssignmentDetails } from "@/stores/learner";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { type ComponentPropsWithoutRef, type FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const TimerExpiredModal: FC<Props> = (props) => {
+  const pathname = usePathname();
   const {} = props;
+
+  const activeAssignmentId = useAssignmentDetails(
+    (state) => state.assignmentDetails?.id
+  );
 
   // useEffect(() => {
 
@@ -60,31 +68,33 @@ const TimerExpiredModal: FC<Props> = (props) => {
               </div>
               <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
                 <h3
-                  className="text-base font-semibold leading-6 text-gray-900"
+                  className="text-xl font-semibold leading-6 text-gray-900"
                   id="modal-title"
                 >
                   Timer Expired
                 </h3>
-                {/* <div className="mt-2">
-                  <p className="text-sm text-gray-500">{description}</p>
-                </div> */}
+                <div className="mt-3">
+                  <p className="text-base text-gray-500">
+                    Your time has expired. Your assignment has been
+                    automatically submitted.
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="mt-5 sm:ml-10 sm:mt-4 sm:flex sm:pl-4">
-              {/* <button
-                onClick={leavePage}
-                type="button"
+            <div className="mt-6 sm:ml-10 sm:mt-5 sm:flex sm:pl-4">
+              <Link
+                href={`${pathname}/learner/${activeAssignmentId}`}
                 className="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:w-auto"
               >
-                {confirmButtonText}
-              </button>
-              <button
-                onClick={() => setShow(false)}
-                type="button"
+                Assignment Home
+              </Link>
+              <Link
+                // TODO: change that link to the course page
+                href={`https://author.skills.network/courses`}
                 className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:ml-3 sm:mt-0 sm:w-auto"
               >
-                Cancel
-              </button> */}
+                Back to course
+              </Link>
             </div>
           </div>
         </div>
