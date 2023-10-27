@@ -24,7 +24,7 @@ function SuccessPage(props: Props) {
       <div className="justify-start items-start gap-3.5 inline-flex">
         <Link
           href={pathname.split("?")[0]}
-          className="px-4 py-2 bg-blue-700 rounded-md shadow justify-end items-center gap-2.5 flex"
+          className="px-4 py-2 bg-blue-700 hover:bg-blue-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
         >
           <ExitIcon className="w-6 h-6 text-white" />
           <div className="text-white text-base font-medium">
@@ -33,7 +33,7 @@ function SuccessPage(props: Props) {
         </Link>
         <Link
           href={`https://author.skills.network/courses`}
-          className="px-4 py-2 bg-blue-700 rounded-md shadow justify-end items-center gap-2.5 flex"
+          className="px-4 py-2 bg-blue-700 hover:bg-blue-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
         >
           <ExitIcon className="w-6 h-6 text-white" />
           <div className="text-white text-base font-medium">Back to course</div>
