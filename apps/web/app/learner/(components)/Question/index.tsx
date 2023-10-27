@@ -124,17 +124,12 @@ function QuestionPage(props: Props) {
   //   []
   // );
 
-  const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
-    (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber]
-  );
+  const [activeQuestionNumber] = useLearnerStore((state) => [
+    state.activeQuestionNumber,
+  ]);
 
   const [submitting, setSubmitting] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
-  // const [submittedSuccessfully, setSubmittedSuccessfully] = useState(false);
-  const submittedSuccessfully = false;
-
-  const isLastQuestion = false;
-
   if (pageState === "loading") {
     return <Loading />;
   } else if (pageState === "no-questions") {
@@ -147,62 +142,23 @@ function QuestionPage(props: Props) {
 
   return (
     <div className="flex gap-x-5">
-      {submittedSuccessfully ? (
-        <div className="flex items-center justify-center h-full">
-          <h1>Thank you for your attempt!</h1>
-        </div>
-      ) : (
-        <>
-          <div className="flex-1">
-            {questionsStore.map((question, index) => (
-              <QuestionContainer
-                key={index}
-                questionNumber={index + 1}
-                className={`${
-                  index + 1 === activeQuestionNumber ? "" : "hidden"
-                } `}
-                questionId={question.id}
-                // question={question}
-              />
-            ))}
+      <div className="flex-1">
+        {questionsStore.map((question, index) => (
+          <QuestionContainer
+            key={index}
+            questionNumber={index + 1}
+            className={`${index + 1 === activeQuestionNumber ? "" : "hidden"} `}
+            questionId={question.id}
+            // question={question}
+          />
+        ))}
+      </div>
+      <div className="">
+        <Overview />
+      </div>
 
-            <div className="flex justify-between mt-4">
-              <Button
-                onClick={() =>
-                  setActiveQuestionNumber(activeQuestionNumber - 1)
-                }
-                disabled={activeQuestionNumber === 1}
-                className="disabled:invisible"
-              >
-                Previous
-              </Button>
-
-              {isLastQuestion ? (
-                <Button
-                  onClick={() => setShowWarning(true)}
-                  disabled={submitting}
-                >
-                  {submitting ? "Submitting..." : "Submit Assignment"}
-                </Button>
-              ) : (
-                <Button
-                  onClick={() =>
-                    setActiveQuestionNumber(activeQuestionNumber + 1)
-                  }
-                  disabled={activeQuestionNumber === questions.length}
-                  className="disabled:invisible"
-                >
-                  Next
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="">
-            <Overview />
-          </div>
-
-          {/* Attempt Warning Modal */}
-          {/* {showWarning && (
+      {/* Attempt Warning Modal */}
+      {/* {showWarning && (
             <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-opacity-50 bg-black">
               <div className="bg-white p-8 rounded shadow-lg">
                 <p>
@@ -218,8 +174,6 @@ function QuestionPage(props: Props) {
               </div>
             </div>
           )} */}
-        </>
-      )}
     </div>
   );
 }

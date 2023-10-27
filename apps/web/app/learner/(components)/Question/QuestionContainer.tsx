@@ -1,6 +1,10 @@
 import Spinner from "@/components/svgs/Spinner";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import {
+  ArrowLongLeftIcon,
+  ArrowLongRightIcon,
+} from "@heroicons/react/24/outline";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
@@ -18,11 +22,13 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
 function Component(props: Props) {
   const { className, questionId, questionNumber } = props;
 
-  const [activeAttemptId, questions, setQuestion] = useLearnerStore((state) => [
-    state.activeAttemptId,
-    state.questions,
-    state.setQuestion,
-  ]);
+  const [activeAttemptId, questions, setQuestion, setActiveQuestionNumber] =
+    useLearnerStore((state) => [
+      state.activeAttemptId,
+      state.questions,
+      state.setQuestion,
+      state.setActiveQuestionNumber,
+    ]);
   const assignmentId = useAssignmentDetails(
     (state) => state.assignmentDetails?.id
   );
@@ -130,7 +136,7 @@ function Component(props: Props) {
       </div>
       {/* Feedback section */}
       {mostRecentFeedback && (
-        <div className="bg-green-100 p-5 rounded-lg shadow-sm">
+        <div className="bg-green-100 border-green-500 p-5 rounded-lg shadow-sm">
           <p className="text-green-700 text-center font-medium">
             <span className="font-bold">
               {mostRecentFeedback.points}/{totalPoints}
@@ -139,7 +145,19 @@ function Component(props: Props) {
           </p>
         </div>
       )}
-      <div className="flex justify-center">
+      <div className="flex justify-between">
+        <button
+          onClick={() => setActiveQuestionNumber(questionNumber - 1)}
+          disabled={questionNumber === 1}
+          className="disabled:invisible text-gray-600 font-medium flex items-center group gap-x-1.5"
+        >
+          <ArrowLongLeftIcon
+            strokeWidth={2}
+            className="w-5 h-5 transition-transform group-hover:-translate-x-0.5"
+          />
+          Question {questionNumber - 1}
+        </button>
+
         <Button
           disabled={attemptsRemaining === 0 || submitting}
           className="disabled:opacity-50"
@@ -147,6 +165,17 @@ function Component(props: Props) {
         >
           {submitting ? <Spinner className="w-7 h-7" /> : "Submit Response"}
         </Button>
+        <button
+          onClick={() => setActiveQuestionNumber(questionNumber + 1)}
+          disabled={questionNumber === questions.length}
+          className="disabled:invisible text-gray-600 font-medium flex items-center group gap-x-1.5"
+        >
+          Question {questionNumber + 1}
+          <ArrowLongRightIcon
+            strokeWidth={2}
+            className="w-5 h-5 transition-transform group-hover:translate-x-0.5"
+          />
+        </button>
       </div>
     </section>
   );
