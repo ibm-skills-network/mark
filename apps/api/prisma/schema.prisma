@@ -111,6 +111,6 @@ model QuestionResponse {
   assignmentAttempt      AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id])   /// The assignment attempt that includes this response
   questionId             Int                                                      /// The ID of the question to which the student is responding
   learnerResponse        String                                                   /// The student's response to the question
-  points                 Int                                                      /// The points earned by the student for this response
+  points                 Float                                                    /// The points earned by the student for this response
   feedback               Json                                                     /// Feedback on the student's response, stored as JSON
 }
