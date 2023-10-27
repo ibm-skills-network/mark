@@ -69,6 +69,7 @@ api:
     timeoutSeconds: 1
     periodSeconds: 15
   markDBName: ''
+  usePgBouncer: true
   env:
     API_PORT: 3000
   secretEnv: {}
