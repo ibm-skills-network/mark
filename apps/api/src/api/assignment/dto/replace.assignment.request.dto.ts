@@ -40,6 +40,16 @@ export class ReplaceAssignmentRequestDto {
   gradingCriteriaOverview: string | null;
 
   @ApiProperty({
+    description:
+      "Estimated time it will take to complete the assignment in minutes.",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  timeEstimateMinutes: number | null;
+
+  @ApiProperty({
     description: "Is the assignment graded or not.",
     type: Boolean,
     required: true,
