@@ -48,7 +48,7 @@ async function Component(props: Props) {
     <main className="p-20 flex flex-col gap-y-14">
       {/* if submission tims is within 10 seconds of now, show the submitted page, and it can't be greater than the current date in this page */}
       {submissionTime &&
-      currentDateInThisPage - submissionTimeInt < 10000 &&
+      currentDateInThisPage - submissionTimeInt < 10000000 &&
       currentDateInThisPage > submissionTimeInt ? (
         <SuccessPage />
       ) : (

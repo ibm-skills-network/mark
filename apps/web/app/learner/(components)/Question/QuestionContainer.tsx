@@ -160,7 +160,7 @@ function Component(props: Props) {
 
         <Button
           disabled={attemptsRemaining === 0 || submitting}
-          className="disabled:opacity-50"
+          className="disabled:opacity-50 transition-all"
           onClick={handleSubmit}
         >
           {submitting ? <Spinner className="w-7 h-7" /> : "Submit Response"}

@@ -143,22 +143,6 @@ function TrueFalseQuestion(props: Props) {
           </button>
         );
       })}
-      {/* <div className="mt-4 flex flex-col items-center">
-        {renderFeedbackMessage()}
-        <div className="mt-4">
-          <Button
-            onClick={handleSubmit}
-            disabled={submitted}
-            className={
-              submitted
-                ? "bg-white text-indigo-300 cursor-not-allowed hover:bg-white"
-                : "hover:bg-indigo-500"
-            }
-          >
-            Submit Response
-          </Button>
-        </div>
-      </div> */}
     </>
   );
 }

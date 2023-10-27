@@ -108,45 +108,27 @@ function TrueFalseQuestion(props: Props) {
   };
 
   return (
-    <>
-      <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
-        <InfoLine text={question} />
-        <button
-          className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
-            true
-          )}`}
-          onClick={() => handleChoiceClick(true)}
-          disabled={submitted}
-        >
-          True
-        </button>
-        <button
-          className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
-            false
-          )}`}
-          onClick={() => handleChoiceClick(false)}
-          disabled={submitted}
-        >
-          False
-        </button>
-      </div>
-      <div className="mt-4 flex flex-col items-center">
-        {renderFeedbackMessage()}
-        <div className="mt-4">
-          <Button
-            onClick={handleSubmit}
-            disabled={submitted}
-            className={
-              submitted
-                ? "bg-white text-indigo-300 cursor-not-allowed hover:bg-white"
-                : "hover:bg-indigo-500"
-            }
-          >
-            Submit Response
-          </Button>
-        </div>
-      </div>
-    </>
+    <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
+      <InfoLine text={question} />
+      <button
+        className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
+          true
+        )}`}
+        onClick={() => handleChoiceClick(true)}
+        disabled={submitted}
+      >
+        True
+      </button>
+      <button
+        className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
+          false
+        )}`}
+        onClick={() => handleChoiceClick(false)}
+        disabled={submitted}
+      >
+        False
+      </button>
+    </div>
   );
 }
 

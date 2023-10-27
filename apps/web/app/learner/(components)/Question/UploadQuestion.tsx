@@ -1,6 +1,5 @@
 import { useLearnerStore } from "@/stores/learner";
 import { useState } from "react";
-import Button from "../Button";
 import InfoLine from "../InfoLine";
 
 interface Props {}
@@ -18,7 +17,6 @@ function UploadQuestion(props: Props) {
   const { question, id } = questions[activeQuestionNumber - 1];
 
   const [file, setFile] = useState<File | null>(null);
-  const [submitted, setSubmitted] = useState<boolean>(false);
 
   // Handles file selection
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,15 +28,6 @@ function UploadQuestion(props: Props) {
   // Handles the removal of uploaded file
   const handleFileRemoval = () => {
     setFile(null);
-  };
-
-  // Handles the form attempt
-  const handleSubmit = () => {
-    if (file) {
-      setSubmitted(true);
-      // updateStatus("edited");
-      // if (onAnswerSelected) onAnswerSelected("pendingReview");
-    }
   };
 
   return (
@@ -77,17 +66,6 @@ function UploadQuestion(props: Props) {
           Supported types: PNG, JPG, GIF, PDF up to 10MB
         </span>
       </div>
-
-      {/* Submit Button */}
-      <div className="flex justify-center mt-4">
-        <Button onClick={handleSubmit}>Submit Response</Button>
-      </div>
-
-      {submitted && (
-        <p className="mt-2 text-sm text-gray-600">
-          Your answer has been submitted and is pending review.
-        </p>
-      )}
     </div>
   );
 }
