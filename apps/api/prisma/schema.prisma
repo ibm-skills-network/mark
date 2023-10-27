@@ -61,6 +61,7 @@ model Assignment {
   introduction    String?                                                       /// Introduction Paragraph for the assignment
   instructions    String?                                                       /// Instructions for the assignment
   gradingCriteriaOverview    String?                                            /// Grading Criteria for the assignment
+  timeEstimateMinutes        Int?                                               /// Estimated time it will take to complete the assignment in minutes
   type            AssignmentType                                                /// Type of assignment
   graded          Boolean?                                                      /// Is the assignment graded or not
   numAttempts     Int?                                                          /// Max number of times a learner can attempt the assignment
@@ -110,6 +111,6 @@ model QuestionResponse {
   assignmentAttempt      AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id])   /// The assignment attempt that includes this response
   questionId             Int                                                      /// The ID of the question to which the student is responding
   learnerResponse        String                                                   /// The student's response to the question
-  points                 Int                                                      /// The points earned by the student for this response
+  points                 Float                                                    /// The points earned by the student for this response
   feedback               Json                                                     /// Feedback on the student's response, stored as JSON
 }
