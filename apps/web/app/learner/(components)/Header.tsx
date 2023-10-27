@@ -4,7 +4,7 @@ import { submitAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Breadcrumbs from "./Breadcrumbs";
 import Button from "./Button";
@@ -14,6 +14,8 @@ interface Props {}
 function LearnerHeader(props: Props) {
   const {} = props;
   const pathname = usePathname();
+  const router = useRouter();
+
   const [questions, activeAttemptId] = useLearnerStore((state) => [
     state.questions,
     state.activeAttemptId,
@@ -34,12 +36,15 @@ function LearnerHeader(props: Props) {
   );
   async function handleSubmitAssignment() {
     const confirmSubmit = confirm("Are you sure you want to submit?");
-    if (confirmSubmit) {
-      const grade =
-        (await submitAssignment(assignmentId, activeAttemptId)) * 100;
-      alert(`Your grade is ${grade.toFixed(1)}/100
-  ${grade >= passingGrade ? "You passed!" : "You failed."}`);
+    if (!confirmSubmit) {
+      return;
     }
+    const grade = (await submitAssignment(assignmentId, activeAttemptId)) * 100;
+    // alert(`Your grade is ${grade.toFixed(1)}/100
+    // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
+    const currentTime = Date.now();
+    console.log("currentTime", currentTime);
+    router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
   }
 
   return (

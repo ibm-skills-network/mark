@@ -1,5 +1,3 @@
-"use client";
-
 import AssignmentForm from "../(components)/AssignmentDetailsForm";
 import SuccessPage from "../(components)/SuccessPage";
 

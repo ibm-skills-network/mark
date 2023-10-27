@@ -1,17 +1,23 @@
 import ErrorPage from "@/components/ErrorPage";
 import { LearnerAssignmentState } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
+import AboutTheAssignment from "@learnerComponents/AboutTheAssignment";
+import SuccessPage from "@learnerComponents/SuccessPage";
 import { headers } from "next/headers";
-import AboutTheAssignment from "../(components)/AboutTheAssignment";
 
 interface Props {
   params: { assignmentId: string };
+  searchParams: { submissionTime?: string };
 }
 
-async function IntroductionPage(props: Props) {
+async function Component(props: Props) {
+  const { params, searchParams } = props;
+  const { submissionTime } = searchParams;
+  // DON'T USE ~~ TO CONVERT TO INT, CAUSES THE NUMBER TO BECOME SMALLER THAN IT SHOULD BE
+  const submissionTimeInt = parseInt(submissionTime);
+  const currentDateInThisPage = Date.now();
   const headerList = headers();
   const cookie = headerList.get("cookie");
-  const { params } = props;
   const assignmentId = ~~params.assignmentId;
   const assignment = await getAssignment(assignmentId, cookie);
   // go to the error page if the assignment is not found
@@ -40,12 +46,19 @@ async function IntroductionPage(props: Props) {
 
   return (
     <main className="p-20 flex flex-col gap-y-14">
-      <AboutTheAssignment
-        assignment={assignment}
-        assignmentState={assignmentState}
-      />
+      {/* if submission tims is within 10 seconds of now, show the submitted page, and it can't be greater than the current date in this page */}
+      {submissionTime &&
+      currentDateInThisPage - submissionTimeInt < 10000 &&
+      currentDateInThisPage > submissionTimeInt ? (
+        <SuccessPage />
+      ) : (
+        <AboutTheAssignment
+          assignment={assignment}
+          assignmentState={assignmentState}
+        />
+      )}
     </main>
   );
 }
 
-export default IntroductionPage;
+export default Component;
