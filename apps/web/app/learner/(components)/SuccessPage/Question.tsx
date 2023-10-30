@@ -21,6 +21,14 @@ const Question: FC<Props> = (props) => {
   } = question;
 
   const highestScoreResponse = useMemo(() => {
+    if (questionResponses?.length === 0) {
+      return {
+        points: 0,
+        feedback: [{ feedback: "" }],
+        learnerResponse: "",
+        learnerUrlResponse: "",
+      };
+    }
     return questionResponses.reduce((acc, curr) => {
       if (curr.points > acc.points) {
         return curr;
@@ -28,9 +36,9 @@ const Question: FC<Props> = (props) => {
       return acc;
     }, questionResponses[0]);
   }, [questionResponses]);
-  const attemptsRemaining = numRetries
-    ? numRetries - questionResponses.length
-    : -1;
+  // const attemptsRemaining = numRetries
+  //   ? numRetries - questionResponses.length
+  //   : -1;
 
   return (
     <PageWithStickySides

@@ -2,6 +2,7 @@ export type User = {
   userId: string;
   role: "author" | "learner";
   assignmentId: number;
+  returnUrl: string;
 };
 
 // For submitting a question response to backend (Benny's Implementation)

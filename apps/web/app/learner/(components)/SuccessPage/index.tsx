@@ -3,7 +3,7 @@
 import PageWithStickySides from "@/app/components/PageWithStickySides";
 import ExitIcon from "@/components/svgs/ExitIcon";
 import { QuestionStore } from "@/config/types";
-import { useLearnerStore } from "@/stores/learner";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, type ComponentPropsWithoutRef } from "react";
@@ -16,6 +16,9 @@ function SuccessPage(props: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [questions] = useLearnerStore((state) => [state.questions]);
+  const { passingGrade } = useAssignmentDetails(
+    (state) => state.assignmentDetails
+  );
   // const questions = [
   //   {
   //     id: 1,
@@ -153,7 +156,9 @@ function SuccessPage(props: Props) {
               <path
                 fill="none"
                 className="animate-spi"
-                stroke={gradeInPercent >= 60 ? "#10B981" : "#EF4444"}
+                stroke={
+                  gradeInPercent >= passingGrade * 100 ? "#10B981" : "#EF4444"
+                }
                 strokeDasharray={`${gradeInPercent}, 100`}
                 strokeWidth={2}
                 strokeLinecap="round"
@@ -206,7 +211,7 @@ function SuccessPage(props: Props) {
       {/* show the list of questions with their feedback */}
       <div className="flex flex-col gap-y-20">
         {questions.map((question, index) => (
-          <Question key={index} number={index + 1} question={question} />
+          <Question key={question.id} number={index + 1} question={question} />
         ))}
       </div>
     </div>
