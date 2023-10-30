@@ -87,7 +87,8 @@ type QuestionResponse = {
   assignmentAttemptId: number;
   questionId: number;
   // This probably needs to be changed when we implement the other question types
-  learnerResponse: string;
+  learnerResponse?: string;
+  learnerUrlResponse?: string;
   points: number;
   feedback: Feedback[];
 };

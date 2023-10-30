@@ -136,7 +136,7 @@ function Component(props: Props) {
       </div>
       {/* Feedback section */}
       {mostRecentFeedback && (
-        <div className="bg-green-100 border-green-500 p-5 rounded-lg shadow-sm">
+        <div className="bg-green-100 border border-green-500 p-5 rounded-lg shadow-sm">
           <p className="text-green-700 text-center font-medium">
             <span className="font-bold">
               {mostRecentFeedback.points}/{totalPoints}

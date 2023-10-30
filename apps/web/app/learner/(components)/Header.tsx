@@ -6,6 +6,7 @@ import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import Breadcrumbs from "./Breadcrumbs";
 import Button from "./Button";
 
@@ -42,6 +43,10 @@ function LearnerHeader(props: Props) {
     }
     const grade = (await submitAssignment(assignmentId, activeAttemptId)) * 100;
     // alert(`Your grade is ${grade.toFixed(1)}/100
+    if (!grade) {
+      toast.error("Failed to submit assignment.");
+      return;
+    }
     // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     const currentTime = Date.now();
     console.log("currentTime", currentTime);
