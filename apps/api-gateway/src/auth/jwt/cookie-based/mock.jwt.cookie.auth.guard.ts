@@ -28,6 +28,7 @@ export class MockJwtCookieAuthGuard extends AuthGuard("cookie-strategy") {
       groupId: "test-group-id",
       assignmentId: 1,
       gradingCallbackRequired: false,
+      returnUrl: "https://skills.network",
     };
 
     return true;
