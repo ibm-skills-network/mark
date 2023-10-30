@@ -19,7 +19,7 @@ import {
 const titleToDescription = [
   {
     sectionId: "introduction",
-    title: "Overview of Assignment",
+    title: "Assignment Overview",
     description:
       "Write a short summary of the learning goals of this assignment and what learners will be required to do",
     placeholder:

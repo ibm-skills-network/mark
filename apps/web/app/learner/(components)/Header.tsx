@@ -25,6 +25,7 @@ function LearnerHeader(props: Props) {
   );
   const assignmentId = assignmentDetails?.id;
   const passingGrade = assignmentDetails?.passingGrade;
+  const isInQuestionPage = pathname.includes("questions");
   const [title, setTitle] = useState<string>("Auto-Graded Assignment");
   useEffect(() => {
     if (assignmentDetails) {
@@ -69,7 +70,7 @@ function LearnerHeader(props: Props) {
           )}
         </div>
       </div>
-      {activeAttemptId && (
+      {activeAttemptId && isInQuestionPage && (
         <Button
           disabled={!userSubmittedAnyQuestion}
           className="disabled:opacity-70"

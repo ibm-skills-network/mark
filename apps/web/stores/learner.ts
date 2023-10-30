@@ -1,5 +1,5 @@
 import type { assignmentDetailsStore, QuestionStore } from "@/config/types";
-import { devtools, persist } from "zustand/middleware";
+import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 
@@ -125,7 +125,7 @@ export const useLearnerStore = createWithEqualityFn<
 );
 
 /**
- * made this a separate store so I can leverage the persist middleware (to store in sessionStorage)
+ * made this a separate store so I can leverage the persist middleware (to store in local storage)
  * Purpose: to store the assignment details which are fetched from the backend when the learner
  * is on the assignment overview page. This reduces the number of requests to the backend.
  */
@@ -146,7 +146,7 @@ export const useAssignmentDetails = createWithEqualityFn<
     ),
     {
       name: "assignmentDetails",
-      getStorage: () => sessionStorage,
+      // storage: createJSONStorage(() => localStorage),
     }
   ),
   shallow

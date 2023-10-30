@@ -1,22 +1,56 @@
+import ErrorPage from "@/components/ErrorPage";
 import Tooltip from "@/components/Tooltip";
-import { Assignment, LearnerAssignmentState } from "@/config/types";
+import { LearnerAssignmentState } from "@/config/types";
+import { getAssignment, getAttempts } from "@/lib/talkToBackend";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Button from "@learnerComponents/Button";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import AssignmentMainInfo from "./AssignmentMainInfo";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
-  assignment: Assignment;
-  assignmentState: LearnerAssignmentState;
+  assignmentId: number;
 }
 
-function AboutTheAssignment(props: Props) {
-  const { assignment, assignmentState } = props;
+async function AboutTheAssignment(props: Props) {
+  const { assignmentId } = props;
+  const headerList = headers();
+  const cookie = headerList.get("cookie");
+  const assignment = await getAssignment(assignmentId, cookie);
+  // go to the error page if the assignment is not found
+  if (!assignment) {
+    return (
+      <ErrorPage
+        className="h-[calc(100vh-85px)]"
+        error={"Assignment not found"}
+      />
+    );
+  }
+  const listOfAttempts = await getAttempts(assignmentId, cookie);
+  console.log("listOfAttempts", listOfAttempts);
+  // if the number of attempts of the assignment is equals to the assignment's max attempts, then the assignment state is "completed"
+  let assignmentState: LearnerAssignmentState = "not-started";
+  if (listOfAttempts.length === assignment.numAttempts) {
+    assignmentState = "completed";
+  } else {
+    // check if there are any attempts that are not submitted and have not expired
+    const unsubmittedAssignment = listOfAttempts.find(
+      (attempt) =>
+        attempt.submitted === false &&
+        // if the assignment does not expire, then the expiresAt is null
+        (attempt.expiresAt === null ||
+          Date.now() < Date.parse(attempt.expiresAt))
+    );
+    if (unsubmittedAssignment) {
+      assignmentState = "in-progress";
+    }
+  }
   const {
     instructions,
     introduction,
+    published,
     gradingCriteriaOverview,
     allotedTimeMinutes,
     numAttempts,
@@ -25,13 +59,18 @@ function AboutTheAssignment(props: Props) {
     id,
   } = assignment;
 
+  if (!published) {
+    assignmentState = "not-published";
+  }
+
   function handleViewResults(e: MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
+    // TODO: do something here
     console.log("view results");
   }
 
   return (
-    <>
+    <main className="p-20 flex flex-col gap-y-14">
       <div className="flex justify-between items-center">
         {/* data passed here will also be stored in zustand store (possible to do that there because it's client-side rendered) */}
         <AssignmentMainInfo
@@ -105,7 +144,7 @@ function AboutTheAssignment(props: Props) {
           </ReactMarkdown>
         )}
       </div>
-    </>
+    </main>
   );
 }
 
