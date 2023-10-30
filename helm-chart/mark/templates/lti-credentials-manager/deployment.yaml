@@ -1,0 +1,90 @@
+{{- if .Values.ltiCredentialsManager.enabled }}
+{{- with .Values.ltiCredentialsManager }}
+{{- if .enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mark.lti-credentials-manager.name" $ }}
+  labels:
+    {{- include "mark.lti-credentials-manager.labels" $ | nindent 6 }}
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 0
+  {{- if not .autoscaling.enabled }}
+  replicas: {{ .replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mark.lti-credentials-manager.labels" $ | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: lti-credentials-manager
+        checksum/secrets: {{ include (print $.Template.BasePath "/lti-credentials-manager/secret.yaml") $ | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/lti-credentials-manager/configmap.yaml") $ | sha256sum }}
+      {{- with $.Values.globalPodAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mark.labels" $ | nindent 8 }}
+        {{- include "mark.lti-credentials-manager.labels" $ | nindent 8 }}
+      {{- with .podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      imagePullSecrets:
+        {{- include "mark.imagePullSecrets" $ | nindent 8 }}
+      serviceAccountName: {{ include "mark.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml .podSecurityContext | nindent 8 }}
+      containers:
+        - name: lti-credentials-manager
+          securityContext:
+            {{- toYaml .securityContext | nindent 12 }}
+          {{- with .image }}
+          image: "{{ .repository }}:{{ .tag }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .containerPort }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "curl -f --user $PICARD_USER:$PICARD_PASS http://localhost:{{ .containerPort }}/settings"]
+            failureThreshold: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "curl -f --user $PICARD_USER:$PICARD_PASS http://localhost:{{ .containerPort }}/settings"]
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "mark.lti-credentials-manager.name" $ }}
+            - secretRef:
+                name: {{ include "mark.lti-credentials-manager.name" $ }}
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+      {{- include "mark.lti-credentials-manager.topologySpreadConstraints" $ | nindent 8 }}
+
+{{- end }}
+{{- end }}
+{{- end }}
