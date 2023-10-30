@@ -1,4 +1,5 @@
 import Tooltip from "@/components/Tooltip";
+import { useAssignmentDetails } from "@/stores/learner";
 import type { GradingData } from "@config/types";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { type Dispatch, type SetStateAction } from "react";
@@ -12,6 +13,9 @@ function GradingOptionsForm(props: Props) {
   const { value, setValue } = props;
 
   const { graded, numAttempts, passingGrade, timeEstimate } = value;
+  const assignmentId = useAssignmentDetails(
+    (state) => state.assignmentDetails?.id
+  );
 
   function handleGradedChange(e: React.ChangeEvent<HTMLInputElement>) {
     // e.preventDefault();
@@ -35,6 +39,10 @@ function GradingOptionsForm(props: Props) {
       ...prevValue,
       questionRetries: ~~e.target.value,
     }));
+    sessionStorage.setItem(
+      `${assignmentId}-defaultQuestionRetries`,
+      e.target.value
+    );
   }
 
   function handlePassingGradeChange(e: React.ChangeEvent<HTMLInputElement>) {

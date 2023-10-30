@@ -98,6 +98,12 @@ const AuthorIntroduction = (props: Props) => {
       }
     }
     void InitializeAssignment(assignmentId);
+    setGrading((oldGrading) => ({
+      ...oldGrading,
+      questionRetries:
+        ~~sessionStorage.getItem(`${assignmentId}-defaultQuestionRetries`) ||
+        oldGrading.questionRetries,
+    }));
     // }
   }, []);
 
