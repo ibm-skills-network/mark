@@ -80,22 +80,24 @@ function QuestionPage(props: Props) {
           case "TEXT":
             // Autofill the text response with the last submission if it exists
             question.learnerTextResponse =
-              lastSubmission?.learnerResponse || "";
+              lastSubmission?.learnerResponse ?? "";
             break;
           // TODO: handle other types of questions
           case "URL":
-            question.learnerUrlResponse = "";
+            question.learnerUrlResponse = lastSubmission?.learnerResponse ?? "";
             break;
           case "SINGLE_CORRECT":
-            question.learnerChoices = [];
+            question.learnerChoices = lastSubmission?.learnerResponse ? JSON.parse(lastSubmission?.learnerResponse) as string[] : [];
             break;
           case "MULTIPLE_CORRECT":
-            question.learnerChoices = [];
+            question.learnerChoices = lastSubmission?.learnerResponse ? JSON.parse(lastSubmission?.learnerResponse) as string[] : [];
             break;
           case "TRUE_FALSE":
+            // TODO: handle this
             question.learnerAnswerChoice = null;
             break;
           case "UPLOAD":
+            // TODO: handle this
             question.learnerFileResponse = null;
             break;
           default:

@@ -18,6 +18,8 @@ const Question: FC<Props> = (props) => {
     questionResponses,
     question: questionText,
     learnerChoices,
+    learnerTextResponse,
+    learnerUrlResponse
   } = question;
 
   const highestScoreResponse = useMemo(() => {
@@ -25,8 +27,6 @@ const Question: FC<Props> = (props) => {
       return {
         points: 0,
         feedback: [{ feedback: "" }],
-        learnerResponse: "",
-        learnerUrlResponse: "",
       };
     }
     return questionResponses.reduce((acc, curr) => {
@@ -109,12 +109,12 @@ const Question: FC<Props> = (props) => {
             )}
             {type === "TEXT" && (
               <p className="font-medium leading-tight">
-                {highestScoreResponse.learnerResponse}
+                {learnerTextResponse}
               </p>
             )}
             {type === "URL" && (
               <p className="font-medium leading-tight">
-                {highestScoreResponse.learnerUrlResponse}
+                {learnerUrlResponse}
               </p>
             )}
           </div>

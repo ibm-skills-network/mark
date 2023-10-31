@@ -85,7 +85,7 @@ function Component(props: Props) {
           //TODO: make sure this is the right var
           points: feedback.totalPoints,
           feedback: feedback.feedback,
-          learnerResponse: question.learnerTextResponse,
+          learnerResponse: question.learnerTextResponse || question.learnerUrlResponse || question.learnerChoices.toString() || question.learnerAnswerChoice.toString() || question.learnerFileResponse.toString() || null,
           questionId: question.id,
           assignmentAttemptId: activeAttemptId,
         },

@@ -73,7 +73,7 @@ export type Scoring = {
 
 type Feedback = {
   // for mcq only
-  choice: string;
+  choice?: string;
   // for all
   feedback: string;
 };
@@ -88,8 +88,7 @@ type QuestionResponse = {
   assignmentAttemptId: number;
   questionId: number;
   // This probably needs to be changed when we implement the other question types
-  learnerResponse?: string;
-  learnerUrlResponse?: string;
+  learnerResponse: string
   points: number;
   feedback: Feedback[];
 };

@@ -25,7 +25,6 @@ function LearnerHeader(props: Props) {
     (state) => [state.assignmentDetails, state.setGrade]
   );
   const assignmentId = assignmentDetails?.id;
-  const passingGrade = assignmentDetails?.passingGrade;
   const isInQuestionPage = pathname.includes("questions");
   const [title, setTitle] = useState<string>("Auto-Graded Assignment");
   useEffect(() => {
