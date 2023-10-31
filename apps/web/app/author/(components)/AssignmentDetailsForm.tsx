@@ -43,6 +43,7 @@ const AuthorIntroduction = (props: Props) => {
     passingGrade: 60,
     timeEstimate: 30,
   });
+  const [published, setPublished] = useState(false);
   const [gradingCriteriaOverview, setGradingCriteriaOverview] = useState("");
 
   const [activeAssignmentId, setActiveAssignmentId] = useAuthorStore(
@@ -73,6 +74,7 @@ const AuthorIntroduction = (props: Props) => {
           timeEstimate:
             assignment.allotedTimeMinutes ?? oldGrading.timeEstimate,
         }));
+        setPublished(assignment.published);
 
         const questionsWithAddedValues = assignment.questions.map(
           (question: QuestionAuthorStore) => {
@@ -119,7 +121,7 @@ const AuthorIntroduction = (props: Props) => {
       gradingCriteriaOverview: gradingCriteriaOverview,
       graded: grading.graded,
       passingGrade: grading.passingGrade,
-      published: false,
+      published: published,
       questionOrder: [],
     };
     // if attempts is -1, it means unlimited attempts, so we don't send that to the backend(default is unlimited)
