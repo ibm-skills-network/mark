@@ -6,12 +6,7 @@ import { getUser } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import Question from "./Question";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {}
