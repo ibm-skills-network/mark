@@ -24,6 +24,7 @@ const titleToDescription = [
       "Write a short summary of the learning goals of this assignment and what learners will be required to do",
     placeholder:
       "Write your introduction here. E.g “This assignment provides an introduction to the topic of climate change...”",
+    required: true,
     svg: <IntroductionIcon />,
   },
   {
@@ -33,6 +34,7 @@ const titleToDescription = [
       "Text you write here will be guidance for the learner, whether it's assignment instructions or a format reminder for submission",
     placeholder:
       "Write your specific instructions here. E.g “Cite your sources at the end of every short answer.”",
+    required: false,
     svg: <InstructionIcon />,
   },
   {
@@ -42,6 +44,7 @@ const titleToDescription = [
       "Provide a brief explanation on how the assignment will be graded",
     placeholder:
       "E.g “1. State the country that is most affected by climate change (1 pt)...”",
+    required: false,
     svg: <GradingIcon />,
   },
   {
@@ -49,6 +52,7 @@ const titleToDescription = [
     title: "Grading",
     description: "Select the options that you want to apply to your assignment",
     placeholder: "",
+    required: true,
     svg: <GradingIcon />,
   },
 ] as const;
@@ -70,7 +74,7 @@ export function IntroductionsectionId<T extends ElementType = "section">(
       (section) => section.sectionId === sectionId
     );
   }, [sectionId]);
-  const { title, description, svg, placeholder } = section;
+  const { title, description, svg, placeholder, required } = section;
   return (
     <Component
       className={twMerge("group relative flex flex-col items-start", className)}
@@ -80,7 +84,13 @@ export function IntroductionsectionId<T extends ElementType = "section">(
       <div className="flex items-center bg-gray-50 rounded-t-lg border-t border-l border-r border-gray-300 w-full min-h-[6.5rem] px-12 2xl:px-14">
         <div className="w-12 mr-6">{svg}</div>
         <div className="">
-          <Title text={title} className="text-lg font-semibold leading-6" />
+          <Title
+            text={title}
+            className={
+              "text-lg font-semibold leading-6 " +
+              (required && "after:text-blue-400 after:content-['*']")
+            }
+          />
           <p className="mt-2 text-gray-500 ">{description}</p>
         </div>
       </div>

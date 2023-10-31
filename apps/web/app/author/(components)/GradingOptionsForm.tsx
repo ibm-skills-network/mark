@@ -65,7 +65,7 @@ function GradingOptionsForm(props: Props) {
     <div className="grid grid-cols-2 gap-x-16 gap-y-7">
       <div className="flex items-start gap-x-3 mb-3">
         <input
-          className="text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-600 h-[1.375rem] w-[1.375rem]"
+          className="text-blue-600 outline-none focus:ring-2 focus:ring-blue-600 h-[1.375rem] w-[1.375rem]"
           type="radio"
           name="graded"
           value="graded"
@@ -85,7 +85,7 @@ function GradingOptionsForm(props: Props) {
 
       <div className="flex items-start gap-x-3 mb-3">
         <input
-          className="text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-600 h-[1.375rem] w-[1.375rem]"
+          className="text-blue-600 outline-none focus:ring-2 focus:ring-blue-600 h-[1.375rem] w-[1.375rem]"
           type="radio"
           name="ungraded"
           value="ungraded"
