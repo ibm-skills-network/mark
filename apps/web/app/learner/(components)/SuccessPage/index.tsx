@@ -2,10 +2,16 @@
 
 import PageWithStickySides from "@/app/components/PageWithStickySides";
 import ExitIcon from "@/components/svgs/ExitIcon";
+import { getUser } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, type ComponentPropsWithoutRef } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import Question from "./Question";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {}
@@ -19,6 +25,7 @@ function SuccessPage(props: Props) {
     state.assignmentDetails,
     state.grade,
   ]);
+  const [returnUrl, setReturnUrl] = useState<string>(null);
   // const questions = [
   //   {
   //     id: 1,
@@ -122,6 +129,16 @@ function SuccessPage(props: Props) {
     if (!questions || questions.length === 0) {
       router.push(pathname.split("?")[0]);
     }
+    const fetchUser = async () => {
+      try {
+        const user = await getUser();
+        setReturnUrl(user.returnUrl);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    void fetchUser();
   }, []);
 
   const totalPoints = useMemo(
@@ -182,11 +199,11 @@ function SuccessPage(props: Props) {
           >
             <ExitIcon className="w-6 h-6 text-white" />
             <div className="text-white text-base font-medium">
-              Back to Assignment
+              Retake assignment
             </div>
           </Link>
           <Link
-            href={`https://author.skills.network/courses`}
+            href={returnUrl}
             className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-md shadow justify-end items-center gap-2.5 flex"
           >
             <ExitIcon className="w-6 h-6 text-white" />

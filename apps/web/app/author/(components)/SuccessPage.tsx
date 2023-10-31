@@ -1,16 +1,30 @@
 "use client";
 
 import ExitIcon from "@/components/svgs/ExitIcon";
+import { getUser } from "@/lib/talkToBackend";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ComponentPropsWithoutRef } from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {}
 
 function SuccessPage(props: Props) {
   const {} = props;
   const pathname = usePathname();
-  const courseId = 400;
+
+  const [returnUrl, setReturnUrl] = useState<string>(null);
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const user = await getUser();
+        setReturnUrl(user.returnUrl);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    void fetchUser();
+  }, []);
 
   return (
     <section className="flex flex-col items-center justify-center w-full h-full gap-y-6">
@@ -28,11 +42,11 @@ function SuccessPage(props: Props) {
         >
           <ExitIcon className="w-6 h-6 text-white" />
           <div className="text-white text-base font-medium">
-            Back to Assignment
+            Continue editing assignment
           </div>
         </Link>
         <Link
-          href={`https://author.skills.network/courses`}
+          href={returnUrl}
           className="px-4 py-2 bg-blue-700 hover:bg-blue-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
         >
           <ExitIcon className="w-6 h-6 text-white" />
