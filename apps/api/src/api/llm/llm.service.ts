@@ -1,3 +1,4 @@
+import { get_encoding, Tiktoken, TiktokenEncoding } from "@dqbd/tiktoken";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { OpenAIModerationChain } from "langchain/chains";
 import { BaseLLM } from "langchain/dist/llms/base";
@@ -29,13 +30,18 @@ import {
 @Injectable()
 export class LlmService {
   private readonly logger: Logger;
-  private llmGpt3: BaseLLM;
-  private llmGpt4: BaseLLM;
+  private llm: BaseLLM;
+  private tiktokenEncoding: Tiktoken;
+
+  static readonly llmModelName: string = "gpt-4";
 
   constructor(@Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger) {
     this.logger = parentLogger.child({ context: LlmService.name });
-    this.llmGpt3 = new OpenAI({ temperature: 0.5, modelName: "gpt-3.5-turbo" });
-    this.llmGpt4 = new OpenAI({ temperature: 0.5, modelName: "gpt-4" });
+    this.llm = new OpenAI({
+      temperature: 0.5,
+      modelName: LlmService.llmModelName,
+    });
+    this.tiktokenEncoding = get_encoding("gpt2");
   }
 
   async applyGuardRails(message: string): Promise<boolean> {
@@ -82,8 +88,7 @@ export class LlmService {
       },
     });
 
-    const input = await prompt.format({});
-    const response = await this.llmGpt4.call(input);
+    const response = await this.processPrompt(prompt);
     const parsedResponse = await parser.parse(response);
     const gradingContextQuestionMap: Record<number, number[]> = {};
     for (const item of parsedResponse) {
@@ -132,8 +137,7 @@ export class LlmService {
       },
     });
 
-    const input = await prompt.format({});
-    const response = await this.llmGpt3.call(input);
+    const response = await this.processPrompt(prompt);
 
     const trueFalseBasedQuestionResponseModel = (await parser.parse(
       response
@@ -195,8 +199,7 @@ export class LlmService {
       },
     });
 
-    const input = await prompt.format({});
-    const response = await this.llmGpt3.call(input);
+    const response = await this.processPrompt(prompt);
 
     const choiceBasedFeedback = (await parser.parse(
       response
@@ -262,8 +265,7 @@ export class LlmService {
       },
     });
 
-    const input = await prompt.format({});
-    const response = await this.llmGpt3.call(input);
+    const response = await this.processPrompt(prompt);
 
     const textBasedQuestionResponseModel = (await parser.parse(
       response
@@ -330,13 +332,29 @@ export class LlmService {
       },
     });
 
-    const input = await prompt.format({});
-    const response = await this.llmGpt3.call(input);
+    const response = await this.processPrompt(prompt);
 
     const urlBasedQuestionResponseModel = (await parser.parse(
       response
     )) as UrlBasedQuestionResponseModel;
 
     return urlBasedQuestionResponseModel;
+  }
+
+  // private methods
+  private async processPrompt(prompt: PromptTemplate): Promise<string> {
+    const input = await prompt.format({});
+
+    // Get tokens for the input and compute token count
+    const inputTokens = this.tiktokenEncoding.encode(input);
+    this.logger.info(`Input token count: ${inputTokens.length}`);
+
+    const response = await this.llm.call(input);
+
+    // Get tokens for the response and compute token count
+    const responseTokens = this.tiktokenEncoding.encode(response);
+    this.logger.info(`Output token count: ${responseTokens.length}`);
+
+    return response;
   }
 }
