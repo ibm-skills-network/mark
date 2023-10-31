@@ -15,9 +15,10 @@ function SuccessPage(props: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [questions] = useLearnerStore((state) => [state.questions]);
-  const [{ passingGrade=50 }, grade] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.grade],
-  );
+  const [{ passingGrade = 50 }, grade] = useAssignmentDetails((state) => [
+    state.assignmentDetails,
+    state.grade,
+  ]);
   // const questions = [
   //   {
   //     id: 1,
@@ -145,9 +146,7 @@ function SuccessPage(props: Props) {
               <path
                 fill="none"
                 className=""
-                stroke={
-                  grade >= passingGrade * 100 ? "#10B981" : "#EF4444"
-                }
+                stroke={grade >= passingGrade ? "#10B981" : "#EF4444"}
                 strokeDasharray={`${grade}, 100`}
                 strokeWidth={2}
                 strokeLinecap="round"
