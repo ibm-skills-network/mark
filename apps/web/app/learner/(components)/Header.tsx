@@ -21,8 +21,8 @@ function LearnerHeader(props: Props) {
     state.questions,
     state.activeAttemptId,
   ]);
-  const assignmentDetails = useAssignmentDetails(
-    (state) => state.assignmentDetails
+  const [assignmentDetails, setGrade] = useAssignmentDetails(
+    (state) => [state.assignmentDetails, state.setGrade]
   );
   const assignmentId = assignmentDetails?.id;
   const passingGrade = assignmentDetails?.passingGrade;
@@ -47,6 +47,7 @@ function LearnerHeader(props: Props) {
       toast.error("Failed to submit assignment.");
       return;
     }
+    setGrade(grade);
     // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     const currentTime = Date.now();
     console.log("currentTime", currentTime);

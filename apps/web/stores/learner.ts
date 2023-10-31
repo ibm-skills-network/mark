@@ -25,10 +25,12 @@ export type LearnerActions = {
 
 export type AssignmentDetailsState = {
   assignmentDetails: assignmentDetailsStore | null;
+  grade: number | null;
 };
 
 export type AssignmentDetailsActions = {
   setAssignmentDetails: (assignmentDetails: assignmentDetailsStore) => void;
+  setGrade: (grade: number) => void;
 };
 
 export const useLearnerStore = createWithEqualityFn<
@@ -138,6 +140,8 @@ export const useAssignmentDetails = createWithEqualityFn<
         assignmentDetails: null,
         setAssignmentDetails: (assignmentDetails) =>
           set({ assignmentDetails: assignmentDetails }),
+        grade: null,
+        setGrade: (grade) => set({ grade }),
       }),
       {
         name: "learner",

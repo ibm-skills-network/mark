@@ -2,7 +2,6 @@
 
 import PageWithStickySides from "@/app/components/PageWithStickySides";
 import ExitIcon from "@/components/svgs/ExitIcon";
-import { QuestionStore } from "@/config/types";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -16,8 +15,8 @@ function SuccessPage(props: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [questions] = useLearnerStore((state) => [state.questions]);
-  const { passingGrade } = useAssignmentDetails(
-    (state) => state.assignmentDetails
+  const [{ passingGrade=50 }, grade] = useAssignmentDetails(
+    (state) => [state.assignmentDetails, state.grade],
   );
   // const questions = [
   //   {
@@ -124,20 +123,10 @@ function SuccessPage(props: Props) {
     }
   }, []);
 
-  const totalPointsEarned = useMemo(() => {
-    const pointsEarned = questions.map((question) =>
-      question.questionResponses.reduce((acc, curr) => acc + curr.points, 0)
-    );
-    return pointsEarned.reduce((acc, curr) => acc + curr, 0);
-  }, [questions]);
   const totalPoints = useMemo(
     () => questions.reduce((acc, curr) => acc + curr.totalPoints, 0),
     [questions]
   );
-
-  const gradeInPercent = useMemo(() => {
-    return (totalPointsEarned / totalPoints) * 100;
-  }, [totalPointsEarned, totalPoints]);
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full gap-y-10 py-10">
@@ -155,11 +144,11 @@ function SuccessPage(props: Props) {
               />
               <path
                 fill="none"
-                className="animate-spi"
+                className=""
                 stroke={
-                  gradeInPercent >= passingGrade * 100 ? "#10B981" : "#EF4444"
+                  grade >= passingGrade * 100 ? "#10B981" : "#EF4444"
                 }
-                strokeDasharray={`${gradeInPercent}, 100`}
+                strokeDasharray={`${grade}, 100`}
                 strokeWidth={2}
                 strokeLinecap="round"
                 d="M18 2.0845
@@ -171,7 +160,7 @@ function SuccessPage(props: Props) {
                 y="20.35"
                 className=" text-center text-slate-500 text-[0.4rem] font-semibold"
               >
-                {gradeInPercent.toFixed(1)}%
+                {grade.toFixed(1)}%
               </text>
             </svg>
           }
@@ -190,7 +179,7 @@ function SuccessPage(props: Props) {
         <div className="justify-center gap-3.5 flex pt-5">
           <Link
             href={pathname.split("?")[0]} // remove the query params
-            className="px-4 py-2 bg-blue-700 rounded-md shadow justify-end items-center gap-2.5 flex"
+            className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-md shadow justify-end items-center gap-2.5 flex"
           >
             <ExitIcon className="w-6 h-6 text-white" />
             <div className="text-white text-base font-medium">
@@ -199,7 +188,7 @@ function SuccessPage(props: Props) {
           </Link>
           <Link
             href={`https://author.skills.network/courses`}
-            className="px-4 py-2 bg-blue-700 rounded-md shadow justify-end items-center gap-2.5 flex"
+            className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-md shadow justify-end items-center gap-2.5 flex"
           >
             <ExitIcon className="w-6 h-6 text-white" />
             <div className="text-white text-base font-medium">
