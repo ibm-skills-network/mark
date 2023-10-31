@@ -39,7 +39,7 @@ function GradingOptionsForm(props: Props) {
       ...prevValue,
       questionRetries: ~~e.target.value,
     }));
-    sessionStorage.setItem(
+    localStorage.setItem(
       `${assignmentId}-defaultQuestionRetries`,
       e.target.value
     );

@@ -10,18 +10,18 @@ const usePersistentCountdown = ({
   initialCountdown,
 }: UsePersistentCountdownProps) => {
   const [countdown, setCountdown] = useState(
-    ~~sessionStorage.getItem(keyString) || initialCountdown
+    ~~localStorage.getItem(keyString) || initialCountdown
   );
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    sessionStorage.setItem(keyString, countdown.toString());
+    localStorage.setItem(keyString, countdown.toString());
 
     intervalRef.current = setInterval(() => {
       setCountdown((prevCountdown) => {
         const newCountdown = prevCountdown - 1;
-        sessionStorage.setItem(keyString, newCountdown.toString());
+        localStorage.setItem(keyString, newCountdown.toString());
         return newCountdown;
       });
     }, 1000);

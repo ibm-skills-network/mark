@@ -103,7 +103,7 @@ const AuthorIntroduction = (props: Props) => {
     setGrading((oldGrading) => ({
       ...oldGrading,
       questionRetries:
-        ~~sessionStorage.getItem(`${assignmentId}-defaultQuestionRetries`) ||
+        ~~localStorage.getItem(`${assignmentId}-defaultQuestionRetries`) ||
         oldGrading.questionRetries,
     }));
     // }
