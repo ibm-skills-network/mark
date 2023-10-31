@@ -114,17 +114,17 @@ function GradingOptionsForm(props: Props) {
           htmlFor="passingGrade"
           className="font-medium leading-5 flex gap-x-1"
         >
-          Time Estimate
-          <span className="text-gray-500">(minutes)</span>
+          Passing Grade
+          <span className="text-gray-500">(%)</span>
         </label>
         <input
           type="number"
           className="border border-gray-300 rounded-md h-12 p-4 w-full"
-          placeholder="ex. 60"
+          placeholder="ex. 50"
           min={0}
           step={5}
-          onChange={handleTimeEstimateChange}
-          value={timeEstimate}
+          onChange={handlePassingGradeChange}
+          value={passingGrade}
         />
       </div>
       <div className="flex flex-col gap-y-2">
@@ -158,17 +158,17 @@ function GradingOptionsForm(props: Props) {
           htmlFor="passingGrade"
           className="font-medium leading-5 flex gap-x-1"
         >
-          Passing Grade
-          <span className="text-gray-500">(%)</span>
+          Time Estimate
+          <span className="text-gray-500">(minutes)</span>
         </label>
         <input
           type="number"
           className="border border-gray-300 rounded-md h-12 p-4 w-full"
-          placeholder="ex. 50"
+          placeholder="ex. 60"
           min={0}
           step={5}
-          onChange={handlePassingGradeChange}
-          value={passingGrade}
+          onChange={handleTimeEstimateChange}
+          value={timeEstimate}
         />
       </div>
 

@@ -10,7 +10,7 @@ function Component(props: Props) {
   const { params, searchParams } = props;
   const { submissionTime } = searchParams;
   const { assignmentId } = params;
-  // DON'T USE ~~ TO CONVERT TO INT, CAUSES THE NUMBER TO BECOME SMALLER THAN IT SHOULD BE
+  // DON'T USE ~~ TO CONVERT TO BIG INT, CAUSES THE NUMBER TO BECOME SMALLER THAN IT SHOULD BE
   const submissionTimeInt = parseInt(submissionTime);
   console.log("submissionTime", submissionTimeInt);
   console.log("date now", Date.now());

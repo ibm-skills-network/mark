@@ -19,7 +19,7 @@ const Question: FC<Props> = (props) => {
     question: questionText,
     learnerChoices,
     learnerTextResponse,
-    learnerUrlResponse
+    learnerUrlResponse,
   } = question;
 
   const highestScoreResponse = useMemo(() => {
@@ -108,14 +108,12 @@ const Question: FC<Props> = (props) => {
               </div>
             )}
             {type === "TEXT" && (
-              <p className="font-medium leading-tight">
+              <ReactMarkdown className="font-medium leading-tight">
                 {learnerTextResponse}
-              </p>
+              </ReactMarkdown>
             )}
             {type === "URL" && (
-              <p className="font-medium leading-tight">
-                {learnerUrlResponse}
-              </p>
+              <p className="font-medium leading-tight">{learnerUrlResponse}</p>
             )}
           </div>
           {/* feedback */}

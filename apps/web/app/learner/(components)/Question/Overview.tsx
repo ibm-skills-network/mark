@@ -56,7 +56,7 @@ function Overview(props: Props) {
 
       <hr className="border-gray-300 -mx-4" />
 
-      <h3 className="text-gray-600 leading-tight">Breakdown</h3>
+      <h3 className="text-gray-600 leading-tight">Questions</h3>
       <div className="grid gap-1.5 grid-cols-5">
         {questionStatus.map((question: QuestionStatus, index) => (
           <button
