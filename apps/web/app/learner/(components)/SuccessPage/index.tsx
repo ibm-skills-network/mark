@@ -141,11 +141,6 @@ function SuccessPage(props: Props) {
     void fetchUser();
   }, []);
 
-  const totalPoints = useMemo(
-    () => questions.reduce((acc, curr) => acc + curr.totalPoints, 0),
-    [questions]
-  );
-
   return (
     <div className="flex flex-col items-center justify-center w-full h-full gap-y-10 py-10">
       <div className="py-10">
