@@ -101,6 +101,7 @@ function Section(props: sectionProps) {
               value={points}
               onChange={handleChangePoints}
               min={1}
+              max={10}
             />
           </div>
         </div>
