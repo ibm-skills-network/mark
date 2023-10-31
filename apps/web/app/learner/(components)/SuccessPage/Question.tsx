@@ -26,7 +26,7 @@ const Question: FC<Props> = (props) => {
     if (questionResponses?.length === 0) {
       return {
         points: 0,
-        feedback: [{ feedback: "" }],
+        feedback: [{ feedback: "question has not been submitted" }],
       };
     }
     return questionResponses.reduce((acc, curr) => {
