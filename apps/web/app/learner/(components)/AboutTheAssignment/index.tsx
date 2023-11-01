@@ -9,6 +9,7 @@ import Link from "next/link";
 import { type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import AssignmentMainInfo from "./AssignmentMainInfo";
+import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   assignmentId: number;
@@ -80,32 +81,12 @@ async function AboutTheAssignment(props: Props) {
           name={name}
           assignmentId={id}
         />
-        {/* if the assignment is completed(no more attempts), then show the "View Results" button */}
-        {assignmentState === "completed" ? (
-          <Button className="group flex gap-x-2" onClick={handleViewResults}>
-            View Results
-            <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200 disabled:opacity-50" />
-          </Button>
-        ) : (
-          // it's either "not-started" or "in-progress"
-          <Tooltip
-            className=""
-            distance={3}
-            disabled={assignmentState !== "not-published"}
-            content="This assignment has not been published yet."
-          >
-            <Link href={`/learner/${id}/questions`}>
-              <Button
-                className="group flex gap-x-2"
-                disabled={assignmentState === "not-published"}
-              >
-                {assignmentState === "in-progress" ? "Resume " : "Begin "}the
-                Assignment
-                <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200 disabled:opacity-50" />
-              </Button>
-            </Link>
-          </Tooltip>
-        )}
+
+        <BeginTheAssignmentButton
+          assignmentState={assignmentState}
+          assignmentId={id}
+        />
+        {/* )} */}
       </div>
       <div className="border border-gray-300 rounded-lg bg-white p-4 flex flex-col gap-y-4">
         {introduction && (
@@ -144,6 +125,11 @@ async function AboutTheAssignment(props: Props) {
           </ReactMarkdown>
         )}
       </div>
+      <BeginTheAssignmentButton
+        className="flex justify-center"
+        assignmentState={assignmentState}
+        assignmentId={id}
+      />
     </main>
   );
 }
