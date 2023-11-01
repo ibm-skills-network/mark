@@ -29,7 +29,7 @@ function GradingOptionsForm(props: Props) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
-      attempts: ~~e.target.value,
+      numAttempts: ~~e.target.value,
     }));
   }
 
