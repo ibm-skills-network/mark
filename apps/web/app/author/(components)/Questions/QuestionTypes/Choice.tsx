@@ -28,7 +28,7 @@ function Component(props: Props) {
         onChange={() => toggleChoice(choice)}
       />
       <input
-        className="w-full overflow-hidden border-transparent focus:!border-transparent transition focus:!border-b-gray-300 !ring-0 p-2 text-black outline-none"
+        className="w-full overflow-hidden !border-transparent transition hover:!border-b-gray-300 focus:!border-b-gray-600 !ring-0 p-2 text-black outline-none"
         placeholder={`Choice ${index + 1}`}
         value={choice}
         onChange={handleChoiceTextChange}

@@ -12,7 +12,7 @@ function SuccessPage(props: Props) {
   const {} = props;
   const pathname = usePathname();
 
-  const [returnUrl, setReturnUrl] = useState<string>(null);
+  const [returnUrl, setReturnUrl] = useState<string>("");
   useEffect(() => {
     const fetchUser = async () => {
       try {

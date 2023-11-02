@@ -14,7 +14,7 @@ const getBaseUrl = () => {
 export const getFeedbackColors = (score: number, totalPoints: number) => {
   switch (score) {
     case totalPoints:
-      return "bg-green-100 border-green-500 text-green-700 ";
+      return "bg-green-100 border-green-500 text-green-700";
     case 0:
       return "bg-red-100 border-red-500 text-red-700";
     default:

@@ -97,7 +97,7 @@ function QuestionWrapper(props: TextBoxProps) {
   return (
     <div
       {...rest}
-      className={`relative flex flex-col flex-1 w-[64rem] rounded-md bg-white transition border-l-8 py-10 px-12 border-blue-700 gap-y-4`}
+      className={`relative flex flex-col flex-1 w-[64rem] rounded-md bg-white transition border-l-8 border-y border-r border-y-gray-300 border-r-gray-300 py-10 px-12 border-l-blue-700 gap-y-8`}
     >
       {/* Toggle view button */}
       {/* <button

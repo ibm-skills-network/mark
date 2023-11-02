@@ -181,10 +181,12 @@ function AuthorQuestionsPage(props: Props) {
         {questions.map((question, index) => {
           const questionNumber = index + 1;
           let questionMaxPoints: number;
-          if (question.type === "TEXT" || question.type === "URL") {
-            questionMaxPoints = Math.max(
-              ...question.scoring.criteria.map((criteria) => criteria.points)
-            );
+          if (
+            (question.type === "TEXT" || question.type === "URL") &&
+            question.scoring?.type === "CRITERIA_BASED" &&
+            question.scoring?.criteria.length > 0
+          ) {
+            questionMaxPoints = question.scoring.criteria.at(-1).points;
           } else {
             questionMaxPoints = question.totalPoints;
           }

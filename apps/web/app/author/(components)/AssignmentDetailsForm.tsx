@@ -171,7 +171,7 @@ const AuthorIntroduction = (props: Props) => {
       <footer className="mx-auto items-center flex flex-col">
         <button
           ref={updateAssignmentButtonRef}
-          className="mt-4 group flex gap-x-1 transition-colors items-center pl-4 pr-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-md shadow-lg"
+          className="mt-4 group flex gap-x-1 transition-colors items-center pl-4 pr-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-md"
           onClick={handleGoToQuestions}
         >
           Add Questions

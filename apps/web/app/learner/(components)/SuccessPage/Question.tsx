@@ -3,6 +3,7 @@ import { QuestionStore } from "@/config/types";
 import { getFeedbackColors } from "@/lib/utils";
 import { useMemo, type ComponentPropsWithoutRef, type FC } from "react";
 import ReactMarkdown from "react-markdown";
+import QuestionScore from "../QuestionScore";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   question: QuestionStore;
@@ -67,15 +68,10 @@ const Question: FC<Props> = (props) => {
               </p>
               <p className="text-base font-medium leading-tight my-auto">
                 {highestScoreResponse ? (
-                  <span className="text-green-600">
-                    Scored{" "}
-                    <span className="font-bold">
-                      {Number.isInteger(highestScoreResponse.points)
-                        ? highestScoreResponse.points
-                        : 0}{" "}
-                    </span>
-                    out of {totalPoints} points
-                  </span>
+                  <QuestionScore
+                    earnedPoints={highestScoreResponse.points}
+                    totalPoints={totalPoints}
+                  />
                 ) : (
                   <span className="text-blue-700">{totalPoints} points</span>
                 )}

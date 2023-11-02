@@ -87,10 +87,14 @@ function QuestionPage(props: Props) {
             question.learnerUrlResponse = lastSubmission?.learnerResponse ?? "";
             break;
           case "SINGLE_CORRECT":
-            question.learnerChoices = lastSubmission?.learnerResponse ? JSON.parse(lastSubmission?.learnerResponse) as string[] : [];
+            question.learnerChoices = lastSubmission?.learnerResponse
+              ? (JSON.parse(lastSubmission?.learnerResponse) as string[])
+              : [];
             break;
           case "MULTIPLE_CORRECT":
-            question.learnerChoices = lastSubmission?.learnerResponse ? JSON.parse(lastSubmission?.learnerResponse) as string[] : [];
+            question.learnerChoices = lastSubmission?.learnerResponse
+              ? (JSON.parse(lastSubmission?.learnerResponse) as string[])
+              : [];
             break;
           case "TRUE_FALSE":
             // TODO: handle this

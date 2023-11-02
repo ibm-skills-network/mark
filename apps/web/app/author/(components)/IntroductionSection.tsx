@@ -11,6 +11,7 @@ import {
 import { twMerge } from "tailwind-merge";
 import GradingOptionsForm from "./GradingOptionsForm";
 import {
+  AdjustSettingsIcon,
   GradingIcon,
   InstructionIcon,
   IntroductionIcon,
@@ -29,7 +30,7 @@ const titleToDescription = [
   },
   {
     sectionId: "instructions",
-    title: "Instructions for learners",
+    title: "Instructions For Learners",
     description:
       "Text you write here will be guidance for the learner, whether it's assignment instructions or a format reminder for submission",
     placeholder:
@@ -49,11 +50,11 @@ const titleToDescription = [
   },
   {
     sectionId: "grading",
-    title: "Grading",
+    title: "Adjust Settings",
     description: "Select the options that you want to apply to your assignment",
     placeholder: "",
     required: true,
-    svg: <GradingIcon />,
+    svg: <AdjustSettingsIcon />,
   },
 ] as const;
 

@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
 import Button from "../Button";
+import QuestionScore from "../QuestionScore";
 import RenderQuestion from "./RenderQuestion";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
@@ -89,9 +90,9 @@ function Component(props: Props) {
           learnerResponse:
             question.learnerTextResponse ||
             question.learnerUrlResponse ||
-            question.learnerChoices.toString() ||
-            question.learnerAnswerChoice.toString() ||
-            question.learnerFileResponse.toString() ||
+            question.learnerChoices?.toString() ||
+            question.learnerAnswerChoice?.toString() ||
+            question.learnerFileResponse?.toString() ||
             null,
           questionId: question.id,
           assignmentAttemptId: activeAttemptId,
@@ -109,15 +110,10 @@ function Component(props: Props) {
           </p>
           <p className="text-base font-medium leading-tight my-auto">
             {mostRecentFeedback ? (
-              <span className="text-green-600">
-                Scored{" "}
-                <span className="font-bold">
-                  {Number.isInteger(mostRecentFeedback.points)
-                    ? mostRecentFeedback.points
-                    : mostRecentFeedback.points.toFixed(1)}{" "}
-                </span>
-                out of {totalPoints} points
-              </span>
+              <QuestionScore
+                earnedPoints={mostRecentFeedback.points}
+                totalPoints={totalPoints}
+              />
             ) : (
               <span className="text-blue-700">{totalPoints} points</span>
             )}

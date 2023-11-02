@@ -15,7 +15,7 @@ import { useAuthorStore } from "@/stores/author";
 import { type ChangeEvent } from "react";
 import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import WordCountComponent from "../../WordCountComponent";
-import ExtendableRubricChart from "../Rubric";
+import Rubric from "../Rubric";
 
 interface TextBasedAnswerSectionProps {
   questionId: number;
@@ -155,7 +155,7 @@ function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
       </div> */}
 
       {/* Render the child component and pass the handleMaxPointsChange function as a prop */}
-      <ExtendableRubricChart questionId={questionId} />
+      <Rubric questionId={questionId} />
 
       {/* {switchState === "b" && (
         // <RubricTable

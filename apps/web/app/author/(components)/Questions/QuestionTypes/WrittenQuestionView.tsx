@@ -12,11 +12,10 @@
 //   ViewListIcon,
 // } from "@heroicons/react/solid";
 import { useAuthorStore } from "@/stores/author";
-import { useState, type ChangeEvent } from "react";
-import RubricTable from "../../../../../components/depreciated/RubricTable";
+import { type ChangeEvent } from "react";
 import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import WordCountComponent from "../../WordCountComponent";
-import ExtendableRubricChart from "../Rubric";
+import Rubric from "../Rubric";
 
 interface WrittenQuestionViewProps {
   questionId: number;
@@ -158,7 +157,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       </div> */}
 
       {/* Render the child component and pass the handleMaxPointsChange function as a prop */}
-      <ExtendableRubricChart questionId={questionId} />
+      <Rubric questionId={questionId} />
 
       {/* {switchState === "b" && (
         // <RubricTable

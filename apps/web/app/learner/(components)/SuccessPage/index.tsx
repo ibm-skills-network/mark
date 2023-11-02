@@ -20,7 +20,7 @@ function SuccessPage(props: Props) {
     state.assignmentDetails,
     state.grade,
   ]);
-  const [returnUrl, setReturnUrl] = useState<string>(null);
+  const [returnUrl, setReturnUrl] = useState<string>("");
   // const questions = [
   //   {
   //     id: 1,
@@ -135,6 +135,11 @@ function SuccessPage(props: Props) {
 
     void fetchUser();
   }, []);
+
+  // Not needed as long as returnUrl is not null(it is initialized to "")
+  // if (returnUrl === null) {
+  //   return null;
+  // }
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full gap-y-10 py-10">

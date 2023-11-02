@@ -6,7 +6,7 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   safelist: [
-    // for the tooltip
+    // for the Tooltip.tsx
     "bottom-[0rem]",
     "left-[0rem]",
     "bottom-[1rem]",
@@ -19,7 +19,18 @@ const config: Config = {
     "left-[2.5rem]",
     "bottom-[3rem]",
     "left-[3rem]",
+    // for getFeedbackColors in utils.ts
+    "bg-green-100",
+    "border-green-500",
+    "text-green-700",
+    "bg-red-100",
+    "border-red-500",
+    "text-red-700",
+    "bg-yellow-100",
+    "text-yellow-700",
+    "border-yellow-500",
     {
+      // for Tooltip.tsx
       pattern: /delay-(100|200|300|500)/,
     },
   ],

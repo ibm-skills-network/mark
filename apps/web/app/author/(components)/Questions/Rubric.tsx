@@ -85,16 +85,19 @@ function Rubric(props: Rubric) {
       className={`relative flex flex-col rounded-md bg-white border border-transparent`}
     >
       <div>
-        <h1 className="text-base font-normal pb-1 leading-6 text-gray-900 relative after:text-blue-400 after:content-['*']">
+        <h1 className="text-base font-normal pb-4 leading-6 text-gray-900 relative after:text-blue-400 after:content-['*']">
           List the conditions for meeting the Criteria of Question
         </h1>
-        <ul ref={parent} className="flex flex-col gap-4">
+        <div className="flex items-center gap-x-2 pb-1">
+          <p className="w-24">Points</p> <p> Description</p>
+        </div>
+        <ul ref={parent} className="flex flex-col gap-3">
           {criterias.map((criteria, index) => (
             <li key={criteria.id} className="flex items-center gap-x-2">
               {/* Add input for promptPoints */}
               <input
                 type="number"
-                className="p-2 transition shadow-sm border border-gray-300 rounded-md h-12 w-[100px] text-gray-700 bg-transparent outline-none"
+                className="p-2 transition shadow-sm border border-gray-300 rounded-md h-12 w-24 text-gray-700 bg-transparent outline-none"
                 placeholder={`ex. ${index}`}
                 value={criteria.points}
                 onChange={(event) => {
