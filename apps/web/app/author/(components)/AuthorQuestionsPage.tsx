@@ -112,7 +112,8 @@ function AuthorQuestionsPage(props: Props) {
     const question: CreateQuestionRequest = {
       question: " ",
       totalPoints: 1,
-      numRetries: defaultQuestionRetries || 1,
+      // if default has not been given, then set it to 1
+      numRetries: defaultQuestionRetries ?? 1,
       // TODO: have different buttons so that users can easily add other type of questions
       type: "TEXT",
       scoring: {

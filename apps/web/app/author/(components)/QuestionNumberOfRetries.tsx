@@ -10,13 +10,13 @@ function Component(props: Props) {
 
   return (
     <div className="flex flex-col gap-y-1">
-      <label className="font-medium leading-5 text-gray-800">
+      <label className="leading-5 text-gray-800">
         Number of Retries Per Submission
       </label>
       <select
-        className="border border-gray-300 shadow-sm rounded-md px-4 py-3"
+        className="border border-gray-300 rounded-md px-4 py-3"
         name="attempts"
-        value={retries || -1}
+        value={retries ?? -1}
         onChange={handleRetryChange}
       >
         <option value={1}>1</option>

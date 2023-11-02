@@ -75,7 +75,7 @@ function WrittenQuestionView(props: WrittenQuestionViewProps) {
       <div className="grid grid-cols-2 gap-x-16">
         <WordCountComponent text="Maximum Word Count " />
         <QuestionNumberOfRetries
-          retries={question?.numRetries || -1}
+          retries={question?.numRetries ?? -1}
           handleRetryChange={handleQuestionRetryChange}
         />
       </div>

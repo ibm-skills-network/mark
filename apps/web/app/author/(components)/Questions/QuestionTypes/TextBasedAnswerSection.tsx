@@ -72,7 +72,7 @@ function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
     <>
       <div className="grid grid-cols-2 gap-x-16">
         <QuestionNumberOfRetries
-          retries={question?.numRetries || -1}
+          retries={question?.numRetries ?? -1}
           handleRetryChange={handleQuestionRetryChange}
         />
         {!isUrl && <WordCountComponent text="Maximum Word Count " />}
