@@ -11,6 +11,17 @@ const getBaseUrl = () => {
   return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
 };
 
+export const getFeedbackColors = (score: number, totalPoints: number) => {
+  switch (score) {
+    case totalPoints:
+      return "bg-green-100 border-green-500 text-green-700 ";
+    case 0:
+      return "bg-red-100 border-red-500 text-red-700";
+    default:
+      return "bg-yellow-100 border-yellow-500 text-yellow-700";
+  }
+};
+
 // export function debounce<T extends (...args: unknown[]) => void>(
 //   func: T,
 //   delay: number

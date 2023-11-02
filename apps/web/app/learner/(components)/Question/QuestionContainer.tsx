@@ -1,5 +1,6 @@
 import Spinner from "@/components/svgs/Spinner";
 import { submitQuestion } from "@/lib/talkToBackend";
+import { getFeedbackColors } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import {
   ArrowLongLeftIcon,
@@ -53,8 +54,8 @@ function Component(props: Props) {
     ? numRetries - questionResponses.length
     : -1;
 
-  const [submitted, setSubmitted] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+
   async function handleSubmit() {
     setSubmitting(true);
     // updateStatus("edited");
@@ -85,7 +86,13 @@ function Component(props: Props) {
           //TODO: make sure this is the right var
           points: feedback.totalPoints,
           feedback: feedback.feedback,
-          learnerResponse: question.learnerTextResponse || question.learnerUrlResponse || question.learnerChoices.toString() || question.learnerAnswerChoice.toString() || question.learnerFileResponse.toString() || null,
+          learnerResponse:
+            question.learnerTextResponse ||
+            question.learnerUrlResponse ||
+            question.learnerChoices.toString() ||
+            question.learnerAnswerChoice.toString() ||
+            question.learnerFileResponse.toString() ||
+            null,
           questionId: question.id,
           assignmentAttemptId: activeAttemptId,
         },
@@ -136,8 +143,13 @@ function Component(props: Props) {
       </div>
       {/* Feedback section */}
       {mostRecentFeedback && (
-        <div className="bg-green-100 border border-green-500 p-5 rounded-lg shadow-sm">
-          <p className="text-green-700 text-center font-medium">
+        <div
+          className={
+            "border p-5 rounded-lg shadow-sm " +
+            getFeedbackColors(mostRecentFeedback.points, totalPoints)
+          }
+        >
+          <p className="text-center font-medium">
             <span className="font-bold">
               {mostRecentFeedback.points}/{totalPoints}
             </span>{" "}

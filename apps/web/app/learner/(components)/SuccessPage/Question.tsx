@@ -1,5 +1,6 @@
 import PageWithStickySides from "@/app/components/PageWithStickySides";
 import { QuestionStore } from "@/config/types";
+import { getFeedbackColors } from "@/lib/utils";
 import { useMemo, type ComponentPropsWithoutRef, type FC } from "react";
 import ReactMarkdown from "react-markdown";
 
@@ -117,8 +118,13 @@ const Question: FC<Props> = (props) => {
             )}
           </div>
           {/* feedback */}
-          <div className="bg-green-100 w-full border border-green-500 p-5 rounded-lg shadow-sm">
-            <p className="text-green-700 text-center font-medium">
+          <div
+            className={
+              "w-full border p-5 rounded-lg shadow-sm " +
+              getFeedbackColors(highestScoreResponse.points, totalPoints)
+            }
+          >
+            <p className="text-center font-medium">
               <span className="font-bold">
                 {highestScoreResponse.points}/{totalPoints}
               </span>{" "}
