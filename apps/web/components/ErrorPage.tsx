@@ -5,9 +5,11 @@ import { twMerge } from "tailwind-merge";
 
 export default function Error({
   error,
+  statusCode = 500,
   className,
 }: {
   error: Error | string;
+  statusCode?: number;
   className?: string;
 }) {
   useEffect(() => {
@@ -23,7 +25,7 @@ export default function Error({
       )}
     >
       <h1 className="text-6xl font-bold text-destructive text-indigo-500">
-        500
+        {statusCode}
       </h1>
       <h2 className=" text-4xl font-bold text-destructive">
         Something Went Wrong!

@@ -32,6 +32,14 @@ async function LearnerLayout(props: Props) {
   console.log("attemptId", attemptId);
   if (!attemptId) {
     return <Error error={"Attempt could not be created"} />;
+  } else if (attemptId === "no more attempts") {
+    return (
+      <Error
+        className="h-[calc(100vh-100px)]"
+        statusCode={422}
+        error={"No more attempts"}
+      />
+    );
   }
   // get the questions for the assignment from the attemptId
   const attempt = await getAttempt(assignmentId, attemptId, cookie);
