@@ -54,6 +54,7 @@ async function AboutTheAssignment(props: Props) {
     published,
     gradingCriteriaOverview,
     allotedTimeMinutes,
+    timeEstimateMinutes,
     numAttempts,
     passingGrade,
     name,
@@ -76,6 +77,7 @@ async function AboutTheAssignment(props: Props) {
         {/* data passed here will also be stored in zustand store (possible to do that there because it's client-side rendered) */}
         <AssignmentMainInfo
           allotedTimeMinutes={allotedTimeMinutes}
+          timeEstimateMinutes={timeEstimateMinutes}
           numAttempts={numAttempts}
           passingGrade={passingGrade}
           name={name}

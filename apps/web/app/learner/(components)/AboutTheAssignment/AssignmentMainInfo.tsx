@@ -6,14 +6,21 @@ import { useEffect, type ComponentPropsWithoutRef } from "react";
 interface Props extends ComponentPropsWithoutRef<"div"> {
   name: string;
   allotedTimeMinutes?: number;
+  timeEstimateMinutes?: number;
   numAttempts?: number;
   passingGrade?: number;
   assignmentId: number;
 }
 
 function Component(props: Props) {
-  const { name, allotedTimeMinutes, numAttempts, passingGrade, assignmentId } =
-    props;
+  const {
+    name,
+    allotedTimeMinutes,
+    timeEstimateMinutes,
+    numAttempts,
+    passingGrade,
+    assignmentId,
+  } = props;
 
   const setAssignmentDetails = useAssignmentDetails(
     (state) => state.setAssignmentDetails
@@ -41,9 +48,17 @@ function Component(props: Props) {
         <div className="border-r border-gray-400 h-4 self-center"></div>
         <div className="flex items-center">
           {allotedTimeMinutes ? (
-            <>Time Alloted: {allotedTimeMinutes} minutes</>
+            <>Time Limit: {allotedTimeMinutes} minutes</>
           ) : (
             "No Time Limit"
+          )}
+        </div>
+        <div className="border-r border-gray-400 h-4 self-center"></div>
+        <div className="flex items-center">
+          {timeEstimateMinutes ? (
+            <>Time Estimate: {timeEstimateMinutes} minutes</>
+          ) : (
+            "No Time Estimate"
           )}
         </div>
         <div className="border-r border-gray-400 h-4 self-center"></div>
