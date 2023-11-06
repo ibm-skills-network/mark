@@ -321,7 +321,7 @@ export async function getAttempts(
 export async function createAttempt(
   assignmentId: number,
   cookies?: string
-): Promise<number | undefined> {
+): Promise<number | undefined | "no more attempts"> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
   console.log("endpointURL", endpointURL);
   try {
@@ -335,6 +335,9 @@ export async function createAttempt(
     console.log("res", res);
 
     if (!res.ok) {
+      if (res.status === 422) {
+        return "no more attempts";
+      }
       throw new Error("Failed to create attempt");
     }
     const { success, error, id } = (await res.json()) as BaseBackendResponse;

@@ -152,7 +152,8 @@ export interface GetQuestionResponse extends Question {
 export type GradingData = {
   graded: boolean;
   questionRetries: number;
-  timeEstimate: number;
+  timeEstimateMinutes: number | null;
+  allotedTimeMinutes?: number | null;
   passingGrade: number;
   numAttempts?: number;
 };
@@ -164,6 +165,7 @@ export type ReplaceAssignmentRequest = {
   graded: boolean;
   numAttempts?: number;
   allotedTimeMinutes?: number;
+  timeEstimateMinutes?: number;
   passingGrade: number;
   displayOrder?: "DEFINED" | "RANDOM";
   published: boolean;

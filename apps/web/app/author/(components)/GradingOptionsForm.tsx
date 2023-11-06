@@ -2,9 +2,14 @@ import Tooltip from "@/components/Tooltip";
 import { useAssignmentDetails } from "@/stores/learner";
 import type { GradingData } from "@config/types";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
-import { type Dispatch, type SetStateAction } from "react";
+import type {
+  ChangeEvent,
+  ComponentPropsWithoutRef,
+  Dispatch,
+  SetStateAction,
+} from "react";
 
-interface Props extends React.ComponentPropsWithoutRef<"div"> {
+interface Props extends ComponentPropsWithoutRef<"div"> {
   value: GradingData;
   setValue: Dispatch<SetStateAction<GradingData>>;
 }
@@ -12,12 +17,18 @@ interface Props extends React.ComponentPropsWithoutRef<"div"> {
 function GradingOptionsForm(props: Props) {
   const { value, setValue } = props;
 
-  const { graded, numAttempts, passingGrade, timeEstimate } = value;
+  const {
+    graded,
+    numAttempts,
+    passingGrade,
+    timeEstimateMinutes,
+    allotedTimeMinutes,
+  } = value;
   const assignmentId = useAssignmentDetails(
     (state) => state.assignmentDetails?.id
   );
 
-  function handleGradedChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleGradedChange(e: ChangeEvent<HTMLInputElement>) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
@@ -25,7 +36,7 @@ function GradingOptionsForm(props: Props) {
     }));
   }
 
-  function handleAttemptChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  function handleAttemptChange(e: ChangeEvent<HTMLSelectElement>) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
@@ -33,7 +44,7 @@ function GradingOptionsForm(props: Props) {
     }));
   }
 
-  function handleQuestionRetryChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  function handleQuestionRetryChange(e: ChangeEvent<HTMLSelectElement>) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
@@ -45,7 +56,7 @@ function GradingOptionsForm(props: Props) {
     );
   }
 
-  function handlePassingGradeChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePassingGradeChange(e: ChangeEvent<HTMLInputElement>) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
@@ -53,11 +64,20 @@ function GradingOptionsForm(props: Props) {
     }));
   }
 
-  function handleTimeEstimateChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleTimeEstimateChange(e: ChangeEvent<HTMLInputElement>) {
     // e.preventDefault();
     setValue((prevValue) => ({
       ...prevValue,
-      timeEstimate: ~~e.target.value,
+      timeEstimateMinutes: ~~e.target.value || null,
+    }));
+  }
+
+  function handleAllotedTimeChange(e: ChangeEvent<HTMLInputElement>) {
+    // e.preventDefault();
+    console.log(e.target.value);
+    setValue((prevValue) => ({
+      ...prevValue,
+      allotedTimeMinutes: ~~e.target.value || null,
     }));
   }
 
@@ -114,19 +134,39 @@ function GradingOptionsForm(props: Props) {
           htmlFor="passingGrade"
           className="font-medium leading-5 flex gap-x-1"
         >
-          Passing Grade
-          <span className="text-gray-500">(%)</span>
+          Time Limit
+          <span className="text-gray-500 font-normal">(minutes)</span>
         </label>
         <input
           type="number"
           className="border border-gray-300 rounded-md h-12 p-4 w-full"
-          placeholder="ex. 50"
+          placeholder="ex. 60"
           min={0}
           step={5}
-          onChange={handlePassingGradeChange}
-          value={passingGrade}
+          onChange={handleAllotedTimeChange}
+          value={allotedTimeMinutes}
         />
       </div>
+
+      <div className="flex flex-col gap-y-2">
+        <label
+          htmlFor="passingGrade"
+          className="font-medium leading-5 flex gap-x-1"
+        >
+          Time Estimate
+          <span className="text-gray-500 font-normal">(minutes)</span>
+        </label>
+        <input
+          type="number"
+          className="border border-gray-300 rounded-md h-12 p-4 w-full"
+          placeholder="ex. 60"
+          min={0}
+          step={5}
+          onChange={handleTimeEstimateChange}
+          value={timeEstimateMinutes}
+        />
+      </div>
+
       <div className="flex flex-col gap-y-2">
         <label
           htmlFor="attempts"
@@ -155,25 +195,6 @@ function GradingOptionsForm(props: Props) {
 
       <div className="flex flex-col gap-y-2">
         <label
-          htmlFor="passingGrade"
-          className="font-medium leading-5 flex gap-x-1"
-        >
-          Time Estimate
-          <span className="text-gray-500">(minutes)</span>
-        </label>
-        <input
-          type="number"
-          className="border border-gray-300 rounded-md h-12 p-4 w-full"
-          placeholder="ex. 60"
-          min={0}
-          step={5}
-          onChange={handleTimeEstimateChange}
-          value={timeEstimate}
-        />
-      </div>
-
-      <div className="flex flex-col gap-y-2">
-        <label
           htmlFor="attempts"
           className="font-medium leading-5 flex gap-x-1"
         >
@@ -196,6 +217,25 @@ function GradingOptionsForm(props: Props) {
           <option value={5}>5</option>
           <option value={-1}>unlimited</option>
         </select>
+      </div>
+
+      <div className="flex flex-col gap-y-2">
+        <label
+          htmlFor="passingGrade"
+          className="font-medium leading-5 flex gap-x-1"
+        >
+          Passing Grade
+          <span className="text-gray-500">(%)</span>
+        </label>
+        <input
+          type="number"
+          className="border border-gray-300 rounded-md h-12 p-4 w-full"
+          placeholder="ex. 50"
+          min={0}
+          step={5}
+          onChange={handlePassingGradeChange}
+          value={passingGrade}
+        />
       </div>
     </div>
   );

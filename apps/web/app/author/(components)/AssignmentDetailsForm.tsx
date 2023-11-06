@@ -41,7 +41,8 @@ const AuthorIntroduction = (props: Props) => {
     questionRetries: 1,
     numAttempts: -1,
     passingGrade: 60,
-    timeEstimate: 30,
+    timeEstimateMinutes: 30,
+    // allotedTimeMinutes: null,
   });
   const [published, setPublished] = useState(false);
   const [gradingCriteriaOverview, setGradingCriteriaOverview] = useState("");
@@ -71,8 +72,10 @@ const AuthorIntroduction = (props: Props) => {
           graded: assignment.graded ?? oldGrading.graded,
           numAttempts: assignment.numAttempts ?? oldGrading.numAttempts,
           passingGrade: assignment.passingGrade ?? oldGrading.passingGrade,
-          timeEstimate:
-            assignment.allotedTimeMinutes ?? oldGrading.timeEstimate,
+          allotedTimeMinutes:
+            assignment.allotedTimeMinutes ?? oldGrading.allotedTimeMinutes,
+          timeEstimateMinutes:
+            assignment.timeEstimateMinutes ?? oldGrading.timeEstimateMinutes,
         }));
         setPublished(assignment.published);
 
@@ -115,7 +118,8 @@ const AuthorIntroduction = (props: Props) => {
    * */
   async function handleGoToQuestions() {
     const assignment: ReplaceAssignmentRequest = {
-      allotedTimeMinutes: grading.timeEstimate,
+      timeEstimateMinutes: grading.timeEstimateMinutes,
+      allotedTimeMinutes: grading.allotedTimeMinutes,
       instructions: instructions,
       introduction: introduction,
       gradingCriteriaOverview: gradingCriteriaOverview,
