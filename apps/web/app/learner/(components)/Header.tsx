@@ -21,9 +21,10 @@ function LearnerHeader(props: Props) {
     state.questions,
     state.activeAttemptId,
   ]);
-  const [assignmentDetails, setGrade] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.setGrade]
-  );
+  const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
+    state.assignmentDetails,
+    state.setGrade,
+  ]);
   const assignmentId = assignmentDetails?.id;
   const isInQuestionPage = pathname.includes("questions");
   const [title, setTitle] = useState<string>("Auto-Graded Assignment");
@@ -40,13 +41,13 @@ function LearnerHeader(props: Props) {
     if (!confirmSubmit) {
       return;
     }
-    const grade = (await submitAssignment(assignmentId, activeAttemptId)) * 100;
+    const grade = await submitAssignment(assignmentId, activeAttemptId);
     // alert(`Your grade is ${grade.toFixed(1)}/100
-    if (!grade) {
+    if (grade && (grade >= 0 || grade <= 1)) {
       toast.error("Failed to submit assignment.");
       return;
     }
-    setGrade(grade);
+    setGrade(grade * 100);
     // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     const currentTime = Date.now();
     console.log("currentTime", currentTime);

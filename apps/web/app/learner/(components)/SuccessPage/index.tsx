@@ -171,7 +171,7 @@ function SuccessPage(props: Props) {
                 y="20.35"
                 className=" text-center text-slate-500 text-[0.4rem] font-semibold"
               >
-                {grade.toFixed(1)}%
+                {grade === 100 || grade === 0 ? grade : grade.toFixed(1)}%
               </text>
             </svg>
           }
