@@ -100,8 +100,13 @@ export class LlmService {
   async gradeTrueFalseBasedQuestion(
     trueFalseBasedQuestionEvaluateModel: TrueFalseBasedQuestionEvaluateModel
   ): Promise<TrueFalseBasedQuestionResponseModel> {
-    const { question, answer, learnerChoice, totalPoints } =
-      trueFalseBasedQuestionEvaluateModel;
+    const {
+      question,
+      answer,
+      learnerChoice,
+      assignmentInstrctions,
+      previousQuestionsAnswersContext,
+    } = trueFalseBasedQuestionEvaluateModel;
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.string().describe("Feedback for the choice made by the learner")
@@ -116,6 +121,10 @@ export class LlmService {
         question: question,
         learner_choice: JSON.stringify(learnerChoice),
         answer: JSON.stringify(answer),
+        previous_questions_and_answers: JSON.stringify(
+          previousQuestionsAnswersContext
+        ),
+        assignment_instructions: assignmentInstrctions,
         format_instructions: formatInstructions,
       },
     });
