@@ -103,25 +103,8 @@ export class LlmService {
     const { question, answer, learnerChoice, totalPoints } =
       trueFalseBasedQuestionEvaluateModel;
 
-    let pointsEarned = 0;
-
-    if (learnerChoice === answer) {
-      pointsEarned = totalPoints;
-    }
-
     const parser = StructuredOutputParser.fromZodSchema(
-      z
-        .object({
-          choice: z
-            .boolean()
-            .describe(
-              "The choice selected by the learner (can be either true or false)"
-            ),
-          feedback: z
-            .string()
-            .describe("Feedback provided for the learner's choice"),
-        })
-        .describe("Feedback for the choice made by the learner")
+      z.string().describe("Feedback for the choice made by the learner")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -138,10 +121,14 @@ export class LlmService {
     });
 
     const response = await this.processPrompt(prompt);
+    const feedback = await parser.parse(response);
 
-    const trueFalseBasedQuestionResponseModel = (await parser.parse(
-      response
-    )) as TrueFalseBasedQuestionResponseModel;
+    const trueFalseBasedQuestionResponseModel =
+      new TrueFalseBasedQuestionResponseModel(
+        learnerChoice,
+        trueFalseBasedQuestionEvaluateModel.evaluatePoints(),
+        feedback
+      );
 
     return trueFalseBasedQuestionResponseModel;
   }
@@ -149,8 +136,6 @@ export class LlmService {
   async gradeChoiceBasedQuestion(
     choiceBasedQuestionEvaluateModel: ChoiceBasedQuestionEvaluateModel
   ): Promise<ChoiceBasedQuestionResponseModel> {
-    // TODO: Handle loss per mistake
-
     const {
       question,
       learnerChoices,
@@ -158,16 +143,6 @@ export class LlmService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
     } = choiceBasedQuestionEvaluateModel;
-
-    // Initialize score count
-    let pointsEarned = 0;
-
-    for (const choice of learnerChoices) {
-      // If the learner's choice is correct, increment the score count
-      if (validChoices[choice] === true) {
-        pointsEarned++;
-      }
-    }
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.array(
@@ -206,7 +181,7 @@ export class LlmService {
     )) as ChoiceBasedFeedback[];
 
     return new ChoiceBasedQuestionResponseModel(
-      pointsEarned,
+      choiceBasedQuestionEvaluateModel.evaluatePoints(),
       choiceBasedFeedback
     );
   }

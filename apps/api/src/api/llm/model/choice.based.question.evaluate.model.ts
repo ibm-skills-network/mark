@@ -34,4 +34,26 @@ export class ChoiceBasedQuestionEvaluateModel
     this.scoringCriteriaType = scoringCriteriaType;
     this.scoringCriteria = scoringCriteria;
   }
+
+  evaluatePoints(): number {
+    // Count the number of valid choices
+    const totalValidChoices = Object.values(this.validChoices).filter(
+      Boolean
+    ).length;
+
+    // Calculate points per valid choice
+    const pointsPerChoice = this.totalPoints / totalValidChoices;
+
+    let pointsEarned = 0;
+
+    for (const choice of this.learnerChoices) {
+      // If the learner's choice is correct, increment the score count proportionally
+      if (this.validChoices[choice]) {
+        pointsEarned += pointsPerChoice;
+      }
+    }
+
+    // Return the total points earned, rounded to avoid floating point errors
+    return Math.round(pointsEarned);
+  }
 }
