@@ -1,4 +1,5 @@
 name: Build and Release Image
+
 on:
   push:
     branches:
@@ -16,10 +17,28 @@ on:
         description: Custom suffix for tag
         required: false
   repository_dispatch:
+
 jobs:
-  build:
+  build_api_gateway:
     uses: ibm-skills-network/.github/.github/workflows/release.yml@main
     with:
-      image: icr.io/skills-network-labs/mark
+      image: icr.io/skills-network/mark-api-gateway
+      docker_file: apps/api-gateway/Dockerfile
+      docker_target: patched
+    secrets: inherit
+
+  build_api:
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network/mark-api
+      docker_file: apps/api/Dockerfile
+      docker_target: patched
+    secrets: inherit
+
+  build_ui:
+    uses: ibm-skills-network/.github/.github/workflows/release.yml@main
+    with:
+      image: icr.io/skills-network/mark-ui
+      docker_file: apps/web/Dockerfile
       docker_target: patched
     secrets: inherit

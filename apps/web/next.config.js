@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+
 const nextConfig = {
   reactStrictMode: true,
   // proxy api requests to nestjs server
@@ -6,10 +7,10 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `http://localhost:${
-          process.env.API_PORT || 4222
-        }/api/:path*`,
-      },
+        destination: process.env.NODE_ENV === 'production' ? 
+                     `http://{API_GATEWAY_HOST}/api/:path*` : 
+                     `${process.env.API_GATEWAY_HOST}/api/:path*`,
+      },    
     ];
   },
 };
