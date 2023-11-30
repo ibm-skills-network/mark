@@ -25,6 +25,22 @@ export class ChoiceBasedFeedbackDto {
   feedback: string;
 }
 
+export class TrueFalseBasedFeedbackDto {
+  @ApiProperty({
+    description: "The choice selected by the learner (true or false).",
+    type: Boolean,
+    required: true,
+  })
+  choice: boolean;
+
+  @ApiProperty({
+    description: "The feedback for selecting the above choice.",
+    type: String,
+    required: true,
+  })
+  feedback: string;
+}
+
 export class CreateQuestionResponseAttemptResponseDto {
   @ApiProperty({
     description: "The unqiue id of the question response.",
@@ -43,9 +59,16 @@ export class CreateQuestionResponseAttemptResponseDto {
   @ApiProperty({
     description:
       "The feedback received after evaluating the question response of the learner.",
-    type: [ChoiceBasedFeedbackDto, GeneralFeedbackDto],
+    type: [
+      ChoiceBasedFeedbackDto,
+      GeneralFeedbackDto,
+      TrueFalseBasedFeedbackDto,
+    ],
     isArray: true,
     required: true,
   })
-  feedback: ChoiceBasedFeedbackDto[] | GeneralFeedbackDto[];
+  feedback:
+    | ChoiceBasedFeedbackDto[]
+    | GeneralFeedbackDto[]
+    | TrueFalseBasedFeedbackDto[];
 }

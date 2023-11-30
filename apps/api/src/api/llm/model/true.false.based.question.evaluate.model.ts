@@ -28,4 +28,12 @@ export class TrueFalseBasedQuestionEvaluateModel
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
     this.assignmentInstrctions = assignmentInstrctions;
   }
+
+  evaluatePoints(): number {
+    let pointsEarned = 0;
+    if (this.learnerChoice === this.answer) {
+      pointsEarned = this.totalPoints;
+    }
+    return pointsEarned;
+  }
 }
