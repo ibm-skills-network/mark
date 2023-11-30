@@ -1,0 +1,12 @@
+{{- if .Values.api.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mark.api.name" . }}-config
+  annotations: {{- include "mark.install-first.annotations" $ | nindent 4 }}
+data:
+{{- range $name, $value := .Values.api.env }}
+  {{ $name }}: {{ $value | quote }}
+{{- end }}
+{{- end }}

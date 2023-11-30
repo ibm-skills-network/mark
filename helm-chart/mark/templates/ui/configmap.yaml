@@ -1,0 +1,11 @@
+{{- if .Values.ui.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mark.ui.name" . }}-config
+data:
+{{- range $name, $value := .Values.ui.env }}
+  {{ $name }}: {{ $value | quote }}
+{{- end }}
+{{- end }}
