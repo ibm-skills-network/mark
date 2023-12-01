@@ -34,7 +34,7 @@ function QuestionPage(props: Props) {
   useEffect(() => {
     if (!assignmentDetails || assignmentDetails.id !== assignmentId) {
       // if the current active assignment details are not stored in zustand store, then
-      (async () => {
+      const fetchAssignment = async () => {
         // call the backend to get the assignment details
         const assignment = await getAssignment(assignmentId);
         if (assignment) {
@@ -50,10 +50,8 @@ function QuestionPage(props: Props) {
           // if the assignment details are not found, then redirect to the assignment overview page
           router.push(`/learner/${assignmentId}`);
         }
-      })().catch((err) => {
-        console.log(err);
-        router.push(`/learner/${assignmentId}`);
-      });
+      };
+      void fetchAssignment();
     }
     // store the questions in zustand store
     const allQuestions: QuestionStore[] = questions
