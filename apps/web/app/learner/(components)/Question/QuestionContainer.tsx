@@ -1,3 +1,4 @@
+import MarkdownViewer from "@/components/MarkdownViewer";
 import Spinner from "@/components/svgs/Spinner";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { getFeedbackColors } from "@/lib/utils";
@@ -132,9 +133,9 @@ function Component(props: Props) {
         </div>
       </div>
       <div className="bg-white p-8 rounded-lg border border-gray-300">
-        <ReactMarkdown className="mb-4 text-gray-700">
+        <MarkdownViewer className="mb-4 text-gray-700">
           {questionText}
-        </ReactMarkdown>
+        </MarkdownViewer>
         <RenderQuestion questionType={type} />
       </div>
       {/* Feedback section */}

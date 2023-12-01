@@ -1,4 +1,5 @@
 import PageWithStickySides from "@/app/components/PageWithStickySides";
+import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionStore } from "@/config/types";
 import { getFeedbackColors } from "@/lib/utils";
 import { useMemo, type ComponentPropsWithoutRef, type FC } from "react";
@@ -81,9 +82,9 @@ const Question: FC<Props> = (props) => {
           </div>
           {/* question */}
           <div className="flex flex-col w-full gap-y-6 p-8 rounded-lg bg-white border border-gray-300">
-            <ReactMarkdown className="mb-4 font-medium text-gray-700 text-lg">
+            <MarkdownViewer className="mb-4 font-medium text-gray-700 text-lg">
               {questionText}
-            </ReactMarkdown>
+            </MarkdownViewer>
             {type === "MULTIPLE_CORRECT" && (
               <div className="flex flex-col items-start justify-center gap-y-2">
                 {question.choices.map((option, index) => (
@@ -105,9 +106,9 @@ const Question: FC<Props> = (props) => {
               </div>
             )}
             {type === "TEXT" && (
-              <ReactMarkdown className="font-medium leading-tight">
+              <MarkdownViewer className="font-medium leading-tight">
                 {learnerTextResponse}
-              </ReactMarkdown>
+              </MarkdownViewer>
             )}
             {type === "URL" && (
               <p className="font-medium leading-tight">{learnerUrlResponse}</p>

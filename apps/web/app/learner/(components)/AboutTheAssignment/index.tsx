@@ -1,4 +1,5 @@
 import ErrorPage from "@/components/ErrorPage";
+import MarkdownViewer from "@/components/MarkdownViewer";
 import Tooltip from "@/components/Tooltip";
 import { LearnerAssignmentState } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
@@ -96,9 +97,9 @@ async function AboutTheAssignment(props: Props) {
             <h3 className="text-xl font-semibold text-gray-800">
               About this Assignment
             </h3>
-            <ReactMarkdown className="text-gray-600">
+            <MarkdownViewer className="text-gray-600">
               {introduction}
-            </ReactMarkdown>
+            </MarkdownViewer>
           </>
         )}
         {instructions && (
@@ -106,9 +107,9 @@ async function AboutTheAssignment(props: Props) {
             <h3 className="text-xl font-semibold text-gray-800">
               Instructions
             </h3>
-            <ReactMarkdown className="text-gray-600">
+            <MarkdownViewer className="text-gray-600">
               {instructions}
-            </ReactMarkdown>
+            </MarkdownViewer>
           </>
         )}
         {gradingCriteriaOverview && (
@@ -116,15 +117,15 @@ async function AboutTheAssignment(props: Props) {
             <h3 className="text-xl font-semibold text-gray-800">
               Grading Criteria
             </h3>
-            <ReactMarkdown className="text-gray-600">
+            <MarkdownViewer className="text-gray-600">
               {gradingCriteriaOverview}
-            </ReactMarkdown>
+            </MarkdownViewer>
           </>
         )}
         {!introduction && !instructions && !gradingCriteriaOverview && (
-          <ReactMarkdown className="text-gray-600">
+          <MarkdownViewer className="text-gray-600">
             No information has been provided for this assignment.
-          </ReactMarkdown>
+          </MarkdownViewer>
         )}
       </div>
       <BeginTheAssignmentButton

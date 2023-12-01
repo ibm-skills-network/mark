@@ -1,9 +1,8 @@
 // import MdEditor from "@uiw/react-md-editor";
+import dynamic from "next/dynamic";
 import { useState, type ComponentPropsWithoutRef } from "react";
 import rehypeSanitize from "rehype-sanitize";
 import { twMerge } from "tailwind-merge";
-import "@uiw/react-md-editor/markdown-editor.css";
-import dynamic from "next/dynamic";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
@@ -43,7 +42,6 @@ function MarkdownEditor(props: Props) {
   return (
     <>
       <MdEditor
-        data-color-mode="light"
         className={twMerge(className, "max-h-96")}
         preview="edit"
         height="100%"
