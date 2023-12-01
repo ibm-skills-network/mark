@@ -1,8 +1,9 @@
+// import MdEditor from "@uiw/react-md-editor";
 import { useState, type ComponentPropsWithoutRef } from "react";
-import ReactMarkdown from "react-markdown";
-import MdEditor from "react-markdown-editor-lite";
-import "react-markdown-editor-lite/lib/index.css";
+import rehypeSanitize from "rehype-sanitize";
 import { twMerge } from "tailwind-merge";
+import "@uiw/react-md-editor/markdown-editor.css";
+import dynamic from "next/dynamic";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
@@ -11,6 +12,9 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   textareaClassName?: string;
   maxWords?: number; // Introduced maxWords prop for word limit
 }
+const MdEditor = dynamic(() => import("@uiw/react-md-editor"), {
+  ssr: false,
+});
 
 function MarkdownEditor(props: Props) {
   const {
@@ -26,7 +30,7 @@ function MarkdownEditor(props: Props) {
     value?.split(/\s+/).filter(Boolean).length ?? 0
   );
 
-  const handleEditorChange = ({ text }: { text: string }) => {
+  const handleEditorChange = (text: string) => {
     setWordCount(text.split(/\s+/).filter(Boolean).length ?? 0);
     if (maxWords !== undefined && wordCount <= maxWords) {
       setValue(text);
@@ -39,19 +43,29 @@ function MarkdownEditor(props: Props) {
   return (
     <>
       <MdEditor
-        className={
-          className + " rounded-md border border-gray-300 overflow-hidden"
-        }
-        markdownClass={twMerge(
-          "focus:ring-0 focus:ring-offset-0 placeholder-gray-400 !text-base",
-          textareaClassName
-        )}
-        placeholder={placeholder}
+        data-color-mode="light"
+        className={twMerge(className, "max-h-96")}
+        preview="edit"
+        height="100%"
+        textareaProps={{
+          className: twMerge("placeholder-gray-400", textareaClassName),
+          placeholder,
+        }}
+        // markdownClass={twMerge(
+        //   "focus:ring-0 focus:ring-offset-0 placeholder-gray-400 !text-base",
+        //   textareaClassName
+        // )}
+        visibleDragbar={false}
         value={value}
-        renderHTML={(text) => <ReactMarkdown>{text}</ReactMarkdown>}
         onChange={handleEditorChange}
-        view={{ menu: true, md: true, html: false }}
-      />
+        previewOptions={{
+          rehypePlugins: [[rehypeSanitize]],
+          className: "whitespace-pre-wrap",
+        }}
+      >
+        {value}
+      </MdEditor>
+      {/* <ReactMarkdown className="prose">{value}</ReactMarkdown> */}
 
       {/* Word count display */}
       {maxWords !== undefined ? (

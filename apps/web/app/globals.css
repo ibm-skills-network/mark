@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* to overrride the default font size for the md editor */
+body .w-md-editor-text-pre > code,
+body .w-md-editor-text-input {
+  @apply !text-base;
+}
+
+body .w-md-editor-content {
+  min-height: 200px;
+}
+
 /* :root {
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;

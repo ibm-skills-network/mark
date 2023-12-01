@@ -103,8 +103,6 @@ export function IntroductionsectionId<T extends ElementType = "section">(
             value={value as string}
             setValue={setValue}
             placeholder={placeholder}
-            textareaClassName="!min-h-[6.5rem] !max-h-72"
-            className=" h-60"
           />
         ) : (
           <GradingOptionsForm

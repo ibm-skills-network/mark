@@ -131,7 +131,6 @@ function QuestionWrapper(props: TextBoxProps) {
           value={question.question}
           setValue={handleQuestionTextChange}
           placeholder="Type your question for the learner"
-          textareaClassName="!min-h-[6.5rem] !max-h-72"
           className="bg-gray-600"
         />
       </div>

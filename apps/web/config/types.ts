@@ -83,6 +83,13 @@ type Feedback = {
  */
 export type Choices = Record<string, boolean>;
 
+// type Choice = {
+//   choice: string;
+//   correct: boolean;
+// };
+
+// type NewChoices = Choice[];
+
 type QuestionResponse = {
   id: number;
   assignmentAttemptId: number;
