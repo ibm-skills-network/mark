@@ -56,7 +56,7 @@ function AuthorQuestionsPage(props: Props) {
     // if not, call the backend to get the assignment details
     console.log("assignmentId", assignmentId);
     if (assignmentId !== activeAssignmentId) {
-      (async () => {
+      const fetchAssignment = async () => {
         const assignment = await getAssignment(assignmentId);
         console.log("assignment", assignment);
         if (assignment) {
@@ -101,9 +101,8 @@ function AuthorQuestionsPage(props: Props) {
           toast.error("Failed to get assignment details");
           router.push("/");
         }
-      })().catch((err) => {
-        console.log("err", err);
-      });
+      }
+      void fetchAssignment();
     }
     //  if there are no questions, add one question to the store
     console.log("questions", questions);
