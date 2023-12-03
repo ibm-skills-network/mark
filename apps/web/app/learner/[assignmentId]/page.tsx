@@ -17,7 +17,7 @@ function Component(props: Props) {
   return (
     <>
       {/* if submission tims is within 10 seconds of now, show the submitted page, and it can't be greater than the current date in this page */}
-      {submissionTime && // TODO: fix this when done developing
+      {submissionTime &&
       currentDateInThisPage - submissionTimeInt < 10000 &&
       currentDateInThisPage > submissionTimeInt ? (
         <SuccessPage />

@@ -22,15 +22,13 @@ const BeginTheAssignment: FC<Props> = (props) => {
     //   </Button>
     // ) : (
     // it's either "not-started" or "in-progress"
-    <Tooltip
-      className=""
-      distance={3}
-      disabled={assignmentState !== "not-published"}
-      content="This assignment has not been published yet."
-    >
-      <div 
-        className={twMerge("", className)}
->
+    <div className={twMerge("", className)}>
+      <Tooltip
+        className=""
+        distance={3}
+        disabled={assignmentState !== "not-published"}
+        content="This assignment has not been published yet."
+      >
         <Link href={`/learner/${assignmentId}/questions`}>
           <Button
             className="group flex gap-x-2 disabled:opacity-50"
@@ -41,8 +39,8 @@ const BeginTheAssignment: FC<Props> = (props) => {
             <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />
           </Button>
         </Link>
-      </div>
-    </Tooltip>
+      </Tooltip>
+    </div>
   );
 };
 
