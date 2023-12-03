@@ -15,13 +15,13 @@ const Component: FC<Props> = (props) => {
   const questions = useAuthorStore((state) => state.questions);
   const disableButton =
     !questionsAreReadyToBePublished || submitting || questions?.length === 0;
-  let tooltipMessage = "bals";
+  let tooltipMessage = "";
   if (questions?.length === 0) {
-    tooltipMessage = "Please add questions";
+    tooltipMessage = "You need to add at least one question";
   } else if (!questionsAreReadyToBePublished) {
     tooltipMessage = "Some questions have incomplete fields";
   } else if (submitting) {
-    tooltipMessage = "Submitting questions";
+    tooltipMessage = "Submitting questions...";
   }
   return (
     <Tooltip disabled={!disableButton} content={tooltipMessage} distance={-2}>
