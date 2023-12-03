@@ -171,7 +171,7 @@ function AuthorHeader(props: Props) {
     // if (id === 2) updateAssignmentButtonRef.current?.click();
     switch (id) {
       case 2:
-        if (questionsAreReadyToBePublished) {
+        if (updateAssignmentButtonRef.current) {
           updateAssignmentButtonRef.current?.click();
         } else {
           // the state where the user is in the success page and clicks on the second step
