@@ -101,7 +101,7 @@ function AuthorQuestionsPage(props: Props) {
           toast.error("Failed to get assignment details");
           router.push("/");
         }
-      }
+      };
       void fetchAssignment();
     }
     //  if there are no questions, add one question to the store
@@ -218,7 +218,7 @@ function AuthorQuestionsPage(props: Props) {
               }
               rightStickySide={
                 <button
-                  disabled={questions.length <= 1}
+                  // disabled={questions.length <= 1}
                   className="inline-flex rounded-full border-gray-300 text-gray-500 border items-center justify-center w-11 h-11 text-2xl leading-5 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() =>
                     handleDeleteTextBox(question.alreadyInBackend, question.id)

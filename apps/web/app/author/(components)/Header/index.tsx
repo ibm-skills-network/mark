@@ -1,6 +1,5 @@
 "use client";
 
-import Spinner from "@/components/svgs/Spinner";
 import { replaceQuestion, updateAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
@@ -10,6 +9,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import SubmitQuestionsButton from "./SubmitQuestionsButton";
 
 interface Props {}
 
@@ -171,7 +171,13 @@ function AuthorHeader(props: Props) {
     // if (id === 2) updateAssignmentButtonRef.current?.click();
     switch (id) {
       case 2:
-        updateAssignmentButtonRef.current?.click();
+        if (questionsAreReadyToBePublished) {
+          updateAssignmentButtonRef.current?.click();
+        } else {
+          // the state where the user is in the success page and clicks on the second step
+          // this will redirect the user to the second step
+          router.push(`/author/${activeAssignmentId}/questions`);
+        }
         break;
       default:
         break;
@@ -255,14 +261,11 @@ function AuthorHeader(props: Props) {
         </nav>
         <div className="items-center flex justify-end gap-x-2.5">
           {getCurrentId() === 2 && (
-            <button
-              type="button"
-              disabled={!questionsAreReadyToBePublished || submitting}
-              onClick={handlePublishButton}
-              className="inline-flex transition-all leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 enabled:hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:opacity-50"
-            >
-              {submitting ? <Spinner className="w-8" /> : "Save & Publish"}
-            </button>
+            <SubmitQuestionsButton
+              handlePublishButton={handlePublishButton}
+              submitting={submitting}
+              questionsAreReadyToBePublished={questionsAreReadyToBePublished}
+            />
           )}
 
           <button

@@ -25,9 +25,9 @@ const Tooltip: FC<Props> = (props) => {
   function getClassNamesFromDirectionAndDistance() {
     switch (direction) {
       case "x":
-        return `left-[${distance}rem] ${classNamesFromXDistance()}`;
+        return classNamesFromXDistance();
       case "y":
-        return `bottom-[${distance}rem] ${classNamesFromYDistance()}`;
+        return classNamesFromYDistance();
     }
   }
   const classNamesFromXDistance = () => {
@@ -55,6 +55,11 @@ const Tooltip: FC<Props> = (props) => {
       <div className="relative flex items-center justify-center group/tooltip">
         {!disabled && (
           <span
+            style={
+              direction === "x"
+                ? { left: `${distance}rem` }
+                : { bottom: `${distance}rem` }
+            }
             className={twMerge(
               "absolute rounded-lg z-50 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-w-max group-hover/tooltip:scale-100",
               `group-hover/tooltip:delay-${delay}`,
