@@ -28,19 +28,20 @@ const BeginTheAssignment: FC<Props> = (props) => {
       disabled={assignmentState !== "not-published"}
       content="This assignment has not been published yet."
     >
-      <Link
-        href={`/learner/${assignmentId}/questions`}
+      <div 
         className={twMerge("", className)}
-      >
-        <Button
-          className="group flex gap-x-2 disabled:opacity-50"
-          disabled={assignmentState === "not-published"}
-        >
-          {assignmentState === "in-progress" ? "Resume " : "Begin "}the
-          Assignment
-          <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />
-        </Button>
-      </Link>
+>
+        <Link href={`/learner/${assignmentId}/questions`}>
+          <Button
+            className="group flex gap-x-2 disabled:opacity-50"
+            disabled={assignmentState === "not-published"}
+          >
+            {assignmentState === "in-progress" ? "Resume " : "Begin "}the
+            Assignment
+            <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />
+          </Button>
+        </Link>
+      </div>
     </Tooltip>
   );
 };
