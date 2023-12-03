@@ -4,11 +4,8 @@ import Tooltip from "@/components/Tooltip";
 import { LearnerAssignmentState } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
-import Button from "@learnerComponents/Button";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { type ComponentPropsWithoutRef, type MouseEvent } from "react";
-import ReactMarkdown from "react-markdown";
 import AssignmentMainInfo from "./AssignmentMainInfo";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 
@@ -21,6 +18,7 @@ async function AboutTheAssignment(props: Props) {
   const headerList = headers();
   const cookie = headerList.get("cookie");
   const assignment = await getAssignment(assignmentId, cookie);
+  console.log("assignment:", assignment);
   // go to the error page if the assignment is not found
   if (!assignment) {
     return (
