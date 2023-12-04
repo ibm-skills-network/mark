@@ -1,5 +1,4 @@
 import MarkdownViewer from "@/components/MarkdownViewer";
-import Spinner from "@/components/svgs/Spinner";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { getFeedbackColors } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -8,12 +7,11 @@ import {
   ArrowLongRightIcon,
 } from "@heroicons/react/24/outline";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
-import Button from "../Button";
 import QuestionScore from "../QuestionScore";
 import RenderQuestion from "./RenderQuestion";
+import SubmitQuestion from "./SubmitQuestion";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   // question: QuestionStore;
@@ -141,10 +139,10 @@ function Component(props: Props) {
       {/* Feedback section */}
       {mostRecentFeedback && (
         <div
-          className={
-            "border p-5 rounded-lg shadow-sm " +
+          className={twMerge(
+            "border p-5 rounded-lg shadow-sm",
             getFeedbackColors(mostRecentFeedback.points, totalPoints)
-          }
+          )}
         >
           <p className="text-center font-medium">
             <span className="font-bold">
@@ -167,13 +165,12 @@ function Component(props: Props) {
           Question {questionNumber - 1}
         </button>
 
-        <Button
-          disabled={attemptsRemaining === 0 || submitting}
-          className="disabled:opacity-50 transition-all"
-          onClick={handleSubmit}
-        >
-          {submitting ? <Spinner className="w-7 h-7" /> : "Submit Response"}
-        </Button>
+        <SubmitQuestion
+          question={question}
+          submitting={submitting}
+          handleSubmit={handleSubmit}
+          attemptsRemaining={attemptsRemaining}
+        />
         <button
           onClick={() => setActiveQuestionNumber(questionNumber + 1)}
           disabled={questionNumber === questions.length}
