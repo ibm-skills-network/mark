@@ -1,7 +1,7 @@
 import Tooltip from "@/components/Tooltip";
 import { useAssignmentDetails } from "@/stores/learner";
 import type { GradingData } from "@config/types";
-import { InformationCircleIcon } from "@heroicons/react/24/outline";
+import { QuestionMarkCircleIcon } from "@heroicons/react/24/solid";
 import type {
   ChangeEvent,
   ComponentPropsWithoutRef,
@@ -140,6 +140,9 @@ function GradingOptionsForm(props: Props) {
         >
           Time Limit
           <span className="text-gray-500 font-normal">(minutes)</span>
+          <Tooltip content="The amount of time a student has to complete this assignment.">
+            <QuestionMarkCircleIcon className="w-5 inline-block text-blue-500" />
+          </Tooltip>
         </label>
         <TimeLimitInputDropdown
           value={allotedTimeMinutes}
@@ -154,6 +157,9 @@ function GradingOptionsForm(props: Props) {
         >
           Time Estimate
           <span className="text-gray-500 font-normal">(minutes)</span>
+          <Tooltip content="The amount of time you think it will take a student to complete this assignment.">
+            <QuestionMarkCircleIcon className="w-5 inline-block text-blue-500" />
+          </Tooltip>
         </label>
         <input
           type="number"
@@ -173,7 +179,7 @@ function GradingOptionsForm(props: Props) {
         >
           Assignment Submissions Allowed
           <Tooltip content="The number of times a student can submit this assignment.">
-            <InformationCircleIcon className="w-5 inline-block text-blue-500" />
+            <QuestionMarkCircleIcon className="w-5 inline-block text-blue-500" />
           </Tooltip>
         </label>
         <select
@@ -198,8 +204,8 @@ function GradingOptionsForm(props: Props) {
           className="font-medium leading-5 flex gap-x-1"
         >
           Default Attempts for Each Question
-          <Tooltip content="the default number of times a student can retry each question in one submission">
-            <InformationCircleIcon className="w-5 inline-block text-blue-500" />
+          <Tooltip content="The default number of times a student can retry each question in one submission">
+            <QuestionMarkCircleIcon className="w-5 inline-block text-blue-500" />
           </Tooltip>
         </label>
         <select
@@ -207,7 +213,7 @@ function GradingOptionsForm(props: Props) {
           name="attempts"
           id="attempts"
           onChange={handleQuestionRetryChange}
-          value={value.questionRetries ?? -1}
+          value={value.questionRetries || -1}
         >
           <option value={1}>1</option>
           <option value={2}>2</option>
@@ -221,7 +227,7 @@ function GradingOptionsForm(props: Props) {
       <div className="flex flex-col gap-y-2">
         <label
           htmlFor="passingGrade"
-          className="font-medium leading-5 flex gap-x-1"
+          className="font-medium leading-5 flex gap-x-1 after:text-blue-400 after:content-['*']"
         >
           Passing Grade
           <span className="text-gray-500">(%)</span>
