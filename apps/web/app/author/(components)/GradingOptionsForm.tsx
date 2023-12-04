@@ -8,6 +8,7 @@ import type {
   Dispatch,
   SetStateAction,
 } from "react";
+import TimeLimitInputDropdown from "./TimeLimitInputDropdown";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   value: GradingData;
@@ -72,13 +73,16 @@ function GradingOptionsForm(props: Props) {
     }));
   }
 
+  function setAllotedTimeMinutes(minutes: number | null) {
+    setValue((prevValue) => ({
+      ...prevValue,
+      allotedTimeMinutes: minutes || null,
+    }));
+  }
   function handleAllotedTimeChange(e: ChangeEvent<HTMLInputElement>) {
     // e.preventDefault();
     console.log(e.target.value);
-    setValue((prevValue) => ({
-      ...prevValue,
-      allotedTimeMinutes: ~~e.target.value || null,
-    }));
+    setAllotedTimeMinutes(~~e.target.value || null);
   }
 
   return (
@@ -137,14 +141,9 @@ function GradingOptionsForm(props: Props) {
           Time Limit
           <span className="text-gray-500 font-normal">(minutes)</span>
         </label>
-        <input
-          type="number"
-          className="border border-gray-300 rounded-md h-12 p-4 w-full"
-          placeholder="ex. 60"
-          min={0}
-          step={5}
-          onChange={handleAllotedTimeChange}
+        <TimeLimitInputDropdown
           value={allotedTimeMinutes}
+          setAllotedTimeMinutes={setAllotedTimeMinutes}
         />
       </div>
 

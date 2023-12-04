@@ -21,7 +21,7 @@ const Component: FC<Props> = (props) => {
   } else if (!questionsAreReadyToBePublished) {
     tooltipMessage = "Some questions have incomplete fields";
   } else if (submitting) {
-    tooltipMessage = "Submitting questions...";
+    tooltipMessage = "Mark is analyzing your questions...";
   }
   return (
     <Tooltip disabled={!disableButton} content={tooltipMessage} distance={-2}>
