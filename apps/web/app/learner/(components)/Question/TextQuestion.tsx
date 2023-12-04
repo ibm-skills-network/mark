@@ -14,19 +14,12 @@ function TextQuestion(props: Props) {
     state.setTextResponse,
   ]);
 
-  // const maxWords = assignmentDetails?.;
-  // useEffect(() => {
-  //   useLearnerStore.subscribe((state) => {
-  //     console.log("state.questions", state.questions);
-  //     setText(state.questions[activeQuestionNumber - 1]?.learnerTextResponse);
-  //   });
-  // }, [activeQuestionNumber]);
+  const question = questions[activeQuestionNumber - 1];
 
-  // TODO: get this from the backend
-  const maxWords = 1000;
+  const maxWords = question?.maxWords || null;
   return (
     <MarkdownEditor
-      value={questions[activeQuestionNumber - 1]?.learnerTextResponse || ""}
+      value={question?.learnerTextResponse || ""}
       // update status
       setValue={(value) => setTextResponse(value)}
       placeholder="Type your answer here"
