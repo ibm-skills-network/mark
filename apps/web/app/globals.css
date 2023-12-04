@@ -10,7 +10,7 @@ body .w-md-editor-text-input {
 
 /* For the markdown editor to still show in preview mode (bug in the library) */
 body .w-md-editor-content {
-  min-height: 200px;
+  min-height: 150px;
 }
 
 /* for the Markdown parser to display lists correctly */
