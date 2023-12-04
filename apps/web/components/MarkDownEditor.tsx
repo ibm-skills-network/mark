@@ -1,4 +1,4 @@
-// import MdEditor from "@uiw/react-md-editor";
+import { getWordCount } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import { useState, type ComponentPropsWithoutRef } from "react";
 import rehypeSanitize from "rehype-sanitize";
@@ -9,7 +9,7 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   setValue: (value: string) => void;
   placeholder?: string;
   textareaClassName?: string;
-  maxWords?: number; // Introduced maxWords prop for word limit
+  maxWords?: number | null;
 }
 const MdEditor = dynamic(() => import("@uiw/react-md-editor"), {
   ssr: false,
@@ -30,10 +30,10 @@ function MarkdownEditor(props: Props) {
   );
 
   const handleEditorChange = (text: string) => {
-    setWordCount(text.split(/\s+/).filter(Boolean).length ?? 0);
-    if (maxWords !== undefined && wordCount <= maxWords) {
+    setWordCount(getWordCount(text));
+    if (maxWords && wordCount <= maxWords) {
       setValue(text);
-    } else if (maxWords === undefined) {
+    } else if (!maxWords) {
       setValue(text);
     }
     setValue(text); // Temporary
@@ -49,10 +49,6 @@ function MarkdownEditor(props: Props) {
           className: twMerge("placeholder-gray-400", textareaClassName),
           placeholder,
         }}
-        // markdownClass={twMerge(
-        //   "focus:ring-0 focus:ring-offset-0 placeholder-gray-400 !text-base",
-        //   textareaClassName
-        // )}
         visibleDragbar={false}
         value={value}
         onChange={handleEditorChange}
@@ -66,7 +62,7 @@ function MarkdownEditor(props: Props) {
       {/* <ReactMarkdown className="prose">{value}</ReactMarkdown> */}
 
       {/* Word count display */}
-      {maxWords !== undefined ? (
+      {maxWords ? (
         <div
           className={`${
             wordCount > maxWords ? "text-red-500" : "text-gray-400"
