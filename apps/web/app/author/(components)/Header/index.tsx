@@ -268,13 +268,13 @@ function AuthorHeader(props: Props) {
             />
           )}
 
-          <button
-            onClick={() => alert("Coming soon!")}
+          {/* Add this back if we wanna have learner view for the authors */}
+          {/* <button
             className="inline-flex items-center px-4 py-2 border border-transparent leading-6 font-medium rounded-md text-blue-700 hover:text-blue-500 bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
           >
             <EyeIcon className="h-5 w-5 mr-2" aria-hidden="true" />
             Learner View
-          </button>
+          </button> */}
         </div>
       </header>
       {/* table of contents */}
