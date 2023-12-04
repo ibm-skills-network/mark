@@ -1,16 +1,5 @@
 "use client";
 
-// COMMENT: this is the component where we show written question for the author
-// this contains "points", and the "rubric table"
-
-// import { Listbox, Menu, RadioGroup, Transition } from "@headlessui/react";
-// import {
-//   CheckCircleIcon,
-//   CheckIcon,
-//   ChevronDownIcon,
-//   PencilIcon,
-//   ViewListIcon,
-// } from "@heroicons/react/solid";
 import { useAuthorStore } from "@/stores/author";
 import { type ChangeEvent } from "react";
 import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
@@ -37,37 +26,11 @@ function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
       numRetries: ~~e.target.value,
     });
   }
-
-  // COMMENT: here's the state and helper function we use to control the row of the rubric table
-  // const [rubrics, setRubrics] = useState(initialRubrics);
-  // var maxLength = 1;
-  // const handleAddRow = () => {
-  // Calculate the index for the new row
-  // if (maxLength < rubrics.length + 1) {
-  //   maxLength = rubrics.length + 1;
-  // }
-  // Create a new row object with dynamic criteria
-  // const newRow = {
-  //   key: maxLength,
-  //   criteria: `New Criteria`,
-  //   judgement: "",
-  //   rate: "",
-  //   weight: "",
-  // };
-
-  // Add the new row to the initialRubrics array
-  // setRubrics([...rubrics, newRow]);
-  // };
-
-  // const handleDeleteRow = (index) => {
-  //   if (rubrics.length === 1) {
-  //     alert("You only have one criteria, so you cannot delete it.");
-  //     return;
-  //   }
-
-  //   const updatedRubrics = rubrics.filter((_, i) => i !== index);
-  //   setRubrics(updatedRubrics);
-  // };
+  function handleMaxWordCountChange(e: ChangeEvent<HTMLInputElement>) {
+    modifyQuestion(questionId, {
+      maxWords: ~~e.target.value || null,
+    });
+  }
   return (
     <>
       <div className="grid grid-cols-2 gap-x-16">
@@ -75,7 +38,12 @@ function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
           retries={question?.numRetries ?? -1}
           handleRetryChange={handleQuestionRetryChange}
         />
-        {!isUrl && <WordCountComponent text="Maximum Word Count " />}
+        {!isUrl && (
+          <WordCountComponent
+            maxWords={question?.maxWords || null}
+            handleMaxWordCountChange={handleMaxWordCountChange}
+          />
+        )}
       </div>
       <div className="bg-indigo-100 px-8 flex gap-x-4 py-4 -mx-12">
         <svg

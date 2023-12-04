@@ -250,7 +250,7 @@ function AuthorQuestionsPage(props: Props) {
           className="mx-auto rounded-full bg-blue-700 p-2 text-white shadow-sm hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           onClick={handleAddTextBox}
         >
-          <PlusIcon className="h-5 w-5" aria-hidden="true" />
+          <PlusIcon className="h-6 w-6" aria-hidden="true" />
         </button>
       </div>
     </>
