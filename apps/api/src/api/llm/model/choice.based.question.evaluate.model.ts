@@ -41,7 +41,7 @@ export class ChoiceBasedQuestionEvaluateModel
     let penaltyPoints = 0;
 
     const totalCorrectChoices = this.validChoices.filter(
-      (c) => c.correct
+      (c) => c.isCorrect
     ).length;
     const penaltyPerIncorrect =
       totalCorrectChoices > 0
@@ -54,7 +54,7 @@ export class ChoiceBasedQuestionEvaluateModel
       );
 
       if (matchingChoice) {
-        if (matchingChoice.correct) {
+        if (matchingChoice.isCorrect) {
           pointsEarned += matchingChoice.points;
         } else {
           penaltyPoints += penaltyPerIncorrect;

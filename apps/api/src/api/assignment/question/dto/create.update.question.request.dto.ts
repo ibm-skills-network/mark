@@ -55,7 +55,7 @@ export class Choice {
   choice: string;
   @IsNotEmpty()
   @IsBoolean()
-  correct: boolean;
+  isCorrect: boolean;
   @IsNotEmpty()
   @IsNumber()
   points: number;
