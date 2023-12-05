@@ -30,10 +30,11 @@ export class QuestionService {
     const scoring = createQuestionRequestDto.scoring
       ? (createQuestionRequestDto.scoring as object)
       : undefined;
-    const choices =
-      (JSON.parse(
-        JSON.stringify(createQuestionRequestDto.choices)
-      ) as Prisma.InputJsonValue) || Prisma.JsonNull;
+    const choices = createQuestionRequestDto.choices
+      ? (JSON.parse(
+          JSON.stringify(createQuestionRequestDto.choices)
+        ) as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
     const result = await this.prisma.question.create({
       data: {
         assignmentId: assignmentId,
@@ -78,10 +79,11 @@ export class QuestionService {
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring = (updateQuestionRequestDto.scoring as object) || undefined;
-    const choices =
-      (JSON.parse(
-        JSON.stringify(updateQuestionRequestDto.choices)
-      ) as Prisma.InputJsonValue) || Prisma.JsonNull;
+    const choices = updateQuestionRequestDto.choices
+      ? (JSON.parse(
+          JSON.stringify(updateQuestionRequestDto.choices)
+        ) as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
     const result = await this.prisma.question.update({
       where: { id },
       data: {
@@ -108,10 +110,11 @@ export class QuestionService {
       (updateQuestionRequestDto.scoring as object) || Prisma.JsonNull;
     // eslint-disable-next-line unicorn/no-null
     const answer = updateQuestionRequestDto.answer || null;
-    const choices =
-      (JSON.parse(
-        JSON.stringify(updateQuestionRequestDto.choices)
-      ) as Prisma.InputJsonValue) || Prisma.JsonNull;
+    const choices = updateQuestionRequestDto.choices
+      ? (JSON.parse(
+          JSON.stringify(updateQuestionRequestDto.choices)
+        ) as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
 
     const result = await this.prisma.question.update({
       where: { id },
