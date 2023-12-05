@@ -418,12 +418,7 @@ export class AttemptService {
         break;
       }
       case QuestionType.TRUE_FALSE: {
-        if (
-          createQuestionResponseAttemptRequestDto.learnerAnswerChoice ===
-            null ||
-          createQuestionResponseAttemptRequestDto.learnerAnswerChoice ===
-            undefined
-        ) {
+        if (!createQuestionResponseAttemptRequestDto.learnerAnswerChoice) {
           throw new BadRequestException(
             "Expected a true-false-based response (learnerAnswerChoice), but did not receive one."
           );

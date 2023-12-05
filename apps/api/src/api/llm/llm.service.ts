@@ -100,13 +100,8 @@ export class LlmService {
   async gradeTrueFalseBasedQuestion(
     trueFalseBasedQuestionEvaluateModel: TrueFalseBasedQuestionEvaluateModel
   ): Promise<TrueFalseBasedQuestionResponseModel> {
-    const {
-      question,
-      answer,
-      learnerChoice,
-      assignmentInstrctions,
-      previousQuestionsAnswersContext,
-    } = trueFalseBasedQuestionEvaluateModel;
+    const { question, answer, learnerChoice, totalPoints } =
+      trueFalseBasedQuestionEvaluateModel;
 
     let pointsEarned = 0;
 
@@ -138,10 +133,6 @@ export class LlmService {
         question: question,
         learner_choice: JSON.stringify(learnerChoice),
         answer: JSON.stringify(answer),
-        previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext
-        ),
-        assignment_instructions: assignmentInstrctions,
         format_instructions: formatInstructions,
       },
     });
