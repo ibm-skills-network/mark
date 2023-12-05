@@ -1,3 +1,4 @@
+import { Choice } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import {
   BaseQuestionEvaluateModel,
   QuestionAnswerContext,
@@ -7,7 +8,7 @@ export class ChoiceBasedQuestionEvaluateModel
   implements BaseQuestionEvaluateModel
 {
   readonly question: string;
-  readonly validChoices: Record<string, boolean>;
+  readonly validChoices: Choice[];
   readonly learnerChoices: string[];
   readonly totalPoints: number;
   readonly scoringCriteriaType?: string;
@@ -19,7 +20,7 @@ export class ChoiceBasedQuestionEvaluateModel
     question: string,
     previousQuestionsAnswersContext: QuestionAnswerContext[],
     assignmentInstrctions: string,
-    validChoices: Record<string, boolean>,
+    validChoices: Choice[],
     learnerChoices: string[],
     totalPoints: number,
     scoringCriteriaType?: string,
@@ -36,24 +37,34 @@ export class ChoiceBasedQuestionEvaluateModel
   }
 
   evaluatePoints(): number {
-    // Count the number of valid choices
-    const totalValidChoices = Object.values(this.validChoices).filter(
-      Boolean
-    ).length;
-
-    // Calculate points per valid choice
-    const pointsPerChoice = this.totalPoints / totalValidChoices;
-
     let pointsEarned = 0;
+    let penaltyPoints = 0;
 
-    for (const choice of this.learnerChoices) {
-      // If the learner's choice is correct, increment the score count proportionally
-      if (this.validChoices[choice]) {
-        pointsEarned += pointsPerChoice;
+    const totalCorrectChoices = this.validChoices.filter(
+      (c) => c.correct
+    ).length;
+    const penaltyPerIncorrect =
+      totalCorrectChoices > 0
+        ? this.totalPoints / (4 * totalCorrectChoices)
+        : 0;
+
+    for (const learnerChoice of this.learnerChoices) {
+      const matchingChoice = this.validChoices.find(
+        (c) => c.choice === learnerChoice
+      );
+
+      if (matchingChoice) {
+        if (matchingChoice.correct) {
+          pointsEarned += matchingChoice.points;
+        } else {
+          penaltyPoints += penaltyPerIncorrect;
+        }
       }
     }
 
-    // Return the total points earned, rounded to avoid floating point errors
-    return Math.round(pointsEarned);
+    let totalScore = pointsEarned - penaltyPoints;
+    totalScore = totalScore < 0 ? 0 : totalScore; // Ensure no negative score
+
+    return totalScore;
   }
 }

@@ -9,6 +9,7 @@ import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import {
+  Choice,
   CreateUpdateQuestionRequestDto,
   Scoring,
 } from "./dto/create.update.question.request.dto";
@@ -29,11 +30,16 @@ export class QuestionService {
     const scoring = createQuestionRequestDto.scoring
       ? (createQuestionRequestDto.scoring as object)
       : undefined;
+    const choices =
+      (JSON.parse(
+        JSON.stringify(createQuestionRequestDto.choices)
+      ) as Prisma.InputJsonValue) || Prisma.JsonNull;
     const result = await this.prisma.question.create({
       data: {
         assignmentId: assignmentId,
         ...createQuestionRequestDto,
-        scoring: scoring,
+        scoring,
+        choices,
       },
     });
 
@@ -58,7 +64,7 @@ export class QuestionService {
         ? (result.scoring as unknown as Scoring)
         : undefined,
       choices: result.choices
-        ? (result.choices as Record<string, boolean>)
+        ? (result.choices as unknown as Choice[])
         : undefined,
       assignmentId: result.assignmentId,
       success: true,
@@ -72,12 +78,17 @@ export class QuestionService {
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring = (updateQuestionRequestDto.scoring as object) || undefined;
+    const choices =
+      (JSON.parse(
+        JSON.stringify(updateQuestionRequestDto.choices)
+      ) as Prisma.InputJsonValue) || Prisma.JsonNull;
     const result = await this.prisma.question.update({
       where: { id },
       data: {
         assignmentId: assignmentId,
         ...updateQuestionRequestDto,
         scoring,
+        choices,
       },
     });
 
@@ -97,7 +108,10 @@ export class QuestionService {
       (updateQuestionRequestDto.scoring as object) || Prisma.JsonNull;
     // eslint-disable-next-line unicorn/no-null
     const answer = updateQuestionRequestDto.answer || null;
-    const choices = updateQuestionRequestDto.choices || Prisma.JsonNull;
+    const choices =
+      (JSON.parse(
+        JSON.stringify(updateQuestionRequestDto.choices)
+      ) as Prisma.InputJsonValue) || Prisma.JsonNull;
 
     const result = await this.prisma.question.update({
       where: { id },

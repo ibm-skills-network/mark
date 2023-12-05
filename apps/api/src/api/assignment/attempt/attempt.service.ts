@@ -458,7 +458,7 @@ export class AttemptService {
             question.question,
             assignmentContext.questionAnswerContext,
             assignmentContext.assignmentInstructions,
-            question.choices ?? {},
+            question.choices ?? [],
             createQuestionResponseAttemptRequestDto.learnerChoices,
             question.totalPoints,
             question.scoring?.type,
