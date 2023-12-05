@@ -56,14 +56,15 @@ function AuthorHeader(props: Props) {
           // disable publish button if choices is not filled out
           return false;
         }
-        const keys = Object.keys(choices);
-        const choicesFilledOut = keys.every((key) => {
-          return key?.trim().length > 0;
+
+        const choicesFilledOut = choices.every((choice) => {
+          return choice.choice?.trim().length > 0;
         });
-        const isTwoOrMoreChoices = keys.length >= 2;
-        const isAtLeastOneCorrectChoice = keys.some((key) => {
-          return choices[key];
-        });
+        const isTwoOrMoreChoices = choices.length >= 2;
+        const isAtLeastOneCorrectChoice = choices.some(
+          (choice) => choice.isCorrect
+        );
+
         if (
           !choicesFilledOut ||
           !isTwoOrMoreChoices ||

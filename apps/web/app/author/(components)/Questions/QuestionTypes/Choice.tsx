@@ -1,20 +1,20 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { type ComponentPropsWithoutRef } from "react";
+import { type ComponentPropsWithoutRef, type ChangeEvent } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"li"> {
   index: number;
   choice: string;
   isChecked: boolean;
-  toggleChoice: (selected: string) => void;
+  toggleChoice: (choiceIndex: number) => void;
   modifyChoice: (index: number, value: string) => void;
-  removeChoice: (choice: string) => void;
+  removeChoice: (choiceIndex: number) => void;
 }
 
 function Component(props: Props) {
   const { index, choice, isChecked, toggleChoice, modifyChoice, removeChoice } =
     props;
 
-  function handleChoiceTextChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleChoiceTextChange(event: ChangeEvent<HTMLInputElement>) {
     modifyChoice(index, event.target.value);
   }
 
@@ -25,7 +25,7 @@ function Component(props: Props) {
         className="rounded"
         id={index.toString()}
         checked={isChecked}
-        onChange={() => toggleChoice(choice)}
+        onChange={() => toggleChoice(index)}
       />
       <input
         className="w-full overflow-hidden !border-transparent transition hover:!border-b-gray-300 focus:!border-b-gray-600 !ring-0 p-2 text-black outline-none"
@@ -36,7 +36,7 @@ function Component(props: Props) {
       <button
         className=" text-red-600"
         onClick={() => {
-          removeChoice(choice);
+          removeChoice(index);
         }}
       >
         <XMarkIcon className="w-6" />

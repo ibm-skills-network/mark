@@ -81,14 +81,11 @@ type Feedback = {
 /**
  * used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
  */
-export type Choices = Record<string, boolean>;
-
-// type Choice = {
-//   choice: string;
-//   correct: boolean;
-// };
-
-// type NewChoices = Choice[];
+export type Choice = {
+  choice: string;
+  isCorrect: boolean;
+  points: number;
+};
 
 type QuestionResponse = {
   id: number;
@@ -124,7 +121,7 @@ export interface CreateQuestionRequest extends BaseQuestion {
   // used if question type is TRUE_FALSE
   answer?: boolean;
   // used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
-  choices?: Choices;
+  choices?: Choice[];
 }
 
 // TODO: merge this and the one below

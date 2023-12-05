@@ -38,9 +38,13 @@ function Section(props: sectionProps) {
   useEffect(() => {
     // if choices is empty, add a default choice
     if (!choices) {
-      setChoices(questionId, {
-        "": false,
-      });
+      setChoices(questionId, [
+        {
+          choice: "",
+          isCorrect: false,
+          points: 1,
+        }
+      ]);
     }
   }, []);
   const [parent, enableAnimations] = useAutoAnimate();
@@ -51,21 +55,21 @@ function Section(props: sectionProps) {
   const keys = Object.keys(choices);
   const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
 
-  function handleChoiceToggle(choiceId: string) {
-    toggleChoice(questionId, choiceId);
+  function handleChoiceToggle(choiceIndex: number) {
+    toggleChoice(questionId, choiceIndex);
   }
 
-  function handleChoiceChange(choiceId: number, value: string) {
-    console.log("handleChoiceChange", choiceId, value);
-    modifyChoice(questionId, choiceId, value);
+  function handleChoiceChange(choiceIndex: number, value: string) {
+    console.log("handleChoiceChange", choiceIndex, value);
+    modifyChoice(questionId, choiceIndex, value);
   }
 
   function handleAddChoice() {
     addChoice(questionId);
   }
 
-  function handleRemoveChoice(choice: string) {
-    removeChoice(questionId, choice);
+  function handleRemoveChoice(choiceIndex: number) {
+    removeChoice(questionId, choiceIndex);
   }
 
   function handleChangePoints(e: ChangeEvent<HTMLInputElement>) {
@@ -77,9 +81,6 @@ function Section(props: sectionProps) {
       numRetries: ~~e.target.value,
     });
   }
-  // convert the choices map to an array of [choice, isChecked] tuples
-  // const choicesEntries = Array.from(choices.entries());
-
   return (
     <div className="pt-4 flex flex-col gap-y-2">
       <div className="flex gap-x-6">
@@ -113,12 +114,12 @@ function Section(props: sectionProps) {
       <label className="font-medium leading-5 text-gray-800">Choices</label>
       {/* loop throug the key value object */}
       <ul ref={parent} className="">
-        {Object.entries(choices).map(([choice, isChecked], index) => (
+        {choices.map((choice, index) => (
           <Choice
             key={index}
             index={index}
-            choice={choice}
-            isChecked={isChecked}
+            choice={choice.choice}
+            isChecked={choice.isCorrect}
             modifyChoice={handleChoiceChange}
             toggleChoice={handleChoiceToggle}
             removeChoice={handleRemoveChoice}
