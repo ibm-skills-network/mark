@@ -12,7 +12,6 @@ import {
   ChoiceBasedFeedbackDto,
   CreateQuestionResponseAttemptResponseDto,
   GeneralFeedbackDto,
-  TrueFalseBasedFeedbackDto,
 } from "../dto/question-response/create.question.response.attempt.response.dto";
 
 interface UploadedFile {
@@ -32,13 +31,6 @@ export const AttemptHelper = {
     responseDto.totalPoints = model.points;
     if (model instanceof ChoiceBasedQuestionResponseModel) {
       responseDto.feedback = model.feedback as ChoiceBasedFeedbackDto[];
-    } else if (model instanceof TrueFalseBasedQuestionResponseModel) {
-      responseDto.feedback = [
-        {
-          choice: model.choice,
-          feedback: model.feedback,
-        },
-      ] as TrueFalseBasedFeedbackDto[];
     } else {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
