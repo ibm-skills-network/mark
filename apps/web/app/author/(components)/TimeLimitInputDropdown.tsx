@@ -50,30 +50,37 @@ const Component: FC<Props> = (props) => {
             (isOpen ? " rounded-t-md ring-blue-600 ring-1" : " rounded-md")
           }
         >
-          <p
+          {/* <p
             className={
               "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm text-left leading-5 transition-colors font-medium text-gray-700"
             }
-          >
-            {value ? (
-              isOpen ? (
-                <input
-                  type="number"
-                  placeholder="ex. 60"
-                  min={0}
-                  step={5}
-                  value={tempValue ?? ""}
-                  onChange={(e) => setTempValue(Number(e.target.value) || null)}
-                  onBlur={() => setAllotedTimeMinutes(tempValue || null)}
-                  className="w-full h-full bg-gray-100 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
-                />
-              ) : (
-                `${value} minute${value > 1 ? "s" : ""}`
-              )
+          > */}
+          {value ? (
+            isOpen ? (
+              <input
+                type="number"
+                placeholder="ex. 60"
+                min={0}
+                step={5}
+                value={tempValue ?? ""}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    // blur the input field to save the value then close the dropdown
+                    event.currentTarget.blur();
+                    toggleDropdown();
+                  }                  
+                }}
+                onChange={(e) => setTempValue(Number(e.target.value) || null)}
+                onBlur={() => setAllotedTimeMinutes(tempValue || null)}
+                className="w-full h-full bg-gray-100 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
+              />
             ) : (
-              "No time limit"
-            )}
-          </p>
+              <p className="whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm text-left leading-5 transition-colors font-medium text-gray-700">{value} minute{value > 1 ? "s" : ""}</p>
+            )
+          ) : (
+            "No time limit"
+          )}
+          {/* </p> */}
 
           <svg
             className={"transition " + (isOpen ? "rotate-180" : "")}
@@ -119,6 +126,12 @@ const Component: FC<Props> = (props) => {
               min={0}
               step={5}
               value={tempValue ?? ""}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  // blur the input field so the dropdown closes
+                  event.currentTarget.blur();
+                }
+              }}
               onChange={(e) => setTempValue(Number(e.target.value) || null)}
               onBlur={() => setAllotedTimeMinutes(tempValue || null)}
               className="w-full h-full bg-gray-100 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
