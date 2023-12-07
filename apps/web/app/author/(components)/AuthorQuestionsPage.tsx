@@ -121,6 +121,10 @@ function AuthorQuestionsPage(props: Props) {
       },
     };
     const questionId = await createQuestion(assignmentId, question);
+    if (!questionId) {
+      toast.error("Failed to add question");
+      return;
+    }
     addQuestion({
       ...question,
       question: "",
