@@ -146,6 +146,7 @@ function AuthorHeader(props: Props) {
       ); // add the submissionTime query param to the url
     } else {
       toast.error(`Couldn't publish all questions. Please try again.`);
+      setSubmitting(false);
     }
   }
 
