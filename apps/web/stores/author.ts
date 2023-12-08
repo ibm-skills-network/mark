@@ -31,7 +31,7 @@ export type AuthorActions = {
   modifyChoice: (
     questionId: number,
     choiceIndex: number,
-    modifiedData: string
+    modifiedData: Partial<Choice>
   ) => void;
   setPoints: (questionId: number, points: number) => void;
 };
@@ -136,7 +136,7 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
           if (q.id === questionId) {
             return {
               ...q,
-              choices: [...q.choices, { choice, isCorrect: false, points: 1 }],
+              choices: [...q.choices, { choice, isCorrect: false, points: 0 }],
             };
           }
           return q;
@@ -189,7 +189,7 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
               if (index === choiceIndex) {
                 return {
                   ...choice,
-                  choice: modifiedData,
+                  ...modifiedData,
                 };
               }
               return choice;

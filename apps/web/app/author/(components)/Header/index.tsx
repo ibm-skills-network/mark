@@ -58,7 +58,7 @@ function AuthorHeader(props: Props) {
         }
 
         const choicesFilledOut = choices.every((choice) => {
-          return choice.choice?.trim().length > 0;
+          return choice?.choice?.trim().length > 0;
         });
         const isTwoOrMoreChoices = choices.length >= 2;
         const isAtLeastOneCorrectChoice = choices.some(
@@ -97,7 +97,10 @@ function AuthorHeader(props: Props) {
           delete criteria.id;
         });
       } else if (dataToSend.type === "MULTIPLE_CORRECT") {
-        console.log("dataToSend.choices", dataToSend.choices);
+        dataToSend.totalPoints = dataToSend.choices?.reduce(
+          (acc, curr) => acc + curr.points,
+          0
+        ); // sum up all the points
         dataToSend.scoring = null; // scoring is not needed for multiple correct
       }
       // if numRetries is -1 (unlimited), set it to null
