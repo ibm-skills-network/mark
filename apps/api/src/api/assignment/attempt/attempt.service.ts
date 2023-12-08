@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { QuestionResponse, QuestionType } from "@prisma/client";
+import { Prisma, QuestionResponse, QuestionType } from "@prisma/client";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { TrueFalseBasedQuestionEvaluateModel } from "../../../api/llm/model/true.false.based.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
@@ -19,6 +19,7 @@ import { LlmService } from "../../llm/llm.service";
 import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
+import { Choice } from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
@@ -302,6 +303,10 @@ export class AttemptService {
         (response) => response.questionId === question.id
       );
 
+      const choices = question.choices
+        ? (JSON.parse(JSON.stringify(question.choices)) as Choice[])
+        : undefined;
+
       return {
         id: question.id,
         totalPoints: question.totalPoints,
@@ -309,7 +314,7 @@ export class AttemptService {
         maxWords: question.maxWords,
         type: question.type,
         question: question.question,
-        choices: question.choices ? Object.keys(question.choices) : undefined,
+        choices: choices,
         questionResponses:
           correspondingResponses.length > 0 ? correspondingResponses : [],
       };

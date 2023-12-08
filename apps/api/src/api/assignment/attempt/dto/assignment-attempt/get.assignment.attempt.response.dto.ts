@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionResponse, QuestionType } from "@prisma/client";
+import { Type } from "class-transformer";
+import { Choice } from "../../../../../api/assignment/question/dto/create.update.question.request.dto";
 
 export class AssignmentAttemptResponseDto {
   @ApiProperty({
@@ -91,10 +93,12 @@ class AssignmentAttemptQuestions {
   question: string;
 
   @ApiPropertyOptional({
-    description: "The choices for the question.",
-    type: [String],
+    description:
+      'The choices for the question (if the Question Type is "SINGLE_CORRECT" or "MULTIPLE_CORRECT").',
+    type: [Choice], // Use an array of Choice
   })
-  choices: string[];
+  @Type(() => Choice)
+  choices?: Choice[];
 
   @ApiPropertyOptional({
     description: "The max number of words allowed for this question.",
