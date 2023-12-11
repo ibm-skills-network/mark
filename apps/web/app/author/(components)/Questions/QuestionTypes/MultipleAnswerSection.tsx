@@ -59,10 +59,6 @@ function Section(props: sectionProps) {
   const keys = Object.keys(choices);
   const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
 
-  function handleChoiceToggle(choiceIndex: number) {
-    toggleChoice(questionId, choiceIndex);
-  }
-
   function handleChoiceChange(choiceIndex: number, choice: Partial<ChoiceType>) {
     console.log("handleChoiceChange", choiceIndex, choice);
     modifyChoice(questionId, choiceIndex, choice);
@@ -74,10 +70,6 @@ function Section(props: sectionProps) {
 
   function handleRemoveChoice(choiceIndex: number) {
     removeChoice(questionId, choiceIndex);
-  }
-
-  function handleChangePoints(e: ChangeEvent<HTMLInputElement>) {
-    setPoints(questionId, parseInt(e.target.value));
   }
 
   function handleChangeChoicePoints(choiceIndex: number, points: number) {
@@ -93,6 +85,23 @@ function Section(props: sectionProps) {
       numRetries: ~~e.target.value,
     });
   }
+
+  function handleChoiceToggle(choiceIndex: number) {
+    // check if the choice is correct
+    // if it is, then that means that the user is trying to uncheck it
+    // in that case, we need to also return the points to 0
+    const choice = choices[choiceIndex];
+    console.log("handleChoiceToggle", choice);
+    const { isCorrect } = choice;
+    if (isCorrect) {
+      // set the points to 0
+      // this experience could be improved by getting back the points that the user had before
+      handleChangeChoicePoints(choiceIndex, 0);
+    }
+    toggleChoice(questionId, choiceIndex);
+  }
+
+
   return (
     <div className="flex flex-col gap-y-6">
       <div className="grid grid-cols-2 gap-x-16">
