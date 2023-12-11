@@ -1,6 +1,6 @@
+import { PlusIcon } from "@heroicons/react/24/solid";
 import { type ComponentPropsWithoutRef, type FC, type ReactNode } from "react";
 import { twMerge } from "tailwind-merge";
-import { PlusIcon } from "@heroicons/react/24/solid";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   children: ReactNode;
@@ -57,7 +57,7 @@ const Tooltip: FC<Props> = (props) => {
                 className="focus:outline-none rounded-full p-1 hover:text-gray-300 disabled:text-gray-500"
                 onClick={incrementPoints}
               >
-                <PlusIcon  className="w-6" strokeWidth={3} />
+                <PlusIcon className="w-6" strokeWidth={3} />
               </button>
             </div>
           </div>

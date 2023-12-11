@@ -68,14 +68,16 @@ const Component: FC<Props> = (props) => {
                     // blur the input field to save the value then close the dropdown
                     event.currentTarget.blur();
                     toggleDropdown();
-                  }                  
+                  }
                 }}
                 onChange={(e) => setTempValue(Number(e.target.value) || null)}
                 onBlur={() => setAllotedTimeMinutes(tempValue || null)}
                 className="w-full h-full bg-gray-100 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
               />
             ) : (
-              <p className="whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm text-left leading-5 transition-colors font-medium text-gray-700">{value} minute{value > 1 ? "s" : ""}</p>
+              <p className="whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm text-left leading-5 transition-colors font-medium text-gray-700">
+                {value} minute{value > 1 ? "s" : ""}
+              </p>
             )
           ) : (
             "No time limit"

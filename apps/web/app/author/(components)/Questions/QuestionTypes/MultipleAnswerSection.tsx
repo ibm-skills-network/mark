@@ -1,12 +1,12 @@
 "use client";
 
+import { Choice as ChoiceType } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import React, { useEffect, useState, type ChangeEvent } from "react";
+import { toast } from "sonner";
 import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import Choice from "./Choice";
-import {toast } from "sonner";
-import { Choice as ChoiceType } from "@/config/types";
 
 interface sectionProps {
   questionId: number;
@@ -35,7 +35,8 @@ function Section(props: sectionProps) {
     state.setPoints,
   ]);
 
-  const numOfTimeSuggestionHasBeenShown = ~~localStorage.getItem('numOfTimeSuggestionHasBeenShown') || 0;
+  const numOfTimeSuggestionHasBeenShown =
+    ~~localStorage.getItem("numOfTimeSuggestionHasBeenShown") || 0;
 
   const question = questions.find((question) => question.id === questionId);
   const { choices, totalPoints: points, numRetries: retries } = question;
@@ -59,7 +60,10 @@ function Section(props: sectionProps) {
   const keys = Object.keys(choices);
   const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
 
-  function handleChoiceChange(choiceIndex: number, choice: Partial<ChoiceType>) {
+  function handleChoiceChange(
+    choiceIndex: number,
+    choice: Partial<ChoiceType>
+  ) {
     console.log("handleChoiceChange", choiceIndex, choice);
     modifyChoice(questionId, choiceIndex, choice);
   }
@@ -101,11 +105,9 @@ function Section(props: sectionProps) {
     toggleChoice(questionId, choiceIndex);
   }
 
-
   return (
     <div className="flex flex-col gap-y-6">
       <div className="grid grid-cols-2 gap-x-16">
-
         <QuestionNumberOfRetries
           retries={retries}
           handleRetryChange={handleNumberOfRetriesChange}
@@ -135,14 +137,20 @@ function Section(props: sectionProps) {
           onClick={() => {
             handleAddChoice();
             if (numOfTimeSuggestionHasBeenShown < 3) {
-              toast.message("You can also press enter to create a new choice!", {
-                position: "bottom-center",
-                duration: 5000,
-                important: true,
-              });
-              localStorage.setItem('numOfTimeSuggestionHasBeenShown', (numOfTimeSuggestionHasBeenShown + 1).toString());
-              }
-            }}
+              toast.message(
+                "You can also press enter to create a new choice!",
+                {
+                  position: "bottom-center",
+                  duration: 5000,
+                  important: true,
+                }
+              );
+              localStorage.setItem(
+                "numOfTimeSuggestionHasBeenShown",
+                (numOfTimeSuggestionHasBeenShown + 1).toString()
+              );
+            }
+          }}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

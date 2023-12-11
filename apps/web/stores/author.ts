@@ -37,7 +37,9 @@ export type AuthorActions = {
   setPoints: (questionId: number, points: number) => void;
 };
 
-export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>()(
+export const useAuthorStore = createWithEqualityFn<
+  AuthorState & AuthorActions
+>()(
   devtools(
     (set, get) => ({
       activeAssignmentId: null,
@@ -138,7 +140,10 @@ export const useAuthorStore = createWithEqualityFn<AuthorState & AuthorActions>(
             if (q.id === questionId) {
               return {
                 ...q,
-                choices: [...q.choices, { choice, isCorrect: false, points: 0 }],
+                choices: [
+                  ...q.choices,
+                  { choice, isCorrect: false, points: 0 },
+                ],
               };
             }
             return q;
