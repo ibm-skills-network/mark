@@ -47,8 +47,8 @@ export class ChoiceBasedQuestionEvaluateModel
       totalCorrectChoices > 0
         ? this.totalPoints / (4 * totalCorrectChoices)
         : 0;
-
-    for (const learnerChoice of this.learnerChoices) {
+    let learnerChoice: string;
+    for (learnerChoice of this.learnerChoices) {
       const matchingChoice = this.validChoices.find(
         (c) => c.choice === learnerChoice
       );
