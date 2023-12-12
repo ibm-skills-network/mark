@@ -9,7 +9,6 @@ import type {
   BaseBackendResponse,
   CreateQuestionRequest,
   GetAssignmentResponse,
-  MakePropertiesOptional,
   QuestionAttemptRequest,
   QuestionAttemptResponse,
   ReplaceAssignmentRequest,
@@ -78,7 +77,7 @@ export async function replaceAssignment(
  * Calls the backend to update an assignment.
  */
 export async function updateAssignment(
-  data: MakePropertiesOptional<ReplaceAssignmentRequest>,
+  data: Partial<ReplaceAssignmentRequest>,
   id: number,
   cookies?: string
 ): Promise<boolean> {

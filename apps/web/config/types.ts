@@ -109,7 +109,7 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
   // for TEXT only, otherwise null
   maxWords?: number;
   // for SINGLE_CORRECT or MULTIPLE_CORRECT only, otherwise null
-  choices?: string[];
+  choices?: Choice[];
 
   // assignmentId: number;
 }
@@ -227,7 +227,3 @@ export type LearnerAssignmentState =
   | "not-started"
   | "in-progress"
   | "completed";
-
-export type MakePropertiesOptional<T> = {
-  [K in keyof T]?: T[K];
-};
