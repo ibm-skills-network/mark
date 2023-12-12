@@ -14,19 +14,16 @@ function TrueFalseQuestion(props: Props) {
     state.addChoice,
     state.removeChoice,
   ]);
-  const { question, id, choices, learnerChoices } =
+  const { question, id, choices, learnerChoices, questionResponses } =
     questions[activeQuestionNumber - 1];
-  console.log("choices", choices);
-
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [submitted, setSubmitted] = useState<boolean>(false);
+  // const {} = questionResponses.at(-1);
 
   const assignmentId = useAssignmentDetails(
     (state) => state.assignmentDetails?.id
   );
 
   const handleChoiceClick = (choice: string) => {
-    if (!submitted) {
+    if (!questionResponses.length) {
       if (learnerChoices.includes(choice)) {
         removeChoice(choice);
       } else {
@@ -41,27 +38,24 @@ function TrueFalseQuestion(props: Props) {
   return (
     <>
       {choices.map((choice, index) => {
-        // TODO: resolve this when backend is ready for it
-        const isChoiceCorrect = false;
-        console.log("isChoiceCorrect", isChoiceCorrect);
-        console.log("learnerChoices", learnerChoices);
+        const { isCorrect, choice: choiceText } = choice;
         return (
           <button
             key={index}
             className={`block w-full text-left p-2 mb-2 border rounded ${
-              submitted
-                ? learnerChoices.includes(choice)
-                  ? isChoiceCorrect
-                    ? "bg-green-100 text-black"
-                    : "bg-red-100 text-black"
-                  : "text-black"
-                : learnerChoices.includes(choice)
-                ? "bg-blue-100 text-black"
-                : "text-black"
+              questionResponses.length // if question is answered
+                ? learnerChoices.includes(choiceText)
+                  ? isCorrect
+                    ? "bg-teal-100" // if choice is selected and question is answered correctly
+                    : "bg-amber-100" // if choice is selected and question is answered incorrectly
+                  : ""
+                : learnerChoices.includes(choiceText)
+                ? "bg-blue-100" // if choice is selected but question is not answered
+                : ""
             }`}
-            onClick={() => handleChoiceClick(choice)}
+            onClick={() => handleChoiceClick(choiceText)}
           >
-            {choice}
+            {choiceText}
           </button>
         );
       })}

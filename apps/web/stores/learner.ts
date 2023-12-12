@@ -1,5 +1,5 @@
 import type { assignmentDetailsStore, QuestionStore } from "@/config/types";
-import { createJSONStorage, devtools, persist } from "zustand/middleware";
+import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 
