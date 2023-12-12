@@ -37,7 +37,7 @@ const Component: FC<Props> = (props) => {
   return (
     <Tooltip
       content={tooltipContent}
-      disabled={!disableSubmission}
+      disabled={!disableSubmission || !tooltipContent}
       distance={-2}
     >
       <Button
