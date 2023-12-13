@@ -1,5 +1,5 @@
 import { absoluteUrl } from "../lib/utils";
-import type { Criteria, Question } from "./types";
+import type { Criteria } from "./types";
 
 const BASE_API_PATH = absoluteUrl("/api/v1");
 
@@ -14,23 +14,6 @@ export const BASE_API_ROUTES = {
   admin: `${BASE_API_PATH}/admin`,
 };
 
-// interface LongFormQuestionData {
-//   type: "longForm";
-//   questionText: string;
-//   instructions: string;
-//   points: number;
-// }
-
-// interface MultipleChoiceQuestionData {
-//   type: "multipleChoice";
-//   questionText: string;
-//   options: string[];
-//   points: number;
-//   correctOptions: string[];
-// }
-
-// type QuestionData = LongFormQuestionData | MultipleChoiceQuestionData;
-
 export const initialCriteria: Criteria[] = [
   {
     id: 1,
@@ -41,104 +24,5 @@ export const initialCriteria: Criteria[] = [
     id: 2,
     points: 1,
     description: "",
-  },
-];
-
-export const questionsData: Question[] = [
-  {
-    id: 1,
-    assignmentId: 1,
-    numRetries: 2,
-    type: "TEXT",
-    totalPoints: 10,
-    question: "Describe the key elements of a project charter...",
-  },
-  {
-    id: 2,
-    assignmentId: 1,
-    type: "SINGLE_CORRECT",
-    totalPoints: 5,
-    numRetries: 2,
-    question: "Choose the correct option. What is 5 + 5?",
-    choices: { "10": true, "15": false, "-10": false, "-15": false },
-  },
-  {
-    id: 3,
-    assignmentId: 1,
-    type: "MULTIPLE_CORRECT",
-    numRetries: 2,
-    totalPoints: 5,
-    question: "Which of the following is NOT a programming language?",
-    choices: {
-      Java: false,
-      Python: false,
-      "C++": false,
-      "C#": false,
-      "C-": true,
-    },
-  },
-  {
-    id: 4,
-    assignmentId: 2,
-    numRetries: 2,
-    type: "TRUE_FALSE",
-    totalPoints: 3,
-    question: "Is the Earth flat?",
-    answer: false,
-  },
-  {
-    id: 5,
-    assignmentId: 2,
-    numRetries: 2,
-    type: "URL",
-    totalPoints: 8,
-    question: "Provide a link to a relevant resource.",
-  },
-  {
-    id: 6,
-    numRetries: 2,
-    assignmentId: 3,
-    type: "UPLOAD",
-    totalPoints: 15,
-    question: "Upload a screenshot of your completed code.",
-  },
-  {
-    id: 7,
-    assignmentId: 1,
-    type: "SINGLE_CORRECT",
-    totalPoints: 5,
-    numRetries: 2,
-    question: "Which one is not an OOP principle?",
-    choices: {
-      Encapsulation: false,
-      Inheritance: false,
-      Abstraction: false,
-      Polymorphism: false,
-      Composition: true,
-    },
-  },
-  {
-    id: 8,
-    assignmentId: 1,
-    type: "MULTIPLE_CORRECT",
-    numRetries: 2,
-    totalPoints: 5,
-    question: "Select all relational database systems:",
-    choices: {
-      MySQL: false,
-      MongoDB: false,
-      PostgreSQL: false,
-      SQLite: false,
-      Oracle: true,
-    },
-  },
-  {
-    id: 10,
-    numRetries: 2,
-    assignmentId: 1,
-    type: "TRUE_FALSE",
-    totalPoints: 3,
-    question: "HTML stands for Hyper Text Markup Language?",
-    answer: true,
   },
 ];

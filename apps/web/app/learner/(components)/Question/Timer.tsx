@@ -26,7 +26,8 @@ function Timer(props: Props) {
   if (countdown <= 0 && submitAssignmentRef.current) {
     toast.message("Time's up! Submitting your assignment...");
     // click the submit button
-    submitAssignmentRef.current.click()
+    submitAssignmentRef.current.click();
+    return null;
   }
 
   // const countdown = usePersistentCountdown({
