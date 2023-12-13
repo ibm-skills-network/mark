@@ -23,13 +23,19 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
 function Component(props: Props) {
   const { className, questionId, questionNumber } = props;
 
-  const [activeAttemptId, questions, setQuestion, setActiveQuestionNumber] =
-    useLearnerStore((state) => [
-      state.activeAttemptId,
-      state.questions,
-      state.setQuestion,
-      state.setActiveQuestionNumber,
-    ]);
+  const [
+    activeAttemptId,
+    questions,
+    setQuestion,
+    setActiveQuestionNumber,
+    setChoices,
+  ] = useLearnerStore((state) => [
+    state.activeAttemptId,
+    state.questions,
+    state.setQuestion,
+    state.setActiveQuestionNumber,
+    state.setChoices,
+  ]);
   const assignmentId = useAssignmentDetails(
     (state) => state.assignmentDetails?.id
   );
@@ -60,7 +66,6 @@ function Component(props: Props) {
     setSubmitting(true);
     // updateStatus("edited");
     // const question = questions[questionNumber - 1];
-    // todo: show a loading indicator
     const feedback = await submitQuestion(assignmentId, activeAttemptId, id, {
       learnerTextResponse: question.learnerTextResponse || null,
       learnerUrlResponse: question.learnerUrlResponse || null,

@@ -23,12 +23,10 @@ function TrueFalseQuestion(props: Props) {
   );
 
   const handleChoiceClick = (choice: string) => {
-    if (!questionResponses.length) {
-      if (learnerChoices.includes(choice)) {
-        removeChoice(choice);
-      } else {
-        addChoice(choice);
-      }
+    if (learnerChoices.includes(choice)) {
+      removeChoice(choice);
+    } else {
+      addChoice(choice);
     }
   };
 
@@ -39,20 +37,29 @@ function TrueFalseQuestion(props: Props) {
     <>
       {choices.map((choice, index) => {
         const { isCorrect, choice: choiceText } = choice;
+        let bgColor = "";
+
+        // TODO: Fix: Answers are revealed after the learner submits the Q
+        if (questionResponses.length) {
+          // if question is answered
+          if (learnerChoices.includes(choiceText)) {
+            if (isCorrect) {
+              bgColor = "bg-green-100"; // if choice is selected and question is answered correctly
+            } else {
+              bgColor = "bg-red-100"; // if choice is selected and question is answered incorrectly
+            }
+          }
+        } else {
+          if (learnerChoices.includes(choiceText)) {
+            bgColor = "bg-blue-100"; // if choice is selected but question is not answered
+          }
+        }
         return (
           <button
             key={index}
-            className={`block w-full text-left p-2 mb-2 border rounded ${
-              questionResponses.length // if question is answered
-                ? learnerChoices.includes(choiceText)
-                  ? isCorrect
-                    ? "bg-teal-100" // if choice is selected and question is answered correctly
-                    : "bg-amber-100" // if choice is selected and question is answered incorrectly
-                  : ""
-                : learnerChoices.includes(choiceText)
-                ? "bg-blue-100" // if choice is selected but question is not answered
-                : ""
-            }`}
+            className={
+              "block w-full text-left p-2 mb-2 border rounded" + " " + bgColor
+            }
             onClick={() => handleChoiceClick(choiceText)}
           >
             {choiceText}
