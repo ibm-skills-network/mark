@@ -1,6 +1,8 @@
 import useCountdown from "@/hooks/use-countdown";
-import { useLearnerStore } from "@/stores/learner";
-import { type ComponentPropsWithoutRef, useEffect } from "react";
+import { submitAssignment } from "@/lib/talkToBackend";
+import { useLearnerStore, useAssignmentDetails } from "@/stores/learner";
+import {useRouter} from "next/navigation";
+import { type ComponentPropsWithoutRef } from "react";
 import { toast } from "sonner";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -9,11 +11,17 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 
 function Timer(props: Props) {
   const { expiresAt,...restOfProps } = props;
+  const router = useRouter();
 
   // const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
-  const submitAssignmentRef = useLearnerStore(
-    (state) => state.submitAssignmentRef
+  const activeAttemptId = useLearnerStore(
+    (state) => state.activeAttemptId
   );
+  const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
+    state.assignmentDetails,
+    state.setGrade,
+  ]);
+  const assignmentId = assignmentDetails?.id;
   const { countdown } = useCountdown(Date.parse(expiresAt));
   const seconds = Math.floor((countdown / 1000) % 60);
   const minutes = Math.floor((countdown / (1000 * 60)) % 60);
@@ -22,11 +30,23 @@ function Timer(props: Props) {
     return num < 10 ? `0${num}` : num;
   };
 
+  async function handleSubmitAssignment() {
+    const grade = await submitAssignment(assignmentId, activeAttemptId);
+    if (!grade || grade <= 0 || grade >= 1) {
+      toast.error("Failed to submit assignment.");
+      return;
+    }
+    setGrade(grade * 100);
+    // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
+    const currentTime = Date.now();
+    console.log("currentTime", currentTime);
+    router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
+  }
+
   // if assignment runs out of time, automatically submit
-  if (countdown <= 0 && submitAssignmentRef.current) {
+  if (countdown <= 0) {
     toast.message("Time's up! Submitting your assignment...");
-    // click the submit button
-    submitAssignmentRef.current.click();
+    void handleSubmitAssignment();
     return null;
   }
 

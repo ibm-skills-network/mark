@@ -39,7 +39,6 @@ function LearnerHeader(props: Props) {
   );
   async function handleSubmitAssignment() {
     const grade = await submitAssignment(assignmentId, activeAttemptId);
-    // alert(`Your grade is ${grade.toFixed(1)}/100
     if (!grade || grade <= 0 || grade >= 1) {
       toast.error("Failed to submit assignment.");
       return;
