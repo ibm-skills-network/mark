@@ -4,6 +4,7 @@ import { QuestionStore } from "@/config/types";
 import { getWordCount } from "@/lib/utils";
 import { type ComponentPropsWithoutRef, type FC } from "react";
 import Button from "../Button";
+import { useLearnerStore } from "@/stores/learner";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   question: QuestionStore;

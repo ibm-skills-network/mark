@@ -1,12 +1,16 @@
+import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { twMerge } from "tailwind-merge";
 
-interface Props extends React.ComponentPropsWithoutRef<"button"> {}
+interface Props extends ComponentPropsWithoutRef<"button"> {
+  err?: boolean;
+}
 
-function Button(props: Props) {
+const Button = forwardRef<HTMLButtonElement, Props>(({err, ...props}, ref) => {
   const { onClick, disabled, children, className } = props;
 
   return (
     <button
+      ref={err ? null : ref}
       onClick={onClick}
       disabled={disabled}
       className={twMerge(
@@ -17,6 +21,7 @@ function Button(props: Props) {
       {children}
     </button>
   );
-}
+});
 
+Button.displayName = "Button";
 export default Button;

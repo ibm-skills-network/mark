@@ -87,12 +87,12 @@ const Question: FC<Props> = (props) => {
             </MarkdownViewer>
             {type === "MULTIPLE_CORRECT" && (
               <div className="flex flex-col items-start justify-center gap-y-2">
-                {question.choices.map((option, index) => (
+                {question.choices.map((choice, index) => (
                   <div
                     key={index}
                     className={
                       "flex items-center justify-start gap-x-2 " +
-                      (learnerChoices.includes(option)
+                      (learnerChoices.includes(choice.choice)
                         ? "text-grey-700"
                         : "text-grey-500")
                     }
@@ -100,7 +100,7 @@ const Question: FC<Props> = (props) => {
                     <div className="flex items-center justify-center w-5 h-5 border border-gray-300 rounded-full">
                       <div className="w-2 h-2 bg-gray-300 rounded-full" />
                     </div>
-                    <p className="">{option}</p>
+                    <p className="">{choice.choice}</p>
                   </div>
                 ))}
               </div>

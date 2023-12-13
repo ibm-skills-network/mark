@@ -17,9 +17,10 @@ function LearnerHeader(props: Props) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [questions, activeAttemptId] = useLearnerStore((state) => [
+  const [questions, activeAttemptId, submitAssignmentRef] = useLearnerStore((state) => [
     state.questions,
     state.activeAttemptId,
+    state.submitAssignmentRef
   ]);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
@@ -37,13 +38,9 @@ function LearnerHeader(props: Props) {
     (question) => question.questionResponses.length > 0
   );
   async function handleSubmitAssignment() {
-    const confirmSubmit = confirm("Are you sure you want to submit?");
-    if (!confirmSubmit) {
-      return;
-    }
     const grade = await submitAssignment(assignmentId, activeAttemptId);
     // alert(`Your grade is ${grade.toFixed(1)}/100
-    if (grade && (grade >= 0 || grade <= 1)) {
+    if (!grade || grade <= 0 || grade >= 1) {
       toast.error("Failed to submit assignment.");
       return;
     }
@@ -78,6 +75,7 @@ function LearnerHeader(props: Props) {
       </div>
       {activeAttemptId && isInQuestionPage && (
         <Button
+          ref={submitAssignmentRef}
           disabled={!userSubmittedAnyQuestion}
           className="disabled:opacity-70"
           onClick={handleSubmitAssignment}

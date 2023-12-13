@@ -1,4 +1,5 @@
 import type { assignmentDetailsStore, QuestionStore } from "@/config/types";
+import { createRef, type RefObject } from "react";
 import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
@@ -8,6 +9,7 @@ export type LearnerState = {
   activeQuestionNumber: number | null;
   expiresAt?: string;
   questions: QuestionStore[];
+  submitAssignmentRef: RefObject<HTMLButtonElement>;
 };
 
 export type LearnerActions = {
@@ -116,7 +118,7 @@ export const useLearnerStore = createWithEqualityFn<
               : q
           ),
         })),
-      // getActiveQuestionNumber:
+      submitAssignmentRef: createRef<HTMLButtonElement>(),
     }),
     {
       name: "learner",

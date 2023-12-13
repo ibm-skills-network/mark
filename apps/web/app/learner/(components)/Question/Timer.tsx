@@ -1,14 +1,19 @@
 import useCountdown from "@/hooks/use-countdown";
 import { useLearnerStore } from "@/stores/learner";
-import { type ComponentPropsWithoutRef } from "react";
+import { type ComponentPropsWithoutRef, useEffect } from "react";
+import { toast } from "sonner";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+interface Props extends ComponentPropsWithoutRef<"div"> {
+  expiresAt: string
+}
 
 function Timer(props: Props) {
-  const { ...restOfProps } = props;
+  const { expiresAt,...restOfProps } = props;
 
   // const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
-  const expiresAt = useLearnerStore((state) => state.expiresAt);
+  const submitAssignmentRef = useLearnerStore(
+    (state) => state.submitAssignmentRef
+  );
   const { countdown } = useCountdown(Date.parse(expiresAt));
   const seconds = Math.floor((countdown / 1000) % 60);
   const minutes = Math.floor((countdown / (1000 * 60)) % 60);
@@ -16,6 +21,13 @@ function Timer(props: Props) {
   const twoDigit = (num: number) => {
     return num < 10 ? `0${num}` : num;
   };
+
+  // if assignment runs out of time, automatically submit
+  if (countdown <= 0 && submitAssignmentRef.current) {
+    toast.message("Time's up! Submitting your assignment...");
+    // click the submit button
+    submitAssignmentRef.current.click()
+  }
 
   // const countdown = usePersistentCountdown({
   //   keyString: `assignment-${assignmentId}-attempt-${activeAttemptId}-countdown`,

@@ -55,7 +55,6 @@ function QuestionPage(props: Props) {
     }
     // store the questions in zustand store
     const allQuestions: QuestionStore[] = questions
-      // .concat(questionsData)
       .map((question: QuestionStore) => {
         // get the info about previous attempts
         const previousAttempts = question.questionResponses.map((response) => ({
