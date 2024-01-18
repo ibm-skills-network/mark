@@ -142,7 +142,7 @@ function Component(props: Props) {
         <RenderQuestion questionType={type} />
       </div>
       {/* Feedback section */}
-      {mostRecentFeedback && mostRecentFeedback.points && mostRecentFeedback.feedback[0].feedback && (
+      {mostRecentFeedback && mostRecentFeedback.points !== null && mostRecentFeedback.points !== undefined  && mostRecentFeedback.feedback[0].feedback && (
         <div
           className={twMerge(
             "border p-5 rounded-lg shadow-sm",
