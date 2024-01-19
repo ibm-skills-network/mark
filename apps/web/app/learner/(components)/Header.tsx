@@ -39,7 +39,7 @@ function LearnerHeader(props: Props) {
   );
   async function handleSubmitAssignment() {
     const grade = await submitAssignment(assignmentId, activeAttemptId);
-    if (!grade || grade <= 0 || grade >= 1) {
+    if (typeof grade !== "number" || grade < 0 || grade > 1) {
       toast.error("Failed to submit assignment.");
       return;
     }
