@@ -21,105 +21,7 @@ function SuccessPage(props: Props) {
     state.grade,
   ]);
   const [returnUrl, setReturnUrl] = useState<string>("");
-  // const questions = [
-  //   {
-  //     id: 1,
-  //     totalPoints: 3,
-  //     numRetries: null,
-  //     maxWords: null,
-  //     type: "TEXT",
-  //     question:
-  //       "Write a brief note about the significance of the Pythagoras theorem in mathematics.",
-  //     questionResponses: [
-  //       {
-  //         id: 10,
-  //         points: 1,
-  //         feedback: [
-  //           {
-  //             feedback:
-  //               "The learner's response does not provide a basic description of the Pythagoras theorem. Please provide a more detailed explanation of the significance of the theorem in mathematics.",
-  //           },
-  //         ],
-  //         learnerResponse: "ass",
-  //         questionId: 1,
-  //         assignmentAttemptId: 4,
-  //       },
-  //     ],
-  //     learnerTextResponse: "ass",
-  //   },
-  //   {
-  //     id: 2,
-  //     totalPoints: 2,
-  //     numRetries: 5,
-  //     maxWords: null,
-  //     type: "TEXT",
-  //     question: "hello is it tall?",
-  //     questionResponses: [
-  //       {
-  //         id: 13,
-  //         points: 2,
-  //         feedback: [
-  //           {
-  //             feedback:
-  //               "Great job! Your response aligns perfectly with the criteria provided. You answered 'yes' to the question 'hello is it tall?', which is the correct response according to the given scoring criteria. Keep up the good work!",
-  //           },
-  //         ],
-  //         learnerResponse: "yes",
-  //         questionId: 2,
-  //         assignmentAttemptId: 4,
-  //       },
-  //     ],
-  //     learnerTextResponse: "yes",
-  //   },
-  //   {
-  //     id: 3,
-  //     totalPoints: 8,
-  //     numRetries: null,
-  //     maxWords: null,
-  //     type: "MULTIPLE_CORRECT",
-  //     question: "yeah or hell?",
-  //     choices: ["yes", "hell"],
-  //     questionResponses: [
-  //       {
-  //         id: 11,
-  //         points: 0,
-  //         feedback: [
-  //           {
-  //             choice: "yes",
-  //             feedback:
-  //               "Your choice of 'yes' is incorrect. The correct choices for this question are 'yeah' or 'hell'. Please review the question and select the appropriate option.",
-  //           },
-  //         ],
-  //         questionId: 3,
-  //         assignmentAttemptId: 4,
-  //       },
-  //     ],
-  //     learnerChoices: ["yes"],
-  //   },
-  //   {
-  //     id: 4,
-  //     totalPoints: 1,
-  //     numRetries: 1,
-  //     maxWords: null,
-  //     type: "URL",
-  //     question: "yay",
-  //     questionResponses: [
-  //       {
-  //         id: 12,
-  //         points: 0,
-  //         feedback: [
-  //           {
-  //             feedback: "nay",
-  //           },
-  //         ],
-  //         questionId: 4,
-  //         assignmentAttemptId: 4,
-  //       },
-  //     ],
-  //     learnerUrlResponse: "bro",
-  //   },
-  // ] as QuestionStore[];
-  // TODO: uncomment this
+  
   useEffect(() => {
     if (!questions || questions.length === 0) {
       router.push(pathname.split("?")[0]);
@@ -127,7 +29,7 @@ function SuccessPage(props: Props) {
     const fetchUser = async () => {
       try {
         const user = await getUser();
-        setReturnUrl(user.returnUrl);
+        setReturnUrl(user.returnUrl || "");
       } catch (err) {
         console.error(err);
       }
@@ -197,15 +99,17 @@ function SuccessPage(props: Props) {
               Retake assignment
             </div>
           </Link>
-          <Link
-            href={returnUrl}
-            className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-md shadow justify-end items-center gap-2.5 flex"
-          >
-            <ExitIcon className="w-6 h-6 text-white" />
-            <div className="text-white text-base font-medium">
-              Back to course
-            </div>
-          </Link>
+          {returnUrl && (
+            <Link
+              href={returnUrl}
+              className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-md shadow justify-end items-center gap-2.5 flex"
+            >
+              <ExitIcon className="w-6 h-6 text-white" />
+              <div className="text-white text-base font-medium">
+                Back to course
+              </div>
+            </Link>
+          )}
         </div>
       </div>
       {/* show the list of questions with their feedback */}
