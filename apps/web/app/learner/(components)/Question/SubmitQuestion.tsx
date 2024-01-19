@@ -17,10 +17,14 @@ const Component: FC<Props> = (props) => {
   const { question, submitting, attemptsRemaining, handleSubmit } = props;
 
   const noMoreAttempts = attemptsRemaining === 0;
+  
+  const exceededWordLimit = question.maxWords && (
+    getWordCount(question.learnerTextResponse) > question.maxWords
+  );
+
   const invalidTextResponse =
-    question.learnerTextResponse &&
-    (question.learnerTextResponse.length === 0 ||
-      getWordCount(question.learnerTextResponse) > question.maxWords);
+    question.learnerTextResponse && exceededWordLimit;
+  
   const invalidUrlResponse =
     question.learnerUrlResponse && question.learnerUrlResponse.length === 0;
 
