@@ -27,7 +27,8 @@ spec:
   {{- end }}
   tls:
   - hosts:
-    - "{{ .Values.baseDomain }}"
+    - "mark.{{ .Values.baseDomain }}"
+    - "mark-api.{{ .Values.baseDomain }}"
     {{- if .Values.ingress.tls.secretName }}
     secretName: {{ .Values.ingress.tls.secretName | quote }}
     {{- else }}
