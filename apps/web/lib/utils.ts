@@ -22,8 +22,8 @@ export const getFeedbackColors = (score: number, totalPoints: number) => {
   }
 };
 
-export function getWordCount(str: string) {
-  return str.split(/\s+/).filter(Boolean).length ?? 0;
+export function getWordCount(str: string | undefined) {
+  return str?.split(/\s+/).filter(Boolean).length ?? 0;
 }
 
 // export function debounce<T extends (...args: unknown[]) => void>(
