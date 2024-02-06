@@ -153,6 +153,21 @@ spec:
     - Egress
 ---
 
+# Allow all pods to connect to NATS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nats-traffic
+spec:
+  podSelector: {}
+  egress:
+    - ports:
+      - protocol: TCP
+        port: {{.Values.networkPolicy.natsPort}}
+  policyTypes:
+    - Egress
+---
+
 # Allow ingress and egress to control-plane traffic
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
