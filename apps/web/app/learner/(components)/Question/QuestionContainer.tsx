@@ -53,7 +53,7 @@ function Component(props: Props) {
   } = question;
 
   const mostRecentFeedback = useMemo(() => {
-    return question.questionResponses.at(-1);
+    return question.questionResponses?.at(-1);
   }, [question]);
 
   const attemptsRemaining = numRetries
@@ -142,21 +142,24 @@ function Component(props: Props) {
         <RenderQuestion questionType={type} />
       </div>
       {/* Feedback section */}
-      {mostRecentFeedback && mostRecentFeedback.points !== null && mostRecentFeedback.points !== undefined  && mostRecentFeedback.feedback[0].feedback && (
-        <div
-          className={twMerge(
-            "border p-5 rounded-lg shadow-sm",
-            getFeedbackColors(mostRecentFeedback.points, totalPoints)
-          )}
-        >
-          <p className="text-center font-medium">
-            <span className="font-bold">
-              {mostRecentFeedback.points}/{totalPoints}
-            </span>{" "}
-            {mostRecentFeedback.feedback[0].feedback}
-          </p>
-        </div>
-      )}
+      {mostRecentFeedback &&
+        mostRecentFeedback.points !== null &&
+        mostRecentFeedback.points !== undefined &&
+        mostRecentFeedback.feedback[0]?.feedback && (
+          <div
+            className={twMerge(
+              "border p-5 rounded-lg shadow-sm",
+              getFeedbackColors(mostRecentFeedback.points, totalPoints)
+            )}
+          >
+            <p className="text-center font-medium">
+              <span className="font-bold">
+                {mostRecentFeedback.points}/{totalPoints}
+              </span>{" "}
+              {mostRecentFeedback.feedback[0]?.feedback}
+            </p>
+          </div>
+        )}
       <div className="flex justify-between">
         <button
           onClick={() => setActiveQuestionNumber(questionNumber - 1)}
