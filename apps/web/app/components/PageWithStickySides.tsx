@@ -1,7 +1,7 @@
 import { type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { twMerge } from "tailwind-merge";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {
+interface Props extends ComponentPropsWithoutRef<"section"> {
   leftStickySide?: ReactNode;
   mainContent: ReactNode;
   rightStickySide?: ReactNode;
