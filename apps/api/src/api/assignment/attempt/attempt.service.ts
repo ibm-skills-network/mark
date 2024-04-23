@@ -235,7 +235,7 @@ export class AttemptService {
     // Send the grade to LTI gateway (optional)
     if (gradingCallbackRequired) {
       const ltiGatewayResponse = await this.httpService
-        .post(
+        .put(
           process.env.GRADING_LTI_GATEWAY_URL,
           { score: grade },
           {
