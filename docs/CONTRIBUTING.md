@@ -1,130 +1,218 @@
-# CONTRIBUTING
+# CONTRIBUTING GUIDE
 
-## Install Pre-requisites
+## Table of Contents
 
-1. Install IBM's detect-secrets fork:
+- [CONTRIBUTING GUIDE](#contributing-guide)
+  - [Table of Contents](#table-of-contents)
+  - [Prerequisites](#prerequisites)
+  - [Secrets Management](#secrets-management)
+  - [Development Setup](#development-setup)
+    - [NestJS Framework](#nestjs-framework)
+      - [Local Database](#local-database)
+      - [Dependencies](#dependencies)
+      - [Build and Test](#build-and-test)
+  - [Local End-to-End Development: Author Workbench](#local-end-to-end-development-author-workbench)
+    - [Setup Mark:](#setup-mark)
+      - [Author Workbench Setup](#author-workbench-setup)
+      - [LTI Gateway Setup](#lti-gateway-setup)
+      - [LTI Creditial Manager Setup](#lti-creditial-manager-setup)
+    - [Coursera Setup](#coursera-setup)
+      - [Pre-requisities](#pre-requisities)
+      - [Setup Assignment](#setup-assignment)
+  - [Local Development: Frontend Only](#local-development-frontend-only)
+    - [Enable Mock Mode](#enable-mock-mode)
+    - [Example: Adding Assignments](#example-adding-assignments)
+  - [Deployment](#deployment)
+  - [Troubleshooting](#troubleshooting)
+    - [Unable to reach local host with ngrok:](#unable-to-reach-local-host-with-ngrok)
+
+## Prerequisites
+
+Before contributing to this project, ensure the following tools and dependencies are installed:
+
+1. **IBM's detect-secrets fork**:
 
    ```bash
    pip install --upgrade "git+https://github.com/ibm/detect-secrets.git@master#egg=detect-secrets"
    ```
 
-1. [Install Hadolint](https://github.com/hadolint/hadolint#install). On MacOS:
+2. **Hadolint**:
+   [Installation Guide for Hadolint](https://github.com/hadolint/hadolint#install)
+
    ```bash
    brew install hadolint
    ```
-1. [Install Shellcheck](https://github.com/koalaman/shellcheck#installing). On MacOS:
+
+3. **Shellcheck**:
+   [Installation Guide for Shellcheck](https://github.com/koalaman/shellcheck#installing)
 
    ```bash
    brew install shellcheck
    ```
 
-1. Install asdf if not already installed. See [asdf's installation instructions here](https://asdf-vm.com/guide/getting-started.html).
+4. **asdf (version manager)**:
+   See [asdf's installation instructions here](https://asdf-vm.com/guide/getting-started.html).
 
-1. Install node and yarn using [asdf](https://asdf-vm.com/):
+5. **Node.js and Yarn via asdf**:
    ```bash
    asdf plugin add nodejs
    asdf plugin add yarn
    asdf install
    ```
 
-## Start Postgress database locally for development
+## Secrets Management
+
+To integrate with a staging environment during local development:
+
+1. Store the secret in the "Skills Network" 1password vault.
+2. Export a reference to the secret in [dev.env](../dev.env), e.g.:
+   ```bash
+   export MY_SECRET=op://3vjfhk4mi7jyrqx7ycf62anltm/ < op_item_id > /path/to/secret/field
+   ```
+
+## Development Setup
+
+### NestJS Framework
+
+This project uses [NestJS](https://docs.nestjs.com/). Familiarize yourself with NestJS if making significant changes.
+
+_hint: When adding new components you should utilize the nest cli generator by running `npx next g ...`_
+
+#### Local Database
+
+Start Postgres database locally:
 
 ```bash
 yarn db
 ```
 
-## Install Dependencies
+#### Dependencies
+
+Install project dependencies:
 
 ```bash
 yarn
 ```
 
-## Setup
+#### Build and Test
 
-Perform one-time setup (e.g. prisma migrations and generations) by running:
+- **Setup**: Run one-time setup operations like Prisma migrations:
+  ```bash
+  yarn setup
+  ```
+- **Build**: Compile the application:
+  ```bash
+  yarn build
+  ```
+- **Run Tests**: Execute tests:
+  ```bash
+  yarn test
+  ```
+- **Run the Application**:
+  ```bash
+  yarn dev
+  ```
+- **API Documentation**: Accessible at [localhost:3010/api](http://localhost:3010/api) while the application is running.
 
-```bash
-yarn setup
-```
+## Local End-to-End Development: Author Workbench
 
-## Build
+### Setup Mark:
 
-```bash
-yarn build
-```
+Set `AUTH_DISABLED=false` in `dev.env` before running `mark`
 
-## Run Tests
+#### Author Workbench Setup
 
-```bash
-yarn test
-```
+Update `config/settings/development.local.yml`:
 
-## Run the Application
-
-```bash
-yarn dev
-```
-
-## View API Documentation
-
-With the application running, you can view API documentation by visiting [localhost:3010/api](http://localhost:3010/api)
-
-## Secrets
-
-Ideally, no secrets are required for local development. However, it is sometimes useful to integrate with a staging environment (with authentication) instead of spending a lot of time mocking external functionality.
-To make a secret available during development, follow these steps:
-
-1. Ensure the secret is stored in our "Skills Network" 1password vault
-1. Export a reference to the secret in [dev.env](../dev.env), e.g.:
-   ```bash
-   export MY_SECRET=op://3vjfhk4mi7jyrqx7ycf62anltm/ < op_item_id > /path/to/secret/field
-   ```
-
-## NestJS
-
-This project uses [NestJS](https://docs.nestjs.com/). If you're making significant changes or additions to this project, you should familiarize yourself with NestJS before starting.
-
-When adding new components you should utilize the nest cli generator by running `npx next g ...`
-
-
-Steps after mark running with DB (be careful of conflicts)
-0. Start mark:
-Set the following
-```dev.env
-AUTH_DISABLED=false 
-```
-
-1. get AWB setup 
-
-```config/settings/development.local.yml
+```yaml
 mark_service:
-    client:
-        private_token: any-value
-        url: http://localhost:3010/api # Update to the correct Mark Port
-    lti:
-        launch_url: http://localhost:4010/lti/1.1/launch # Update to the correct LTI Port
+  client:
+    private_token: any-value
+    url: http://localhost:3010/api # mark's port, in dev.env
+  lti:
+    launch_url: http://localhost:4010/lti/1.1/launch # lti-gateway's port
 ```
 
-2. get LTI-gateway setup (follow readme)
-in dev.env change:
+_hint: Make sure remove other clean up custom settings as appropriate e.g.: Atlas configs should be removed if not running Atlas locally._
+
+#### LTI Gateway Setup
+
+Follow the `readme.md` in `lti-gateway` repo
+Update `dev.env`
+
 ```
 LTI_CREDENTIAL_SOURCE=api
 JWT_CREDENTIAL_SOURCE=file
 ```
 
-3. get LTI-Creditial-Manager setup 
-```
+#### LTI Creditial Manager Setup
+
+Run the following commands in the terminal
+
+```bash
 ibmcloud ks cluster config --cluster apps-faculty-staging-us-east
-k port-forward deployments.apps/mark-lti-credentials-manager 8080 -n mark 
+kubectl port-forward deployments.apps/mark-lti-credentials-manager XXXX -n mark # usually 8080
 ```
 
+_note: `XXXX` must be the same as `lti-gate`'s `dev.env` `LTI_CREDENTIALS_API` variable AND `mark`'s `dev.env` `LTI_CREDENTIAL_MANAGER_ENDPOINT` variable_
 
-Turn on Mock:
-set AUTH_DISABLED=true
-add assignment: `http://localhost:8000/api/v1/admin/assignments`
-visit: `http://localhost:3010/learner/{:id}`
+### Coursera Setup
 
+#### Pre-requisities
 
-_note: 8080 is determined by LTI-Gateway's dev.env LTI_CREDENTIALS_API AND Mark is dependent on this at dev.env LTI_CREDENTIAL_MANAGER_ENDPOINT_
+- Install ngrok run:
+  ```bash
+  brew install ngrok
+  ```
+- Sign up for free ngrok account and get your auth token [here](https://ngrok.com/)
+- Add your auth token run:
+  ```bash
+   ngrok config add-authtoken <TOKEN>
+  ```
+- Run HTTP Forwarding
+  ```bash
+  ngrok http XXXX
+  ```
+  where XXXX is the localhost port you are using for Author Workbench
 
-Deployment:
+#### Setup Assignment
+
+- Visit [Coursera LTI Test Course](https://www.coursera.org/learn/cognitive-class-lti-test-course/home/)
+- Click `Edit Course`
+- Select or Create `App Item`
+
+  _Note: App Item describes that this is an embedded item from Author Workbench (Lab, Assignment, etc)_
+
+- Click the `Embed Button` and copy the `Coursera` Assignment Launch URL e.g. `<ngrok URL>/courses/4/assignments/2`
+- Copy `Consumer Key` e.g. `autogen-faculty-v1-coursera-course-v1-IND-AU0101DE-v1`
+- Copy the `Secret` e.g. `gGDFK0bDVPEA5aINdtv7`
+- Add the above to the `App Item`
+- Launch the `App Item` from `View as Learner`
+
+## Local Development: Frontend Only
+
+### Enable Mock Mode
+
+To enable mock mode, set `AUTH_DISABLED=true` in `dev.env`.
+
+### Example: Adding Assignments
+
+Add blank assignment: `http://localhost:8000/api/v1/admin/assignments`
+To access learner view, visit: `http://localhost:3010/learner/{:id}`
+
+## Deployment
+
+Deployments are managed to `faculty-apps-staging`. The build triggers images for API, API-Gateway, and UI with the same image tag.
+
+This plain text version is formatted for easy insertion into a Markdown file, keeping the intended structure and links operational. Copy and paste this content into your README.md file to update it with the new structure.
+
+## Troubleshooting
+
+### Unable to reach local host with ngrok:
+
+Add ngrok to Author Workbench whitelist in `config/environments/development.rb`
+e.g.
+
+```
+config.hosts << /.*\.ngrok-free\.app/
+```
