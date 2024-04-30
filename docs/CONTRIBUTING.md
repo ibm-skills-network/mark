@@ -19,6 +19,7 @@
     - [Coursera Setup](#coursera-setup)
       - [Pre-requisities](#pre-requisities)
       - [Setup Assignment](#setup-assignment)
+    - [EdX Setup](#edx-setup)
   - [Local Development: Frontend Only](#local-development-frontend-only)
     - [Enable Mock Mode](#enable-mock-mode)
     - [Example: Adding Assignments](#example-adding-assignments)
@@ -118,32 +119,36 @@ yarn
 
 ### Setup Mark:
 
-Set `AUTH_DISABLED=false` in `dev.env` before running `mark`
+Set `AUTH_DISABLED=false` in `apps/api-gateway/dev.env` before running `mark`
 
 #### Author Workbench Setup
 
-Update `config/settings/development.local.yml`:
+1. Update `config/settings/development.local.yml`:
 
-```yaml
-mark_service:
-  client:
-    private_token: any-value
-    url: http://localhost:3010/api # mark's port, in dev.env
-  lti:
-    launch_url: http://localhost:4010/lti/1.1/launch # lti-gateway's port
-```
+   ```yaml
+   mark_service:
+   client:
+     private_token: <mark staging value> # mark's api-gateway staging value
+     url: http://localhost:3010/api # mark's frontend, in dev.env
+   lti:
+     launch_url: http://localhost:4010/lti/1.1/launch # lti-gateway's port
+   ```
 
-_hint: Make sure remove other clean up custom settings as appropriate e.g.: Atlas configs should be removed if not running Atlas locally._
+   _hint: Make sure remove other clean up custom settings as appropriate e.g.: Atlas configs should be removed if not running Atlas locally._
+
+2. Launch Author Workbench locally: See `author-workbench/README.md`
 
 #### LTI Gateway Setup
 
-Follow the `readme.md` in `lti-gateway` repo
-Update `dev.env`
+1. Update `dev.env`
 
-```
-LTI_CREDENTIAL_SOURCE=api
-JWT_CREDENTIAL_SOURCE=file
-```
+   ```
+   SN_FACULTY_MARK_URL=http://localhost:3010    # Mark client
+   LTI_CREDENTIAL_SOURCE=api                    # TODO: What is it doing?
+   JWT_CREDENTIAL_SOURCE=file
+   ```
+
+2. Launch LTI Gateway locally: `lti-gateway/README.md`
 
 #### LTI Creditial Manager Setup
 
@@ -154,7 +159,7 @@ ibmcloud ks cluster config --cluster apps-faculty-staging-us-east
 kubectl port-forward deployments.apps/mark-lti-credentials-manager XXXX -n mark # usually 8080
 ```
 
-_note: `XXXX` must be the same as `lti-gate`'s `dev.env` `LTI_CREDENTIALS_API` variable AND `mark`'s `dev.env` `LTI_CREDENTIAL_MANAGER_ENDPOINT` variable_
+_note: `XXXX` must be the same as `lti-gateways`'s `dev.env`: `LTI_CREDENTIALS_API` variable AND `mark`'s `apps/api-gateway/dev.env`: `LTI_CREDENTIAL_MANAGER_ENDPOINT` variable_
 
 ### Coursera Setup
 
@@ -188,6 +193,10 @@ _note: `XXXX` must be the same as `lti-gate`'s `dev.env` `LTI_CREDENTIALS_API` v
 - Copy the `Secret` e.g. `gGDFK0bDVPEA5aINdtv7`
 - Add the above to the `App Item`
 - Launch the `App Item` from `View as Learner`
+
+### EdX Setup
+
+TODO Later
 
 ## Local Development: Frontend Only
 
