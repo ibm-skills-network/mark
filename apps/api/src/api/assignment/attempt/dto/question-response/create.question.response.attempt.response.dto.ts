@@ -1,16 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { TrueFalseChoiceBasedFeedback } from "../../../../..//api/llm/model/true.false.based.question.response.model";
 
-export class TextBasedFeedbackDto {
+export class GeneralFeedbackDto {
   @ApiProperty({
-    description: "The points earned for the above criteria.",
-    type: Number,
-    required: true,
-  })
-  points: number;
-
-  @ApiProperty({
-    description: "The feedback earned for the above criteria.",
+    description: "The feedback earned by the leanrer.",
     type: String,
     required: true,
   })
@@ -24,6 +16,22 @@ export class ChoiceBasedFeedbackDto {
     required: true,
   })
   choice: string;
+
+  @ApiProperty({
+    description: "The feedback for selecting the above choice.",
+    type: String,
+    required: true,
+  })
+  feedback: string;
+}
+
+export class TrueFalseBasedFeedbackDto {
+  @ApiProperty({
+    description: "The choice selected by the learner (true or false).",
+    type: Boolean,
+    required: true,
+  })
+  choice: boolean;
 
   @ApiProperty({
     description: "The feedback for selecting the above choice.",
@@ -53,14 +61,14 @@ export class CreateQuestionResponseAttemptResponseDto {
       "The feedback received after evaluating the question response of the learner.",
     type: [
       ChoiceBasedFeedbackDto,
-      TextBasedFeedbackDto,
-      TrueFalseChoiceBasedFeedback,
+      GeneralFeedbackDto,
+      TrueFalseBasedFeedbackDto,
     ],
     isArray: true,
     required: true,
   })
   feedback:
     | ChoiceBasedFeedbackDto[]
-    | TextBasedFeedbackDto[]
-    | TrueFalseChoiceBasedFeedback[];
+    | GeneralFeedbackDto[]
+    | TrueFalseBasedFeedbackDto[];
 }

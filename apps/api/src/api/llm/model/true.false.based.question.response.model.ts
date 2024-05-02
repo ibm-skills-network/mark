@@ -1,13 +1,10 @@
-export class TrueFalseChoiceBasedFeedback {
-  choice: boolean;
-  feedback: string;
-}
-
 export class TrueFalseBasedQuestionResponseModel {
+  readonly choice: boolean;
   readonly points: number;
-  readonly feedback: TrueFalseChoiceBasedFeedback[];
+  readonly feedback: string;
 
-  constructor(points: number, feedback: TrueFalseChoiceBasedFeedback[]) {
+  constructor(choice: boolean, points: number, feedback: string) {
+    this.choice = choice;
     this.points = points;
     this.feedback = feedback;
   }

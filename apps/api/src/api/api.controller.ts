@@ -51,6 +51,7 @@ export class ApiController {
       userId: userSession.userId,
       role: userSession.role,
       assignmentId: userSession.assignmentId,
+      returnUrl: userSession.returnUrl,
     };
   }
 }

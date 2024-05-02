@@ -15,8 +15,8 @@ export class MessagingService {
 
   onModuleInit() {
     const url = this.configService.get<string>("NATS_URL");
-    const user = this.configService.get<string>("NATS_USER");
-    const pass = this.configService.get<string>("NATS_PASS");
+    const user = this.configService.get<string>("NATS_USERNAME");
+    const pass = this.configService.get<string>("NATS_PASSWORD");
     const organization = this.configService.get<string>("NATS_ORGANIZATION");
     const program = this.configService.get<string>("NATS_PROGRAM");
     const project = this.configService.get<string>("NATS_PROJECT");

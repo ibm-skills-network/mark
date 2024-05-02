@@ -1,4 +1,6 @@
-interface Props {}
+import { type ComponentPropsWithoutRef } from "react";
+
+interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 function Component(props: Props) {
   const {} = props;

@@ -1,0 +1,58 @@
+import { useLearnerStore } from "@/stores/learner";
+import { useState, type ComponentPropsWithoutRef } from "react";
+import { twMerge } from "tailwind-merge";
+
+interface Props extends ComponentPropsWithoutRef<"div"> {}
+
+function URLQuestion(props: Props) {
+  const { className, ...restOfProps } = props;
+  const activeQuestionNumber = useLearnerStore(
+    (state) => state.activeQuestionNumber
+  );
+
+  const [questions, setURLResponse] = useLearnerStore((state) => [
+    state.questions,
+    state.setURLResponse,
+  ]);
+  const {
+    question,
+    id,
+    learnerUrlResponse: url,
+  } = questions[activeQuestionNumber - 1];
+  const [validURL, setValidURL] = useState<boolean>(true);
+
+  const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newUrl = e.target.value;
+    setURLResponse(newUrl, id);
+    setValidURL(newUrl ? validateURL(url) : true);
+  };
+
+  const validateURL = (str: string) => {
+    const pattern = new RegExp(
+      "^(https?:\\/\\/)?" + // protocol
+        "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
+        "((\\d{1,3}\\.){3}\\d{1,3}))" + // OR ip (v4) address
+        "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" + // port and path
+        "(\\?[;&a-z\\d%_.~+=-]*)?" + // query string
+        "(\\#[-a-z\\d_]*)?$",
+      "i"
+    ); // fragment locator
+    return pattern.test(str);
+  };
+
+  return (
+    <input
+      type="text"
+      className={twMerge(
+        "w-full p-2 mt-4 border rounded",
+        !validURL ? "border-red-500" : "border-gray-300",
+        className
+      )}
+      value={url}
+      placeholder="Enter website URL"
+      onChange={handleURLChange}
+    />
+  );
+}
+
+export default URLQuestion;

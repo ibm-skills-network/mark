@@ -48,11 +48,11 @@ model Group {
 
 /// The AssignmentGroup model represents the many-to-many relationship between Assignments and Groups
 model AssignmentGroup {
-  assignment       Assignment     @relation(fields: [assignmentId], references: [id])     /// The associated Assignment model
-  assignmentId     Int                                                                    /// Relation scalar field  (used in the `@relation` attribute above)
-  group            Group @relation(fields: [groupId], references: [id])                   /// The associated Group model
-  groupId          String                                                                 /// Relation scalar field  (used in the `@relation` attribute above)
-  @@id([assignmentId, groupId])                                                           /// Unique identifier for the relationship
+  assignment       Assignment     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)    /// The associated Assignment model
+  assignmentId     Int                                                                                      /// Relation scalar field  (used in the `@relation` attribute above)
+  group            Group @relation(fields: [groupId], references: [id])                                     /// The associated Group model
+  groupId          String                                                                                   /// Relation scalar field  (used in the `@relation` attribute above)
+  @@id([assignmentId, groupId])                                                                             /// Unique identifier for the relationship
 }
 
 /// The Assignment model represents a particular assignment
@@ -61,6 +61,8 @@ model Assignment {
   name            String                                                        /// Name of the assignment
   introduction    String?                                                       /// Introduction Paragraph for the assignment
   instructions    String?                                                       /// Instructions for the assignment
+  gradingCriteriaOverview    String?                                            /// Grading Criteria for the assignment
+  timeEstimateMinutes        Int?                                               /// Estimated time it will take to complete the assignment in minutes
   type            AssignmentType                                                /// Type of assignment
   graded          Boolean?                                                      /// Is the assignment graded or not
   numAttempts     Int?                                                          /// Max number of times a learner can attempt the assignment
@@ -69,23 +71,26 @@ model Assignment {
   attemptsTimeRangeHours    Int?                                                /// Time range, in hours, over which the attempts are counted.
   passingGrade    Int?                                                          /// The minimum grade required to pass the assignment
   displayOrder    AssignmentQuestionDisplayOrder?                               /// The order in which the assignment is displayed
+  questionOrder   Int[]                                                         /// An array of questionIds to infer in which order should they be displayed
   questions       Question[]                                                    /// The list of questions in the assignment
   groups          AssignmentGroup[]                                             /// List of groups associated with the assignment
+  published       Boolean                                                       /// Is the assignment published or not
 }
 
 /// The Question model represents a question in an assignment
 model Question {
   id           Int          @id @default(autoincrement())         /// Unique identifier for the question
   totalPoints  Int                                                /// Total points that can be scored for the question
-  numRetries   Int                                                /// Max number of times a student can retry a question
+  numRetries   Int?                                               /// Max number of times a student can retry a question
   type         QuestionType                                       /// Type of question
   question     String                                             /// The text of the question
-  maxWords     Int?                                               /// optional maximum number of words allowed for a written response type question
+  maxWords     Int?                                               /// Optional maximum number of words allowed for a written response type question
   scoring      Json?                                              /// Scoring details for the question, stored as JSON
   choices      Json?                                              /// Possible choices for the question, stored as JSON
   answer       Boolean?                                           /// The correct answer for the question (used for auto grading)
   assignmentId Int                                                /// The ID of the assignment to which the question belongs
-  assignment   Assignment   @relation(fields: [assignmentId], references: [id])   /// The assignment to which the question belongs
+  assignment   Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)                    /// The assignment to which the question belongs
+  gradingContextQuestionIds Int[]                                 /// List of question Ids that are used as contextual questions when auto grading this question
 }
 
 /// This model represents an assignment attempt by a learner
@@ -107,6 +112,6 @@ model QuestionResponse {
   assignmentAttempt      AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id])   /// The assignment attempt that includes this response
   questionId             Int                                                      /// The ID of the question to which the student is responding
   learnerResponse        String                                                   /// The student's response to the question
-  points                 Int                                                      /// The points earned by the student for this response
+  points                 Float                                                    /// The points earned by the student for this response
   feedback               Json                                                     /// Feedback on the student's response, stored as JSON
 }

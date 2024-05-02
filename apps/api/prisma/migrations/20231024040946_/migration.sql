@@ -29,6 +29,7 @@ CREATE TABLE "Assignment" (
     "name" TEXT NOT NULL,
     "introduction" TEXT,
     "instructions" TEXT,
+    "gradingCriteriaOverview" TEXT,
     "type" "AssignmentType" NOT NULL,
     "graded" BOOLEAN,
     "numAttempts" INTEGER,
@@ -37,6 +38,8 @@ CREATE TABLE "Assignment" (
     "attemptsTimeRangeHours" INTEGER,
     "passingGrade" INTEGER,
     "displayOrder" "AssignmentQuestionDisplayOrder",
+    "questionOrder" INTEGER[],
+    "published" BOOLEAN NOT NULL,
 
     CONSTRAINT "Assignment_pkey" PRIMARY KEY ("id")
 );
@@ -45,7 +48,7 @@ CREATE TABLE "Assignment" (
 CREATE TABLE "Question" (
     "id" SERIAL NOT NULL,
     "totalPoints" INTEGER NOT NULL,
-    "numRetries" INTEGER NOT NULL,
+    "numRetries" INTEGER,
     "type" "QuestionType" NOT NULL,
     "question" TEXT NOT NULL,
     "maxWords" INTEGER,
@@ -53,6 +56,7 @@ CREATE TABLE "Question" (
     "choices" JSONB,
     "answer" BOOLEAN,
     "assignmentId" INTEGER NOT NULL,
+    "gradingContextQuestionIds" INTEGER[],
 
     CONSTRAINT "Question_pkey" PRIMARY KEY ("id")
 );
@@ -86,13 +90,13 @@ CREATE TABLE "QuestionResponse" (
 CREATE UNIQUE INDEX "Group_id_key" ON "Group"("id");
 
 -- AddForeignKey
-ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Question" ADD CONSTRAINT "Question_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Question" ADD CONSTRAINT "Question_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "QuestionResponse" ADD CONSTRAINT "QuestionResponse_assignmentAttemptId_fkey" FOREIGN KEY ("assignmentAttemptId") REFERENCES "AssignmentAttempt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

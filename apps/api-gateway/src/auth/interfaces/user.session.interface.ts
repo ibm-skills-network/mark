@@ -11,6 +11,7 @@ export interface UserSession {
   assignmentId: number;
   groupId: string;
   gradingCallbackRequired?: boolean;
+  returnUrl?: string;
 }
 
 export interface UserSessionPayload {
@@ -19,6 +20,7 @@ export interface UserSessionPayload {
   assignmentID: number;
   groupID: string;
   gradingCallbackRequired?: boolean;
+  returnUrl?: string;
 }
 
 export interface UserSessionRequest extends Request {

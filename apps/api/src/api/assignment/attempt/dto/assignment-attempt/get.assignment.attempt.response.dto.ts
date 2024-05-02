@@ -1,11 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionResponse, QuestionType } from "@prisma/client";
+import { Type } from "class-transformer";
+import { Choice } from "../../../../../api/assignment/question/dto/create.update.question.request.dto";
 
 export class AssignmentAttemptResponseDto {
   @ApiProperty({
     description: "The unique Id of the AssignmentAttempt",
     type: Number,
     example: 1,
+    required: true,
   })
   id: number;
 
@@ -13,6 +16,7 @@ export class AssignmentAttemptResponseDto {
     description: "The Id of the assignment that this attempt corresponds to",
     type: Number,
     example: 2,
+    required: true,
   })
   assignmentId: number;
 
@@ -67,11 +71,12 @@ class AssignmentAttemptQuestions {
   totalPoints: number;
 
   @ApiProperty({
-    description: "The number of retries allowed for the assignment.",
+    description:
+      "The number of retries allowed for the assignment. (null means unlimited retries)",
     type: Number,
     required: false,
   })
-  numRetries: number;
+  numRetries: number | null;
 
   @ApiProperty({
     description: "Type of the question.",
@@ -88,10 +93,19 @@ class AssignmentAttemptQuestions {
   question: string;
 
   @ApiPropertyOptional({
-    description: "The choices for the question.",
-    type: [String],
+    description:
+      'The choices for the question (if the Question Type is "SINGLE_CORRECT" or "MULTIPLE_CORRECT").',
+    type: [Choice], // Use an array of Choice
   })
-  choices: string[];
+  @Type(() => Choice)
+  choices?: Choice[];
+
+  @ApiPropertyOptional({
+    description: "The max number of words allowed for this question.",
+    type: Number,
+    required: false,
+  })
+  maxWords?: number;
 
   @ApiProperty({
     description:

@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   UserRole,
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../prisma.service";
+import { LlmService } from "../llm/llm.service";
 import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
 import {
   AssignmentResponseDto,
@@ -15,7 +20,10 @@ import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto"
 
 @Injectable()
 export class AssignmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llmService: LlmService
+  ) {}
 
   async findOne(
     id: number,
@@ -32,13 +40,23 @@ export class AssignmentService {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
-    // If learner then get rid of irrelevant/sensitive fields like questions and displayOrder
+    // If learner then get rid of irrelevant/sensitive fields like questions, displayOrder and questionOrder
     if (userSession.role === UserRole.LEARNER) {
       delete result["displayOrder"];
+      delete result["questionOrder"];
       return {
         ...result,
         success: true,
       } as LearnerGetAssignmentResponseDto;
+    }
+
+    // sort the questions
+    if (result.questions && result.questionOrder) {
+      result.questions.sort(
+        (a, b) =>
+          result.questionOrder.indexOf(a.id) -
+          result.questionOrder.indexOf(b.id)
+      );
     }
 
     return {
@@ -72,7 +90,10 @@ export class AssignmentService {
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
-      data: replaceAssignmentDto,
+      data: {
+        ...this.createEmptyDto(),
+        ...replaceAssignmentDto,
+      },
     });
 
     return {
@@ -85,6 +106,20 @@ export class AssignmentService {
     id: number,
     updateAssignmentDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
+    //emforce questionOrder when publishing
+    if (updateAssignmentDto.published) {
+      if (!updateAssignmentDto.questionOrder) {
+        throw new BadRequestException(
+          "Expected questionOrder when publishing the assignment."
+        );
+      }
+      // Generate grading context for questions when publishing the assignment
+      await this.handleQuestionGradingContext(
+        id,
+        updateAssignmentDto.questionOrder
+      );
+    }
+
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,
@@ -94,5 +129,55 @@ export class AssignmentService {
       id: result.id,
       success: true,
     };
+  }
+
+  // private methods
+  private createEmptyDto(): Partial<ReplaceAssignmentRequestDto> {
+    /* eslint-disable unicorn/no-null */
+    return {
+      instructions: null,
+      numAttempts: null,
+      allotedTimeMinutes: null,
+      attemptsPerTimeRange: null,
+      attemptsTimeRangeHours: null,
+      displayOrder: null,
+    };
+  }
+
+  private async handleQuestionGradingContext(
+    assignmentId: number,
+    questionOrder: number[]
+  ) {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: { questions: true },
+    });
+
+    const questionsForGradingContext = assignment.questions
+      .sort((a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id))
+      .map((q) => ({
+        id: q.id,
+        questionText: q.question,
+      }));
+
+    const questionGradingContextMap =
+      await this.llmService.generateQuestionGradingContext(
+        questionsForGradingContext
+      );
+
+    const updates = [];
+
+    for (const [questionId, gradingContextQuestionIds] of Object.entries(
+      questionGradingContextMap
+    )) {
+      updates.push(
+        this.prisma.question.update({
+          where: { id: Number.parseInt(questionId) },
+          data: { gradingContextQuestionIds },
+        })
+      );
+    }
+
+    await Promise.all(updates);
   }
 }

@@ -1,9 +1,12 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentQuestionDisplayOrder } from "@prisma/client";
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
 } from "class-validator";
@@ -29,6 +32,25 @@ export class UpdateAssignmentRequestDto {
   instructions: string | null;
 
   @ApiProperty({
+    description: "The grading criteria overiew for the assignment.",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  gradingCriteriaOverview: string | null;
+
+  @ApiProperty({
+    description:
+      "Estimated time it will take to complete the assignment in minutes.",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  timeEstimateMinutes: number | null;
+
+  @ApiProperty({
     description: "Is the assignment graded or not.",
     type: Boolean,
     required: false,
@@ -38,7 +60,8 @@ export class UpdateAssignmentRequestDto {
   graded: boolean;
 
   @ApiProperty({
-    description: "The number of attempts made on the assignment.",
+    description:
+      "The max number of attempts allowed for this assignment. (null means unlimited attempts)",
     type: Number,
     required: false,
   })
@@ -47,7 +70,8 @@ export class UpdateAssignmentRequestDto {
   numAttempts: number | null;
 
   @ApiProperty({
-    description: "The allotted time for the assignment.",
+    description:
+      "The allotted time for the assignment. (null means unlimited time)",
     type: Number,
     required: false,
   })
@@ -90,4 +114,24 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsEnum(AssignmentQuestionDisplayOrder)
   displayOrder: AssignmentQuestionDisplayOrder | null;
+
+  @ApiProperty({
+    description: "Is the assignment published or not.",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  published: boolean;
+
+  @ApiProperty({
+    description: "Array of questionIds used for ordering of the questions",
+    type: [Number],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsNumber({}, { each: true })
+  questionOrder: number[];
 }

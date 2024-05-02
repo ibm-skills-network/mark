@@ -44,6 +44,7 @@ export class JwtCookieStrategy extends PassportStrategy(
       groupId: payload.groupID,
       assignmentId: payload.assignmentID,
       gradingCallbackRequired: payload.gradingCallbackRequired,
+      returnUrl: payload.returnUrl,
     };
   }
 }

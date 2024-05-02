@@ -9,6 +9,7 @@ export interface ClientUserSession {
   userId: string;
   role: UserRole;
   assignmentId: number;
+  returnUrl?: string;
 }
 
 export interface UserSession extends ClientUserSession {

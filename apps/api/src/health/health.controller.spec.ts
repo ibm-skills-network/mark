@@ -1,5 +1,6 @@
 import { TerminusModule } from "@nestjs/terminus";
 import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaService } from "../prisma.service";
 import { HealthController } from "./health.controller";
 import { HealthService } from "./health.service";
 
@@ -10,7 +11,7 @@ describe("HealthController", () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HealthController],
       imports: [TerminusModule],
-      providers: [HealthService],
+      providers: [HealthService, PrismaService],
     }).compile();
 
     controller = module.get<HealthController>(HealthController);

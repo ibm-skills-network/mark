@@ -34,6 +34,7 @@ export class AdminService {
     const newAssignmentData = {
       ...assignment,
       id: undefined,
+      published: false,
       questions: {
         createMany: {
           data: assignment.questions.map((question) => ({
@@ -143,6 +144,7 @@ export class AdminService {
       data: {
         name: createAssignmentRequestDto.name,
         type: createAssignmentRequestDto.type,
+        published: false,
         groups: {
           create: [
             {
@@ -188,7 +190,6 @@ export class AdminService {
     id: number,
     updateAssignmentDto: AdminUpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
-    console.log(updateAssignmentDto);
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,

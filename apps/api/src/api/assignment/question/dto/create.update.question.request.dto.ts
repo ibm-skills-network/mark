@@ -2,12 +2,13 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
-  IsObject,
   IsOptional,
   IsString,
   Validate,
@@ -48,6 +49,18 @@ export class Scoring {
   criteria: Criteria[] | null;
 }
 
+export class Choice {
+  @IsNotEmpty()
+  @IsString()
+  choice: string;
+  @IsNotEmpty()
+  @IsBoolean()
+  isCorrect: boolean;
+  @IsNotEmpty()
+  @IsNumber()
+  points: number;
+}
+
 export class CreateUpdateQuestionRequestDto {
   @ApiProperty({
     description: "Total points for the question.",
@@ -59,12 +72,14 @@ export class CreateUpdateQuestionRequestDto {
   totalPoints: number;
 
   @ApiProperty({
-    description: "The number of retries allowed for this question.",
+    description:
+      "The number of retries allowed for this question (null means unlimited).",
     type: Number,
     required: false,
   })
+  @IsOptional()
   @IsInt()
-  numRetries: number;
+  numRetries: number | null;
 
   @ApiProperty({
     description: "Type of the question.",
@@ -103,12 +118,14 @@ export class CreateUpdateQuestionRequestDto {
   @ApiPropertyOptional({
     description:
       'The choices for the question (if the Question Type is "SINGLE_CORRECT" or "MULTIPLE_CORRECT").',
-    type: Object,
-    additionalProperties: { type: "boolean" },
+    type: [Choice], // Use an array of Choice
   })
   @IsOptional()
-  @IsObject()
-  choices?: Record<string, boolean>;
+  @IsArray()
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true }) // Validate each item in the array
+  @Type(() => Choice)
+  choices?: Choice[];
 
   @ApiPropertyOptional({
     description:

@@ -5,6 +5,22 @@ const config: Config = {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  safelist: [
+    // for getFeedbackColors in utils.ts
+    "bg-green-100",
+    "border-green-500",
+    "text-green-700",
+    "bg-red-100",
+    "border-red-500",
+    "text-red-700",
+    "bg-yellow-100",
+    "text-yellow-700",
+    "border-yellow-500",
+    {
+      // for Tooltip.tsx
+      pattern: /delay-(100|200|300|500)/,
+    },
+  ],
   theme: {
     extend: {
       backgroundImage: {
@@ -14,6 +30,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [require("@tailwindcss/forms")],
 };
 export default config;

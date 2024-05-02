@@ -1,0 +1,57 @@
+import Error from "@/components/ErrorPage";
+import { createAttempt, getAttempt, getAttempts } from "@/lib/talkToBackend";
+import QuestionPage from "@learnerComponents/Question";
+import { headers } from "next/headers";
+
+interface Props {
+  params: { assignmentId: string };
+}
+
+async function LearnerLayout(props: Props) {
+  const headerList = headers();
+  const cookie = headerList.get("cookie");
+  const { params } = props;
+  const assignmentId = ~~params.assignmentId;
+  const listOfAttempts = await getAttempts(assignmentId, cookie);
+  console.log("listOfAttempts", listOfAttempts);
+  if (!listOfAttempts) {
+    return <Error error={"Assignment not found"} />;
+  }
+
+  // check if there are any attempts that are not submitted and have not expired
+  const unsubmittedAssignment = listOfAttempts.find(
+    (attempt) =>
+      attempt.submitted === false &&
+      // if the assignment does not expire, then the expiresAt is null
+      (attempt.expiresAt === null || Date.now() < Date.parse(attempt.expiresAt))
+  );
+  // if there are no unsubmitted attempts, create a new attempt
+  const attemptId = unsubmittedAssignment
+    ? unsubmittedAssignment.id
+    : await createAttempt(assignmentId, cookie);
+  console.log("attemptId", attemptId);
+  if (!attemptId) {
+    return <Error error={"Attempt could not be created"} />;
+  } else if (attemptId === "no more attempts") {
+    return (
+      <Error
+        className="h-[calc(100vh-100px)]"
+        statusCode={422}
+        error={"No more attempts"}
+      />
+    );
+  }
+  // get the questions for the assignment from the attemptId
+  const attempt = await getAttempt(assignmentId, attemptId, cookie);
+  console.log("attempt", attempt);
+  if (!attempt) {
+    return <Error error={"Attempt could not be fetched"} />;
+  }
+  return (
+    <main className="p-24">
+      <QuestionPage attempt={attempt} assignmentId={assignmentId} />
+    </main>
+  );
+}
+
+export default LearnerLayout;

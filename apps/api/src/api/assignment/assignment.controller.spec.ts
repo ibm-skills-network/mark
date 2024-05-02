@@ -2,6 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { PrismaService } from "../../prisma.service";
+import { LlmService } from "../llm/llm.service";
 import { AssignmentController } from "./assignment.controller";
 import { AssignmentService } from "./assignment.service";
 
@@ -14,6 +15,7 @@ describe("AssignmentController", () => {
       providers: [
         AssignmentService,
         PrismaService,
+        LlmService,
         {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: {

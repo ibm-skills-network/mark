@@ -5,10 +5,9 @@
     "cd apps/api && yarn lint:staged"
   ],
   "apps/api-gateway/**/*.ts": [
-    "cd apps/api && yarn test:staged",
-    "cd apps/api && yarn lint:staged"
+    "cd apps/api-gateway && yarn test:staged",
+    "cd apps/api-gateway && yarn lint:staged"
   ],
-  "apps/web/**/*.ts?(x)": ["cd apps/web && yarn lint:staged"],
   "Dockerfile": ["hadolint"],
   "*.{sh,zsh,bash}": ["shellcheck"]
 }

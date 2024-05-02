@@ -6,8 +6,10 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { QuestionType } from "@prisma/client";
+import { Prisma, QuestionResponse, QuestionType } from "@prisma/client";
+import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { TrueFalseBasedQuestionEvaluateModel } from "../../../api/llm/model/true.false.based.question.evaluate.model";
+import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
   UserRole,
   UserSession,
@@ -17,6 +19,7 @@ import { LlmService } from "../../llm/llm.service";
 import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
+import { Choice } from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
@@ -232,7 +235,7 @@ export class AttemptService {
     // Send the grade to LTI gateway (optional)
     if (gradingCallbackRequired) {
       const ltiGatewayResponse = await this.httpService
-        .post(
+        .put(
           process.env.GRADING_LTI_GATEWAY_URL,
           { score: grade },
           {
@@ -283,21 +286,35 @@ export class AttemptService {
 
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
-      select: { questions: true },
+      select: { questions: true, questionOrder: true },
     });
+
+    // Apply the sorting based on questionOrder
+    if (assignment.questions && assignment.questionOrder) {
+      assignment.questions.sort(
+        (a, b) =>
+          assignment.questionOrder.indexOf(a.id) -
+          assignment.questionOrder.indexOf(b.id)
+      );
+    }
 
     const questions = assignment.questions.map((question) => {
       const correspondingResponses = assignmentAttempt.questionResponses.filter(
         (response) => response.questionId === question.id
       );
 
+      const choices = question.choices
+        ? (JSON.parse(JSON.stringify(question.choices)) as Choice[])
+        : undefined;
+
       return {
         id: question.id,
         totalPoints: question.totalPoints,
         numRetries: question.numRetries,
+        maxWords: question.maxWords,
         type: question.type,
         question: question.question,
-        choices: question.choices ? Object.keys(question.choices) : undefined,
+        choices: choices,
         questionResponses:
           correspondingResponses.length > 0 ? correspondingResponses : [],
       };
@@ -347,95 +364,123 @@ export class AttemptService {
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     let learnerResponse: string;
-    // Grade Text Based Questions
-    if (
-      question.type === QuestionType.TEXT ||
-      question.type === QuestionType.UPLOAD ||
-      question.type === QuestionType.URL
-    ) {
-      learnerResponse = await AttemptHelper.validateAndGetTextResponse(
-        question.type,
-        createQuestionResponseAttemptRequestDto
-      );
 
-      const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
-        question.question,
-        learnerResponse,
-        question.totalPoints,
-        question.scoring?.type ?? "",
-        question.scoring?.criteria ?? {}
-      );
+    const assignmentContext = await this.getAssignmentContext(
+      assignmentAttempt.assignmentId,
+      question.id,
+      assignmentAttemptId
+    );
 
-      const models = await this.llmService.gradeTextBasedQuestion(
-        textBasedQuestionEvaluateModel
-      );
-
-      // map from model to response DTO
-      responseDto.totalPoints = models.reduce(
-        (sum, model) => sum + model.points,
-        0
-      );
-      responseDto.feedback = models.map((element) =>
-        AttemptHelper.toTextBasedFeedbackDto(element)
-      );
-    }
-
-    // Grade True False Questions
-    else if (question.type === QuestionType.TRUE_FALSE) {
-      if (!createQuestionResponseAttemptRequestDto.learnerAnswerChoice) {
-        throw new BadRequestException(
-          "Expected a true-false-based response (learnerAnswerChoice), but did not receive one."
+    switch (question.type) {
+      case QuestionType.TEXT:
+      case QuestionType.UPLOAD: {
+        learnerResponse = await AttemptHelper.validateAndGetTextResponse(
+          question.type,
+          createQuestionResponseAttemptRequestDto
         );
+        const textBasedQuestionEvaluateModel =
+          new TextBasedQuestionEvaluateModel(
+            question.question,
+            assignmentContext.questionAnswerContext,
+            assignmentContext.assignmentInstructions,
+            learnerResponse,
+            question.totalPoints,
+            question.scoring?.type ?? "",
+            question.scoring?.criteria ?? {}
+          );
+        const model = await this.llmService.gradeTextBasedQuestion(
+          textBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        break;
       }
-
-      const trueFalseBasedQuestionEvaluateModel =
-        new TrueFalseBasedQuestionEvaluateModel(
-          question.question,
-          question.answer,
-          createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
-          question.totalPoints
+      case QuestionType.URL: {
+        if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
+          throw new BadRequestException(
+            "Expected a url-based response (learnerUrlResponse), but did not receive one."
+          );
+        }
+        const urlFetchResponse = await AttemptHelper.fetchPlainTextFromUrl(
+          createQuestionResponseAttemptRequestDto.learnerUrlResponse
         );
-
-      const model = await this.llmService.gradeTrueFalseBasedQuestion(
-        trueFalseBasedQuestionEvaluateModel
-      );
-
-      // map from model to respons DTO
-      responseDto.totalPoints = model.points;
-      responseDto.feedback = model.feedback;
-      learnerResponse = JSON.stringify(
-        createQuestionResponseAttemptRequestDto.learnerAnswerChoice
-      );
-    }
-
-    //Grade Choice Based Questions
-    else {
-      if (!createQuestionResponseAttemptRequestDto.learnerChoices) {
-        throw new BadRequestException(
-          "Expected a choice-based response (learnerChoices), but did not receive one."
-        );
-      }
-
-      const choiceBasedQuestionEvaluateModel =
-        new ChoiceBasedQuestionEvaluateModel(
+        const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
           question.question,
-          question.choices ?? {},
-          createQuestionResponseAttemptRequestDto.learnerChoices,
+          assignmentContext.questionAnswerContext,
+          assignmentContext.assignmentInstructions,
+          createQuestionResponseAttemptRequestDto.learnerUrlResponse,
+          urlFetchResponse.isFunctional,
+          urlFetchResponse.body,
           question.totalPoints,
-          question.scoring?.type,
-          question.scoring?.criteria ?? undefined
+          question.scoring?.type ?? "",
+          question.scoring?.criteria ?? {}
         );
-
-      const model = await this.llmService.gradeChoiceBasedQuestion(
-        choiceBasedQuestionEvaluateModel
-      );
-
-      // map from model to respons DTO
-      responseDto.totalPoints = model.points;
-      responseDto.feedback = model.feedback;
-      learnerResponse = JSON.stringify(
-        createQuestionResponseAttemptRequestDto.learnerChoices
-      );
+        const model = await this.llmService.gradeUrlBasedQuestion(
+          urlBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        learnerResponse =
+          createQuestionResponseAttemptRequestDto.learnerUrlResponse;
+        break;
+      }
+      case QuestionType.TRUE_FALSE: {
+        if (
+          createQuestionResponseAttemptRequestDto.learnerAnswerChoice ===
+            null ||
+          createQuestionResponseAttemptRequestDto.learnerAnswerChoice ===
+            undefined
+        ) {
+          throw new BadRequestException(
+            "Expected a true-false-based response (learnerAnswerChoice), but did not receive one."
+          );
+        }
+        const trueFalseBasedQuestionEvaluateModel =
+          new TrueFalseBasedQuestionEvaluateModel(
+            question.question,
+            assignmentContext.questionAnswerContext,
+            assignmentContext.assignmentInstructions,
+            question.answer,
+            createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
+            question.totalPoints
+          );
+        const model = await this.llmService.gradeTrueFalseBasedQuestion(
+          trueFalseBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        learnerResponse = JSON.stringify(
+          createQuestionResponseAttemptRequestDto.learnerAnswerChoice
+        );
+        break;
+      }
+      case QuestionType.SINGLE_CORRECT:
+      case QuestionType.MULTIPLE_CORRECT: {
+        if (!createQuestionResponseAttemptRequestDto.learnerChoices) {
+          throw new BadRequestException(
+            "Expected a choice-based response (learnerChoices), but did not receive one."
+          );
+        }
+        const choiceBasedQuestionEvaluateModel =
+          new ChoiceBasedQuestionEvaluateModel(
+            question.question,
+            assignmentContext.questionAnswerContext,
+            assignmentContext.assignmentInstructions,
+            question.choices ?? [],
+            createQuestionResponseAttemptRequestDto.learnerChoices,
+            question.totalPoints,
+            question.scoring?.type,
+            question.scoring?.criteria ?? undefined
+          );
+        const model = await this.llmService.gradeChoiceBasedQuestion(
+          choiceBasedQuestionEvaluateModel
+        );
+        AttemptHelper.assignFeedbackToResponse(model, responseDto);
+        learnerResponse = JSON.stringify(
+          createQuestionResponseAttemptRequestDto.learnerChoices
+        );
+        break;
+      }
+      default: {
+        throw new Error("Invalid question type provided.");
+      }
     }
 
     // create a question response record in db
@@ -477,5 +522,90 @@ export class AttemptService {
         assignmentAttemptId: assignmentAttemptId,
       },
     });
+  }
+
+  async getAssignmentContext(
+    assignmentId: number,
+    questionId: number,
+    assignmentAttemptId: number
+  ): Promise<{
+    assignmentInstructions: string;
+    questionAnswerContext: QuestionAnswerContext[];
+  }> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: { instructions: true },
+    });
+
+    // 1. Fetch the gradingContextQuestionIds for the given question.
+    const question = await this.prisma.question.findUnique({
+      where: { id: questionId },
+      select: { gradingContextQuestionIds: true },
+    });
+
+    if (!question) {
+      throw new Error("Question not found.");
+    }
+
+    // 2. Using the fetched gradingContextQuestionIds, retrieve all those questions.
+    const contextQuestions = await this.prisma.question.findMany({
+      where: {
+        id: {
+          in: question.gradingContextQuestionIds,
+        },
+      },
+      select: { id: true, question: true, type: true },
+    });
+
+    // 3. Fetch all responses for the context questions at once.
+    const allResponses = await this.prisma.questionResponse.findMany({
+      where: {
+        assignmentAttemptId: assignmentAttemptId,
+        questionId: {
+          in: question.gradingContextQuestionIds,
+        },
+      },
+      orderBy: {
+        id: "desc", // This ensures that the latest responses come first.
+      },
+    });
+
+    // Group responses by questionId to quickly look up the latest response for each question.
+    const groupedResponses: { [key: number]: QuestionResponse } = {};
+
+    for (const response of allResponses) {
+      if (!groupedResponses[response.questionId]) {
+        groupedResponses[response.questionId] = response; // store the latest response (since we ordered them in descending order)
+      }
+    }
+
+    // 4. Construct the QuestionAnswerContext model array with the added functionality.
+    const questionsAnswersContext: QuestionAnswerContext[] = [];
+    for (const contextQuestion of contextQuestions) {
+      let learnerResponse =
+        groupedResponses[contextQuestion.id]?.learnerResponse || "";
+
+      // Check if the question type is URL and then fetch plain text from the URL.
+      if (contextQuestion.type === "URL" && learnerResponse) {
+        const urlContent = await AttemptHelper.fetchPlainTextFromUrl(
+          learnerResponse
+        );
+        learnerResponse = JSON.stringify({
+          url: learnerResponse,
+          ...urlContent,
+        });
+      }
+
+      questionsAnswersContext.push({
+        question: contextQuestion.question,
+        answer: learnerResponse,
+      });
+    }
+
+    // 5. Return the assignment instructions and the QuestionAnswerContext array.
+    return {
+      assignmentInstructions: assignment?.instructions || "",
+      questionAnswerContext: questionsAnswersContext,
+    };
   }
 }

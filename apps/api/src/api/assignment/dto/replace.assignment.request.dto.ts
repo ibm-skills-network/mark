@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentQuestionDisplayOrder } from "@prisma/client";
 import {
+  IsArray,
   IsBoolean,
   IsDefined,
   IsEnum,
@@ -27,7 +28,26 @@ export class ReplaceAssignmentRequestDto {
   })
   @IsOptional()
   @IsString()
-  instructions: string;
+  instructions: string | null;
+
+  @ApiProperty({
+    description: "The grading criteria overiew for the assignment.",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  gradingCriteriaOverview: string | null;
+
+  @ApiProperty({
+    description:
+      "Estimated time it will take to complete the assignment in minutes.",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  timeEstimateMinutes: number | null;
 
   @ApiProperty({
     description: "Is the assignment graded or not.",
@@ -92,5 +112,23 @@ export class ReplaceAssignmentRequestDto {
   })
   @IsOptional()
   @IsEnum(AssignmentQuestionDisplayOrder)
-  displayOrder: AssignmentQuestionDisplayOrder;
+  displayOrder: AssignmentQuestionDisplayOrder | null;
+
+  @ApiProperty({
+    description: "Is the assignment published or not.",
+    type: Boolean,
+    required: true,
+  })
+  @IsDefined()
+  @IsBoolean()
+  published: boolean;
+
+  @ApiProperty({
+    description: "Array of questionIds used for ordering of the questions",
+    type: [Number],
+    required: false,
+  })
+  @IsDefined()
+  @IsArray()
+  questionOrder: number[];
 }

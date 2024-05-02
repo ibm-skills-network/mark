@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* to overrride the default font size for the md editor */
+body .w-md-editor-text-pre > code,
+body .w-md-editor-text-input {
+  @apply !text-base;
+}
+
+/* For the markdown editor to still show in preview mode (bug in the library) */
+body .w-md-editor-content {
+  min-height: 150px;
+}
+
+/* for the Markdown parser to display lists correctly */
+ul {
+  list-style: disc;
+}
+
+/* :root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+  }
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+} */

@@ -41,12 +41,16 @@ export class ApiService {
       }
 
       let forwardingEndpoint;
+      let forwardingServiceHeaders;
 
       switch (forwardingService) {
         case DownstreamService.MARK_API: {
           forwardingEndpoint = `${process.env.MARK_API_ENDPOINT ?? ""}${
             request.originalUrl
           }`;
+          forwardingServiceHeaders = {
+            "user-session": JSON.stringify(request.user),
+          };
           break;
         }
         case DownstreamService.LTI_CREDENTIAL_MANAGER: {
@@ -54,6 +58,16 @@ export class ApiService {
           forwardingEndpoint = `${
             process.env.LTI_CREDENTIAL_MANAGER_ENDPOINT ?? ""
           }/${servicePath}`;
+          // Encode username and password for Basic Auth
+          const username = process.env.LTI_CREDENTIAL_MANAGER_USERNAME ?? "";
+          const password = process.env.LTI_CREDENTIAL_MANAGER_PASSWORD ?? ""; // pragma: allowlist secret
+          const base64Credentials = Buffer.from(
+            `${username}:${password}`
+          ).toString("base64");
+
+          forwardingServiceHeaders = {
+            Authorization: `Basic ${base64Credentials}`,
+          };
           break;
         }
         default: {
@@ -77,7 +91,7 @@ export class ApiService {
         data: request.body,
         headers: {
           ...originalHeaders,
-          "user-session": JSON.stringify(request.user),
+          ...forwardingServiceHeaders,
         },
       };
 
