@@ -1,5 +1,5 @@
 # Using a consistent base for all stages
-FROM icr.io/skills-network/node:18 AS base
+FROM icr.io/skills-network/node:20 AS base
 
 ARG SN_GITHUB_NPM_TOKEN
 ARG SN_GITHUB_NPM_REGISTRY=https://npm.pkg.github.com
@@ -32,7 +32,7 @@ RUN /usr/local/share/.config/yarn/global/node_modules/.bin/turbo run build --sco
 FROM base AS production
 ENV NODE_ENV production
 WORKDIR $DIR
-RUN apk add --no-cache dumb-init=1.2.5-r2
+RUN apk add --no-cache dumb-init=1.2.5-r3
 COPY --chown=node:node --from=sourcer $DIR/apps/web/.next ./.next
 COPY --chown=node:node --from=sourcer $DIR/package.json $DIR/package.json
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
