@@ -9,8 +9,8 @@ ENV DIR=${DIR}
 # Pruning using turbo
 FROM base AS builder
 WORKDIR $DIR
-RUN yarn global add turbo
 COPY . .
+RUN yarn global add turbo
 RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc
 RUN turbo prune --scope=api-gateway --docker && rm -f .npmrc
 
@@ -28,13 +28,14 @@ FROM base AS sourcer
 WORKDIR $DIR
 COPY --from=installer $DIR/ .
 COPY --from=builder $DIR/out/full/ .
-RUN yarn turbo run build --scope=api-gateway --include-dependencies
+COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
+RUN /usr/local/share/.config/yarn/global/node_modules/.bin/turbo run build --scope=api-gateway --include-dependencies && yarn install --production --ignore-scripts --frozen-lockfile
 
 # Production stage
 FROM base AS production
 ENV NODE_ENV production
 WORKDIR $DIR
-RUN apk add --no-cache dumb-init~=1
+RUN apk add --no-cache dumb-init=1.2.5-r2
 COPY --chown=node:node --from=sourcer $DIR/apps/api-gateway/dist ./dist
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
