@@ -11,8 +11,8 @@ yarn.lock
 
 # Python
 requirements.txt
-pipfile.toml
-pipfile.lock
+Pipfile
+Pipfile.lock
 pyproject.toml
 poetry.lock
 setup.py
