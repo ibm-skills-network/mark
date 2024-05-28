@@ -6,7 +6,7 @@
   ],
   "packageManager": "yarn@1.22.19",
   "engines": {
-    "node": ">=18.15.0",
+    "node": ">=20.9.0",
     "npm": ">=7.0.0"
   },
   "scripts": {
@@ -29,9 +29,12 @@
     "test": "turbo run test",
     "test:staged": "turbo run test:staged --"
   },
+  "dependencies": {
+    "zod": "^3.23.5"
+  },
   "devDependencies": {
     "prettier": "^2.8.8",
-    "turbo": "latest"
+    "turbo": "^1.13.3"
   },
   "resolutions": {
     "**/express": "^4.19.2",
