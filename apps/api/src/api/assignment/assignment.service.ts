@@ -102,8 +102,7 @@ export class AssignmentService {
     id: number,
     updateAssignmentDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
-    //emforce questionOrder when publishing
-    if (updateAssignmentDto.published) {
+    if (updateAssignmentDto.published && updateAssignmentDto.questionOrder) {
       // Generate grading context for questions when publishing the assignment
       await this.handleQuestionGradingContext(
         id,
