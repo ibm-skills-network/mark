@@ -3,12 +3,12 @@ name: Build and Release Image
 on:
   push:
     branches:
-    - main
+    - master
     tags:
     - '**'
   pull_request:
     branches:
-    - main
+    - master
   schedule:
   - cron: 0 5 * * *
   workflow_dispatch:

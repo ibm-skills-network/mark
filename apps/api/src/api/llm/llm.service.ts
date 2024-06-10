@@ -1,24 +1,24 @@
-import { get_encoding, Tiktoken, TiktokenEncoding } from "@dqbd/tiktoken";
+import { get_encoding, TiktokenEncoding, type Tiktoken } from "@dqbd/tiktoken";
+import type { BaseLanguageModel as BaseLLM } from "@langchain/core/language_models/base";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { OpenAI } from "@langchain/openai";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { OpenAIModerationChain } from "langchain/chains";
-import { BaseLLM } from "langchain/dist/llms/base";
-import { OpenAI } from "langchain/llms/openai";
 import { StructuredOutputParser } from "langchain/output_parsers";
-import { PromptTemplate } from "langchain/prompts";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
+import type { Logger } from "winston";
 import { z } from "zod";
-import { ChoiceBasedQuestionEvaluateModel } from "./model/choice.based.question.evaluate.model";
+import type { ChoiceBasedQuestionEvaluateModel } from "./model/choice.based.question.evaluate.model";
 import {
-  ChoiceBasedFeedback,
   ChoiceBasedQuestionResponseModel,
+  type ChoiceBasedFeedback,
 } from "./model/choice.based.question.response.model";
-import { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
-import { TextBasedQuestionResponseModel } from "./model/text.based.question.response.model";
-import { TrueFalseBasedQuestionEvaluateModel } from "./model/true.false.based.question.evaluate.model";
+import type { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
+import type { TextBasedQuestionResponseModel } from "./model/text.based.question.response.model";
+import type { TrueFalseBasedQuestionEvaluateModel } from "./model/true.false.based.question.evaluate.model";
 import { TrueFalseBasedQuestionResponseModel } from "./model/true.false.based.question.response.model";
-import { UrlBasedQuestionEvaluateModel } from "./model/url.based.question.evaluate.model";
-import { UrlBasedQuestionResponseModel } from "./model/url.based.question.response.model";
+import type { UrlBasedQuestionEvaluateModel } from "./model/url.based.question.evaluate.model";
+import type { UrlBasedQuestionResponseModel } from "./model/url.based.question.response.model";
 import {
   feedbackChoiceBasedQuestionLlmTemplate,
   feedbackTrueFalseBasedQuestionLlmTemplate,
@@ -333,7 +333,7 @@ export class LlmService {
     const inputTokens = this.tiktokenEncoding.encode(input);
     this.logger.info(`Input token count: ${inputTokens.length}`);
 
-    const response = await this.llm.call(input);
+    const response = await this.llm.invoke(input);
 
     // Get tokens for the response and compute token count
     const responseTokens = this.tiktokenEncoding.encode(response);

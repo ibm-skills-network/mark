@@ -26,11 +26,11 @@ const questionTypes = [
   //   description: "This multiple choice should have exactly one answer.",
   //   value: "SINGLE_CORRECT",
   // },
-  {
-    label: "Multiple Choice",
-    description: "This multiple choice can have zero or more than one answer",
-    value: "MULTIPLE_CORRECT",
-  },
+  // {
+  //   label: "Multiple Choice",
+  //   description: "This multiple choice can have zero or more than one answer",
+  //   value: "MULTIPLE_CORRECT",
+  // },
 ] as QuestionTypeDropdown[];
 interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
   questionId: number;

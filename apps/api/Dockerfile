@@ -10,9 +10,9 @@ ENV DIR=${DIR}
 FROM base AS builder
 WORKDIR $DIR
 COPY . .
-RUN yarn global add turbo
+RUN yarn global add turbo@^2.0.3
 RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc
-RUN turbo prune --scope=api --docker && rm -f .npmrc
+RUN turbo prune api --docker && rm -f .npmrc
 
 # Installing the isolated workspace
 FROM base AS installer
@@ -30,13 +30,13 @@ WORKDIR $DIR
 COPY --from=installer $DIR/ .
 COPY --from=builder $DIR/out/full/ .
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN /usr/local/share/.config/yarn/global/node_modules/.bin/turbo run build --scope=api --include-dependencies && yarn install --production --ignore-scripts --frozen-lockfile
+RUN yarn build --filter=api && yarn install --production --ignore-scripts --frozen-lockfile
 
 # Production stage
 FROM base AS production
 ENV NODE_ENV production
 WORKDIR $DIR
-RUN apk add --no-cache dumb-init=1.2.5-r3 postgresql15-client=15.6-r0
+RUN apk add --no-cache dumb-init~=1 postgresql15-client~=15
 COPY --chown=node:node --from=sourcer $DIR/apps/api/dist ./dist
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 COPY --chown=node:node --from=sourcer $DIR/prisma ./prisma
