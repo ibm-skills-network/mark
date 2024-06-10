@@ -333,8 +333,7 @@ export class LlmService {
     const inputTokens = this.tiktokenEncoding.encode(input);
     this.logger.info(`Input token count: ${inputTokens.length}`);
 
-    const response = await this.llm.invoke(input);
-
+    const response: string = (await this.llm.invoke(input)) as string;
     // Get tokens for the response and compute token count
     const responseTokens = this.tiktokenEncoding.encode(response);
     this.logger.info(`Output token count: ${responseTokens.length}`);
