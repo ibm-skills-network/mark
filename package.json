@@ -14,7 +14,7 @@
     "build": "turbo run build",
     "build:docker": "docker buildx build -f ./apps/api-gateway/Dockerfile -t mark-api-gateway --no-cache --platform linux/amd64 . &> build-gateway.log && docker buildx build -f ./apps/web/Dockerfile -t mark-web --no-cache --platform linux/amd64 . &> build-web.log && docker buildx build -f ./apps/api/Dockerfile -t mark-api --no-cache --platform linux/amd64 . &> build-api.log",
     "db": "source dev.env && docker run --name mark-postgres -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_DB=$POSTGRES_DB -p 6001:5432 -d postgres",
-    "dev": "source dev.env && turbo run dev --parallel",
+    "dev": "turbo run dev --parallel",
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write \"**/*.{ts,tsx,md}\"",
     "lint": "turbo run lint",

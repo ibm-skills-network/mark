@@ -1,22 +1,18 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   UserRole,
-  UserSession,
+  type UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../prisma.service";
 import { LlmService } from "../llm/llm.service";
-import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
-import {
+import type { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
+import type {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
-import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
-import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
+import type { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
+import type { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 
 @Injectable()
 export class AssignmentService {
@@ -29,11 +25,11 @@ export class AssignmentService {
     id: number,
     userSession: UserSession
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    const includeQuestions = userSession.role !== UserRole.LEARNER;
+    const isLearner = userSession.role === UserRole.LEARNER;
 
     const result = await this.prisma.assignment.findUnique({
       where: { id },
-      include: { questions: includeQuestions },
+      include: { questions: !isLearner },
     });
 
     if (!result) {
@@ -41,9 +37,9 @@ export class AssignmentService {
     }
 
     // If learner then get rid of irrelevant/sensitive fields like questions, displayOrder and questionOrder
-    if (userSession.role === UserRole.LEARNER) {
-      delete result["displayOrder"];
-      delete result["questionOrder"];
+    if (isLearner) {
+      result.displayOrder = undefined;
+      result.questionOrder = undefined;
       return {
         ...result,
         success: true,
@@ -108,11 +104,6 @@ export class AssignmentService {
   ): Promise<BaseAssignmentResponseDto> {
     //emforce questionOrder when publishing
     if (updateAssignmentDto.published) {
-      if (!updateAssignmentDto.questionOrder) {
-        throw new BadRequestException(
-          "Expected questionOrder when publishing the assignment."
-        );
-      }
       // Generate grading context for questions when publishing the assignment
       await this.handleQuestionGradingContext(
         id,
