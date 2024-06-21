@@ -190,7 +190,7 @@ _note: `XXXX` must be the same as `lti-gateways`'s `dev.env`: `LTI_CREDENTIALS_A
 
 - Click the `Embed Button` and copy the `Coursera` Assignment Launch URL e.g. `<ngrok URL>/courses/4/assignments/2`
 - Copy `Consumer Key` e.g. `autogen-faculty-v1-coursera-course-v1-IND-AU0101DE-v1`
-- Copy the `Secret` e.g. `gGDFK0bDVPEA5aINdtv7`
+- Copy the `Secret` e.g. `password-from-embed-settings`
 - Add the above to the `App Item`
 - Launch the `App Item` from `View as Learner`
 
