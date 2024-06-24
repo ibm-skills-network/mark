@@ -13,6 +13,8 @@
     "format:staged": "prettier --ignore-unknown --write",
     "lint": "eslint .",
     "lint:staged": "eslint",
+    "seed": "source dev.env && pg_restore -d $DATABASE_URL prisma/seed.dump",
+    "seed:update": "source dev.env && pg_dump -Fc --data-only --no-owner --no-privileges $DATABASE_URL > prisma/seed.dump",
     "start": "op run --env-file=./dev.env -- nest start",
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",

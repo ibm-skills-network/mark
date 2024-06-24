@@ -11,6 +11,10 @@
       - [Local Database](#local-database)
       - [Dependencies](#dependencies)
       - [Build and Test](#build-and-test)
+    - [Useful Resources](#useful-resources)
+  - [Local Development: Mark Only](#local-development-mark-only)
+    - [Enable Mock Mode](#enable-mock-mode)
+    - [Example: Adding Assignments](#example-adding-assignments-then-accessing-learner-view)
   - [Local End-to-End Development: Author Workbench](#local-end-to-end-development-author-workbench)
     - [Setup Mark:](#setup-mark)
       - [Author Workbench Setup](#author-workbench-setup)
@@ -20,9 +24,6 @@
       - [Pre-requisities](#pre-requisities)
       - [Setup Assignment](#setup-assignment)
     - [EdX Setup](#edx-setup)
-  - [Local Development: Frontend Only](#local-development-frontend-only)
-    - [Enable Mock Mode](#enable-mock-mode)
-    - [Example: Adding Assignments](#example-adding-assignments)
   - [Deployment](#deployment)
   - [Troubleshooting](#troubleshooting)
     - [Unable to reach local host with ngrok:](#unable-to-reach-local-host-with-ngrok)
@@ -75,16 +76,34 @@ To integrate with a staging environment during local development:
 
 ### NestJS Framework
 
-This project uses [NestJS](https://docs.nestjs.com/). Familiarize yourself with NestJS if making significant changes.
+This project uses [NestJS](https://docs.nestjs.com/) on the backend ([api](../apps/api/) and [api-gateway](../apps/api-gateway/)) and [NextJS](https://nextjs.org/docs) on the frontend ([web](../apps/web/)). Familiarize yourself with them if making significant changes.
 
-_hint: When adding new components you should utilize the nest cli generator by running `npx next g ...`_
+_hint: When adding new components you should utilize the nest cli generator by running `npx nest g ...`_
 
 #### Local Database
 
-Start Postgres database locally:
+Start (or restart) Postgres database locally:
 
 ```bash
 yarn db
+```
+
+Run one-time setup operations like Prisma migrations to create the database schema:
+
+```bash
+yarn setup
+```
+
+Seed the database with test data (optional, it will create an assignment with 5 questions):
+
+```bash
+yarn seed
+```
+
+> Note: To modify the seed data, run the following command to generate a new seed.dump file. But only do this when you have modified the schema or would like to improve the seed data.
+
+```bash
+yarn seed:update
 ```
 
 #### Dependencies
@@ -113,15 +132,33 @@ yarn
   ```bash
   yarn dev
   ```
+
+### Useful Resources
+
 - **API Documentation**: Accessible at [localhost:3010/api](http://localhost:3010/api) while the application is running.
+- **Postman Collection**: Import the [Postman Collection](https://psycho-baller.postman.co/workspace/Mark~2fc561a8-6a26-4528-9a86-a8fbc86424c0/collection/23796705-d29338fc-95d8-407f-bfbd-d8395c3e72bd?action=share&creator=23796705) to test the API.
+
+## Local Development: Mark Only
+
+### Enable Mock Mode
+
+To enable mock mode, set `AUTH_DISABLED=true` in [apps/api-gateway/dev.env](../apps/api-gateway/dev.env#L17-L18).
+
+### Example: Adding Assignments then Accessing Learner View
+
+Add blank assignment: `http://localhost:8000/api/v1/admin/assignments`
+To access author view, visit: `http://localhost:3010/author/{:id}`
+
+To become a learner, first change the `AUTHOR` role to `LEARNER` in [here](../apps/api-gateway/src/auth/jwt/cookie-based/mock.jwt.cookie.auth.guard.ts#L27)
+Then visit: `http://localhost:3010/learner/{:id}`
 
 ## Local End-to-End Development: Author Workbench
 
 ### Setup Mark:
 
-Set `AUTH_DISABLED=false` in `apps/api-gateway/dev.env` before running `mark`
-
 #### Author Workbench Setup
+
+Set `AUTH_DISABLED=false` in `apps/api-gateway/dev.env` before running `mark`
 
 1. Update `config/settings/development.local.yml`:
 
@@ -197,17 +234,6 @@ _note: `XXXX` must be the same as `lti-gateways`'s `dev.env`: `LTI_CREDENTIALS_A
 ### EdX Setup
 
 TODO Later
-
-## Local Development: Frontend Only
-
-### Enable Mock Mode
-
-To enable mock mode, set `AUTH_DISABLED=true` in `dev.env`.
-
-### Example: Adding Assignments
-
-Add blank assignment: `http://localhost:8000/api/v1/admin/assignments`
-To access learner view, visit: `http://localhost:3010/learner/{:id}`
 
 ## Deployment
 
