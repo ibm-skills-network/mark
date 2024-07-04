@@ -1,4 +1,4 @@
-import Error from "@/components/ErrorPage";
+import ErrorPage from "@/components/ErrorPage";
 import { createAttempt, getAttempt, getAttempts } from "@/lib/talkToBackend";
 import QuestionPage from "@learnerComponents/Question";
 import { headers } from "next/headers";
@@ -15,7 +15,7 @@ async function LearnerLayout(props: Props) {
   const listOfAttempts = await getAttempts(assignmentId, cookie);
   console.log("listOfAttempts", listOfAttempts);
   if (!listOfAttempts) {
-    return <Error error={"Assignment not found"} />;
+    return <ErrorPage error={"Assignment not found"} />;
   }
 
   // check if there are any attempts that are not submitted and have not expired
@@ -31,10 +31,11 @@ async function LearnerLayout(props: Props) {
     : await createAttempt(assignmentId, cookie);
   console.log("attemptId", attemptId);
   if (!attemptId) {
-    return <Error error={"Attempt could not be created"} />;
-  } else if (attemptId === "no more attempts") {
+    return <ErrorPage error={"Attempt could not be created"} />;
+  }
+  if (attemptId === "no more attempts") {
     return (
-      <Error
+      <ErrorPage
         className="h-[calc(100vh-100px)]"
         statusCode={422}
         error={"No more attempts"}
@@ -45,7 +46,7 @@ async function LearnerLayout(props: Props) {
   const attempt = await getAttempt(assignmentId, attemptId, cookie);
   console.log("attempt", attempt);
   if (!attempt) {
-    return <Error error={"Attempt could not be fetched"} />;
+    return <ErrorPage error={"Attempt could not be fetched"} />;
   }
   return (
     <main className="p-24">

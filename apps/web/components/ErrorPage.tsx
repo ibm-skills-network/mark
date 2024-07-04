@@ -1,9 +1,9 @@
 "use client";
 
+import { cn } from "@/lib/strings";
 import { useEffect } from "react";
-import { twMerge } from "tailwind-merge";
 
-export default function Error({
+export default function ErrorPage({
   error,
   statusCode = 500,
   className,
@@ -19,7 +19,7 @@ export default function Error({
 
   return (
     <div
-      className={twMerge(
+      className={cn(
         "flex flex-col items-center justify-center gap-y-4",
         className
       )}

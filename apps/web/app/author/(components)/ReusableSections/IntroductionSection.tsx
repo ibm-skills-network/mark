@@ -1,21 +1,21 @@
 import MarkdownEditor from "@/components/MarkDownEditor";
 import Title from "@/components/Title";
-import { GradingData } from "@/config/types";
+import type { GradingData } from "@/config/types";
+import { cn } from "@/lib/strings";
 import {
-  ComponentPropsWithoutRef,
-  ElementType,
   useMemo,
+  type ComponentPropsWithoutRef,
   type Dispatch,
+  type ElementType,
   type SetStateAction,
 } from "react";
-import { twMerge } from "tailwind-merge";
-import GradingOptionsForm from "./GradingOptionsForm";
+import GradingOptionsForm from "../GradingOptionsForm";
 import {
   AdjustSettingsIcon,
   GradingIcon,
   InstructionIcon,
   IntroductionIcon,
-} from "./IntroductionSvgs";
+} from "../IntroductionSvgs";
 
 const titleToDescription = [
   {
@@ -78,7 +78,7 @@ export function IntroductionsectionId<T extends ElementType = "section">(
   const { title, description, svg, placeholder, required } = section;
   return (
     <Component
-      className={twMerge("group relative flex flex-col items-start", className)}
+      className={cn("group relative flex flex-col items-start", className)}
       id={sectionId.toLowerCase()}
       {...rest}
     >
@@ -86,13 +86,15 @@ export function IntroductionsectionId<T extends ElementType = "section">(
         <div className="w-12 mr-6">{svg}</div>
         <div className="">
           <Title
-            text={title}
-            className={
-              "text-lg font-semibold leading-6 " +
-              (required && "after:text-blue-400 after:content-['*']")
-            }
-          />
-          <p className="mt-2 text-gray-500 ">{description}</p>
+            level={5}
+            className={cn(
+              "leading-6",
+              required && "after:text-blue-400 after:content-['*']"
+            )}
+          >
+            {title}
+          </Title>
+          <p className="mt-2 text-gray-600">{description}</p>
         </div>
       </div>
       <div className="w-full border rounded-b-lg border-gray-300 bg-white px-12 2xl:px-14 py-8">

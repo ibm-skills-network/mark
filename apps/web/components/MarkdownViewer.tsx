@@ -1,8 +1,8 @@
 "use client";
 
+import { cn } from "@/lib/strings";
 import dynamic from "next/dynamic";
-import { type ComponentPropsWithoutRef, type FC } from "react";
-import { twMerge } from "tailwind-merge";
+import type { ComponentPropsWithoutRef, FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 const MdViewer = dynamic(
@@ -17,7 +17,7 @@ const MarkdownViewer: FC<Props> = (props) => {
 
   return (
     <MdViewer
-      className={twMerge(className, "whitespace-pre-wrap")}
+      className={cn("whitespace-pre-wrap", className)}
       {...restOfProps}
       source={children as string}
     />

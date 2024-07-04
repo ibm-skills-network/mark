@@ -1,6 +1,6 @@
+import { cn } from "@/lib/strings";
 import { useLearnerStore } from "@/stores/learner";
 import { useState, type ComponentPropsWithoutRef } from "react";
-import { twMerge } from "tailwind-merge";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
@@ -43,7 +43,7 @@ function URLQuestion(props: Props) {
   return (
     <input
       type="text"
-      className={twMerge(
+      className={cn(
         "w-full p-2 mt-4 border rounded",
         !validURL ? "border-red-500" : "border-gray-300",
         className

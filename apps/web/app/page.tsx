@@ -16,7 +16,7 @@ export default async function Home() {
   }
   const user = await getUser(cookie);
   // assignmentId is Number
-  if (!(user?.assignmentId && !isNaN(user.assignmentId))) {
+  if (!(user?.assignmentId && !Number.isNaN(user.assignmentId))) {
     return <ErrorPage error="assignmentId not found" />;
   }
   if (user?.role === "author") {

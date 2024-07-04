@@ -1,5 +1,5 @@
-import { type ComponentPropsWithoutRef, type FC } from "react";
-import { twMerge } from "tailwind-merge";
+import { cn } from "@/lib/strings";
+import type { ComponentPropsWithoutRef, FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"svg"> {}
 
@@ -9,7 +9,7 @@ const Spinner: FC<Props> = (props) => {
   return (
     <svg
       fill="none"
-      className={twMerge("w-6 animate-spin", className)}
+      className={cn("w-6 animate-spin", className)}
       viewBox="0 0 32 32"
       xmlns="http://www.w3.org/2000/svg"
       {...restOfProps}

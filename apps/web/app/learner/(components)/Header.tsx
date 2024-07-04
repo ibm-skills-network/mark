@@ -17,11 +17,13 @@ function LearnerHeader(props: Props) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [questions, activeAttemptId, submitAssignmentRef] = useLearnerStore((state) => [
-    state.questions,
-    state.activeAttemptId,
-    state.submitAssignmentRef
-  ]);
+  const [questions, activeAttemptId, submitAssignmentRef] = useLearnerStore(
+    (state) => [
+      state.questions,
+      state.activeAttemptId,
+      state.submitAssignmentRef,
+    ]
+  );
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
@@ -57,7 +59,7 @@ function LearnerHeader(props: Props) {
           <SNIcon />
         </div>
         <div>
-          <Title text={title} className="text-lg font-semibold" />
+          <Title className="text-lg font-semibold">{title}</Title>
           {pathname.includes("questions") && (
             <Breadcrumbs
               homeHref={pathname.replace(/\/questions.*/, "")}

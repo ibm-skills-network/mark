@@ -1,4 +1,5 @@
 import Tooltip from "@/components/Tooltip";
+import { cn } from "@/lib/strings";
 import {
   useEffect,
   useRef,
@@ -45,10 +46,10 @@ const Component: FC<Props> = (props) => {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className={
-            "w-full transition-all flex gap-x-2 justify-between items-center border relative border-gray-300 rounded-md h-12 pl-4 pr-3 py-2 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-blue-600" +
-            (isOpen ? " rounded-t-md ring-blue-600 ring-1" : " rounded-md")
-          }
+          className={cn(
+            "w-full transition-all flex gap-x-2 justify-between items-center border relative border-gray-300 rounded-md h-12 pl-4 pr-3 py-2 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-blue-600",
+            isOpen ? "rounded-t-md ring-blue-600 ring-1" : "rounded-md"
+          )}
         >
           {/* <p
             className={
@@ -85,7 +86,7 @@ const Component: FC<Props> = (props) => {
           {/* </p> */}
 
           <svg
-            className={"transition " + (isOpen ? "rotate-180" : "")}
+            className={cn("transition", isOpen ? "rotate-180" : "")}
             width="20"
             height="20"
             viewBox="0 0 20 20"
@@ -104,10 +105,10 @@ const Component: FC<Props> = (props) => {
       </Tooltip>
 
       <div
-        className={
-          "absolute w-full bg-white rounded-b-md shadow-lg border border-gray-300 origin-top duration-150 z-10 " +
-          (isOpen ? "scale-100" : "scale-0")
-        }
+        className={cn(
+          "absolute w-full bg-white rounded-b-md shadow-lg border border-gray-300 origin-top duration-150 z-10",
+          isOpen ? "scale-100" : "scale-0"
+        )}
       >
         {value ? (
           <div

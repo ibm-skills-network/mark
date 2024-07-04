@@ -1,8 +1,8 @@
+import { cn } from "@/lib/strings";
 import { getWordCount } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import { useState, type ComponentPropsWithoutRef } from "react";
 import rehypeSanitize from "rehype-sanitize";
-import { twMerge } from "tailwind-merge";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
@@ -42,11 +42,11 @@ function MarkdownEditor(props: Props) {
   return (
     <>
       <MdEditor
-        className={twMerge(className, "max-h-96")}
+        className={cn(className, "max-h-96")}
         preview="edit"
         height="100%"
         textareaProps={{
-          className: twMerge("placeholder-gray-400", textareaClassName),
+          className: cn("placeholder-gray-400", textareaClassName),
           placeholder,
         }}
         visibleDragbar={false}

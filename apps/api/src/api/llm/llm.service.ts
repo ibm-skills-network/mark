@@ -47,7 +47,7 @@ export class LlmService {
   async applyGuardRails(message: string): Promise<boolean> {
     const moderation = new OpenAIModerationChain();
 
-    const { output: guardRailsResponse } = await moderation.call({
+    const { output: guardRailsResponse } = await moderation.invoke({
       input: message,
     });
 

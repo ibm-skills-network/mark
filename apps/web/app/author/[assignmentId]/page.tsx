@@ -14,7 +14,7 @@ function Component(props: Props) {
   const currentDateInThisPage = Date.now();
 
   return (
-    <main className="flex flex-col gap-y-11 mx-auto max-w-6xl py-20">
+    <main className="main-author-container">
       {/* if submission tims is within 10 seconds of now, show the submitted page, and it can't be greater than the current date in this page */}
       {submissionTime &&
       currentDateInThisPage - submissionTimeInt < 10000 &&

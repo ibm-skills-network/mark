@@ -131,7 +131,7 @@ function GradingOptionsForm(props: Props) {
       </div>
 
       {/* a border that has a corner that thins out */}
-      <div className="col-span-2 h-0.5 bg-gradient-to-r from-transparent via-gray-300 via-50%"></div>
+      <div className="col-span-2 h-0.5 bg-gradient-to-r from-transparent via-gray-300 via-50%" />
 
       <div className="flex flex-col gap-y-2">
         <label

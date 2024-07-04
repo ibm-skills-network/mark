@@ -1,11 +1,11 @@
 import { Choice } from "@/config/types";
+import { cn } from "@/lib/strings";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import {
   useMemo,
   type ChangeEvent,
   type ComponentPropsWithoutRef,
 } from "react";
-import { twMerge } from "tailwind-merge";
 import NumberInputTooltip from "./NumberInputTooltip";
 
 interface Props extends ComponentPropsWithoutRef<"li"> {
@@ -88,7 +88,7 @@ function Component(props: Props) {
         disableDecrement={points <= 1}
         incrementPoints={incrementPoints}
         decrementPoints={decrementPoints}
-        className={twMerge(
+        className={cn(
           "text-sm leading-5 transition-colors font-medium",
           isCorrect ? "text-blue-700" : "text-gray-500"
         )}

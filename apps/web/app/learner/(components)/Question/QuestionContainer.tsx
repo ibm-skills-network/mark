@@ -1,4 +1,5 @@
 import MarkdownViewer from "@/components/MarkdownViewer";
+import { cn } from "@/lib/strings";
 import { submitQuestion } from "@/lib/talkToBackend";
 import { getFeedbackColors } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -8,7 +9,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { twMerge } from "tailwind-merge";
 import QuestionScore from "../QuestionScore";
 import RenderQuestion from "./RenderQuestion";
 import SubmitQuestion from "./SubmitQuestion";
@@ -41,7 +41,7 @@ function Component(props: Props) {
   );
 
   const question = useMemo(() => {
-    return questions.find((q) => q.id === props.questionId);
+    return questions.find((q) => q.id === questionId);
   }, [questions, questionId]);
   const {
     id,
@@ -106,7 +106,7 @@ function Component(props: Props) {
   }
 
   return (
-    <section className={twMerge("flex flex-col gap-y-5 relative", className)}>
+    <section className={cn("flex flex-col gap-y-5 relative", className)}>
       <div className="flex absolute -top-8 justify-between w-full">
         <div className="flex gap-x-1">
           <p className="text-gray-600 text-xl font-medium leading-tight">
@@ -147,7 +147,7 @@ function Component(props: Props) {
         mostRecentFeedback.points !== undefined &&
         mostRecentFeedback.feedback[0]?.feedback && (
           <div
-            className={twMerge(
+            className={cn(
               "border p-5 rounded-lg shadow-sm",
               getFeedbackColors(mostRecentFeedback.points, totalPoints)
             )}

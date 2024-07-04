@@ -81,9 +81,7 @@ function Rubric(props: Rubric) {
   const [parent, enableAnimations] = useAutoAnimate();
 
   return (
-    <div
-      className={`relative flex flex-col rounded-md bg-white border border-transparent`}
-    >
+    <div className="relative flex flex-col rounded-md bg-white border border-transparent">
       <div>
         <h1 className="text-base font-normal pb-4 leading-6 text-gray-900 relative after:text-blue-400 after:content-['*']">
           List the conditions for meeting the Criteria of Question
@@ -117,8 +115,8 @@ function Rubric(props: Rubric) {
                 className="transition py-2 border flex-1 border-gray-300 shadow-sm pl-2 h-12 max-h-60 resize-none pr-10 rounded-md text-black outline-none placeholder-gray-400"
                 placeholder={
                   index === 0
-                    ? `ex. “The question is not legible” `
-                    : `ex. “The question is legible” `
+                    ? "ex. “The question is not legible” "
+                    : "ex. “The question is legible” "
                 }
                 value={criteria.description}
                 onChange={(event) =>

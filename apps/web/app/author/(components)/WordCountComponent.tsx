@@ -18,7 +18,7 @@ const WordCountComponent: FC<WordCountComponentProps> = (props) => {
       <input
         type="number"
         className="rounded-md transition py-3 px-4 border-gray-300 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
-        placeholder={`ex. 250`}
+        placeholder="ex. 250"
         value={maxWords}
         onChange={handleMaxWordCountChange}
         min={1}

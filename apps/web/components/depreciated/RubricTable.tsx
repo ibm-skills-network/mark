@@ -89,12 +89,8 @@ function RubricTableProps(props: RubricTableProps) {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {rubrics.map((rubric, index) => (
                   <tr key={rubric.key} className="divide-x divide-gray-200">
-                    <td
-                      className={` h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
-                    >
-                      <td
-                        className={` h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0`}
-                      >
+                    <td className="h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0">
+                      <td className="h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium bg-gray-100 sm:pl-0">
                         <input
                           type="text"
                           className="w-full h-full border-transparent bg-gray-100 hover:bg-gray-300 text-sm placeholder-gray-400 hover:placeholder-white focus:outline-none focus:bg-gray-300 focus:placeholder-gray-600"
@@ -111,7 +107,9 @@ function RubricTableProps(props: RubricTableProps) {
                     </td>
                     <td className=" p-4 text-sm text-gray-500 ">
                       <td
-                        className={` h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
+                        className={
+                          " h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0"
+                        }
                       >
                         <textarea
                           className="w-[100%] h-[100%] border-transparent text-xs break-normal  hover:bg-gray-300 "
@@ -129,7 +127,9 @@ function RubricTableProps(props: RubricTableProps) {
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500 flex">
                       <div className="flex items-center">
                         <td
-                          className={`whitespace-nowrap  h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0 flex`}
+                          className={
+                            "whitespace-nowrap  h-[12.0625rem] py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0 flex"
+                          }
                         >
                           <input
                             type="text"
@@ -169,7 +169,9 @@ function RubricTableProps(props: RubricTableProps) {
                     <td className="whitespace-nowrap p-4 text-sm text-gray-500">
                       <div className="flex items-center">
                         <td
-                          className={`whitespace-nowrap  py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0`}
+                          className={
+                            "whitespace-nowrap  py-4 pl-4 pr-4 text-sm font-medium  sm:pl-0"
+                          }
                         >
                           <input
                             type="number"

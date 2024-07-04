@@ -1,14 +1,12 @@
+import { cn } from "@/lib/strings";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import type { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
 import { useMemo, type ComponentPropsWithoutRef } from "react";
-import { twMerge } from "tailwind-merge";
 import Timer from "./Timer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 function Overview(props: Props) {
-  const {} = props;
-
   const [
     questionsStore,
     activeQuestionNumber,
@@ -32,21 +30,23 @@ function Overview(props: Props) {
           : -1;
       if (question.totalPoints === earnedPoints) {
         return "correct";
-      } else if (earnedPoints > 0) {
+      }
+      if (earnedPoints > 0) {
         return "partiallyCorrect";
         // TODO: add other types of questions
-      } else if (earnedPoints === 0) {
+      }
+      if (earnedPoints === 0) {
         return "incorrect";
-      } else if (earnedPoints === -1) {
+      }
+      if (earnedPoints === -1) {
         if (
           question?.learnerTextResponse ||
           question?.learnerUrlResponse ||
           question?.learnerChoices?.length > 0
         ) {
           return "edited";
-        } else {
-          return "unedited";
         }
+        return "unedited";
       }
     });
   }, [questionsStore]);
@@ -66,7 +66,7 @@ function Overview(props: Props) {
           <button
             key={index}
             onClick={() => setActiveQuestionNumber(index + 1)}
-            className={twMerge(
+            className={cn(
               "p-0.5 w-10 h-14 border rounded-md text-center grid grid-rows-2 cursor-pointer focus:outline-none",
               question === "edited" ? "bg-indigo-100" : "bg-gray-100",
               index === activeQuestionNumber - 1

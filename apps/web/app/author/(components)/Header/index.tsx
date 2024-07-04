@@ -4,17 +4,13 @@ import { replaceQuestion, updateAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
-import { EyeIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 
-interface Props {}
-
-function AuthorHeader(props: Props) {
-  const {} = props;
+function AuthorHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const activeAssignmentId = useAuthorStore(
@@ -93,9 +89,9 @@ function AuthorHeader(props: Props) {
         dataToSend.totalPoints =
           dataToSend.scoring?.criteria?.at(-1).points || 0;
         // remove id from criteria since it's not needed in the backend
-        dataToSend.scoring?.criteria?.forEach((criteria) => {
-          delete criteria.id;
-        });
+        for (const criteria of dataToSend.scoring.criteria) {
+          criteria.id = undefined;
+        }
       } else if (dataToSend.type === "MULTIPLE_CORRECT") {
         dataToSend.totalPoints = dataToSend.choices?.reduce(
           (acc, curr) => acc + curr.points,
@@ -139,7 +135,7 @@ function AuthorHeader(props: Props) {
       );
 
       if (!updated) {
-        toast.error(`Questions were updated but assignment failed to publish.`);
+        toast.error("Questions were updated but assignment failed to publish.");
       }
       setSubmitting(false);
       const currentTime = Date.now();
@@ -209,10 +205,9 @@ function AuthorHeader(props: Props) {
             <SNIcon />
           </div>
           <div>
-            <Title
-              text="Auto-Graded Assignment Creator"
-              className="text-lg font-semibold leading-6"
-            />
+            <Title level={5} className="leading-6">
+              Auto-Graded Assignment Creator
+            </Title>
             <div className="text-gray-500 font-medium text-sm leading-5">
               {assignmentTitle || "Untitled Assignment"}
             </div>
@@ -251,6 +246,7 @@ function AuthorHeader(props: Props) {
                 ) : (
                   // incomplete
                   <button
+                    type="button"
                     className="group w-full flex flex-col border-l-4 border-gray-200 py-2 pl-4 hover:border-gray-300 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
                     onClick={() => handleIncompleteClick(id)}
                   >
@@ -325,9 +321,8 @@ function AuthorHeader(props: Props) {
         {isOpen && ( // Render the second div only when isOpen is true
           <div className="max-h-52 overflow-auto">
             {questions.map((question, index) => (
-              <div key={index} className="flex gap-4 my-0 justify-end">
+              <div key={question.id} className="flex gap-4 my-0 justify-end">
                 <button
-                  key={index}
                   type="button"
                   onClick={() => handleScrollToTarget(question.id)}
                   className="inline-flex justify-center gap-x-1.5 w-[9.375rem] bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-inset ring-gray-300 hover:bg-gray-50"

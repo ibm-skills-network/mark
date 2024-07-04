@@ -1,22 +1,21 @@
 import useCountdown from "@/hooks/use-countdown";
+import { cn } from "@/lib/strings";
 import { submitAssignment } from "@/lib/talkToBackend";
-import { useLearnerStore, useAssignmentDetails } from "@/stores/learner";
-import {useRouter} from "next/navigation";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import { useRouter } from "next/navigation";
 import { type ComponentPropsWithoutRef } from "react";
 import { toast } from "sonner";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
-  expiresAt: string
+  expiresAt: string;
 }
 
 function Timer(props: Props) {
-  const { expiresAt,...restOfProps } = props;
+  const { expiresAt, ...restOfProps } = props;
   const router = useRouter();
 
   // const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
-  const activeAttemptId = useLearnerStore(
-    (state) => state.activeAttemptId
-  );
+  const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
@@ -61,10 +60,10 @@ function Timer(props: Props) {
         Time Remaining:
       </div>
       <div
-        className={
-          "text-base font-bold leading-tight " +
-          (hours === 0 && minutes < 5 ? "text-red-500" : "text-blue-600")
-        }
+        className={cn(
+          "text-base font-bold leading-tight",
+          hours === 0 && minutes < 5 ? "text-red-500" : "text-blue-600"
+        )}
       >
         {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}
       </div>

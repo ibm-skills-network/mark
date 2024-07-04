@@ -5,13 +5,13 @@
 import { initialCriteria } from "@/config/constants";
 import { CreateQuestionRequest, QuestionAuthorStore } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
+import { cn } from "@/lib/strings";
 import { createQuestion, getAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { PlusIcon } from "@heroicons/react/24/solid";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { twMerge } from "tailwind-merge";
 import Question from "./Question";
 
 interface Props {
@@ -151,7 +151,7 @@ function AuthorQuestionsPage(props: Props) {
         </p>
       )}
       <div
-        className={twMerge(
+        className={cn(
           "flex flex-col gap-y-20",
           questions.length === 0 ? "mb-24" : "my-24"
         )}

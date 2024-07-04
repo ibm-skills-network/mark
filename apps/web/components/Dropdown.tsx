@@ -2,8 +2,8 @@
 
 import Tooltip from "@/components/Tooltip";
 import type { QuestionType, QuestionTypeDropdown } from "@/config/types";
+import { cn } from "@/lib/strings";
 import { useEffect, useRef, useState } from "react";
-import { twMerge } from "tailwind-merge";
 
 interface DropdownProps {
   questionType: QuestionType;
@@ -51,26 +51,26 @@ function Dropdown(props: DropdownProps) {
         <button
           type="button"
           onClick={toggleModelPicker}
-          className={
-            "w-full transition-all flex justify-between items-center pl-4 px-3 py-3 text-left border border-gray-300 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-blue-600" +
-            (isOpen ? " rounded-t-md ring-blue-600 ring-1" : " rounded-md")
-          }
+          className={cn(
+            "w-full transition-all flex justify-between items-center pl-4 px-3 py-3 text-left border border-gray-300 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-blue-600",
+            isOpen ? "rounded-t-md ring-blue-600 ring-1" : "rounded-md"
+          )}
           {...rest}
         >
           <p
-            className={
-              "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm  transition-colors" +
-              (questionType
+            className={cn(
+              "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm transition-colors",
+              questionType
                 ? " font-medium text-gray-700"
-                : " text-gray-500 dark:text-gray-500")
-            }
+                : " text-gray-500 dark:text-gray-500"
+            )}
           >
             {questionTypes.find((question) => question.value === questionType)
               ?.label ?? "Select a question type"}
           </p>
 
           <svg
-            className={"transition " + (isOpen ? "rotate-180" : "")}
+            className={cn("transition", isOpen ? "rotate-180" : "")}
             width="20"
             height="20"
             viewBox="0 0 20 20"
@@ -89,10 +89,10 @@ function Dropdown(props: DropdownProps) {
       </Tooltip>
 
       <div
-        className={
-          "pb-1 absolute w-full bg-white rounded-b-md shadow-lg border border-gray-300 origin-top duration-150 z-10 " +
-          (isOpen ? "scale-100" : "scale-0")
-        }
+        className={cn(
+          "pb-1 absolute w-full bg-white rounded-b-md shadow-lg border border-gray-300 origin-top duration-150 z-10",
+          isOpen ? "scale-100" : "scale-0"
+        )}
       >
         {questionTypes.map((question) => (
           <Tooltip
@@ -101,7 +101,7 @@ function Dropdown(props: DropdownProps) {
             disabled={true}
           >
             <li
-              className={twMerge(
+              className={cn(
                 "block px-4 border-t border-gray-300 py-3 text-sm cursor-pointer transition",
                 questionType === question.value
                   ? "hover:bg-blue-400 bg-blue-500 text-white"

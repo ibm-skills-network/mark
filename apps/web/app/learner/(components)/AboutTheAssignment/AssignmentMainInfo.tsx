@@ -45,7 +45,7 @@ function Component(props: Props) {
         <div className="flex items-center">
           Attempts Allowed: {numAttempts || "Unlimited"}
         </div>
-        <div className="border-r border-gray-400 h-4 self-center"></div>
+        <div className="border-r border-gray-400 h-4 self-center" />
         <div className="flex items-center">
           {allotedTimeMinutes ? (
             <>Time Limit: {allotedTimeMinutes} minutes</>
@@ -53,7 +53,7 @@ function Component(props: Props) {
             "No Time Limit"
           )}
         </div>
-        <div className="border-r border-gray-400 h-4 self-center"></div>
+        <div className="border-r border-gray-400 h-4 self-center" />
         <div className="flex items-center">
           {timeEstimateMinutes ? (
             <>Time Estimate: {timeEstimateMinutes} minutes</>
@@ -61,7 +61,7 @@ function Component(props: Props) {
             "No Time Estimate"
           )}
         </div>
-        <div className="border-r border-gray-400 h-4 self-center"></div>
+        <div className="border-r border-gray-400 h-4 self-center" />
         <div className="flex items-center">
           {passingGrade ? (
             <>Passing Grade: {passingGrade}%</>

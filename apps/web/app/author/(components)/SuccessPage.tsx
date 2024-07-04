@@ -47,12 +47,14 @@ function SuccessPage(props: Props) {
         </Link>
         {returnUrl && (
           <Link
-          href={returnUrl}
-          className="px-4 py-2 bg-blue-700 hover:bg-blue-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
-        >
-          <ExitIcon className="w-6 h-6 text-white" />
-          <div className="text-white text-base font-medium">Back to course</div>
-        </Link>
+            href={returnUrl}
+            className="px-4 py-2 bg-blue-700 hover:bg-blue-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
+          >
+            <ExitIcon className="w-6 h-6 text-white" />
+            <div className="text-white text-base font-medium">
+              Back to course
+            </div>
+          </Link>
         )}
       </div>
     </section>

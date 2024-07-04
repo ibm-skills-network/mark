@@ -1,6 +1,7 @@
 import PageWithStickySides from "@/app/components/PageWithStickySides";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionStore } from "@/config/types";
+import { cn } from "@/lib/strings";
 import { getFeedbackColors } from "@/lib/utils";
 import { useMemo, type ComponentPropsWithoutRef, type FC } from "react";
 import ReactMarkdown from "react-markdown";
@@ -90,12 +91,12 @@ const Question: FC<Props> = (props) => {
                 {question.choices.map((choice, index) => (
                   <div
                     key={index}
-                    className={
-                      "flex items-center justify-start gap-x-2 " +
-                      (learnerChoices.includes(choice.choice)
+                    className={cn(
+                      "flex items-center justify-start gap-x-2",
+                      learnerChoices.includes(choice.choice)
                         ? "text-grey-700"
-                        : "text-grey-500")
-                    }
+                        : "text-grey-500"
+                    )}
                   >
                     <div className="flex items-center justify-center w-5 h-5 border border-gray-300 rounded-full">
                       <div className="w-2 h-2 bg-gray-300 rounded-full" />
@@ -116,10 +117,10 @@ const Question: FC<Props> = (props) => {
           </div>
           {/* feedback */}
           <div
-            className={
-              "w-full border p-5 rounded-lg shadow-sm " +
-              getFeedbackColors(highestScoreResponse.points, totalPoints)
-            }
+            className={`w-full border p-5 rounded-lg shadow-sm ${getFeedbackColors(
+              highestScoreResponse.points,
+              totalPoints
+            )}`}
           >
             <p className="text-center font-medium">
               <span className="font-bold">

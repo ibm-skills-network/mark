@@ -1,27 +1,29 @@
 "use client";
 
-import { type ComponentPropsWithoutRef } from "react";
-import { twMerge } from "tailwind-merge";
+import { cn } from "@/lib/strings";
+import type { ComponentPropsWithoutRef } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"h1"> {
-  text: string;
-  level?: string;
+  level?: 1 | 2 | 3 | 4 | 5;
 }
 
 function Title(props: Props) {
-  const { text, level = "1", className } = props;
+  const { children, level = 1, className } = props;
 
-  const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+  const Tag = `h${level.toString()}` as keyof JSX.IntrinsicElements;
   return (
     <Tag
-      className={twMerge(
-        `text-${
-          level === "1" ? "3xl" : level === "2" ? "2xl" : "xl"
-        } font-bold text-black`,
+      className={cn(
+        { "text-4xl": level === 1 },
+        { "text-3xl": level === 2 },
+        { "text-2xl": level === 3 },
+        { "text-xl": level === 4 },
+        { "text-lg font-bold": level === 5 },
+        "font-bold text-gray-900",
         className
       )}
     >
-      {text}
+      {children}
     </Tag>
   );
 }

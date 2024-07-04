@@ -1,6 +1,6 @@
+import { cn } from "@/lib/strings";
 import { PlusIcon } from "@heroicons/react/24/solid";
-import { type ComponentPropsWithoutRef, type FC, type ReactNode } from "react";
-import { twMerge } from "tailwind-merge";
+import type { ComponentPropsWithoutRef, FC, ReactNode } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   children: ReactNode;
@@ -25,7 +25,7 @@ const Tooltip: FC<Props> = (props) => {
   } = props;
 
   return (
-    <div className={twMerge("group/tooltip", className)} {...restOfProps}>
+    <div className={cn("group/tooltip", className)} {...restOfProps}>
       {children}
       <div className="relative flex items-center justify-center">
         {!disabled && (

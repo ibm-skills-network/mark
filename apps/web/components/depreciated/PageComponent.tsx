@@ -22,7 +22,7 @@ function PageComponent({ children }) {
               className={`w-199.25 h-1 ${
                 currentPage === 1 ? "bg-blue-700" : "bg-gray-300"
               }`}
-            ></div>
+            />
             Step: <span className="text-blue-700 font-normal">1</span>
             <br />
             <span
@@ -43,7 +43,7 @@ function PageComponent({ children }) {
               className={`w-199.25 h-1 ${
                 currentPage === 2 ? "bg-blue-700" : "bg-gray-300"
               }`}
-            ></div>
+            />
             Step: <span className="text-blue-700 font-normal">2</span>
             <br />
             <span
@@ -64,7 +64,7 @@ function PageComponent({ children }) {
               className={`w-199.25 h-1 ${
                 currentPage === 3 ? "bg-blue-700" : "bg-gray-300"
               }`}
-            ></div>
+            />
             Step: <span className="text-blue-700 font-normal">3</span>
             <br />
             <span

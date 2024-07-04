@@ -18,6 +18,10 @@ ul {
   list-style: disc;
 }
 
+.main-author-container {
+  @apply flex flex-col gap-y-8 mx-auto max-w-6xl py-24;
+}
+
 /* :root {
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;

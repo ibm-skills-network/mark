@@ -1,10 +1,8 @@
+import { cn } from "@/lib/strings";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { useState } from "react";
 
-interface Props {}
-
-function TrueFalseQuestion(props: Props) {
-  const {} = props;
+function TrueFalseQuestion() {
   const activeQuestionNumber = useLearnerStore(
     (state) => state.activeQuestionNumber
   );
@@ -57,9 +55,11 @@ function TrueFalseQuestion(props: Props) {
         return (
           <button
             key={index}
-            className={
-              "block w-full text-left p-2 mb-2 border rounded" + " " + bgColor
-            }
+            type="button"
+            className={cn(
+              "block w-full text-left p-2 mb-2 border rounded",
+              bgColor
+            )}
             onClick={() => handleChoiceClick(choiceText)}
           >
             {choiceText}

@@ -1,8 +1,8 @@
 import Tooltip from "@/components/Tooltip";
+import { cn } from "@/lib/strings";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
-import { type ComponentPropsWithoutRef, type FC } from "react";
-import { twMerge } from "tailwind-merge";
+import type { ComponentPropsWithoutRef, FC } from "react";
 import Button from "../Button";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -22,7 +22,7 @@ const BeginTheAssignment: FC<Props> = (props) => {
     //   </Button>
     // ) : (
     // it's either "not-started" or "in-progress"
-    <div className={twMerge("", className)}>
+    <div className={cn("", className)}>
       <Tooltip
         className=""
         distance={3}
