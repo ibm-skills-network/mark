@@ -774,9 +774,9 @@
     zod-to-json-schema "^3.22.3"
 
 "@langchain/core@>=0.2.8 <0.3.0", "@langchain/core@>=0.2.9 <0.3.0", "@langchain/core@^0.2.6":
-  version "0.2.14"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.14.tgz#2f607b3da03717bdb1ddb70ec64cf0f6d03bede3"
-  integrity sha512-e+dB2Sra+5sY4fPCXrZh4w1fLR68yfX2XSWS97DzHpeJRRnMGbOzjaaks6gy3wPyWhfS1WGLisJCMfCmFvH9fw==
+  version "0.2.15"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.15.tgz#1bb99ac4fffe935c7ba37edcaa91abfba3c82219"
+  integrity sha512-L096itIBQ5XNsy5BCCPqIQEk/x4rzI+U4BhYT+fDBYtljESshIi/WzXdmiGfY/6MpVjB76jNuaRgMDmo1m9NeQ==
   dependencies:
     ansi-styles "^5.0.0"
     camelcase "6"
