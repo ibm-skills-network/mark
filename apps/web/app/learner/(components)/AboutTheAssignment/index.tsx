@@ -41,7 +41,7 @@ async function AboutTheAssignment(props: Props) {
         attempt.submitted === false &&
         // if the assignment does not expire, then the expiresAt is null
         (attempt.expiresAt === null ||
-          Date.now() < Date.parse(attempt.expiresAt))
+          Date.now() < Date.parse(attempt.expiresAt)),
     );
     if (unsubmittedAssignment) {
       assignmentState = "in-progress";
@@ -80,11 +80,6 @@ async function AboutTheAssignment(props: Props) {
           numAttempts={numAttempts}
           passingGrade={passingGrade}
           name={name}
-          assignmentId={id}
-        />
-
-        <BeginTheAssignmentButton
-          assignmentState={assignmentState}
           assignmentId={id}
         />
         {/* )} */}

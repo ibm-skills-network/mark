@@ -7,7 +7,7 @@ interface Props extends ComponentPropsWithoutRef<"div"> {}
 function URLQuestion(props: Props) {
   const { className, ...restOfProps } = props;
   const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber
+    (state) => state.activeQuestionNumber,
   );
 
   const [questions, setURLResponse] = useLearnerStore((state) => [
@@ -35,7 +35,7 @@ function URLQuestion(props: Props) {
         "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" + // port and path
         "(\\?[;&a-z\\d%_.~+=-]*)?" + // query string
         "(\\#[-a-z\\d_]*)?$",
-      "i"
+      "i",
     ); // fragment locator
     return pattern.test(str);
   };
@@ -46,7 +46,7 @@ function URLQuestion(props: Props) {
       className={cn(
         "w-full p-2 mt-4 border rounded",
         !validURL ? "border-red-500" : "border-gray-300",
-        className
+        className,
       )}
       value={url}
       placeholder="Enter website URL"

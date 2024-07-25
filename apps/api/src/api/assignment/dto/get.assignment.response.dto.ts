@@ -35,5 +35,5 @@ export class GetAssignmentResponseDto extends AssignmentResponseDto {
 
 export class LearnerGetAssignmentResponseDto extends OmitType(
   GetAssignmentResponseDto,
-  ["questions", "displayOrder"] as const
+  ["questions", "displayOrder"] as const,
 ) {}

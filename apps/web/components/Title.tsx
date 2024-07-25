@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/strings";
 import type { ComponentPropsWithoutRef } from "react";
-
 interface Props extends ComponentPropsWithoutRef<"h1"> {
   level?: 1 | 2 | 3 | 4 | 5;
 }
@@ -20,7 +19,7 @@ function Title(props: Props) {
         { "text-xl": level === 4 },
         { "text-lg font-bold": level === 5 },
         "font-bold text-gray-900",
-        className
+        className,
       )}
     >
       {children}

@@ -13,7 +13,7 @@ export class HealthService {
     private readonly health: HealthCheckService,
     private readonly disk: DiskHealthIndicator,
     private readonly prisma: PrismaHealthIndicator,
-    private readonly prismaService: PrismaService
+    private readonly prismaService: PrismaService,
   ) {}
 
   checkReadiness(): Promise<HealthCheckResult> {

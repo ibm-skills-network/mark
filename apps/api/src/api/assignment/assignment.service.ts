@@ -16,14 +16,15 @@ import type { UpdateAssignmentRequestDto } from "./dto/update.assignment.request
 
 @Injectable()
 export class AssignmentService {
+  [x: string]: any;
   constructor(
     private readonly prisma: PrismaService,
-    private readonly llmService: LlmService
+    private readonly llmService: LlmService,
   ) {}
 
   async findOne(
     id: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession.role === UserRole.LEARNER;
 
@@ -51,7 +52,7 @@ export class AssignmentService {
       result.questions.sort(
         (a, b) =>
           result.questionOrder.indexOf(a.id) -
-          result.questionOrder.indexOf(b.id)
+          result.questionOrder.indexOf(b.id),
       );
     }
 
@@ -71,7 +72,7 @@ export class AssignmentService {
 
     if (!results) {
       throw new NotFoundException(
-        `Group with Id ${userSession.groupId} not found.`
+        `Group with Id ${userSession.groupId} not found.`,
       );
     }
 
@@ -82,7 +83,7 @@ export class AssignmentService {
 
   async replace(
     id: number,
-    replaceAssignmentDto: ReplaceAssignmentRequestDto
+    replaceAssignmentDto: ReplaceAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -100,13 +101,13 @@ export class AssignmentService {
 
   async update(
     id: number,
-    updateAssignmentDto: UpdateAssignmentRequestDto
+    updateAssignmentDto: UpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     if (updateAssignmentDto.published && updateAssignmentDto.questionOrder) {
       // Generate grading context for questions when publishing the assignment
       await this.handleQuestionGradingContext(
         id,
-        updateAssignmentDto.questionOrder
+        updateAssignmentDto.questionOrder,
       );
     }
 
@@ -136,7 +137,7 @@ export class AssignmentService {
 
   private async handleQuestionGradingContext(
     assignmentId: number,
-    questionOrder: number[]
+    questionOrder: number[],
   ) {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -152,19 +153,19 @@ export class AssignmentService {
 
     const questionGradingContextMap =
       await this.llmService.generateQuestionGradingContext(
-        questionsForGradingContext
+        questionsForGradingContext,
       );
 
     const updates = [];
 
     for (const [questionId, gradingContextQuestionIds] of Object.entries(
-      questionGradingContextMap
+      questionGradingContextMap,
     )) {
       updates.push(
         this.prisma.question.update({
           where: { id: Number.parseInt(questionId) },
           data: { gradingContextQuestionIds },
-        })
+        }),
       );
     }
 

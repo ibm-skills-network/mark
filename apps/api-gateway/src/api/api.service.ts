@@ -18,7 +18,7 @@ export class ApiService {
   private logger;
   constructor(
     private readonly messagingService: MessagingService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: ApiService.name });
   }
@@ -33,7 +33,7 @@ export class ApiService {
 
   async forwardRequestToDownstreamService(
     forwardingService: DownstreamService,
-    request: UserSessionRequest & { originalUrl?: string }
+    request: UserSessionRequest & { originalUrl?: string },
   ): Promise<{ data: string; status: number }> {
     try {
       if (!request.originalUrl) {
@@ -62,7 +62,7 @@ export class ApiService {
           const username = process.env.LTI_CREDENTIAL_MANAGER_USERNAME ?? "";
           const password = process.env.LTI_CREDENTIAL_MANAGER_PASSWORD ?? ""; // pragma: allowlist secret
           const base64Credentials = Buffer.from(
-            `${username}:${password}`
+            `${username}:${password}`,
           ).toString("base64");
 
           forwardingServiceHeaders = {
@@ -110,7 +110,7 @@ export class ApiService {
         this.logger.error(axiosError.response.data);
         throw new HttpException(
           axiosError.response?.data ?? "",
-          axiosError.response.status
+          axiosError.response.status,
         );
       }
       this.logger.error(error);

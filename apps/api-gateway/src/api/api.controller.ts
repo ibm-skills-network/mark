@@ -20,7 +20,7 @@ export enum DownstreamService {
 }
 
 @ApiTags(
-  "Api (All the endpoints use a JWT Cookie named 'authentication' for authorization)"
+  "Api (All the endpoints use a JWT Cookie named 'authentication' for authorization)",
 )
 @Injectable()
 @Controller({
@@ -40,11 +40,11 @@ export class ApiController {
   @ApiBadRequestResponse({ description: "Bad request" })
   async handleLtiOauthConsumers(
     @Req() request: UserSessionRequest,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.LTI_CREDENTIAL_MANAGER,
-      request
+      request,
     );
     return response.status(apiResponse.status).send(apiResponse.data);
   }
@@ -55,11 +55,11 @@ export class ApiController {
   @ApiBadRequestResponse({ description: "Bad request" })
   async handleAdminApiRequests(
     @Req() request: UserSessionRequest,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
-      request
+      request,
     );
     return response.status(apiResponse.status).send(apiResponse.data);
   }
@@ -70,11 +70,11 @@ export class ApiController {
   @ApiBadRequestResponse({ description: "Bad request" })
   async handleApiRequests(
     @Req() request: UserSessionRequest,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
-      request
+      request,
     );
     return response.status(apiResponse.status).send(apiResponse.data);
   }

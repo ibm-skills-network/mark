@@ -29,11 +29,11 @@ const AuthorIntroduction = (props: Props) => {
   const { assignmentId } = props;
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes."
+    "Are you sure you want to leave this page? You will lose any unsaved changes.",
   );
   const [introduction, setIntroduction] = useState("");
   const [showPage, setShowPage] = useState<"loading" | "error" | "success">(
-    "loading"
+    "loading",
   );
   const [assignmentTitle, setAssignmentTitle] = useAuthorStore((state) => [
     state.assignmentTitle,
@@ -53,10 +53,10 @@ const AuthorIntroduction = (props: Props) => {
   const [gradingCriteriaOverview, setGradingCriteriaOverview] = useState("");
 
   const [activeAssignmentId, setActiveAssignmentId] = useAuthorStore(
-    (state) => [state.activeAssignmentId, state.setActiveAssignmentId]
+    (state) => [state.activeAssignmentId, state.setActiveAssignmentId],
   );
   const updateAssignmentButtonRef = useAuthorStore(
-    (state) => state.updateAssignmentButtonRef
+    (state) => state.updateAssignmentButtonRef,
   );
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   useEffect(() => {
@@ -97,7 +97,7 @@ const AuthorIntroduction = (props: Props) => {
                 ...question.scoring,
               },
             };
-          }
+          },
         );
         console.log(questionsWithAddedValues);
         setQuestions(questionsWithAddedValues.sort((a, b) => a.id - b.id)); // TODO: might wanna remove this later
@@ -138,7 +138,7 @@ const AuthorIntroduction = (props: Props) => {
     const modified = await updateAssignment(assignment, activeAssignmentId);
     if (modified) {
       router.push(
-        `/author/${activeAssignmentId}/questions?defaultQuestionRetries=${grading.questionRetries}`
+        `/author/${activeAssignmentId}/questions?defaultQuestionRetries=${grading.questionRetries}`,
       );
     } else {
       setShowPage("error");
@@ -147,12 +147,11 @@ const AuthorIntroduction = (props: Props) => {
 
   if (showPage === "error") {
     return <ErrorPage error="Assignment error" />;
-  }
-  if (showPage === "loading") {
+  } else if (showPage === "loading") {
     return <Loading />;
   }
   return (
-    <>
+    <div className="flex flex-col gap-y-11 mx-auto max-w-6xl py-20">
       <PageTitle
         title="Let's set up your assignment!"
         description="Responses in this section will be shown to learners."
@@ -187,7 +186,7 @@ const AuthorIntroduction = (props: Props) => {
           <ChevronRightIcon className="w-5 h-5 transition-transform group-hover:translate-x-0.5 duration-200" />
         </button>
       </footer>
-    </>
+    </div>
   );
 };
 

@@ -23,7 +23,7 @@ function Component(props: Props) {
   } = props;
 
   const setAssignmentDetails = useAssignmentDetails(
-    (state) => state.setAssignmentDetails
+    (state) => state.setAssignmentDetails,
   );
 
   useEffect(() => {

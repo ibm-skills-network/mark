@@ -11,7 +11,10 @@ import { PrismaService } from "../../../prisma.service";
 
 @Injectable()
 export class AssignmentAccessControlGuard implements CanActivate {
-  constructor(private reflector: Reflector, private prisma: PrismaService) {}
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();

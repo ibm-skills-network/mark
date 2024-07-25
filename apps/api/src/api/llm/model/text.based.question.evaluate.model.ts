@@ -21,7 +21,7 @@ export class TextBasedQuestionEvaluateModel
     learnerResponse: string,
     totalPoints: number,
     scoringCriteriaType: string,
-    scoringCriteria: object
+    scoringCriteria: object,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;

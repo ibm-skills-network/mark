@@ -37,7 +37,7 @@ function Component(props: Props) {
     state.setChoices,
   ]);
   const assignmentId = useAssignmentDetails(
-    (state) => state.assignmentDetails?.id
+    (state) => state.assignmentDetails?.id,
   );
 
   const question = useMemo(() => {
@@ -149,7 +149,7 @@ function Component(props: Props) {
           <div
             className={cn(
               "border p-5 rounded-lg shadow-sm",
-              getFeedbackColors(mostRecentFeedback.points, totalPoints)
+              getFeedbackColors(mostRecentFeedback.points, totalPoints),
             )}
           >
             <p className="text-center font-medium">

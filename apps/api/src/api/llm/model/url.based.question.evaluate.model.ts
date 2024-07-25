@@ -25,7 +25,7 @@ export class UrlBasedQuestionEvaluateModel
     urlBody: string,
     totalPoints: number,
     scoringCriteriaType: string,
-    scoringCriteria: object
+    scoringCriteria: object,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;

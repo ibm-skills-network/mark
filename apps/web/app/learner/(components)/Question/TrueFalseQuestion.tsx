@@ -9,7 +9,7 @@ interface Props {}
 function TrueFalseQuestion(props: Props) {
   const {} = props;
   const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber
+    (state) => state.activeQuestionNumber,
   );
 
   const [questions, setTextResponse] = useLearnerStore((state) => [
@@ -112,7 +112,7 @@ function TrueFalseQuestion(props: Props) {
       <InfoLine text={question} />
       <button
         className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
-          true
+          true,
         )}`}
         onClick={() => handleChoiceClick(true)}
         disabled={submitted}
@@ -121,7 +121,7 @@ function TrueFalseQuestion(props: Props) {
       </button>
       <button
         className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
-          false
+          false,
         )}`}
         onClick={() => handleChoiceClick(false)}
         disabled={submitted}

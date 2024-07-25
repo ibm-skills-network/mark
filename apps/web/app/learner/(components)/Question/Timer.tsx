@@ -62,7 +62,7 @@ function Timer(props: Props) {
       <div
         className={cn(
           "text-base font-bold leading-tight",
-          hours === 0 && minutes < 5 ? "text-red-500" : "text-blue-600"
+          hours === 0 && minutes < 5 ? "text-red-500" : "text-blue-600",
         )}
       >
         {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}

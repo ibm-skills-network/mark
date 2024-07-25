@@ -30,18 +30,27 @@
     "setup": "[ -d \"$(git rev-parse --show-toplevel)/apps/api\" ] && cd \"$(git rev-parse --show-toplevel)/apps/api\" && op run --env-file=./dev.env -- npx prisma migrate dev && npx prisma generate; cd $(git rev-parse --show-toplevel)",
     "setup:no-git": "cd \"./apps/api\" && op run --env-file=./dev.env -- npx prisma migrate dev && npx prisma generate; cd ../../",
     "test": "turbo run test",
-    "test:staged": "turbo run test:staged --"
+    "test:staged": "turbo run test:staged --",
+    "start": "yarn db && yarn setup && yarn dev"
   },
   "dependencies": {
+    "marked": "^4.0.10",
+    "mem": "^4.0.0",
+    "underscore": "^1.12.1",
+    "yargs-parser": "^13.1.2",
     "zod": "^3.23.5"
   },
   "devDependencies": {
-    "prettier": "^2.8.8",
+    "prettier": "^3.3.2",
     "turbo": "^2.0.3"
   },
   "resolutions": {
     "**/express": "^4.19.2",
     "**/follow-redirects": "^1.15.6",
-    "**/zod": "^3.23.5"
+    "**/zod": "^3.23.5",
+    "underscore": "^1.12.1",
+    "marked": "^4.0.10",
+    "mem": "^4.0.0",
+    "yargs-parser": "^13.1.2"
   }
 }

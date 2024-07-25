@@ -47,7 +47,7 @@ function Rubric(props: Rubric) {
       id:
         (criterias?.reduce(
           (maxId, criteria) => Math.max(criteria.id, maxId),
-          0
+          0,
         ) || 0) + 1,
       points: criterias.at(-1)?.points + 1 || 0,
       description: "",
@@ -68,7 +68,7 @@ function Rubric(props: Rubric) {
           return a.id - b.id;
         }
         return a.points - b.points;
-      })
+      }),
     );
   };
 
@@ -94,7 +94,7 @@ function Rubric(props: Rubric) {
             <li key={criteria.id} className="flex items-center gap-x-2">
               {/* Add input for promptPoints */}
               <input
-                type="number"
+                type="integer"
                 className="p-2 transition shadow-sm border border-gray-300 rounded-md h-12 w-24 text-gray-700 bg-transparent outline-none"
                 placeholder={`ex. ${index}`}
                 value={criteria.points}
@@ -115,8 +115,8 @@ function Rubric(props: Rubric) {
                 className="transition py-2 border flex-1 border-gray-300 shadow-sm pl-2 h-12 max-h-60 resize-none pr-10 rounded-md text-black outline-none placeholder-gray-400"
                 placeholder={
                   index === 0
-                    ? "ex. “The question is not legible” "
-                    : "ex. “The question is legible” "
+                    ? `ex. “the answer is not legible” `
+                    : `ex. “the answer is legible” `
                 }
                 value={criteria.description}
                 onChange={(event) =>

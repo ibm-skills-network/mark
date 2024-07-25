@@ -6,7 +6,7 @@ interface Props {}
 function TextQuestion(props: Props) {
   const {} = props;
   const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber
+    (state) => state.activeQuestionNumber,
   );
 
   const [questions, setTextResponse] = useLearnerStore((state) => [

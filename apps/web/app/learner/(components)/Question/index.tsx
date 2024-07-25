@@ -2,8 +2,8 @@
 
 import Loading from "@/components/Loading";
 import type {
-	AssignmentAttemptWithQuestions,
-	QuestionStore,
+  AssignmentAttemptWithQuestions,
+  QuestionStore,
 } from "@/config/types";
 import { getAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -13,148 +13,146 @@ import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
-	attempt: AssignmentAttemptWithQuestions;
-	assignmentId: number;
+  attempt: AssignmentAttemptWithQuestions;
+  assignmentId: number;
 }
 
 function QuestionPage(props: Props) {
-	const { attempt, assignmentId } = props;
-	const { questions, id, expiresAt } = attempt;
-	const router = useRouter();
+  const { attempt, assignmentId } = props;
+  const { questions, id, expiresAt } = attempt;
+  const router = useRouter();
+  const questionsStore = useLearnerStore((state) => state.questions);
+  const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
+    (state) => [state.assignmentDetails, state.setAssignmentDetails],
+  );
+  const [pageState, setPageState] = useState<
+    "loading" | "success" | "no-questions"
+  >("loading");
 
-	const questionsStore = useLearnerStore((state) => state.questions);
-	const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
-		(state) => [state.assignmentDetails, state.setAssignmentDetails],
-	);
-	const [pageState, setPageState] = useState<
-		"loading" | "success" | "no-questions"
-	>("loading");
+  useEffect(() => {
+    if (!assignmentDetails || assignmentDetails.id !== assignmentId) {
+      // if the current active assignment details are not stored in zustand store, then
+      const fetchAssignment = async () => {
+        // call the backend to get the assignment details
+        const assignment = await getAssignment(assignmentId);
+        if (assignment) {
+          // if the assignment is found, then store it in zustand store
+          setAssignmentDetails({
+            id: assignment.id,
+            name: assignment.name,
+            numAttempts: assignment.numAttempts,
+            passingGrade: assignment.passingGrade,
+            allotedTimeMinutes: assignment.allotedTimeMinutes,
+          });
+        } else {
+          // if the assignment details are not found, then redirect to the assignment overview page
+          router.push(`/learner/${assignmentId}`);
+        }
+      };
+      void fetchAssignment();
+    }
+    // store the questions in zustand store
+    const allQuestions: QuestionStore[] = questions.map(
+      (question: QuestionStore) => {
+        // get the info about previous attempts
+        const previousAttempts = question.questionResponses.map((response) => ({
+          points: response.points,
+          learnerResponse: response.learnerResponse,
+        }));
+        // get the highest points earned for the question by finding the highest points earned for each response
+        // const earnedPoints = previousAttempts.reduce(
+        //   (highestPoints, response) => {
+        //     return response.points > highestPoints.points
+        //       ? response
+        //       : highestPoints;
+        //   }
+        // );
+        // get the last submission for the question
+        const lastSubmission = previousAttempts.at(-1);
 
-	useEffect(() => {
-		if (!assignmentDetails || assignmentDetails.id !== assignmentId) {
-			// if the current active assignment details are not stored in zustand store, then
-			const fetchAssignment = async () => {
-				// call the backend to get the assignment details
-				const assignment = await getAssignment(assignmentId);
-				if (assignment) {
-					// if the assignment is found, then store it in zustand store
-					setAssignmentDetails({
-						id: assignment.id,
-						name: assignment.name,
-						numAttempts: assignment.numAttempts,
-						passingGrade: assignment.passingGrade,
-						allotedTimeMinutes: assignment.allotedTimeMinutes,
-					});
-				} else {
-					// if the assignment details are not found, then redirect to the assignment overview page
-					router.push(`/learner/${assignmentId}`);
-				}
-			};
-			void fetchAssignment();
-		}
-		// store the questions in zustand store
-		const allQuestions: QuestionStore[] = questions.map(
-			(question: QuestionStore) => {
-				// get the info about previous attempts
-				const previousAttempts = question.questionResponses.map((response) => ({
-					points: response.points,
-					learnerResponse: response.learnerResponse,
-				}));
-				// get the highest points earned for the question by finding the highest points earned for each response
-				// const earnedPoints = previousAttempts.reduce(
-				//   (highestPoints, response) => {
-				//     return response.points > highestPoints.points
-				//       ? response
-				//       : highestPoints;
-				//   }
-				// );
-				// get the last submission for the question
-				const lastSubmission = previousAttempts.at(-1);
+        // add the input field for the question
+        switch (question.type) {
+          case "TEXT":
+            // Autofill the text response with the last submission if it exists
+            question.learnerTextResponse =
+              lastSubmission?.learnerResponse ?? "";
+            break;
+          // TODO: handle other types of questions
+          case "URL":
+            question.learnerUrlResponse = lastSubmission?.learnerResponse ?? "";
+            break;
+          case "SINGLE_CORRECT":
+            question.learnerChoices = lastSubmission?.learnerResponse
+              ? (JSON.parse(lastSubmission?.learnerResponse) as string[])
+              : [];
+            break;
+          case "MULTIPLE_CORRECT":
+            question.learnerChoices = lastSubmission?.learnerResponse
+              ? (JSON.parse(lastSubmission?.learnerResponse) as string[])
+              : [];
+            break;
+          case "TRUE_FALSE":
+            // TODO: handle this
+            question.learnerAnswerChoice = null;
+            break;
+          case "UPLOAD":
+            // TODO: handle this
+            question.learnerFileResponse = null;
+            break;
+          default:
+            break;
+        }
+        return question;
+      },
+    );
+    useLearnerStore.setState({
+      questions: allQuestions,
+      activeAttemptId: id,
+      expiresAt: expiresAt,
+    });
+    if (allQuestions.length) {
+      setPageState("success");
+    } else {
+      setPageState("no-questions");
+    }
+  }, []);
 
-				// add the input field for the question
-				switch (question.type) {
-					case "TEXT":
-						// Autofill the text response with the last submission if it exists
-						question.learnerTextResponse =
-							lastSubmission?.learnerResponse ?? "";
-						break;
-					// TODO: handle other types of questions
-					case "URL":
-						question.learnerUrlResponse = lastSubmission?.learnerResponse ?? "";
-						break;
-					case "SINGLE_CORRECT":
-						question.learnerChoices = lastSubmission?.learnerResponse
-							? (JSON.parse(lastSubmission?.learnerResponse) as string[])
-							: [];
-						break;
-					case "MULTIPLE_CORRECT":
-						question.learnerChoices = lastSubmission?.learnerResponse
-							? (JSON.parse(lastSubmission?.learnerResponse) as string[])
-							: [];
-						break;
-					case "TRUE_FALSE":
-						// TODO: handle this
-						question.learnerAnswerChoice = null;
-						break;
-					case "UPLOAD":
-						// TODO: handle this
-						question.learnerFileResponse = null;
-						break;
-					default:
-						break;
-				}
-				return question;
-			},
-		);
+  const [activeQuestionNumber] = useLearnerStore((state) => [
+    state.activeQuestionNumber,
+  ]);
 
-		useLearnerStore.setState({
-			questions: allQuestions,
-			activeAttemptId: id,
-			expiresAt: expiresAt,
-		});
-		if (allQuestions.length) {
-			setPageState("success");
-		} else {
-			setPageState("no-questions");
-		}
-	}, []);
+  const [submitting, setSubmitting] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  if (pageState === "loading") {
+    return <Loading />;
+  }
+  if (pageState === "no-questions") {
+    return (
+      <div className="col-span-4 flex items-center justify-center h-full">
+        <h1>No questions found.</h1>
+      </div>
+    );
+  }
 
-	const [activeQuestionNumber] = useLearnerStore((state) => [
-		state.activeQuestionNumber,
-	]);
+  return (
+    <div className="flex gap-x-5">
+      <div className="flex-1">
+        {questionsStore.map((question, index) => (
+          <QuestionContainer
+            key={question.id ?? index}
+            questionNumber={index + 1}
+            className={`${index + 1 === activeQuestionNumber ? "" : "hidden"} `}
+            questionId={question.id}
+            // question={question}
+          />
+        ))}
+      </div>
+      <div className="">
+        <Overview />
+      </div>
 
-	const [submitting, setSubmitting] = useState(false);
-	const [showWarning, setShowWarning] = useState(false);
-	if (pageState === "loading") {
-		return <Loading />;
-	}
-	if (pageState === "no-questions") {
-		return (
-			<div className="col-span-4 flex items-center justify-center h-full">
-				<h1>No questions found.</h1>
-			</div>
-		);
-	}
-
-	return (
-		<div className="flex gap-x-5">
-			<div className="flex-1">
-				{questionsStore.map((question, index) => (
-					<QuestionContainer
-						key={question.id ?? index}
-						questionNumber={index + 1}
-						className={`${index + 1 === activeQuestionNumber ? "" : "hidden"} `}
-						questionId={question.id}
-						// question={question}
-					/>
-				))}
-			</div>
-			<div className="">
-				<Overview />
-			</div>
-
-			{/* Attempt Warning Modal */}
-			{/* {showWarning && (
+      {/* Attempt Warning Modal */}
+      {/* {showWarning && (
             <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-opacity-50 bg-black">
               <div className="bg-white p-8 rounded shadow-lg">
                 <p>
@@ -170,8 +168,8 @@ function QuestionPage(props: Props) {
               </div>
             </div>
           )} */}
-		</div>
-	);
+    </div>
+  );
 }
 
 export default QuestionPage;

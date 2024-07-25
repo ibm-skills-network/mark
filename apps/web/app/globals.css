@@ -2,7 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
-/* to overrride the default font size for the md editor */
+
+
+@layer components {
+  .btn {
+    @apply inline-flex text-base items-center justify-center font-medium whitespace-nowrap px-3.5 py-2 border border-solid rounded-md shadow-sm gap-1.5 w-fit focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 ring-offset-white dark:ring-offset-gray-800 disabled:cursor-not-allowed cursor-pointer transition-all;
+  }
+}
+
+.btn-icon {
+  @apply h-5 w-5 transition-all;
+}
+
+.btn-primary {
+  @apply btn bg-violet-600 hover:bg-violet-700 text-white;
+}
+
+.btn-primary-icon {
+  @apply btn-icon text-white;
+}
+
+.btn-secondary {
+  @apply btn text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950;
+}
+
+.btn-secondary-icon {
+  @apply btn-icon text-violet-600 dark:text-violet-100;
+}
+
+.btn-tertiary {
+  @apply btn text-gray-600 bg-white border-gray-200 dark:text-white dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-900 hover:bg-gray-100;
+}
+
+.btn-tertiary-icon {
+  @apply btn-icon text-gray-500 dark:text-white;
+}
+
+.btn-disabled {
+  @apply btn text-gray-500 bg-gray-100 border-gray-200 dark:text-gray-400 dark:bg-gray-700 dark:border-gray-600 cursor-not-allowed;
+}
+
+.btn-disabled-icon {
+  @apply btn-icon text-gray-500 dark:text-gray-400;
+}
+
+.btn-danger {
+  @apply btn text-red-600 border-red-500 bg-white hover:text-white hover:bg-red-600 hover:border-red-600 dark:text-red-400 dark:border-red-500 dark:bg-gray-800 dark:hover:text-white dark:hover:border-red-700 dark:hover:bg-red-700 focus:ring-red-600;
+}
+
+.btn-danger-icon {
+  @apply btn-icon text-red-500 hover:text-white;
+}
+
+.typography-h1 {
+  @apply text-4xl font-bold;
+}
+
+.typography-h2 {
+  @apply text-3xl font-bold;
+}
+
+.typography-h3 {
+  @apply text-2xl font-bold;
+}
+
+.typography-h4 {
+  @apply text-xl font-bold;
+}
+
+.typography-h5 {
+  @apply text-lg font-semibold;
+}
+
+.typography-body {
+  @apply text-base font-normal;
+}
+
+.typography-caption {
+  @apply text-xs font-medium;
+}
+
+.typography-btn {
+  @apply text-base font-medium;
+}
+
+.inline-link {
+  @apply text-violet-600 no-underline hover:text-violet-800 hover:underline dark:text-violet-400 dark:hover:text-violet-300 transition-all;
+}
+
+
+/* Override the default font size for the markdown editor */
 body .w-md-editor-text-pre > code,
 body .w-md-editor-text-input {
   @apply !text-base;
@@ -13,13 +102,183 @@ body .w-md-editor-content {
   min-height: 150px;
 }
 
-/* for the Markdown parser to display lists correctly */
+/* For the markdown parser to display lists correctly */
 ul {
   list-style: disc;
 }
 
-.main-author-container {
-  @apply flex flex-col gap-y-8 mx-auto max-w-6xl py-24;
+.title-placeholder::placeholder {
+  font-weight: 600; /* Font weight for title */
+}
+/* Custom Quill Styles */
+
+.description-placeholder::placeholder {
+  font-weight: 450; /* Font weight for description */
+}
+.ql-snow .ql-stroke {
+  stroke: #6b7280 !important;
+}
+.ql-snow .ql-fill {
+  fill: #6b7280 !important;
+}
+.ql-snow .ql-stroke.ql-fill {
+  fill: #6b7280 !important;
+  stroke: #6b7280 !important;
+}
+.ql-snow .ql-fill.ql-stroke {
+  fill: #6b7280 !important;
+  stroke: #6b7280 !important;
+}
+.ql-snow .ql-stroke.ql-fill.ql-stroke {
+  fill: #6b7280 !important;
+  stroke: #6b7280 !important;
+}
+.ql-picker-label {
+  color: #6b7280 !important;
+}
+
+pre {
+  background: #6b7280;
+  padding: 1em;
+  overflow: auto;
+  border-radius: 4px;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+.title-placeholder::placeholder {
+  font-weight: 600; /* Font weight for title */
+}
+
+.description-placeholder::placeholder {
+  font-weight: 450; /* Font weight for description */
+}
+.ql-snow .ql-stroke {
+  stroke: #6b7280 !important;
+}
+.ql-snow .ql-fill {
+  fill: #6b7280 !important;
+}
+.ql-snow .ql-stroke.ql-fill {
+  fill: #6b7280 !important;
+  stroke: #6b7280 !important;
+}
+.ql-snow .ql-fill.ql-stroke {
+  fill: #6b7280 !important;
+  stroke: #6b7280 !important;
+}
+.ql-snow .ql-stroke.ql-fill.ql-stroke {
+  fill: #6b7280 !important;
+  stroke: #6b7280 !important;
+}
+.ql-picker-label {
+  color: #6b7280 !important;
+}
+
+pre {
+  background: #6b7280;
+  padding: 1em;
+  overflow: auto;
+  border-radius: 4px;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+/* Custom Quill Styles */
+
+/* Base styling for Quill editor */
+.quill-editor {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  background-color: #fff;
+  transition: all 0.3s ease-in-out;
+  font-family: IBM Plex Sans !important;
+  font-size: 16px;
+  font-weight: 450;
+  line-height: 24px;
+  text-align: left;
+}
+.ql-editor.ql-blank::before {
+  padding-left: 8px;
+}
+
+/* Toolbar styling */
+.ql-toolbar {
+  border-bottom: 1px solid #ccc;
+  background-color: #f9f9f9;
+  border-radius: 5px 5px 0 0;
+  padding: 5px;
+  transition: background-color 0.3s ease-in-out;
+}
+
+/* Container styling */
+.ql-container {
+  min-height: 200px;
+  border-radius: 0 0 5px 5px;
+  transition: min-height 0.3s ease-in-out;
+}
+.ql-snow .ql-editor .ql-code-block-container {
+  min-height: 40px !important;
+}
+
+/* Editor UI styling */
+.ql-code-block-container .ql-ui {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  transition: border-color 0.3s ease-in-out;
+  max-width: fit-content;
+  max-height: 30px;
+  color: #333;
+  font-size: small;
+  text-align: center;
+  padding: 3px;
+  position: absolute;
+  z-index: 1;
+}
+
+/* Syntax highlighting styling */
+pre.ql-syntax {
+  background-color: #f5f5f5;
+  padding: 10px;
+  border-radius: 5px;
+  transition: background-color 0.3s ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .quill-editor {
+    padding: 8px;
+  }
+
+  .ql-toolbar {
+    padding: 4px;
+  }
+
+  .ql-container {
+    min-height: 150px;
+  }
+
+  .ql-editor {
+    min-height: 150px;
+    padding: 8px;
+  }
+
+  pre.ql-syntax {
+    padding: 8px;
+  }
+}
+
+
+/* Optional dark mode */
+/*
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
 }
 
 .main-author-container {
@@ -28,67 +287,7 @@ ul {
 
 @layer components {
   .btn {
-    @apply inline-flex text-base items-center justify-center font-medium whitespace-nowrap px-3.5 py-2 border border-solid rounded-md shadow-sm gap-1.5 w-fit focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 ring-offset-white dark:ring-offset-gray-800 disabled:cursor-not-allowed cursor-pointer transition-all
+    @apply inline-flex text-base items-center justify-center font-medium whitespace-nowrap px-3.5 py-2 border border-solid rounded-md shadow-sm gap-1.5 w-fit focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 ring-offset-white dark:ring-offset-gray-800 disabled:cursor-not-allowed cursor-pointer transition-all;
   }
 }
-
-.btn-icon {
-  @apply h-5 w-5 transition-all
-}
-.btn-primary {
-  @apply btn bg-violet-600 hover:bg-violet-700 text-white
-}
-.btn-primary-icon {
-  @apply btn-icon text-white
-}
-.btn-secondary {
-  @apply btn text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950
-}
-.btn-secondary-icon {
-  @apply btn-icon text-violet-600 dark:text-violet-100
-}
-.btn-tertiary {
-  @apply btn text-gray-600 bg-white border-gray-200 dark:text-white dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-900 hover:bg-gray-100
-}
-.btn-tertiary-icon {
-  @apply btn-icon text-gray-500 dark:text-white
-}
-.btn-disabled {
-  @apply btn text-gray-500 bg-gray-100 border-gray-200 dark:text-gray-400 dark:bg-gray-700 dark:border-gray-600 cursor-not-allowed
-}
-.btn-disabled-icon {
-  @apply btn-icon text-gray-500 dark:text-gray-400
-}
-.btn-danger {
-  @apply btn text-red-600 border-red-500 bg-white hover:text-white hover:bg-red-600 hover:border-red-600 dark:text-red-400 dark:border-red-500 dark:bg-gray-800 dark:hover:text-white dark:hover:border-red-700 dark:hover:bg-red-700 focus:ring-red-600
-}
-.btn-danger-icon {
-  @apply btn-icon text-red-500 hover:text-white
-}
-.typography-h1 {
-  @apply text-4xl font-bold
-}
-.typography-h2 {
-  @apply text-3xl font-bold
-}
-.typography-h3 {
-  @apply text-2xl font-bold
-}
-.typography-h4 {
-  @apply text-xl font-bold
-}
-.typography-h5 {
-  @apply text-lg font-semibold
-}
-.typography-body {
-  @apply text-base font-normal
-}
-.typography-caption {
-  @apply text-xs font-medium
-}
-.typography-btn {
-  @apply text-base font-medium
-}
-.inline-link {
-  @apply text-violet-600 no-underline hover:text-violet-800 hover:underline dark:text-violet-400 dark:hover:text-violet-300 transition-all
-}
+  */

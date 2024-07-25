@@ -1,8 +1,16 @@
-import { cn } from "@/lib/strings";
+/* eslint-disable */
+"use client";
+import React, {
+  ComponentPropsWithoutRef,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import "quill/dist/quill.snow.css"; // Ensure correct CSS import
+import "highlight.js/styles/vs2015.css"; // Import a Highlight.js theme
+import { twMerge } from "tailwind-merge";
 import { getWordCount } from "@/lib/utils";
-import dynamic from "next/dynamic";
-import { useState, type ComponentPropsWithoutRef } from "react";
-import rehypeSanitize from "rehype-sanitize";
+import hljs from "highlight.js";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
@@ -10,69 +18,114 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   placeholder?: string;
   textareaClassName?: string;
   maxWords?: number | null;
+  className?: string;
 }
-const MdEditor = dynamic(() => import("@uiw/react-md-editor"), {
-  ssr: false,
-});
 
-function MarkdownEditor(props: Props) {
-  const {
-    value,
-    setValue,
-    className,
-    textareaClassName,
-    maxWords,
-    placeholder = "Write your question here...",
-  } = props;
-
+const MarkdownEditor: React.FC<Props> = ({
+  value,
+  setValue,
+  className,
+  textareaClassName,
+  maxWords,
+  placeholder = "Write your question here...",
+}) => {
+  const quillRef = useRef<HTMLDivElement>(null);
+  const [quillInstance, setQuillInstance] = useState<any>(null);
   const [wordCount, setWordCount] = useState<number>(
-    value?.split(/\s+/).filter(Boolean).length ?? 0
+    value?.split(/\s+/).filter(Boolean).length ?? 0,
   );
 
-  const handleEditorChange = (text: string) => {
-    setWordCount(getWordCount(text));
-    if (maxWords && wordCount <= maxWords) {
-      setValue(text);
-    } else if (!maxWords) {
-      setValue(text);
-    }
-    setValue(text); // Temporary
-  };
+  useEffect(() => {
+    let isMounted = true;
+    const initializeQuill = async () => {
+      if (
+        typeof document !== "undefined" &&
+        quillRef.current &&
+        !quillInstance
+      ) {
+        const existingToolbars = document.querySelectorAll(".ql-toolbar");
+        existingToolbars.forEach((toolbar, index) => {
+          if (index > 0) toolbar.remove();
+        });
+
+        // Ensure hljs is available globally
+        // @ts-ignore
+        window.hljs = hljs;
+
+        const QuillModule = await import("quill");
+        if (!isMounted) return;
+        const Quill = QuillModule.default;
+        const quill = new Quill(quillRef.current, {
+          theme: "snow",
+          placeholder,
+          modules: {
+            toolbar: [
+              // [{ header: [1, 2, 3, 4, 5, 6, false] }], in case we need font sizes in the future uncomment this line
+              ["bold", "italic", "underline", "strike"],
+              ["blockquote", "code-block"],
+              [{ list: "ordered" }, { list: "bullet" }],
+              [{ script: "sub" }, { script: "super" }],
+              [{ indent: "-1" }, { indent: "+1" }],
+              [{ direction: "rtl" }],
+              [{ color: [] }, { background: [] }],
+              [{ font: [] }],
+              [{ align: [] }],
+              ["link", "image", "video"],
+              ["clean"],
+            ],
+            syntax: {
+              highlight: (text: string) => hljs.highlightAuto(text).value,
+            },
+          },
+        });
+        quill.on("text-change", () => {
+          const text = quill.getText().trim();
+          const wordCount = getWordCount(text);
+          setWordCount(wordCount);
+          if (maxWords && wordCount <= maxWords) {
+            setValue(quill.root.innerHTML);
+          } else if (!maxWords) {
+            setValue(quill.root.innerHTML);
+          }
+        });
+
+        quill.root.innerHTML = value;
+        setQuillInstance(quill);
+      }
+    };
+
+    initializeQuill();
+
+    return () => {
+      isMounted = false;
+      if (quillInstance) {
+        quillInstance.off("text-change");
+        quillInstance.off("selection-change");
+        setQuillInstance(null);
+      }
+    };
+  }, [quillInstance]);
 
   return (
-    <>
-      <MdEditor
-        className={cn(className, "max-h-96")}
-        preview="edit"
-        height="100%"
-        textareaProps={{
-          className: cn("placeholder-gray-400", textareaClassName),
-          placeholder,
-        }}
-        visibleDragbar={false}
-        value={value}
-        onChange={handleEditorChange}
-        previewOptions={{
-          rehypePlugins: [[rehypeSanitize]],
-          className: "whitespace-pre-wrap",
-        }}
-      >
-        {value}
-      </MdEditor>
-      {/* <ReactMarkdown className="prose">{value}</ReactMarkdown> */}
-
-      {/* Word count display */}
+    <div className={twMerge("flex flex-col", className)}>
+      <div
+        className={twMerge(
+          "quill-editor max-h-96 p-2 border border-gray-300 rounded-lg",
+          textareaClassName,
+        )}
+        ref={quillRef}
+      />
       {maxWords ? (
         <div
-          className={`${
+          className={`mt-2 text-sm font-medium leading-tight ${
             wordCount > maxWords ? "text-red-500" : "text-gray-400"
-          } text-sm font-medium leading-tight`}
+          }`}
         >
           Words: {wordCount} / {maxWords}
         </div>
       ) : null}
-    </>
+    </div>
   );
-}
+};
 
 export default MarkdownEditor;

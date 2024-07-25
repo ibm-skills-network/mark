@@ -39,7 +39,7 @@ import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto"
 import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 
 @ApiTags(
-  "Assignments (All endpoints need a user-session header (injected using the API Gateway)"
+  "Assignments (All endpoints need a user-session header (injected using the API Gateway)",
 )
 @Injectable()
 @Controller({
@@ -50,7 +50,7 @@ export class AssignmentController {
   private logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
-    private readonly assignmentService: AssignmentService
+    private readonly assignmentService: AssignmentService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentController.name });
   }
@@ -72,7 +72,7 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   async getAssignment(
     @Param("id") id: number,
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     return this.assignmentService.findOne(Number(id), request.userSession);
   }
@@ -88,7 +88,7 @@ export class AssignmentController {
   })
   @ApiResponse({ status: 403 })
   async listAssignments(
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<AssignmentResponseDto[]> {
     return this.assignmentService.list(request.userSession);
   }
@@ -106,11 +106,11 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   updateAssignment(
     @Param("id") id: number,
-    @Body() updateAssignmentRequestDto: UpdateAssignmentRequestDto
+    @Body() updateAssignmentRequestDto: UpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.update(
       Number(id),
-      updateAssignmentRequestDto
+      updateAssignmentRequestDto,
     );
   }
 
@@ -127,11 +127,11 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   replaceAssignment(
     @Param("id") id: number,
-    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto
+    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.replace(
       Number(id),
-      replaceAssignmentRequestDto
+      replaceAssignmentRequestDto,
     );
   }
 }

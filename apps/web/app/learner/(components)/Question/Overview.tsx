@@ -25,7 +25,7 @@ function Overview(props: Props) {
       const earnedPoints =
         question.questionResponses.length > 0
           ? Math.max(
-              ...question.questionResponses.map((response) => response.points)
+              ...question.questionResponses.map((response) => response.points),
             )
           : -1;
       if (question.totalPoints === earnedPoints) {
@@ -71,7 +71,7 @@ function Overview(props: Props) {
               question === "edited" ? "bg-indigo-100" : "bg-gray-100",
               index === activeQuestionNumber - 1
                 ? "border-blue-700 text-blue-700 bg-blue-100"
-                : "border-gray-400 text-gray-500"
+                : "border-gray-400 text-gray-500",
             )}
           >
             <div className="leading-5 font-bold my-auto">{index + 1}</div>

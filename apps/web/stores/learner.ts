@@ -53,7 +53,7 @@ export const useLearnerStore = createWithEqualityFn<
       setQuestion: (question) =>
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === question.id ? question : q
+            q.id === question.id ? question : q,
           ),
         })),
       setTextResponse: (learnerTextResponse, questionId) =>
@@ -71,7 +71,7 @@ export const useLearnerStore = createWithEqualityFn<
             q.id ===
             (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerUrlResponse }
-              : q
+              : q,
           ),
         })),
       setChoices: (learnerChoices, questionId) =>
@@ -80,7 +80,7 @@ export const useLearnerStore = createWithEqualityFn<
             q.id ===
             (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerChoices }
-              : q
+              : q,
           ),
         })),
       addChoice: (learnerChoice, questionId) =>
@@ -92,7 +92,7 @@ export const useLearnerStore = createWithEqualityFn<
                   ...q,
                   learnerChoices: [...(q.learnerChoices ?? []), learnerChoice],
                 }
-              : q
+              : q,
           ),
         })),
       removeChoice: (learnerChoice, questionId) =>
@@ -103,10 +103,10 @@ export const useLearnerStore = createWithEqualityFn<
               ? {
                   ...q,
                   learnerChoices: q.learnerChoices?.filter(
-                    (c) => c !== learnerChoice
+                    (c) => c !== learnerChoice,
                   ),
                 }
-              : q
+              : q,
           ),
         })),
       setAnswerChoice: (learnerAnswerChoice, questionId) =>
@@ -115,7 +115,7 @@ export const useLearnerStore = createWithEqualityFn<
             q.id ===
             (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerAnswerChoice }
-              : q
+              : q,
           ),
         })),
       submitAssignmentRef: createRef<HTMLButtonElement>(),
@@ -123,9 +123,9 @@ export const useLearnerStore = createWithEqualityFn<
     {
       name: "learner",
       enabled: process.env.NODE_ENV === "development",
-    }
+    },
   ),
-  shallow
+  shallow,
 );
 
 /**
@@ -148,12 +148,12 @@ export const useAssignmentDetails = createWithEqualityFn<
       {
         name: "learner",
         enabled: process.env.NODE_ENV === "development",
-      }
+      },
     ),
     {
       name: "assignmentDetails",
       // storage: createJSONStorage(() => localStorage),
-    }
+    },
   ),
-  shallow
+  shallow,
 );

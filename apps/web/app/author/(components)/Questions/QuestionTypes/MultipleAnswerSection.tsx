@@ -62,7 +62,7 @@ function Section(props: sectionProps) {
 
   function handleChoiceChange(
     choiceIndex: number,
-    choice: Partial<ChoiceType>
+    choice: Partial<ChoiceType>,
   ) {
     console.log("handleChoiceChange", choiceIndex, choice);
     modifyChoice(questionId, choiceIndex, choice);
@@ -143,11 +143,11 @@ function Section(props: sectionProps) {
                   position: "bottom-center",
                   duration: 5000,
                   important: true,
-                }
+                },
               );
               localStorage.setItem(
                 "numOfTimeSuggestionHasBeenShown",
-                (numOfTimeSuggestionHasBeenShown + 1).toString()
+                (numOfTimeSuggestionHasBeenShown + 1).toString(),
               );
             }
           }}

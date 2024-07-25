@@ -14,11 +14,11 @@ function AuthorHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId
+    (state) => state.activeAssignmentId,
   );
   const assignmentTitle = useAuthorStore((state) => state.assignmentTitle);
   const updateAssignmentButtonRef = useAuthorStore(
-    (state) => state.updateAssignmentButtonRef
+    (state) => state.updateAssignmentButtonRef,
   );
   const [questions, modifyQuestion] = useAuthorStore((state) => [
     state.questions,
@@ -58,7 +58,7 @@ function AuthorHeader() {
         });
         const isTwoOrMoreChoices = choices.length >= 2;
         const isAtLeastOneCorrectChoice = choices.some(
-          (choice) => choice.isCorrect
+          (choice) => choice.isCorrect,
         );
 
         if (
@@ -95,7 +95,7 @@ function AuthorHeader() {
       } else if (dataToSend.type === "MULTIPLE_CORRECT") {
         dataToSend.totalPoints = dataToSend.choices?.reduce(
           (acc, curr) => acc + curr.points,
-          0
+          0,
         ); // sum up all the points
         dataToSend.scoring = null; // scoring is not needed for multiple correct
       }
@@ -121,7 +121,7 @@ function AuthorHeader() {
     const results = await Promise.allSettled(promises); // wait for all promises to resolve
     // only redirect if all promises are fulfilled and have a value(questionId from the backend)
     const allPromisesFulfilled = results.every(
-      (result) => result.status === "fulfilled" && result.value
+      (result) => result.status === "fulfilled" && result.value,
     );
     if (allPromisesFulfilled) {
       // update the assignment with the question order and publish it
@@ -131,7 +131,7 @@ function AuthorHeader() {
           questionOrder,
           published: true,
         },
-        activeAssignmentId
+        activeAssignmentId,
       );
 
       if (!updated) {
@@ -141,7 +141,7 @@ function AuthorHeader() {
       const currentTime = Date.now();
       console.log("currentTime", currentTime);
       router.push(
-        `/author/${activeAssignmentId}?submissionTime=${currentTime}`
+        `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
       ); // add the submissionTime query param to the url
     } else {
       toast.error(`Couldn't publish all questions. Please try again.`);

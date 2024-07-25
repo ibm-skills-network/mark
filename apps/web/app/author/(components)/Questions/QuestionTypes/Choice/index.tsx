@@ -90,7 +90,7 @@ function Component(props: Props) {
         decrementPoints={decrementPoints}
         className={cn(
           "text-sm leading-5 transition-colors font-medium",
-          isCorrect ? "text-blue-700" : "text-gray-500"
+          isCorrect ? "text-blue-700" : "text-gray-500",
         )}
       >
         <div className=" whitespace-nowrap">

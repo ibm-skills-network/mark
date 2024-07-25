@@ -22,7 +22,7 @@ function AuthorQuestionsPage(props: Props) {
   const { assignmentId, defaultQuestionRetries } = props;
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes."
+    "Are you sure you want to leave this page? You will lose any unsaved changes.",
   );
   // const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
 
@@ -66,7 +66,7 @@ function AuthorQuestionsPage(props: Props) {
                     ...criteria,
                     id: index + 1,
                   };
-                }
+                },
               );
               return {
                 ...question,
@@ -79,7 +79,7 @@ function AuthorQuestionsPage(props: Props) {
                   criteria: criteriaWithId || initialCriteria,
                 },
               };
-            }
+            },
           );
           if (questions?.length > 0) {
             // if there are questions, then add them to the store
@@ -153,7 +153,7 @@ function AuthorQuestionsPage(props: Props) {
       <div
         className={cn(
           "flex flex-col gap-y-20",
-          questions.length === 0 ? "mb-24" : "my-24"
+          questions.length === 0 ? "mb-24" : "my-24",
         )}
       >
         {/* TODO: make this into a component */}

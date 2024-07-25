@@ -38,7 +38,7 @@ const Component: FC<Props> = (props) => {
   async function handleDeleteTextBox(
     alreadyInBackend: boolean,
     // questionNumber?: number,
-    questionId: number
+    questionId: number,
   ) {
     // call the backend to delete the question if it came from the backend
     if (alreadyInBackend) {

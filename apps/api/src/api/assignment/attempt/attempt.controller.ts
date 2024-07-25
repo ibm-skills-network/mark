@@ -49,7 +49,7 @@ export class AttemptController {
   private logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
-    private readonly attemptService: AttemptService
+    private readonly attemptService: AttemptService,
   ) {
     this.logger = parentLogger.child({ context: AttemptController.name });
   }
@@ -69,11 +69,11 @@ export class AttemptController {
   @ApiResponse({ status: 403 })
   createAssignmentAttempt(
     @Param("assignmentId") assignmentId: number,
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<BaseAssignmentAttemptResponseDto> {
     return this.attemptService.createAssignmentAttempt(
       Number(assignmentId),
-      request.userSession
+      request.userSession,
     );
   }
 
@@ -85,11 +85,11 @@ export class AttemptController {
   @ApiResponse({ status: 403 })
   listAssignmentAttempts(
     @Param("assignmentId") assignmentId: number,
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<AssignmentAttemptResponseDto[]> {
     return this.attemptService.listAssignmentAttempts(
       Number(assignmentId),
-      request.userSession
+      request.userSession,
     );
   }
 
@@ -100,10 +100,10 @@ export class AttemptController {
   @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptId: number
+    @Param("attemptId") assignmentAttemptId: number,
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
-      Number(assignmentAttemptId)
+      Number(assignmentAttemptId),
     );
   }
 
@@ -134,7 +134,7 @@ export class AttemptController {
     @Param("assignmentId") assignmentId: number,
     @Body()
     learnerUpdateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const authCookie: string = request?.cookies?.authentication;
@@ -145,7 +145,7 @@ export class AttemptController {
       Number(assignmentId),
       learnerUpdateAssignmentAttemptDto,
       authCookie,
-      gradingCallbackRequired
+      gradingCallbackRequired,
     );
   }
 
@@ -172,7 +172,7 @@ export class AttemptController {
     @Param("questionId") questionId: number,
     @UploadedFile() file: Express.Multer.File,
     @Body()
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     createQuestionResponseAttemptRequestDto.learnerFileResponse = file;
@@ -180,7 +180,7 @@ export class AttemptController {
     return this.attemptService.createQuestionResponse(
       Number(assignmentAttemptId),
       Number(questionId),
-      createQuestionResponseAttemptRequestDto
+      createQuestionResponseAttemptRequestDto,
     );
   }
 }

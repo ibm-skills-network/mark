@@ -28,7 +28,7 @@ export class ApiController {
       "..",
       "assets",
       "schema",
-      "assignment-example.json"
+      "assignment-example.json",
     );
     const fileContent = fs.readFileSync(filePath, "utf8");
     const formattedJson = JSON.stringify(JSON.parse(fileContent), undefined, 2);

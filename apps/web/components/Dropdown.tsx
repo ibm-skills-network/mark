@@ -53,7 +53,7 @@ function Dropdown(props: DropdownProps) {
           onClick={toggleModelPicker}
           className={cn(
             "w-full transition-all flex justify-between items-center pl-4 px-3 py-3 text-left border border-gray-300 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-blue-600",
-            isOpen ? "rounded-t-md ring-blue-600 ring-1" : "rounded-md"
+            isOpen ? "rounded-t-md ring-blue-600 ring-1" : "rounded-md",
           )}
           {...rest}
         >
@@ -62,7 +62,7 @@ function Dropdown(props: DropdownProps) {
               "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm transition-colors",
               questionType
                 ? " font-medium text-gray-700"
-                : " text-gray-500 dark:text-gray-500"
+                : " text-gray-500 dark:text-gray-500",
             )}
           >
             {questionTypes.find((question) => question.value === questionType)
@@ -91,7 +91,7 @@ function Dropdown(props: DropdownProps) {
       <div
         className={cn(
           "pb-1 absolute w-full bg-white rounded-b-md shadow-lg border border-gray-300 origin-top duration-150 z-10",
-          isOpen ? "scale-100" : "scale-0"
+          isOpen ? "scale-100" : "scale-0",
         )}
       >
         {questionTypes.map((question) => (
@@ -105,7 +105,7 @@ function Dropdown(props: DropdownProps) {
                 "block px-4 border-t border-gray-300 py-3 text-sm cursor-pointer transition",
                 questionType === question.value
                   ? "hover:bg-blue-400 bg-blue-500 text-white"
-                  : "hover:bg-gray-100 "
+                  : "hover:bg-gray-100 ",
               )}
               onClick={() => handleSelectQuestionType(question.value)}
             >

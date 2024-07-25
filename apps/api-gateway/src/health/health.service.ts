@@ -9,7 +9,7 @@ import {
 export class HealthService {
   constructor(
     private readonly health: HealthCheckService,
-    private readonly disk: DiskHealthIndicator
+    private readonly disk: DiskHealthIndicator,
   ) {}
 
   checkReadiness(): Promise<HealthCheckResult> {

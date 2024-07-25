@@ -50,7 +50,7 @@ export class CustomScoringValidator implements ValidatorConstraintInterface {
         }
 
         const maxPointsCriterion = Math.max(
-          ...criteria.map((criterion) => criterion.points)
+          ...criteria.map((criterion) => criterion.points),
         );
 
         if (maxPointsCriterion !== totalPoints) {

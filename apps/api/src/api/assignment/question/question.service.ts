@@ -19,12 +19,12 @@ import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
 export class QuestionService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly llmService: LlmService
+    private readonly llmService: LlmService,
   ) {}
 
   async create(
     assignmentId: number,
-    createQuestionRequestDto: CreateUpdateQuestionRequestDto
+    createQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(createQuestionRequestDto);
     const scoring = createQuestionRequestDto.scoring
@@ -32,7 +32,7 @@ export class QuestionService {
       : undefined;
     const choices = createQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(createQuestionRequestDto.choices)
+          JSON.stringify(createQuestionRequestDto.choices),
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
     const result = await this.prisma.question.create({
@@ -75,13 +75,13 @@ export class QuestionService {
   async update(
     assignmentId: number,
     id: number,
-    updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring = (updateQuestionRequestDto.scoring as object) || undefined;
     const choices = updateQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(updateQuestionRequestDto.choices)
+          JSON.stringify(updateQuestionRequestDto.choices),
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
     const result = await this.prisma.question.update({
@@ -103,7 +103,7 @@ export class QuestionService {
   async replace(
     assignmentId: number,
     id: number,
-    updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring =
@@ -112,7 +112,7 @@ export class QuestionService {
     const answer = updateQuestionRequestDto.answer || null;
     const choices = updateQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(updateQuestionRequestDto.choices)
+          JSON.stringify(updateQuestionRequestDto.choices),
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
 
@@ -145,15 +145,15 @@ export class QuestionService {
   }
 
   private async applyGuardRails(
-    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<void> {
     const guardRailsValidation = await this.llmService.applyGuardRails(
-      JSON.stringify(createUpdateQuestionRequestDto)
+      JSON.stringify(createUpdateQuestionRequestDto),
     );
     if (!guardRailsValidation) {
       throw new HttpException(
         "Question validation failed due to inappropriate or unacceptable content",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
   }

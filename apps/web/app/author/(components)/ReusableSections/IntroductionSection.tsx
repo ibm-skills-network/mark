@@ -66,13 +66,13 @@ export function IntroductionsectionId<T extends ElementType = "section">(
     value: unknown;
     setValue: Dispatch<SetStateAction<unknown>>;
     [key: string]: unknown;
-  }
+  },
 ) {
   const { as, className, sectionId, value, setValue, ...rest } = props;
   const Component = as ?? "section";
   const section = useMemo(() => {
     return titleToDescription.find(
-      (section) => section.sectionId === sectionId
+      (section) => section.sectionId === sectionId,
     );
   }, [sectionId]);
   const { title, description, svg, placeholder, required } = section;
@@ -89,7 +89,7 @@ export function IntroductionsectionId<T extends ElementType = "section">(
             level={5}
             className={cn(
               "leading-6",
-              required && "after:text-blue-400 after:content-['*']"
+              required && "after:text-blue-400 after:content-['*']",
             )}
           >
             {title}

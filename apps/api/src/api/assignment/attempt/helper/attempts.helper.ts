@@ -27,7 +27,7 @@ export const AttemptHelper = {
       | TextBasedQuestionResponseModel
       | ChoiceBasedQuestionResponseModel
       | TrueFalseBasedQuestionResponseModel,
-    responseDto: CreateQuestionResponseAttemptResponseDto
+    responseDto: CreateQuestionResponseAttemptResponseDto,
   ) {
     responseDto.totalPoints = model.points;
     if (model instanceof ChoiceBasedQuestionResponseModel) {
@@ -48,12 +48,12 @@ export const AttemptHelper = {
 
   async validateAndGetTextResponse(
     questionType: QuestionType,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<string> {
     if (questionType === QuestionType.TEXT) {
       if (!createQuestionResponseAttemptRequestDto.learnerTextResponse) {
         throw new BadRequestException(
-          "Expected a text-based response (learnerResponse), but did not receive one."
+          "Expected a text-based response (learnerResponse), but did not receive one.",
         );
       }
       return createQuestionResponseAttemptRequestDto.learnerTextResponse;
@@ -65,7 +65,7 @@ export const AttemptHelper = {
         createQuestionResponseAttemptRequestDto.learnerFileResponse as UploadedFile;
       if (!file) {
         throw new BadRequestException(
-          "Expected a file-based response (learnerFileResponse), but did not receive one."
+          "Expected a file-based response (learnerFileResponse), but did not receive one.",
         );
       }
 
@@ -78,7 +78,7 @@ export const AttemptHelper = {
         return value;
       } else {
         throw new BadRequestException(
-          "Unsupported file type provided. Only .txt and .docx are supported."
+          "Unsupported file type provided. Only .txt and .docx are supported.",
         );
       }
     }
@@ -87,7 +87,7 @@ export const AttemptHelper = {
   },
 
   async fetchPlainTextFromUrl(
-    url: string
+    url: string,
   ): Promise<{ body: string; isFunctional: boolean }> {
     try {
       const response = await axios.get<string>(url);

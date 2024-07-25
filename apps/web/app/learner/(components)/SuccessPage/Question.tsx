@@ -95,7 +95,7 @@ const Question: FC<Props> = (props) => {
                       "flex items-center justify-start gap-x-2",
                       learnerChoices.includes(choice.choice)
                         ? "text-grey-700"
-                        : "text-grey-500"
+                        : "text-grey-500",
                     )}
                   >
                     <div className="flex items-center justify-center w-5 h-5 border border-gray-300 rounded-full">
@@ -119,7 +119,7 @@ const Question: FC<Props> = (props) => {
           <div
             className={`w-full border p-5 rounded-lg shadow-sm ${getFeedbackColors(
               highestScoreResponse.points,
-              totalPoints
+              totalPoints,
             )}`}
           >
             <p className="text-center font-medium">

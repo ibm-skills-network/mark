@@ -10,7 +10,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
     as?: T;
     className?: string;
     [key: string]: unknown;
-  }
+  },
 ) {
   const {
     as,
@@ -27,7 +27,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
     <Component
       className={cn(
         "group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid max-md:px-5 ",
-        className
+        className,
       )}
       // id={sectionId.toLowerCase()}
       {...rest}
@@ -36,7 +36,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
         <Title
           className={cn(
             "flex text-2xl font-bold text-black max-md:flex-wrap",
-            required && "after:text-violet-600 after:content-['*']"
+            required && "after:text-violet-600 after:content-['*']",
           )}
         >
           <DocumentTextIcon className="shrink-0 my-auto w-6 aspect-square text-gray-500" />

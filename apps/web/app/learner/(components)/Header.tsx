@@ -22,7 +22,7 @@ function LearnerHeader(props: Props) {
       state.questions,
       state.activeAttemptId,
       state.submitAssignmentRef,
-    ]
+    ],
   );
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
@@ -37,7 +37,7 @@ function LearnerHeader(props: Props) {
     }
   }, []);
   const userSubmittedAnyQuestion = questions.some(
-    (question) => question.questionResponses.length > 0
+    (question) => question.questionResponses.length > 0,
   );
   async function handleSubmitAssignment() {
     const grade = await submitAssignment(assignmentId, activeAttemptId);

@@ -26,7 +26,7 @@ function GradingOptionsForm(props: Props) {
     allotedTimeMinutes,
   } = value;
   const assignmentId = useAssignmentDetails(
-    (state) => state.assignmentDetails?.id
+    (state) => state.assignmentDetails?.id,
   );
 
   function handleGradedChange(e: ChangeEvent<HTMLInputElement>) {
@@ -53,7 +53,7 @@ function GradingOptionsForm(props: Props) {
     }));
     localStorage.setItem(
       `${assignmentId}-defaultQuestionRetries`,
-      e.target.value
+      e.target.value,
     );
   }
 

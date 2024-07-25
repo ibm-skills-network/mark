@@ -23,7 +23,8 @@ async function LearnerLayout(props: Props) {
     (attempt) =>
       attempt.submitted === false &&
       // if the assignment does not expire, then the expiresAt is null
-      (attempt.expiresAt === null || Date.now() < Date.parse(attempt.expiresAt))
+      (attempt.expiresAt === null ||
+        Date.now() < Date.parse(attempt.expiresAt)),
   );
   // if there are no unsubmitted attempts, create a new attempt
   const attemptId = unsubmittedAssignment

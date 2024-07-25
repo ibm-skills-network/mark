@@ -10,7 +10,7 @@ const MdViewer = dynamic(
     import("@uiw/react-md-editor").then((mod) => {
       return mod.default.Markdown;
     }),
-  { ssr: false }
+  { ssr: false },
 );
 const MarkdownViewer: FC<Props> = (props) => {
   const { className, children, ...restOfProps } = props;

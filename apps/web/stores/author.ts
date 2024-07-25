@@ -32,7 +32,7 @@ export type AuthorActions = {
   modifyChoice: (
     questionId: number,
     choiceIndex: number,
-    modifiedData: Partial<Choice>
+    modifiedData: Partial<Choice>,
   ) => void;
   setPoints: (questionId: number, points: number) => void;
 };
@@ -67,7 +67,7 @@ export const useAuthorStore = createWithEqualityFn<
                 }
               : {
                   ...q,
-                }
+                },
           ),
         })),
       setCriterias: (questionId, criterias) => {
@@ -112,7 +112,7 @@ export const useAuthorStore = createWithEqualityFn<
                 scoring: {
                   ...q.scoring,
                   criteria: q.scoring.criteria.filter(
-                    (_, index) => index !== criteriaIndex
+                    (_, index) => index !== criteriaIndex,
                   ),
                 },
               };
@@ -155,7 +155,7 @@ export const useAuthorStore = createWithEqualityFn<
           questions: state.questions.map((q) => {
             if (q.id === questionId) {
               const choices = q.choices.filter(
-                (_, index) => index !== choiceIndex
+                (_, index) => index !== choiceIndex,
               );
               return {
                 ...q,
@@ -227,7 +227,7 @@ export const useAuthorStore = createWithEqualityFn<
     {
       name: "author",
       enabled: process.env.NODE_ENV === "development",
-    }
+    },
   ),
-  shallow
+  shallow,
 );

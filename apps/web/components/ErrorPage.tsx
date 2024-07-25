@@ -21,7 +21,7 @@ export default function ErrorPage({
     <div
       className={cn(
         "flex flex-col items-center justify-center gap-y-4",
-        className
+        className,
       )}
     >
       <h1 className="text-6xl font-bold text-destructive text-indigo-500">
