@@ -5658,9 +5658,9 @@ kuler@^2.0.0:
   integrity sha512-Xq9nH7KlWZmXAtodXDDRE7vs6DU1gTU8zYDHDiWLSip45Egwq3plLHzPn27NgvzL2r1LMPC1vdqh98sQxtqj4A==
 
 langchain@^0.2.5:
-  version "0.2.10"
-  resolved "https://registry.yarnpkg.com/langchain/-/langchain-0.2.10.tgz#35b74038e54650efbd9fe7d9d59765fe2790bb47"
-  integrity sha512-i0fC+RlX/6w6HKPWL3N5zrhrkijvpe2Xu4t/qbWzq4uFf8WBfPwmNFom3RtO2RatuPnHLm8mViU6nw8YBDiVwA==
+  version "0.2.11"
+  resolved "https://registry.yarnpkg.com/langchain/-/langchain-0.2.11.tgz#d97e5bbd57e8954f21356fd85603aa39e3efe03f"
+  integrity sha512-6FQWKNAXuTmwuhHHMOmurLo8pydSRu5C/FwCYvYbR4ulCLqcsj+jre/kfXvA5BdHOZHNo6oQn0/5kxDNnhxMUA==
   dependencies:
     "@langchain/core" ">=0.2.11 <0.3.0"
     "@langchain/openai" ">=0.1.0 <0.3.0"
