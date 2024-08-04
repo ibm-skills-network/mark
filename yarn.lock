@@ -760,16 +760,15 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/core@>0.2.0 <0.3.0", "@langchain/core@>=0.2.11 <0.3.0", "@langchain/core@>=0.2.16 <0.3.0", "@langchain/core@^0.2.6":
-  version "0.2.19"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.19.tgz#1366014c20fbacb90db0b67c2c89b7390633a797"
-  integrity sha512-Q3q3yUuKuwIDHYef+Vk4BmtkJsNZGkdKV1pNUomL1+v2pOKmu2kchQh2oLg74tqupsr2ICVQAMjYzcPrXnNmzQ==
+  version "0.2.20"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.20.tgz#5115781b0a86db3ce4b697e473405892c09621ca"
+  integrity sha512-WPBjrzOj79/yqjloDUIw1GDhuRQfHis07TyyDj+qS81nHh0svSasetKcqAZ3L5JoPcBmEL7rRBtM+OcyC3mLVg==
   dependencies:
     ansi-styles "^5.0.0"
     camelcase "6"
     decamelize "1.2.0"
     js-tiktoken "^1.0.12"
     langsmith "~0.1.39"
-    ml-distance "^4.0.0"
     mustache "^4.2.0"
     p-queue "^6.6.2"
     p-retry "4"
