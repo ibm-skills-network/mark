@@ -760,9 +760,9 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/core@>0.2.0 <0.3.0", "@langchain/core@>=0.2.21 <0.3.0", "@langchain/core@^0.2.6":
-  version "0.2.21"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.21.tgz#3872c7d9e7c8033c7ebd8460c808b71bb1e89dcf"
-  integrity sha512-NQaoiRG4lIAJKAlo1Ww/aLcC3azfXymHAmWPAJOFcugsOSXYlrj050hilZdLzHrpliS4vDMezHNSaCf+H0CInQ==
+  version "0.2.22"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.22.tgz#9f5f9f5a00fc8c99711e6991e4631ccf9e276fce"
+  integrity sha512-mElDcRSIbZ8uCvavPBpfFBuMRhiPKGMfLXkz+AmYp9rXNH4eGFZJ0Ghn33lYQcwzulzXHfhXxMs63g63UDcUaQ==
   dependencies:
     ansi-styles "^5.0.0"
     camelcase "6"
