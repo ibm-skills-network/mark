@@ -375,9 +375,9 @@
     kuler "^2.0.0"
 
 "@dqbd/tiktoken@^1.0.7":
-  version "1.0.15"
-  resolved "https://registry.yarnpkg.com/@dqbd/tiktoken/-/tiktoken-1.0.15.tgz#25ead8d80b7b2b9930c1ca7fcde203f0bec2f1e7"
-  integrity sha512-a6I67K1xUkuqcuwulobIJiLikkoE7egMaviI1Jg5bxSn2V7QGqXsGE3jTKr8UIOU/o74mAAd5TkeXFNBtaKF4A==
+  version "1.0.16"
+  resolved "https://registry.yarnpkg.com/@dqbd/tiktoken/-/tiktoken-1.0.16.tgz#374c201d84158b50babff84e77aa3504564f510b"
+  integrity sha512-4uIrs5qxAwFVFFEP507HZIZhGOsgfaEMEWDXWalr+v+XP+wJwP60EVmkZtQyQe70IsKGVkx5umBxw4NfmU0pPg==
 
 "@eslint-community/eslint-utils@^4.2.0", "@eslint-community/eslint-utils@^4.4.0":
   version "4.4.0"
