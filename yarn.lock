@@ -759,7 +759,7 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@langchain/core@>0.2.0 <0.3.0", "@langchain/core@>=0.2.21 <0.3.0", "@langchain/core@^0.2.6":
+"@langchain/core@>0.2.0 <0.3.0", "@langchain/core@>=0.2.21 <0.3.0", "@langchain/core@>=0.2.26 <0.3.0", "@langchain/core@^0.2.6":
   version "0.2.27"
   resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.27.tgz#ee05b3e55954b9369b968b9faa9c2e5df121e86a"
   integrity sha512-QAIlGxXWW7fox1oGmQjEHs1fbPaXOE9CeunmwZl9grFpu1igdkLbKnEJF7fjbVchyJHRB6yzpQ1bwP/S12O4mQ==
@@ -777,11 +777,11 @@
     zod-to-json-schema "^3.22.3"
 
 "@langchain/openai@>=0.1.0 <0.3.0", "@langchain/openai@^0.2.0":
-  version "0.2.6"
-  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.2.6.tgz#644391f26a3ad89778c17484efc1a4e8bfc04ead"
-  integrity sha512-LZgSzHOZPJGsZr2ZXJICqZo1GN0kUyP9/RN+T45g7HDdMRfS5Df7fJgY9w7EIfznT83Q0Ywhz+At/UvWMR3xhw==
+  version "0.2.7"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.2.7.tgz#5a1ca6ae2c61e1836e24181faa891adb79dc978c"
+  integrity sha512-f2XDXbExJf4SYsy17QSiq0YY/UWJXhJwoiS8uRi/gBa20zBQ8+bBFRnb9vPdLkOkGiaTy+yXZVFro3a9iW2r3w==
   dependencies:
-    "@langchain/core" ">=0.2.21 <0.3.0"
+    "@langchain/core" ">=0.2.26 <0.3.0"
     js-tiktoken "^1.0.12"
     openai "^4.55.0"
     zod "^3.22.4"
