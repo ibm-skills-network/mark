@@ -2,7 +2,9 @@
 
 ## **PR Description**
 
-### ** Overview:** Select all that applies
+### **Overview:**
+
+<!-- Select all that applies -->
 
 #### **Type of Issue:**
 
@@ -45,7 +47,10 @@ This PR addresses an issue where the application fails to handle edge cases in t
 
 ### **Basic Usage:**
 
-<!-- Describe if there’s any change to basic usage. Mention if the README or CONTRIBUTING docs need to be updated to reflect these changes. -->
+<!--
+Describe how this PR cause changes to the standard way users or developers interact with a part of the codebase.
+Mention if README (Users) or CONTRIBUTING (Dev) docs need to be updated to reflect these changes.
+-->
 <!-- Example: -->
 <!--
 No changes have been made to the basic usage of the user profile update functionality. The validation logic has been enhanced internally, but the API and user interface remain the same. The README and CONTRIBUTING documentation have been reviewed, and no updates are necessary as the changes are backward-compatible.
