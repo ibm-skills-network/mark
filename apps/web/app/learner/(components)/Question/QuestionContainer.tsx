@@ -9,9 +9,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { ComponentPropsWithoutRef, useMemo, useState } from "react";
 import { toast } from "sonner";
-import QuestionScore from "../QuestionScore";
 import RenderQuestion from "./RenderQuestion";
-import SubmitQuestion from "./SubmitQuestion";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   // question: QuestionStore;
@@ -52,14 +50,6 @@ function Component(props: Props) {
     question: questionText,
   } = question;
 
-  const mostRecentFeedback = useMemo(() => {
-    return question.questionResponses?.at(-1);
-  }, [question]);
-
-  const attemptsRemaining = numRetries
-    ? numRetries - questionResponses.length
-    : -1;
-
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   async function handleSubmit() {
@@ -83,12 +73,10 @@ function Component(props: Props) {
     // this is also automatically added to the backend so the learner can see
     // their previous submissions next time they log in
     setQuestion({
-      ...question,
       questionResponses: [
         ...question.questionResponses,
         {
           id: feedback.id,
-          //TODO: make sure this is the right var
           points: feedback.totalPoints,
           feedback: feedback.feedback,
           learnerResponse:
@@ -113,27 +101,10 @@ function Component(props: Props) {
             Question {questionNumber}:
           </p>
           <p className="text-base font-medium leading-tight my-auto">
-            {mostRecentFeedback ? (
-              <QuestionScore
-                earnedPoints={mostRecentFeedback.points}
-                totalPoints={totalPoints}
-              />
-            ) : (
-              <span className="text-blue-700">{totalPoints} points</span>
-            )}
+            <span className="text-blue-700">{totalPoints} points</span>
           </p>
         </div>
         {/* attempts remaining */}
-        <div className="text-gray-500 text-base font-medium leading-tight">
-          {attemptsRemaining > 1 || attemptsRemaining === 0 ? (
-            <span>{attemptsRemaining} attempts remaining</span>
-          ) : attemptsRemaining === 1 ? (
-            <span>1 attempt remaining</span>
-          ) : (
-            // attempts remaining is -1 if there are unlimited attempts
-            <span>Unlimited attempts</span>
-          )}
-        </div>
       </div>
       <div className="bg-white p-8 rounded-lg border border-gray-300">
         <MarkdownViewer className="mb-4 text-gray-700">
@@ -141,25 +112,6 @@ function Component(props: Props) {
         </MarkdownViewer>
         <RenderQuestion questionType={type} />
       </div>
-      {/* Feedback section */}
-      {mostRecentFeedback &&
-        mostRecentFeedback.points !== null &&
-        mostRecentFeedback.points !== undefined &&
-        mostRecentFeedback.feedback[0]?.feedback && (
-          <div
-            className={cn(
-              "border p-5 rounded-lg shadow-sm",
-              getFeedbackColors(mostRecentFeedback.points, totalPoints),
-            )}
-          >
-            <p className="text-center font-medium">
-              <span className="font-bold">
-                {mostRecentFeedback.points}/{totalPoints}
-              </span>{" "}
-              {mostRecentFeedback.feedback[0]?.feedback}
-            </p>
-          </div>
-        )}
       <div className="flex justify-between">
         <button
           onClick={() => setActiveQuestionNumber(questionNumber - 1)}
@@ -173,12 +125,6 @@ function Component(props: Props) {
           Question {questionNumber - 1}
         </button>
 
-        <SubmitQuestion
-          question={question}
-          submitting={submitting}
-          handleSubmit={handleSubmit}
-          attemptsRemaining={attemptsRemaining}
-        />
         <button
           onClick={() => setActiveQuestionNumber(questionNumber + 1)}
           disabled={questionNumber === questions.length}

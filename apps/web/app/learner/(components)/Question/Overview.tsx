@@ -23,7 +23,7 @@ function Overview(props: Props) {
     return questionsStore.map((question) => {
       // get the higest points earned for the question by finding the highest points earned for each response
       const earnedPoints =
-        question.questionResponses.length > 0
+        question.questionResponses?.length > 0
           ? Math.max(
               ...question.questionResponses.map((response) => response.points),
             )

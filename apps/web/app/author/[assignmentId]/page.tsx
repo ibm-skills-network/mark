@@ -1,4 +1,4 @@
-import AssignmentForm from "../(components)/AssignmentDetailsForm";
+import StepOne from "../(components)/StepOne/layout";
 import SuccessPage from "../(components)/SuccessPage";
 
 interface Props {
@@ -10,7 +10,9 @@ function Component(props: Props) {
   const { params, searchParams } = props;
   const { submissionTime } = searchParams;
   const { assignmentId } = params;
-  const submissionTimeInt = submissionTime ? parseInt(submissionTime) : null;
+  const submissionTimeInt = submissionTime
+    ? Number.parseInt(submissionTime)
+    : null;
   const currentDateInThisPage = Date.now();
 
   return (
@@ -21,7 +23,7 @@ function Component(props: Props) {
       currentDateInThisPage > submissionTimeInt ? (
         <SuccessPage />
       ) : (
-        <AssignmentForm assignmentId={~~assignmentId} />
+        <StepOne assignmentId={~~assignmentId} />
       )}
     </main>
   );

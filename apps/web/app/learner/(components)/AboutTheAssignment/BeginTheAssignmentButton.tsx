@@ -3,7 +3,7 @@ import { cn } from "@/lib/strings";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import type { ComponentPropsWithoutRef, FC } from "react";
-import Button from "../Button";
+import Button from "../../../../components/Button";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   assignmentState: string;

@@ -17,11 +17,11 @@
     "@fortawesome/fontawesome-svg-core": "^6.4.2",
     "@fortawesome/free-solid-svg-icons": "^6.4.2",
     "@fortawesome/react-fontawesome": "^0.2.0",
-    "@headlessui/react": "^1.7.17",
+    "@headlessui/react": "^2.1.2",
     "@heroicons/react": "^2.0.18",
     "@tailwindcss/forms": "^0.5.5",
     "@uiw/react-md-editor": "^4.0.1",
-    "clsx": "^2.0.0",
+    "clsx": "^2.1.1",
     "font-awesome": "^4.7.0",
     "highlight.js": "^11.9.0",
     "katex": "^0.16.10",
@@ -36,7 +36,8 @@
     "react-type-animation": "^3.1.0",
     "rehype-sanitize": "^6.0.0",
     "sonner": "^1.0.3",
-    "tailwind-merge": "^1.14.0",
+    "tailwind-merge": "^2.4.0",
+    "tailwindcss-animate": "^1.0.7",
     "zustand": "^4.4.1"
   },
   "devDependencies": {

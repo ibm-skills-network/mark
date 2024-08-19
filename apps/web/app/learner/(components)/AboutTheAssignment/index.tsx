@@ -82,6 +82,10 @@ async function AboutTheAssignment(props: Props) {
           name={name}
           assignmentId={id}
         />
+        <BeginTheAssignmentButton
+          assignmentState={assignmentState}
+          assignmentId={id}
+        />
         {/* )} */}
       </div>
       <div className="border border-gray-300 rounded-lg bg-white p-4 flex flex-col gap-y-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import Button from "@learnerComponents/Button";
+import Button from "@components/Button";
 
 function Submitted() {
   const handleGoHome = () => {

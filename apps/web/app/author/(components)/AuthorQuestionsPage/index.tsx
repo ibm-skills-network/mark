@@ -1,10 +1,10 @@
-// This is the component that we use to add/delete questions for author, it contains two buttons
-// which are "add new textbox" and "delete"
 "use client";
 
 import { initialCriteria } from "@/config/constants";
-import { CreateQuestionRequest, QuestionAuthorStore } from "@/config/types";
-import useBeforeUnload from "@/hooks/use-before-unload";
+import type {
+  CreateQuestionRequest,
+  QuestionAuthorStore,
+} from "@/config/types";
 import { cn } from "@/lib/strings";
 import { createQuestion, getAssignment } from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
@@ -21,9 +21,6 @@ interface Props {
 function AuthorQuestionsPage(props: Props) {
   const { assignmentId, defaultQuestionRetries } = props;
   const router = useRouter();
-  useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes.",
-  );
   // const [textBoxes, setTextBoxes] = useState<number[]>([Date.now()]); // Initialize with one textbox
 
   // click me button for textboxes
@@ -49,11 +46,9 @@ function AuthorQuestionsPage(props: Props) {
   useEffect(() => {
     // check if we have the assignment details in the store
     // if not, call the backend to get the assignment details
-    console.log("assignmentId", assignmentId);
     if (assignmentId !== activeAssignmentId) {
       const fetchAssignment = async () => {
         const assignment = await getAssignment(assignmentId);
-        console.log("assignment", assignment);
         if (assignment) {
           setActiveAssignmentId(assignmentId);
           // update the state of the introduction page with the assignment details from the backend
@@ -82,13 +77,7 @@ function AuthorQuestionsPage(props: Props) {
             },
           );
           if (questions?.length > 0) {
-            // if there are questions, then add them to the store
-            // if the assignment has questionOrder, then it's already sorted from the backend, otherwise sort it by id
-            const sortedQuestions =
-              assignment?.questionOrder.length > 0
-                ? questions
-                : questions.sort((a, b) => a.id - b.id);
-            setQuestions(sortedQuestions);
+            setQuestions(questions);
           } else {
             console.log("no questions");
           }

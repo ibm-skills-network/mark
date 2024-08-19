@@ -100,12 +100,6 @@ Seed the database with test data (optional, it will create an assignment with 5 
 yarn seed
 ```
 
-> Note: To modify the seed data, run the following command to generate a new seed.dump file. But only do this when you have modified the schema or would like to improve the seed data.
-
-```bash
-yarn seed:update
-```
-
 #### Dependencies
 
 Install project dependencies:

@@ -1,10 +1,9 @@
 import PageWithStickySides from "@/app/components/PageWithStickySides";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import { QuestionStore } from "@/config/types";
+import type { QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { getFeedbackColors } from "@/lib/utils";
 import { useMemo, type ComponentPropsWithoutRef, type FC } from "react";
-import ReactMarkdown from "react-markdown";
 import QuestionScore from "../QuestionScore";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
@@ -27,10 +26,10 @@ const Question: FC<Props> = (props) => {
   } = question;
 
   const highestScoreResponse = useMemo(() => {
-    if (questionResponses?.length === 0) {
+    if (!questionResponses || questionResponses.length === 0) {
       return {
         points: 0,
-        feedback: [{ feedback: "question has not been submitted" }],
+        feedback: [{ feedback: "no response provided" }],
       };
     }
     return questionResponses.reduce((acc, curr) => {
@@ -52,12 +51,16 @@ const Question: FC<Props> = (props) => {
             {number}
           </div>
           {/* Display the maxPoints value received from the child component */}
-          <div className="text-blue-700 whitespace-nowrap">
-            <div className="font-bold text-center">
-              {highestScoreResponse.points}/{totalPoints}
+          {typeof highestScoreResponse.points === "number" ? (
+            <div className="text-blue-700 whitespace-nowrap">
+              <div className="font-bold text-center">
+                {highestScoreResponse.points}/{totalPoints}
+              </div>
+              Points
             </div>
-            Points
-          </div>
+          ) : (
+            <span className="text-blue-700">{totalPoints} points</span>
+          )}
         </>
       }
       mainContent={
@@ -69,7 +72,8 @@ const Question: FC<Props> = (props) => {
                 Question {number}:
               </p>
               <p className="text-base font-medium leading-tight my-auto">
-                {highestScoreResponse ? (
+                {highestScoreResponse &&
+                typeof highestScoreResponse.points === "number" ? (
                   <QuestionScore
                     earnedPoints={highestScoreResponse.points}
                     totalPoints={totalPoints}
@@ -116,19 +120,21 @@ const Question: FC<Props> = (props) => {
             )}
           </div>
           {/* feedback */}
-          <div
-            className={`w-full border p-5 rounded-lg shadow-sm ${getFeedbackColors(
-              highestScoreResponse.points,
-              totalPoints,
-            )}`}
-          >
-            <p className="text-center font-medium">
-              <span className="font-bold">
-                {highestScoreResponse.points}/{totalPoints}
-              </span>{" "}
-              {highestScoreResponse.feedback[0].feedback}
-            </p>
-          </div>
+          {highestScoreResponse?.feedback && (
+            <div
+              className={`w-full border p-5 rounded-lg shadow-sm ${getFeedbackColors(
+                highestScoreResponse.points,
+                totalPoints,
+              )}`}
+            >
+              <p className="text-center font-medium">
+                <span className="font-bold">
+                  {highestScoreResponse.points}/{totalPoints}
+                </span>{" "}
+                {highestScoreResponse.feedback[0].feedback}
+              </p>
+            </div>
+          )}
         </div>
       }
       // rightStickySide={<div>right</div>}

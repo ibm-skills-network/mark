@@ -75,13 +75,16 @@ model Assignment {
   questions       Question[]                                                    /// The list of questions in the assignment
   groups          AssignmentGroup[]                                             /// List of groups associated with the assignment
   published       Boolean                                                       /// Is the assignment published or not
+  showAssignmentScore        Boolean      @default(false)                       /// Should the assignment score be shown to the learner after its submission
+  showQuestionScore          Boolean      @default(false)                       /// Should the question score be shown to the learner after its submission
+  showSubmissionFeedback     Boolean      @default(false)                       /// Should the AI provide feedback when the learner submits a question
+  updatedAt                  DateTime     @updatedAt @default(now())            /// The DateTime at which the assignment was last updated
 }
 
 /// The Question model represents a question in an assignment
 model Question {
   id           Int          @id @default(autoincrement())         /// Unique identifier for the question
   totalPoints  Int                                                /// Total points that can be scored for the question
-  numRetries   Int?                                               /// Max number of times a student can retry a question
   type         QuestionType                                       /// Type of question
   question     String                                             /// The text of the question
   maxWords     Int?                                               /// Optional maximum number of words allowed for a written response type question

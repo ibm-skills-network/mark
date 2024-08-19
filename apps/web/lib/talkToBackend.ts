@@ -10,9 +10,10 @@ import type {
   CreateQuestionRequest,
   GetAssignmentResponse,
   QuestionAttemptRequest,
+  QuestionAttemptRequestWithId,
   QuestionAttemptResponse,
   ReplaceAssignmentRequest,
-  submitAssignmentResponse,
+  SubmitAssignmentResponse,
   User,
 } from "@config/types";
 
@@ -428,14 +429,15 @@ export async function submitQuestion(
 export async function submitAssignment(
   assignmentId: number,
   attemptId: number,
+  responsesForQuestions: QuestionAttemptRequestWithId[],
   cookies?: string,
-): Promise<number | undefined> {
+): Promise<SubmitAssignmentResponse | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 
   try {
     const res = await fetch(endpointURL, {
       method: "PATCH",
-      body: JSON.stringify({ submitted: true }),
+      body: JSON.stringify({ submitted: true, responsesForQuestions }),
       headers: {
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
@@ -445,12 +447,8 @@ export async function submitAssignment(
     if (!res.ok) {
       throw new Error("Failed to submit assignment");
     }
-    const { success, error, grade } =
-      (await res.json()) as submitAssignmentResponse;
-    if (!success) {
-      throw new Error(error);
-    }
-    return grade;
+    const data = (await res.json()) as SubmitAssignmentResponse;
+    return data;
   } catch (err) {
     console.error(err);
     return undefined;

@@ -27,13 +27,18 @@ export type QuestionAttemptRequest = {
   learnerFileResponse?: File | undefined;
 };
 
+export type QuestionAttemptRequestWithId = QuestionAttemptRequest & {
+  id: number;
+};
 /**
  * This is the type of the response from the backend when submitting a question attempt
  */
 export type QuestionAttemptResponse = {
   id: number;
-  totalPoints: number;
-  feedback: Feedback[];
+  questionId: number;
+  question: string;
+  totalPoints?: number;
+  feedback?: Feedback[];
 };
 
 export type QuestionStatus =
@@ -155,11 +160,26 @@ export interface GetQuestionResponse extends Question {
 
 export type GradingData = {
   graded: boolean;
-  questionRetries: number;
   timeEstimateMinutes: number | null;
   allotedTimeMinutes?: number | null;
   passingGrade: number;
   numAttempts?: number;
+  displayOrder?: "DEFINED" | "RANDOM";
+  strictTimeLimit: boolean;
+};
+
+export type FeedbackData = {
+  verbosityLevel: VerbosityLevels;
+  // whether to show the status to the learner
+  // showStatus: boolean;
+  // whether to show the correct answer to the learner
+  // showCorrectAnswer: boolean;
+  // whether to show the feedback to the learner
+  showSubmissionFeedback: boolean;
+  // whether to show the question score to the learner
+  showQuestionScore: boolean;
+  // whether to show the total assignment score to the learner
+  showAssignmentScore: boolean;
 };
 
 export type ReplaceAssignmentRequest = {
@@ -174,6 +194,10 @@ export type ReplaceAssignmentRequest = {
   displayOrder?: "DEFINED" | "RANDOM";
   published: boolean;
   questionOrder: number[];
+  showAssignmentScore?: boolean; // Should the assignment score be shown to the learner after its submission
+  showQuestionScore?: boolean; // Should the question score be shown to the learner after its submission
+  showSubmissionFeedback?: boolean; // Should the AI provide feedback when the learner submits a question
+  updatedAt: number;
 };
 
 export interface Assignment extends ReplaceAssignmentRequest {
@@ -218,8 +242,9 @@ export type BaseBackendResponse = {
   error?: string;
 };
 
-export interface submitAssignmentResponse extends BaseBackendResponse {
+export interface SubmitAssignmentResponse extends BaseBackendResponse {
   grade?: number;
+  feedbacksForQuestions?: QuestionAttemptResponse[];
 }
 
 export type LearnerAssignmentState =
@@ -227,3 +252,9 @@ export type LearnerAssignmentState =
   | "not-started"
   | "in-progress"
   | "completed";
+
+export type VerbosityLevels = "Full" | "Partial" | "None" | "Custom";
+export type VerbosityState = {
+  verbosity: VerbosityLevels;
+  loading: boolean;
+};

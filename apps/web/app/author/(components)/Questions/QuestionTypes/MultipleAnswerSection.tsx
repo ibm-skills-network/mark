@@ -84,18 +84,11 @@ function Section(props: sectionProps) {
     handleChoiceChange(choiceIndex, { choice: choiceText });
   }
 
-  function handleNumberOfRetriesChange(e: ChangeEvent<HTMLSelectElement>) {
-    modifyQuestion(questionId, {
-      numRetries: ~~e.target.value,
-    });
-  }
-
   function handleChoiceToggle(choiceIndex: number) {
     // check if the choice is correct
     // if it is, then that means that the user is trying to uncheck it
     // in that case, we need to also return the points to 0
     const choice = choices[choiceIndex];
-    console.log("handleChoiceToggle", choice);
     const { isCorrect } = choice;
     if (isCorrect) {
       // set the points to 0
@@ -107,12 +100,6 @@ function Section(props: sectionProps) {
 
   return (
     <div className="flex flex-col gap-y-6">
-      <div className="grid grid-cols-2 gap-x-16">
-        <QuestionNumberOfRetries
-          retries={retries}
-          handleRetryChange={handleNumberOfRetriesChange}
-        />
-      </div>
       <div className="flex flex-col gap-y-2">
         <label className="font-medium leading-5 text-gray-800">Choices</label>
         {/* loop throug the key value object */}

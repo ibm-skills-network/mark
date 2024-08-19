@@ -9,7 +9,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
     required?: boolean;
     as?: T;
     className?: string;
-    [key: string]: unknown;
+    IconForTitle?: ElementType;
   },
 ) {
   const {
@@ -18,29 +18,31 @@ export function SectionWithTitle<T extends ElementType = "section">(
     description,
     className,
     children,
+    IconForTitle,
     required = false,
     ...rest
   } = props;
   const Component = as ?? "section";
-  const svg = <DocumentTextIcon />;
   return (
     <Component
-      className={cn(
-        "group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid max-md:px-5 ",
-        className,
-      )}
-      // id={sectionId.toLowerCase()}
+      className="group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid max-md:px-5 "
       {...rest}
     >
       <div className="flex flex-col gap-y-1.5">
         <Title
-          className={cn(
-            "flex text-2xl font-bold text-black max-md:flex-wrap",
-            required && "after:text-violet-600 after:content-['*']",
-          )}
+          className={cn("flex text-2xl font-bold text-black max-md:flex-wrap")}
         >
-          <DocumentTextIcon className="shrink-0 my-auto w-6 aspect-square text-gray-500" />
-          <span className="pl-1.5">{title}</span>
+          {IconForTitle && (
+            <IconForTitle className="shrink-0 my-auto w-6 aspect-square text-gray-500" />
+          )}
+          <span
+            className={cn(
+              required && "after:text-violet-600 after:content-['*']",
+              IconForTitle && "pl-1.5",
+            )}
+          >
+            {title}
+          </span>
         </Title>
         <p className="text-base leading-6 text-gray-600 font-[450]">
           {description}
@@ -57,7 +59,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
 					{description && <p className="mt-2 text-gray-600">{description}</p>} */}
       {/* </div> */}
       {/* </div> */}
-      <div className="w-full">{children}</div>
+      <div className={cn("w-full", className)}>{children}</div>
     </Component>
   );
 }

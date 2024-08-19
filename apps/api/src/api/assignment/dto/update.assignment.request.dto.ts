@@ -134,4 +134,35 @@ export class UpdateAssignmentRequestDto {
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
   questionOrder: number[];
+
+  @ApiProperty({
+    description:
+      "Should the assignment score be shown to the learner after its submission",
+    type: Boolean,
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showAssignmentScore: boolean;
+
+  @ApiProperty({
+    description:
+      "Should the question score be shown to the learner after its submission",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showQuestionScore: boolean;
+
+  @ApiProperty({
+    description:
+      "Should the AI provide feedback when the learner submits a question",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showSubmissionFeedback: boolean;
 }

@@ -1,7 +1,7 @@
 import { QuestionAttemptRequest } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
 import { useState } from "react";
-import Button from "../Button";
+import Button from "../../../../components/Button";
 import InfoLine from "../InfoLine";
 
 interface Props {}
@@ -107,6 +107,29 @@ function TrueFalseQuestion(props: Props) {
     return "text-black";
   };
 
+  return (
+    <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
+      <InfoLine text={question} />
+      <button
+        className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
+          true,
+        )}`}
+        onClick={() => handleChoiceClick(true)}
+        disabled={submitted}
+      >
+        True
+      </button>
+      <button
+        className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
+          false,
+        )}`}
+        onClick={() => handleChoiceClick(false)}
+        disabled={submitted}
+      >
+        False
+      </button>
+    </div>
+  );
   return (
     <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
       <InfoLine text={question} />

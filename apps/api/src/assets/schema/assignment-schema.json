@@ -13,13 +13,13 @@
     },
     "type": {
       "type": "string",
-      "enum": ["AI_GRADED", "MANUAL"]
+      "enum": [
+        "AI_GRADED",
+        "MANUAL"
+      ]
     },
     "graded": {
       "type": "boolean"
-    },
-    "numAttempts": {
-      "type": "integer"
     },
     "allotedTimeMinutes": {
       "type": "integer"
@@ -29,7 +29,10 @@
     },
     "displayOrder": {
       "type": "string",
-      "enum": ["DEFINED", "RANDOM"]
+      "enum": [
+        "DEFINED",
+        "RANDOM"
+      ]
     },
     "questions": {
       "type": "array",
@@ -53,7 +56,11 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["CRITERIA_BASED", "LOSS_PER_MISTAKE", "AI_GRADED"]
+                "enum": [
+                  "CRITERIA_BASED",
+                  "LOSS_PER_MISTAKE",
+                  "AI_GRADED"
+                ]
               },
               "criteria": {
                 "type": "object",
@@ -62,7 +69,9 @@
                 }
               }
             },
-            "required": ["type"]
+            "required": [
+              "type"
+            ]
           },
           "choices": {
             "type": "object",
@@ -74,14 +83,17 @@
             "type": "boolean"
           }
         },
-        "required": ["total_points", "type", "question"]
+        "required": [
+          "total_points",
+          "type",
+          "question"
+        ]
       }
     }
   },
   "required": [
     "name",
     "type",
-    "numRetries",
     "numAttempts",
     "allotedTimeMinutes",
     "passingGrade",

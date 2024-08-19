@@ -1,5 +1,5 @@
+import { cn } from "@/lib/strings";
 import { type ComponentPropsWithoutRef, type ReactNode } from "react";
-import { twMerge } from "tailwind-merge";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   leftStickySide?: ReactNode;
@@ -10,7 +10,7 @@ function PageWithStickySides(props: Props) {
   const { className, leftStickySide, mainContent, rightStickySide } = props;
 
   return (
-    <section className={twMerge("flex gap-x-4 mx-auto", className)}>
+    <section className={cn("flex gap-x-4 mx-auto", className)}>
       <div className="sticky top-14 flex h-full flex-col gap-y-2">
         {leftStickySide}
       </div>

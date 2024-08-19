@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     },
     {
       name: "Rami Maalouf",
-      url: "https://ramimaalouf.tech",
+      url: "https://rami-maalouf.tech",
     },
   ],
 };

@@ -16,7 +16,8 @@ export type LearnerActions = {
   setActiveAttemptId: (id: number) => void;
   setActiveQuestionNumber: (id: number) => void;
   addQuestion: (question: QuestionStore) => void;
-  setQuestion: (question: QuestionStore) => void;
+  setQuestion: (question: Partial<QuestionStore>) => void;
+  setQuestions: (questions: Partial<QuestionStore>[]) => void;
   setTextResponse: (learnerTextResponse: string, questionId?: number) => void;
   setURLResponse: (learnerUrlResponse: string, questionId?: number) => void;
   setChoices: (learnerChoices: string[], questionId?: number) => void;
@@ -53,9 +54,24 @@ export const useLearnerStore = createWithEqualityFn<
       setQuestion: (question) =>
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === question.id ? question : q,
+            q.id === question.id
+              ? {
+                  ...q,
+                  ...question,
+                }
+              : q,
           ),
         })),
+      setQuestions: (questions) =>
+        set((state) => {
+          const updatedQuestions = questions.map((q) => {
+            const prevDataForQuestion = state.questions.find(
+              (q2) => q2.id === q.id,
+            );
+            return prevDataForQuestion ? { ...prevDataForQuestion, ...q } : q;
+          });
+          return { questions: updatedQuestions as QuestionStore[] };
+        }),
       setTextResponse: (learnerTextResponse, questionId) =>
         set((state) => ({
           questions: state.questions?.map((q) => {
@@ -152,6 +168,9 @@ export const useAssignmentDetails = createWithEqualityFn<
     ),
     {
       name: "assignmentDetails",
+      partialize: (state) => ({
+        assignmentDetails: state.assignmentDetails,
+      }),
       // storage: createJSONStorage(() => localStorage),
     },
   ),

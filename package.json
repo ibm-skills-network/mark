@@ -25,7 +25,7 @@
     "secrets:check": "scripts/detect-secrets.sh",
     "secrets:check:staged": "scripts/detect-secrets-staged.sh",
     "secrets:setup": "detect-secrets scan --update .secrets.baseline",
-    "seed": "turbo run seed --filter=api",
+    "seed": "cd \"./apps/api\" && op run --env-file=./dev.env -- npx prisma db seed && cd ../../",
     "seed:update": "turbo run seed:update --filter=api",
     "setup": "[ -d \"$(git rev-parse --show-toplevel)/apps/api\" ] && cd \"$(git rev-parse --show-toplevel)/apps/api\" && op run --env-file=./dev.env -- npx prisma migrate dev && npx prisma generate; cd $(git rev-parse --show-toplevel)",
     "setup:no-git": "cd \"./apps/api\" && op run --env-file=./dev.env -- npx prisma migrate dev && npx prisma generate; cd ../../",

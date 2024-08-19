@@ -10,10 +10,12 @@
   "attemptsTimeRangeHours": 2,
   "passingGrade": 70,
   "displayOrder": "RANDOM",
+  "showAssignmentScore": true,
+  "showQuestionScore": true,
+  "provideSubmissionsFeedback": true,
   "exercises": [
     {
       "totalPoints": 3,
-      "numRetries": 3,
       "type": "TEXT",
       "question": "Write a brief note about the significance of the Pythagoras theorem in mathematics.",
       "scoring": {
@@ -33,13 +35,11 @@
     {
       "totalPoints": 4,
       "type": "true_false",
-      "numRetries": 0,
       "question": "Is 0 an even number?",
       "answer": true
     },
     {
       "totalPoints": 2,
-      "numRetries": 2,
       "type": "SINGLE_CORRECT",
       "question": "What is the square root of 64?",
       "choices": {
@@ -51,7 +51,6 @@
     {
       "totalPoints": 2,
       "type": "MULTIPLE_CORRECT",
-      "numRetries": 0,
       "question": "Which of the following are prime numbers?",
       "choices": {
         "4": false,
@@ -62,7 +61,6 @@
     },
     {
       "totalPoints": 5,
-      "numRetries": 1,
       "type": "url",
       "question": "Please provide a URL to your project repository.",
       "scoring": {
@@ -81,7 +79,6 @@
     },
     {
       "totalPoints": 7,
-      "numRetries": 1,
       "type": "upload",
       "question": "Upload a document summarizing your project findings.",
       "scoring": {

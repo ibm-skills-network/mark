@@ -1,13 +1,12 @@
 "use client";
 
-import Dropdown from "@/components/Dropdown";
+import Dropdown from "@/components/SelectQuestionTypeDropdown";
 import Tooltip from "@/components/Tooltip";
 import type { QuestionType, QuestionTypeDropdown } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { QuestionMarkCircleIcon } from "@heroicons/react/24/solid";
-import { ComponentPropsWithoutRef, useEffect, useRef, useState } from "react";
-import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
+import type { ComponentPropsWithoutRef } from "react";
 import TextBasedAnswerSection from "./Questions/QuestionTypes/TextBasedAnswerSection";
 
 const questionTypes = [
@@ -38,45 +37,12 @@ interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
 
 function QuestionWrapper(props: TextBoxProps) {
   const { questionId, ...rest } = props;
-  const [isLearnerView, setIsLearnerView] = useState(false);
-  const [displayText, setDisplayText] = useState("");
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [
-    questions,
-    setQuestions,
-    removeQuestion,
-    addQuestion,
-    activeAssignmentId,
-    modifyQuestion,
-  ] = useAuthorStore((state) => [
+  const [questions, modifyQuestion] = useAuthorStore((state) => [
     state.questions,
-    state.setQuestions,
-    state.removeQuestion,
-    state.addQuestion,
-    state.activeAssignmentId,
     state.modifyQuestion,
   ]);
 
   const question = questions.find((question) => question.id === questionId);
-
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [choicesWrittenQuestion, setChoicesWrittenQuestion] = useState<
-    string[]
-  >([]);
-
-  useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-    };
-  }, []);
 
   const handleQuestionTextChange = (value: string) => {
     modifyQuestion(questionId, {
@@ -137,12 +103,12 @@ function QuestionWrapper(props: TextBoxProps) {
         />
       </div>
       <div className="flex flex-col gap-y-1">
-        <p className="leading-5 flex gap-x-1">
+        <div className="leading-5 flex gap-x-1">
           Response Type
           <Tooltip content="Choose how you want the learner to answer your question.">
             <QuestionMarkCircleIcon className="w-5 inline-block text-blue-500" />
           </Tooltip>
-        </p>
+        </div>
         <Dropdown
           questionType={question.type}
           setQuestionType={setQuestionType}

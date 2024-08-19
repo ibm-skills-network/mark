@@ -1,32 +1,98 @@
 "use client";
 
-import { replaceQuestion, updateAssignment } from "@/lib/talkToBackend";
+import {
+  getAssignment,
+  replaceQuestion,
+  updateAssignment,
+} from "@/lib/talkToBackend";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
+import { Nav } from "./Nav";
+import { extractAssignmentId } from "@/lib/strings";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { mergeData } from "@/lib/utils";
+import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 
 function AuthorHeader() {
-  const pathname = usePathname();
   const router = useRouter();
-  const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId,
-  );
+  const pathname = usePathname();
+  const assignmentId = extractAssignmentId(pathname);
   const assignmentTitle = useAuthorStore((state) => state.assignmentTitle);
-  const updateAssignmentButtonRef = useAuthorStore(
-    (state) => state.updateAssignmentButtonRef,
-  );
-  const [questions, modifyQuestion] = useAuthorStore((state) => [
-    state.questions,
-    state.modifyQuestion,
+  const [currentStepId, setCurrentStepId] = useState<number>(0);
+  const [setActiveAssignmentId] = useAuthorStore((state) => [
+    state.setActiveAssignmentId,
   ]);
+  const [questions, modifyQuestion, pageState, setPageState] = useAuthorStore(
+    (state) => [
+      state.questions,
+      state.modifyQuestion,
+      state.pageState,
+      state.setPageState,
+    ],
+  );
 
   const [isOpen, setIsOpen] = useState(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  useEffect(() => {
+    setActiveAssignmentId(~~assignmentId);
+    const fetchAssignment = async () => {
+      const assignment = await getAssignment(~~assignmentId);
+
+      if (assignment) {
+        setPageState("success");
+        // update all the stores with the data from the backend/mergedData
+        const mergedAuthorData = mergeData(
+          useAuthorStore.getState(),
+          assignment,
+        );
+        const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+        console;
+        useAuthorStore.setState((state) => ({
+          ...state,
+          ...cleanedAuthorData,
+        }));
+
+        const mergedAssignmentConfigData = mergeData(
+          useAssignmentConfig.getState(),
+          assignment,
+        );
+
+        const {
+          updatedAt: authorStoreUpdatedAt,
+          ...cleanedAssignmentConfigData
+        } = mergedAssignmentConfigData;
+
+        useAssignmentConfig.setState((state) => ({
+          ...state,
+
+          ...cleanedAssignmentConfigData,
+        }));
+
+        const mergedAssignmentFeedbackData = mergeData(
+          useAssignmentFeedbackConfig.getState(),
+          assignment,
+        );
+        const {
+          updatedAt: assignmentFeedbackUpdatedAt,
+          ...cleanedAssignmentFeedbackData
+        } = mergedAssignmentFeedbackData;
+        useAssignmentFeedbackConfig.setState((state) => ({
+          ...state,
+          ...cleanedAssignmentFeedbackData,
+        }));
+      } else {
+        setPageState("error");
+      }
+    };
+    void fetchAssignment();
+  }, [assignmentId]);
 
   // check if all questions have been filled out
   const questionsAreReadyToBePublished = useMemo(() => {
@@ -74,6 +140,10 @@ function AuthorHeader() {
     });
   }, [questions]);
 
+  // useEffect(() => {
+  // 	setActiveAssignmentId(Number(activeAssignmentId));
+  // }, [activeAssignmentId]);
+
   async function handlePublishButton() {
     // const confirmPublish = confirm("Are you sure you want to publish?");
     // if (!confirmPublish) {
@@ -83,7 +153,6 @@ function AuthorHeader() {
     const promises = questions.map(async (question, index) => {
       // remove values that are not needed in the backend
       const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
-      console.log("alreadyInBackend", alreadyInBackend, "id", id);
       // conclude the total points of the question by taking the last element of the criteria array if question is TEXT or URL
       if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
         dataToSend.totalPoints =
@@ -131,7 +200,7 @@ function AuthorHeader() {
           questionOrder,
           published: true,
         },
-        activeAssignmentId,
+        Number(assignmentId),
       );
 
       if (!updated) {
@@ -140,48 +209,10 @@ function AuthorHeader() {
       setSubmitting(false);
       const currentTime = Date.now();
       console.log("currentTime", currentTime);
-      router.push(
-        `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
-      ); // add the submissionTime query param to the url
+      router.push(`/author/${assignmentId}?submissionTime=${currentTime}`); // add the submissionTime query param to the url
     } else {
       toast.error(`Couldn't publish all questions. Please try again.`);
       setSubmitting(false);
-    }
-  }
-
-  const steps = [
-    {
-      id: 1,
-      name: "Set up your assignment",
-      href: `/author/${activeAssignmentId}`,
-    },
-    {
-      id: 2,
-      name: "Create questions",
-      href: `/author/${activeAssignmentId}/questions`,
-    },
-  ];
-
-  function getCurrentId() {
-    const currentStep = steps.find((step) => step.href === pathname);
-    return currentStep?.id;
-  }
-
-  function handleIncompleteClick(id: number) {
-    // when clicking on step 2, it will click the update button located in the bottom of the page
-    // if (id === 2) updateAssignmentButtonRef.current?.click();
-    switch (id) {
-      case 2:
-        if (updateAssignmentButtonRef.current) {
-          updateAssignmentButtonRef.current?.click();
-        } else {
-          // the state where the user is in the success page and clicks on the second step
-          // this will redirect the user to the second step
-          router.push(`/author/${activeAssignmentId}/questions`);
-        }
-        break;
-      default:
-        break;
     }
   }
 
@@ -213,55 +244,12 @@ function AuthorHeader() {
             </div>
           </div>
         </div>
-        <nav aria-label="Progress" className="col-span-2 w-full">
-          <ol
-            role="navigation"
-            className="space-y-4 sm:flex md:space-x-8 sm:space-y-0"
-          >
-            {steps.map(({ name, href, id }) => (
-              <li key={name} className="sm:flex-1 w-full">
-                {id < getCurrentId() ? (
-                  // completed
-                  <Link
-                    href={href}
-                    className="group transition w-full flex flex-col border-l-4 border-blue-700 py-2 pl-4 hover:border-blue-500 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
-                  >
-                    <span className="text-sm font-medium text-blue-700 group-hover:text-blue-500">
-                      Step {id}
-                    </span>
-                    <span className="text-sm font-medium">{name}</span>
-                  </Link>
-                ) : pathname === href ? (
-                  // current
-                  <Link
-                    href={href}
-                    className="group flex w-full flex-col border-l-4 border-blue-700 hover:border-blue-500 py-2 pl-4 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
-                    aria-current="step"
-                  >
-                    <span className="text-sm font-medium text-blue-700 group-hover:text-blue-500">
-                      Step {id}
-                    </span>
-                    <span className="text-sm font-medium">{name}</span>
-                  </Link>
-                ) : (
-                  // incomplete
-                  <button
-                    type="button"
-                    className="group w-full flex flex-col border-l-4 border-gray-200 py-2 pl-4 hover:border-gray-300 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
-                    onClick={() => handleIncompleteClick(id)}
-                  >
-                    <span className="text-sm font-medium text-gray-500 group-hover:text-gray-700">
-                      Step {id}
-                    </span>
-                    <span className="text-sm font-medium">{name}</span>
-                  </button>
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
+        <Nav
+          currentStepId={currentStepId}
+          setCurrentStepId={setCurrentStepId}
+        />
         <div className="items-center flex justify-end gap-x-2.5">
-          {getCurrentId() === 2 && (
+          {currentStepId === 2 && (
             <SubmitQuestionsButton
               handlePublishButton={handlePublishButton}
               submitting={submitting}
@@ -286,7 +274,7 @@ function AuthorHeader() {
             onClick={() => setIsOpen(!isOpen)}
             className="inline-flex group justify-center gap-x-1.5 px-3 py-2 text-sm font-semibold"
             id="menu-button"
-            aria-expanded={isOpen} // Set aria-expanded to the value of isOpen
+            aria-expanded={isOpen}
             aria-haspopup="true"
           >
             <svg
@@ -318,7 +306,7 @@ function AuthorHeader() {
             </svg>
           </button>
         </div>
-        {isOpen && ( // Render the second div only when isOpen is true
+        {isOpen && (
           <div className="max-h-52 overflow-auto">
             {questions.map((question, index) => (
               <div key={question.id} className="flex gap-4 my-0 justify-end">

@@ -72,16 +72,6 @@ export class CreateUpdateQuestionRequestDto {
   totalPoints: number;
 
   @ApiProperty({
-    description:
-      "The number of retries allowed for this question (null means unlimited).",
-    type: Number,
-    required: false,
-  })
-  @IsOptional()
-  @IsInt()
-  numRetries: number | null;
-
-  @ApiProperty({
     description: "Type of the question.",
     enum: QuestionType,
     required: true,
@@ -134,5 +124,5 @@ export class CreateUpdateQuestionRequestDto {
   })
   @IsOptional()
   @IsBoolean()
-  answer: boolean | null;
+  answer?: boolean | null;
 }

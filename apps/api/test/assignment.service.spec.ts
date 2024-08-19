@@ -1,15 +1,16 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { AttemptService } from "../src/api/assignment/attempt/attempt.service";
-import { PrismaService } from "../src/prisma.service";
 import { HttpService } from "@nestjs/axios";
-import { LearnerUpdateAssignmentAttemptRequestDto } from "../src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
-import { of } from "rxjs";
-import { LlmService } from "../src/api/llm/llm.service";
-import { QuestionService } from "../src/api/assignment/question/question.service";
-import { AssignmentService } from "../src/api/assignment/assignment.service";
+import { Test, TestingModule } from "@nestjs/testing";
 import { AxiosResponse } from "axios";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import each from "jest-each";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { of } from "rxjs";
+import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { AssignmentService } from "../src/api/assignment/assignment.service";
+import { AttemptService } from "../src/api/assignment/attempt/attempt.service";
+import { LearnerUpdateAssignmentAttemptRequestDto } from "../src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
+import { QuestionService } from "../src/api/assignment/question/question.service";
+import { LlmService } from "../src/api/llm/llm.service";
+import { PrismaService } from "../src/prisma.service";
 
 interface TestCase {
   totalPoints: number[];
@@ -62,17 +63,17 @@ describe("AttemptService", () => {
   const generateRandomPoints = (): TestCase => {
     const totalPoints = Array.from(
       { length: 5 },
-      () => Math.floor(Math.random() * 100) + 1,
+      () => Math.floor(Math.random() * 100) + 1
     );
     const earnedPoints = totalPoints.map((points) =>
-      Math.floor(Math.random() * points),
+      Math.floor(Math.random() * points)
     );
     return { totalPoints, earnedPoints };
   };
 
   const testCases: TestCase[] = Array.from(
     { length: 10 },
-    generateRandomPoints,
+    generateRandomPoints
   );
 
   each(testCases).test(
@@ -81,30 +82,80 @@ describe("AttemptService", () => {
       // Mock data
       const assignmentAttemptId = 1;
       const assignmentId = 1;
+
+      const mockResponses = earnedPoints.map((points, index) => ({
+        questionId: index + 1,
+        points,
+      }));
       const updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto =
         {
           submitted: true,
+          responsesForQuestions: mockResponses.map(({ questionId }) => ({
+            id: questionId,
+            learnerAnswerChoice: undefined,
+            learnerAnswerText: undefined,
+            learnerChoices: undefined,
+            learnerTextResponse: "what is your name",
+            learnerUrlResponse: undefined,
+            learnerFileResponse: undefined,
+          })),
         };
       const authCookie = "someAuthCookie";
       const gradingCallbackRequired = false;
 
       const mockAssignment = {
         id: assignmentId,
+        showAssignmentScore: true,
+        showQuestionScore: true,
+        showSubmissionFeedback: true,
         questions: totalPoints.map((points, index) => ({
           id: index + 1,
           totalPoints: points,
         })),
       };
 
-      const mockResponses = earnedPoints.map((points, index) => ({
-        questionId: index + 1,
-        points,
-      }));
-
-      const mockAssignmentAttempt = {
+      const mockAssignmentAttempt: LearnerUpdateAssignmentAttemptRequestDto & {
+        id: number;
+        expiresAt: Date;
+      } = {
         id: assignmentAttemptId,
+        submitted: false,
+        responsesForQuestions: updateAssignmentAttemptDto.responsesForQuestions,
         expiresAt: new Date(Date.now() + 1_000_000), // future date
       };
+
+      const mockQuestionResponses: CreateQuestionResponseAttemptResponseDto[] =
+        mockResponses.map((response, index) => ({
+          id: index + 1,
+          questionId: response.questionId,
+          feedback: [
+            {
+              feedback: "that's right!",
+            },
+          ],
+          totalPoints: response.points,
+          question: "What is your name",
+        }));
+
+      // service.createQuestionResponse = jest
+      //   .fn()
+      //   .mockResolvedValue(mockQuestionResponses);
+
+      service.createQuestionResponse = jest
+        .fn()
+        .mockImplementation(
+          (
+            assignmentAttemptId,
+            questionId: number,
+            _createQuestionResponse
+          ) => {
+            return Promise.resolve(
+              mockQuestionResponses.find(
+                (response) => response.questionId === questionId
+              ) || { id: 1, questionId, totalPoints: 0, feedback: [] }
+            );
+          }
+        );
 
       prisma.assignment.findUnique = jest
         .fn()
@@ -128,7 +179,7 @@ describe("AttemptService", () => {
               submitted: parameters.data.submitted,
               success: true,
             };
-          },
+          }
         );
 
       // Execute the method
@@ -137,23 +188,22 @@ describe("AttemptService", () => {
         assignmentId,
         updateAssignmentAttemptDto,
         authCookie,
-        gradingCallbackRequired,
+        gradingCallbackRequired
       );
-
       // Calculate expected grade
       const totalPointsPossible = totalPoints.reduce(
         (sum, points) => sum + points,
-        0,
+        0
       );
       const totalPointsEarned = earnedPoints.reduce(
         (sum, points) => sum + points,
-        0,
+        0
       );
       const expectedGrade = totalPointsEarned / totalPointsPossible;
       // Verify the result
       expect(result.grade).toBeCloseTo(expectedGrade, 4);
       expect(result.submitted).toBe(true);
       expect(result.success).toBe(true);
-    },
+    }
   );
 });

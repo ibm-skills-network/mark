@@ -2,7 +2,6 @@
 
 import { useAuthorStore } from "@/stores/author";
 import { type ChangeEvent } from "react";
-import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import WordCountComponent from "../../WordCountComponent";
 import Rubric from "../Rubric";
 
@@ -21,11 +20,6 @@ function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
 
   const question = questions.find((question) => question.id === questionId);
 
-  function handleQuestionRetryChange(e: ChangeEvent<HTMLSelectElement>) {
-    modifyQuestion(questionId, {
-      numRetries: ~~e.target.value,
-    });
-  }
   function handleMaxWordCountChange(e: ChangeEvent<HTMLInputElement>) {
     modifyQuestion(questionId, {
       maxWords: ~~e.target.value || null,
@@ -34,10 +28,6 @@ function TextBasedAnswerSection(props: TextBasedAnswerSectionProps) {
   return (
     <>
       <div className="grid grid-cols-2 gap-x-16">
-        <QuestionNumberOfRetries
-          retries={question?.numRetries ?? -1}
-          handleRetryChange={handleQuestionRetryChange}
-        />
         {!isUrl && (
           <WordCountComponent
             maxWords={question?.maxWords || null}

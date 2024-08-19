@@ -2,7 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+* {
+  font-family: "IBM Plex Sans", sans-serif;
+}
 
+/* to overrride the default font size for the md editor */
+body .w-md-editor-text-pre > code,
+body .w-md-editor-text-input {
+  @apply !text-base;
+}
+
+/* For the markdown editor to still show in preview mode (bug in the library) */
+body .w-md-editor-content {
+  min-height: 150px;
+}
+
+/* for the Markdown parser to display lists correctly */
+ul {
+  list-style: disc;
+}
+
+.main-author-container {
+  @apply flex flex-col gap-y-8 mx-auto w-full max-w-6xl py-24 px-4;
+}
 
 @layer components {
   .btn {
@@ -90,23 +112,6 @@
   @apply text-violet-600 no-underline hover:text-violet-800 hover:underline dark:text-violet-400 dark:hover:text-violet-300 transition-all;
 }
 
-
-/* Override the default font size for the markdown editor */
-body .w-md-editor-text-pre > code,
-body .w-md-editor-text-input {
-  @apply !text-base;
-}
-
-/* For the markdown editor to still show in preview mode (bug in the library) */
-body .w-md-editor-content {
-  min-height: 150px;
-}
-
-/* For the markdown parser to display lists correctly */
-ul {
-  list-style: disc;
-}
-
 .title-placeholder::placeholder {
   font-weight: 600; /* Font weight for title */
 }
@@ -145,47 +150,8 @@ pre {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
-}
-
-.title-placeholder::placeholder {
-  font-weight: 600; /* Font weight for title */
-}
-
-.description-placeholder::placeholder {
-  font-weight: 450; /* Font weight for description */
-}
-.ql-snow .ql-stroke {
-  stroke: #6b7280 !important;
-}
-.ql-snow .ql-fill {
-  fill: #6b7280 !important;
-}
-.ql-snow .ql-stroke.ql-fill {
-  fill: #6b7280 !important;
-  stroke: #6b7280 !important;
-}
-.ql-snow .ql-fill.ql-stroke {
-  fill: #6b7280 !important;
-  stroke: #6b7280 !important;
-}
-.ql-snow .ql-stroke.ql-fill.ql-stroke {
-  fill: #6b7280 !important;
-  stroke: #6b7280 !important;
-}
-.ql-picker-label {
-  color: #6b7280 !important;
-}
-
-pre {
-  background: #6b7280;
-  padding: 1em;
-  overflow: auto;
-  border-radius: 4px;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+    monospace;
 }
 /* Custom Quill Styles */
 
@@ -271,23 +237,3 @@ pre.ql-syntax {
     padding: 8px;
   }
 }
-
-
-/* Optional dark mode */
-/*
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-}
-
-.main-author-container {
-  @apply flex flex-col gap-y-8 mx-auto max-w-6xl py-24;
-}
-
-@layer components {
-  .btn {
-    @apply inline-flex text-base items-center justify-center font-medium whitespace-nowrap px-3.5 py-2 border border-solid rounded-md shadow-sm gap-1.5 w-fit focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 ring-offset-white dark:ring-offset-gray-800 disabled:cursor-not-allowed cursor-pointer transition-all;
-  }
-}
-  */

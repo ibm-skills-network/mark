@@ -1,16 +1,17 @@
 /* eslint-disable */
 "use client";
-import React, {
-  ComponentPropsWithoutRef,
+import {
+  type ComponentPropsWithoutRef,
   useEffect,
   useRef,
   useState,
 } from "react";
 import "quill/dist/quill.snow.css"; // Ensure correct CSS import
 import "highlight.js/styles/vs2015.css"; // Import a Highlight.js theme
-import { twMerge } from "tailwind-merge";
+
 import { getWordCount } from "@/lib/utils";
 import hljs from "highlight.js";
+import { cn } from "@/lib/strings";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
@@ -18,7 +19,6 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   placeholder?: string;
   textareaClassName?: string;
   maxWords?: number | null;
-  className?: string;
 }
 
 const MarkdownEditor: React.FC<Props> = ({
@@ -106,10 +106,17 @@ const MarkdownEditor: React.FC<Props> = ({
     };
   }, [quillInstance]);
 
+  // keep the value in sync with the editor
+  useEffect(() => {
+    if (quillInstance) {
+      quillInstance.root.innerHTML = value;
+    }
+  }, [quillInstance]);
+
   return (
-    <div className={twMerge("flex flex-col", className)}>
+    <div className={cn("flex flex-col", className)}>
       <div
-        className={twMerge(
+        className={cn(
           "quill-editor max-h-96 p-2 border border-gray-300 rounded-lg",
           textareaClassName,
         )}

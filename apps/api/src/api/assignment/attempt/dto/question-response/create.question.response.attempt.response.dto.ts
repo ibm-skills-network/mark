@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { IsString } from "class-validator";
 
 export class GeneralFeedbackDto {
   @ApiProperty({
@@ -71,4 +72,19 @@ export class CreateQuestionResponseAttemptResponseDto {
     | ChoiceBasedFeedbackDto[]
     | GeneralFeedbackDto[]
     | TrueFalseBasedFeedbackDto[];
+
+  @ApiProperty({
+    description: "The question text.",
+    type: String,
+    required: true,
+  })
+  @IsString()
+  question: string;
+
+  @ApiProperty({
+    description: "The question id.",
+    type: Number,
+    required: true,
+  })
+  questionId: number;
 }

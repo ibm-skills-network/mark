@@ -1,9 +1,11 @@
+import { QuestionAttemptRequestWithId } from "@/config/types";
 import useCountdown from "@/hooks/use-countdown";
 import { cn } from "@/lib/strings";
 import { submitAssignment } from "@/lib/talkToBackend";
+import { editedQuestionsOnly } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { useRouter } from "next/navigation";
-import { type ComponentPropsWithoutRef } from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import { toast } from "sonner";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -14,14 +16,20 @@ function Timer(props: Props) {
   const { expiresAt, ...restOfProps } = props;
   const router = useRouter();
 
+  const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
+
   // const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
-  const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
+  const [activeAttemptId, questions, setQuestion] = useLearnerStore((state) => [
+    state.activeAttemptId,
+    state.questions,
+    state.setQuestion,
+  ]);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
   ]);
   const assignmentId = assignmentDetails?.id;
-  const { countdown } = useCountdown(Date.parse(expiresAt));
+  const { countdown, timerExpired } = useCountdown(Date.parse(expiresAt));
   const seconds = Math.floor((countdown / 1000) % 60);
   const minutes = Math.floor((countdown / (1000 * 60)) % 60);
   const hours = Math.floor((countdown / (1000 * 60 * 60)) % 24);
@@ -30,20 +38,63 @@ function Timer(props: Props) {
   };
 
   async function handleSubmitAssignment() {
-    const grade = await submitAssignment(assignmentId, activeAttemptId);
-    if (!grade || grade <= 0 || grade >= 1) {
+    const responsesForOnlyEditedQuestions = editedQuestionsOnly(questions);
+    const responsesForQuestions: QuestionAttemptRequestWithId[] =
+      responsesForOnlyEditedQuestions.map((q) => ({
+        id: q.id,
+        learnerTextResponse: q.learnerTextResponse || undefined,
+        learnerUrlResponse: q.learnerUrlResponse || undefined,
+        learnerChoices: q.learnerChoices || undefined,
+        learnerAnswerChoice: q.learnerAnswerChoice || undefined,
+        learnerFileResponse: q.learnerFileResponse || undefined,
+      }));
+    const res = await submitAssignment(
+      assignmentId,
+      activeAttemptId,
+      responsesForQuestions,
+    );
+    const { grade, feedbacksForQuestions, success } = res;
+    if (!success) {
       toast.error("Failed to submit assignment.");
       return;
     }
-    setGrade(grade * 100);
+    if (typeof grade === "number") {
+      setGrade(grade * 100);
+    }
+
+    for (const feedback of feedbacksForQuestions || []) {
+      setQuestion({
+        id: feedback.questionId,
+        questionResponses: [
+          {
+            id: feedback.id,
+            points: feedback.totalPoints,
+            feedback: feedback.feedback,
+            learnerResponse: feedback.question,
+            questionId: feedback.questionId,
+            assignmentAttemptId: activeAttemptId,
+          },
+        ],
+      });
+    }
     // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     const currentTime = Date.now();
     console.log("currentTime", currentTime);
     router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
   }
 
+  useEffect(() => {
+    if (expiresAt && countdown <= 60000 && !oneMinuteAlertShown) {
+      toast.warning("You have 1 minute remaining to submit your assignment.", {
+        description:
+          "If you don't submit your assignment in time, it will be automatically submitted.",
+      });
+      setOneMinuteAlertShown(true);
+    }
+  }, [expiresAt, countdown]);
+
   // if assignment runs out of time, automatically submit
-  if (countdown <= 0) {
+  if (timerExpired) {
     toast.message("Time's up! Submitting your assignment...");
     void handleSubmitAssignment();
     return null;

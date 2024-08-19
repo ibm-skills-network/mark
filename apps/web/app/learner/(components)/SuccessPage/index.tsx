@@ -9,10 +9,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import Question from "./Question";
 
-interface Props extends ComponentPropsWithoutRef<"section"> {}
-
-function SuccessPage(props: Props) {
-  const {} = props;
+function SuccessPage() {
   const pathname = usePathname();
   const router = useRouter();
   const [questions] = useLearnerStore((state) => [state.questions]);
@@ -20,6 +17,7 @@ function SuccessPage(props: Props) {
     state.assignmentDetails,
     state.grade,
   ]);
+  console.log("questions", grade);
   const [returnUrl, setReturnUrl] = useState<string>("");
 
   useEffect(() => {
@@ -48,34 +46,38 @@ function SuccessPage(props: Props) {
       <div className="py-10">
         <PageWithStickySides
           leftStickySide={
-            <svg viewBox="0 0 36 36" className="h-24">
-              <path
-                fill="none"
-                className="stroke-gray-200"
-                strokeWidth={2.6}
-                d="M18 2.0845
+            <>
+              {typeof grade === "number" ? (
+                <svg viewBox="0 0 36 36" className="h-24">
+                  <path
+                    fill="none"
+                    className="stroke-gray-200"
+                    strokeWidth={2.6}
+                    d="M18 2.0845
           a 15.9155 15.9155 0 0 1 0 31.831
           a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-              <path
-                fill="none"
-                className=""
-                stroke={grade >= passingGrade ? "#10B981" : "#EF4444"}
-                strokeDasharray={`${grade}, 100`}
-                strokeWidth={2}
-                strokeLinecap="round"
-                d="M18 2.0845
+                  />
+                  <path
+                    fill="none"
+                    className=""
+                    stroke={grade >= passingGrade ? "#10B981" : "#EF4444"}
+                    strokeDasharray={`${grade}, 100`}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    d="M18 2.0845
           a 15.9155 15.9155 0 0 1 0 31.831
           a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-              <text
-                x="10"
-                y="20.35"
-                className=" text-center text-slate-500 text-[0.4rem] font-semibold"
-              >
-                {grade === 100 || grade === 0 ? grade : grade.toFixed(1)}%
-              </text>
-            </svg>
+                  />
+                  <text
+                    x="10"
+                    y="20.35"
+                    className=" text-center text-slate-500 text-[0.4rem] font-semibold"
+                  >
+                    {grade === 100 || grade === 0 ? grade : grade.toFixed(1)}%
+                  </text>
+                </svg>
+              ) : null}
+            </>
           }
           mainContent={
             <>

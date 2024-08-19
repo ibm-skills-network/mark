@@ -1,11 +1,10 @@
 import { cn } from "@/lib/strings";
-import type { ComponentPropsWithoutRef, FC, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   direction?: "x" | "y";
   content: string;
   delay?: number;
-  children: ReactNode;
   disabled?: boolean;
   distance?: number;
 }
@@ -61,7 +60,7 @@ const Tooltip: FC<Props> = (props) => {
                 : { bottom: `${distance}rem` }
             }
             className={cn(
-              "absolute rounded-lg z-50 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-w-max group-hover/tooltip:scale-100",
+              "absolute rounded-lg z-50 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 dark:bg-white bg-gray-950 dark:text-gray-800 text-slate-100 min-w-max group-hover/tooltip:scale-100",
               `group-hover/tooltip:delay-${delay}`,
               getClassNamesFromDirectionAndDistance(),
             )}

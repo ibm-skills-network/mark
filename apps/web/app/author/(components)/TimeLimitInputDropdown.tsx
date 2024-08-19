@@ -1,3 +1,4 @@
+"use client";
 import Tooltip from "@/components/Tooltip";
 import { cn } from "@/lib/strings";
 import {

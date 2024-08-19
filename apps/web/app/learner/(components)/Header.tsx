@@ -8,7 +8,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import Breadcrumbs from "./Breadcrumbs";
-import Button from "./Button";
+import Button from "../../../components/Button";
+import type { QuestionAttemptRequestWithId } from "@/config/types";
+import { editedQuestionsOnly } from "@/lib/utils";
 
 interface Props {}
 
@@ -17,13 +19,13 @@ function LearnerHeader(props: Props) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [questions, activeAttemptId, submitAssignmentRef] = useLearnerStore(
-    (state) => [
+  const [questions, setQuestion, activeAttemptId, submitAssignmentRef] =
+    useLearnerStore((state) => [
       state.questions,
+      state.setQuestion,
       state.activeAttemptId,
       state.submitAssignmentRef,
-    ],
-  );
+    ]);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
@@ -36,17 +38,47 @@ function LearnerHeader(props: Props) {
       setTitle(assignmentDetails.name);
     }
   }, []);
-  const userSubmittedAnyQuestion = questions.some(
-    (question) => question.questionResponses.length > 0,
-  );
+
   async function handleSubmitAssignment() {
-    const grade = await submitAssignment(assignmentId, activeAttemptId);
-    if (typeof grade !== "number" || grade < 0 || grade > 1) {
+    const responsesForOnlyEditedQuestions = editedQuestionsOnly(questions);
+    const responsesForQuestions: QuestionAttemptRequestWithId[] =
+      responsesForOnlyEditedQuestions.map((q) => ({
+        id: q.id,
+        learnerTextResponse: q.learnerTextResponse || undefined,
+        learnerUrlResponse: q.learnerUrlResponse || undefined,
+        learnerChoices: q.learnerChoices || undefined,
+        learnerAnswerChoice: q.learnerAnswerChoice || undefined,
+        learnerFileResponse: q.learnerFileResponse || undefined,
+      }));
+    console.log("responsesForQuestions", responsesForQuestions);
+    const res = await submitAssignment(
+      assignmentId,
+      activeAttemptId,
+      responsesForQuestions,
+    );
+    const { grade, feedbacksForQuestions, success } = res;
+    if (!success) {
       toast.error("Failed to submit assignment.");
       return;
     }
-    setGrade(grade * 100);
-    // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
+    if (typeof grade === "number") {
+      setGrade(grade * 100);
+    }
+    for (const feedback of feedbacksForQuestions || []) {
+      setQuestion({
+        id: feedback.questionId,
+        questionResponses: [
+          {
+            id: feedback.id,
+            points: feedback.totalPoints,
+            feedback: feedback.feedback,
+            learnerResponse: feedback.question,
+            questionId: feedback.questionId,
+            assignmentAttemptId: activeAttemptId,
+          },
+        ],
+      });
+    }
     const currentTime = Date.now();
     console.log("currentTime", currentTime);
     router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
@@ -77,7 +109,7 @@ function LearnerHeader(props: Props) {
       {activeAttemptId && isInQuestionPage && (
         <Button
           ref={submitAssignmentRef}
-          disabled={!userSubmittedAnyQuestion}
+          disabled={editedQuestionsOnly(questions).length === 0}
           className="disabled:opacity-70"
           onClick={handleSubmitAssignment}
         >

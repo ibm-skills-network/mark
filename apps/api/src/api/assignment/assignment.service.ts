@@ -16,7 +16,6 @@ import type { UpdateAssignmentRequestDto } from "./dto/update.assignment.request
 
 @Injectable()
 export class AssignmentService {
-  [x: string]: any;
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
