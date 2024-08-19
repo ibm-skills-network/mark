@@ -414,9 +414,8 @@ export async function submitQuestion(
     if (!res.ok) {
       throw new Error("Failed to submit answer");
     }
-    const { id, feedback, totalPoints } =
-      (await res.json()) as QuestionAttemptResponse;
-    return { id, feedback, totalPoints };
+    const data = (await res.json()) as QuestionAttemptResponse;
+    return data;
   } catch (err) {
     console.error(err);
     return undefined;

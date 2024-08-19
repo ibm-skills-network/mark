@@ -1,7 +1,7 @@
 "use client";
 import type { ComponentPropsWithoutRef, FC, ButtonHTMLAttributes } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { stepTwoSections } from "@/app/author/[assignmentId]/config/page";
+import { stepTwoSections } from "@/config/constants";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { cn } from "@/lib/strings";
 import type { VerbosityLevels } from "@/config/types";

@@ -10,7 +10,9 @@ function Component(props: Props) {
   const { params, searchParams } = props;
   const { submissionTime } = searchParams;
   const { assignmentId } = params;
-  const submissionTimeInt = submissionTime ? parseInt(submissionTime) : null;
+  const submissionTimeInt = submissionTime
+    ? Number.parseInt(submissionTime)
+    : null;
   const currentDateInThisPage = Date.now();
 
   return (

@@ -6,7 +6,7 @@ import {
   type MouseEvent,
 } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { stepTwoSections } from "@/app/author/[assignmentId]/config/page";
+import { stepTwoSections } from "@/config/constants";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { cn } from "@/lib/strings";
 

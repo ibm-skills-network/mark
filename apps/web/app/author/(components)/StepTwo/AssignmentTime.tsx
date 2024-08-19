@@ -1,20 +1,11 @@
 "use client";
-import {
-  useEffect,
-  useState,
-  type ChangeEvent,
-  type ComponentPropsWithoutRef,
-  type FC,
-} from "react";
+import type { ComponentPropsWithoutRef, FC } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { stepTwoSections } from "@/app/author/[assignmentId]/config/page";
+import { stepTwoSections } from "@/config/constants";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { cn } from "@/lib/strings";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {
-  allotedTimeMinutes: number;
-  timeEstimateMinutes: number;
-}
+interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {
   const [

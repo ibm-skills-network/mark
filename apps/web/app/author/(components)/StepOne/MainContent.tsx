@@ -33,56 +33,27 @@ Good luck!`,
     placeholder: "",
     required: true,
   },
-} as {
-  [key: string]: {
-    title: string;
-    description: string;
-    placeholder: string;
-    required: boolean;
-  };
-};
+} as const;
 
 const MainContent = () => {
   const [
-    activeAssignmentId,
-    assignmentTitle,
-    setAssignmentTitle,
     introduction,
     setIntroduction,
     instructions,
     setInstructions,
     gradingCriteriaOverview,
     setGradingCriteriaOverview,
-    setQuestions,
   ] = useAuthorStore((state) => [
-    state.activeAssignmentId,
-    state.assignmentTitle,
-    state.setAssignmentTitle,
     state.introduction,
     state.setIntroduction,
     state.instructions,
     state.setInstructions,
     state.gradingCriteriaOverview,
     state.setGradingCriteriaOverview,
-    state.setQuestions,
   ]);
 
-  // useEffect(() => {
-  // 	async () => {
-  // 		console.log("activeAssignmentId", activeAssignmentId);
-  // 		const assignment = await useAssignmentConfig
-  // 			.getState()
-  // 			.getAssignment(activeAssignmentId);
-  // 		if (assignment) {
-  // 			setPageState("success");
-  // 		} else {
-  // 			setPageState("error");
-  // 		}
-  // 	};
-  // }, []);
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8">
       <SectionWithTitle
         title={stepOneSections.introduction.title}
         description={stepOneSections.introduction.description}

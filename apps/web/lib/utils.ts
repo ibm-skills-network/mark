@@ -1,4 +1,4 @@
-import { QuestionStore } from "@/config/types";
+import type { QuestionStore } from "@/config/types";
 
 export function absoluteUrl(path: string) {
   const base = getBaseUrl();
@@ -34,8 +34,8 @@ export interface DataWithUpdatedAt {
 
 export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
-  backendData: T,
-): T {
+  backendData: Partial<T>,
+): T | Partial<T> {
   console.log("localData", localData);
   console.log("backendData", backendData);
   const localDataExists = localData?.updatedAt;

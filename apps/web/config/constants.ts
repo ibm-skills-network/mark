@@ -14,6 +14,30 @@ export const BASE_API_ROUTES = {
   admin: `${BASE_API_PATH}/admin`,
 };
 
+export const stepTwoSections = {
+  type: {
+    title: "1. What type of assignment is this?",
+    required: true,
+  },
+  time: {
+    title: "2. How much time will learners have to complete this assignment?",
+    required: false,
+  },
+  completion: {
+    title: "3. How will learners complete the assignment?",
+    required: true,
+  },
+  feedback: {
+    title: "4. How much feedback should I give students?",
+    description: "Choose what feedback Mark gives to students",
+    required: true,
+  },
+  order: {
+    title: "5. What order should questions appear in?",
+    required: true,
+  },
+} as const;
+
 export const initialCriteria: Criteria[] = [
   {
     id: 1,

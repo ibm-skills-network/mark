@@ -1,4 +1,6 @@
-import StepOne from "../(components)/StepOne/layout";
+import PageTitle from "../(components)/PageTitle";
+import { FooterNavigation } from "../(components)/StepOne/FooterNavigation";
+import MainContent from "../(components)/StepOne/MainContent";
 import SuccessPage from "../(components)/SuccessPage";
 
 interface Props {
@@ -23,7 +25,14 @@ function Component(props: Props) {
       currentDateInThisPage > submissionTimeInt ? (
         <SuccessPage />
       ) : (
-        <StepOne assignmentId={~~assignmentId} />
+        <>
+          <PageTitle
+            title="Let's set up your assignment!"
+            description="Responses in this section will be shown to learners."
+          />
+          <MainContent />
+          <FooterNavigation assignmentId={String(assignmentId)} />
+        </>
       )}
     </main>
   );

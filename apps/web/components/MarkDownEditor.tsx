@@ -117,7 +117,7 @@ const MarkdownEditor: React.FC<Props> = ({
     <div className={cn("flex flex-col", className)}>
       <div
         className={cn(
-          "quill-editor max-h-96 p-2 border border-gray-300 rounded-lg",
+          "quill-editor p-2 border border-gray-300 rounded-lg",
           textareaClassName,
         )}
         ref={quillRef}

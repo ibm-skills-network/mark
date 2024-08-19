@@ -1,6 +1,5 @@
 import Title from "@/components/Title";
 import { cn } from "@/lib/strings";
-import { DocumentTextIcon } from "@heroicons/react/24/outline";
 import type { ComponentPropsWithoutRef, ElementType } from "react";
 
 export function SectionWithTitle<T extends ElementType = "section">(
@@ -48,17 +47,6 @@ export function SectionWithTitle<T extends ElementType = "section">(
           {description}
         </p>
       </div>
-      {/* <Title
-						text={title}
-						level={5}
-						className={cn(
-							"leading-6",
-							required && "after:text-blue-400 after:content-['*']",
-						)}
-					/>
-					{description && <p className="mt-2 text-gray-600">{description}</p>} */}
-      {/* </div> */}
-      {/* </div> */}
       <div className={cn("w-full", className)}>{children}</div>
     </Component>
   );
