@@ -7,7 +7,7 @@ import { createWithEqualityFn } from "zustand/traditional";
 export type LearnerState = {
   activeAttemptId: number | null;
   activeQuestionNumber: number | null;
-  expiresAt?: string;
+  expiresAt: number | undefined;
   questions: QuestionStore[];
   submitAssignmentRef: RefObject<HTMLButtonElement>;
 };
@@ -24,6 +24,7 @@ export type LearnerActions = {
   addChoice: (learnerChoice: string, questionId?: number) => void;
   removeChoice: (learnerChoice: string, questionId?: number) => void;
   setAnswerChoice: (learnerAnswerChoice: boolean, questionId?: number) => void;
+  setLearnerStore: (learnerState: Partial<LearnerState>) => void;
 };
 
 export type AssignmentDetailsState = {
@@ -46,6 +47,7 @@ export const useLearnerStore = createWithEqualityFn<
       activeQuestionNumber: 1,
       setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
       assignmentDetails: null,
+      expiresAt: undefined,
       questions: [],
       addQuestion: (question) =>
         set((state) => ({
@@ -135,6 +137,7 @@ export const useLearnerStore = createWithEqualityFn<
           ),
         })),
       submitAssignmentRef: createRef<HTMLButtonElement>(),
+      setLearnerStore: (learnerState) => set((state) => ({ ...learnerState })),
     }),
     {
       name: "learner",

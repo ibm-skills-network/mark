@@ -3,18 +3,18 @@ import { createRef, type RefObject } from "react";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
-import { withUpdatedAt } from "./middlewares";
 import { extractAssignmentId } from "@/lib/strings";
+import { withUpdatedAt } from "./middlewares";
 
 export type AuthorState = {
-  activeAssignmentId?: number | null;
-  assignmentTitle: string;
+  activeAssignmentId?: number | undefined;
+  name: string;
   introduction: string;
   instructions: string;
   gradingCriteriaOverview: string;
   questions: QuestionAuthorStore[];
   pageState: "loading" | "success" | "error";
-  updatedAt: number;
+  updatedAt: number | undefined;
 };
 
 type OptionalQuestion = {
@@ -23,7 +23,7 @@ type OptionalQuestion = {
 
 export type AuthorActions = {
   setActiveAssignmentId: (id: number) => void;
-  setAssignmentTitle: (title: string) => void;
+  setName: (name: string) => void;
   setIntroduction: (introduction: string) => void;
   setInstructions: (instructions: string) => void;
   setGradingCriteriaOverview: (gradingCriteriaOverview: string) => void;
@@ -46,6 +46,7 @@ export type AuthorActions = {
   setPoints: (questionId: number, points: number) => void;
   setPageState: (state: "loading" | "success" | "error") => void;
   setUpdatedAt: (updatedAt: number) => void;
+  setAuthorStore: (state: Partial<AuthorState>) => void;
 };
 
 export const useAuthorStore = createWithEqualityFn<
@@ -54,10 +55,10 @@ export const useAuthorStore = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
-        activeAssignmentId: null,
+        activeAssignmentId: undefined,
         setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
-        assignmentTitle: "",
-        setAssignmentTitle: (title) => set({ assignmentTitle: title }),
+        name: "",
+        setName: (title) => set({ name: title }),
         introduction: "",
         setIntroduction: (introduction) => set({ introduction }),
         instructions: "",
@@ -242,9 +243,10 @@ export const useAuthorStore = createWithEqualityFn<
           }));
         },
         pageState: "loading",
-        setPageState: (state) => set({ pageState: state }),
-        updatedAt: Date.now(),
+        setPageState: (pageState) => set({ pageState }),
+        updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
+        setAuthorStore: (state) => set((prev) => ({ ...prev, ...state })),
       })),
       {
         name: "author",

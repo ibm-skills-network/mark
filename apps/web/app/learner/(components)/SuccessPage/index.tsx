@@ -6,18 +6,18 @@ import { getUser } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import { useEffect, useState } from "react";
 import Question from "./Question";
+import { revalidateQuestionsRoute } from "@/app/actions/learner";
 
 function SuccessPage() {
   const pathname = usePathname();
   const router = useRouter();
   const [questions] = useLearnerStore((state) => [state.questions]);
-  const [{ passingGrade = 50 }, grade] = useAssignmentDetails((state) => [
+  const [{ passingGrade = 50, id }, grade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.grade,
   ]);
-  console.log("questions", grade);
   const [returnUrl, setReturnUrl] = useState<string>("");
 
   useEffect(() => {
@@ -28,6 +28,7 @@ function SuccessPage() {
       try {
         const user = await getUser();
         setReturnUrl(user.returnUrl || "");
+        await revalidateQuestionsRoute();
       } catch (err) {
         console.error(err);
       }

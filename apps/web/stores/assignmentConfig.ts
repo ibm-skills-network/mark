@@ -1,7 +1,5 @@
 import { extractAssignmentId } from "@/lib/strings";
-import type { Assignment, VerbosityLevels } from "../config/types";
 import type { GradingData } from "@/config/types";
-import { getAssignment } from "@/lib/talkToBackend";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
@@ -14,8 +12,9 @@ type GradingDataActions = {
   setAllotedTimeMinutes: (allotedTimeMinutes: number) => void;
   setDisplayOrder: (displayOrder: "DEFINED" | "RANDOM") => void;
   toggleStrictTimeLimit: () => void;
-  updatedAt: number;
   setUpdatedAt: (updatedAt: number) => void;
+  setAssignmentConfigStore: (state: Partial<GradingData>) => void;
+  setStrictTimeLimit: (strictTimeLimit: boolean) => void;
 };
 
 export const useAssignmentConfig = createWithEqualityFn<
@@ -24,16 +23,16 @@ export const useAssignmentConfig = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
-        graded: null,
+        graded: undefined,
         setGraded: (graded) => set({ graded }),
         numAttempts: -1,
         setNumAttempts: (numAttempts) => set({ numAttempts }),
         passingGrade: 60,
         setPassingGrade: (passingGrade) => set({ passingGrade }),
-        timeEstimateMinutes: null,
+        timeEstimateMinutes: undefined,
         setTimeEstimateMinutes: (timeEstimateMinutes) =>
           set({ timeEstimateMinutes }),
-        allotedTimeMinutes: null,
+        allotedTimeMinutes: undefined,
         setAllotedTimeMinutes: (allotedTimeMinutes) =>
           set({ allotedTimeMinutes }),
         displayOrder: "DEFINED",
@@ -41,8 +40,11 @@ export const useAssignmentConfig = createWithEqualityFn<
         strictTimeLimit: false,
         toggleStrictTimeLimit: () =>
           set((state) => ({ strictTimeLimit: !state.strictTimeLimit })),
-        updatedAt: Date.now(),
+        setStrictTimeLimit: (strictTimeLimit) => set({ strictTimeLimit }),
+        updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
+        setAssignmentConfigStore: (state) =>
+          set((prevState) => ({ ...prevState, ...state })),
       })),
     ),
     {

@@ -16,8 +16,8 @@ type FeedbackDataActions = {
   setShowQuestionScore: (showQuestionScore: boolean) => void;
   setShowAssignmentScore: (showAssignmentScore: boolean) => void;
   // setShowStatus: (showStatus: boolean) => void;
-  updatedAt: number;
   setUpdatedAt: (updatedAt: number) => void;
+  setAssignmentFeedbackConfigStore: (state: Partial<FeedbackData>) => void;
 };
 
 export const useAssignmentFeedbackConfig = createWithEqualityFn<
@@ -54,8 +54,10 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
         // toggleShowStatus: () =>
         // 	set((state) => ({ showStatus: !state.showStatus })),
         // setShowStatus: (showStatus: boolean) => set({ showStatus }),
-        updatedAt: Date.now(),
+        updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
+        setAssignmentFeedbackConfigStore: (state) =>
+          set((prevState) => ({ ...prevState, ...state })),
       })),
     ),
     {

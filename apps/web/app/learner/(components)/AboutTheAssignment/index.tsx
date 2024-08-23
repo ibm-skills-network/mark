@@ -18,7 +18,6 @@ async function AboutTheAssignment(props: Props) {
   const headerList = headers();
   const cookie = headerList.get("cookie");
   const assignment = await getAssignment(assignmentId, cookie);
-  console.log("assignment:", assignment);
   // go to the error page if the assignment is not found
   if (!assignment) {
     return (
@@ -62,12 +61,6 @@ async function AboutTheAssignment(props: Props) {
 
   if (!published) {
     assignmentState = "not-published";
-  }
-
-  function handleViewResults(e: MouseEvent<HTMLButtonElement>) {
-    e.preventDefault();
-    // TODO: do something here
-    console.log("view results");
   }
 
   return (

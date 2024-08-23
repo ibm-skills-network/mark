@@ -22,6 +22,7 @@ function QuestionPage(props: Props) {
   const { questions, id, expiresAt } = attempt;
   const router = useRouter();
   const questionsStore = useLearnerStore((state) => state.questions);
+  const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
     (state) => [state.assignmentDetails, state.setAssignmentDetails],
   );
@@ -105,10 +106,11 @@ function QuestionPage(props: Props) {
         return question;
       },
     );
-    useLearnerStore.setState({
+    console.log("attemptId, expiresAt", id, new Date(expiresAt).getTime());
+    setLearnerStore({
       questions: allQuestions,
       activeAttemptId: id,
-      expiresAt: expiresAt,
+      expiresAt: new Date(expiresAt).getTime(),
     });
     if (allQuestions.length) {
       setPageState("success");

@@ -1,5 +1,6 @@
 "use client";
 
+import Spinner from "@/components/svgs/Spinner";
 import { submitAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
@@ -12,12 +13,10 @@ import Button from "../../../components/Button";
 import type { QuestionAttemptRequestWithId } from "@/config/types";
 import { editedQuestionsOnly } from "@/lib/utils";
 
-interface Props {}
-
-function LearnerHeader(props: Props) {
-  const {} = props;
+function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
 
   const [questions, setQuestion, activeAttemptId, submitAssignmentRef] =
     useLearnerStore((state) => [
@@ -51,16 +50,18 @@ function LearnerHeader(props: Props) {
         learnerFileResponse: q.learnerFileResponse || undefined,
       }));
     console.log("responsesForQuestions", responsesForQuestions);
+    setSubmitting(true);
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
     );
-    const { grade, feedbacksForQuestions, success } = res;
-    if (!success) {
+    setSubmitting(false);
+    if (!res || !res.success) {
       toast.error("Failed to submit assignment.");
       return;
     }
+    const { grade, feedbacksForQuestions } = res;
     if (typeof grade === "number") {
       setGrade(grade * 100);
     }
@@ -80,7 +81,6 @@ function LearnerHeader(props: Props) {
       });
     }
     const currentTime = Date.now();
-    console.log("currentTime", currentTime);
     router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
   }
 
@@ -109,11 +109,11 @@ function LearnerHeader(props: Props) {
       {activeAttemptId && isInQuestionPage && (
         <Button
           ref={submitAssignmentRef}
-          disabled={editedQuestionsOnly(questions).length === 0}
+          disabled={editedQuestionsOnly(questions).length === 0 || submitting}
           className="disabled:opacity-70"
           onClick={handleSubmitAssignment}
         >
-          Submit assignment
+          {submitting ? <Spinner className="w-8" /> : "Submit assignment"}
         </Button>
       )}
     </header>

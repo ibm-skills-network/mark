@@ -1,5 +1,5 @@
 "use client";
-import type { ComponentPropsWithoutRef, FC } from "react";
+import { useEffect, type ComponentPropsWithoutRef, type FC } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 import { stepTwoSections } from "@/config/constants";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
@@ -15,6 +15,7 @@ const Component: FC<Props> = () => {
     setTimeEstimateMinutes,
     strictTimeLimit,
     toggleStrictTimeLimit,
+    setStrictTimeLimit,
   ] = useAssignmentConfig((state) => [
     state.allotedTimeMinutes,
     state.setAllotedTimeMinutes,
@@ -22,7 +23,14 @@ const Component: FC<Props> = () => {
     state.setTimeEstimateMinutes,
     state.strictTimeLimit,
     state.toggleStrictTimeLimit,
+    state.setStrictTimeLimit,
   ]);
+
+  useEffect(() => {
+    if (allotedTimeMinutes > 0) {
+      setStrictTimeLimit(true);
+    }
+  }, [allotedTimeMinutes]);
 
   return (
     <SectionWithTitle

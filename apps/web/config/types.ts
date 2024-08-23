@@ -160,12 +160,13 @@ export interface GetQuestionResponse extends Question {
 
 export type GradingData = {
   graded: boolean;
-  timeEstimateMinutes: number | null;
-  allotedTimeMinutes?: number | null;
+  timeEstimateMinutes: number | undefined;
+  allotedTimeMinutes?: number | undefined;
   passingGrade: number;
   numAttempts?: number;
   displayOrder?: "DEFINED" | "RANDOM";
   strictTimeLimit: boolean;
+  updatedAt: number | undefined;
 };
 
 export type FeedbackData = {
@@ -180,6 +181,7 @@ export type FeedbackData = {
   showQuestionScore: boolean;
   // whether to show the total assignment score to the learner
   showAssignmentScore: boolean;
+  updatedAt: number | undefined;
 };
 
 export type ReplaceAssignmentRequest = {

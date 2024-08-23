@@ -8,7 +8,6 @@ import {
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -23,20 +22,21 @@ function AuthorHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const assignmentId = extractAssignmentId(pathname);
-  const assignmentTitle = useAuthorStore((state) => state.assignmentTitle);
   const [currentStepId, setCurrentStepId] = useState<number>(0);
-  const [setActiveAssignmentId] = useAuthorStore((state) => [
-    state.setActiveAssignmentId,
-  ]);
-  const [questions, modifyQuestion, pageState, setPageState] = useAuthorStore(
-    (state) => [
+  const [setActiveAssignmentId, questions, setPageState, setAuthorStore, name] =
+    useAuthorStore((state) => [
+      state.setActiveAssignmentId,
       state.questions,
-      state.modifyQuestion,
-      state.pageState,
       state.setPageState,
-    ],
+      state.setAuthorStore,
+      state.name,
+    ]);
+  const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
+    state.setAssignmentConfigStore,
+  ]);
+  const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
+    (state) => [state.setAssignmentFeedbackConfigStore],
   );
-
   const [isOpen, setIsOpen] = useState(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -44,37 +44,35 @@ function AuthorHeader() {
     setActiveAssignmentId(~~assignmentId);
     const fetchAssignment = async () => {
       const assignment = await getAssignment(~~assignmentId);
-
       if (assignment) {
-        setPageState("success");
         // update all the stores with the data from the backend/mergedData
+
+        // Author store
         const mergedAuthorData = mergeData(
           useAuthorStore.getState(),
           assignment,
         );
         const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
-        console;
-        useAuthorStore.setState((state) => ({
-          ...state,
+        setAuthorStore({
           ...cleanedAuthorData,
-        }));
+          // updatedAt: Date.now()
+        });
 
+        // Assignment Config store
         const mergedAssignmentConfigData = mergeData(
           useAssignmentConfig.getState(),
           assignment,
         );
-
         const {
           updatedAt: authorStoreUpdatedAt,
           ...cleanedAssignmentConfigData
         } = mergedAssignmentConfigData;
-
-        useAssignmentConfig.setState((state) => ({
-          ...state,
-
+        setAssignmentConfigStore({
           ...cleanedAssignmentConfigData,
-        }));
+          // updatedAt: Date.now(),
+        });
 
+        // Assignment Feedback Config store
         const mergedAssignmentFeedbackData = mergeData(
           useAssignmentFeedbackConfig.getState(),
           assignment,
@@ -83,10 +81,11 @@ function AuthorHeader() {
           updatedAt: assignmentFeedbackUpdatedAt,
           ...cleanedAssignmentFeedbackData
         } = mergedAssignmentFeedbackData;
-        useAssignmentFeedbackConfig.setState((state) => ({
-          ...state,
+        setAssignmentFeedbackConfigStore({
           ...cleanedAssignmentFeedbackData,
-        }));
+          // updatedAt: Date.now(),
+        });
+        setPageState("success");
       } else {
         setPageState("error");
       }
@@ -240,7 +239,7 @@ function AuthorHeader() {
               Auto-Graded Assignment Creator
             </Title>
             <div className="text-gray-500 font-medium text-sm leading-5">
-              {assignmentTitle || "Untitled Assignment"}
+              {name || "Untitled Assignment"}
             </div>
           </div>
         </div>

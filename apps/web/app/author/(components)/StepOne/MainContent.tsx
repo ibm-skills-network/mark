@@ -2,6 +2,7 @@
 import MarkdownEditor from "@/components/MarkDownEditor";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 import { useAuthorStore } from "@/stores/author";
+import Loading from "@/components/Loading";
 
 const stepOneSections = {
   introduction: {
@@ -43,6 +44,7 @@ const MainContent = () => {
     setInstructions,
     gradingCriteriaOverview,
     setGradingCriteriaOverview,
+    pageState,
   ] = useAuthorStore((state) => [
     state.introduction,
     state.setIntroduction,
@@ -50,7 +52,12 @@ const MainContent = () => {
     state.setInstructions,
     state.gradingCriteriaOverview,
     state.setGradingCriteriaOverview,
+    state.pageState,
   ]);
+
+  if (pageState === "loading") {
+    return <Loading />;
+  }
 
   return (
     <div className="flex flex-col gap-8">

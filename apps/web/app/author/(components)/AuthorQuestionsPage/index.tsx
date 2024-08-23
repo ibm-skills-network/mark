@@ -28,19 +28,17 @@ function AuthorQuestionsPage(props: Props) {
   const [
     questions,
     setQuestions,
-    removeQuestion,
     addQuestion,
     activeAssignmentId,
     setActiveAssignmentId,
-    setAssignmentTitle,
+    setName,
   ] = useAuthorStore((state) => [
     state.questions,
     state.setQuestions,
-    state.removeQuestion,
     state.addQuestion,
     state.activeAssignmentId,
     state.setActiveAssignmentId,
-    state.setAssignmentTitle,
+    state.setName,
   ]);
 
   useEffect(() => {
@@ -52,7 +50,7 @@ function AuthorQuestionsPage(props: Props) {
         if (assignment) {
           setActiveAssignmentId(assignmentId);
           // update the state of the introduction page with the assignment details from the backend
-          setAssignmentTitle(assignment.name || "Untitled Assignment");
+          setName(assignment.name || "Untitled Assignment");
           const questions: QuestionAuthorStore[] = assignment.questions?.map(
             (question) => {
               const criteriaWithId = question.scoring?.criteria?.map(
@@ -78,8 +76,6 @@ function AuthorQuestionsPage(props: Props) {
           );
           if (questions?.length > 0) {
             setQuestions(questions);
-          } else {
-            console.log("no questions");
           }
         } else {
           toast.error("Failed to get assignment details");
@@ -89,7 +85,6 @@ function AuthorQuestionsPage(props: Props) {
       void fetchAssignment();
     }
     //  if there are no questions, add one question to the store
-    console.log("questions", questions);
   }, []);
   async function handleAddTextBox() {
     const question: CreateQuestionRequest = {

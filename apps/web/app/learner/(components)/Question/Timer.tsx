@@ -1,4 +1,4 @@
-import { QuestionAttemptRequestWithId } from "@/config/types";
+import type { QuestionAttemptRequestWithId } from "@/config/types";
 import useCountdown from "@/hooks/use-countdown";
 import { cn } from "@/lib/strings";
 import { submitAssignment } from "@/lib/talkToBackend";
@@ -8,28 +8,28 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import { toast } from "sonner";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {
-  expiresAt: string;
-}
+interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 function Timer(props: Props) {
-  const { expiresAt, ...restOfProps } = props;
   const router = useRouter();
 
   const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
 
   // const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
-  const [activeAttemptId, questions, setQuestion] = useLearnerStore((state) => [
-    state.activeAttemptId,
-    state.questions,
-    state.setQuestion,
-  ]);
+  const [activeAttemptId, questions, setQuestion, expiresAt] = useLearnerStore(
+    (state) => [
+      state.activeAttemptId,
+      state.questions,
+      state.setQuestion,
+      state.expiresAt,
+    ],
+  );
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
   ]);
   const assignmentId = assignmentDetails?.id;
-  const { countdown, timerExpired } = useCountdown(Date.parse(expiresAt));
+  const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
   const seconds = Math.floor((countdown / 1000) % 60);
   const minutes = Math.floor((countdown / (1000 * 60)) % 60);
   const hours = Math.floor((countdown / (1000 * 60 * 60)) % 24);
@@ -53,11 +53,11 @@ function Timer(props: Props) {
       activeAttemptId,
       responsesForQuestions,
     );
-    const { grade, feedbacksForQuestions, success } = res;
-    if (!success) {
+    if (!res || !res.success) {
       toast.error("Failed to submit assignment.");
       return;
     }
+    const { grade, feedbacksForQuestions } = res;
     if (typeof grade === "number") {
       setGrade(grade * 100);
     }
@@ -93,6 +93,11 @@ function Timer(props: Props) {
     }
   }, [expiresAt, countdown]);
 
+  // Reset countdown when activeAttemptId changes
+  useEffect(() => {
+    resetCountdown(expiresAt);
+  }, [activeAttemptId, expiresAt, resetCountdown]);
+
   // if assignment runs out of time, automatically submit
   if (timerExpired) {
     toast.message("Time's up! Submitting your assignment...");
@@ -106,7 +111,7 @@ function Timer(props: Props) {
   // });
 
   return (
-    <div className="flex items-center space-x-2" {...restOfProps}>
+    <div className="flex items-center space-x-2" {...props}>
       <div className="text-gray-600 text-base font-medium leading-tight">
         Time Remaining:
       </div>

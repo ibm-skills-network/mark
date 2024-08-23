@@ -1,7 +1,7 @@
 import Spinner from "@/components/svgs/Spinner";
 import Tooltip from "@/components/Tooltip";
 import { useAuthorStore } from "@/stores/author";
-import { type ComponentPropsWithoutRef, type FC } from "react";
+import type { ComponentPropsWithoutRef, FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   submitting: boolean;
