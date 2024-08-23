@@ -1,5 +1,7 @@
 # CONTRIBUTING GUIDE
 
+You can watch a video going through how to set up the project for local development [here](https://ibm.box.com/s/7rzbsidqv2pvghol68vjugo92c92m3kn).
+
 ## Table of Contents
 
 - [CONTRIBUTING GUIDE](#contributing-guide)
