@@ -1,13 +1,12 @@
 # Using a consistent base for all stages
-FROM icr.io/skills-network/node:20 AS base
+ARG BASE_IMAGE=icr.io/skills-network/node:20
+FROM ${BASE_IMAGE} AS builder
 
 ARG SN_GITHUB_NPM_TOKEN
 ARG SN_GITHUB_NPM_REGISTRY=https://npm.pkg.github.com
 ARG DIR=/usr/src/app
-ENV DIR=${DIR}
 
 # Pruning using turbo
-FROM base AS builder
 WORKDIR $DIR
 COPY . .
 RUN yarn global add turbo@^2.0.3
@@ -15,7 +14,8 @@ RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && ech
 RUN turbo prune api-gateway --docker && rm -f .npmrc
 
 # Installing the isolated workspace
-FROM base AS installer
+FROM ${BASE_IMAGE} AS installer
+ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=builder $DIR/out/json/ .
 COPY --from=builder $DIR/out/yarn.lock ./yarn.lock
@@ -24,7 +24,8 @@ COPY --from=builder $DIR/packages ./packages
 RUN yarn install --ignore-scripts --frozen-lockfile
 
 # Running build using turbo
-FROM base AS sourcer
+FROM ${BASE_IMAGE} AS sourcer
+ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=installer $DIR/ .
 COPY --from=builder $DIR/out/full/ .
@@ -32,7 +33,8 @@ COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.confi
 RUN yarn build --filter=api-gateway && yarn install --production --ignore-scripts --frozen-lockfile
 
 # Production stage
-FROM base AS production
+FROM ${BASE_IMAGE} AS production
+ARG DIR=/usr/src/app
 ENV NODE_ENV production
 WORKDIR $DIR
 RUN apk add --no-cache dumb-init~=1
