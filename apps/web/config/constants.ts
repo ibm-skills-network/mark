@@ -12,6 +12,7 @@ export const BASE_API_ROUTES = {
   assignments: `${BASE_API_PATH}/assignments`,
   // admin
   admin: `${BASE_API_PATH}/admin`,
+  rubric: `${BASE_API_PATH}/assignments`,
 };
 
 export const stepTwoSections = {
@@ -37,16 +38,3 @@ export const stepTwoSections = {
     required: true,
   },
 } as const;
-
-export const initialCriteria: Criteria[] = [
-  {
-    id: 1,
-    points: 0,
-    description: "",
-  },
-  {
-    id: 2,
-    points: 1,
-    description: "",
-  },
-];

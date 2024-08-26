@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap');
+
 * {
   font-family: "IBM Plex Sans", sans-serif;
 }
@@ -112,6 +114,7 @@ ul {
   @apply text-violet-600 no-underline hover:text-violet-800 hover:underline dark:text-violet-400 dark:hover:text-violet-300 transition-all;
 }
 
+
 .title-placeholder::placeholder {
   font-weight: 600; /* Font weight for title */
 }
@@ -120,26 +123,23 @@ ul {
 .description-placeholder::placeholder {
   font-weight: 450; /* Font weight for description */
 }
-.ql-snow .ql-stroke {
-  stroke: #6b7280 !important;
+
+.ql-code-block-container{
+  background-color: #23241f;
+  color: #f8f8f2;
+  padding: 10px;
+  border-radius: 5px;
+  transition: background-color 0.3s ease-in-out;
+
 }
-.ql-snow .ql-fill {
-  fill: #6b7280 !important;
+
+.question-container {
+  border: 1px solid transparent;
+  border-left: 8px solid transparent;
 }
-.ql-snow .ql-stroke.ql-fill {
-  fill: #6b7280 !important;
-  stroke: #6b7280 !important;
-}
-.ql-snow .ql-fill.ql-stroke {
-  fill: #6b7280 !important;
-  stroke: #6b7280 !important;
-}
-.ql-snow .ql-stroke.ql-fill.ql-stroke {
-  fill: #6b7280 !important;
-  stroke: #6b7280 !important;
-}
-.ql-picker-label {
-  color: #6b7280 !important;
+
+.question-container:focus-within {
+  border-left-color: blue;
 }
 
 pre {
@@ -150,23 +150,31 @@ pre {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
+
 /* Custom Quill Styles */
 
 /* Base styling for Quill editor */
 .quill-editor {
-  border: 1px solid #ccc;
+  border: 1px solid #E5E7EB;
   border-radius: 5px;
   padding: 10px;
   background-color: #fff;
   transition: all 0.3s ease-in-out;
-  font-family: IBM Plex Sans !important;
-  font-size: 16px;
-  font-weight: 450;
-  line-height: 24px;
+  font-family: "IBM Plex Sans", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 450 !important;
+  line-height: 24px !important;
   text-align: left;
+  width: 100%;
+}
+
+.wmde-markdown {
+  font-family: "IBM Plex Sans", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 450 !important;
+  line-height: 24px !important;
 }
 .ql-editor.ql-blank::before {
   padding-left: 8px;
@@ -174,7 +182,7 @@ code {
 
 /* Toolbar styling */
 .ql-toolbar {
-  border-bottom: 1px solid #ccc;
+  border-bottom: 1px solid #E5E7EB;
   background-color: #f9f9f9;
   border-radius: 5px 5px 0 0;
   padding: 5px;
@@ -186,6 +194,13 @@ code {
   min-height: 200px;
   border-radius: 0 0 5px 5px;
   transition: min-height 0.3s ease-in-out;
+  font-size: 1rem; /* 16px */
+  line-height: 1.5rem; /* 24px */
+  font-weight: 400;
+}
+
+.ql-container.ql-snow, .ql-toolbar.ql-snow {
+  border-color: #E5E7EB !important;
 }
 .ql-snow .ql-editor .ql-code-block-container {
   min-height: 40px !important;
@@ -193,7 +208,7 @@ code {
 
 /* Editor UI styling */
 .ql-code-block-container .ql-ui {
-  border: 1px solid #ccc;
+  border: 1px solid #E5E7EB;
   border-radius: 5px;
   transition: border-color 0.3s ease-in-out;
   max-width: fit-content;
@@ -205,6 +220,16 @@ code {
   position: absolute;
   z-index: 1;
 }
+/* make text unselectable */
+.unselectable {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
 
 /* Syntax highlighting styling */
 pre.ql-syntax {
@@ -212,6 +237,12 @@ pre.ql-syntax {
   padding: 10px;
   border-radius: 5px;
   transition: background-color 0.3s ease-in-out;
+}
+
+.swapping {
+  transition: background-color 0.5s ease-in-out, transform 0.5s ease-in-out, box-shadow 0.5s ease-in-out;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: scale(1.02);
 }
 
 /* Responsive adjustments */
@@ -237,3 +268,19 @@ pre.ql-syntax {
     padding: 8px;
   }
 }
+
+
+/* Optional dark mode */
+/*
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex text-base items-center justify-center font-medium whitespace-nowrap px-3.5 py-2 border border-solid rounded-md shadow-sm gap-1.5 w-fit focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 ring-offset-white dark:ring-offset-gray-800 disabled:cursor-not-allowed cursor-pointer transition-all;
+  }
+}
+  */

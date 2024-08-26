@@ -97,6 +97,9 @@ export class CreateUpdateQuestionRequestDto {
   @IsOptional()
   @IsInt()
   maxWords?: number;
+  @IsOptional()
+  @IsInt()
+  maxCharacters?: number;
 
   @ApiPropertyOptional({ description: "The scoring criteria.", type: Scoring })
   @IsOptional()

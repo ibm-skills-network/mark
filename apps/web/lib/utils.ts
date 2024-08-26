@@ -24,9 +24,9 @@ export const getFeedbackColors = (score: number, totalPoints: number) => {
   }
 };
 
-export function getWordCount(str: string | undefined) {
-  return str?.split(/\s+/).filter(Boolean).length ?? 0;
-}
+export const getWordCount = (text: string): number => {
+  return text?.split(/\s+/).filter(Boolean).length;
+};
 
 export interface DataWithUpdatedAt {
   updatedAt: Date | number;

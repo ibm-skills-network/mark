@@ -9,12 +9,10 @@ function Component(props: Props) {
   const { params, searchParams } = props;
   const { defaultQuestionRetries } = searchParams;
   return (
-    <div className="overflow-auto">
-      <AuthorQuestionsPage
-        assignmentId={~~params.assignmentId}
-        defaultQuestionRetries={~~defaultQuestionRetries}
-      />
-    </div>
+    <AuthorQuestionsPage
+      assignmentId={~~params.assignmentId}
+      defaultQuestionRetries={~~defaultQuestionRetries}
+    />
   );
 }
 

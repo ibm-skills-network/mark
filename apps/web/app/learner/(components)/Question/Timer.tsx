@@ -79,7 +79,6 @@ function Timer(props: Props) {
     }
     // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     const currentTime = Date.now();
-    console.log("currentTime", currentTime);
     router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
   }
 

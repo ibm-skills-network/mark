@@ -116,3 +116,33 @@ Ensure your feedback is constructive, assisting the learner in recognizing and l
 
 {format_instructions}
 `;
+export const generateQuestionVariationsTemplate = `
+  Generate variations of the following question outline based on the provided concepts:
+  Outline: {outline}
+  Concepts: {concepts}
+  {format_instructions}
+`;
+
+export const generateMarkingRubricTemplate = `
+  You are tasked with creating a JSON Object of marking rubric for the following questions:
+  Questions: {questions_json_array}
+  {format_instructions}
+
+  Text-based questions are the default type. For these and other specified types:
+  - Point values as keys and criteria descriptions as values.
+  - Points must differ for each criterion, listed in descending order.
+  - No terms like "full marks" or "partial marks."
+  - End each criterion with "||".
+  - Criteria should assess clarity, examples, and explanation depth.
+
+  For "url" questions:
+  - Point values as keys and criteria descriptions as values.
+  - Points must differ, listed in descending order.
+  - No terms like "full marks" or "partial marks."
+  - End each criterion with "||".
+  - Criteria should assess:
+    - URL content relevance.
+    - Source credibility.
+    - Content clarity and depth.
+    - Integration and explanation quality.
+`;

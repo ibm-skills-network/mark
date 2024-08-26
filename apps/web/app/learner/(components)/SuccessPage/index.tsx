@@ -33,6 +33,20 @@ function SuccessPage() {
         console.error(err);
       }
     };
+  });
+
+  useEffect(() => {
+    if (!questions || questions.length === 0) {
+      router.push(pathname.split("?")[0]);
+    }
+    const fetchUser = async () => {
+      try {
+        const user = await getUser();
+        setReturnUrl(user.returnUrl || "");
+      } catch (err) {
+        console.error(err);
+      }
+    };
 
     void fetchUser();
   }, []);
@@ -41,7 +55,6 @@ function SuccessPage() {
   // if (returnUrl === null) {
   //   return null;
   // }
-
   return (
     <div className="flex flex-col items-center justify-center w-full h-full gap-y-10 py-10">
       <div className="py-10">

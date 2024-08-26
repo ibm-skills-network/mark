@@ -13,16 +13,25 @@ const Component: FC<Props> = (props) => {
   const { submitting, questionsAreReadyToBePublished, handlePublishButton } =
     props;
   const questions = useAuthorStore((state) => state.questions);
+  const hasEmptyQuestion = questions?.some(
+    (question) => question.type === "EMPTY",
+  ); // disable button if there is an empty question Type
   const disableButton =
-    !questionsAreReadyToBePublished || submitting || questions?.length === 0;
+    !questionsAreReadyToBePublished ||
+    submitting ||
+    questions?.length === 0 ||
+    hasEmptyQuestion;
   let tooltipMessage = "";
   if (questions?.length === 0) {
     tooltipMessage = "You need to add at least one question";
+  } else if (hasEmptyQuestion) {
+    tooltipMessage = "Some questions have incomplete fields";
   } else if (!questionsAreReadyToBePublished) {
     tooltipMessage = "Some questions have incomplete fields";
   } else if (submitting) {
     tooltipMessage = "Mark is analyzing your questions...";
   }
+
   return (
     <Tooltip disabled={!disableButton} content={tooltipMessage} distance={-2}>
       <button

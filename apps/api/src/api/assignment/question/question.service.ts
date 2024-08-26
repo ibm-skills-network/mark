@@ -126,7 +126,6 @@ export class QuestionService {
         choices,
       },
     });
-
     return {
       id: result.id,
       success: true,
@@ -142,6 +141,23 @@ export class QuestionService {
       id: result.id,
       success: true,
     };
+  }
+  async createMarkingRubric(
+    questions: { id: number; questionText: string; questionType: string }[],
+  ): Promise<Record<number, string>> {
+    const markingRubric = await this.llmService.createMarkingRubric(questions);
+    return markingRubric;
+  }
+
+  async generateQuestionVariations(
+    outline: string,
+    concepts: string[],
+  ): Promise<string[]> {
+    const variations = await this.llmService.generateQuestionVariations(
+      outline,
+      concepts,
+    );
+    return variations;
   }
 
   private async applyGuardRails(

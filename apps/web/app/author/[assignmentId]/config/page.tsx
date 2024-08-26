@@ -12,7 +12,6 @@ interface Props {
 
 function Component(props: Props) {
   const { params, searchParams } = props;
-  console.log(params, searchParams);
   return (
     <main className="main-author-container">
       <PageTitle

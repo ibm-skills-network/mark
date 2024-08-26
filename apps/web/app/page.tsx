@@ -7,7 +7,6 @@ import { redirect } from "next/navigation";
 export default async function Home() {
   const headerList = headers();
   const cookie = headerList.get("cookie");
-  console.log("cookie", cookie);
   if (!cookie && process.env.NODE_ENV === "production") {
     // that means the user is not logged in/cookie expired
     // TODO: do nothing and show the marketing page

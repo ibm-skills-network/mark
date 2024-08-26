@@ -121,4 +121,40 @@ export class QuestionController {
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {
     return this.questionService.remove(Number(id));
   }
+
+  @Post("generate-question-variations")
+  @Roles(UserRole.AUTHOR)
+  @ApiOperation({ summary: "Generate question variations" })
+  @ApiBody({
+    type: Object,
+    description: "Outline and concepts for question variations",
+  })
+  @ApiResponse({ status: 200, type: [String] })
+  async generateQuestionVariations(
+    @Body() body: { outline: string; concepts: string[] },
+  ): Promise<string[]> {
+    const { outline, concepts } = body;
+    return await this.questionService.generateQuestionVariations(
+      outline,
+      concepts,
+    );
+  }
+
+  @Post("create-marking-rubric")
+  @Roles(UserRole.AUTHOR)
+  @ApiOperation({ summary: "Create marking rubric" })
+  @ApiBody({
+    type: Object,
+    description: "Questions for creating marking rubric",
+  })
+  @ApiResponse({ status: 200, type: Object })
+  async createMarkingRubric(
+    @Body()
+    body: {
+      questions: { id: number; questionText: string; questionType: string }[];
+    },
+  ): Promise<Record<number, string>> {
+    const { questions } = body;
+    return await this.questionService.createMarkingRubric(questions);
+  }
 }

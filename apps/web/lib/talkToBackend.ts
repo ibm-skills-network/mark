@@ -204,6 +204,38 @@ export async function createQuestion(
   }
 }
 
+export async function updateQuestions(
+  assignmentId: number,
+  questions: CreateQuestionRequest[],
+  cookies?: string,
+): Promise<boolean> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({ questions }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to update questions");
+    }
+    const { success, error } = (await res.json()) as BaseBackendResponse;
+    if (!success) {
+      throw new Error(error);
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
 /**
  * Updates a question for a given assignment.
  * @param assignmentId The id of the assignment to update the question for.
@@ -239,6 +271,34 @@ export async function replaceQuestion(
     }
 
     return id;
+  } catch (err) {
+    console.error(err);
+    return undefined;
+  }
+}
+
+export async function generateRubric(
+  questions: { id: number; questionText: string; questionType: string }[],
+  assignmentId: number,
+  cookies?: string,
+): Promise<Record<number, string> | undefined> {
+  const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/create-marking-rubric`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({ questions }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to generate rubric");
+    }
+    const rubric = (await res.json()) as Record<number, string>;
+    return rubric;
   } catch (err) {
     console.error(err);
     return undefined;

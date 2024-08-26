@@ -19,6 +19,7 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   placeholder?: string;
   textareaClassName?: string;
   maxWords?: number | null;
+  maxCharacters?: number | null;
 }
 
 const MarkdownEditor: React.FC<Props> = ({
@@ -27,6 +28,7 @@ const MarkdownEditor: React.FC<Props> = ({
   className,
   textareaClassName,
   maxWords,
+  maxCharacters,
   placeholder = "Write your question here...",
 }) => {
   const quillRef = useRef<HTMLDivElement>(null);
@@ -34,6 +36,7 @@ const MarkdownEditor: React.FC<Props> = ({
   const [wordCount, setWordCount] = useState<number>(
     value?.split(/\s+/).filter(Boolean).length ?? 0,
   );
+  const [charCount, setCharCount] = useState<number>(value.length ?? 0);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,7 +50,6 @@ const MarkdownEditor: React.FC<Props> = ({
         existingToolbars.forEach((toolbar, index) => {
           if (index > 0) toolbar.remove();
         });
-
         // Ensure hljs is available globally
         // @ts-ignore
         window.hljs = hljs;
@@ -60,7 +62,7 @@ const MarkdownEditor: React.FC<Props> = ({
           placeholder,
           modules: {
             toolbar: [
-              // [{ header: [1, 2, 3, 4, 5, 6, false] }], in case we need font sizes in the future uncomment this line
+              [{ header: [1, 2, 3, 4, 5, 6, false] }],
               ["bold", "italic", "underline", "strike"],
               ["blockquote", "code-block"],
               [{ list: "ordered" }, { list: "bullet" }],
@@ -68,7 +70,6 @@ const MarkdownEditor: React.FC<Props> = ({
               [{ indent: "-1" }, { indent: "+1" }],
               [{ direction: "rtl" }],
               [{ color: [] }, { background: [] }],
-              [{ font: [] }],
               [{ align: [] }],
               ["link", "image", "video"],
               ["clean"],
@@ -80,20 +81,28 @@ const MarkdownEditor: React.FC<Props> = ({
         });
         quill.on("text-change", () => {
           const text = quill.getText().trim();
-          const wordCount = getWordCount(text);
-          setWordCount(wordCount);
-          if (maxWords && wordCount <= maxWords) {
-            setValue(quill.root.innerHTML);
-          } else if (!maxWords) {
-            setValue(quill.root.innerHTML);
+          if (maxCharacters) {
+            const charCount = text.length;
+            if (charCount > maxCharacters) {
+              quill.deleteText(maxCharacters, text.length);
+            } else if (charCount <= maxCharacters) {
+              setCharCount(charCount);
+            }
+          } else if (maxWords && text) {
+            const wordCount = getWordCount(text);
+            if (wordCount > maxWords) {
+              quill.deleteText(text.length - 1, text.length);
+            } else if (wordCount <= maxWords) {
+              setWordCount(wordCount);
+            }
           }
+          setValue(quill.root.innerHTML);
         });
 
         quill.root.innerHTML = value;
         setQuillInstance(quill);
       }
     };
-
     initializeQuill();
 
     return () => {
@@ -117,7 +126,7 @@ const MarkdownEditor: React.FC<Props> = ({
     <div className={cn("flex flex-col", className)}>
       <div
         className={cn(
-          "quill-editor p-2 border border-gray-300 rounded-lg",
+          "quill-editor overflow-auto p-2 border border-gray-200 rounded",
           textareaClassName,
         )}
         ref={quillRef}
@@ -129,6 +138,15 @@ const MarkdownEditor: React.FC<Props> = ({
           }`}
         >
           Words: {wordCount} / {maxWords}
+        </div>
+      ) : null}
+      {maxCharacters ? (
+        <div
+          className={`mt-2 text-sm font-medium leading-tight ${
+            charCount > maxCharacters ? "text-red-500" : "text-gray-400"
+          }`}
+        >
+          Characters: {charCount} / {maxCharacters}
         </div>
       ) : null}
     </div>

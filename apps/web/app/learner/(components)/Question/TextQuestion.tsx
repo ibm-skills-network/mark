@@ -17,6 +17,7 @@ function TextQuestion(props: Props) {
   const question = questions[activeQuestionNumber - 1];
 
   const maxWords = question?.maxWords || null;
+  const maxCharacters = question?.maxCharacters || null;
   return (
     <MarkdownEditor
       value={question?.learnerTextResponse || ""}
@@ -24,6 +25,7 @@ function TextQuestion(props: Props) {
       setValue={(value) => setTextResponse(value)}
       placeholder="Type your answer here"
       maxWords={maxWords}
+      maxCharacters={maxCharacters}
     />
   );
 }

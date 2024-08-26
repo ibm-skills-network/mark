@@ -37,6 +37,7 @@ import {
 import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
+import { UpdateAssignmentQuestionsDto } from "./dto/update.questions.request.dto";
 
 @ApiTags(
   "Assignments (All endpoints need a user-session header (injected using the API Gateway)",
@@ -111,6 +112,26 @@ export class AssignmentController {
     return this.assignmentService.update(
       Number(id),
       updateAssignmentRequestDto,
+    );
+  }
+  @Put(":id/questions")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "Update all questions for an assignment" })
+  @ApiParam({ name: "id", required: true })
+  @ApiBody({
+    type: UpdateAssignmentRequestDto,
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
+  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 403 })
+  async updateAssignmentQuestions(
+    @Param("id") id: number,
+    @Body() updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
+  ): Promise<BaseAssignmentResponseDto> {
+    return this.assignmentService.updateAssignmentQuestions(
+      Number(id),
+      updateAssignmentQuestionsDto,
     );
   }
 

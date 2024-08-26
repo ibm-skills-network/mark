@@ -28,7 +28,6 @@ async function AboutTheAssignment(props: Props) {
     );
   }
   const listOfAttempts = await getAttempts(assignmentId, cookie);
-  console.log("listOfAttempts", listOfAttempts);
   // if the number of attempts of the assignment is equals to the assignment's max attempts, then the assignment state is "completed"
   let assignmentState: LearnerAssignmentState = "not-started";
   if (listOfAttempts.length === assignment.numAttempts) {

@@ -13,7 +13,6 @@ async function LearnerLayout(props: Props) {
   const { params } = props;
   const assignmentId = ~~params.assignmentId;
   const listOfAttempts = await getAttempts(assignmentId, cookie);
-  console.log("listOfAttempts", listOfAttempts);
   if (!listOfAttempts) {
     return <ErrorPage error={"Assignment not found"} />;
   }
@@ -30,7 +29,6 @@ async function LearnerLayout(props: Props) {
   const attemptId = unsubmittedAssignment
     ? unsubmittedAssignment.id
     : await createAttempt(assignmentId, cookie);
-  console.log("attemptId", attemptId);
   if (!attemptId) {
     return <ErrorPage error={"Attempt could not be created"} />;
   }
@@ -45,7 +43,6 @@ async function LearnerLayout(props: Props) {
   }
   // get the questions for the assignment from the attemptId
   const attempt = await getAttempt(assignmentId, attemptId, cookie);
-  console.log("attempt", attempt);
   if (!attempt) {
     return <ErrorPage error={"Attempt could not be fetched"} />;
   }

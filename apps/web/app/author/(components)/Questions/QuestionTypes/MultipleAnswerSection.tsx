@@ -64,7 +64,6 @@ function Section(props: sectionProps) {
     choiceIndex: number,
     choice: Partial<ChoiceType>,
   ) {
-    console.log("handleChoiceChange", choiceIndex, choice);
     modifyChoice(questionId, choiceIndex, choice);
   }
 

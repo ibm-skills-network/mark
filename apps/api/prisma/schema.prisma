@@ -94,6 +94,7 @@ model Question {
   assignmentId Int                                                /// The ID of the assignment to which the question belongs
   assignment   Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)                    /// The assignment to which the question belongs
   gradingContextQuestionIds Int[]                                 /// List of question Ids that are used as contextual questions when auto grading this question
+  maxCharacters Int?                                             /// Maximum number of characters allowed for a written response type question
 }
 
 /// This model represents an assignment attempt by a learner

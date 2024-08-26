@@ -123,8 +123,6 @@ function QuestionPage(props: Props) {
     state.activeQuestionNumber,
   ]);
 
-  const [submitting, setSubmitting] = useState(false);
-  const [showWarning, setShowWarning] = useState(false);
   if (pageState === "loading") {
     return <Loading />;
   }

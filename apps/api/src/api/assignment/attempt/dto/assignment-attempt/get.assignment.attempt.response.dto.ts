@@ -99,6 +99,13 @@ class AssignmentAttemptQuestions {
   })
   maxWords?: number;
 
+  @ApiPropertyOptional({
+    description: "The max number of characters allowed for this question.",
+    type: Number,
+    required: false,
+  })
+  maxCharacters?: number;
+
   @ApiProperty({
     description:
       "The list of responses provided by the learner for this question",

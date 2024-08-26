@@ -13,6 +13,7 @@ export type AuthorState = {
   instructions: string;
   gradingCriteriaOverview: string;
   questions: QuestionAuthorStore[];
+  questionOrder: number[];
   pageState: "loading" | "success" | "error";
   updatedAt: number | undefined;
 };
@@ -46,8 +47,79 @@ export type AuthorActions = {
   setPoints: (questionId: number, points: number) => void;
   setPageState: (state: "loading" | "success" | "error") => void;
   setUpdatedAt: (updatedAt: number) => void;
+  setQuestionTitle: (questionTitle: string, questionId: number) => void;
+  setQuestionOrder: (order: number[]) => void; // Ensure you add this method
   setAuthorStore: (state: Partial<AuthorState>) => void;
 };
+interface QuestionState {
+  questionStates: {
+    [key: number]: {
+      showWordCountInput: boolean;
+      countMode: "CHARACTER" | "WORD";
+      toggleTitle: boolean;
+      criteriaMode: "AI_GEN" | "CUSTOM";
+    };
+    showCriteriaHeader: boolean;
+  };
+  setShowWordCountInput: (questionId: number, value: boolean) => void;
+  setCountMode: (questionId: number, mode: "CHARACTER" | "WORD") => void;
+  setToggleTitle: (questionId: number, value: boolean) => void;
+  setShowCriteriaHeader: (value: boolean) => void;
+  setCriteriaMode: (questionId: number, mode: "AI_GEN" | "CUSTOM") => void;
+}
+
+export const useQuestionStore = createWithEqualityFn<QuestionState>((set) => ({
+  questionStates: {
+    showCriteriaHeader: true,
+  },
+  setShowWordCountInput: (questionId, value) =>
+    set((state) => ({
+      questionStates: {
+        ...state.questionStates,
+        [questionId]: {
+          ...state.questionStates[questionId],
+          showWordCountInput: value,
+        },
+      },
+    })),
+  setCountMode: (questionId, mode) =>
+    set((state) => ({
+      questionStates: {
+        ...state.questionStates,
+        [questionId]: {
+          ...state.questionStates[questionId],
+          countMode: mode,
+        },
+      },
+    })),
+  setToggleTitle: (questionId, value) =>
+    set((state) => ({
+      questionStates: {
+        ...state.questionStates,
+        [questionId]: {
+          ...state.questionStates[questionId],
+          toggleTitle: value,
+        },
+      },
+    })),
+  setShowCriteriaHeader: (value) =>
+    set((state) => ({
+      questionStates: {
+        ...state.questionStates,
+        showCriteriaHeader: value,
+      },
+    })),
+  setCriteriaMode: (questionId, mode) =>
+    set((state) => ({
+      questionStates: {
+        ...state.questionStates,
+        [questionId]: {
+          ...state.questionStates[questionId],
+          criteriaMode: mode,
+        },
+      },
+    })),
+}));
 
 export const useAuthorStore = createWithEqualityFn<
   AuthorState & AuthorActions
@@ -240,6 +312,25 @@ export const useAuthorStore = createWithEqualityFn<
               }
               return q;
             }),
+          }));
+        },
+        questionOrder: [],
+        setQuestionTitle: (questionTitle, questionId) => {
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId
+                ? {
+                    ...q,
+                    question: questionTitle,
+                  }
+                : q,
+            ),
+          }));
+        },
+        setQuestionOrder: (order) => {
+          set((state) => ({
+            ...state,
+            questionOrder: order,
           }));
         },
         pageState: "loading",

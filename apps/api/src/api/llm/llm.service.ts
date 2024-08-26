@@ -1,4 +1,4 @@
-import { get_encoding, TiktokenEncoding, type Tiktoken } from "@dqbd/tiktoken";
+import { get_encoding, type Tiktoken } from "@dqbd/tiktoken";
 import type { BaseLanguageModel as BaseLLM } from "@langchain/core/language_models/base";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { OpenAI } from "@langchain/openai";
@@ -22,7 +22,9 @@ import type { UrlBasedQuestionResponseModel } from "./model/url.based.question.r
 import {
   feedbackChoiceBasedQuestionLlmTemplate,
   feedbackTrueFalseBasedQuestionLlmTemplate,
+  generateMarkingRubricTemplate,
   generateQuestionsGradingContext,
+  generateQuestionVariationsTemplate,
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
 } from "./templates";
@@ -323,6 +325,74 @@ export class LlmService {
     )) as UrlBasedQuestionResponseModel;
 
     return urlBasedQuestionResponseModel;
+  }
+  async generateQuestionVariations(
+    outline: string,
+    concepts: string[],
+  ): Promise<string[]> {
+    const parser = StructuredOutputParser.fromZodSchema(
+      z
+        .array(
+          z
+            .string()
+            .describe(
+              "A variation of the question based on the outline and concepts",
+            ),
+        )
+        .describe("Array of question variations"),
+    );
+
+    const formatInstructions = parser.getFormatInstructions();
+
+    const prompt = new PromptTemplate({
+      template: generateQuestionVariationsTemplate,
+      inputVariables: [],
+      partialVariables: {
+        outline: outline,
+        concepts: JSON.stringify(concepts),
+        format_instructions: formatInstructions,
+      },
+    });
+
+    const response = await this.processPrompt(prompt);
+    const questionVariations = await parser.parse(response);
+
+    return questionVariations;
+  }
+  async createMarkingRubric(
+    questions: { id: number; questionText: string; questionType: string }[],
+  ): Promise<Record<number, string>> {
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.array(
+        z
+          .object({
+            questionId: z.number().describe("The id of the question"),
+            rubric: z.string().describe("The marking rubric for the question"),
+          })
+          .describe(
+            "Array of objects, where each object represents a question and its marking rubric",
+          ),
+      ),
+    );
+
+    const formatInstructions = parser.getFormatInstructions();
+
+    const prompt = new PromptTemplate({
+      template: generateMarkingRubricTemplate,
+      inputVariables: [],
+      partialVariables: {
+        questions_json_array: JSON.stringify(questions),
+        format_instructions: formatInstructions,
+      },
+    });
+
+    const response = await this.processPrompt(prompt);
+    const parsedResponse = await parser.parse(response);
+    const markingRubricMap: Record<number, string> = {};
+    for (const item of parsedResponse) {
+      markingRubricMap[item.questionId] = item.rubric;
+    }
+    return markingRubricMap;
   }
 
   // private methods

@@ -1,4 +1,3 @@
-import { initialCriteria } from "@/config/constants";
 import { useAuthorStore } from "@/stores/author";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
@@ -23,8 +22,7 @@ function Rubric(props: Rubric) {
   // TODO: I know that this is gonna create bugs in the future (when users refresh)
   // TODO: this needs to change depending on the question type
   // for each question, we first try to get the criteria from the question and if it doesn't exist, we create a new one
-  const criterias =
-    scoring?.criteria || setCriterias(questionId, initialCriteria);
+  const criterias = scoring?.criteria;
   // Initialize the promptOptions state with two default rubric options
 
   // const [promptOptions, setPromptOptions] =

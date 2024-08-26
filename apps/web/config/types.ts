@@ -1,3 +1,5 @@
+import { ReactNode } from "react";
+
 export type User = {
   userId: string;
   role: "author" | "learner";
@@ -27,6 +29,18 @@ export type QuestionAttemptRequest = {
   learnerFileResponse?: File | undefined;
 };
 
+export type UpdateQuestionStateParams = {
+  questionType?: "TEXT" | "URL" | "MULTIPLE_CORRECT" | "UPLOAD";
+  maxWordCount?: number;
+  questionTitle?: string;
+  questionCriteria?: {
+    points: number[];
+    criteriaDesc: string[];
+    criteriaIds: number[];
+  };
+  maxCharacters?: number;
+};
+
 export type QuestionAttemptRequestWithId = QuestionAttemptRequest & {
   id: number;
 };
@@ -51,6 +65,7 @@ export type QuestionStatus =
 
 export type QuestionType =
   | "TEXT"
+  | "EMPTY"
   | "SINGLE_CORRECT"
   | "MULTIPLE_CORRECT"
   | "TRUE_FALSE"
@@ -113,9 +128,10 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
   id: number;
   // for TEXT only, otherwise null
   maxWords?: number;
+
+  maxCharacters?: number;
   // for SINGLE_CORRECT or MULTIPLE_CORRECT only, otherwise null
   choices?: Choice[];
-
   // assignmentId: number;
 }
 
@@ -131,14 +147,17 @@ export interface CreateQuestionRequest extends BaseQuestion {
 
 // TODO: merge this and the one below
 export interface Question extends CreateQuestionRequest {
-  // id only exists in auestions that came from the backend
+  // id only exists in questions that came from the backend
   // Questions that users add during a session before saving/publishing
   // will have no id
   id: number;
   assignmentId: number;
+  questionOrder?: number[];
 }
 
 export interface QuestionAuthorStore extends Question {
+  maxCharacters?: number;
+  index?: number;
   alreadyInBackend?: boolean;
 }
 

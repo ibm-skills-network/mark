@@ -341,6 +341,7 @@ export class AttemptService {
         id: question.id,
         totalPoints: question.totalPoints,
         maxWords: question.maxWords,
+        maxCharacters: question.maxCharacters,
         type: question.type,
         question: question.question,
         choices: choices,
