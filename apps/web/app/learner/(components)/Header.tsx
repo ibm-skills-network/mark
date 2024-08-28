@@ -18,13 +18,19 @@ function LearnerHeader() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
-  const [questions, setQuestion, activeAttemptId, submitAssignmentRef] =
-    useLearnerStore((state) => [
-      state.questions,
-      state.setQuestion,
-      state.activeAttemptId,
-      state.submitAssignmentRef,
-    ]);
+  const [
+    questions,
+    setQuestion,
+    setShowSubmissionFeedback,
+    activeAttemptId,
+    submitAssignmentRef,
+  ] = useLearnerStore((state) => [
+    state.questions,
+    state.setQuestion,
+    state.setShowSubmissionFeedback,
+    state.activeAttemptId,
+    state.submitAssignmentRef,
+  ]);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
@@ -65,6 +71,7 @@ function LearnerHeader() {
     if (typeof grade === "number") {
       setGrade(grade * 100);
     }
+    setShowSubmissionFeedback(res.showSubmissionFeedback); // set showSubmissionFeedback boolean in zustand store
     for (const feedback of feedbacksForQuestions || []) {
       setQuestion({
         id: feedback.questionId,

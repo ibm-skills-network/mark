@@ -287,9 +287,17 @@ export class AttemptService {
       submitted: result.submitted,
       success: true,
       grade: assignment.showAssignmentScore ? result.grade : undefined,
-      feedbacksForQuestions: assignment.showSubmissionFeedback
-        ? successfulQuestionResponseSubmissions
-        : undefined,
+      showSubmissionFeedback: assignment.showSubmissionFeedback, // boolean to show submission feedback or not
+      feedbacksForQuestions: successfulQuestionResponseSubmissions.map(
+        (feedbackForQuestion) => {
+          const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
+          return {
+            totalPoints: assignment.showQuestionScore ? totalPoints : undefined,
+            feedback: assignment.showSubmissionFeedback ? feedback : undefined,
+            ...otherData,
+          };
+        },
+      ),
     };
   }
 
@@ -349,7 +357,6 @@ export class AttemptService {
           correspondingResponses.length > 0 ? correspondingResponses : [],
       };
     });
-
     delete assignmentAttempt.questionResponses;
 
     return {
@@ -518,12 +525,7 @@ export class AttemptService {
     responseDto.id = result.id;
     responseDto.questionId = questionId;
     responseDto.question = question.question;
-    if (!assignment.showQuestionScore) {
-      delete responseDto.totalPoints;
-    }
-    if (!assignment.showSubmissionFeedback) {
-      delete responseDto.feedback;
-    }
+
     return responseDto;
   }
 

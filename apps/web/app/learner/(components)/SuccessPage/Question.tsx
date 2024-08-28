@@ -5,6 +5,7 @@ import { cn } from "@/lib/strings";
 import { getFeedbackColors } from "@/lib/utils";
 import { useMemo, type ComponentPropsWithoutRef, type FC } from "react";
 import QuestionScore from "../QuestionScore";
+import { useLearnerStore } from "@/stores/learner";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   question: QuestionStore;
@@ -24,9 +25,17 @@ const Question: FC<Props> = (props) => {
     learnerTextResponse,
     learnerUrlResponse,
   } = question;
+  const showSubmissionFeedback = useLearnerStore(
+    (state) => state.showSubmissionFeedback,
+  );
 
   const highestScoreResponse = useMemo(() => {
-    if (!questionResponses || questionResponses.length === 0) {
+    // Differentiate between Question feedback as assignments that provide feedback and assignments that don't
+    // if showSubmissionFeedback is true, return an object, otherwise, return undefined
+    // TODO: get access to showSubmissionFeedback from the backend
+    if (questionResponses === undefined) return undefined;
+    if (questionResponses?.length === 0 && showSubmissionFeedback) {
+      // only if showSubmissionFeedback is true, return no response feedback
       return {
         points: 0,
         feedback: [{ feedback: "no response provided" }],
@@ -51,7 +60,7 @@ const Question: FC<Props> = (props) => {
             {number}
           </div>
           {/* Display the maxPoints value received from the child component */}
-          {typeof highestScoreResponse.points === "number" ? (
+          {typeof highestScoreResponse?.points === "number" ? (
             <div className="text-blue-700 whitespace-nowrap">
               <div className="font-bold text-center">
                 {highestScoreResponse.points}/{totalPoints}

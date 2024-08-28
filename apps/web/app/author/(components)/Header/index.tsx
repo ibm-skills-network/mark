@@ -23,15 +23,21 @@ function AuthorHeader() {
   const pathname = usePathname();
   const assignmentId = extractAssignmentId(pathname);
   const [currentStepId, setCurrentStepId] = useState<number>(0);
-  const [setActiveAssignmentId, questions, setPageState, setAuthorStore,activeAssignmentId, name] =
-    useAuthorStore((state) => [
-      state.setActiveAssignmentId,
-      state.questions,
-      state.setPageState,
-      state.setAuthorStore,
-      state.activeAssignmentId,
-      state.name,
-    ]);
+  const [
+    setActiveAssignmentId,
+    questions,
+    setPageState,
+    setAuthorStore,
+    activeAssignmentId,
+    name,
+  ] = useAuthorStore((state) => [
+    state.setActiveAssignmentId,
+    state.questions,
+    state.setPageState,
+    state.setAuthorStore,
+    state.activeAssignmentId,
+    state.name,
+  ]);
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
@@ -194,23 +200,10 @@ function AuthorHeader() {
       );
 
       if (success) {
-        // Update the assignment with the question order and publish it
-        const updated = await updateAssignment(
-          {
-            questionOrder: useAuthorStore.getState().questionOrder,
-            published: true,
-          },
-          activeAssignmentId,
+        const currentTime = Date.now();
+        router.push(
+          `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
         );
-
-        if (updated) {
-          const currentTime = Date.now();
-          router.push(
-            `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
-          );
-        } else {
-          toast.error("Couldn't publish all questions. Please try again.");
-        }
       } else {
         toast.error("Couldn't publish all questions. Please try again.");
       }

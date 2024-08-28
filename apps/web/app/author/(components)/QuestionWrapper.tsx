@@ -582,7 +582,7 @@ function QuestionWrapper(props: TextBoxProps) {
             ) : (
               <tr className="border-b border-gray-200 w-full">
                 <td colSpan={2} className="py-2 px-4 text-center">
-                  <div className="flex justify-center items-center">
+                  <div className="flex justify-center items-center gap-x-3">
                     {loading ? (
                       <>
                         <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
@@ -601,7 +601,7 @@ function QuestionWrapper(props: TextBoxProps) {
                         </button>
                         <span className="text-gray-500">OR</span>
                         <button
-                          className="text-gray-500 ml-4"
+                          className="text-gray-500"
                           onClick={() => {
                             setCriteriaMode(questionId, "CUSTOM");
                             questionCriteria.points = [1, 0];

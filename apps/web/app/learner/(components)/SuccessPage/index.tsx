@@ -13,7 +13,10 @@ import { revalidateQuestionsRoute } from "@/app/actions/learner";
 function SuccessPage() {
   const pathname = usePathname();
   const router = useRouter();
-  const [questions] = useLearnerStore((state) => [state.questions]);
+  const [questions, setLearnerStore] = useLearnerStore((state) => [
+    state.questions,
+    state.setLearnerStore,
+  ]);
   const [{ passingGrade = 50, id }, grade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.grade,
@@ -26,9 +29,23 @@ function SuccessPage() {
     }
     const fetchUser = async () => {
       try {
+        await revalidateQuestionsRoute();
         const user = await getUser();
         setReturnUrl(user.returnUrl || "");
-        await revalidateQuestionsRoute();
+      } catch (err) {
+        console.error(err);
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (!questions || questions.length === 0) {
+      router.push(pathname.split("?")[0]);
+    }
+    const fetchUser = async () => {
+      try {
+        const user = await getUser();
+        setReturnUrl(user.returnUrl || "");
       } catch (err) {
         console.error(err);
       }
@@ -49,6 +66,9 @@ function SuccessPage() {
     };
 
     void fetchUser();
+    setLearnerStore({
+      activeQuestionNumber: 1,
+    });
   }, []);
 
   // Not needed as long as returnUrl is not null(it is initialized to "")

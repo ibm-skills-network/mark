@@ -142,8 +142,11 @@ export class AssignmentService {
     // Track all processed IDs to identify which existing questions need to be deleted
     const processedIds = new Set<number>();
 
+    // A map to store the upserted questions with their original indexes
+    const upsertedQuestionsMap = new Map<number, number>();
+
     await Promise.all(
-      questions.map(async (question) => {
+      questions.map(async (question, index) => {
         const questionData: Prisma.QuestionUpsertArgs["create"] = {
           choices: question.choices
             ? (JSON.parse(
@@ -183,6 +186,9 @@ export class AssignmentService {
 
         // Mark this ID as processed
         processedIds.add(upsertedQuestion.id);
+
+        // Store the upserted question ID in the map with its original index
+        upsertedQuestionsMap.set(index, upsertedQuestion.id);
       }),
     );
 
@@ -196,6 +202,25 @@ export class AssignmentService {
         where: { id: { in: questionsToDelete } },
       });
     }
+
+    // Construct the questionOrder array by mapping the original question array's indexes to the upserted IDs
+    const questionOrder = questions.map((_, index) =>
+      upsertedQuestionsMap.get(index),
+    );
+
+    await this.handleQuestionGradingContext(
+      assignmentId,
+      questionOrder.filter((q) => q !== undefined),
+    );
+
+    // Save the question order for the assignment
+    await this.prisma.assignment.update({
+      where: { id: assignmentId },
+      data: {
+        questionOrder,
+        published: true,
+      },
+    });
 
     return {
       id: assignmentId,

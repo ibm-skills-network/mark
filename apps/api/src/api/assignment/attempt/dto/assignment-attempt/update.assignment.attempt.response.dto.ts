@@ -24,9 +24,15 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
   @ApiProperty({
     description: "The feedback for each question.",
     isArray: true,
-    required: false,
+    required: true,
+  })
+  @IsArray()
+  feedbacksForQuestions: CreateQuestionResponseAttemptResponseDto[];
+
+  @ApiProperty({
+    description: "The list of question responses for the assignment attempt.",
+    type: Boolean,
   })
   @IsOptional()
-  @IsArray()
-  feedbacksForQuestions?: CreateQuestionResponseAttemptResponseDto[];
+  showSubmissionFeedback: boolean;
 }

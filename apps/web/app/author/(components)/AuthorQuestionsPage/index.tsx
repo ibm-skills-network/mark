@@ -216,7 +216,7 @@ const AuthorQuestionsPage: FC<Props> = ({
   // assign a temporary id to the question
   const generateTempQuestionId = (): number => {
     // if there are no questions, generate a random number
-    return Math.floor(Math.random() * 1e15); // Generates a number between 0 and 999,999,999
+    return Math.floor(Math.random() * 2e9); // Generates a number between 0 and 2,000,000,000
   };
 
   /**

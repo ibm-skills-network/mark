@@ -53,9 +53,9 @@ export class CreateQuestionResponseAttemptResponseDto {
   @ApiProperty({
     description: "The total points earned.",
     type: Number,
-    required: true,
+    required: false,
   })
-  totalPoints: number;
+  totalPoints?: number;
 
   @ApiProperty({
     description:
@@ -66,9 +66,9 @@ export class CreateQuestionResponseAttemptResponseDto {
       TrueFalseBasedFeedbackDto,
     ],
     isArray: true,
-    required: true,
+    required: false,
   })
-  feedback:
+  feedback?:
     | ChoiceBasedFeedbackDto[]
     | GeneralFeedbackDto[]
     | TrueFalseBasedFeedbackDto[];

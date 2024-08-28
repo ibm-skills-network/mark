@@ -36,7 +36,7 @@ const MarkdownEditor: React.FC<Props> = ({
   const [wordCount, setWordCount] = useState<number>(
     value?.split(/\s+/).filter(Boolean).length ?? 0,
   );
-  const [charCount, setCharCount] = useState<number>(value.length ?? 0);
+  const [charCount, setCharCount] = useState<number>(value?.length ?? 0);
 
   useEffect(() => {
     let isMounted = true;

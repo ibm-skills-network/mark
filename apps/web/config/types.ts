@@ -265,6 +265,7 @@ export type BaseBackendResponse = {
 
 export interface SubmitAssignmentResponse extends BaseBackendResponse {
   grade?: number;
+  showSubmissionFeedback: boolean;
   feedbacksForQuestions?: QuestionAttemptResponse[];
 }
 

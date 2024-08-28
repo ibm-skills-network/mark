@@ -52,67 +52,13 @@ function QuestionPage(props: Props) {
       };
       void fetchAssignment();
     }
-    // store the questions in zustand store
-    const allQuestions: QuestionStore[] = questions.map(
-      (question: QuestionStore) => {
-        // get the info about previous attempts
-        const previousAttempts = question.questionResponses.map((response) => ({
-          points: response.points,
-          learnerResponse: response.learnerResponse,
-        }));
-        // get the highest points earned for the question by finding the highest points earned for each response
-        // const earnedPoints = previousAttempts.reduce(
-        //   (highestPoints, response) => {
-        //     return response.points > highestPoints.points
-        //       ? response
-        //       : highestPoints;
-        //   }
-        // );
-        // get the last submission for the question
-        const lastSubmission = previousAttempts.at(-1);
-
-        // add the input field for the question
-        switch (question.type) {
-          case "TEXT":
-            // Autofill the text response with the last submission if it exists
-            question.learnerTextResponse =
-              lastSubmission?.learnerResponse ?? "";
-            break;
-          // TODO: handle other types of questions
-          case "URL":
-            question.learnerUrlResponse = lastSubmission?.learnerResponse ?? "";
-            break;
-          case "SINGLE_CORRECT":
-            question.learnerChoices = lastSubmission?.learnerResponse
-              ? (JSON.parse(lastSubmission?.learnerResponse) as string[])
-              : [];
-            break;
-          case "MULTIPLE_CORRECT":
-            question.learnerChoices = lastSubmission?.learnerResponse
-              ? (JSON.parse(lastSubmission?.learnerResponse) as string[])
-              : [];
-            break;
-          case "TRUE_FALSE":
-            // TODO: handle this
-            question.learnerAnswerChoice = null;
-            break;
-          case "UPLOAD":
-            // TODO: handle this
-            question.learnerFileResponse = null;
-            break;
-          default:
-            break;
-        }
-        return question;
-      },
-    );
     console.log("attemptId, expiresAt", id, new Date(expiresAt).getTime());
     setLearnerStore({
-      questions: allQuestions,
+      questions: questions,
       activeAttemptId: id,
       expiresAt: new Date(expiresAt).getTime(),
     });
-    if (allQuestions.length) {
+    if (questions.length) {
       setPageState("success");
     } else {
       setPageState("no-questions");

@@ -17,6 +17,8 @@ export type LearnerActions = {
   setActiveQuestionNumber: (id: number) => void;
   addQuestion: (question: QuestionStore) => void;
   setQuestion: (question: Partial<QuestionStore>) => void;
+  showSubmissionFeedback: boolean;
+  setShowSubmissionFeedback: (ShowSubmissionFeedback: boolean) => void;
   setQuestions: (questions: Partial<QuestionStore>[]) => void;
   setTextResponse: (learnerTextResponse: string, questionId?: number) => void;
   setURLResponse: (learnerUrlResponse: string, questionId?: number) => void;
@@ -49,6 +51,9 @@ export const useLearnerStore = createWithEqualityFn<
       assignmentDetails: null,
       expiresAt: undefined,
       questions: [],
+      showSubmissionFeedback: false,
+      setShowSubmissionFeedback: (showSubmissionFeedback) =>
+        set({ showSubmissionFeedback }),
       addQuestion: (question) =>
         set((state) => ({
           questions: [...(state.questions ?? []), question],
@@ -137,7 +142,7 @@ export const useLearnerStore = createWithEqualityFn<
           ),
         })),
       submitAssignmentRef: createRef<HTMLButtonElement>(),
-      setLearnerStore: (learnerState) => set((state) => ({ ...learnerState })),
+      setLearnerStore: (learnerState) => set(learnerState),
     }),
     {
       name: "learner",
