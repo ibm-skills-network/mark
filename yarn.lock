@@ -505,9 +505,9 @@
     prop-types "^15.8.1"
 
 "@headlessui/react@^2.1.2":
-  version "2.1.6"
-  resolved "https://registry.yarnpkg.com/@headlessui/react/-/react-2.1.6.tgz#4161d085cfdbcfb21cdff75d4c048c9e6cc5fe09"
-  integrity sha512-IkaSHxsMdrSdVZn5n3ClfvqQo5umHeqwjeZfbFUTczykeHoMH+3VOP0nn7zVsbebazjPmOsXh3x9gCy6e2PG5Q==
+  version "2.1.8"
+  resolved "https://registry.yarnpkg.com/@headlessui/react/-/react-2.1.8.tgz#b0e254fdf8b1f65dbf28de444f70d0a9b61705dd"
+  integrity sha512-uajqVkAcVG/wHwG9Fh5PFMcFpf2VxM4vNRNKxRjuK009kePVur8LkuuygHfIE+2uZ7z7GnlTtYsyUe6glPpTLg==
   dependencies:
     "@floating-ui/react" "^0.26.16"
     "@react-aria/focus" "^3.17.1"
