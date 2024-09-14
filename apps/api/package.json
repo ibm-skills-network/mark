@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@dqbd/tiktoken": "^1.0.7",
-    "@langchain/core": "^0.2.6",
+    "@langchain/core": "^0.3.0",
     "@langchain/openai": "^0.3.0",
     "@nestjs/axios": "^3.0.0",
     "@nestjs/class-validator": "^0.13.4",

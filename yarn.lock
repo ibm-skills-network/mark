@@ -818,10 +818,27 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@langchain/core@>0.2.0 <0.3.0", "@langchain/core@>=0.2.21 <0.3.0", "@langchain/core@>=0.2.26 <0.3.0", "@langchain/core@^0.2.6":
+"@langchain/core@>0.2.0 <0.3.0", "@langchain/core@>=0.2.21 <0.3.0", "@langchain/core@>=0.2.26 <0.3.0":
   version "0.2.32"
   resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.2.32.tgz#a5dfbc49f8b6c15c8082763b93aeae8f9f4ca1a0"
   integrity sha512-S27M+9Qou2qtcLfFGEvANkJ/zHq5XApeQsR6Q4I7C6v9x07eoYr558h6vVy6WQmKcksgbCIJ854ikwp173wBjA==
+  dependencies:
+    ansi-styles "^5.0.0"
+    camelcase "6"
+    decamelize "1.2.0"
+    js-tiktoken "^1.0.12"
+    langsmith "^0.1.43"
+    mustache "^4.2.0"
+    p-queue "^6.6.2"
+    p-retry "4"
+    uuid "^10.0.0"
+    zod "^3.22.4"
+    zod-to-json-schema "^3.22.3"
+
+"@langchain/core@^0.3.0":
+  version "0.3.0"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.0.tgz#52bcf9d0bc480d2b2a456ee4aa8aed1cce6f6aba"
+  integrity sha512-uYuozr9cHpm+Aat6RdheGWAiJ2GEmb/N33FCbHlN/+vKTwRmaju2F5pZi2CioK9kQwrQZVNydCbgaZm1c6ry6w==
   dependencies:
     ansi-styles "^5.0.0"
     camelcase "6"
