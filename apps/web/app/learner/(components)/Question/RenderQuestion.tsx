@@ -15,10 +15,9 @@ const RenderQuestion: FC<Props> = (props) => {
     case "TEXT":
       return <TextQuestion />;
     case "SINGLE_CORRECT":
-      // removed singleCorrect
-      return <MultipleChoiceQuestion />;
+      return <MultipleChoiceQuestion isSingleCorrect={true} />;
     case "MULTIPLE_CORRECT":
-      return <MultipleChoiceQuestion />;
+      return <MultipleChoiceQuestion isSingleCorrect={false} />;
     case "TRUE_FALSE":
       return <TrueFalseQuestion />;
     case "URL":

@@ -1,3 +1,4 @@
+import { debugLog } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
 interface CountdownResult {
@@ -20,7 +21,7 @@ const useCountdown = (expiresAt: number): CountdownResult => {
       // that means the countdown is already set to the new value (false positive)
       return;
     }
-    console.log("resetting countdown", new Date(newExpiresAt).toLocaleString());
+    debugLog("resetting countdown", new Date(newExpiresAt).toLocaleString());
     setCountdown(newExpiresAt - Date.now());
     setTimerExpired(false);
   };

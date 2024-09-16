@@ -103,9 +103,11 @@ function SuccessPage() {
           a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                   <text
-                    x="10"
-                    y="20.35"
-                    className=" text-center text-slate-500 text-[0.4rem] font-semibold"
+                    x="50%"
+                    y="50%"
+                    dominantBaseline="middle"
+                    textAnchor="middle"
+                    className="text-center text-slate-500 text-[0.4rem] font-semibold"
                   >
                     {grade === 100 || grade === 0 ? grade : grade.toFixed(1)}%
                   </text>

@@ -1,21 +1,20 @@
-import type { QuestionAttemptRequestWithId } from "@/config/types";
-import useCountdown from "@/hooks/use-countdown";
-import { cn } from "@/lib/strings";
-import { submitAssignment } from "@/lib/talkToBackend";
-import { editedQuestionsOnly } from "@/lib/utils";
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import { cn } from "@/lib/strings";
+import { editedQuestionsOnly } from "@/lib/utils";
+import { submitAssignment } from "@/lib/talkToBackend";
+import useCountdown from "@/hooks/use-countdown";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import type { QuestionAttemptRequestWithId } from "@/config/types";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 function Timer(props: Props) {
   const router = useRouter();
-
   const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false); // New state to prevent re-submission
 
-  // const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
   const [activeAttemptId, questions, setQuestion, expiresAt] = useLearnerStore(
     (state) => [
       state.activeAttemptId,
@@ -38,6 +37,10 @@ function Timer(props: Props) {
   };
 
   async function handleSubmitAssignment() {
+    if (isSubmitted) return; // Prevent multiple submissions
+
+    setIsSubmitted(true); // Mark as submitted to avoid duplicate submissions
+
     const responsesForOnlyEditedQuestions = editedQuestionsOnly(questions);
     const responsesForQuestions: QuestionAttemptRequestWithId[] =
       responsesForOnlyEditedQuestions.map((q) => ({
@@ -45,14 +48,19 @@ function Timer(props: Props) {
         learnerTextResponse: q.learnerTextResponse || undefined,
         learnerUrlResponse: q.learnerUrlResponse || undefined,
         learnerChoices: q.learnerChoices || undefined,
-        learnerAnswerChoice: q.learnerAnswerChoice || undefined,
+        learnerAnswerChoice:
+          q.learnerAnswerChoice !== undefined
+            ? q.learnerAnswerChoice
+            : undefined,
         learnerFileResponse: q.learnerFileResponse || undefined,
       }));
+
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
     );
+
     if (!res || !res.success) {
       toast.error("Failed to submit assignment.");
       return;
@@ -73,11 +81,13 @@ function Timer(props: Props) {
             learnerResponse: feedback.question,
             questionId: feedback.questionId,
             assignmentAttemptId: activeAttemptId,
+            learnerAnswerChoice: responsesForOnlyEditedQuestions.find(
+              (q) => q.id === feedback.questionId,
+            )?.learnerAnswerChoice,
           },
         ],
       });
     }
-    // ${grade >= passingGrade ? "You passed!" : "You failed."}`);
     const currentTime = Date.now();
     router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
   }
@@ -90,24 +100,20 @@ function Timer(props: Props) {
       });
       setOneMinuteAlertShown(true);
     }
-  }, [expiresAt, countdown]);
+  }, [expiresAt, countdown, oneMinuteAlertShown]);
 
   // Reset countdown when activeAttemptId changes
   useEffect(() => {
     resetCountdown(expiresAt);
   }, [activeAttemptId, expiresAt, resetCountdown]);
 
-  // if assignment runs out of time, automatically submit
-  if (timerExpired) {
-    toast.message("Time's up! Submitting your assignment...");
-    void handleSubmitAssignment();
-    return null;
-  }
-
-  // const countdown = usePersistentCountdown({
-  //   keyString: `assignment-${assignmentId}-attempt-${activeAttemptId}-countdown`,
-  //   initialCountdown: timeInSecs,
-  // });
+  // If assignment runs out of time, automatically submit it
+  useEffect(() => {
+    if (timerExpired && !isSubmitted) {
+      toast.message("Time's up! Submitting your assignment...");
+      void handleSubmitAssignment();
+    }
+  }, [timerExpired, isSubmitted]); // Trigger only when timerExpired is true and submission hasn't been made
 
   return (
     <div className="flex items-center space-x-2" {...props}>
@@ -122,8 +128,6 @@ function Timer(props: Props) {
       >
         {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}
       </div>
-      {/* show a modal that tells the user that they cannot submit any more questions */}
-      {/* {!timerExpired && <TimerExpiredModal />} */}
     </div>
   );
 }

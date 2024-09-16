@@ -26,12 +26,12 @@ import { CreateUpdateQuestionRequestDto } from "./question/dto/create.update.que
 export class AssignmentService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly llmService: LlmService,
+    private readonly llmService: LlmService
   ) {}
 
   async findOne(
     id: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession.role === UserRole.LEARNER;
 
@@ -59,7 +59,7 @@ export class AssignmentService {
       result.questions.sort(
         (a, b) =>
           result.questionOrder.indexOf(a.id) -
-          result.questionOrder.indexOf(b.id),
+          result.questionOrder.indexOf(b.id)
       );
     }
 
@@ -79,7 +79,7 @@ export class AssignmentService {
 
     if (!results) {
       throw new NotFoundException(
-        `Group with Id ${userSession.groupId} not found.`,
+        `Group with Id ${userSession.groupId} not found.`
       );
     }
 
@@ -90,7 +90,7 @@ export class AssignmentService {
 
   async replace(
     id: number,
-    replaceAssignmentDto: ReplaceAssignmentRequestDto,
+    replaceAssignmentDto: ReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -108,13 +108,13 @@ export class AssignmentService {
 
   async update(
     id: number,
-    updateAssignmentDto: UpdateAssignmentRequestDto,
+    updateAssignmentDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     if (updateAssignmentDto.published && updateAssignmentDto.questionOrder) {
       // Generate grading context for questions when publishing the assignment
       await this.handleQuestionGradingContext(
         id,
-        updateAssignmentDto.questionOrder,
+        updateAssignmentDto.questionOrder
       );
     }
 
@@ -130,7 +130,7 @@ export class AssignmentService {
   }
   async updateAssignmentQuestions(
     assignmentId: number,
-    updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
+    updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto
   ): Promise<BaseAssignmentResponseDto> {
     const { questions } = updateAssignmentQuestionsDto;
 
@@ -144,23 +144,22 @@ export class AssignmentService {
 
     // A map to store the upserted questions with their original indexes
     const upsertedQuestionsMap = new Map<number, number>();
-
     await Promise.all(
       questions.map(async (question, index) => {
         const questionData: Prisma.QuestionUpsertArgs["create"] = {
           choices: question.choices
             ? (JSON.parse(
-                JSON.stringify(question.choices),
+                JSON.stringify(question.choices)
               ) as Prisma.InputJsonValue)
             : Prisma.JsonNull,
           scoring: question.scoring
             ? (JSON.parse(
-                JSON.stringify(question.scoring),
+                JSON.stringify(question.scoring)
               ) as Prisma.InputJsonValue)
             : Prisma.JsonNull,
           answer: question.answer ?? false, // Ensure answer is provided or default to false
           type: question.type as QuestionType, // Cast type correctly to QuestionType
-          totalPoints: question.totalPoints,
+          totalPoints: question.totalPoints ?? 0, // Set a default if undefined
           question: question.question,
           maxWords: question.maxWords,
           maxCharacters: question.maxCharacters,
@@ -172,7 +171,7 @@ export class AssignmentService {
         };
 
         await this.applyGuardRails(
-          questionData as unknown as CreateUpdateQuestionRequestDto,
+          questionData as unknown as CreateUpdateQuestionRequestDto
         );
 
         // Upsert the question (update if it exists, create if it doesn't)
@@ -189,7 +188,7 @@ export class AssignmentService {
 
         // Store the upserted question ID in the map with its original index
         upsertedQuestionsMap.set(index, upsertedQuestion.id);
-      }),
+      })
     );
 
     // Delete questions that were not processed (i.e., they were not included in the incoming DTO)
@@ -205,12 +204,12 @@ export class AssignmentService {
 
     // Construct the questionOrder array by mapping the original question array's indexes to the upserted IDs
     const questionOrder = questions.map((_, index) =>
-      upsertedQuestionsMap.get(index),
+      upsertedQuestionsMap.get(index)
     );
 
     await this.handleQuestionGradingContext(
       assignmentId,
-      questionOrder.filter((q) => q !== undefined),
+      questionOrder.filter((q) => q !== undefined)
     );
 
     // Save the question order for the assignment
@@ -242,22 +241,22 @@ export class AssignmentService {
   }
 
   private async applyGuardRails(
-    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto,
+    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto
   ): Promise<void> {
     const guardRailsValidation = await this.llmService.applyGuardRails(
-      JSON.stringify(createUpdateQuestionRequestDto),
+      JSON.stringify(createUpdateQuestionRequestDto)
     );
     if (!guardRailsValidation) {
       throw new HttpException(
         "Question validation failed due to inappropriate or unacceptable content",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
   }
 
   private async handleQuestionGradingContext(
     assignmentId: number,
-    questionOrder: number[],
+    questionOrder: number[]
   ) {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -273,19 +272,19 @@ export class AssignmentService {
 
     const questionGradingContextMap =
       await this.llmService.generateQuestionGradingContext(
-        questionsForGradingContext,
+        questionsForGradingContext
       );
 
     const updates = [];
 
     for (const [questionId, gradingContextQuestionIds] of Object.entries(
-      questionGradingContextMap,
+      questionGradingContextMap
     )) {
       updates.push(
         this.prisma.question.update({
           where: { id: Number.parseInt(questionId) },
           data: { gradingContextQuestionIds },
-        }),
+        })
       );
     }
 

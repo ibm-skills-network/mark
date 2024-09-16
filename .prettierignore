@@ -4,3 +4,10 @@ coverage
 ./husky/_/
 **/.github/workflows/*
 helm-chart
+node_modules
+docs/
+.vscode
+**/.next/
+.eslintrc.cjs
+.prettierrc 
+/dev.env

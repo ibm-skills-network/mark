@@ -91,6 +91,7 @@ describe("AttemptService", () => {
         {
           submitted: true,
           responsesForQuestions: mockResponses.map(({ questionId }) => ({
+            questionId: questionId, // Add the missing questionId property
             id: questionId,
             learnerAnswerChoice: undefined,
             learnerAnswerText: undefined,

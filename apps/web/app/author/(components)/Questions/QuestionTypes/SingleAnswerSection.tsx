@@ -1,11 +1,10 @@
 "use client";
 
-import { Choice as ChoiceType } from "@/config/types";
-import { useAuthorStore } from "@/stores/author";
+import { Choice as ChoiceType } from "../../../../../config/types";
+import { useAuthorStore } from "../../../../../stores/author";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import React, { useEffect, useState, type ChangeEvent } from "react";
+import React, { useEffect } from "react";
 import { toast } from "sonner";
-import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import Choice from "./Choice";
 import { shallow } from "zustand/shallow";
 
@@ -21,7 +20,6 @@ function Section(props: sectionProps) {
     addChoice,
     removeChoice,
     setChoices,
-    toggleChoice,
     modifyChoice,
     setPoints,
   ] = useAuthorStore((state) => [
@@ -29,7 +27,6 @@ function Section(props: sectionProps) {
     state.addChoice,
     state.removeChoice,
     state.setChoices,
-    state.toggleChoice,
     state.modifyChoice,
     state.setPoints,
   ]);
@@ -38,11 +35,12 @@ function Section(props: sectionProps) {
     (state) => state.questions,
     shallow, // Use shallow to prevent re-renders when other state doesn't change
   );
-  const numOfTimeSuggestionHasBeenShown =
-    ~~localStorage.getItem("numOfTimeSuggestionHasBeenShown") || 0;
-
+  const numOfTimeSuggestionHasBeenShown = ~~(
+    localStorage.getItem("numOfTimeSuggestionHasBeenShown") || 0
+  );
   const question = questions.find((question) => question.id === questionId);
   const { choices, totalPoints: points, numRetries: retries } = question;
+
   useEffect(() => {
     // if choices is empty, add a default choice
     if (!choices) {
@@ -55,13 +53,14 @@ function Section(props: sectionProps) {
       ]);
     }
   }, []);
+
   const [parent, enableAnimations] = useAutoAnimate();
+
   if (!choices) {
     return null;
   }
-  // keys are the choices, values are booleans
-  const keys = Object.keys(choices);
-  const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
+
+  const disableAddChoice = choices.some((choice) => choice.choice === "");
 
   function handleChoiceChange(
     choiceIndex: number,
@@ -94,17 +93,30 @@ function Section(props: sectionProps) {
 
     const { choices } = question;
 
-    // Toggle the selected choice for multiple correct answers
-    const choice = choices[choiceIndex];
-    const newCorrectStatus = !choice.isCorrect;
+    // Deselect all other choices within the same question
+    choices.forEach((_, index) => {
+      if (index !== choiceIndex && choices[index].isCorrect) {
+        handleChoiceChange(index, { isCorrect: false, points: 0 });
+      }
+    });
 
-    // Toggle the `isCorrect` status
+    const choice = choices[choiceIndex];
+    const { isCorrect } = choice;
+    const newCorrectStatus = !isCorrect;
+
+    // Only set points if marking correct
+    if (newCorrectStatus) {
+      handleChangeChoicePoints(choiceIndex, 1);
+    } else {
+      handleChangeChoicePoints(choiceIndex, 0);
+    }
+
     handleChoiceChange(choiceIndex, { isCorrect: newCorrectStatus });
   }
 
-  // Function to focus the next input field or create a new choice
   const focusNextInput = (index: number) => {
     if (index < choices.length - 1) {
+      // TODO: Focus on the next input field if it exists, currently it doesnt work
       const nextInput = document.getElementById((index + 1).toString());
       if (nextInput) {
         nextInput.focus();
@@ -124,8 +136,7 @@ function Section(props: sectionProps) {
     <div className="flex flex-col gap-y-6 w-full">
       <div className="flex flex-col gap-y-2">
         <label className="font-medium leading-5 text-gray-800">Choices</label>
-        {/* loop throug the key value object */}
-        <ul ref={parent}>
+        <ul ref={parent} className="">
           {choices.map((choice, index) => (
             <Choice
               key={index}
@@ -136,7 +147,7 @@ function Section(props: sectionProps) {
               removeChoice={handleRemoveChoice}
               addChoice={handleAddChoice}
               changePoints={handleChangeChoicePoints}
-              isSingleChoice={false}
+              isSingleChoice={true}
               focusNextInput={focusNextInput} // Pass the focusNextInput function
               questionId={questionId}
             />
@@ -179,8 +190,8 @@ function Section(props: sectionProps) {
           <span
             style={{
               fontSize: "0.8rem",
-              whiteSpace: "nowrap", // Prevent text from wrapping
-              display: "inline-block", // Ensure it stays on one line
+              whiteSpace: "nowrap",
+              display: "inline-block",
             }}
           >
             Add Option

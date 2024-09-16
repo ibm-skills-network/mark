@@ -9,6 +9,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
 
@@ -63,7 +64,7 @@ class ScoringDto {
   criteria: CriteriaDto[];
 }
 
-class QuestionDto {
+export class QuestionDto {
   @ApiProperty({ description: "Question text", type: String })
   @IsString()
   question: string;
@@ -76,8 +77,10 @@ class QuestionDto {
   answer?: boolean | null;
 
   @ApiProperty({ description: "Total points for the question", type: Number })
+  @IsOptional()
   @IsInt()
-  totalPoints: number;
+  @ValidateIf((o: QuestionDto) => o.type !== "MULTIPLE_CORRECT")
+  totalPoints?: number;
 
   @ApiProperty({ description: "Number of retries allowed", type: Number })
   @IsOptional()
@@ -99,9 +102,10 @@ class QuestionDto {
   maxCharacters?: number;
 
   @ApiProperty({ description: "Scoring configuration", type: ScoringDto })
-  @ValidateNested()
+  @IsOptional()
+  @ValidateNested({ each: true })
   @Type(() => ScoringDto)
-  scoring: ScoringDto;
+  scoring?: ScoringDto | null;
 
   @ApiProperty({ description: "ID of the question", type: Number })
   @IsInt()
@@ -129,6 +133,14 @@ class QuestionDto {
   @ValidateNested({ each: true }) // Validate each item in the array
   @Type(() => Choice)
   choices?: Choice[];
+
+  @ApiPropertyOptional({
+    description: "Optional success message.",
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  success?: boolean;
 
   //
 }

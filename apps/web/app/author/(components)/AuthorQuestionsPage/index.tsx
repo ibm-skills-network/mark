@@ -40,6 +40,7 @@ import {
   ListBulletIcon,
   PencilIcon,
 } from "@heroicons/react/20/solid";
+import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
 
 interface Props {
   assignmentId: number;
@@ -83,27 +84,37 @@ const AuthorQuestionsPage: FC<Props> = ({
   const [collapseAll, setCollapseAll] = useState(true); // State to collapse all questions
   const [activeId, setActiveId] = useState<number | null>(null); // State to store the active assignment ID
   const questionTypes = useMemo(
-    // object to store the question types and their icons and labels
     () => [
       {
         value: "TEXT",
         label: "Text Response",
-        icon: <Bars3BottomLeftIcon className="w-5 h-5 mr-2 fill-gray-500" />,
+        icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
+      },
+
+      {
+        value: "MULTIPLE_CORRECT",
+        label: "Multiple Select",
+        icon: <IconCheckbox className="w-5 h-5 mr-2" />,
+      },
+      {
+        value: "SINGLE_CORRECT",
+        label: "Multiple Choice",
+        icon: <MultipleChoiceSVG className="w-5 h-5 mr-2 " />,
+      },
+      {
+        value: "TRUE_FALSE",
+        label: "True/False",
+        icon: <IconCircleCheck className="w-5 h-5 mr-2" />,
       },
       {
         value: "URL",
         label: "URL Link",
-        icon: <LinkIcon className="w-5 h-5 mr-2 fill-gray-500" />,
-      },
-      {
-        value: "MULTIPLE_CORRECT",
-        label: "Multiple Choice",
-        icon: <MultipleChoiceSVG className="w-5 h-5 mr-2 stroke-gray-500" />,
+        icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />,
       },
       {
         value: "UPLOAD",
         label: "Repo Upload",
-        icon: <ArrowUpTrayIcon className="w-5 h-5 mr-2 fill-gray-500" />,
+        icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
     [],
@@ -205,7 +216,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       ...question,
       question: "",
       id: questionId,
-      alreadyInBackend: true,
+      alreadyInBackend: false,
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? 1,
       index: questions.length + 1,
@@ -242,9 +253,9 @@ const AuthorQuestionsPage: FC<Props> = ({
     }
     addQuestion({
       ...question,
-      question: " ",
+      question: "",
       id: questionId,
-      alreadyInBackend: true,
+      alreadyInBackend: false,
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? -1,
       index: questions.length + 1, // Set the index for the new question
@@ -271,8 +282,10 @@ const AuthorQuestionsPage: FC<Props> = ({
       const newQuestion = {
         ...question,
         id: questionId,
-        alreadyInBackend: true,
+        alreadyInBackend: false,
         assignmentId: assignmentId,
+        choices : question.choices,
+        answer : question.answer,
         scoring: question.scoring,
         numRetries: question.numRetries,
         index: Number(question.index) + 1, // Set the index for the new question
@@ -571,17 +584,13 @@ const AuthorQuestionsPage: FC<Props> = ({
                                   | "UPLOAD",
                               )
                             }
-                            disabled={
-                              qt.value === "MULTIPLE_CORRECT" ||
-                              qt.value === "UPLOAD"
-                            }
+                            disabled={qt.value === "UPLOAD"}
                             className={`${
                               active
                                 ? "bg-gray-100 text-gray-600"
                                 : "text-gray-600"
                             } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
-                              (qt.value === "MULTIPLE_CORRECT" ||
-                                qt.value === "UPLOAD") &&
+                              qt.value === "UPLOAD" &&
                               "cursor-not-allowed opacity-50"
                             }`}
                           >
@@ -611,6 +620,13 @@ const AuthorQuestionsPage: FC<Props> = ({
           </div>
         )}
       </div>
+      {/*console log questions*/}
+      <button
+        onClick={() => console.log(questions)}
+        className="fixed bottom-0 right-0 p-2 bg-white text-gray-600"
+      >
+        Log
+      </button> 
     </DndContext>
   );
 };

@@ -50,6 +50,7 @@ const MarkdownEditor: React.FC<Props> = ({
         existingToolbars.forEach((toolbar, index) => {
           if (index > 0) toolbar.remove();
         });
+
         // Ensure hljs is available globally
         // @ts-ignore
         window.hljs = hljs;
@@ -79,30 +80,38 @@ const MarkdownEditor: React.FC<Props> = ({
             },
           },
         });
+
         quill.on("text-change", () => {
           const text = quill.getText().trim();
+
           if (maxCharacters) {
             const charCount = text.length;
-            if (charCount > maxCharacters) {
-              quill.deleteText(maxCharacters, text.length);
-            } else if (charCount <= maxCharacters) {
+            if (charCount <= maxCharacters) {
               setCharCount(charCount);
+              setValue(quill.root.innerHTML);
+            } else {
+              quill.deleteText(charCount - 1, charCount); // Prevent typing beyond the character limit
             }
-          } else if (maxWords && text) {
-            const wordCount = getWordCount(text);
-            if (wordCount > maxWords) {
-              quill.deleteText(text.length - 1, text.length);
-            } else if (wordCount <= maxWords) {
+          } else if (maxWords) {
+            const wordsArray = text.split(/\s+/).filter(Boolean);
+            const wordCount = wordsArray.length;
+
+            if (wordCount <= maxWords) {
               setWordCount(wordCount);
+              setValue(quill.root.innerHTML);
+            } else {
+              quill.deleteText(text.length - 1, text.length); // Prevent typing beyond the word limit
             }
+          } else {
+            setValue(quill.root.innerHTML);
           }
-          setValue(quill.root.innerHTML);
         });
 
         quill.root.innerHTML = value;
         setQuillInstance(quill);
       }
     };
+
     initializeQuill();
 
     return () => {
@@ -115,7 +124,7 @@ const MarkdownEditor: React.FC<Props> = ({
     };
   }, [quillInstance]);
 
-  // keep the value in sync with the editor
+  // Keep the value in sync with the editor
   useEffect(() => {
     if (quillInstance) {
       quillInstance.root.innerHTML = value;

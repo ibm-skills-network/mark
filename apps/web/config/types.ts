@@ -115,6 +115,7 @@ type QuestionResponse = {
   learnerResponse: string;
   points: number;
   feedback: Feedback[];
+  learnerAnswerChoice?: boolean;
 };
 export interface BaseQuestion {
   type: QuestionType;

@@ -17,10 +17,10 @@ const Component: FC<Props> = (props) => {
     (question) => question.type === "EMPTY",
   ); // disable button if there is an empty question Type
   const disableButton =
-    !questionsAreReadyToBePublished ||
     submitting ||
     questions?.length === 0 ||
-    hasEmptyQuestion;
+    hasEmptyQuestion ||
+    !questionsAreReadyToBePublished;
   let tooltipMessage = "";
   if (questions?.length === 0) {
     tooltipMessage = "You need to add at least one question";

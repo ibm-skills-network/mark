@@ -55,7 +55,7 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   questions: AssignmentAttemptQuestions[];
 }
 
-class AssignmentAttemptQuestions {
+export class AssignmentAttemptQuestions {
   @ApiProperty({
     description: "The Id of the question.",
     type: Number,

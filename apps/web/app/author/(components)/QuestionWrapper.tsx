@@ -1,30 +1,32 @@
 "use client";
 
+import SparkleLottie from "@/app/animations/sparkleLottie";
+import MarkdownViewer from "@/components/MarkdownViewer";
 import type {
   CreateQuestionRequest,
   QuestionType,
-  UpdateQuestionStateParams,
   QuestionTypeDropdown,
+  UpdateQuestionStateParams,
 } from "@/config/types";
+import { generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
-import {
-  type ComponentPropsWithoutRef,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import React from "react";
-import MarkdownViewer from "@/components/MarkdownViewer";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import {
   ArrowDownIcon,
   PencilIcon,
   SparklesIcon,
 } from "@heroicons/react/24/solid";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import { toast } from "sonner";
-import { generateRubric } from "@/lib/talkToBackend";
-import SparkleLottie from "@/app/animations/sparkleLottie";
+import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
+import SingleAnswerSection from "./Questions/QuestionTypes/SingleAnswerSection";
 
 // Props type definition for the QuestionWrapper component
 interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
@@ -53,29 +55,52 @@ function QuestionWrapper(props: TextBoxProps) {
     setQuestionTitle,
     handleUpdateQuestionState,
     questionIndex,
+    questionType,
   } = props;
 
   // Zustand store hooks to manage state
   const toggleTitle = useQuestionStore(
-    (state) => state.questionStates[questionId]?.toggleTitle,
+    (state) => state.questionStates[questionId]?.toggleTitle
   );
+  const addTrueFalseChoice = useAuthorStore(
+    (state) => state.addTrueFalseChoice
+  );
+  const updatePointsTrueFalse = useAuthorStore(
+    (state) => state.updatePointsTrueFalse
+  );
+  const getIsItTrueOrFalse = useAuthorStore((state) => state.isItTrueOrFalse);
+  const getTrueFalsePoints = useAuthorStore(
+    (state) => state.getTrueFalsePoints
+  );
+
+  // State for the local question
+  const isItTrueOrFalse = getIsItTrueOrFalse(questionId);
+  const [localPoints, setLocalPoints] = useState<number>(0);
+  const TrueFalsePoints = getTrueFalsePoints(questionId);
+
+  useEffect(() => {
+    setLocalPoints(TrueFalsePoints);
+  }, [TrueFalsePoints]);
+
+  const handleSelectAnswer = (answer: boolean) => {
+    addTrueFalseChoice(questionId, answer);
+  };
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
   const showCriteriaHeader = useQuestionStore(
-    (state) => state.questionStates.showCriteriaHeader ?? true,
+    (state) => state.questionStates.showCriteriaHeader ?? true
   );
   const setShowCriteriaHeader = useQuestionStore(
-    (state) => state.setShowCriteriaHeader,
+    (state) => state.setShowCriteriaHeader
   );
 
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
   const [questionTitle2, setQuestionTitle2] = useState(questionTitle);
   const titleRef = useRef<HTMLDivElement>(null);
   const criteriaMode = useQuestionStore(
-    (state) => state.questionStates[questionId]?.criteriaMode,
+    (state) => state.questionStates[questionId]?.criteriaMode
   );
   const [loading, setLoading] = useState(false);
   const setCriteriaMode = useQuestionStore((state) => state.setCriteriaMode);
-
   // Effect to handle clicks outside the title input to toggle it off
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -452,176 +477,225 @@ function QuestionWrapper(props: TextBoxProps) {
           </div>
         </div>
       ) : null}
+      {/* Criteria Table for non multiple select questions */}
 
-      {/* Criteria Table */}
-      <div className="mx-auto min-w-full border rounded border-solid border-gray-200 overflow-hidden">
-        <table className="min-w-full bg-white">
-          <thead className="h-min">
-            <tr className="border-b border-gray-200 w-full">
-              <th className="py-2 px-4 text-left bg-gray-50 w-1/6 h-min border-r border-gray-200">
-                <div className="flex flex-col">
-                  <p className="typography-body text-gray-600">Points</p>
-                </div>
-              </th>
-              <th className="py-2 px-4 text-left bg-gray-50 w-full h-min">
-                <div className="flex justify-between">
-                  <div className="flex flex-col">
-                    <p className="typography-body text-gray-600">Criteria</p>
-                  </div>
-                  {/* gererating rubric button */}
-                  {criteriaMode && (
-                    <div className="flex justify-end">
-                      <button
-                        className="text-gray-500"
-                        onClick={handleAiClick}
-                        disabled={loading}
-                      >
-                        <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </th>
-            </tr>
-            {criteriaMode && questionCriteria.points.length > 0 ? (
-              questionCriteria.points.map((point, index) => (
-                <React.Fragment key={index}>
-                  <tr
-                    key={index}
-                    ref={(el) => {
-                      rowsRef.current[index] = el;
-                    }}
-                    className={
-                      index === questionCriteria.points.length - 1
-                        ? ""
-                        : "border-b"
-                    }
-                    style={{
-                      transition: swappingIndices.includes(index)
-                        ? "transform 0.3s ease"
-                        : "none",
-                    }}
-                  >
-                    <th className="py-2 px-4 text-left w-1/6 h-min border-r border-gray-200">
-                      <div className="flex flex-col">
-                        <input
-                          type="number"
-                          className="border-none w-full text-left focus:outline-none focus:ring-0 px-0 py-0 text-gray-600"
-                          value={point}
-                          min={0}
-                          max={Math.max(...questionCriteria.points) + 1}
-                          onChange={(e) =>
-                            handlePointsInputChange(index, e.target.value)
-                          }
-                          onBlur={() =>
-                            handlePointsChange(index, point.toString())
-                          }
-                          onKeyPress={(e) => {
-                            if (e.key === "Enter") {
-                              handlePointsChange(index, point.toString());
-                            }
-                          }}
-                        />
-                      </div>
-                    </th>
-                    <th className="relative text-left typography-body size-4 w-full h-min py-2 pl-6 pr-10">
-                      {loading ? (
-                        <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
-                      ) : (
-                        <input
-                          className="border-none resize-none h-5 placeholder-gray-500 focus:outline-none focus:ring-0 px-0 pr-2 py-0 w-full text-left"
-                          placeholder="Click here to add criteria"
-                          value={questionCriteria.criteriaDesc[index] || ""}
-                          onChange={(e) =>
-                            handleCriteriaChange(index, e.target.value)
-                          }
-                          onBlur={handleCriteriaBlur}
-                        />
-                      )}
-                      {/* Remove Criteria Button */}
-                      <button
-                        className="absolute top-1/2 transform -translate-y-1/2 right-4"
-                        onClick={() => {
-                          handleRemoveCriteria(index);
-                        }}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5 text-gray-500"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </button>
-                    </th>
-                  </tr>
-                  {index === questionCriteria.points.length - 1 && (
-                    <tr className="border-t border-gray-200 w-full">
-                      <td colSpan={2} className="py-2 px-4 text-left">
-                        <div
-                          className="text-gray-600 w-full flex items-center gap-x-1.5 text-left text-base full-width cursor-pointer"
-                          onClick={handleShiftCriteria}
-                        >
-                          <PlusIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
-                          <p className="text-gray-600 typography-body">
-                            Click to add new criteria.
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))
-            ) : (
+      {questionType === "MULTIPLE_CORRECT" ? (
+        <MultipleAnswerSection questionId={questionId} />
+      ) : questionType === "SINGLE_CORRECT" ? (
+        <SingleAnswerSection questionId={questionId} />
+      ) : questionType === "TRUE_FALSE" ? (
+        <div className="flex justify-center items-center space-x-6 mt-6">
+          {/* True Button */}
+          <button
+            type="button"
+            className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${
+              isItTrueOrFalse === true
+                ? "bg-violet-600 text-white border-violet-600 shadow-lg"
+                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+            }`}
+            onClick={() => handleSelectAnswer(true)}
+          >
+            True
+          </button>
+
+          {/* False Button */}
+          <button
+            type="button"
+            className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${
+              isItTrueOrFalse === false
+                ? "bg-violet-600 text-white border-violet-600 shadow-lg"
+                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+            }`}
+            onClick={() => handleSelectAnswer(false)}
+          >
+            False
+          </button>
+
+          {/* Point Input */}
+          <div className="relative flex items-center">
+            <input
+              type="number"
+              className={`text-center w-16 px-3 py-2 rounded-lg border text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all duration-200 `}
+              value={localPoints}
+              onChange={(e) => setLocalPoints(parseInt(e.target.value, 10))}
+              onBlur={() => updatePointsTrueFalse(questionId, localPoints)}
+              style={{
+                width: `${localPoints?.toString().length + 5}ch`,
+              }}
+            />
+            <span className="ml-2 text-gray-600">pts</span>
+          </div>
+        </div>
+      ) : (
+        <div className="mx-auto min-w-full border rounded border-solid border-gray-200 overflow-hidden">
+          <table className="min-w-full bg-white">
+            <thead className="h-min">
               <tr className="border-b border-gray-200 w-full">
-                <td colSpan={2} className="py-2 px-4 text-center">
-                  <div className="flex justify-center items-center gap-x-3">
-                    {loading ? (
-                      <>
-                        <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
-                        <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
-                      </>
-                    ) : (
-                      <>
+                <th className="py-2 px-4 text-left bg-gray-50 w-1/6 h-min border-r border-gray-200">
+                  <div className="flex flex-col">
+                    <p className="typography-body text-gray-600">Points</p>
+                  </div>
+                </th>
+                <th className="py-2 px-4 text-left bg-gray-50 w-full h-min">
+                  <div className="flex justify-between">
+                    <div className="flex flex-col">
+                      <p className="typography-body text-gray-600">Criteria</p>
+                    </div>
+                    {/* gererating rubric button */}
+                    {criteriaMode && (
+                      <div className="flex justify-end">
                         <button
                           className="text-gray-500"
                           onClick={handleAiClick}
                           disabled={loading}
                         >
-                          <SparkleLottie />
                           <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
-                          Generate a rubric with Mark
                         </button>
-                        <span className="text-gray-500">OR</span>
-                        <button
-                          className="text-gray-500"
-                          onClick={() => {
-                            setCriteriaMode(questionId, "CUSTOM");
-                            questionCriteria.points = [1, 0];
-                            questionCriteria.criteriaDesc = ["", ""];
-                            questionCriteria.criteriaIds = [1, 2];
-                          }}
-                          disabled={loading}
-                        >
-                          <PencilIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
-                          Create a rubric from scratch
-                        </button>
-                      </>
+                      </div>
                     )}
                   </div>
-                </td>
+                </th>
               </tr>
-            )}
-          </thead>
-        </table>
-      </div>
+              {criteriaMode && questionCriteria.points.length > 0 ? (
+                questionCriteria.points.map((point, index) => (
+                  <React.Fragment key={index}>
+                    <tr
+                      key={index}
+                      ref={(el) => {
+                        rowsRef.current[index] = el;
+                      }}
+                      className={
+                        index === questionCriteria.points.length - 1
+                          ? ""
+                          : "border-b"
+                      }
+                      style={{
+                        transition: swappingIndices.includes(index)
+                          ? "transform 0.3s ease"
+                          : "none",
+                      }}
+                    >
+                      <th className="py-2 px-4 text-left w-1/6 h-min border-r border-gray-200">
+                        <div className="flex flex-col">
+                          <input
+                            type="number"
+                            className="border-none w-full text-left focus:outline-none focus:ring-0 px-0 py-0 text-gray-600"
+                            value={point}
+                            min={0}
+                            max={Math.max(...questionCriteria.points) + 1}
+                            onChange={(e) =>
+                              handlePointsInputChange(index, e.target.value)
+                            }
+                            onBlur={() =>
+                              handlePointsChange(index, point.toString())
+                            }
+                            onKeyPress={(e) => {
+                              if (e.key === "Enter") {
+                                handlePointsChange(index, point.toString());
+                              }
+                            }}
+                          />
+                        </div>
+                      </th>
+                      <th className="relative text-left typography-body size-4 w-full h-min py-2 pl-6 pr-10">
+                        {loading ? (
+                          <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                        ) : (
+                          <input
+                            className="border-none resize-none h-5 placeholder-gray-500 focus:outline-none focus:ring-0 px-0 pr-2 py-0 w-full text-left"
+                            placeholder="Click here to add criteria"
+                            value={questionCriteria.criteriaDesc[index] || ""}
+                            onChange={(e) =>
+                              handleCriteriaChange(index, e.target.value)
+                            }
+                            onBlur={handleCriteriaBlur}
+                          />
+                        )}
+                        {/* Remove Criteria Button */}
+                        <button
+                          className="absolute top-1/2 transform -translate-y-1/2 right-4"
+                          onClick={() => {
+                            handleRemoveCriteria(index);
+                          }}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-5 w-5 text-gray-500"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </th>
+                    </tr>
+                    {index === questionCriteria.points.length - 1 && (
+                      <tr className="border-t border-gray-200 w-full">
+                        <td colSpan={2} className="py-2 px-4 text-left">
+                          <div
+                            className="text-gray-600 w-full flex items-center gap-x-1.5 text-left text-base full-width cursor-pointer"
+                            onClick={handleShiftCriteria}
+                          >
+                            <PlusIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
+                            <p className="text-gray-600 typography-body">
+                              Click to add new criteria.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))
+              ) : (
+                <tr className="border-b border-gray-200 w-full">
+                  <td colSpan={2} className="py-2 px-4 text-center">
+                    <div className="flex justify-center items-center gap-x-3">
+                      {loading ? (
+                        <>
+                          <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
+                          <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="text-gray-500"
+                            onClick={handleAiClick}
+                            disabled={loading}
+                          >
+                            <SparkleLottie />
+                            <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
+                            Generate a rubric with Mark
+                          </button>
+                          <span className="text-gray-500">OR</span>
+                          <button
+                            className="text-gray-500"
+                            onClick={() => {
+                              setCriteriaMode(questionId, "CUSTOM");
+                              questionCriteria.points = [1, 0];
+                              questionCriteria.criteriaDesc = ["", ""];
+                              questionCriteria.criteriaIds = [1, 2];
+                            }}
+                            disabled={loading}
+                          >
+                            <PencilIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
+                            Create a rubric from scratch
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </thead>
+          </table>
+        </div>
+      )}
     </>
   );
 }

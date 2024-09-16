@@ -1,17 +1,17 @@
 "use client";
 
 import Spinner from "@/components/svgs/Spinner";
+import type { QuestionAttemptRequestWithId } from "@/config/types";
 import { submitAssignment } from "@/lib/talkToBackend";
+import { editedQuestionsOnly } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import Breadcrumbs from "./Breadcrumbs";
 import Button from "../../../components/Button";
-import type { QuestionAttemptRequestWithId } from "@/config/types";
-import { editedQuestionsOnly } from "@/lib/utils";
+import Breadcrumbs from "./Breadcrumbs";
 
 function LearnerHeader() {
   const pathname = usePathname();
@@ -52,15 +52,18 @@ function LearnerHeader() {
         learnerTextResponse: q.learnerTextResponse || undefined,
         learnerUrlResponse: q.learnerUrlResponse || undefined,
         learnerChoices: q.learnerChoices || undefined,
-        learnerAnswerChoice: q.learnerAnswerChoice || undefined,
+        learnerAnswerChoice:
+          q.learnerAnswerChoice !== undefined
+            ? q.learnerAnswerChoice
+            : undefined,
         learnerFileResponse: q.learnerFileResponse || undefined,
       }));
-    console.log("responsesForQuestions", responsesForQuestions);
+
     setSubmitting(true);
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
-      responsesForQuestions,
+      responsesForQuestions
     );
     setSubmitting(false);
     if (!res || !res.success) {
@@ -78,6 +81,9 @@ function LearnerHeader() {
         questionResponses: [
           {
             id: feedback.id,
+            learnerAnswerChoice: responsesForOnlyEditedQuestions.find(
+              (q) => q.id === feedback.questionId
+            )?.learnerAnswerChoice,
             points: feedback.totalPoints,
             feedback: feedback.feedback,
             learnerResponse: feedback.question,

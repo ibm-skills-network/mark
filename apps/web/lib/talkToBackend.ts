@@ -29,7 +29,6 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-    console.log("res", res);
 
     if (!res.ok) {
       throw new Error("Failed to fetch user data");
@@ -48,7 +47,7 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
 export async function replaceAssignment(
   data: ReplaceAssignmentRequest,
   id: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<boolean> {
   try {
     //
@@ -80,7 +79,7 @@ export async function replaceAssignment(
 export async function updateAssignment(
   data: Partial<ReplaceAssignmentRequest>,
   id: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<boolean> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
@@ -115,7 +114,7 @@ export async function updateAssignment(
  */
 export async function getAssignment(
   id: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<Assignment | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
@@ -146,7 +145,7 @@ export async function getAssignment(
  * @returns An array of assignments.
  */
 export async function getAssignments(
-  cookies?: string,
+  cookies?: string
 ): Promise<Assignment[] | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments, {
@@ -175,7 +174,7 @@ export async function getAssignments(
 export async function createQuestion(
   assignmentId: number,
   question: CreateQuestionRequest,
-  cookies?: string,
+  cookies?: string
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
 
@@ -207,7 +206,7 @@ export async function createQuestion(
 export async function updateQuestions(
   assignmentId: number,
   questions: CreateQuestionRequest[],
-  cookies?: string,
+  cookies?: string
 ): Promise<boolean> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
 
@@ -248,7 +247,7 @@ export async function replaceQuestion(
   assignmentId: number,
   questionId: number,
   question: CreateQuestionRequest,
-  cookies?: string,
+  cookies?: string
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}`;
 
@@ -280,7 +279,7 @@ export async function replaceQuestion(
 export async function generateRubric(
   questions: { id: number; questionText: string; questionType: string }[],
   assignmentId: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<Record<number, string> | undefined> {
   const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/create-marking-rubric`;
 
@@ -311,7 +310,7 @@ export async function generateRubric(
 export async function deleteQuestion(
   assignmentId: number,
   questionId: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<boolean> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}`;
 
@@ -348,10 +347,9 @@ export async function deleteQuestion(
  */
 export async function getAttempts(
   assignmentId: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
-  console.log("cookie getAttempt: ", cookies);
 
   try {
     const res = await fetch(endpointURL, {
@@ -361,7 +359,7 @@ export async function getAttempts(
     });
     if (!res.ok) {
       throw new Error(
-        `Failed to call ${endpointURL} with ${res.status}: ${res.toString()}`,
+        `Failed to call ${endpointURL} with ${res.status}: ${res.toString()}`
       );
     }
     const attempts = (await res.json()) as AssignmentAttempt[];
@@ -380,10 +378,9 @@ export async function getAttempts(
  */
 export async function createAttempt(
   assignmentId: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<number | undefined | "no more attempts"> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
-  console.log("endpointURL", endpointURL);
   try {
     const res = await fetch(endpointURL, {
       method: "POST",
@@ -392,8 +389,6 @@ export async function createAttempt(
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-    console.log("res", res);
-
     if (!res.ok) {
       if (res.status === 422) {
         return "no more attempts";
@@ -422,7 +417,7 @@ export async function createAttempt(
 export async function getAttempt(
   assignmentId: number,
   attemptId: number,
-  cookies?: string,
+  cookies?: string
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 
@@ -451,7 +446,7 @@ export async function submitQuestion(
   attemptId: number,
   questionId: number,
   requestBody: QuestionAttemptRequest,
-  cookies?: string,
+  cookies?: string
 ): Promise<QuestionAttemptResponse | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
@@ -489,7 +484,7 @@ export async function submitAssignment(
   assignmentId: number,
   attemptId: number,
   responsesForQuestions: QuestionAttemptRequestWithId[],
-  cookies?: string,
+  cookies?: string
 ): Promise<SubmitAssignmentResponse | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 

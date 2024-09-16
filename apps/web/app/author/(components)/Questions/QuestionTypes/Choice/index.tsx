@@ -1,117 +1,121 @@
 import { Choice } from "@/config/types";
-import { cn } from "@/lib/strings";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import {
-  useMemo,
-  type ChangeEvent,
+  memo,
+  useEffect,
+  useState,
   type ComponentPropsWithoutRef,
 } from "react";
-import NumberInputTooltip from "./NumberInputTooltip";
-
 interface Props extends ComponentPropsWithoutRef<"li"> {
+  questionId: number; // Include questionId to uniquely identify the question
   index: number;
   choice: Choice;
+  isSingleChoice: boolean; // Prop to indicate if it's single choice or multi-select
   toggleChoice: (index: number) => void;
   removeChoice: (index: number) => void;
   addChoice: () => void;
   changeText: (index: number, value: string) => void;
   changePoints: (index: number, value: number) => void;
+  focusNextInput: (index: number) => void; // Function to focus the next input field
 }
 
-function Component(props: Props) {
+const ChoiceComponent = memo(function Component(props: Props) {
   const {
+    questionId, // Use questionId to ensure uniqueness
     index,
     choice,
+    isSingleChoice,
     toggleChoice,
     removeChoice,
     addChoice,
     changeText,
     changePoints,
+    focusNextInput,
   } = props;
 
   const { choice: choiceText, points, isCorrect } = choice;
 
-  const pointsShowing = useMemo(() => {
-    return isCorrect ? points : 0;
-  }, [isCorrect, points]);
+  const [localChoiceText, setLocalChoiceText] = useState(choice?.choice || "");
+  const [localPoints, setLocalPoints] = useState<number>(points || 0);
 
-  function handleChoiceTextChange(event: ChangeEvent<HTMLInputElement>) {
-    changeText(index, event.target.value);
-  }
+  useEffect(() => {
+    setLocalChoiceText(choice?.choice || "");
+    setLocalPoints(points || 0);
+  }, [choice?.choice, points]);
 
-  function incrementPoints() {
-    changePoints(index, points + 1);
-  }
+  const handleBlur = () => {
+    changeText(index, localChoiceText);
+  };
 
-  function decrementPoints() {
-    changePoints(index, points - 1);
+  const handlePointsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(event.target.value, 10) || 0;
+    if(isCorrect && value < 0 || value > 100) {
+      return;
+    }
+    else if(!isCorrect && value > 0) {
+      return;
+    }
+    setLocalPoints(value);
+  };
+  const handleChangeCorrect = (index: number, value: boolean) => {
+    const negativePoints = localPoints * -1;
+    console.log(negativePoints);
+    changePoints(index, negativePoints);
+    setLocalPoints(negativePoints); // convert number from positive to negative and vice versa
+    toggleChoice(index);
   }
 
   return (
     <li key={index} className="flex items-center gap-x-1.5">
+      {/* Conditionally render checkbox or radio button based on isSingleChoice */}
       <input
-        type="checkbox"
-        className="rounded"
-        id={index.toString()}
+        type={isSingleChoice ? "radio" : "checkbox"}
+        name={
+          isSingleChoice
+            ? `single-choice-${questionId}-${index}`
+            : `multi-choice-${questionId}-${index}`
+        } // Ensure the name is unique per question
+        className={`${
+          isSingleChoice? "rounded-full" : "rounded"
+        }`}
         checked={isCorrect}
-        onChange={() => toggleChoice(index)}
+        onChange={() => {
+          handleChangeCorrect(index, !isCorrect);
+        }}
       />
       <input
         className="w-full overflow-hidden !border-transparent transition hover:!border-b-gray-300 focus:!border-b-gray-600 !ring-0 p-2 text-black outline-none"
         placeholder={`Choice ${index + 1}`}
-        value={choiceText}
-        onChange={handleChoiceTextChange}
+        id={index.toString()}
+        value={localChoiceText}
+        onChange={(event) => setLocalChoiceText(event.target.value)}
+        onBlur={handleBlur}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
-            addChoice();
-            // Hacky vanilla javascript to get the reference of the next input (first get the reference to the parent element, then get the next sibling,
-            // then get the first child, then get the next sibling)
-            // wait 100ms for the next input to be rendered, then focus on it
-            setTimeout(() => {
-              const inputElement = event.target as HTMLInputElement;
-              const nextInput = inputElement.parentElement?.nextSibling
-                ?.firstChild?.nextSibling as HTMLInputElement;
-              if (nextInput) {
-                nextInput.focus();
-              }
-            }, 100);
-          }
-          // if user clicks backspace and the input field is empty, delete the choice
-          if (event.key === "Backspace" && choiceText === "") {
-            removeChoice(index);
+            handleBlur();
+            focusNextInput(index);
           }
         }}
       />
-      <NumberInputTooltip
-        disabled={!isCorrect}
-        disableIncrement={points >= 9}
-        disableDecrement={points <= 1}
-        incrementPoints={incrementPoints}
-        decrementPoints={decrementPoints}
-        className={cn(
-          "text-sm leading-5 transition-colors font-medium",
-          isCorrect ? "text-blue-700" : "text-gray-500",
-        )}
-      >
-        <div className=" whitespace-nowrap">
-          {pointsShowing}{" "}
-          {pointsShowing === 1 ? (
-            <span className="pr-1.5">point</span>
-          ) : (
-            "points"
-          )}
-        </div>
-      </NumberInputTooltip>
-      <button
-        className=" text-red-600 pl-1"
-        onClick={() => {
-          removeChoice(index);
-        }}
-      >
+      <div className="relative">
+        <input
+          type="number"
+          className={`text-left w-14 focus:outline-none focus:ring-0 px-2 py-0 text-gray-600 ${
+            isCorrect ? "border rounded" : "border-none"
+          }`}
+          value={localPoints}
+          onChange={handlePointsChange}
+          onBlur={() => changePoints(index, localPoints)}
+          style={{
+            width: `${localPoints?.toString().length + 4}ch`,
+          }}
+        />
+      </div>
+      <button className="text-red-600 pl-1" onClick={() => removeChoice(index)}>
         <XMarkIcon className="w-5" />
       </button>
     </li>
   );
-}
+});
 
-export default Component;
+export default ChoiceComponent;

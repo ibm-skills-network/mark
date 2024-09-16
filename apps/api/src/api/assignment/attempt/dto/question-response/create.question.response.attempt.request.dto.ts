@@ -40,4 +40,10 @@ export class CreateQuestionResponseAttemptRequestDto {
   })
   @IsOptional()
   learnerFileResponse?: Express.Multer.File;
+
+  @ApiPropertyOptional({
+    description: "The id of the question.",
+    type: Number,
+  })
+  questionId: number;
 }

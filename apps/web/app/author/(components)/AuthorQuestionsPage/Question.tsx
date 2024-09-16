@@ -25,10 +25,13 @@ import {
   TrashIcon,
   Bars3BottomLeftIcon,
   ArrowPathRoundedSquareIcon,
+  PencilIcon,
+  ListBulletIcon,
 } from "@heroicons/react/24/outline";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 import MultipleChoiceSVG from "@/components/svgs/MC";
+import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
 
 // Props type definition for the Question component
 interface QuestionProps {
@@ -56,7 +59,7 @@ const Question: FC<QuestionProps> = ({
   const setQuestionTitle = useAuthorStore((state) => state.setQuestionTitle);
   const [newIndex, setNewIndex] = useState<number>(questionIndex);
   const [isFocused, setIsFocused] = useState(false);
-  const disabledMenuButtons = ["MULTIPLE_CORRECT", "UPLOAD"]; // These question types are disabled in the dropdown menu
+  const disabledMenuButtons = ["UPLOAD"]; // These question types are disabled in the dropdown menu
   const { questionStates, setShowWordCountInput, setCountMode } =
     useQuestionStore();
 
@@ -239,15 +242,26 @@ const Question: FC<QuestionProps> = ({
         label: "Text Response",
         icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
       },
+
+      {
+        value: "MULTIPLE_CORRECT",
+        label: "Multiple Select",
+        icon: <IconCheckbox className="w-5 h-5 mr-2" />,
+      },
+      {
+        value: "SINGLE_CORRECT",
+        label: "Multiple Choice",
+        icon: <MultipleChoiceSVG className="w-5 h-5 mr-2 " />,
+      },
+      {
+        value: "TRUE_FALSE",
+        label: "True/False",
+        icon: <IconCircleCheck className="w-5 h-5 mr-2" />,
+      },
       {
         value: "URL",
         label: "URL Link",
         icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />,
-      },
-      {
-        value: "MULTIPLE_CORRECT",
-        label: "Multiple Choice",
-        icon: <MultipleChoiceSVG className="w-5 h-5  stroke-gray-500" />,
       },
       {
         value: "UPLOAD",
@@ -327,10 +341,7 @@ const Question: FC<QuestionProps> = ({
                       {({ active }) => (
                         <button
                           onClick={() => {
-                            if (
-                              qt.value === "MULTIPLE_CORRECT" ||
-                              qt.value === "UPLOAD"
-                            ) {
+                            if (disabledMenuButtons.includes(qt.value)) {
                               return;
                             }
                             setQuestionType(
@@ -358,9 +369,9 @@ const Question: FC<QuestionProps> = ({
                               ? "bg-gray-100 text-gray-600"
                               : "text-gray-600"
                           } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
-                            (qt.value === "MULTIPLE_CORRECT" ||
-                              qt.value === "UPLOAD") &&
-                            "cursor-not-allowed opacity-50"
+                            disabledMenuButtons.includes(qt.value)
+                              ? "cursor-not-allowed opacity-50"
+                              : "cursor-pointer"
                           }`}
                         >
                           <div className="stroke-gray-500">{qt.icon}</div>
@@ -563,6 +574,9 @@ const Question: FC<QuestionProps> = ({
                     | "MULTIPLE_CORRECT"
                     | "UPLOAD",
                   maxWords: maxWordCount,
+                  choices: question.choices,
+                  answer: question.answer,
+                  
                   maxCharacters: maxCharacters,
                   index: questionIndex,
                   scoring: {

@@ -6,6 +6,7 @@ import type {
   QuestionStore,
 } from "@/config/types";
 import { getAssignment } from "@/lib/talkToBackend";
+import { debugLog } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
@@ -24,7 +25,7 @@ function QuestionPage(props: Props) {
   const questionsStore = useLearnerStore((state) => state.questions);
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.setAssignmentDetails],
+    (state) => [state.assignmentDetails, state.setAssignmentDetails]
   );
   const [pageState, setPageState] = useState<
     "loading" | "success" | "no-questions"
@@ -52,7 +53,7 @@ function QuestionPage(props: Props) {
       };
       void fetchAssignment();
     }
-    console.log("attemptId, expiresAt", id, new Date(expiresAt).getTime());
+    debugLog("attemptId, expiresAt", id, new Date(expiresAt).getTime());
     setLearnerStore({
       questions: questions,
       activeAttemptId: id,

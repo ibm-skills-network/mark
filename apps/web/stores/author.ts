@@ -25,6 +25,7 @@ type OptionalQuestion = {
 export type AuthorActions = {
   setActiveAssignmentId: (id: number) => void;
   setName: (name: string) => void;
+
   setIntroduction: (introduction: string) => void;
   setInstructions: (instructions: string) => void;
   setGradingCriteriaOverview: (gradingCriteriaOverview: string) => void;
@@ -36,7 +37,11 @@ export type AuthorActions = {
   addCriteria: (questionId: number, criteria: Criteria) => void;
   removeCriteria: (questionId: number, criteriaIndex: number) => void;
   setChoices: (questionId: number, choices: Choice[]) => void;
-  addChoice: (questionId: number, choice?: string) => void;
+  addChoice: (questionId: number, choice?: boolean) => void;
+  addTrueFalseChoice: (questionId: number, isTrueOrFalse: boolean) => void;
+  getTrueFalsePoints: (questionId: number) => number;
+  updatePointsTrueFalse: (questionId: number, points: number) => void;
+  isItTrueOrFalse: (questionId: number) => boolean;
   removeChoice: (questionId: number, choiceIndex: number) => void;
   toggleChoice: (questionId: number, choiceIndex: number) => void;
   modifyChoice: (
@@ -225,6 +230,73 @@ export const useAuthorStore = createWithEqualityFn<
             }),
           }));
         },
+        // Add or update a question's choice to be either "True" or "False"
+        addTrueFalseChoice: (questionId, isTrue) => {
+          return set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId && q.choices) {
+                // Only update the choice and isCorrect, keep the points unchanged
+                const updatedChoices = q.choices.map((choice) => ({
+                  ...choice,
+                  choice: isTrue ? "true" : "false", // Toggle between True and False
+                  isCorrect: true,
+                }));
+
+                return {
+                  ...q,
+                  choices: updatedChoices,
+                };
+              } else if (q.id === questionId && !q.choices) {
+                return {
+                  ...q,
+                  choices: [
+                    {
+                      choice: isTrue ? "true" : "false",
+                      isCorrect: true,
+                      points: 0,
+                    },
+                  ],
+                };
+              }
+              return q;
+            }),
+          }));
+        },
+
+        getTrueFalsePoints: (questionId) => {
+          const question = get().questions.find((q) => q.id === questionId);
+          if (!question || !question.choices) return 0; // If no question or no choices exist, return 0
+          return question.choices[0]?.points || 0; // Return the points for the first choice
+        },
+
+        updatePointsTrueFalse: (questionId, points) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId) {
+                // If the question already has a choice array, update it, otherwise create new
+                const updatedChoices = q.choices.map((choice) => ({
+                  ...choice,
+                  points,
+                }));
+
+                return {
+                  ...q,
+                  choices: updatedChoices,
+                };
+              }
+              return q;
+            }),
+          }));
+        },
+        // Function to retrieve whether the question has only "True" or "False" choices
+        isItTrueOrFalse: (questionId) => {
+          const question = get().questions.find((q) => q.id === questionId);
+          if (!question || !question.choices) return null; // If no question or no choices exist, return null
+
+          return question.choices.find((choice) => choice.choice === "true")
+            ? true
+            : false;
+        },
         addChoice: (questionId, choice) => {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -233,7 +305,7 @@ export const useAuthorStore = createWithEqualityFn<
                   ...q,
                   choices: [
                     ...q.choices,
-                    { choice, isCorrect: false, points: 0 },
+                    { choice: "", isCorrect: false, points: 0 },
                   ],
                 };
               }
@@ -280,27 +352,26 @@ export const useAuthorStore = createWithEqualityFn<
           }));
         },
         modifyChoice: (questionId, choiceIndex, modifiedData) => {
-          set((state) => ({
-            questions: state.questions.map((q) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
               if (q.id === questionId) {
-                const choices = q.choices.map((choice, index) => {
+                // Find the question to modify its choices
+                const updatedChoices = q.choices.map((choice, index) => {
                   if (index === choiceIndex) {
-                    return {
-                      ...choice,
-                      ...modifiedData,
-                    };
+                    // Modify the specific choice by merging modifiedData
+                    return { ...choice, ...modifiedData };
                   }
                   return choice;
                 });
-                return {
-                  ...q,
-                  choices,
-                };
+                return { ...q, choices: updatedChoices };
               }
               return q;
-            }),
-          }));
+            });
+
+            return { ...state, questions: updatedQuestions }; // Return the updated state
+          });
         },
+
         setPoints: (questionId, points) => {
           set((state) => ({
             questions: state.questions.map((q) => {

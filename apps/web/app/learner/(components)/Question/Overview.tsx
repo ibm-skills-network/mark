@@ -42,6 +42,7 @@ function Overview(props: Props) {
         if (
           question?.learnerTextResponse ||
           question?.learnerUrlResponse ||
+          question?.learnerAnswerChoice ||
           question?.learnerChoices?.length > 0
         ) {
           return "edited";
@@ -75,12 +76,6 @@ function Overview(props: Props) {
             )}
           >
             <div className="leading-5 font-bold my-auto">{index + 1}</div>
-
-            {question === "correct" && <div className="text-green-600">✓</div>}
-            {question === "incorrect" && <div className="text-red-600">✗</div>}
-            {question === "partiallyCorrect" && (
-              <div className="text-orange-500">✓</div>
-            )}
             {/* {question === "edited" && <div className="text-gray-600">-</div>} */}
           </button>
         ))}

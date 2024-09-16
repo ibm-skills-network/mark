@@ -34,10 +34,8 @@ export interface DataWithUpdatedAt {
 
 export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
-  backendData: Partial<T>,
+  backendData: Partial<T>
 ): T | Partial<T> {
-  console.log("localData", localData);
-  console.log("backendData", backendData);
   const localDataExists = localData?.updatedAt;
   const localDataIsNewer =
     new Date(localData.updatedAt) > new Date(backendData.updatedAt);
@@ -47,12 +45,23 @@ export function mergeData<T extends DataWithUpdatedAt>(
   return backendData;
 }
 
+const debugMode = process.env.DEBUG_MODE === "true";
+
+type DebugArgs = string | number | boolean | object; 
+
+export const debugLog = (...args: DebugArgs[]) => {
+  if (debugMode) {
+    console.debug(...args);
+  }
+};
+
 export const editedQuestionsOnly = (questions: QuestionStore[]) =>
   questions.filter(
     (q) =>
       q.learnerTextResponse ||
       q.learnerUrlResponse ||
-      q.learnerChoices?.length > 0,
+      q.learnerChoices?.length > 0 ||
+      q.learnerAnswerChoice !== undefined
   );
 // export function debounce<T extends (...args: unknown[]) => void>(
 //   func: T,

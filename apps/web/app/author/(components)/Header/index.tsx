@@ -1,22 +1,22 @@
 "use client";
 
+import { extractAssignmentId } from "@/lib/strings";
 import {
+  getAssignment,
   updateAssignment,
   updateQuestions,
-  getAssignment,
 } from "@/lib/talkToBackend";
+import { debugLog, mergeData } from "@/lib/utils";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import { Nav } from "./Nav";
-import { extractAssignmentId } from "@/lib/strings";
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { mergeData } from "@/lib/utils";
-import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
+import SubmitQuestionsButton from "./SubmitQuestionsButton";
 
 function AuthorHeader() {
   const router = useRouter();
@@ -42,7 +42,7 @@ function AuthorHeader() {
     state.setAssignmentConfigStore,
   ]);
   const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
-    (state) => [state.setAssignmentFeedbackConfigStore],
+    (state) => [state.setAssignmentFeedbackConfigStore]
   );
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -57,7 +57,7 @@ function AuthorHeader() {
         // Author store
         const mergedAuthorData = mergeData(
           useAuthorStore.getState(),
-          assignment,
+          assignment
         );
         const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
         setAuthorStore({
@@ -68,7 +68,7 @@ function AuthorHeader() {
         // Assignment Config store
         const mergedAssignmentConfigData = mergeData(
           useAssignmentConfig.getState(),
-          assignment,
+          assignment
         );
         const {
           updatedAt: authorStoreUpdatedAt,
@@ -82,7 +82,7 @@ function AuthorHeader() {
         // Assignment Feedback Config store
         const mergedAssignmentFeedbackData = mergeData(
           useAssignmentFeedbackConfig.getState(),
-          assignment,
+          assignment
         );
         const {
           updatedAt: assignmentFeedbackUpdatedAt,
@@ -102,93 +102,124 @@ function AuthorHeader() {
 
   // check if all questions have been filled out
   const questionsAreReadyToBePublished = useMemo(() => {
-    // TODO: show a custom error message for each case
-    return questions.every((eachQuestion) => {
+    let allQuestionsAreValid = true; // Assume all questions are valid initially
+
+    questions.forEach((eachQuestion, index) => {
       const { type, question, choices, scoring } = eachQuestion;
-      // Check if the question text is empty or contains only whitespace
-      const questionTextFilledOut =
-        question.replace(/<\/?[^>]+(>|$)/g, "").trim().length > 0;
+
+      // Log the question details
+      debugLog(`Checking question ${index + 1}:`, eachQuestion);
+
+      // Check if the question text is filled out (trim whitespace)
+      const questionTextFilledOut = question?.trim().length > 0;
+
+      if (!questionTextFilledOut) {
+        debugLog(`Question ${index + 1} has empty text.`);
+        allQuestionsAreValid = false;
+        return; // Continue to the next question
+      }
+
       if (type === "URL" || type === "TEXT") {
-        //criteria needs to be filled out
+        // Check if criteria are filled out
         const criteriaFilledOut = scoring?.criteria?.every(
-          (criteria) => criteria.description.trim().length > 0,
+          (criteria) => criteria.description.trim().length > 0
         );
+        // Check if criteria exist
         const doesCriteriaExist = scoring?.criteria?.length > 0;
 
-        if (
-          !criteriaFilledOut ||
-          !doesCriteriaExist ||
-          !questionTextFilledOut
-        ) {
-          // disable publish button if criteria is not filled out
-          return false;
+        if (!criteriaFilledOut || !doesCriteriaExist) {
+          debugLog(`Question ${index + 1} has missing criteria.`);
+          allQuestionsAreValid = false;
+          return;
         }
       }
-      // if type is multiple correct, check if there are at least 2 choices
-      if (type === "MULTIPLE_CORRECT") {
-        if (!choices) {
-          // disable publish button if choices is not filled out
-          return false;
-        }
 
-        const choicesFilledOut = choices?.every((choice) => {
-          return choice?.choice?.trim().length > 0;
-        });
+      if (type === "TRUE_FALSE") {
+        // Check if any choices are empty
+        const hasEmptyChoices = choices?.some(
+          (choice) => choice.choice.trim().length === 0
+        );
+        debugLog(`Question ${index + 1} has invalid True/False choices.`);
+
+        if (hasEmptyChoices || hasEmptyChoices === undefined) {
+          debugLog(`Question ${index + 1} has invalid True/False choices.`);
+          allQuestionsAreValid = false;
+          return;
+        }
+      }
+
+      if (type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT") {
+        // Check if there are at least 2 choices and one correct choice
+        const choicesFilledOut = choices?.every(
+          (choice) => choice?.choice?.trim().length > 0
+        );
         const isTwoOrMoreChoices = choices?.length >= 2;
         const isAtLeastOneCorrectChoice = choices?.some(
-          (choice) => choice.isCorrect,
+          (choice) => choice.isCorrect
         );
 
         if (
           !choicesFilledOut ||
           !isTwoOrMoreChoices ||
-          !isAtLeastOneCorrectChoice ||
-          !questionTextFilledOut
+          !isAtLeastOneCorrectChoice
         ) {
-          // disable publish button if choices requirements is not satisfied
-          return false;
+          debugLog(
+            `Question ${index + 1} is missing valid choices or correct answers.`
+          );
+          allQuestionsAreValid = false;
+          return;
         }
       }
-      return questionTextFilledOut;
+      debugLog(`Question ${index + 1} passed all checks.`);
     });
-  }, [questions]);
+    debugLog("All questions are valid:", allQuestionsAreValid);
 
-  // useEffect(() => {
-  // 	setActiveAssignmentId(Number(activeAssignmentId));
-  // }, [activeAssignmentId]);
+    return allQuestionsAreValid;
+  }, [questions]);
 
   async function handlePublishButton() {
     setSubmitting(true);
 
-    // Process all questions to prepare them for the single request
     const processedQuestions = questions.map((question) => {
-      // Destructure and remove values that are not needed in the backend
-      const { alreadyInBackend, index, id, assignmentId, ...dataToSend } =
-        question;
+      const {
+        alreadyInBackend,
+        index,
+        id,
+        assignmentId,
+        answer,
+        ...dataToSend
+      } = question;
 
-      // Handle specific types: TEXT, URL, and MULTIPLE_CORRECT
       if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
-        // Remove id from criteria since it's not needed in the backend
         for (const criteria of dataToSend.scoring.criteria) {
-          delete criteria.id; // You can also use `criteria.id = undefined;` if `delete` is not preferred
+          delete criteria.id;
         }
-      } else if (dataToSend.type === "MULTIPLE_CORRECT") {
+      } else if (
+        dataToSend.type === "MULTIPLE_CORRECT" ||
+        dataToSend.type === "SINGLE_CORRECT"
+      ) {
         dataToSend.totalPoints = dataToSend.choices?.reduce(
-          (acc, curr) => acc + curr.points,
-          0,
-        ); // Sum up all the points
-        dataToSend.scoring = null; // Scoring is not needed for multiple correct
+          (acc, curr) => (curr.points > 0 ? acc + curr.points : acc),
+          0
+        ); // Sum up all positive points
+        dataToSend.scoring = null;
       }
-
+      if (dataToSend.type === "TRUE_FALSE") {
+        dataToSend.totalPoints = dataToSend.choices?.reduce(
+          (acc, curr) => (curr.points > 0 ? acc + curr.points : acc),
+          0
+        ); // Sum up all positive points
+        dataToSend.scoring = null;
+      }
       // Handle unlimited retries
       dataToSend.numRetries =
         dataToSend.numRetries === -1 ? null : dataToSend.numRetries;
 
       return {
         ...dataToSend,
-        alreadyInBackend, // include alreadyInBackend
-        id, // include id if it's already in the backend
-        assignmentId, // include assignmentId
+        alreadyInBackend,
+        id,
+        assignmentId,
       };
     });
 
@@ -196,13 +227,16 @@ function AuthorHeader() {
       // Send a single request with all the processed questions
       const success = await updateQuestions(
         activeAssignmentId,
-        processedQuestions,
+        processedQuestions
       );
 
       if (success) {
         const currentTime = Date.now();
+        questions.forEach((question) => {
+          question.alreadyInBackend = true;
+        });
         router.push(
-          `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
+          `/author/${activeAssignmentId}?submissionTime=${currentTime}`
         );
       } else {
         toast.error("Couldn't publish all questions. Please try again.");

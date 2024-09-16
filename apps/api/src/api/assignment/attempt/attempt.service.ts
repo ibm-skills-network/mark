@@ -6,9 +6,8 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { QuestionResponse, QuestionType } from "@prisma/client";
+import { Question, QuestionType } from "@prisma/client";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
-import { TrueFalseBasedQuestionEvaluateModel } from "../../../api/llm/model/true.false.based.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
   UserRole,
@@ -16,9 +15,10 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
-import { ChoiceBasedQuestionEvaluateModel } from "../../llm/model/choice.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
+import type { LearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
+import { QuestionDto } from "../dto/update.questions.request.dto";
 import { Choice } from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
 import {
@@ -34,10 +34,24 @@ import {
   AssignmentAttemptResponseDto,
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
+import type { AssignmentAttemptQuestions } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
-import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
+import {
+  ChoiceBasedFeedbackDto,
+  CreateQuestionResponseAttemptResponseDto,
+} from "./dto/question-response/create.question.response.attempt.response.dto";
+import type { GetQuestionResponseAttemptResponseDto } from "./dto/question-response/get.question.response.attempt.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
+
+//types
+type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
+  id: number;
+  assignmentAttemptId?: number;
+  learnerResponse?: string;
+  points: number;
+  feedback: object;
+};
 
 @Injectable()
 export class AttemptService {
@@ -46,45 +60,234 @@ export class AttemptService {
     private readonly llmService: LlmService,
     private readonly questionService: QuestionService,
     private readonly assignmentService: AssignmentService,
-    private readonly httpService: HttpService,
+    private readonly httpService: HttpService
   ) {}
 
+  /**
+   * Lists assignment attempts for the given assignment and user session.
+   * @param assignmentId The ID of the assignment.
+   * @param userSession The user session.
+   * @returns A list of assignment attempt response DTOs.
+   */
   async listAssignmentAttempts(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentAttemptResponseDto[]> {
-    //correct ownership permissions already taken care of through AssignmentAttemptAccessControlGuard
-    return userSession.role === UserRole.AUTHOR
+    const { userId, role } = userSession;
+
+    // Correct ownership permissions are handled through AssignmentAttemptAccessControlGuard.
+    return role === UserRole.AUTHOR
       ? this.prisma.assignmentAttempt.findMany({
-          where: { assignmentId: assignmentId },
+          where: { assignmentId },
         })
       : this.prisma.assignmentAttempt.findMany({
-          where: { assignmentId: assignmentId, userId: userSession.userId },
+          where: { assignmentId, userId },
         });
   }
 
+  /**
+   * Creates a new assignment attempt for the given assignment and user session.
+   * @param assignmentId The ID of the assignment.
+   * @param userSession The user session.
+   * @returns A base assignment attempt response DTO.
+   */
   async createAssignmentAttempt(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<BaseAssignmentAttemptResponseDto> {
-    // Check if any of the existing attempts is in progress and has not expired and user is allowed to start a new attempt, otherwise return exception
     const assignment = await this.assignmentService.findOne(
       assignmentId,
-      userSession,
+      userSession
     );
 
-    // Calculate the start date of the time range.
-    let timeRangeStartDate = new Date();
-    if (assignment.attemptsTimeRangeHours) {
-      timeRangeStartDate = new Date(
-        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000,
-      ); // Convert hours to milliseconds
+    await this.validateNewAttempt(assignment, userSession);
+
+    const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
+
+    const result = await this.prisma.assignmentAttempt.create({
+      data: {
+        expiresAt: attemptExpiresAt,
+        submitted: false,
+        assignmentId: assignmentId,
+        grade: undefined,
+        userId: userSession.userId,
+      },
+    });
+
+    return {
+      id: result.id,
+      success: true,
+    };
+  }
+
+  /**
+   * Updates an assignment attempt with the provided responses and calculates the grade.
+   * @param assignmentAttemptId The ID of the assignment attempt.
+   * @param assignmentId The ID of the assignment.
+   * @param updateAssignmentAttemptDto The update request DTO.
+   * @param authCookie The authentication cookie for LTI gateway.
+   * @param gradingCallbackRequired Whether a grading callback is required.
+   * @returns An update assignment attempt response DTO.
+   */
+  async updateAssignmentAttempt(
+    assignmentAttemptId: number,
+    assignmentId: number,
+    updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
+    authCookie: string,
+    gradingCallbackRequired: boolean
+  ): Promise<UpdateAssignmentAttemptResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptId },
+    });
+
+    this.validateAssignmentAttemptExpiry(assignmentAttempt.expiresAt);
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: { questions: true },
+    });
+    const successfulQuestionResponses = await this.submitQuestions(
+      updateAssignmentAttemptDto.responsesForQuestions as QuestionResponse[],
+      assignmentAttemptId
+    );
+
+    const grade = this.calculateGrade(
+      successfulQuestionResponses,
+      assignment as unknown as GetAssignmentAttemptResponseDto
+    );
+
+    if (gradingCallbackRequired) {
+      await this.sendGradeToLtiGateway(grade, authCookie);
     }
+
+    const result = await this.updateAssignmentAttemptInDb(
+      assignmentAttemptId,
+      updateAssignmentAttemptDto,
+      grade
+    );
+
+    return {
+      id: result.id,
+      submitted: result.submitted,
+      success: true,
+      grade: assignment.showAssignmentScore ? result.grade : undefined,
+      showSubmissionFeedback: assignment.showSubmissionFeedback,
+      feedbacksForQuestions: this.constructFeedbacksForQuestions(
+        successfulQuestionResponses,
+        assignment as unknown as LearnerGetAssignmentResponseDto
+      ),
+    };
+  }
+
+  /**
+   * Retrieves an assignment attempt along with its questions and responses.
+   * @param assignmentAttemptId The ID of the assignment attempt.
+   * @returns A get assignment attempt response DTO.
+   */
+  async getAssignmentAttempt(
+    assignmentAttemptId: number
+  ): Promise<GetAssignmentAttemptResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptId },
+      include: { questionResponses: true },
+    });
+
+    if (!assignmentAttempt) {
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
+      );
+    }
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentAttempt.assignmentId },
+      select: {
+        questions: true,
+        questionOrder: true,
+        displayOrder: true,
+      },
+    });
+
+    this.sortAssignmentQuestions(assignment as LearnerGetAssignmentResponseDto);
+
+    const questions = this.constructQuestionsWithResponses(
+      assignment.questions,
+      assignmentAttempt.questionResponses as unknown as QuestionResponse[]
+    );
+
+    delete assignmentAttempt.questionResponses;
+
+    return {
+      ...assignmentAttempt,
+      questions,
+    };
+  }
+
+  /**
+   * Creates a question response for a specific question in an assignment attempt.
+   * @param assignmentAttemptId The ID of the assignment attempt.
+   * @param questionId The ID of the question.
+   * @param createQuestionResponseAttemptRequestDto The create request DTO.
+   * @returns A create question response attempt response DTO.
+   */
+  async createQuestionResponse(
+    assignmentAttemptId: number,
+    questionId: number,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+  ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptId },
+    });
+
+    this.checkSubmissionDeadline(assignmentAttempt.expiresAt);
+
+    const question = await this.questionService.findOne(questionId);
+
+    const assignmentContext = await this.getAssignmentContext(
+      assignmentAttempt.assignmentId,
+      question.id,
+      assignmentAttemptId
+    );
+
+    const { responseDto, learnerResponse } = await this.processQuestionResponse(
+      question,
+      createQuestionResponseAttemptRequestDto,
+      assignmentContext
+    );
+
+    const result = await this.prisma.questionResponse.create({
+      data: {
+        assignmentAttemptId: assignmentAttemptId,
+        questionId: questionId,
+        learnerResponse: learnerResponse,
+        points: responseDto.totalPoints,
+        feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
+      },
+    });
+
+    responseDto.id = result.id;
+    responseDto.questionId = questionId;
+    responseDto.question = question.question;
+
+    return responseDto;
+  }
+
+  // Private helper methods
+
+  /**
+   * Validates whether a new attempt can be created for the given assignment and user session.
+   * @param assignment The assignment object.
+   * @param userSession The user session.
+   */
+  private async validateNewAttempt(
+    assignment: LearnerGetAssignmentResponseDto,
+    userSession: UserSession
+  ): Promise<void> {
+    const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
     const attempts = await this.prisma.assignmentAttempt.findMany({
       where: {
         userId: userSession.userId,
-        assignmentId: assignmentId,
+        assignmentId: assignment.id,
         OR: [
           {
             submitted: false,
@@ -107,16 +310,15 @@ export class AttemptService {
       },
     });
 
-    // Separate the attempts based on ongoing and within the time range
     const ongoingAttempts = attempts.filter(
       (sub) =>
         !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null),
+        (sub.expiresAt >= new Date() || sub.expiresAt === null)
     );
 
     const attemptsInTimeRange = attempts.filter(
       (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
+        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
     );
 
     if (ongoingAttempts.length > 0) {
@@ -128,202 +330,559 @@ export class AttemptService {
       attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
     ) {
       throw new UnprocessableEntityException(
-        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
       );
     }
 
-    //Get exising attempts count to check if new attempt is possible
     if (assignment.numAttempts) {
-      //if null then assume unlimited attempts
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
-        assignmentId,
+        assignment.id
       );
 
       if (attemptCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
         );
       }
     }
-
-    // eslint-disable-next-line unicorn/no-null
-    let attemptExpiresAt: Date | null = null;
-    if (assignment.allotedTimeMinutes) {
-      const currentDate = new Date();
-      attemptExpiresAt = new Date(
-        currentDate.getTime() + assignment.allotedTimeMinutes * 60 * 1000,
-      );
-    }
-
-    const result = await this.prisma.assignmentAttempt.create({
-      data: {
-        expiresAt: attemptExpiresAt,
-        submitted: false,
-        assignmentId: assignmentId,
-        // eslint-disable-next-line unicorn/no-null
-        grade: null,
-        userId: userSession.userId,
-      },
-    });
-
-    return {
-      id: result.id,
-      success: true,
-    };
   }
 
-  async updateAssignmentAttempt(
-    assignmentAttemptId: number,
-    assignmentId: number,
-    updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
-    authCookie: string,
-    gradingCallbackRequired: boolean,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
-    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptId },
-    });
+  /**
+   * Calculates the expiration date for an attempt based on the assignment settings.
+   * @param assignment The assignment object.
+   * @returns The expiration date or null.
+   */
+  private calculateAttemptExpiresAt(
+    assignment: LearnerGetAssignmentResponseDto
+  ): Date | null {
+    if (assignment.allotedTimeMinutes) {
+      return new Date(Date.now() + assignment.allotedTimeMinutes * 60 * 1000);
+    }
+    return undefined;
+  }
 
-    // Have some buffer time so that submissions right at the deadline are accepted
-    const tenSecondsBeforeSubmission = new Date(Date.now() - 10 * 1000);
-    if (
-      assignmentAttempt.expiresAt &&
-      tenSecondsBeforeSubmission > assignmentAttempt.expiresAt
-    ) {
+  /**
+   * Validates whether the assignment attempt has expired.
+   * @param expiresAt The expiration date of the assignment attempt.
+   */
+  private validateAssignmentAttemptExpiry(
+    expiresAt: Date | null | undefined
+  ): void {
+    const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
+    if (expiresAt && tenSecondsBeforeNow > expiresAt) {
       throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );
     }
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      include: { questions: true },
-    });
+  }
 
-    // Submit all the questions in the assignment
-    const questionResponsesPromise =
-      updateAssignmentAttemptDto.responsesForQuestions.map(
-        async (questionResponse) => {
-          const { id: questionId, ...cleanedQuestionResponse } =
-            questionResponse;
-          return await this.createQuestionResponse(
-            assignmentAttemptId,
-            questionId,
-            cleanedQuestionResponse,
-          );
-        },
-      );
+  /**
+   * Submits the questions for the assignment attempt.
+   * @param responsesForQuestions The responses for questions.
+   * @param assignmentAttemptId The ID of the assignment attempt.
+   * @returns A list of successful question response attempt response DTOs.
+   */
+  private async submitQuestions(
+    responsesForQuestions: QuestionResponse[],
+    assignmentAttemptId: number
+  ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
+    const questionResponsesPromise = responsesForQuestions.map(
+      async (questionResponse) => {
+        const { id: questionId, ...cleanedQuestionResponse } = questionResponse;
+        return await this.createQuestionResponse(
+          assignmentAttemptId,
+          questionId,
+          cleanedQuestionResponse
+        );
+      }
+    );
 
     const questionResponses = await Promise.allSettled(
-      questionResponsesPromise,
+      questionResponsesPromise
     );
-    const successfulQuestionResponseSubmissions = questionResponses
+
+    const successfulResponses = questionResponses
       .filter((response) => response.status === "fulfilled")
       .map((response) => response.value);
 
-    const failedQuestionResponseSubmissions = questionResponses
+    const failedResponses = questionResponses
       .filter((response) => response.status === "rejected")
       .map((response) => response.reason as string);
 
-    if (failedQuestionResponseSubmissions.length > 0) {
-      // Handle the error according to your needs
+    if (failedResponses.length > 0) {
       throw new InternalServerErrorException(
-        `Failed to submit questions: ${failedQuestionResponseSubmissions
+        `Failed to submit questions: ${failedResponses
           .map((response) => response)
-          .join(", ")}`,
+          .join(", ")}`
       );
     }
 
-    let grade: number;
+    return successfulResponses;
+  }
 
-    if (updateAssignmentAttemptDto.responsesForQuestions.length === 0) {
-      grade = 0;
-    } else {
-      const totalPointsEarned = successfulQuestionResponseSubmissions.reduce(
-        (accumulator, response) => accumulator + response.totalPoints,
-        0,
-      );
-
-      // Calculate grade and sent back to lms
-      let totalPossiblePoints = 0;
-      for (const question of assignment.questions) {
-        totalPossiblePoints += question.totalPoints;
-      }
-      grade = totalPointsEarned / totalPossiblePoints;
+  /**
+   * Calculates the grade based on the question responses and assignment settings.
+   * @param successfulQuestionResponses The successful question responses.
+   * @param assignment The assignment object.
+   * @returns The calculated grade.
+   */
+  private calculateGrade(
+    successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
+    assignment: GetAssignmentAttemptResponseDto
+  ): number {
+    if (successfulQuestionResponses.length === 0) {
+      return 0;
     }
-    // Send the grade to LTI gateway (optional)
-    if (gradingCallbackRequired) {
-      const ltiGatewayResponse = await this.httpService
-        .put(
-          process.env.GRADING_LTI_GATEWAY_URL,
-          { score: grade },
-          {
-            headers: {
-              Cookie: `authentication=${authCookie}`,
-            },
+
+    const totalPointsEarned = successfulQuestionResponses.reduce(
+      (accumulator, response) => accumulator + response.totalPoints,
+      0
+    );
+
+    const totalPossiblePoints = assignment.questions.reduce(
+      (accumulator: number, question: { totalPoints: number }) =>
+        accumulator + question.totalPoints,
+      0
+    );
+
+    return totalPointsEarned / totalPossiblePoints;
+  }
+
+  /**
+   * Sends the grade to the LTI gateway if required.
+   * @param grade The calculated grade.
+   * @param authCookie The authentication cookie.
+   */
+  private async sendGradeToLtiGateway(
+    grade: number,
+    authCookie: string
+  ): Promise<void> {
+    const ltiGatewayResponse = await this.httpService
+      .put(
+        process.env.GRADING_LTI_GATEWAY_URL,
+        { score: grade },
+        {
+          headers: {
+            Cookie: `authentication=${authCookie}`,
           },
-        )
-        .toPromise();
+        }
+      )
+      .toPromise();
 
-      // Checking if the request was successful
-      if (ltiGatewayResponse.status !== 200) {
-        // Handle the error according to your needs
-        throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
-      }
+    if (ltiGatewayResponse.status !== 200) {
+      throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
     }
+  }
 
+  /**
+   * Updates the assignment attempt in the database with the new grade.
+   * @param assignmentAttemptId The ID of the assignment attempt.
+   * @param updateAssignmentAttemptDto The update request DTO.
+   * @param grade The calculated grade.
+   * @returns The updated assignment attempt.
+   */
+  private async updateAssignmentAttemptInDb(
+    assignmentAttemptId: number,
+    updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
+    grade: number
+  ) {
     const { responsesForQuestions: _, ...cleanedUpdateAssignmentAttemptDto } =
       updateAssignmentAttemptDto;
-    // Update AssignmentAttempt with the calculated grade
-    const result = await this.prisma.assignmentAttempt.update({
+
+    return this.prisma.assignmentAttempt.update({
       data: {
         ...cleanedUpdateAssignmentAttemptDto,
         grade,
       },
       where: { id: assignmentAttemptId },
     });
-
-    return {
-      id: result.id,
-      submitted: result.submitted,
-      success: true,
-      grade: assignment.showAssignmentScore ? result.grade : undefined,
-      showSubmissionFeedback: assignment.showSubmissionFeedback, // boolean to show submission feedback or not
-      feedbacksForQuestions: successfulQuestionResponseSubmissions.map(
-        (feedbackForQuestion) => {
-          const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
-          return {
-            totalPoints: assignment.showQuestionScore ? totalPoints : undefined,
-            feedback: assignment.showSubmissionFeedback ? feedback : undefined,
-            ...otherData,
-          };
-        },
-      ),
-    };
   }
 
-  async getAssignmentAttempt(
-    assignmentAttemptId: number,
-  ): Promise<GetAssignmentAttemptResponseDto> {
-    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptId },
-      include: { questionResponses: true },
+  /**
+   * Constructs feedbacks for questions based on the assignment settings.
+   * @param successfulQuestionResponses The successful question responses.
+   * @param assignment The assignment object.
+   * @returns An array of feedbacks for questions.
+   */
+  private constructFeedbacksForQuestions(
+    successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
+    assignment: LearnerGetAssignmentResponseDto
+  ) {
+    return successfulQuestionResponses.map((feedbackForQuestion) => {
+      const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
+      return {
+        totalPoints: assignment.showQuestionScore ? totalPoints : undefined,
+        feedback: assignment.showSubmissionFeedback ? feedback : undefined,
+        ...otherData,
+      };
     });
+  }
 
-    if (!assignmentAttempt) {
-      throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+  /**
+   * Checks whether the submission deadline has passed.
+   * @param expiresAt The expiration date of the assignment attempt.
+   */
+  private checkSubmissionDeadline(expiresAt: Date | null | undefined): void {
+    const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
+    if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
+      throw new UnprocessableEntityException(
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
+      );
+    }
+  }
+
+  /**
+   * Processes the question response based on the question type.
+   * @param question The question object.
+   * @param createQuestionResponseAttemptRequestDto The create request DTO.
+   * @param assignmentContext The assignment context.
+   * @returns An object containing the response DTO and learner response.
+   */
+  private async processQuestionResponse(
+    question: QuestionDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    }
+  ): Promise<{
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: string;
+  }> {
+    switch (question.type) {
+      case QuestionType.TEXT:
+      case QuestionType.UPLOAD: {
+        return this.handleTextUploadQuestionResponse(
+          question,
+          question.type,
+          createQuestionResponseAttemptRequestDto,
+          assignmentContext
+        );
+      }
+      case QuestionType.URL: {
+        return this.handleUrlQuestionResponse(
+          question,
+          createQuestionResponseAttemptRequestDto,
+          assignmentContext
+        );
+      }
+      case QuestionType.TRUE_FALSE: {
+        return this.handleTrueFalseQuestionResponse(
+          question,
+          createQuestionResponseAttemptRequestDto
+        );
+      }
+      case QuestionType.SINGLE_CORRECT: {
+        return this.handleSingleCorrectQuestionResponse(
+          question,
+          createQuestionResponseAttemptRequestDto
+        );
+      }
+      case QuestionType.MULTIPLE_CORRECT: {
+        return this.handleMultipleCorrectQuestionResponse(
+          question,
+          createQuestionResponseAttemptRequestDto
+        );
+      }
+      default: {
+        throw new Error("Invalid question type provided.");
+      }
+    }
+  }
+
+  /**
+   * Handles text and upload question responses.
+   */
+  private async handleTextUploadQuestionResponse(
+    question: QuestionDto,
+    questionType: QuestionType,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    }
+  ): Promise<{
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: string;
+  }> {
+    const learnerResponse = await AttemptHelper.validateAndGetTextResponse(
+      questionType,
+      createQuestionResponseAttemptRequestDto
+    );
+
+    const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
+      question.question,
+      assignmentContext.questionAnswerContext,
+      assignmentContext.assignmentInstructions,
+      learnerResponse,
+      question.totalPoints,
+      question.scoring?.type ?? "",
+      question.scoring?.criteria ?? {}
+    );
+
+    const model = await this.llmService.gradeTextBasedQuestion(
+      textBasedQuestionEvaluateModel
+    );
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    AttemptHelper.assignFeedbackToResponse(model, responseDto);
+
+    return { responseDto, learnerResponse };
+  }
+
+  /**
+   * Handles URL question responses.
+   */
+  private async handleUrlQuestionResponse(
+    question: QuestionDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    }
+  ): Promise<{
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: string;
+  }> {
+    if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
+      throw new BadRequestException(
+        "Expected a URL-based response (learnerUrlResponse), but did not receive one."
       );
     }
 
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentAttempt.assignmentId },
-      select: {
-        questions: true,
-        questionOrder: true,
-        displayOrder: true,
+    const learnerResponse =
+      createQuestionResponseAttemptRequestDto.learnerUrlResponse;
+
+    const urlFetchResponse = await AttemptHelper.fetchPlainTextFromUrl(
+      learnerResponse
+    );
+
+    const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
+      question.question,
+      assignmentContext.questionAnswerContext,
+      assignmentContext.assignmentInstructions,
+      learnerResponse,
+      urlFetchResponse.isFunctional,
+      urlFetchResponse.body,
+      question.totalPoints,
+      question.scoring?.type ?? "",
+      question.scoring?.criteria ?? {}
+    );
+
+    const model = await this.llmService.gradeUrlBasedQuestion(
+      urlBasedQuestionEvaluateModel
+    );
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    AttemptHelper.assignFeedbackToResponse(model, responseDto);
+
+    return { responseDto, learnerResponse };
+  }
+
+  /**
+   * Handles true/false question responses.
+   */
+  private handleTrueFalseQuestionResponse(
+    question: QuestionDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+  ): {
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: string;
+  } {
+    if (
+      createQuestionResponseAttemptRequestDto.learnerAnswerChoice === null ||
+      createQuestionResponseAttemptRequestDto.learnerAnswerChoice === undefined
+    ) {
+      throw new BadRequestException(
+        "Expected a true/false response (learnerAnswerChoice), but did not receive one."
+      );
+    }
+
+    const correctAnswer = question.choices?.[0]?.choice === "true";
+    const correctPoints = question.choices?.[0]?.points || 0;
+
+    const learnerChoice =
+      createQuestionResponseAttemptRequestDto.learnerAnswerChoice;
+
+    const isCorrect = learnerChoice === correctAnswer;
+
+    const feedback = isCorrect
+      ? "Correct! Your answer is right."
+      : `Incorrect. The correct answer is ${correctAnswer ? "True" : "False"}.`;
+
+    const pointsAwarded = isCorrect ? correctPoints : 0;
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    responseDto.totalPoints = pointsAwarded;
+    responseDto.feedback = [{ feedback, choice: learnerChoice }];
+
+    const learnerResponse = JSON.stringify(learnerChoice);
+    return { responseDto, learnerResponse };
+  }
+
+  /**
+   * Handles single correct question responses.
+   */
+  private handleSingleCorrectQuestionResponse(
+    question: QuestionDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+  ): {
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: string;
+  } {
+    const learnerChoice =
+      createQuestionResponseAttemptRequestDto.learnerChoices[0];
+    const correctChoice = question.choices?.find((choice) => choice.isCorrect);
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+
+    if (correctChoice && correctChoice.choice === learnerChoice) {
+      responseDto.totalPoints = correctChoice.points;
+      responseDto.feedback = [
+        {
+          choice: learnerChoice,
+          feedback: "Correct! You selected the right answer.",
+        },
+      ] as ChoiceBasedFeedbackDto[];
+    } else {
+      responseDto.totalPoints = 0;
+      responseDto.feedback = [
+        {
+          choice: learnerChoice,
+          feedback: `Incorrect. The correct answer is: ${correctChoice?.choice}`,
+        },
+      ] as ChoiceBasedFeedbackDto[];
+    }
+
+    const learnerResponse = JSON.stringify([learnerChoice]);
+    return { responseDto, learnerResponse };
+  }
+
+  /**
+   * Handles multiple correct question responses.
+   */
+  private handleMultipleCorrectQuestionResponse(
+    question: QuestionDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+  ): {
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: string;
+  } {
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+
+    if (
+      !createQuestionResponseAttemptRequestDto.learnerChoices ||
+      createQuestionResponseAttemptRequestDto.learnerChoices.length === 0
+    ) {
+      responseDto.totalPoints = 0;
+      responseDto.feedback = [
+        {
+          choice: [],
+          feedback: "You didn't select any option.",
+        },
+      ] as unknown as ChoiceBasedFeedbackDto[];
+      const learnerResponse = JSON.stringify([]);
+      return { responseDto, learnerResponse };
+    }
+
+    const learnerChoices =
+      createQuestionResponseAttemptRequestDto.learnerChoices;
+    const correctChoices =
+      question.choices?.filter((choice) => choice.isCorrect) || [];
+    const correctChoiceTexts = correctChoices.map((choice) => choice.choice);
+    let totalPoints = 0;
+    const maxPoints = correctChoices.reduce(
+      (accumulator, choice) => accumulator + choice.points,
+      0
+    );
+    const feedbackDetails: string[] = [];
+
+    for (const learnerChoice of learnerChoices) {
+      const selectedChoice = question.choices.find(
+        (choice) => choice.choice === learnerChoice
+      );
+
+      if (selectedChoice) {
+        totalPoints += selectedChoice.points;
+        if (selectedChoice.isCorrect) {
+          feedbackDetails.push(
+            `Correct selection: ${learnerChoice} (+${selectedChoice.points} points)`
+          );
+        } else {
+          feedbackDetails.push(
+            `Incorrect selection: ${learnerChoice} (${selectedChoice.points} points)`
+          );
+        }
+      } else {
+        feedbackDetails.push(`Invalid selection: ${learnerChoice} (0 points)`);
+      }
+    }
+
+    const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
+    const feedbackMessage = `
+      ${feedbackDetails.join(". ")}.
+      ${
+        totalPoints < maxPoints ||
+        !learnerChoices.every((choice) => correctChoiceTexts.includes(choice))
+          ? `The correct option(s) were: ${correctChoiceTexts.join(", ")}.`
+          : "You selected all correct options!"
+      }
+    `;
+    const feedback: ChoiceBasedFeedbackDto[] = [
+      {
+        choice: learnerChoices.join(", "),
+        feedback: feedbackMessage.trim(),
+      },
+    ];
+    responseDto.totalPoints = finalPoints;
+    responseDto.feedback = feedback;
+
+    const learnerResponse = JSON.stringify(learnerChoices);
+    return { responseDto, learnerResponse };
+  }
+
+  /**
+   * Calculates the time range start date based on the assignment settings.
+   * @param assignment The assignment object.
+   * @returns The time range start date.
+   */
+  private calculateTimeRangeStartDate(
+    assignment: LearnerGetAssignmentResponseDto
+  ): Date {
+    if (assignment.attemptsTimeRangeHours) {
+      return new Date(
+        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000
+      );
+    }
+    return new Date();
+  }
+
+  /**
+   * Counts the number of attempts made by a user for a specific assignment.
+   * @param userId The user ID.
+   * @param assignmentId The assignment ID.
+   * @returns The number of attempts.
+   */
+  private async countUserAttempts(
+    userId: string,
+    assignmentId: number
+  ): Promise<number> {
+    return this.prisma.assignmentAttempt.count({
+      where: {
+        userId: userId,
+        assignmentId: assignmentId,
       },
     });
+  }
 
+  /**
+   * Sorts the assignment questions based on the display order.
+   * @param assignment The assignment object.
+   */
+  private sortAssignmentQuestions(
+    assignment: LearnerGetAssignmentResponseDto
+  ): void {
     if (assignment.questions) {
       if (assignment.displayOrder === "RANDOM") {
         assignment.questions.sort(() => Math.random() - 0.5);
@@ -331,15 +890,33 @@ export class AttemptService {
         assignment.questions.sort(
           (a, b) =>
             assignment.questionOrder.indexOf(a.id) -
-            assignment.questionOrder.indexOf(b.id),
+            assignment.questionOrder.indexOf(b.id)
         );
       }
     }
+  }
 
-    const questions = assignment.questions.map((question) => {
-      const correspondingResponses = assignmentAttempt.questionResponses.filter(
-        (response) => response.questionId === question.id,
-      );
+  /**
+   * Constructs questions with their corresponding responses.
+   * @param questions The list of questions.
+   * @param questionResponses The list of question responses.
+   * @returns A list of questions with responses.
+   */
+  private constructQuestionsWithResponses(
+    questions: Question[],
+    questionResponses: QuestionResponse[]
+  ): AssignmentAttemptQuestions[] {
+    return questions.map((question) => {
+      const correspondingResponses = questionResponses
+        .filter((response) => response.questionId === question.id)
+        .map((response) => ({
+          id: response.id,
+          assignmentAttemptId: response.assignmentAttemptId,
+          questionId: response.questionId,
+          learnerResponse: response.learnerResponse,
+          points: response.points,
+          feedback: response.feedback,
+        }));
 
       const choices = question.choices
         ? (JSON.parse(JSON.stringify(question.choices)) as Choice[])
@@ -353,212 +930,24 @@ export class AttemptService {
         type: question.type,
         question: question.question,
         choices: choices,
-        questionResponses:
-          correspondingResponses.length > 0 ? correspondingResponses : [],
+        assignmentId: question.assignmentId,
+        alreadyInBackend: true,
+        questionResponses: correspondingResponses,
       };
     });
-    delete assignmentAttempt.questionResponses;
-
-    return {
-      ...assignmentAttempt,
-      questions: questions,
-    };
   }
 
-  async createQuestionResponse(
-    assignmentAttemptId: number,
-    questionId: number,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
-  ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptId },
-    });
-
-    // Have some buffer time so that submissions right at the deadline are accepted
-    const thirtySecondsBeforeSubmission = new Date(Date.now() - 30 * 1000);
-    if (
-      assignmentAttempt.expiresAt &&
-      thirtySecondsBeforeSubmission > assignmentAttempt.expiresAt
-    ) {
-      throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
-      );
-    }
-
-    const question = await this.questionService.findOne(questionId);
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentAttempt.assignmentId },
-    });
-
-    const responseDto = new CreateQuestionResponseAttemptResponseDto();
-    let learnerResponse: string;
-
-    const assignmentContext = await this.getAssignmentContext(
-      assignmentAttempt.assignmentId,
-      question.id,
-      assignmentAttemptId,
-    );
-
-    switch (question.type) {
-      case QuestionType.TEXT:
-      case QuestionType.UPLOAD: {
-        learnerResponse = await AttemptHelper.validateAndGetTextResponse(
-          question.type,
-          createQuestionResponseAttemptRequestDto,
-        );
-        const textBasedQuestionEvaluateModel =
-          new TextBasedQuestionEvaluateModel(
-            question.question,
-            assignmentContext.questionAnswerContext,
-            assignmentContext.assignmentInstructions,
-            learnerResponse,
-            question.totalPoints,
-            question.scoring?.type ?? "",
-            question.scoring?.criteria ?? {},
-          );
-        const model = await this.llmService.gradeTextBasedQuestion(
-          textBasedQuestionEvaluateModel,
-        );
-        AttemptHelper.assignFeedbackToResponse(model, responseDto);
-        break;
-      }
-      case QuestionType.URL: {
-        if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
-          throw new BadRequestException(
-            "Expected a url-based response (learnerUrlResponse), but did not receive one.",
-          );
-        }
-        const urlFetchResponse = await AttemptHelper.fetchPlainTextFromUrl(
-          createQuestionResponseAttemptRequestDto.learnerUrlResponse,
-        );
-        const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
-          question.question,
-          assignmentContext.questionAnswerContext,
-          assignmentContext.assignmentInstructions,
-          createQuestionResponseAttemptRequestDto.learnerUrlResponse,
-          urlFetchResponse.isFunctional,
-          urlFetchResponse.body,
-          question.totalPoints,
-          question.scoring?.type ?? "",
-          question.scoring?.criteria ?? {},
-        );
-        const model = await this.llmService.gradeUrlBasedQuestion(
-          urlBasedQuestionEvaluateModel,
-        );
-        AttemptHelper.assignFeedbackToResponse(model, responseDto);
-        learnerResponse =
-          createQuestionResponseAttemptRequestDto.learnerUrlResponse;
-        break;
-      }
-      case QuestionType.TRUE_FALSE: {
-        if (
-          createQuestionResponseAttemptRequestDto.learnerAnswerChoice ===
-            null ||
-          createQuestionResponseAttemptRequestDto.learnerAnswerChoice ===
-            undefined
-        ) {
-          throw new BadRequestException(
-            "Expected a true-false-based response (learnerAnswerChoice), but did not receive one.",
-          );
-        }
-        const trueFalseBasedQuestionEvaluateModel =
-          new TrueFalseBasedQuestionEvaluateModel(
-            question.question,
-            assignmentContext.questionAnswerContext,
-            assignmentContext.assignmentInstructions,
-            question.answer,
-            createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
-            question.totalPoints,
-          );
-        const model = await this.llmService.gradeTrueFalseBasedQuestion(
-          trueFalseBasedQuestionEvaluateModel,
-        );
-        AttemptHelper.assignFeedbackToResponse(model, responseDto);
-        learnerResponse = JSON.stringify(
-          createQuestionResponseAttemptRequestDto.learnerAnswerChoice,
-        );
-        break;
-      }
-      case QuestionType.SINGLE_CORRECT:
-      case QuestionType.MULTIPLE_CORRECT: {
-        if (!createQuestionResponseAttemptRequestDto.learnerChoices) {
-          throw new BadRequestException(
-            "Expected a choice-based response (learnerChoices), but did not receive one.",
-          );
-        }
-        const choiceBasedQuestionEvaluateModel =
-          new ChoiceBasedQuestionEvaluateModel(
-            question.question,
-            assignmentContext.questionAnswerContext,
-            assignmentContext.assignmentInstructions,
-            question.choices ?? [],
-            createQuestionResponseAttemptRequestDto.learnerChoices,
-            question.totalPoints,
-            question.scoring?.type,
-            question.scoring?.criteria ?? undefined,
-          );
-        const model = await this.llmService.gradeChoiceBasedQuestion(
-          choiceBasedQuestionEvaluateModel,
-        );
-        AttemptHelper.assignFeedbackToResponse(model, responseDto);
-        learnerResponse = JSON.stringify(
-          createQuestionResponseAttemptRequestDto.learnerChoices,
-        );
-        break;
-      }
-      default: {
-        throw new Error("Invalid question type provided.");
-      }
-    }
-
-    // create a question response record in db
-    const result = await this.prisma.questionResponse.create({
-      data: {
-        assignmentAttemptId: assignmentAttemptId,
-        questionId: questionId,
-        learnerResponse: learnerResponse,
-        points: responseDto.totalPoints,
-        feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
-      },
-    });
-
-    responseDto.id = result.id;
-    responseDto.questionId = questionId;
-    responseDto.question = question.question;
-
-    return responseDto;
-  }
-
-  // private methods
-
-  async countUserAttempts(
-    userId: string,
-    assignmentId: number,
-  ): Promise<number> {
-    return this.prisma.assignmentAttempt.count({
-      where: {
-        userId: userId,
-        assignmentId: assignmentId,
-      },
-    });
-  }
-
-  async countUserQuestionResponses(
-    questionId: number,
-    assignmentAttemptId: number,
-  ): Promise<number> {
-    return this.prisma.questionResponse.count({
-      where: {
-        questionId: questionId,
-        assignmentAttemptId: assignmentAttemptId,
-      },
-    });
-  }
-
-  async getAssignmentContext(
+  /**
+   * Retrieves the assignment context required for grading.
+   * @param assignmentId The assignment ID.
+   * @param questionId The question ID.
+   * @param assignmentAttemptId The assignment attempt ID.
+   * @returns An object containing assignment instructions and question answer context.
+   */
+  private async getAssignmentContext(
     assignmentId: number,
     questionId: number,
-    assignmentAttemptId: number,
+    assignmentAttemptId: number
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
@@ -568,7 +957,6 @@ export class AttemptService {
       select: { instructions: true },
     });
 
-    // 1. Fetch the gradingContextQuestionIds for the given question.
     const question = await this.prisma.question.findUnique({
       where: { id: questionId },
       select: { gradingContextQuestionIds: true },
@@ -578,7 +966,6 @@ export class AttemptService {
       throw new Error("Question not found.");
     }
 
-    // 2. Using the fetched gradingContextQuestionIds, retrieve all those questions.
     const contextQuestions = await this.prisma.question.findMany({
       where: {
         id: {
@@ -588,7 +975,6 @@ export class AttemptService {
       select: { id: true, question: true, type: true },
     });
 
-    // 3. Fetch all responses for the context questions at once.
     const allResponses = await this.prisma.questionResponse.findMany({
       where: {
         assignmentAttemptId: assignmentAttemptId,
@@ -597,29 +983,29 @@ export class AttemptService {
         },
       },
       orderBy: {
-        id: "desc", // This ensures that the latest responses come first.
+        id: "desc",
       },
     });
 
-    // Group responses by questionId to quickly look up the latest response for each question.
-    const groupedResponses: { [key: number]: QuestionResponse } = {};
+    const groupedResponses: {
+      [key: number]: GetQuestionResponseAttemptResponseDto;
+    } = {};
 
     for (const response of allResponses) {
       if (!groupedResponses[response.questionId]) {
-        groupedResponses[response.questionId] = response; // store the latest response (since we ordered them in descending order)
+        groupedResponses[response.questionId] = response;
       }
     }
 
-    // 4. Construct the QuestionAnswerContext model array with the added functionality.
     const questionsAnswersContext: QuestionAnswerContext[] = [];
     for (const contextQuestion of contextQuestions) {
       let learnerResponse =
         groupedResponses[contextQuestion.id]?.learnerResponse || "";
 
-      // Check if the question type is URL and then fetch plain text from the URL.
       if (contextQuestion.type === "URL" && learnerResponse) {
-        const urlContent =
-          await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+        const urlContent = await AttemptHelper.fetchPlainTextFromUrl(
+          learnerResponse
+        );
         learnerResponse = JSON.stringify({
           url: learnerResponse,
           ...urlContent,
@@ -632,7 +1018,6 @@ export class AttemptService {
       });
     }
 
-    // 5. Return the assignment instructions and the QuestionAnswerContext array.
     return {
       assignmentInstructions: assignment?.instructions || "",
       questionAnswerContext: questionsAnswersContext,
