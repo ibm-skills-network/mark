@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@types/node": "20.5.0",
-    "@types/react": "18.3.6",
+    "@types/react": "18.3.7",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "10.4.20",
     "eslint": "^8.44.0",
