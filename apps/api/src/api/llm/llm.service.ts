@@ -35,7 +35,7 @@ export class LlmService {
   private llm: BaseLLM;
   private tiktokenEncoding: Tiktoken;
 
-  static readonly llmModelName: string = "gpt-4-1106-preview";
+  static readonly llmModelName: string = "gpt-4o-2024-08-06";
 
   constructor(@Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger) {
     this.logger = parentLogger.child({ context: LlmService.name });
