@@ -31,7 +31,7 @@
     "setup:no-git": "cd \"./apps/api\" && op run --env-file=./dev.env -- npx prisma migrate dev && npx prisma generate; cd ../../",
     "test": "turbo run test",
     "test:staged": "turbo run test:staged --",
-    "start": "set -e && yarn db && yarn setup && yarn dev"
+    "start": "set -e && yarn db && yarn seed && yarn setup && yarn dev"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

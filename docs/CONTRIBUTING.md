@@ -82,26 +82,6 @@ This project uses [NestJS](https://docs.nestjs.com/) on the backend ([api](../ap
 
 _hint: When adding new components you should utilize the nest cli generator by running `npx nest g ...`_
 
-#### Local Database
-
-Start (or restart) Postgres database locally:
-
-```bash
-yarn db
-```
-
-Run one-time setup operations like Prisma migrations to create the database schema:
-
-```bash
-yarn setup
-```
-
-Seed the database with test data (optional, it will create an assignment with 5 questions):
-
-```bash
-yarn seed
-```
-
 #### Dependencies
 
 Install project dependencies:
@@ -110,28 +90,89 @@ Install project dependencies:
 yarn
 ```
 
-#### Build and Test
+#### Local Database
 
-- **Setup**: Run one-time setup operations like Prisma migrations:
-  ```bash
-  yarn setup
-  ```
-- **Build**: Compile the application:
-  ```bash
-  yarn build
-  ```
-- **Run Tests**: Execute tests:
-  ```bash
-  yarn test
-  ```
-- **Run the Application**:
-  ```bash
-  yarn dev
-  ```
+1. **Running Mark**
+
+- Start (or restart) Postgres database locally:
+
+```bash
+yarn db
+```
+- Seed the database with test data (optional, it will create an assignment with 5 questions):
+
+```bash
+yarn seed
+```
+
+- Run one-time setup operations like Prisma migrations to create the database schema:
+
+```bash
+yarn setup
+```
+- Run the Application:
+
+```bash
+yarn dev
+
+```
+OR
+- You can run only one command:
+
+```bash
+yarn start
+```
+
+2. **Create Assignment with Insomnia App**:
+
+   - Open the Insomnia app.
+   - Find the "Create Assignment" request on the left side. if you dont have it create one by pressing the + symbol on top left then make a post request to url `http://localhost:8000/api/v1/admin/assignments` with a dummy json body
+
+   ```json
+   {
+     "name": "Assignment 1",
+     "groupId": "test-group-id",
+     "type": "AI_GRADED"
+   }
+   ```
+
+   - Press "Send" on the top right to create an assignment.
+
+   *It should return assignment id which you would use in the URL to route to the assignment*
+
+3. **Access the Website**:
+   Open a browser and navigate to `http://localhost:3010/author/${assignmentid}` to access the website.
+
+### Extra Steps
+
+4. **Switching to Learner View**:
+
+   - Open the file `mock.jwt.cookie.auth.guard.ts`.
+   - Change the line:
+     ```typescript
+     role: UserRole.AUTHOR,
+     ```
+     to
+     ```typescript
+     role: UserRole.LEARNER,
+     ```
+
+5. **Change URL for Learner View**:
+
+   - In the URL, replace "author" with "learner".
+   - For example, change `http://localhost:3010/author/${assignmentid}` to `http://localhost:3010/learner/${assignmentid}`.
+
+6. **Accessing Different Assignments**:
+   - To access a different assignment, change the number after "author" or "learner" in the URL.
+   - For example, to access the second assignment, change the URL to `http://localhost:3010/author/2`.
+   - Remember to create a new assignment if it doesn't exist using the Insomnia app.
+
+P.S. If you need to use mark's production data in the local environment, ask full timer to give you a .sql backup data of mark's db and add it to the root directory then run the app either by using `yarn start` if you want to restart, or run `yarn seed`. One issue is that it wouldn't be `seeded` but it will be `restored`, which would cause issues with migration if you made any, make sure to run `yarn setup` after the `yarn seed` to mitigate it.
+
 
 ### Useful Resources
 
-- **API Documentation**: Accessible at [localhost:3010/api](http://localhost:3010/api) while the application is running.
+- **API Documentation**: Accessible at [http://localhost:4222/api](http://localhost:4222/api) while the application is running.
 - **Postman Collection**: Import the [Postman Collection](https://psycho-baller.postman.co/workspace/Mark~2fc561a8-6a26-4528-9a86-a8fbc86424c0/collection/23796705-d29338fc-95d8-407f-bfbd-d8395c3e72bd?action=share&creator=23796705) to test the API.
 
 ## Local Development: Mark Only
