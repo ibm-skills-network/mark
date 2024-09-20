@@ -576,7 +576,7 @@ const Question: FC<QuestionProps> = ({
                   maxWords: maxWordCount,
                   choices: question.choices,
                   answer: question.answer,
-                  
+
                   maxCharacters: maxCharacters,
                   index: questionIndex,
                   scoring: {

@@ -42,7 +42,7 @@ function AuthorHeader() {
     state.setAssignmentConfigStore,
   ]);
   const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
-    (state) => [state.setAssignmentFeedbackConfigStore]
+    (state) => [state.setAssignmentFeedbackConfigStore],
   );
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -57,7 +57,7 @@ function AuthorHeader() {
         // Author store
         const mergedAuthorData = mergeData(
           useAuthorStore.getState(),
-          assignment
+          assignment,
         );
         const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
         setAuthorStore({
@@ -68,7 +68,7 @@ function AuthorHeader() {
         // Assignment Config store
         const mergedAssignmentConfigData = mergeData(
           useAssignmentConfig.getState(),
-          assignment
+          assignment,
         );
         const {
           updatedAt: authorStoreUpdatedAt,
@@ -82,7 +82,7 @@ function AuthorHeader() {
         // Assignment Feedback Config store
         const mergedAssignmentFeedbackData = mergeData(
           useAssignmentFeedbackConfig.getState(),
-          assignment
+          assignment,
         );
         const {
           updatedAt: assignmentFeedbackUpdatedAt,
@@ -122,7 +122,7 @@ function AuthorHeader() {
       if (type === "URL" || type === "TEXT") {
         // Check if criteria are filled out
         const criteriaFilledOut = scoring?.criteria?.every(
-          (criteria) => criteria.description.trim().length > 0
+          (criteria) => criteria.description.trim().length > 0,
         );
         // Check if criteria exist
         const doesCriteriaExist = scoring?.criteria?.length > 0;
@@ -137,7 +137,7 @@ function AuthorHeader() {
       if (type === "TRUE_FALSE") {
         // Check if any choices are empty
         const hasEmptyChoices = choices?.some(
-          (choice) => choice.choice.trim().length === 0
+          (choice) => choice.choice.trim().length === 0,
         );
         debugLog(`Question ${index + 1} has invalid True/False choices.`);
 
@@ -151,11 +151,11 @@ function AuthorHeader() {
       if (type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT") {
         // Check if there are at least 2 choices and one correct choice
         const choicesFilledOut = choices?.every(
-          (choice) => choice?.choice?.trim().length > 0
+          (choice) => choice?.choice?.trim().length > 0,
         );
         const isTwoOrMoreChoices = choices?.length >= 2;
         const isAtLeastOneCorrectChoice = choices?.some(
-          (choice) => choice.isCorrect
+          (choice) => choice.isCorrect,
         );
 
         if (
@@ -164,7 +164,7 @@ function AuthorHeader() {
           !isAtLeastOneCorrectChoice
         ) {
           debugLog(
-            `Question ${index + 1} is missing valid choices or correct answers.`
+            `Question ${index + 1} is missing valid choices or correct answers.`,
           );
           allQuestionsAreValid = false;
           return;
@@ -200,14 +200,14 @@ function AuthorHeader() {
       ) {
         dataToSend.totalPoints = dataToSend.choices?.reduce(
           (acc, curr) => (curr.points > 0 ? acc + curr.points : acc),
-          0
+          0,
         ); // Sum up all positive points
         dataToSend.scoring = null;
       }
       if (dataToSend.type === "TRUE_FALSE") {
         dataToSend.totalPoints = dataToSend.choices?.reduce(
           (acc, curr) => (curr.points > 0 ? acc + curr.points : acc),
-          0
+          0,
         ); // Sum up all positive points
         dataToSend.scoring = null;
       }
@@ -227,7 +227,7 @@ function AuthorHeader() {
       // Send a single request with all the processed questions
       const success = await updateQuestions(
         activeAssignmentId,
-        processedQuestions
+        processedQuestions,
       );
 
       if (success) {
@@ -236,7 +236,7 @@ function AuthorHeader() {
           question.alreadyInBackend = true;
         });
         router.push(
-          `/author/${activeAssignmentId}?submissionTime=${currentTime}`
+          `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
         );
       } else {
         toast.error("Couldn't publish all questions. Please try again.");

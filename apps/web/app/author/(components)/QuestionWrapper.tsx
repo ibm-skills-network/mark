@@ -60,17 +60,17 @@ function QuestionWrapper(props: TextBoxProps) {
 
   // Zustand store hooks to manage state
   const toggleTitle = useQuestionStore(
-    (state) => state.questionStates[questionId]?.toggleTitle
+    (state) => state.questionStates[questionId]?.toggleTitle,
   );
   const addTrueFalseChoice = useAuthorStore(
-    (state) => state.addTrueFalseChoice
+    (state) => state.addTrueFalseChoice,
   );
   const updatePointsTrueFalse = useAuthorStore(
-    (state) => state.updatePointsTrueFalse
+    (state) => state.updatePointsTrueFalse,
   );
   const getIsItTrueOrFalse = useAuthorStore((state) => state.isItTrueOrFalse);
   const getTrueFalsePoints = useAuthorStore(
-    (state) => state.getTrueFalsePoints
+    (state) => state.getTrueFalsePoints,
   );
 
   // State for the local question
@@ -87,17 +87,17 @@ function QuestionWrapper(props: TextBoxProps) {
   };
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
   const showCriteriaHeader = useQuestionStore(
-    (state) => state.questionStates.showCriteriaHeader ?? true
+    (state) => state.questionStates.showCriteriaHeader ?? true,
   );
   const setShowCriteriaHeader = useQuestionStore(
-    (state) => state.setShowCriteriaHeader
+    (state) => state.setShowCriteriaHeader,
   );
 
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
   const [questionTitle2, setQuestionTitle2] = useState(questionTitle);
   const titleRef = useRef<HTMLDivElement>(null);
   const criteriaMode = useQuestionStore(
-    (state) => state.questionStates[questionId]?.criteriaMode
+    (state) => state.questionStates[questionId]?.criteriaMode,
   );
   const [loading, setLoading] = useState(false);
   const setCriteriaMode = useQuestionStore((state) => state.setCriteriaMode);

@@ -25,7 +25,7 @@ function QuestionPage(props: Props) {
   const questionsStore = useLearnerStore((state) => state.questions);
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.setAssignmentDetails]
+    (state) => [state.assignmentDetails, state.setAssignmentDetails],
   );
   const [pageState, setPageState] = useState<
     "loading" | "success" | "no-questions"

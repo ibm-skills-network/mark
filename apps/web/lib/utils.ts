@@ -34,7 +34,7 @@ export interface DataWithUpdatedAt {
 
 export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
-  backendData: Partial<T>
+  backendData: Partial<T>,
 ): T | Partial<T> {
   const localDataExists = localData?.updatedAt;
   const localDataIsNewer =
@@ -47,7 +47,7 @@ export function mergeData<T extends DataWithUpdatedAt>(
 
 const debugMode = process.env.DEBUG_MODE === "true";
 
-type DebugArgs = string | number | boolean | object; 
+type DebugArgs = string | number | boolean | object;
 
 export const debugLog = (...args: DebugArgs[]) => {
   if (debugMode) {
@@ -61,7 +61,7 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
       q.learnerTextResponse ||
       q.learnerUrlResponse ||
       q.learnerChoices?.length > 0 ||
-      q.learnerAnswerChoice !== undefined
+      q.learnerAnswerChoice !== undefined,
   );
 // export function debounce<T extends (...args: unknown[]) => void>(
 //   func: T,

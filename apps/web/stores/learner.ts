@@ -66,14 +66,14 @@ export const useLearnerStore = createWithEqualityFn<
                   ...q,
                   ...question,
                 }
-              : q
+              : q,
           ),
         })),
       setQuestions: (questions) =>
         set((state) => {
           const updatedQuestions = questions.map((q) => {
             const prevDataForQuestion = state.questions.find(
-              (q2) => q2.id === q.id
+              (q2) => q2.id === q.id,
             );
             return prevDataForQuestion ? { ...prevDataForQuestion, ...q } : q;
           });
@@ -94,7 +94,7 @@ export const useLearnerStore = createWithEqualityFn<
             q.id ===
             (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerUrlResponse }
-              : q
+              : q,
           ),
         })),
       setChoices: (learnerChoices, questionId) =>
@@ -103,7 +103,7 @@ export const useLearnerStore = createWithEqualityFn<
             q.id ===
             (questionId || state.questions[state.activeQuestionNumber - 1].id)
               ? { ...q, learnerChoices }
-              : q
+              : q,
           ),
         })),
       addChoice: (learnerChoice, questionId) =>
@@ -115,7 +115,7 @@ export const useLearnerStore = createWithEqualityFn<
                   ...q,
                   learnerChoices: [...(q.learnerChoices ?? []), learnerChoice],
                 }
-              : q
+              : q,
           ),
         })),
       removeChoice: (learnerChoice, questionId) =>
@@ -126,10 +126,10 @@ export const useLearnerStore = createWithEqualityFn<
               ? {
                   ...q,
                   learnerChoices: q.learnerChoices?.filter(
-                    (c) => c !== learnerChoice
+                    (c) => c !== learnerChoice,
                   ),
                 }
-              : q
+              : q,
           ),
         })),
       setAnswerChoice: (learnerAnswerChoice, questionId) => {
@@ -157,9 +157,9 @@ export const useLearnerStore = createWithEqualityFn<
     {
       name: "learner",
       enabled: process.env.NODE_ENV === "development",
-    }
+    },
   ),
-  shallow
+  shallow,
 );
 
 /**
@@ -182,7 +182,7 @@ export const useAssignmentDetails = createWithEqualityFn<
       {
         name: "learner",
         enabled: process.env.NODE_ENV === "development",
-      }
+      },
     ),
     {
       name: "assignmentDetails",
@@ -190,7 +190,7 @@ export const useAssignmentDetails = createWithEqualityFn<
         assignmentDetails: state.assignmentDetails,
       }),
       // storage: createJSONStorage(() => localStorage),
-    }
+    },
   ),
-  shallow
+  shallow,
 );

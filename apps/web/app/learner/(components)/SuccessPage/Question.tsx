@@ -27,7 +27,7 @@ const Question: FC<Props> = (props) => {
     learnerAnswerChoice,
   } = question;
   const showSubmissionFeedback = useLearnerStore(
-    (state) => state.showSubmissionFeedback
+    (state) => state.showSubmissionFeedback,
   );
   const highestScoreResponse = useMemo(() => {
     // Differentiate between Question feedback as assignments that provide feedback and assignments that don't
@@ -122,29 +122,28 @@ const Question: FC<Props> = (props) => {
               </div>
             )}
 
-            {(type === "MULTIPLE_CORRECT" ||
-              type === "SINGLE_CORRECT") && (
-                <div className="flex flex-col items-start justify-center gap-y-2">
-                  {question.choices.map((choice, index) => (
-                    <div
-                      key={index}
-                      className={cn(
-                        "flex items-center justify-start gap-x-2",
-                        learnerChoices?.includes(choice.choice)
-                          ? "text-grey-700"
-                          : "text-grey-500"
-                      )}
-                    >
-                      <div className="flex items-center justify-center w-5 h-5 border border-gray-300 rounded-full">
-                        {learnerChoices?.includes(choice.choice) ? (
-                          <div className="w-2 h-2 bg-gray-300 rounded-full" />
-                        ) : null}
-                      </div>
-                      <p className="">{choice.choice}</p>
+            {(type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT") && (
+              <div className="flex flex-col items-start justify-center gap-y-2">
+                {question.choices.map((choice, index) => (
+                  <div
+                    key={index}
+                    className={cn(
+                      "flex items-center justify-start gap-x-2",
+                      learnerChoices?.includes(choice.choice)
+                        ? "text-grey-700"
+                        : "text-grey-500",
+                    )}
+                  >
+                    <div className="flex items-center justify-center w-5 h-5 border border-gray-300 rounded-full">
+                      {learnerChoices?.includes(choice.choice) ? (
+                        <div className="w-2 h-2 bg-gray-300 rounded-full" />
+                      ) : null}
                     </div>
-                  ))}
-                </div>
-              )}
+                    <p className="">{choice.choice}</p>
+                  </div>
+                ))}
+              </div>
+            )}
             {type === "TEXT" && (
               <MarkdownViewer className="font-medium leading-tight">
                 {learnerTextResponse}
@@ -159,7 +158,7 @@ const Question: FC<Props> = (props) => {
             <div
               className={`w-full border p-5 rounded-lg shadow-sm ${getFeedbackColors(
                 highestScoreResponse.points,
-                totalPoints
+                totalPoints,
               )}`}
             >
               <p className="text-center font-medium">

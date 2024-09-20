@@ -60,7 +60,7 @@ export class AttemptService {
     private readonly llmService: LlmService,
     private readonly questionService: QuestionService,
     private readonly assignmentService: AssignmentService,
-    private readonly httpService: HttpService
+    private readonly httpService: HttpService,
   ) {}
 
   /**
@@ -71,7 +71,7 @@ export class AttemptService {
    */
   async listAssignmentAttempts(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<AssignmentAttemptResponseDto[]> {
     const { userId, role } = userSession;
 
@@ -93,11 +93,11 @@ export class AttemptService {
    */
   async createAssignmentAttempt(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<BaseAssignmentAttemptResponseDto> {
     const assignment = await this.assignmentService.findOne(
       assignmentId,
-      userSession
+      userSession,
     );
 
     await this.validateNewAttempt(assignment, userSession);
@@ -134,7 +134,7 @@ export class AttemptService {
     assignmentId: number,
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
-    gradingCallbackRequired: boolean
+    gradingCallbackRequired: boolean,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -148,12 +148,12 @@ export class AttemptService {
     });
     const successfulQuestionResponses = await this.submitQuestions(
       updateAssignmentAttemptDto.responsesForQuestions as QuestionResponse[],
-      assignmentAttemptId
+      assignmentAttemptId,
     );
 
     const grade = this.calculateGrade(
       successfulQuestionResponses,
-      assignment as unknown as GetAssignmentAttemptResponseDto
+      assignment as unknown as GetAssignmentAttemptResponseDto,
     );
 
     if (gradingCallbackRequired) {
@@ -163,7 +163,7 @@ export class AttemptService {
     const result = await this.updateAssignmentAttemptInDb(
       assignmentAttemptId,
       updateAssignmentAttemptDto,
-      grade
+      grade,
     );
 
     return {
@@ -174,7 +174,7 @@ export class AttemptService {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       feedbacksForQuestions: this.constructFeedbacksForQuestions(
         successfulQuestionResponses,
-        assignment as unknown as LearnerGetAssignmentResponseDto
+        assignment as unknown as LearnerGetAssignmentResponseDto,
       ),
     };
   }
@@ -185,7 +185,7 @@ export class AttemptService {
    * @returns A get assignment attempt response DTO.
    */
   async getAssignmentAttempt(
-    assignmentAttemptId: number
+    assignmentAttemptId: number,
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -194,7 +194,7 @@ export class AttemptService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
       );
     }
 
@@ -211,7 +211,7 @@ export class AttemptService {
 
     const questions = this.constructQuestionsWithResponses(
       assignment.questions,
-      assignmentAttempt.questionResponses as unknown as QuestionResponse[]
+      assignmentAttempt.questionResponses as unknown as QuestionResponse[],
     );
 
     delete assignmentAttempt.questionResponses;
@@ -232,7 +232,7 @@ export class AttemptService {
   async createQuestionResponse(
     assignmentAttemptId: number,
     questionId: number,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -245,13 +245,13 @@ export class AttemptService {
     const assignmentContext = await this.getAssignmentContext(
       assignmentAttempt.assignmentId,
       question.id,
-      assignmentAttemptId
+      assignmentAttemptId,
     );
 
     const { responseDto, learnerResponse } = await this.processQuestionResponse(
       question,
       createQuestionResponseAttemptRequestDto,
-      assignmentContext
+      assignmentContext,
     );
 
     const result = await this.prisma.questionResponse.create({
@@ -280,7 +280,7 @@ export class AttemptService {
    */
   private async validateNewAttempt(
     assignment: LearnerGetAssignmentResponseDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<void> {
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
@@ -313,12 +313,12 @@ export class AttemptService {
     const ongoingAttempts = attempts.filter(
       (sub) =>
         !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null)
+        (sub.expiresAt >= new Date() || sub.expiresAt === null),
     );
 
     const attemptsInTimeRange = attempts.filter(
       (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
+        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
     );
 
     if (ongoingAttempts.length > 0) {
@@ -330,19 +330,19 @@ export class AttemptService {
       attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
     ) {
       throw new UnprocessableEntityException(
-        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
+        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
       );
     }
 
     if (assignment.numAttempts) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
-        assignment.id
+        assignment.id,
       );
 
       if (attemptCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
+          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
         );
       }
     }
@@ -354,7 +354,7 @@ export class AttemptService {
    * @returns The expiration date or null.
    */
   private calculateAttemptExpiresAt(
-    assignment: LearnerGetAssignmentResponseDto
+    assignment: LearnerGetAssignmentResponseDto,
   ): Date | null {
     if (assignment.allotedTimeMinutes) {
       return new Date(Date.now() + assignment.allotedTimeMinutes * 60 * 1000);
@@ -367,12 +367,12 @@ export class AttemptService {
    * @param expiresAt The expiration date of the assignment attempt.
    */
   private validateAssignmentAttemptExpiry(
-    expiresAt: Date | null | undefined
+    expiresAt: Date | null | undefined,
   ): void {
     const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
     if (expiresAt && tenSecondsBeforeNow > expiresAt) {
       throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
       );
     }
   }
@@ -385,7 +385,7 @@ export class AttemptService {
    */
   private async submitQuestions(
     responsesForQuestions: QuestionResponse[],
-    assignmentAttemptId: number
+    assignmentAttemptId: number,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
@@ -393,13 +393,13 @@ export class AttemptService {
         return await this.createQuestionResponse(
           assignmentAttemptId,
           questionId,
-          cleanedQuestionResponse
+          cleanedQuestionResponse,
         );
-      }
+      },
     );
 
     const questionResponses = await Promise.allSettled(
-      questionResponsesPromise
+      questionResponsesPromise,
     );
 
     const successfulResponses = questionResponses
@@ -414,7 +414,7 @@ export class AttemptService {
       throw new InternalServerErrorException(
         `Failed to submit questions: ${failedResponses
           .map((response) => response)
-          .join(", ")}`
+          .join(", ")}`,
       );
     }
 
@@ -429,7 +429,7 @@ export class AttemptService {
    */
   private calculateGrade(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: GetAssignmentAttemptResponseDto
+    assignment: GetAssignmentAttemptResponseDto,
   ): number {
     if (successfulQuestionResponses.length === 0) {
       return 0;
@@ -437,13 +437,13 @@ export class AttemptService {
 
     const totalPointsEarned = successfulQuestionResponses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
-      0
+      0,
     );
 
     const totalPossiblePoints = assignment.questions.reduce(
       (accumulator: number, question: { totalPoints: number }) =>
         accumulator + question.totalPoints,
-      0
+      0,
     );
 
     return totalPointsEarned / totalPossiblePoints;
@@ -456,7 +456,7 @@ export class AttemptService {
    */
   private async sendGradeToLtiGateway(
     grade: number,
-    authCookie: string
+    authCookie: string,
   ): Promise<void> {
     const ltiGatewayResponse = await this.httpService
       .put(
@@ -466,7 +466,7 @@ export class AttemptService {
           headers: {
             Cookie: `authentication=${authCookie}`,
           },
-        }
+        },
       )
       .toPromise();
 
@@ -485,7 +485,7 @@ export class AttemptService {
   private async updateAssignmentAttemptInDb(
     assignmentAttemptId: number,
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
-    grade: number
+    grade: number,
   ) {
     const { responsesForQuestions: _, ...cleanedUpdateAssignmentAttemptDto } =
       updateAssignmentAttemptDto;
@@ -507,7 +507,7 @@ export class AttemptService {
    */
   private constructFeedbacksForQuestions(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: LearnerGetAssignmentResponseDto
+    assignment: LearnerGetAssignmentResponseDto,
   ) {
     return successfulQuestionResponses.map((feedbackForQuestion) => {
       const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
@@ -527,7 +527,7 @@ export class AttemptService {
     const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
     if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
       throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
       );
     }
   }
@@ -545,7 +545,7 @@ export class AttemptService {
     assignmentContext: {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
-    }
+    },
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -557,32 +557,32 @@ export class AttemptService {
           question,
           question.type,
           createQuestionResponseAttemptRequestDto,
-          assignmentContext
+          assignmentContext,
         );
       }
       case QuestionType.URL: {
         return this.handleUrlQuestionResponse(
           question,
           createQuestionResponseAttemptRequestDto,
-          assignmentContext
+          assignmentContext,
         );
       }
       case QuestionType.TRUE_FALSE: {
         return this.handleTrueFalseQuestionResponse(
           question,
-          createQuestionResponseAttemptRequestDto
+          createQuestionResponseAttemptRequestDto,
         );
       }
       case QuestionType.SINGLE_CORRECT: {
         return this.handleSingleCorrectQuestionResponse(
           question,
-          createQuestionResponseAttemptRequestDto
+          createQuestionResponseAttemptRequestDto,
         );
       }
       case QuestionType.MULTIPLE_CORRECT: {
         return this.handleMultipleCorrectQuestionResponse(
           question,
-          createQuestionResponseAttemptRequestDto
+          createQuestionResponseAttemptRequestDto,
         );
       }
       default: {
@@ -601,14 +601,14 @@ export class AttemptService {
     assignmentContext: {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
-    }
+    },
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   }> {
     const learnerResponse = await AttemptHelper.validateAndGetTextResponse(
       questionType,
-      createQuestionResponseAttemptRequestDto
+      createQuestionResponseAttemptRequestDto,
     );
 
     const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
@@ -618,11 +618,11 @@ export class AttemptService {
       learnerResponse,
       question.totalPoints,
       question.scoring?.type ?? "",
-      question.scoring?.criteria ?? {}
+      question.scoring?.criteria ?? {},
     );
 
     const model = await this.llmService.gradeTextBasedQuestion(
-      textBasedQuestionEvaluateModel
+      textBasedQuestionEvaluateModel,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -640,23 +640,22 @@ export class AttemptService {
     assignmentContext: {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
-    }
+    },
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
       throw new BadRequestException(
-        "Expected a URL-based response (learnerUrlResponse), but did not receive one."
+        "Expected a URL-based response (learnerUrlResponse), but did not receive one.",
       );
     }
 
     const learnerResponse =
       createQuestionResponseAttemptRequestDto.learnerUrlResponse;
 
-    const urlFetchResponse = await AttemptHelper.fetchPlainTextFromUrl(
-      learnerResponse
-    );
+    const urlFetchResponse =
+      await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
 
     const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
       question.question,
@@ -667,11 +666,11 @@ export class AttemptService {
       urlFetchResponse.body,
       question.totalPoints,
       question.scoring?.type ?? "",
-      question.scoring?.criteria ?? {}
+      question.scoring?.criteria ?? {},
     );
 
     const model = await this.llmService.gradeUrlBasedQuestion(
-      urlBasedQuestionEvaluateModel
+      urlBasedQuestionEvaluateModel,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -685,7 +684,7 @@ export class AttemptService {
    */
   private handleTrueFalseQuestionResponse(
     question: QuestionDto,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -695,7 +694,7 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto.learnerAnswerChoice === undefined
     ) {
       throw new BadRequestException(
-        "Expected a true/false response (learnerAnswerChoice), but did not receive one."
+        "Expected a true/false response (learnerAnswerChoice), but did not receive one.",
       );
     }
 
@@ -726,7 +725,7 @@ export class AttemptService {
    */
   private handleSingleCorrectQuestionResponse(
     question: QuestionDto,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -764,7 +763,7 @@ export class AttemptService {
    */
   private handleMultipleCorrectQuestionResponse(
     question: QuestionDto,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -794,24 +793,24 @@ export class AttemptService {
     let totalPoints = 0;
     const maxPoints = correctChoices.reduce(
       (accumulator, choice) => accumulator + choice.points,
-      0
+      0,
     );
     const feedbackDetails: string[] = [];
 
     for (const learnerChoice of learnerChoices) {
       const selectedChoice = question.choices.find(
-        (choice) => choice.choice === learnerChoice
+        (choice) => choice.choice === learnerChoice,
       );
 
       if (selectedChoice) {
         totalPoints += selectedChoice.points;
         if (selectedChoice.isCorrect) {
           feedbackDetails.push(
-            `Correct selection: ${learnerChoice} (+${selectedChoice.points} points)`
+            `Correct selection: ${learnerChoice} (+${selectedChoice.points} points)`,
           );
         } else {
           feedbackDetails.push(
-            `Incorrect selection: ${learnerChoice} (${selectedChoice.points} points)`
+            `Incorrect selection: ${learnerChoice} (${selectedChoice.points} points)`,
           );
         }
       } else {
@@ -848,11 +847,11 @@ export class AttemptService {
    * @returns The time range start date.
    */
   private calculateTimeRangeStartDate(
-    assignment: LearnerGetAssignmentResponseDto
+    assignment: LearnerGetAssignmentResponseDto,
   ): Date {
     if (assignment.attemptsTimeRangeHours) {
       return new Date(
-        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000
+        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000,
       );
     }
     return new Date();
@@ -866,7 +865,7 @@ export class AttemptService {
    */
   private async countUserAttempts(
     userId: string,
-    assignmentId: number
+    assignmentId: number,
   ): Promise<number> {
     return this.prisma.assignmentAttempt.count({
       where: {
@@ -881,7 +880,7 @@ export class AttemptService {
    * @param assignment The assignment object.
    */
   private sortAssignmentQuestions(
-    assignment: LearnerGetAssignmentResponseDto
+    assignment: LearnerGetAssignmentResponseDto,
   ): void {
     if (assignment.questions) {
       if (assignment.displayOrder === "RANDOM") {
@@ -890,7 +889,7 @@ export class AttemptService {
         assignment.questions.sort(
           (a, b) =>
             assignment.questionOrder.indexOf(a.id) -
-            assignment.questionOrder.indexOf(b.id)
+            assignment.questionOrder.indexOf(b.id),
         );
       }
     }
@@ -904,7 +903,7 @@ export class AttemptService {
    */
   private constructQuestionsWithResponses(
     questions: Question[],
-    questionResponses: QuestionResponse[]
+    questionResponses: QuestionResponse[],
   ): AssignmentAttemptQuestions[] {
     return questions.map((question) => {
       const correspondingResponses = questionResponses
@@ -947,7 +946,7 @@ export class AttemptService {
   private async getAssignmentContext(
     assignmentId: number,
     questionId: number,
-    assignmentAttemptId: number
+    assignmentAttemptId: number,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
@@ -1003,9 +1002,8 @@ export class AttemptService {
         groupedResponses[contextQuestion.id]?.learnerResponse || "";
 
       if (contextQuestion.type === "URL" && learnerResponse) {
-        const urlContent = await AttemptHelper.fetchPlainTextFromUrl(
-          learnerResponse
-        );
+        const urlContent =
+          await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
         learnerResponse = JSON.stringify({
           url: learnerResponse,
           ...urlContent,

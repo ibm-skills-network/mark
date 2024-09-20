@@ -284,8 +284,8 @@ const AuthorQuestionsPage: FC<Props> = ({
         id: questionId,
         alreadyInBackend: false,
         assignmentId: assignmentId,
-        choices : question.choices,
-        answer : question.answer,
+        choices: question.choices,
+        answer: question.answer,
         scoring: question.scoring,
         numRetries: question.numRetries,
         index: Number(question.index) + 1, // Set the index for the new question
@@ -626,7 +626,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         className="fixed bottom-0 right-0 p-2 bg-white text-gray-600"
       >
         Log
-      </button> 
+      </button>
     </DndContext>
   );
 };

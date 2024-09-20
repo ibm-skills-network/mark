@@ -63,7 +63,7 @@ function LearnerHeader() {
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
-      responsesForQuestions
+      responsesForQuestions,
     );
     setSubmitting(false);
     if (!res || !res.success) {
@@ -82,7 +82,7 @@ function LearnerHeader() {
           {
             id: feedback.id,
             learnerAnswerChoice: responsesForOnlyEditedQuestions.find(
-              (q) => q.id === feedback.questionId
+              (q) => q.id === feedback.questionId,
             )?.learnerAnswerChoice,
             points: feedback.totalPoints,
             feedback: feedback.feedback,

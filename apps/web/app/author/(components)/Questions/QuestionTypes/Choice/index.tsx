@@ -49,10 +49,9 @@ const ChoiceComponent = memo(function Component(props: Props) {
 
   const handlePointsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(event.target.value, 10) || 0;
-    if(isCorrect && value < 0 || value > 100) {
+    if ((isCorrect && value < 0) || value > 100) {
       return;
-    }
-    else if(!isCorrect && value > 0) {
+    } else if (!isCorrect && value > 0) {
       return;
     }
     setLocalPoints(value);
@@ -63,7 +62,7 @@ const ChoiceComponent = memo(function Component(props: Props) {
     changePoints(index, negativePoints);
     setLocalPoints(negativePoints); // convert number from positive to negative and vice versa
     toggleChoice(index);
-  }
+  };
 
   return (
     <li key={index} className="flex items-center gap-x-1.5">
@@ -75,9 +74,7 @@ const ChoiceComponent = memo(function Component(props: Props) {
             ? `single-choice-${questionId}-${index}`
             : `multi-choice-${questionId}-${index}`
         } // Ensure the name is unique per question
-        className={`${
-          isSingleChoice? "rounded-full" : "rounded"
-        }`}
+        className={`${isSingleChoice ? "rounded-full" : "rounded"}`}
         checked={isCorrect}
         onChange={() => {
           handleChangeCorrect(index, !isCorrect);
