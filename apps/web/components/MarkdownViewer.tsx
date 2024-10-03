@@ -40,6 +40,7 @@ const MarkdownViewer: FC<Props> = (props) => {
         fontFamily: "IBM Plex Sans, sans-serif",
         overflowY: "auto",
         maxHeight: "200px",
+        backgroundColor: "transparent",
       }}
       {...restOfProps}
       source={children as string}

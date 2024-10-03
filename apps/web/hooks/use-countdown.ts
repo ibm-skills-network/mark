@@ -1,4 +1,4 @@
-import { debugLog } from "@/lib/utils";
+import { useDebugLog } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
 interface CountdownResult {
@@ -15,6 +15,7 @@ interface CountdownResult {
 const useCountdown = (expiresAt: number): CountdownResult => {
   const [countdown, setCountdown] = useState(expiresAt - Date.now());
   const [timerExpired, setTimerExpired] = useState(false);
+  const debugLog = useDebugLog();
 
   const resetCountdown = (newExpiresAt: number) => {
     if (newExpiresAt === expiresAt) {

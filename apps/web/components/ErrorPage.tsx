@@ -28,7 +28,12 @@ export default function ErrorPage({
         {statusCode}
       </h1>
       <h2 className=" text-4xl font-bold text-destructive">
-        Something Went Wrong!
+        {{
+          404: "Page not found",
+          403: "Forbidden",
+          422: "Unprocessable Entity",
+          500: "Internal Server Error",
+        }[statusCode] || "Error"}
       </h2>
       <p className="text-gray-500">
         {typeof error === "string" ? error : error.message}

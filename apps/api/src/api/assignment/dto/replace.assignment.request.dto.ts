@@ -76,7 +76,7 @@ export class ReplaceAssignmentRequestDto {
   })
   @IsOptional()
   @IsInt()
-  allotedTimeMinutes: number | null;
+  allotedTimeMinutes?: number | null;
 
   @ApiProperty({
     description: "Number of allowed attempts within the specified time range.",

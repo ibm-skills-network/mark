@@ -1,7 +1,13 @@
 "use client";
 
+import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import Spinner from "@/components/svgs/Spinner";
-import type { QuestionAttemptRequestWithId } from "@/config/types";
+import WarningAlert from "@/components/WarningAlert";
+import type {
+  QuestionAttemptRequestWithId,
+  QuestionStore,
+  ReplaceAssignmentRequest,
+} from "@/config/types";
 import { submitAssignment } from "@/lib/talkToBackend";
 import { editedQuestionsOnly } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -17,32 +23,71 @@ function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-
   const [
     questions,
     setQuestion,
     setShowSubmissionFeedback,
     activeAttemptId,
-    submitAssignmentRef,
+    setTotalPointsEarned,
+    setTotalPointsPossible,
   ] = useLearnerStore((state) => [
     state.questions,
     state.setQuestion,
     state.setShowSubmissionFeedback,
     state.activeAttemptId,
-    state.submitAssignmentRef,
+    state.setTotalPointsEarned,
+    state.setTotalPointsPossible,
   ]);
+  const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
   ]);
+  const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
+    "assignmentConfig",
+    {
+      introduction: "",
+      graded: false,
+      passingGrade: 0,
+      published: false,
+      questionOrder: [],
+      updatedAt: 0,
+    },
+  );
+
   const assignmentId = assignmentDetails?.id;
   const isInQuestionPage = pathname.includes("questions");
   const [title, setTitle] = useState<string>("Auto-Graded Assignment");
+  const [toggleWarning, setToggleWarning] = useState<boolean>(false);
+  const [toggleEmptyWarning, setToggleEmptyWarning] = useState<boolean>(false);
   useEffect(() => {
     if (assignmentDetails) {
       setTitle(assignmentDetails.name);
     }
-  }, []);
+  });
+
+  const CheckNoFlaggedQuestions = () => {
+    const flaggedQuestions = questions.filter((q) => q.status === "flagged");
+    if (flaggedQuestions.length > 0) {
+      setToggleWarning(true);
+    } else {
+      if (questions.every((q) => editedQuestionsOnly([q]).length > 0)) {
+        void handleSubmitAssignment();
+      } else {
+        setToggleEmptyWarning(true);
+        setToggleWarning(true);
+      }
+    }
+  };
+
+  const handleCloseModal = () => {
+    setToggleWarning(false);
+  };
+
+  const handleConfirmSubmission = () => {
+    setToggleWarning(false);
+    void handleSubmitAssignment();
+  };
 
   async function handleSubmitAssignment() {
     const responsesForOnlyEditedQuestions = editedQuestionsOnly(questions);
@@ -58,12 +103,13 @@ function LearnerHeader() {
             : undefined,
         learnerFileResponse: q.learnerFileResponse || undefined,
       }));
-
     setSubmitting(true);
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
+      authorQuestions,
+      authorAssignmentDetails,
     );
     setSubmitting(false);
     if (!res || !res.success) {
@@ -71,9 +117,9 @@ function LearnerHeader() {
       return;
     }
     const { grade, feedbacksForQuestions } = res;
-    if (typeof grade === "number") {
-      setGrade(grade * 100);
-    }
+    setTotalPointsEarned(res.totalPointsEarned);
+    setTotalPointsPossible(res.totalPossiblePoints);
+    setGrade(grade * 100);
     setShowSubmissionFeedback(res.showSubmissionFeedback); // set showSubmissionFeedback boolean in zustand store
     for (const feedback of feedbacksForQuestions || []) {
       setQuestion({
@@ -93,12 +139,11 @@ function LearnerHeader() {
         ],
       });
     }
-    const currentTime = Date.now();
-    router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
+    router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
 
   return (
-    <header className="border-b border-gray-300 w-full px-6 py-6 flex justify-between">
+    <header className="border-b border-gray-300 w-full px-6 py-6 flex justify-between h-[100px]">
       <div className="flex">
         <div className="flex flex-col justify-center mr-4">
           <SNIcon />
@@ -119,16 +164,26 @@ function LearnerHeader() {
           )}
         </div>
       </div>
+
       {activeAttemptId && isInQuestionPage && (
         <Button
-          ref={submitAssignmentRef}
           disabled={editedQuestionsOnly(questions).length === 0 || submitting}
           className="disabled:opacity-70"
-          onClick={handleSubmitAssignment}
+          onClick={CheckNoFlaggedQuestions}
         >
           {submitting ? <Spinner className="w-8" /> : "Submit assignment"}
         </Button>
       )}
+
+      {/* Modal for confirming submission when there are flagged questions */}
+      <WarningAlert
+        isOpen={toggleWarning}
+        onClose={handleCloseModal}
+        onConfirm={handleConfirmSubmission}
+        description={`You have ${
+          toggleEmptyWarning ? "unanswered" : "flagged"
+        } questions. Are you sure you want to submit?`}
+      />
     </header>
   );
 }

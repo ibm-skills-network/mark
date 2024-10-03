@@ -1,5 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AssignmentQuestionDisplayOrder } from "@prisma/client";
+import {
+  AssignmentQuestionDisplayOrder,
+  QuestionDisplay,
+} from "@prisma/client";
 import {
   ArrayNotEmpty,
   IsArray,
@@ -77,7 +80,7 @@ export class UpdateAssignmentRequestDto {
   })
   @IsOptional()
   @IsInt()
-  allotedTimeMinutes: number | null;
+  allotedTimeMinutes?: number | null;
 
   @ApiProperty({
     description: "Number of allowed attempts within the specified time range.",
@@ -114,6 +117,15 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsEnum(AssignmentQuestionDisplayOrder)
   displayOrder: AssignmentQuestionDisplayOrder | null;
+
+  @ApiProperty({
+    description: "The display order of the assignment.",
+    required: false,
+    enum: QuestionDisplay,
+  })
+  @IsOptional()
+  @IsEnum(QuestionDisplay)
+  questionDisplay: QuestionDisplay | null;
 
   @ApiProperty({
     description: "Is the assignment published or not.",

@@ -1,5 +1,7 @@
 "use client";
-import { type FC, Fragment, useEffect, useMemo, useRef, useState } from "react";
+
+import GripVertical from "@/components/svgs/GripVertical";
+import MultipleChoiceSVG from "@/components/svgs/MC";
 import type {
   CreateQuestionRequest,
   Criteria,
@@ -7,40 +9,49 @@ import type {
 } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { getAssignment } from "@/lib/talkToBackend";
+import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
-  DndContext,
   closestCenter,
+  DndContext,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
-  DragOverlay,
 } from "@dnd-kit/core";
 import {
+  arrayMove,
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  LinkIcon,
-  ArrowUpTrayIcon,
-  Bars3BottomLeftIcon,
-  TrashIcon,
-} from "@heroicons/react/24/solid";
-import Question from "./Question";
 import { Menu, Transition } from "@headlessui/react";
-import MultipleChoiceSVG from "@/components/svgs/MC";
-import GripVertical from "@/components/svgs/GripVertical";
 import {
   ChevronDownIcon,
   ListBulletIcon,
   PencilIcon,
 } from "@heroicons/react/20/solid";
+import {
+  ArrowUpTrayIcon,
+  Bars3BottomLeftIcon,
+  LinkIcon,
+  TrashIcon,
+} from "@heroicons/react/24/solid";
 import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FC,
+} from "react";
+import { toast } from "sonner";
+import { FooterNavigation } from "../StepOne/FooterNavigation";
+import Question from "./Question";
 
 interface Props {
   assignmentId: number;
@@ -61,27 +72,23 @@ const AuthorQuestionsPage: FC<Props> = ({
   useBeforeUnload(
     "Are you sure you want to leave this page? You will lose any unsaved changes.",
   ); // Prompt the user before leaving the page
-  const [focusedQuestionId, setFocusedQuestionId] = useState<number | null>(
-    null,
-  ); // State to store the focused question ID
-  const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
-  const [
-    questions,
-    setQuestions,
-    addQuestion,
-    activeAssignmentId,
-    setActiveAssignmentId,
-    setName,
-  ] = useAuthorStore((state) => [
-    state.questions,
-    state.setQuestions,
-    state.addQuestion,
-    state.activeAssignmentId,
-    state.setActiveAssignmentId,
-    state.setName,
+  const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
+    state.focusedQuestionId,
+    state.setFocusedQuestionId,
   ]);
+  const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
+  const questions = useAuthorStore((state) => state.questions);
+  const setQuestions = useAuthorStore((state) => state.setQuestions);
+  const addQuestion = useAuthorStore((state) => state.addQuestion);
+  const activeAssignmentId = useAuthorStore(
+    (state) => state.activeAssignmentId,
+  );
+  const setActiveAssignmentId = useAuthorStore(
+    (state) => state.setActiveAssignmentId,
+  );
+  const setName = useAuthorStore((state) => state.setName);
   const focusRef = useRef(focusedQuestionId); // Ref to store the focused question ID
-  const [collapseAll, setCollapseAll] = useState(true); // State to collapse all questions
+  const [collapseAll, setCollapseAll] = useState(false); // State to collapse all questions
   const [activeId, setActiveId] = useState<number | null>(null); // State to store the active assignment ID
   const questionTypes = useMemo(
     () => [
@@ -119,6 +126,19 @@ const AuthorQuestionsPage: FC<Props> = ({
     ],
     [],
   );
+
+  /**
+   * Scrolls the page to the specified question element.
+   *
+   * @param questionId - The ID of the question element to scroll to.
+   */
+  const handleJumpToQuestion = useCallback((questionId: number) => {
+    const element = document.getElementById(`item-${String(questionId)}`);
+    if (!element) return;
+    requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, []);
 
   useEffect(() => {
     if (assignmentId !== activeAssignmentId) {
@@ -171,11 +191,29 @@ const AuthorQuestionsPage: FC<Props> = ({
     router,
   ]);
   useEffect(() => {
-    /**
-     * Makes sure the question order is updated in the store when the questions are updated.
-     */
-    useAuthorStore.getState().setQuestionOrder(questions.map((q) => q.id));
+    const currentQuestionOrder = useAuthorStore.getState().questionOrder;
+    const newQuestionOrder = questions.map((q) => q.id);
+
+    if (
+      JSON.stringify(currentQuestionOrder) !== JSON.stringify(newQuestionOrder)
+    ) {
+      useAuthorStore.getState().setQuestionOrder(newQuestionOrder); // Only update if the order changes
+    }
   }, [questions]);
+
+  useEffect(() => {
+    if (!focusedQuestionId && questions.length > 0) {
+      setFocusedQuestionId(questions[0].id);
+    }
+  }, [focusedQuestionId, questions]);
+
+  /**
+   * Focuses on a specific question when the focusedQuestionId changes.
+   */
+  useEffect(() => {
+    focusRef.current = focusedQuestionId;
+    handleJumpToQuestion(focusedQuestionId);
+  }, [focusedQuestionId, handleJumpToQuestion]);
 
   /**
    * Adds a text box question to the author questions page.
@@ -216,18 +254,29 @@ const AuthorQuestionsPage: FC<Props> = ({
       ...question,
       question: "",
       id: questionId,
+      choices:
+        type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT"
+          ? [
+              {
+                choice: "",
+                isCorrect: true,
+                points: 1,
+              },
+              {
+                choice: "",
+                isCorrect: false,
+                points: type === "SINGLE_CORRECT" ? 0 : -1,
+              },
+            ]
+          : undefined,
       alreadyInBackend: false,
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? 1,
       index: questions.length + 1,
     });
+    setFocusedQuestionId(questionId);
     handleJumpToQuestion(questionId);
     toast.success("Question has been added!");
-  };
-  // assign a temporary id to the question
-  const generateTempQuestionId = (): number => {
-    // if there are no questions, generate a random number
-    return Math.floor(Math.random() * 2e9); // Generates a number between 0 and 2,000,000,000
   };
 
   /**
@@ -317,14 +366,6 @@ const AuthorQuestionsPage: FC<Props> = ({
   );
 
   /**
-   * Focuses on a specific question when the focusedQuestionId changes.
-   */
-  useEffect(() => {
-    focusRef.current = focusedQuestionId;
-    handleJumpToQuestion(focusedQuestionId);
-  }, [focusedQuestionId]);
-
-  /**
    * Sets the focus on a specific question.
    *
    * @param questionId - The ID of the question to focus on.
@@ -374,10 +415,10 @@ const AuthorQuestionsPage: FC<Props> = ({
       >
         {/* This is wrapper around the question component */}
         <div
-          className={`relative cursor-default shadow-md flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-200 w-full ${
+          className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-200 w-full ${
             focusedQuestionId === question.id
-              ? "border-1 border-violet-600"
-              : ""
+              ? "border-1 border-violet-600 shadow-md"
+              : "shadow-sm"
           }`}
           onClick={() => handleFocus(question.id)}
         >
@@ -471,30 +512,6 @@ const AuthorQuestionsPage: FC<Props> = ({
     toast.success("Question has been deleted!");
   };
 
-  /**
-   * Scrolls the page to the specified question element.
-   *
-   * @param questionId - The ID of the question element to scroll to.
-   */
-  const handleJumpToQuestion = (questionId: number) => {
-    const element = document.getElementById(`item-${questionId}`);
-
-    if (!element) {
-      console.warn(`Element with ID item-${questionId} not found.`);
-      return;
-    }
-
-    // Scroll smoothly to the element if it's not already in view
-    requestAnimationFrame(() => {
-      // Request an animation frame to scroll smoothly
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-        inline: "center",
-      });
-    });
-  };
-
   return (
     <DndContext
       sensors={useSensors(useSensor(PointerSensor))}
@@ -545,7 +562,7 @@ const AuthorQuestionsPage: FC<Props> = ({
               </p>
             </div>
           )}
-          <div className="mx-auto items-center justify-center mb-44 hover:no-underline typography-btn flex rounded-md shadow-sm focus:none disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 bg-white w-fit whitespace-nowrap border-gray-200 border border-solid col-span-4 md:col-start-5 md:col-end-8 ">
+          <div className="mx-auto items-center justify-center mb-8 hover:no-underline typography-btn flex rounded-md shadow-sm hover:shadow-md transition-all focus:none disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 bg-white w-fit whitespace-nowrap border-gray-200 border border-solid col-span-4 md:col-start-5 md:col-end-8 ">
             {/* Add Question button */}
             <button
               type="button"
@@ -558,6 +575,7 @@ const AuthorQuestionsPage: FC<Props> = ({
               <Menu.Button className="text-gray-500 hover:text-gray-500 px-2 py-2.5 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-r-md focus:rounded-md hover:bg-gray-100 leading-[0] ring-offset-white">
                 <ChevronDownIcon width={20} height={20} />
               </Menu.Button>
+
               <Transition
                 as={Fragment}
                 enter="transition ease-out duration-100"
@@ -567,7 +585,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                 leaveFrom="transform opacity-100 scale-100"
                 leaveTo="transform opacity-0 scale-95"
               >
-                <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-sm hover:shadow-md transition-all ring-1 ring-black ring-opacity-5 focus:outline-none">
                   <div className="py-1">
                     {questionTypes.map((qt) => (
                       <Menu.Item key={qt.value}>
@@ -605,14 +623,17 @@ const AuthorQuestionsPage: FC<Props> = ({
               </Transition>
             </Menu>
           </div>
+          <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-9 md:col-end-11 lg:col-start-9 lg:col-end-11 mb-8">
+            <FooterNavigation nextStep="review" />
+          </div>
         </div>
         {/* If there are questions, render the collapse all button */}
         {questions.length > 0 && (
-          <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-screen row-start-1 text-nowrap">
-            <div className="flex items-center justify-center sticky top-4">
+          <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
+            <div className="flex items-center sticky top-4">
               <button
                 onClick={() => setCollapseAll(!collapseAll)}
-                className="p-3 border border-gray-300 rounded-lg shadow-lg bg-white transition-all duration-300 ease-in-out"
+                className="p-3 border border-gray-300 rounded-lg shadow-sm hover:shadow-md transition-all bg-white duration-300 ease-in-out"
               >
                 {collapseAll ? "Expand All" : "Collapse All"}
               </button>
@@ -620,13 +641,6 @@ const AuthorQuestionsPage: FC<Props> = ({
           </div>
         )}
       </div>
-      {/*console log questions*/}
-      <button
-        onClick={() => console.log(questions)}
-        className="fixed bottom-0 right-0 p-2 bg-white text-gray-600"
-      >
-        Log
-      </button>
     </DndContext>
   );
 };
@@ -856,7 +870,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
       onDragEnd={handleNavSortEnd}
     >
       <div
-        className={`sticky overflow-y-auto top-4 p-3 border border-gray-200 rounded-lg shadow-md bg-white overflow-hidden transition-all duration-300 ease-in-out ${
+        className={`sticky overflow-y-auto top-4 p-3 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all bg-white overflow-hidden duration-300 ease-in-out ${
           handleToggleTable ? "w-full max-h-[700px]" : "w-12"
         }`}
       >

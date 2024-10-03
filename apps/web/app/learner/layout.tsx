@@ -3,9 +3,9 @@ import Header from "./(components)/Header";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex flex-col min-h-screen overflow-hidden">
       <Header />
-      <div className="bg-blue-50 flex-1">{children}</div>
+      {children}
     </div>
   );
 }

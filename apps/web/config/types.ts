@@ -6,6 +6,7 @@ export type User = {
   assignmentId: number;
   returnUrl: string;
 };
+export type Cookies = { [key: string]: string };
 
 // For submitting a question response to backend (Benny's Implementation)
 
@@ -57,11 +58,10 @@ export type QuestionAttemptResponse = {
 
 export type QuestionStatus =
   | "active"
-  | "correct"
-  | "incorrect"
-  | "partiallyCorrect"
   | "edited"
-  | "unedited";
+  | "unedited"
+  | "flagged"
+  | "unflagged";
 
 export type QuestionType =
   | "TEXT"
@@ -133,6 +133,7 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
   maxCharacters?: number;
   // for SINGLE_CORRECT or MULTIPLE_CORRECT only, otherwise null
   choices?: Choice[];
+  status?: QuestionStatus;
   // assignmentId: number;
 }
 
@@ -154,6 +155,7 @@ export interface Question extends CreateQuestionRequest {
   id: number;
   assignmentId: number;
   questionOrder?: number[];
+  choices?: Choice[];
 }
 
 export interface QuestionAuthorStore extends Question {
@@ -169,13 +171,19 @@ export interface QuestionAuthorStore extends Question {
  */
 export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
-    // status: QuestionStatus;
+    status: QuestionStatus;
+    learnerResponse: string;
     // feedback: string[];
   };
 
 export interface GetQuestionResponse extends Question {
   success: boolean;
   error?: string;
+}
+
+export enum QuestionDisplayType {
+  ONE_PER_PAGE = "ONE_PER_PAGE",
+  ALL_PER_PAGE = "ALL_PER_PAGE",
 }
 
 export type GradingData = {
@@ -185,6 +193,7 @@ export type GradingData = {
   passingGrade: number;
   numAttempts?: number;
   displayOrder?: "DEFINED" | "RANDOM";
+  questionDisplay?: QuestionDisplayType;
   strictTimeLimit: boolean;
   updatedAt: number | undefined;
 };
@@ -214,6 +223,7 @@ export type ReplaceAssignmentRequest = {
   timeEstimateMinutes?: number;
   passingGrade: number;
   displayOrder?: "DEFINED" | "RANDOM";
+  questionDisplay?: QuestionDisplayType;
   published: boolean;
   questionOrder: number[];
   showAssignmentScore?: boolean; // Should the assignment score be shown to the learner after its submission
@@ -248,13 +258,20 @@ export type AssignmentAttempt = {
 
 export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questions: QuestionStore[];
+  assignmentDetails: AssignmentDetails;
+  grade?: number;
+  totalPointsEarned?: number;
+  totalPossiblePoints?: number;
+  passingGrade?: number;
+  name?: string;
 }
 
-export interface assignmentDetailsStore {
+export interface AssignmentDetails {
   allotedTimeMinutes?: number;
   numAttempts?: number;
   passingGrade?: number;
   name: string;
+  questionDisplay?: QuestionDisplayType;
   id: number;
 }
 
@@ -268,6 +285,8 @@ export interface SubmitAssignmentResponse extends BaseBackendResponse {
   grade?: number;
   showSubmissionFeedback: boolean;
   feedbacksForQuestions?: QuestionAttemptResponse[];
+  totalPointsEarned: number;
+  totalPossiblePoints: number;
 }
 
 export type LearnerAssignmentState =

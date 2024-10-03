@@ -1,33 +1,66 @@
 import Spinner from "@/components/svgs/Spinner";
 import Tooltip from "@/components/Tooltip";
 import { useAuthorStore } from "@/stores/author";
-import type { ComponentPropsWithoutRef, FC } from "react";
+import type { FC } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {
+interface Props {
   submitting: boolean;
-  questionsAreReadyToBePublished: boolean;
+  questionsAreReadyToBePublished: () => {
+    isValid: boolean;
+    message: string;
+    invalidQuestionId: number;
+  };
   handlePublishButton: () => void;
 }
 
-const Component: FC<Props> = (props) => {
-  const { submitting, questionsAreReadyToBePublished, handlePublishButton } =
-    props;
+const SubmitQuestionsButton: FC<Props> = ({
+  submitting,
+  questionsAreReadyToBePublished,
+  handlePublishButton,
+}) => {
+  const { isValid, message, invalidQuestionId } =
+    questionsAreReadyToBePublished();
   const questions = useAuthorStore((state) => state.questions);
+  const setFocusedQuestionId = useAuthorStore(
+    (state) => state.setFocusedQuestionId,
+  );
+
+  const isLoading = !questions;
+
   const hasEmptyQuestion = questions?.some(
     (question) => question.type === "EMPTY",
-  ); // disable button if there is an empty question Type
+  );
+
   const disableButton =
     submitting ||
+    isLoading ||
     questions?.length === 0 ||
     hasEmptyQuestion ||
-    !questionsAreReadyToBePublished;
-  let tooltipMessage = "";
-  if (questions?.length === 0) {
+    !isValid;
+
+  let tooltipMessage: React.ReactNode = "";
+  if (isLoading) {
+    tooltipMessage = "Loading questions...";
+  } else if (questions?.length === 0) {
     tooltipMessage = "You need to add at least one question";
   } else if (hasEmptyQuestion) {
     tooltipMessage = "Some questions have incomplete fields";
-  } else if (!questionsAreReadyToBePublished) {
-    tooltipMessage = "Some questions have incomplete fields";
+  } else if (!isValid) {
+    tooltipMessage = (
+      <>
+        <span>{message}</span>
+        {!isValid && (
+          <button
+            onClick={() => {
+              setFocusedQuestionId(invalidQuestionId);
+            }}
+            className="ml-2 text-blue-500 hover:underline"
+          >
+            Take me there
+          </button>
+        )}
+      </>
+    );
   } else if (submitting) {
     tooltipMessage = "Mark is analyzing your questions...";
   }
@@ -38,12 +71,12 @@ const Component: FC<Props> = (props) => {
         type="button"
         disabled={disableButton}
         onClick={handlePublishButton}
-        className="inline-flex transition-all leading-6 items-center px-4 py-2 border border-transparent font-medium rounded-md text-white bg-blue-700 enabled:hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:opacity-50"
+        className="text-sm font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
       >
-        {submitting ? <Spinner className="w-8" /> : "Save & Publish"}
+        {submitting ? <Spinner className="w-5 h-5" /> : "Save & Publish"}
       </button>
     </Tooltip>
   );
 };
 
-export default Component;
+export default SubmitQuestionsButton;

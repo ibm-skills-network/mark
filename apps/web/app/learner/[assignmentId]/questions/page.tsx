@@ -1,55 +1,87 @@
 import ErrorPage from "@/components/ErrorPage";
-import { createAttempt, getAttempt, getAttempts } from "@/lib/talkToBackend";
+import {
+  createAttempt,
+  getAttempt,
+  getAttempts,
+  getUser,
+} from "@/lib/talkToBackend";
 import QuestionPage from "@learnerComponents/Question";
 import { headers } from "next/headers";
+import ClientLearnerLayout from "./ClientComponent";
 
 interface Props {
   params: { assignmentId: string };
+  searchParams: { authorMode?: string };
 }
 
 async function LearnerLayout(props: Props) {
-  const headerList = headers();
-  const cookie = headerList.get("cookie");
-  const { params } = props;
+  const { params, searchParams } = props;
+  const { authorMode } = searchParams;
   const assignmentId = ~~params.assignmentId;
-  const listOfAttempts = await getAttempts(assignmentId, cookie);
-  if (!listOfAttempts) {
-    return <ErrorPage error={"Assignment not found"} />;
+  const headerList = headers();
+  const cookieHeader = headerList.get("cookie") || "";
+  const user = await getUser(cookieHeader);
+  const role = user?.role;
+  if (role === "author" && authorMode === "true") {
+    return <ClientLearnerLayout assignmentId={assignmentId} role={role} />;
   }
 
-  // check if there are any attempts that are not submitted and have not expired
+  const listOfAttempts = await getAttempts(assignmentId, cookieHeader);
+  if (!listOfAttempts) {
+    return <ErrorPage error={"Attempts could not be fetched"} />;
+  }
+
   const unsubmittedAssignment = listOfAttempts.find(
     (attempt) =>
       attempt.submitted === false &&
-      // if the assignment does not expire, then the expiresAt is null
       (attempt.expiresAt === null ||
         Date.now() < Date.parse(attempt.expiresAt)),
   );
-  // if there are no unsubmitted attempts, create a new attempt
+
   const attemptId = unsubmittedAssignment
     ? unsubmittedAssignment.id
-    : await createAttempt(assignmentId, cookie);
-  if (!attemptId) {
+    : await createAttempt(assignmentId, cookieHeader);
+
+  if (!attemptId && role === "author" && authorMode === undefined) {
+    return (
+      <ErrorPage
+        error={
+          "You can't take the assignment as an author, please switch to learner mode or check learner side in the review page to try the assignment"
+        }
+        statusCode={403}
+      />
+    );
+  } else if (!attemptId) {
     return <ErrorPage error={"Attempt could not be created"} />;
   }
+
   if (attemptId === "no more attempts") {
     return (
       <ErrorPage
         className="h-[calc(100vh-100px)]"
         statusCode={422}
-        error={"No more attempts"}
+        error={
+          "You have reached the maximum number of attempts for this assignment, if you need more attempts, please contact the author"
+        }
       />
     );
   }
-  // get the questions for the assignment from the attemptId
-  const attempt = await getAttempt(assignmentId, attemptId, cookie);
+
+  const attempt = await getAttempt(assignmentId, attemptId, cookieHeader);
   if (!attempt) {
     return <ErrorPage error={"Attempt could not be fetched"} />;
   }
+
   return (
-    <main className="p-24">
-      <QuestionPage attempt={attempt} assignmentId={assignmentId} />
-    </main>
+    role === "learner" && (
+      <main className="flex flex-col h-[calc(100vh-100px)]">
+        <QuestionPage
+          attempt={attempt}
+          assignmentId={assignmentId}
+          role={role}
+        />
+      </main>
+    )
   );
 }
 

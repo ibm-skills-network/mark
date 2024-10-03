@@ -1,22 +1,17 @@
+import { QuestionStore } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
 
-interface Props {}
+interface Props {
+  question: QuestionStore;
+}
 
 function TrueFalseQuestion(props: Props) {
-  const {} = props;
-  const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber,
-  );
-
-  const [questions, setAnswerChoice] = useLearnerStore((state) => [
-    state.questions,
-    state.setAnswerChoice,
-  ]);
-
-  const { learnerAnswerChoice } = questions[activeQuestionNumber - 1];
+  const { question } = props;
+  const [setAnswerChoice] = useLearnerStore((state) => [state.setAnswerChoice]);
+  const learnerAnswerChoice = question.learnerAnswerChoice;
 
   const handleChoiceClick = (choice: boolean) => {
-    setAnswerChoice(choice, questions[activeQuestionNumber - 1].id);
+    setAnswerChoice(choice, question.id);
   };
 
   const buttonStyle = (choice: boolean) => {

@@ -1,11 +1,17 @@
+"use client";
+
+import { LottieRefCurrentProps } from "lottie-react";
+import dynamic from "next/dynamic";
 import {
+  useEffect,
   useRef,
   type ComponentPropsWithoutRef,
   type FC,
-  useEffect,
 } from "react";
 import sparkle from "./sparkle";
-import Lottie, { type LottieRefCurrentProps } from "lottie-react";
+
+const Lottie = dynamic(() => import("lottie-react"), { ssr: false });
+
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {

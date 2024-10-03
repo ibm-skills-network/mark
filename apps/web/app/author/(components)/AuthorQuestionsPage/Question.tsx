@@ -1,47 +1,49 @@
-import {
-  FC,
-  useState,
-  useEffect,
-  Fragment,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react";
-import { Menu, Transition } from "@headlessui/react";
-import { toast } from "sonner";
-import { useAuthorStore } from "@/stores/author";
-import { useQuestionStore } from "@/stores/author";
+import MultipleChoiceSVG from "@/components/svgs/MC";
 import type {
   CreateQuestionRequest,
   QuestionAuthorStore,
   QuestionType,
   UpdateQuestionStateParams,
 } from "@/config/types";
-import QuestionWrapper from "../QuestionWrapper";
-import {
-  LinkIcon,
-  ArrowUpTrayIcon,
-  DocumentDuplicateIcon,
-  TrashIcon,
-  Bars3BottomLeftIcon,
-  ArrowPathRoundedSquareIcon,
-  PencilIcon,
-  ListBulletIcon,
-} from "@heroicons/react/24/outline";
+import { useAuthorStore, useQuestionStore } from "@/stores/author";
+import { Menu, Transition } from "@headlessui/react";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
+import {
+  ArrowPathRoundedSquareIcon,
+  ArrowUpTrayIcon,
+  Bars3BottomLeftIcon,
+  DocumentDuplicateIcon,
+  LinkIcon,
+  ListBulletIcon,
+  PencilIcon,
+  PencilSquareIcon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
-import MultipleChoiceSVG from "@/components/svgs/MC";
 import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
+import { useRouter } from "next/navigation"; // Importing useRouter for navigation
+import {
+  FC,
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
+import QuestionWrapper from "../QuestionWrapper";
 
 // Props type definition for the Question component
 interface QuestionProps {
   question: QuestionAuthorStore;
-  onDelete: (questionId: number) => void;
+  onDelete?: (questionId: number) => void;
   questionId: number;
-  duplicateThisQuestion: (questionData: CreateQuestionRequest) => void;
+  duplicateThisQuestion?: (questionData: CreateQuestionRequest) => void;
   questionIndex: number;
-  collapse: boolean;
-  isFocusedQuestion: boolean;
+  collapse?: boolean;
+  isFocusedQuestion?: boolean;
+  preview?: boolean;
 }
 
 // Main functional component to handle each question
@@ -53,6 +55,7 @@ const Question: FC<QuestionProps> = ({
   questionIndex,
   collapse,
   isFocusedQuestion,
+  preview = false,
 }) => {
   const [toggleQuestion, setToggleQuestion] = useState<boolean>(false);
   const [questionTitle] = useState<string>(question.question || "");
@@ -62,6 +65,10 @@ const Question: FC<QuestionProps> = ({
   const disabledMenuButtons = ["UPLOAD"]; // These question types are disabled in the dropdown menu
   const { questionStates, setShowWordCountInput, setCountMode } =
     useQuestionStore();
+  const router = useRouter();
+  const setFocusedQuestionId = useAuthorStore(
+    (state) => state.setFocusedQuestionId,
+  );
 
   // Manage word count input visibility and mode (character or word count)
   const showWordCountInput =
@@ -107,7 +114,7 @@ const Question: FC<QuestionProps> = ({
     } else {
       setQuestionMaxPoints(question.totalPoints);
     }
-  }, []);
+  }, [question.type, question.scoring]);
 
   // Apply the checkQuestionToggle effect whenever the questionType changes
   useEffect(() => {
@@ -126,22 +133,10 @@ const Question: FC<QuestionProps> = ({
           params.questionCriteria?.points !== undefined
             ? params.questionCriteria.points[0]
             : questionMaxPoints,
-        question:
-          params.questionTitle !== undefined
-            ? params.questionTitle
-            : questionTitle,
-        type:
-          params.questionType !== undefined
-            ? params.questionType
-            : questionType,
-        maxWords:
-          params.maxWordCount !== undefined
-            ? params.maxWordCount
-            : maxWordCount,
-        maxCharacters:
-          params.maxCharacters !== undefined
-            ? params.maxCharacters
-            : maxCharacters,
+        question: params.questionTitle ?? questionTitle,
+        type: params.questionType ?? questionType,
+        maxWords: params.maxWordCount ?? maxWordCount,
+        maxCharacters: params.maxCharacters ?? maxCharacters,
         scoring: {
           type: "CRITERIA_BASED" as const,
           criteria:
@@ -246,17 +241,17 @@ const Question: FC<QuestionProps> = ({
       {
         value: "MULTIPLE_CORRECT",
         label: "Multiple Select",
-        icon: <IconCheckbox className="w-5 h-5 mr-2" />,
+        icon: <IconCheckbox className="w-5 h-5" />,
       },
       {
         value: "SINGLE_CORRECT",
         label: "Multiple Choice",
-        icon: <MultipleChoiceSVG className="w-5 h-5 mr-2 " />,
+        icon: <MultipleChoiceSVG className="w-5 h-5 " />,
       },
       {
         value: "TRUE_FALSE",
         label: "True/False",
-        icon: <IconCircleCheck className="w-5 h-5 mr-2" />,
+        icon: <IconCircleCheck className="w-5 h-5" />,
       },
       {
         value: "URL",
@@ -272,28 +267,42 @@ const Question: FC<QuestionProps> = ({
     [],
   );
 
+  const handleEditClick = (id: number) => {
+    setFocusedQuestionId(id);
+    router.push(`/author/${question.assignmentId}/questions`);
+  };
+
   return (
     <div className="flex flex-col items-center justify-between rounded-lg bg-white w-full gap-y-6">
       {/* First row containing the question index input and dropdown menu */}
       <div className="flex gap-2 flex-wrap w-full">
         <div className="flex items-center gap-x-2 flex-1">
-          <div className="items-center w-11 h-full typography-body text-gray-500 border border-gray-200 rounded-md text-center shadow-sm">
-            <input
-              type="text"
-              min={1}
-              max={useAuthorStore.getState().questions.length}
-              value={inputValue}
-              onChange={handleIndexChange}
-              onBlur={handleIndexBlur}
-              onKeyPress={handleKeyPress}
-              className="w-full h-full text-center p-0 m-0 border-none bg-transparent focus:outline-none focus:ring-0"
-            />
+          <div className="items-center w-11 h-full typography-body text-gray-500 border border-gray-200 rounded-md text-center">
+            {preview ? (
+              <div className="w-full h-full flex items-center justify-center">
+                {questionIndex}
+              </div>
+            ) : (
+              <input
+                type="text"
+                min={1}
+                max={useAuthorStore.getState().questions.length}
+                value={inputValue}
+                onChange={handleIndexChange}
+                onBlur={handleIndexBlur}
+                onKeyPress={handleKeyPress}
+                className="w-full h-full text-center p-0 m-0 border-none bg-transparent focus:outline-none focus:ring-0"
+              />
+            )}
           </div>
 
           {/* Dropdown menu for selecting question type */}
           <Menu as="div" className="relative inline-block text-left">
             <div>
-              <Menu.Button className="inline-flex justify-between items-center px-4 py-2 border border-gray-200 rounded-md bg-white text-gray-700 min-w-[208px] h-min body-typography shadow-sm gap-1.5 hover:bg-gray-100">
+              <Menu.Button
+                className="inline-flex justify-between items-center px-4 py-2 border border-gray-200 rounded-md bg-white text-gray-700 min-w-[208px] h-min body-typography gap-1.5 hover:bg-gray-100"
+                disabled={preview}
+              >
                 {questionType === "EMPTY" ? (
                   <div className="gap-x-1.5 content-between ">
                     <div className="flex items-center gap-x-1.5 typography-body">
@@ -318,10 +327,12 @@ const Question: FC<QuestionProps> = ({
                     }
                   </div>
                 )}
-                <ChevronDownIcon
-                  className="w-5 h-5 text-gray-500"
-                  aria-hidden="true"
-                />
+                {preview ? null : (
+                  <ChevronDownIcon
+                    className="w-5 h-5 text-gray-500"
+                    aria-hidden="true"
+                  />
+                )}
               </Menu.Button>
             </div>
 
@@ -334,7 +345,7 @@ const Question: FC<QuestionProps> = ({
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+              <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
                 <div className="py-1">
                   {questionTypes.map((qt) => (
                     <Menu.Item key={qt.value}>
@@ -385,234 +396,287 @@ const Question: FC<QuestionProps> = ({
             </Transition>
           </Menu>
         </div>
-
         {/* Word count and other controls */}
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2 text-gray-600 text-nowrap ">
-            {showWordCountInput ? (
-              <>
-                <ArrowPathRoundedSquareIcon
-                  height={16}
-                  width={16}
-                  onClick={() => {
-                    setCountMode(
-                      questionId,
-                      countMode === "CHARACTER" ? "WORD" : "CHARACTER",
-                    );
-                    handleResetCounters(
-                      countMode === "CHARACTER" ? "WORD" : "CHARACTER",
-                    );
-                  }}
-                />
-                {countMode === "CHARACTER" ? (
+          {preview ? (
+            <div className="flex items-center gap-2 text-gray-600 text-nowrap ">
+              {maxCharacters ? (
+                <div className="flex items-center">
+                  <span className="text-gray-600 typography-body">
+                    Character Count: {maxCharacters}
+                  </span>
+                </div>
+              ) : (
+                maxWordCount && (
                   <div className="flex items-center">
                     <span className="text-gray-600 typography-body">
-                      Character Count:
+                      Word Count: {maxWordCount}
                     </span>
-                    <input
-                      type="text"
-                      value={maxCharacters}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter") {
-                          setmaxCharacters(maxCharacters);
-                          setMaxWordCount(null);
+                  </div>
+                )
+              )}
+              <button
+                onClick={() => {
+                  handleEditClick(questionId);
+                }}
+              >
+                <PencilSquareIcon className="h-6 w-6 text-gray-500" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-gray-600 text-nowrap ">
+              {showWordCountInput ? (
+                <>
+                  <ArrowPathRoundedSquareIcon
+                    height={16}
+                    width={16}
+                    onClick={() => {
+                      setCountMode(
+                        questionId,
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                      );
+                      handleResetCounters(
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                      );
+                    }}
+                  />
+                  {countMode === "CHARACTER" ? (
+                    <div className="flex items-center">
+                      <span className="text-gray-600 typography-body">
+                        Character Count:
+                      </span>
+                      <input
+                        type="text"
+                        value={maxCharacters}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            setmaxCharacters(maxCharacters);
+                            setMaxWordCount(null);
+                            handleUpdateQuestionState({
+                              maxCharacters: maxCharacters,
+                              maxWordCount: null,
+                            });
+                          }
+                        }}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          if (isNaN(value) || value <= 0) {
+                            setShowWordCountInput(questionId, false);
+                            setmaxCharacters(null);
+                            setMaxWordCount(null);
+                          } else if (value > 10000) {
+                            setmaxCharacters(10000);
+                            setMaxWordCount(null);
+                          } else {
+                            setmaxCharacters(value);
+                            setMaxWordCount(null);
+                          }
+                        }}
+                        onBlur={() => {
                           handleUpdateQuestionState({
                             maxCharacters: maxCharacters,
                             maxWordCount: null,
                           });
-                        }
-                      }}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value, 10);
-                        if (isNaN(value) || value <= 0) {
+                        }}
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
+                          isFocused ? "focused" : "not-focused"
+                        }`}
+                        style={{
+                          width: `${maxCharacters?.toString().length + 1}ch`,
+                        }}
+                      />
+                      <button
+                        className="items-center"
+                        onClick={() => {
                           setShowWordCountInput(questionId, false);
+                          setMaxWordCount(null);
                           setmaxCharacters(null);
-                          setMaxWordCount(null);
-                        } else if (value > 10000) {
-                          setmaxCharacters(10000);
-                          setMaxWordCount(null);
-                        } else {
-                          setmaxCharacters(value);
-                          setMaxWordCount(null);
-                        }
-                      }}
-                      onBlur={() => {
-                        handleUpdateQuestionState({
-                          maxCharacters: maxCharacters,
-                          maxWordCount: null,
-                        });
-                      }}
-                      className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${isFocused ? "focused" : "not-focused"}`}
-                      style={{
-                        width: `${maxCharacters?.toString().length + 1}ch`,
-                      }}
-                    />
-                    <button
-                      className="items-center"
-                      onClick={() => {
-                        setShowWordCountInput(questionId, false);
-                        setMaxWordCount(null);
-                        setmaxCharacters(null);
-                        handleUpdateQuestionState({
-                          maxWordCount: null,
-                          maxCharacters: null,
-                        });
-                      }}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 text-gray-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                          handleUpdateQuestionState({
+                            maxWordCount: null,
+                            maxCharacters: null,
+                          });
+                        }}
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center">
-                    <span className="text-gray-600 typography-body">
-                      Word Count:
-                    </span>
-                    <input
-                      type="text"
-                      value={maxWordCount}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value, 10);
-                        if (isNaN(value) || value <= 0) {
-                          setShowWordCountInput(questionId, false);
-                          setMaxWordCount(null);
-                          setmaxCharacters(null);
-                        } else if (value > 10000) {
-                          setMaxWordCount(10000);
-                          setmaxCharacters(null);
-                        } else {
-                          setMaxWordCount(value);
-                          setmaxCharacters(null);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4 text-gray-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center">
+                      <span className="text-gray-600 typography-body">
+                        Word Count:
+                      </span>
+                      <input
+                        type="text"
+                        value={maxWordCount}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          if (isNaN(value) || value <= 0) {
+                            setShowWordCountInput(questionId, false);
+                            setMaxWordCount(null);
+                            setmaxCharacters(null);
+                          } else if (value > 10000) {
+                            setMaxWordCount(10000);
+                            setmaxCharacters(null);
+                          } else {
+                            setMaxWordCount(value);
+                            setmaxCharacters(null);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleUpdateQuestionState({
+                              maxWordCount: maxWordCount,
+                              maxCharacters: null,
+                            });
+                          }
+                        }}
+                        onFocus={() => setIsFocused(true)}
+                        onBlur={() => {
+                          setIsFocused(false);
                           handleUpdateQuestionState({
                             maxWordCount: maxWordCount,
                             maxCharacters: null,
                           });
-                        }
-                      }}
-                      onFocus={() => setIsFocused(true)}
-                      onBlur={() => {
-                        setIsFocused(false);
-                        handleUpdateQuestionState({
-                          maxWordCount: maxWordCount,
-                          maxCharacters: null,
-                        });
-                      }}
-                      className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${isFocused ? "focused" : "not-focused"}`}
-                      style={{
-                        width: `${isFocused ? maxWordCount?.toString().length + 2 : maxWordCount?.toString().length + 1}ch`,
-                      }}
-                    />
-                    <button
-                      onClick={() => {
-                        setShowWordCountInput(questionId, false);
-                        setMaxWordCount(null);
-                        setmaxCharacters(null);
-                        handleUpdateQuestionState({
-                          maxWordCount: null,
-                          maxCharacters: null,
-                        });
-                      }}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 text-gray-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                        }}
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
+                          isFocused ? "focused" : "not-focused"
+                        }`}
+                        style={{
+                          width: `${
+                            isFocused
+                              ? maxWordCount?.toString().length + 2
+                              : maxWordCount?.toString().length + 1
+                          }ch`,
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          setShowWordCountInput(questionId, false);
+                          setMaxWordCount(null);
+                          setmaxCharacters(null);
+                          handleUpdateQuestionState({
+                            maxWordCount: null,
+                            maxCharacters: null,
+                          });
+                        }}
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4 text-gray-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : maxWordCount || maxCharacters ? (
+                <div className="flex items-center gap-x-2">
+                  <ArrowPathRoundedSquareIcon
+                    height={16}
+                    width={16}
+                    onClick={() => {
+                      setCountMode(
+                        questionId,
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                      );
+                      handleResetCounters(
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                      );
+                    }}
+                  />
+                  <span className="text-gray-600 typography-body">
+                    {maxCharacters
+                      ? `Character Count: ${maxCharacters}`
+                      : `Word Count: ${maxWordCount}`}
+                  </span>
+                </div>
+              ) : questionType === "TEXT" ? (
+                <button
+                  className="text-gray-600 text-nowrap typography-body"
+                  onClick={() => {
+                    setShowWordCountInput(questionId, true);
+                    handleResetCounters("CHARACTER");
+                  }}
+                >
+                  + Add character/word limit
+                </button>
+              ) : null}
               <button
-                className="text-gray-600 text-nowrap typography-body"
+                className="text-gray-500"
                 onClick={() => {
-                  setShowWordCountInput(questionId, true);
-                  handleResetCounters("CHARACTER");
+                  const questionData: QuestionAuthorStore = {
+                    question: questionTitle,
+                    totalPoints: Math.max(...questionCriteria.points),
+                    type: questionType as
+                      | "TEXT"
+                      | "URL"
+                      | "MULTIPLE_CORRECT"
+                      | "TRUE_FALSE"
+                      | "SINGLE_CORRECT"
+                      | "UPLOAD",
+                    maxWords: maxWordCount,
+                    choices: question.choices,
+                    answer: question.answer,
+                    maxCharacters: maxCharacters,
+                    index: questionIndex,
+                    scoring: {
+                      type: "CRITERIA_BASED",
+                      criteria: questionCriteria.criteriaDesc.map(
+                        (criteria, index) => {
+                          return {
+                            id: questionCriteria.criteriaIds[index],
+                            description: criteria,
+                            points: questionCriteria.points[index],
+                          };
+                        },
+                      ),
+                    },
+                    id: 0,
+                    assignmentId: 0,
+                  };
+                  try {
+                    duplicateThisQuestion(questionData);
+                  } catch (error) {
+                    toast.error("Failed to duplicate question");
+                  }
                 }}
               >
-                + Add character/word limit
+                <DocumentDuplicateIcon width={20} height={20} />
               </button>
-            )}
-          </div>
-
-          <div className="flex gap-2 align-middle">
-            {/* Duplicate question button */}
-            <button
-              className="text-gray-500"
-              onClick={() => {
-                const questionData: QuestionAuthorStore = {
-                  question: questionTitle,
-                  totalPoints: Math.max(...questionCriteria.points),
-                  type: questionType as
-                    | "TEXT"
-                    | "URL"
-                    | "MULTIPLE_CORRECT"
-                    | "UPLOAD",
-                  maxWords: maxWordCount,
-                  choices: question.choices,
-                  answer: question.answer,
-
-                  maxCharacters: maxCharacters,
-                  index: questionIndex,
-                  scoring: {
-                    type: "CRITERIA_BASED",
-                    criteria: questionCriteria.criteriaDesc.map(
-                      (criteria, index) => {
-                        return {
-                          id: questionCriteria.criteriaIds[index],
-                          description: criteria,
-                          points: questionCriteria.points[index],
-                        };
-                      },
-                    ),
-                  },
-                  id: 0,
-                  assignmentId: 0,
-                };
-                try {
-                  duplicateThisQuestion(questionData);
-                } catch (error) {
-                  toast.error("Failed to duplicate question");
-                }
-              }}
-            >
-              <DocumentDuplicateIcon width={20} height={20} />
-            </button>
-            {/* Delete question button */}
-            <button
-              className="text-gray-500"
-              onClick={() => onDelete(question.id)}
-            >
-              <TrashIcon width={20} height={20} />
-            </button>
-          </div>
+              {/* Delete question button */}
+              <button
+                className="text-gray-500"
+                onClick={() => onDelete(question.id)}
+              >
+                <TrashIcon width={20} height={20} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
       {/* Render the QuestionWrapper component if the question is toggled open */}
       {toggleQuestion && (
         <QuestionWrapper
@@ -625,6 +689,7 @@ const Question: FC<QuestionProps> = ({
           setQuestionCriteria={setQuestionCriteria}
           handleUpdateQuestionState={handleUpdateQuestionState}
           questionIndex={questionIndex}
+          preview={preview}
         />
       )}
     </div>

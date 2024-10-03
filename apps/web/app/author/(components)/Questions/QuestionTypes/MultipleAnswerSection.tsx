@@ -5,42 +5,31 @@ import { useAuthorStore } from "@/stores/author";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import React, { useEffect, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
+import { shallow } from "zustand/shallow";
 import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
 import Choice from "./Choice";
-import { shallow } from "zustand/shallow";
 
 interface sectionProps {
   questionId: number;
+  preview?: boolean;
 }
 
 function Section(props: sectionProps) {
-  const { questionId } = props;
+  const { questionId, preview } = props;
 
-  const [
-    modifyQuestion,
-    addChoice,
-    removeChoice,
-    setChoices,
-    toggleChoice,
-    modifyChoice,
-    setPoints,
-  ] = useAuthorStore((state) => [
-    state.modifyQuestion,
-    state.addChoice,
-    state.removeChoice,
-    state.setChoices,
-    state.toggleChoice,
-    state.modifyChoice,
-    state.setPoints,
-  ]);
+  const [addChoice, removeChoice, setChoices, modifyChoice] = useAuthorStore(
+    (state) => [
+      state.addChoice,
+      state.removeChoice,
+      state.setChoices,
+      state.modifyChoice,
+    ],
+  );
 
   const questions = useAuthorStore(
     (state) => state.questions,
     shallow, // Use shallow to prevent re-renders when other state doesn't change
   );
-  const numOfTimeSuggestionHasBeenShown =
-    ~~localStorage.getItem("numOfTimeSuggestionHasBeenShown") || 0;
-
   const question = questions.find((question) => question.id === questionId);
   const { choices, totalPoints: points, numRetries: retries } = question;
   useEffect(() => {
@@ -49,8 +38,13 @@ function Section(props: sectionProps) {
       setChoices(questionId, [
         {
           choice: "",
+          isCorrect: true,
+          points: 1,
+        },
+        {
+          choice: "",
           isCorrect: false,
-          points: 0,
+          points: -1,
         },
       ]);
     }
@@ -61,7 +55,8 @@ function Section(props: sectionProps) {
   }
   // keys are the choices, values are booleans
   const keys = Object.keys(choices);
-  const disableAddChoice = keys.length >= 10 || keys.some((key) => key === "");
+  const disableAddChoice =
+    keys.length >= 10 || keys.some((key) => key === "") || preview;
 
   function handleChoiceChange(
     choiceIndex: number,
@@ -101,25 +96,6 @@ function Section(props: sectionProps) {
     // Toggle the `isCorrect` status
     handleChoiceChange(choiceIndex, { isCorrect: newCorrectStatus });
   }
-
-  // Function to focus the next input field or create a new choice
-  const focusNextInput = (index: number) => {
-    if (index < choices.length - 1) {
-      const nextInput = document.getElementById((index + 1).toString());
-      if (nextInput) {
-        nextInput.focus();
-      }
-    } else {
-      handleAddChoice();
-      setTimeout(() => {
-        const newInput = document.getElementById(choices.length.toString());
-        if (newInput) {
-          newInput.focus();
-        }
-      }, 100);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-y-6 w-full">
       <div className="flex flex-col gap-y-2">
@@ -137,8 +113,9 @@ function Section(props: sectionProps) {
               addChoice={handleAddChoice}
               changePoints={handleChangeChoicePoints}
               isSingleChoice={false}
-              focusNextInput={focusNextInput} // Pass the focusNextInput function
               questionId={questionId}
+              preview={preview}
+              choices={choices}
             />
           ))}
         </ul>
@@ -148,20 +125,6 @@ function Section(props: sectionProps) {
           className="flex mr-auto rounded-full bg-white px-5 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200 disabled:opacity-50 transition"
           onClick={() => {
             handleAddChoice();
-            if (numOfTimeSuggestionHasBeenShown < 3) {
-              toast.message(
-                "You can also press enter to create a new choice!",
-                {
-                  position: "bottom-center",
-                  duration: 5000,
-                  important: true,
-                },
-              );
-              localStorage.setItem(
-                "numOfTimeSuggestionHasBeenShown",
-                (numOfTimeSuggestionHasBeenShown + 1).toString(),
-              );
-            }
           }}
         >
           <svg

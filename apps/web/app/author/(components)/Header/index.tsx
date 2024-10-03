@@ -1,12 +1,11 @@
 "use client";
 
+import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
+import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
+import { Question } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
-import {
-  getAssignment,
-  updateAssignment,
-  updateQuestions,
-} from "@/lib/talkToBackend";
-import { debugLog, mergeData } from "@/lib/utils";
+import { getAssignment, updateQuestions } from "@/lib/talkToBackend";
+import { mergeData } from "@/lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
@@ -15,6 +14,7 @@ import Title from "@components/Title";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 
@@ -38,6 +38,9 @@ function AuthorHeader() {
     state.activeAssignmentId,
     state.name,
   ]);
+  const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
+    questions as Question[],
+  );
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
@@ -45,15 +48,11 @@ function AuthorHeader() {
     (state) => [state.setAssignmentFeedbackConfigStore],
   );
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [isOpen, setIsOpen] = useState(false);
-
   useEffect(() => {
     setActiveAssignmentId(~~assignmentId);
     const fetchAssignment = async () => {
       const assignment = await getAssignment(~~assignmentId);
       if (assignment) {
-        // update all the stores with the data from the backend/mergedData
-
         // Author store
         const mergedAuthorData = mergeData(
           useAuthorStore.getState(),
@@ -100,134 +99,14 @@ function AuthorHeader() {
     void fetchAssignment();
   }, [assignmentId]);
 
-  // check if all questions have been filled out
-  const questionsAreReadyToBePublished = useMemo(() => {
-    let allQuestionsAreValid = true; // Assume all questions are valid initially
-
-    questions.forEach((eachQuestion, index) => {
-      const { type, question, choices, scoring } = eachQuestion;
-
-      // Log the question details
-      debugLog(`Checking question ${index + 1}:`, eachQuestion);
-
-      // Check if the question text is filled out (trim whitespace)
-      const questionTextFilledOut = question?.trim().length > 0;
-
-      if (!questionTextFilledOut) {
-        debugLog(`Question ${index + 1} has empty text.`);
-        allQuestionsAreValid = false;
-        return; // Continue to the next question
-      }
-
-      if (type === "URL" || type === "TEXT") {
-        // Check if criteria are filled out
-        const criteriaFilledOut = scoring?.criteria?.every(
-          (criteria) => criteria.description.trim().length > 0,
-        );
-        // Check if criteria exist
-        const doesCriteriaExist = scoring?.criteria?.length > 0;
-
-        if (!criteriaFilledOut || !doesCriteriaExist) {
-          debugLog(`Question ${index + 1} has missing criteria.`);
-          allQuestionsAreValid = false;
-          return;
-        }
-      }
-
-      if (type === "TRUE_FALSE") {
-        // Check if any choices are empty
-        const hasEmptyChoices = choices?.some(
-          (choice) => choice.choice.trim().length === 0,
-        );
-        debugLog(`Question ${index + 1} has invalid True/False choices.`);
-
-        if (hasEmptyChoices || hasEmptyChoices === undefined) {
-          debugLog(`Question ${index + 1} has invalid True/False choices.`);
-          allQuestionsAreValid = false;
-          return;
-        }
-      }
-
-      if (type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT") {
-        // Check if there are at least 2 choices and one correct choice
-        const choicesFilledOut = choices?.every(
-          (choice) => choice?.choice?.trim().length > 0,
-        );
-        const isTwoOrMoreChoices = choices?.length >= 2;
-        const isAtLeastOneCorrectChoice = choices?.some(
-          (choice) => choice.isCorrect,
-        );
-
-        if (
-          !choicesFilledOut ||
-          !isTwoOrMoreChoices ||
-          !isAtLeastOneCorrectChoice
-        ) {
-          debugLog(
-            `Question ${index + 1} is missing valid choices or correct answers.`,
-          );
-          allQuestionsAreValid = false;
-          return;
-        }
-      }
-      debugLog(`Question ${index + 1} passed all checks.`);
-    });
-    debugLog("All questions are valid:", allQuestionsAreValid);
-
-    return allQuestionsAreValid;
-  }, [questions]);
-
   async function handlePublishButton() {
     setSubmitting(true);
-
-    const processedQuestions = questions.map((question) => {
-      const {
-        alreadyInBackend,
-        index,
-        id,
-        assignmentId,
-        answer,
-        ...dataToSend
-      } = question;
-
-      if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
-        for (const criteria of dataToSend.scoring.criteria) {
-          delete criteria.id;
-        }
-      } else if (
-        dataToSend.type === "MULTIPLE_CORRECT" ||
-        dataToSend.type === "SINGLE_CORRECT"
-      ) {
-        dataToSend.totalPoints = dataToSend.choices?.reduce(
-          (acc, curr) => (curr.points > 0 ? acc + curr.points : acc),
-          0,
-        ); // Sum up all positive points
-        dataToSend.scoring = null;
-      }
-      if (dataToSend.type === "TRUE_FALSE") {
-        dataToSend.totalPoints = dataToSend.choices?.reduce(
-          (acc, curr) => (curr.points > 0 ? acc + curr.points : acc),
-          0,
-        ); // Sum up all positive points
-        dataToSend.scoring = null;
-      }
-      // Handle unlimited retries
-      dataToSend.numRetries =
-        dataToSend.numRetries === -1 ? null : dataToSend.numRetries;
-
-      return {
-        ...dataToSend,
-        alreadyInBackend,
-        id,
-        assignmentId,
-      };
-    });
 
     try {
       // Send a single request with all the processed questions
       const success = await updateQuestions(
         activeAssignmentId,
-        processedQuestions,
+        processQuestions(questions),
       );
 
       if (success) {
@@ -251,26 +130,12 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
-
-  function handleScrollToTarget(questionId: number) {
-    if (typeof questionId !== "number") {
-      throw new Error("questionId must be a string");
-    }
-
-    // Scroll to the specified target
-    const targetElement = document.getElementById(`question-${questionId}`);
-    if (targetElement) {
-      targetElement.scrollIntoView({ behavior: "smooth" });
-    }
-  }
-
   return (
     <div className="fixed w-full z-50">
-      <header className="border-b border-gray-300 px-6 py-6 bg-white justify-between gap-x-16 grid grid-cols-4">
-        <div className="flex">
-          <div className="flex flex-col justify-center pr-4">
-            <SNIcon />
-          </div>
+      <header className="border-b border-gray-300 px-6 py-4 bg-white flex items-center justify-between">
+        {/* Left Section */}
+        <div className="flex items-center space-x-4">
+          <SNIcon />
           <div>
             <Title level={5} className="leading-6">
               Auto-Graded Assignment Creator
@@ -280,26 +145,21 @@ function AuthorHeader() {
             </div>
           </div>
         </div>
+
+        {/* Center Navigation */}
         <Nav
           currentStepId={currentStepId}
           setCurrentStepId={setCurrentStepId}
         />
-        <div className="items-center flex justify-end gap-x-2.5">
-          {currentStepId === 2 && (
-            <SubmitQuestionsButton
-              handlePublishButton={handlePublishButton}
-              submitting={submitting}
-              questionsAreReadyToBePublished={questionsAreReadyToBePublished}
-            />
-          )}
 
-          {/* Add this back if we wanna have learner view for the authors */}
-          {/* <button
-            className="inline-flex items-center px-4 py-2 border border-transparent leading-6 font-medium rounded-md text-blue-700 hover:text-blue-500 bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
-          >
-            <EyeIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-            Learner View
-          </button> */}
+        {/* Right Section */}
+        <div className="flex items-center space-x-4">
+          <CheckLearnerSideButton disabled={!questions} />
+          <SubmitQuestionsButton
+            handlePublishButton={handlePublishButton}
+            submitting={submitting}
+            questionsAreReadyToBePublished={questionsAreReadyToBePublished}
+          />
         </div>
       </header>
     </div>

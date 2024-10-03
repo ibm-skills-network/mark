@@ -1,137 +1,191 @@
+import { useAuthorStore } from "@/stores/author";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, FC } from "react";
+import { motion } from "framer-motion";
+import Tooltip from "@/components/Tooltip";
+import {
+  IconClipboardList,
+  IconSettings,
+  IconQuestionMark,
+  IconEyeCheck,
+} from "@tabler/icons-react";
+import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import {
   publishStepOneData,
   publishStepTwoData,
 } from "@/lib/sendZustandDataToBackend";
-import { extractAssignmentId } from "@/lib/strings";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  Dispatch,
-  SetStateAction,
-  useEffect,
-  type ComponentPropsWithoutRef,
-  type FC,
-} from "react";
 
-interface Props extends ComponentPropsWithoutRef<"nav"> {
-  currentStepId: number;
-  setCurrentStepId: Dispatch<SetStateAction<number>>;
+interface Step {
+  id: number;
+  name: string;
+  href: string;
+  icon: React.ComponentType<React.ComponentProps<typeof IconClipboardList>>;
+  tooltip: string;
 }
 
-export const Nav: FC<Props> = ({ currentStepId, setCurrentStepId }) => {
+interface NavProps {
+  currentStepId: number;
+  setCurrentStepId: (id: number) => void;
+}
+
+export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
   const pathname = usePathname();
   const router = useRouter();
+  const [questions] = useAuthorStore((state) => [state.questions]);
+  const regex = /author\/(\d+)/;
+  const numbers = pathname.match(regex);
+  const activeAssignmentId = numbers[1]; // This will give you the second number (ind
+  const questionsAreReadyToBePublished =
+    useQuestionsAreReadyToBePublished(questions);
 
   useEffect(() => {
     setCurrentStepId(getCurrentId());
   }, [pathname]);
-  if (!pathname) {
-    return null;
-  }
-  const activeAssignmentId = extractAssignmentId(pathname);
 
-  const steps = [
+  const setFocusedQuestionId = useAuthorStore(
+    (state) => state.setFocusedQuestionId,
+  );
+
+  const steps: Step[] = [
     {
       id: 0,
-      name: "Assignment Set up",
+      name: "Assignment Setup",
       href: `/author/${activeAssignmentId}`,
+      icon: IconClipboardList,
+      tooltip: "Set up your assignment details",
     },
     {
       id: 1,
       name: "Assignment Config",
       href: `/author/${activeAssignmentId}/config`,
+      icon: IconSettings,
+      tooltip: "Configure assignment settings",
     },
     {
       id: 2,
       name: "Question Setup",
       href: `/author/${activeAssignmentId}/questions`,
+      icon: IconQuestionMark,
+      tooltip: "Add and edit questions",
+    },
+    {
+      id: 3,
+      name: "Review",
+      href: `/author/${activeAssignmentId}/review`,
+      icon: IconEyeCheck,
+      tooltip: "Review and publish your assignment",
     },
   ];
 
-  function getCurrentId() {
-    const currentStep = steps.find((step) => step.href === pathname);
-    return currentStep?.id;
-  }
+  const handleDisabled = (id: number) => {
+    if (id === 3) {
+      const { isValid, message, invalidQuestionId } =
+        questionsAreReadyToBePublished();
+      tooltipMessage = (
+        <>
+          <span>{message}</span>
+          {!isValid && (
+            <button
+              onClick={() => {
+                setFocusedQuestionId(invalidQuestionId);
+              }}
+              className="ml-2 text-blue-500 hover:underline"
+            >
+              Take me there
+            </button>
+          )}
+        </>
+      );
+      return !isValid;
+    }
+    return false;
+  };
 
   async function handleStepClick(id: number) {
-    const stepOneToTwo = currentStepId === 0 && id === 1;
-    const stepOneToThree = currentStepId === 0 && id === 2;
-    const stepTwoToOne = currentStepId === 1 && id === 0;
-    const stepTwoToThree = currentStepId === 1 && id === 2;
-    const stepThreeToOne = currentStepId === 2 && id === 0;
-    const stepThreeToTwo = currentStepId === 2 && id === 1;
-    switch (true) {
-      case stepOneToTwo:
-        router.push(`/author/${activeAssignmentId}/config`);
+    const stepActions: Record<number, () => Promise<void>> = {
+      0: async () => {
         await publishStepOneData();
-        break;
-      case stepOneToThree:
-        router.push(`/author/${activeAssignmentId}/questions`);
-        await publishStepOneData();
-        break;
-      case stepTwoToOne:
-        router.push(`/author/${activeAssignmentId}`);
+      },
+      1: async () => {
         await publishStepTwoData();
-        break;
-      case stepTwoToThree:
-        router.push(`/author/${activeAssignmentId}/questions`);
-        await publishStepTwoData();
-        break;
-      case stepThreeToOne:
-        router.push(`/author/${activeAssignmentId}`);
-        break;
-      case stepThreeToTwo:
-        router.push(`/author/${activeAssignmentId}/config`);
-        break;
+      },
+    };
+
+    // Check if the action exists for the current step
+    const action = stepActions[currentStepId];
+
+    if (currentStepId < id && action) {
+      await action();
     }
+
+    router.push(steps[id].href);
   }
 
+  const getCurrentId = () => {
+    const currentStep = steps.find((step) => {
+      return step.href === pathname;
+    });
+    return currentStep?.id ?? 0;
+  };
+
+  let tooltipMessage: React.ReactNode = "";
+
   return (
-    <nav aria-label="Progress" className="col-span-2 w-full">
-      <ol
-        role="navigation"
-        className="space-y-4 sm:flex md:space-x-8 sm:space-y-0"
-      >
-        {steps.map(({ name, href, id }) => {
-          const stepNumber = id + 1;
+    <nav aria-label="Progress" className="flex-1 mx-8">
+      <ol className="flex items-center justify-center space-x-4">
+        {steps.map((step, index) => {
+          const isCompleted = index < currentStepId;
+          const isActive = index === currentStepId;
+          const Icon = step.icon;
+
           return (
-            <li key={name} className="sm:flex-1 w-full">
-              {id < currentStepId ? (
-                // completed
+            <li key={step.id} className="flex items-center">
+              <Tooltip
+                disabled={!handleDisabled(step.id)}
+                content={tooltipMessage}
+                distance={-2}
+              >
                 <button
-                  onClick={() => handleStepClick(id)}
-                  type="button"
-                  className="group transition w-full flex flex-col border-l-4 border-blue-700 py-2 pl-4 hover:border-blue-500 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
+                  onClick={() => handleStepClick(index)}
+                  disabled={handleDisabled(step.id)}
+                  className="relative flex flex-col items-center text-center focus:outline-none"
                 >
-                  <span className="text-sm font-medium text-blue-700 group-hover:text-blue-500">
-                    Step {stepNumber}
+                  <motion.div
+                    initial={{ scale: 1 }}
+                    animate={{ scale: isActive ? 1.2 : 1 }}
+                    transition={{ duration: 0.3 }}
+                    className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors duration-500 ease-in-out ${
+                      isCompleted
+                        ? "bg-violet-600 text-white"
+                        : isActive
+                          ? "bg-white border-2 border-violet-600 text-violet-600"
+                          : "bg-gray-200 text-gray-500"
+                    }`}
+                  >
+                    <Icon size={28} stroke={1.5} />
+                  </motion.div>
+                  <span
+                    className={`mt-2 text-sm font-medium ${
+                      isCompleted || isActive
+                        ? "text-violet-600"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    {step.name}
                   </span>
-                  <span className="text-sm font-medium">{name}</span>
                 </button>
-              ) : pathname === href ? (
-                // current
-                <button
-                  onClick={() => handleStepClick(id)}
-                  type="button"
-                  className="group flex w-full flex-col border-l-4 border-blue-700 hover:border-blue-500 py-2 pl-4 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
-                  aria-current="step"
-                >
-                  <span className="text-sm font-medium text-blue-700 group-hover:text-blue-500">
-                    Step {stepNumber}
-                  </span>
-                  <span className="text-sm font-medium">{name}</span>
-                </button>
-              ) : (
-                //
-                <button
-                  type="button"
-                  className="group w-full flex flex-col border-l-4 border-gray-200 py-2 pl-4 hover:border-gray-300 sm:border-l-0 sm:border-t-4 sm:pb-0 sm:pl-0 sm:pt-4"
-                  onClick={() => handleStepClick(id)}
-                >
-                  <span className="text-sm font-medium text-gray-500 group-hover:text-gray-700">
-                    Step {stepNumber}
-                  </span>
-                  <span className="text-sm font-medium">{name}</span>
-                </button>
+              </Tooltip>
+
+              {/* Render the connecting dash after the step unless it's the last one */}
+              {index < steps.length - 1 && (
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{
+                    width: index < currentStepId ? "100%" : "0%",
+                  }}
+                  transition={{ duration: 0.5 }}
+                  className="h-1 bg-violet-600 mx-2"
+                ></motion.div>
               )}
             </li>
           );

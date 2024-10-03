@@ -30,11 +30,11 @@ async function AboutTheAssignment(props: Props) {
   const listOfAttempts = await getAttempts(assignmentId, cookie);
   // if the number of attempts of the assignment is equals to the assignment's max attempts, then the assignment state is "completed"
   let assignmentState: LearnerAssignmentState = "not-started";
-  if (listOfAttempts.length === assignment.numAttempts) {
+  if (listOfAttempts?.length === assignment.numAttempts) {
     assignmentState = "completed";
   } else {
     // check if there are any attempts that are not submitted and have not expired
-    const unsubmittedAssignment = listOfAttempts.find(
+    const unsubmittedAssignment = listOfAttempts?.find(
       (attempt) =>
         attempt.submitted === false &&
         // if the assignment does not expire, then the expiresAt is null
@@ -63,7 +63,7 @@ async function AboutTheAssignment(props: Props) {
   }
 
   return (
-    <main className="p-20 flex flex-col gap-y-14">
+    <main className="p-20 flex flex-col gap-y-14 bg-gray-50 flex-1">
       <div className="flex justify-between items-center">
         {/* data passed here will also be stored in zustand store (possible to do that there because it's client-side rendered) */}
         <AssignmentMainInfo

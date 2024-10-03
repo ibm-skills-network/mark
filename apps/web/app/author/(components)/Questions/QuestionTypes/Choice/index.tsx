@@ -1,11 +1,7 @@
 import { Choice } from "@/config/types";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import {
-  memo,
-  useEffect,
-  useState,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { memo, useRef, useState, type ComponentPropsWithoutRef } from "react";
+
 interface Props extends ComponentPropsWithoutRef<"li"> {
   questionId: number; // Include questionId to uniquely identify the question
   index: number;
@@ -16,7 +12,8 @@ interface Props extends ComponentPropsWithoutRef<"li"> {
   addChoice: () => void;
   changeText: (index: number, value: string) => void;
   changePoints: (index: number, value: number) => void;
-  focusNextInput: (index: number) => void; // Function to focus the next input field
+  preview: boolean;
+  choices: Choice[];
 }
 
 const ChoiceComponent = memo(function Component(props: Props) {
@@ -30,18 +27,14 @@ const ChoiceComponent = memo(function Component(props: Props) {
     addChoice,
     changeText,
     changePoints,
-    focusNextInput,
+    preview,
+    choices,
   } = props;
-
   const { choice: choiceText, points, isCorrect } = choice;
-
   const [localChoiceText, setLocalChoiceText] = useState(choice?.choice || "");
   const [localPoints, setLocalPoints] = useState<number>(points || 0);
-
-  useEffect(() => {
-    setLocalChoiceText(choice?.choice || "");
-    setLocalPoints(points || 0);
-  }, [choice?.choice, points]);
+  const [backspaceCount, setBackspaceCount] = useState(0);
+  const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null); // To track the debounce timer
 
   const handleBlur = () => {
     changeText(index, localChoiceText);
@@ -58,12 +51,66 @@ const ChoiceComponent = memo(function Component(props: Props) {
   };
   const handleChangeCorrect = (index: number, value: boolean) => {
     const negativePoints = localPoints * -1;
-    console.log(negativePoints);
     changePoints(index, negativePoints);
-    setLocalPoints(negativePoints); // convert number from positive to negative and vice versa
+    setLocalPoints(negativePoints);
     toggleChoice(index);
   };
+  // Function to handle backspace press to remove choice
+  const handleBackspacePress = (index: number, event: React.KeyboardEvent) => {
+    const value = (event.currentTarget as HTMLInputElement).value;
 
+    if (event.key === "Backspace" && value === "") {
+      if (backspaceTimerRef.current) {
+        clearTimeout(backspaceTimerRef.current);
+      }
+
+      setBackspaceCount((prevCount) => prevCount + 1);
+
+      backspaceTimerRef.current = setTimeout(() => {
+        setBackspaceCount(0);
+      }, 10000);
+
+      if (backspaceCount === 1) {
+        removeChoice(index);
+
+        setTimeout(() => {
+          const lastChoiceInput = document.getElementById(
+            `Choice-${questionId}-${index - 1}`,
+          );
+          if (lastChoiceInput) {
+            lastChoiceInput.focus();
+          }
+        }, 100);
+
+        setBackspaceCount(0);
+      }
+    } else {
+      setBackspaceCount(0);
+    }
+  };
+  // Function to focus the next input field or create a new choice
+  const focusNextInput = (index: number) => {
+    if (index < choices.length - 1) {
+      setTimeout(() => {
+        const newInput = document.getElementById(
+          `Choice-${questionId}-${index + 1}`,
+        );
+        if (newInput) {
+          newInput.focus();
+        }
+      }, 100);
+    } else {
+      addChoice();
+      setTimeout(() => {
+        const newInput = document.getElementById(
+          `Choice-${questionId}-${choices.length}`,
+        );
+        if (newInput) {
+          newInput.focus();
+        }
+      }, 100);
+    }
+  };
   return (
     <li key={index} className="flex items-center gap-x-1.5">
       {/* Conditionally render checkbox or radio button based on isSingleChoice */}
@@ -76,6 +123,7 @@ const ChoiceComponent = memo(function Component(props: Props) {
         } // Ensure the name is unique per question
         className={`${isSingleChoice ? "rounded-full" : "rounded"}`}
         checked={isCorrect}
+        disabled={preview}
         onChange={() => {
           handleChangeCorrect(index, !isCorrect);
         }}
@@ -83,14 +131,17 @@ const ChoiceComponent = memo(function Component(props: Props) {
       <input
         className="w-full overflow-hidden !border-transparent transition hover:!border-b-gray-300 focus:!border-b-gray-600 !ring-0 p-2 text-black outline-none"
         placeholder={`Choice ${index + 1}`}
-        id={index.toString()}
+        id={`Choice-${questionId}-${index}`}
         value={localChoiceText}
         onChange={(event) => setLocalChoiceText(event.target.value)}
         onBlur={handleBlur}
+        disabled={preview}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             handleBlur();
             focusNextInput(index);
+          } else {
+            handleBackspacePress(index, event);
           }
         }}
       />
@@ -101,6 +152,7 @@ const ChoiceComponent = memo(function Component(props: Props) {
             isCorrect ? "border rounded" : "border-none"
           }`}
           value={localPoints}
+          disabled={preview}
           onChange={handlePointsChange}
           onBlur={() => changePoints(index, localPoints)}
           style={{
@@ -108,7 +160,11 @@ const ChoiceComponent = memo(function Component(props: Props) {
           }}
         />
       </div>
-      <button className="text-red-600 pl-1" onClick={() => removeChoice(index)}>
+      <button
+        className="text-red-600 pl-1"
+        disabled={preview}
+        onClick={() => removeChoice(index)}
+      >
         <XMarkIcon className="w-5" />
       </button>
     </li>

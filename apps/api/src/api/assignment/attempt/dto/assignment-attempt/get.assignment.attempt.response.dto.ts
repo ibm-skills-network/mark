@@ -53,6 +53,12 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     isArray: true,
   })
   questions: AssignmentAttemptQuestions[];
+  @ApiProperty({
+    description: "Passing grade for the assignment",
+    type: Number,
+    required: true,
+  })
+  passingGrade: number;
 }
 
 export class AssignmentAttemptQuestions {

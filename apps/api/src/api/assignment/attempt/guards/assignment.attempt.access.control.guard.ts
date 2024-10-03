@@ -25,8 +25,8 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       assignmentId: assignmentIdString,
       attemptId: attemptIdString,
       questionId: questionIdString,
+      role: role,
     } = params;
-
     const assignmentId = Number(assignmentIdString);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,6 +57,25 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
         whereClause.userId = userSession.userId;
       }
 
+      if (userSession.role === UserRole.LEARNER) {
+        // check if attempt belongs to user
+        const suspeciousUserId = userSession.userId;
+
+        // grab userId using attemptId
+        const userId = await this.prisma.assignmentAttempt.findUnique({
+          where: {
+            id: Number(attemptIdString),
+          },
+          select: {
+            userId: true,
+          },
+        });
+        if (userId.userId !== suspeciousUserId) {
+          throw new NotFoundException(
+            "Attempt not found or not owned by the user",
+          );
+        }
+      }
       // Query to check if the attempt belongs to the assignment and is owned by the user (if they're a learner)
       queries.push(
         this.prisma.assignmentAttempt.findFirst({ where: whereClause }),
@@ -91,7 +110,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       return false;
     }
 
-    if (attemptIdString && !attempt) {
+    if (attemptIdString && !attempt && role === UserRole.LEARNER) {
       throw new NotFoundException("Attempt not found or not owned by the user");
     }
 

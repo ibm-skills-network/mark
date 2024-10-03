@@ -1,58 +1,70 @@
-import { cn } from "@/lib/strings";
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
-import type { QuestionStatus } from "@config/types"; // Ensure this type is updated as specified below
-import { useMemo, type ComponentPropsWithoutRef } from "react";
+import { useLearnerStore } from "@/stores/learner";
+import type { QuestionStore } from "@config/types";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  type ComponentPropsWithoutRef,
+} from "react";
 import Timer from "./Timer";
+import { IconBookmarkFilled } from "@tabler/icons-react";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+interface Props extends ComponentPropsWithoutRef<"div"> {
+  questions: QuestionStore[];
+}
 
-function Overview(props: Props) {
-  const [
-    questionsStore,
-    activeQuestionNumber,
-    setActiveQuestionNumber,
-    expiresAt,
-  ] = useLearnerStore((state) => [
-    state.questions,
-    state.activeQuestionNumber,
-    state.setActiveQuestionNumber,
-    state.expiresAt,
-  ]);
+function Overview({ questions }: Props) {
+  const [activeQuestionNumber, setActiveQuestionNumber, expiresAt] =
+    useLearnerStore((state) => [
+      state.activeQuestionNumber,
+      state.setActiveQuestionNumber,
+      state.expiresAt,
+    ]);
 
-  const questionStatus = useMemo(() => {
-    return questionsStore.map((question) => {
-      // get the higest points earned for the question by finding the highest points earned for each response
-      const earnedPoints =
-        question.questionResponses?.length > 0
-          ? Math.max(
-              ...question.questionResponses.map((response) => response.points),
-            )
-          : -1;
-      if (question.totalPoints === earnedPoints) {
-        return "correct";
+  /**
+   * Scrolls the page to the specified question element.
+   *
+   * @param questionId - The ID of the question element to scroll to.
+   */
+  const handleJumpToQuestion = useCallback((questionId: number) => {
+    const element = document.getElementById(
+      `indexQuestion-${String(questionId)}`,
+    );
+
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, []);
+
+  useEffect(() => {
+    handleJumpToQuestion(activeQuestionNumber);
+  }, [activeQuestionNumber, handleJumpToQuestion]);
+
+  /**
+   * Computes the classes for each question button based on its status and whether it's active.
+   */
+  const getQuestionButtonClasses = useCallback(
+    (question: QuestionStore, index: number) => {
+      let baseClasses =
+        "pb-2 w-10 h-14 border rounded-md text-center cursor-pointer focus:outline-none flex flex-col items-center";
+      if (question.status === "flagged") {
+        baseClasses += " bg-yellow-200 border-yellow-400 text-yellow-700";
+      } else if (question.status === "edited") {
+        baseClasses += " bg-indigo-100 border-gray-400 text-gray-500";
+      } else {
+        baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
       }
-      if (earnedPoints > 0) {
-        return "partiallyCorrect";
-        // TODO: add other types of questions
+      if (index === activeQuestionNumber - 1) {
+        baseClasses += " border-violet-700 text-violet-700 bg-violet-100";
       }
-      if (earnedPoints === 0) {
-        return "incorrect";
-      }
-      if (earnedPoints === -1) {
-        if (
-          question?.learnerTextResponse ||
-          question?.learnerUrlResponse ||
-          question?.learnerAnswerChoice ||
-          question?.learnerChoices?.length > 0
-        ) {
-          return "edited";
-        }
-        return "unedited";
-      }
-    });
-  }, [questionsStore]);
+
+      return baseClasses;
+    },
+    [activeQuestionNumber],
+  );
+
   return (
-    <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 w-64 max-w-xl bg-white">
+    <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 max-w-[250px] bg-white shadow hover:shadow-md max-h-[310px]">
       {expiresAt ? (
         <Timer />
       ) : (
@@ -62,21 +74,20 @@ function Overview(props: Props) {
       <hr className="border-gray-300 -mx-4" />
 
       <h3 className="text-gray-600 leading-tight">Questions</h3>
-      <div className="grid gap-1.5 grid-cols-5">
-        {questionStatus.map((question: QuestionStatus, index) => (
+
+      {/* Grid for question numbers */}
+      <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(35px,1fr))] overflow-y-auto">
+        {questions.map((question: QuestionStore, index) => (
           <button
             key={index}
+            id={`indexQuestion-${index + 1}`}
             onClick={() => setActiveQuestionNumber(index + 1)}
-            className={cn(
-              "p-0.5 w-10 h-14 border rounded-md text-center grid grid-rows-2 cursor-pointer focus:outline-none",
-              question === "edited" ? "bg-indigo-100" : "bg-gray-100",
-              index === activeQuestionNumber - 1
-                ? "border-blue-700 text-blue-700 bg-blue-100"
-                : "border-gray-400 text-gray-500",
-            )}
+            className={getQuestionButtonClasses(question, index)}
           >
-            <div className="leading-5 font-bold my-auto">{index + 1}</div>
-            {/* {question === "edited" && <div className="text-gray-600">-</div>} */}
+            <div className="font-bold text-lg mb-2">{index + 1}</div>
+            {question.status === "flagged" && (
+              <IconBookmarkFilled className="text-yellow-700" size={16} />
+            )}
           </button>
         ))}
       </div>

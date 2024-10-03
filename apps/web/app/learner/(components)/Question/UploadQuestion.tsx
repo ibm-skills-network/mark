@@ -1,21 +1,14 @@
 import { useLearnerStore } from "@/stores/learner";
 import { useState } from "react";
 import InfoLine from "../InfoLine";
+import { QuestionStore } from "@/config/types";
 
-interface Props {}
+interface Props {
+  question: QuestionStore;
+}
 
 function UploadQuestion(props: Props) {
-  const {} = props;
-  const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber,
-  );
-
-  const [questions, setTextResponse] = useLearnerStore((state) => [
-    state.questions,
-    state.setTextResponse,
-  ]);
-  const { question, id } = questions[activeQuestionNumber - 1];
-
+  const { question } = props;
   const [file, setFile] = useState<File | null>(null);
 
   // Handles file selection
@@ -24,15 +17,9 @@ function UploadQuestion(props: Props) {
       setFile(event.target.files[0]);
     }
   };
-
-  // Handles the removal of uploaded file
-  const handleFileRemoval = () => {
-    setFile(null);
-  };
-
   return (
     <div className="mb-4 bg-white p-9 rounded-lg border border-gray-300">
-      <InfoLine text={question} />
+      <InfoLine text={question.question || ""} />
 
       {/* File Upload Section */}
       <div className="mt-4 relative h-44 flex flex-col justify-center items-center border border-gray-300 rounded-md cursor-pointer">

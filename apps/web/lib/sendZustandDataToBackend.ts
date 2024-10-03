@@ -39,6 +39,7 @@ export async function publishStepTwoData() {
     passingGrade,
     displayOrder,
     numAttempts,
+    questionDisplay,
   } = useAssignmentConfig.getState();
 
   const { showAssignmentScore, showQuestionScore, showSubmissionFeedback } =
@@ -50,13 +51,14 @@ export async function publishStepTwoData() {
     graded,
     allotedTimeMinutes: strictTimeLimit ? allotedTimeMinutes : null,
     timeEstimateMinutes: timeEstimateMinutes || null,
-    passingGrade,
-    displayOrder,
+    passingGrade: passingGrade || 60,
+    displayOrder: displayOrder || "DEFINED",
     numAttempts: numAttempts === -1 ? null : numAttempts,
     // --- feedback settings ---
     showAssignmentScore,
     showQuestionScore,
     showSubmissionFeedback: showSubmissionFeedback,
+    questionDisplay,
     // -------------------------
   };
   // if attempts is -1, it means unlimited attempts, so we don't send that to the backend(default is unlimited)

@@ -4,29 +4,74 @@ import { publishStepOneData } from "@/lib/sendZustandDataToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { type ComponentPropsWithoutRef, type FC } from "react";
+import {
+  useEffect,
+  useState,
+  type ComponentPropsWithoutRef,
+  type FC,
+} from "react";
+import { useQuestionsAreReadyToBePublished } from "@/app/Helpers/checkQuestionsReady";
+import { Question } from "@/config/types";
+import Tooltip from "@/components/Tooltip";
 interface Props extends ComponentPropsWithoutRef<"nav"> {
-  assignmentId: string;
+  assignmentId?: string;
+  nextStep?: string;
 }
 
-export const FooterNavigation: FC<Props> = ({ assignmentId }) => {
+export const FooterNavigation: FC<Props> = ({
+  assignmentId,
+  nextStep = "config",
+}) => {
   const router = useRouter();
-  const [activeAssignmentId] = useAuthorStore((state) => [
+  const [activeAssignmentId, questions] = useAuthorStore((state) => [
     state.activeAssignmentId,
+    state.questions,
   ]);
+  const setFocusedQuestionId = useAuthorStore(
+    (state) => state.setFocusedQuestionId,
+  );
+  const [tooltipMessage, setTooltipMessage] = useState<React.ReactNode>("");
+  const [disableButton, setDisableButton] = useState<boolean>(false);
+  const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
+    questions as Question[],
+  );
   const goToNextStep = async () => {
-    router.push(`/author/${activeAssignmentId}/config`);
+    router.push(`/author/${activeAssignmentId}/${nextStep}`);
     await publishStepOneData();
   };
+  useEffect(() => {
+    const { isValid, message, invalidQuestionId } =
+      questionsAreReadyToBePublished();
+    setDisableButton(!isValid);
+    setTooltipMessage(
+      <>
+        <span>{message}</span>
+        {!isValid && (
+          <button
+            onClick={() => {
+              setFocusedQuestionId(invalidQuestionId);
+            }}
+            className="ml-2 text-blue-500 hover:underline"
+          >
+            Take me there
+          </button>
+        )}
+      </>,
+    );
+  }, [questions]);
+
   return (
     <footer className="flex gap-5 justify-end max-w-full text-base font-medium leading-6 text-violet-800 whitespace-nowrap max-md:flex-wrap">
-      <Button
-        version="secondary"
-        RightIcon={ChevronRightIcon}
-        onClick={goToNextStep}
-      >
-        Next
-      </Button>
+      <Tooltip disabled={!disableButton} content={tooltipMessage} distance={3}>
+        <Button
+          version="secondary"
+          disabled={disableButton}
+          RightIcon={ChevronRightIcon}
+          onClick={goToNextStep}
+        >
+          Next
+        </Button>
+      </Tooltip>
     </footer>
   );
 };

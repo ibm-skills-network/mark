@@ -1,35 +1,29 @@
 "use client";
 
-import { Choice as ChoiceType } from "../../../../../config/types";
-import { useAuthorStore } from "../../../../../stores/author";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import React, { useEffect } from "react";
 import { toast } from "sonner";
-import Choice from "./Choice";
 import { shallow } from "zustand/shallow";
+import { Choice as ChoiceType } from "../../../../../config/types";
+import { useAuthorStore } from "../../../../../stores/author";
+import Choice from "./Choice";
 
 interface sectionProps {
   questionId: number;
+  preview?: boolean;
 }
 
 function Section(props: sectionProps) {
-  const { questionId } = props;
+  const { questionId, preview } = props;
 
-  const [
-    modifyQuestion,
-    addChoice,
-    removeChoice,
-    setChoices,
-    modifyChoice,
-    setPoints,
-  ] = useAuthorStore((state) => [
-    state.modifyQuestion,
-    state.addChoice,
-    state.removeChoice,
-    state.setChoices,
-    state.modifyChoice,
-    state.setPoints,
-  ]);
+  const [addChoice, removeChoice, setChoices, modifyChoice] = useAuthorStore(
+    (state) => [
+      state.addChoice,
+      state.removeChoice,
+      state.setChoices,
+      state.modifyChoice,
+    ],
+  );
 
   const questions = useAuthorStore(
     (state) => state.questions,
@@ -47,6 +41,11 @@ function Section(props: sectionProps) {
       setChoices(questionId, [
         {
           choice: "",
+          isCorrect: true,
+          points: 0,
+        },
+        {
+          choice: "",
           isCorrect: false,
           points: 0,
         },
@@ -60,7 +59,8 @@ function Section(props: sectionProps) {
     return null;
   }
 
-  const disableAddChoice = choices.some((choice) => choice.choice === "");
+  const disableAddChoice =
+    choices.some((choice) => choice.choice === "") || preview;
 
   function handleChoiceChange(
     choiceIndex: number,
@@ -113,25 +113,6 @@ function Section(props: sectionProps) {
 
     handleChoiceChange(choiceIndex, { isCorrect: newCorrectStatus });
   }
-
-  const focusNextInput = (index: number) => {
-    if (index < choices.length - 1) {
-      // TODO: Focus on the next input field if it exists, currently it doesnt work
-      const nextInput = document.getElementById((index + 1).toString());
-      if (nextInput) {
-        nextInput.focus();
-      }
-    } else {
-      handleAddChoice();
-      setTimeout(() => {
-        const newInput = document.getElementById(choices.length.toString());
-        if (newInput) {
-          newInput.focus();
-        }
-      }, 100);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-y-6 w-full">
       <div className="flex flex-col gap-y-2">
@@ -148,8 +129,9 @@ function Section(props: sectionProps) {
               addChoice={handleAddChoice}
               changePoints={handleChangeChoicePoints}
               isSingleChoice={true}
-              focusNextInput={focusNextInput} // Pass the focusNextInput function
               questionId={questionId}
+              preview={preview}
+              choices={choices}
             />
           ))}
         </ul>

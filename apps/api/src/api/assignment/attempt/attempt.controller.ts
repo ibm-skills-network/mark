@@ -108,7 +108,7 @@ export class AttemptController {
   }
 
   @Patch(":attemptId")
-  @Roles(UserRole.LEARNER)
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
   @ApiOperation({
     summary: "Update an assignment attempt for an assignment.",
@@ -146,6 +146,7 @@ export class AttemptController {
       learnerUpdateAssignmentAttemptDto,
       authCookie,
       gradingCallbackRequired,
+      request,
     );
   }
 
@@ -172,15 +173,17 @@ export class AttemptController {
     @Param("questionId") questionId: number,
     @UploadedFile() file: Express.Multer.File,
     @Body()
+    @Req()
+    request: UserSessionRequest,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     createQuestionResponseAttemptRequestDto.learnerFileResponse = file;
-
     return this.attemptService.createQuestionResponse(
       Number(assignmentAttemptId),
       Number(questionId),
       createQuestionResponseAttemptRequestDto,
+      request.userSession.role,
     );
   }
 }

@@ -1,9 +1,9 @@
 import { cn } from "@/lib/strings";
-import type { ComponentPropsWithoutRef, FC } from "react";
+import type { ComponentPropsWithoutRef, FC, ReactNode } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {
+interface Props extends Omit<ComponentPropsWithoutRef<"div">, "content"> {
   direction?: "x" | "y";
-  content: string;
+  content: ReactNode; // Changed this to ReactNode to accept JSX or string
   delay?: number;
   disabled?: boolean;
   distance?: number;
@@ -29,6 +29,7 @@ const Tooltip: FC<Props> = (props) => {
         return classNamesFromYDistance();
     }
   }
+
   const classNamesFromXDistance = () => {
     if (distance > 0) {
       return "origin-right";
@@ -38,6 +39,7 @@ const Tooltip: FC<Props> = (props) => {
     }
     return "origin-center";
   };
+
   const classNamesFromYDistance = () => {
     if (distance > 0) {
       return "origin-bottom";
@@ -65,7 +67,7 @@ const Tooltip: FC<Props> = (props) => {
               getClassNamesFromDirectionAndDistance(),
             )}
           >
-            {content}
+            {content} {/* content can now be text or a JSX element */}
           </span>
         )}
       </div>

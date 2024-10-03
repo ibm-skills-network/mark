@@ -124,25 +124,17 @@ export const generateQuestionVariationsTemplate = `
 `;
 
 export const generateMarkingRubricTemplate = `
-  You are tasked with creating a JSON Object of marking rubric for the following questions:
+  You are tasked with creating a JSON object of marking rubrics for the following questions:
   Questions: {questions_json_array}
   {format_instructions}
 
-  Text-based questions are the default type. For these and other specified types:
-  - Point values as keys and criteria descriptions as values.
-  - Points must differ for each criterion, listed in descending order.
-  - No terms like "full marks" or "partial marks."
+  Guidelines for all question types:
+  - Use point values as keys and criteria descriptions as values.
+  - List points in descending order, ensuring they differ for each criterion.
+  - Avoid terms like "full marks" or "partial marks."
   - End each criterion with "||".
-  - Criteria should assess clarity, examples, and explanation depth.
 
-  For "url" questions:
-  - Point values as keys and criteria descriptions as values.
-  - Points must differ, listed in descending order.
-  - No terms like "full marks" or "partial marks."
-  - End each criterion with "||".
-  - Criteria should assess:
-    - URL content relevance.
-    - Source credibility.
-    - Content clarity and depth.
-    - Integration and explanation quality.
+  Specific Criteria:
+  - **Text-based questions**: Focus on correctness of the answer, and differentiate between correct and incorrect responses.
+  - **URL-based questions**: Evaluate content relevance, source credibility, clarity, and quality of integration and explanation.
 `;

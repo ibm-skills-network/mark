@@ -1,4 +1,5 @@
 import type { QuestionStore } from "@/config/types";
+import { useAppConfig } from "@/stores/appConfig";
 
 export function absoluteUrl(path: string) {
   const base = getBaseUrl();
@@ -45,14 +46,17 @@ export function mergeData<T extends DataWithUpdatedAt>(
   return backendData;
 }
 
-const debugMode = process.env.DEBUG_MODE === "true";
-
 type DebugArgs = string | number | boolean | object;
 
-export const debugLog = (...args: DebugArgs[]) => {
-  if (debugMode) {
-    console.debug(...args);
-  }
+export const useDebugLog = () => {
+  const debugMode = useAppConfig((state) => state.DEBUG_MODE);
+  const useDebugLog = (...args: DebugArgs[]) => {
+    if (debugMode) {
+      console.log("DEBUG LOG:", ...args);
+    }
+  };
+
+  return useDebugLog;
 };
 
 export const editedQuestionsOnly = (questions: QuestionStore[]) =>
@@ -63,6 +67,10 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
       q.learnerChoices?.length > 0 ||
       q.learnerAnswerChoice !== undefined,
   );
+
+export const generateTempQuestionId = (): number => {
+  return Math.floor(Math.random() * 2e9); // Generates a number between 0 and 2,000,000,000
+};
 // export function debounce<T extends (...args: unknown[]) => void>(
 //   func: T,
 //   delay: number

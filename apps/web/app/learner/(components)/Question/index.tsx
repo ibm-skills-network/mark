@@ -1,15 +1,17 @@
 "use client";
 
 import Loading from "@/components/Loading";
-import type {
-  AssignmentAttemptWithQuestions,
-  QuestionStore,
-} from "@/config/types";
+import type { AssignmentAttemptWithQuestions } from "@/config/types";
 import { getAssignment } from "@/lib/talkToBackend";
-import { debugLog } from "@/lib/utils";
+import { useDebugLog } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 
@@ -21,6 +23,7 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 function QuestionPage(props: Props) {
   const { attempt, assignmentId } = props;
   const { questions, id, expiresAt } = attempt;
+  const debugLog = useDebugLog();
   const router = useRouter();
   const questionsStore = useLearnerStore((state) => state.questions);
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
@@ -32,43 +35,95 @@ function QuestionPage(props: Props) {
   >("loading");
 
   useEffect(() => {
-    if (!assignmentDetails || assignmentDetails.id !== assignmentId) {
-      // if the current active assignment details are not stored in zustand store, then
-      const fetchAssignment = async () => {
-        // call the backend to get the assignment details
-        const assignment = await getAssignment(assignmentId);
-        if (assignment) {
-          // if the assignment is found, then store it in zustand store
+    const fetchAssignment = async () => {
+      const assignment = await getAssignment(assignmentId);
+
+      if (assignment) {
+        // Only set assignment details if they are different from the current state
+        if (
+          !assignmentDetails ||
+          assignmentDetails.id !== assignment.id ||
+          JSON.stringify(assignmentDetails) !== JSON.stringify(assignment)
+        ) {
           setAssignmentDetails({
             id: assignment.id,
             name: assignment.name,
             numAttempts: assignment.numAttempts,
             passingGrade: assignment.passingGrade,
             allotedTimeMinutes: assignment.allotedTimeMinutes,
+            questionDisplay: assignment.questionDisplay,
           });
-        } else {
-          // if the assignment details are not found, then redirect to the assignment overview page
-          router.push(`/learner/${assignmentId}`);
         }
-      };
+      } else {
+        router.push(`/learner/${assignmentId}`);
+      }
+    };
+
+    if (
+      !assignmentDetails ||
+      assignmentDetails.id !== assignmentId ||
+      assignmentDetails.questionDisplay === undefined
+    ) {
       void fetchAssignment();
     }
+
+    const questionsWithStatus = questions.map((question) => ({
+      ...question,
+      status: question.status ?? "unedited",
+    }));
+
     debugLog("attemptId, expiresAt", id, new Date(expiresAt).getTime());
-    setLearnerStore({
-      questions: questions,
+
+    const currentStore = {
+      questions: questionsWithStatus,
       activeAttemptId: id,
       expiresAt: new Date(expiresAt).getTime(),
-    });
+    };
+
+    const hasChanges =
+      JSON.stringify(questionsWithStatus) !== JSON.stringify(questions) ||
+      id !== currentStore.activeAttemptId ||
+      new Date(expiresAt).getTime() !== currentStore.expiresAt;
+
+    if (hasChanges) {
+      setLearnerStore(currentStore);
+    }
+
     if (questions.length) {
       setPageState("success");
     } else {
       setPageState("no-questions");
     }
-  }, []);
+  }, [
+    assignmentId,
+    assignmentDetails,
+    questions,
+    id,
+    expiresAt,
+    setLearnerStore,
+    setAssignmentDetails,
+  ]);
 
   const [activeQuestionNumber] = useLearnerStore((state) => [
     state.activeQuestionNumber,
   ]);
+
+  /**
+   * Scrolls the page to the specified question element.
+   *
+   * @param questionId - The ID of the question element to scroll to.
+   */
+  const handleJumpToQuestion = (questionId: number) => {
+    const element = document.getElementById(`item-${String(questionId)}`);
+    if (!element) return;
+    requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+  useEffect(() => {
+    handleJumpToQuestion(activeQuestionNumber);
+  }, [activeQuestionNumber]);
 
   if (pageState === "loading") {
     return <Loading />;
@@ -82,39 +137,41 @@ function QuestionPage(props: Props) {
   }
 
   return (
-    <div className="flex gap-x-5">
-      <div className="flex-1">
-        {questionsStore.map((question, index) => (
-          <QuestionContainer
-            key={question.id ?? index}
-            questionNumber={index + 1}
-            className={`${index + 1 === activeQuestionNumber ? "" : "hidden"} `}
-            questionId={question.id}
-            // question={question}
-          />
-        ))}
-      </div>
-      <div className="">
-        <Overview />
+    <div className="grid grid-cols-[260px_1fr] bg-gray-50 flex-grow min-h-0">
+      {/* Overview section with fixed width */}
+      <div className="rounded-md h-auto pt-12 px-4">
+        <Overview questions={questionsStore} />
       </div>
 
-      {/* Attempt Warning Modal */}
-      {/* {showWarning && (
-            <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-opacity-50 bg-black">
-              <div className="bg-white p-8 rounded shadow-lg">
-                <p>
-                  Once submitted, no more changes can be made. Are you sure you
-                  want to submit?
-                </p>
-                <div className="flex justify-end mt-4">
-                  <Button onClick={() => setShowWarning(false)}>Cancel</Button>
-              <Button className="ml-2" onClick={handleAttempt}>
-                Yes, Submit
-              </Button>
-                </div>
-              </div>
-            </div>
-          )} */}
+      {/* Questions section that takes the remaining space */}
+      <div className="flex flex-col gap-y-5 py-12 overflow-y-auto px-4 h-full">
+        {/* Conditional rendering based on questionDisplay */}
+        {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
+          ? // Display all questions
+            questionsStore.map((question, index) => (
+              <QuestionContainer
+                key={index}
+                questionNumber={index + 1}
+                questionId={question.id}
+                question={question}
+                questionDisplay={assignmentDetails.questionDisplay}
+                lastQuestionNumber={questionsStore.length}
+              />
+            ))
+          : // Display one question per page
+            questionsStore.map((question, index) =>
+              index + 1 === activeQuestionNumber ? (
+                <QuestionContainer
+                  key={index}
+                  questionNumber={index + 1}
+                  questionId={question.id}
+                  question={question}
+                  questionDisplay={assignmentDetails.questionDisplay}
+                  lastQuestionNumber={questionsStore.length}
+                />
+              ) : null,
+            )}
+      </div>
     </div>
   );
 }

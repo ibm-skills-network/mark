@@ -1,20 +1,14 @@
+import { QuestionStore } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
 import MarkdownEditor from "@components/MarkDownEditor";
 
-interface Props {}
+interface Props {
+  question: QuestionStore;
+}
 
 function TextQuestion(props: Props) {
-  const {} = props;
-  const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber,
-  );
-
-  const [questions, setTextResponse] = useLearnerStore((state) => [
-    state.questions,
-    state.setTextResponse,
-  ]);
-
-  const question = questions[activeQuestionNumber - 1];
+  const { question } = props;
+  const [setTextResponse] = useLearnerStore((state) => [state.setTextResponse]);
 
   const maxWords = question?.maxWords || null;
   const maxCharacters = question?.maxCharacters || null;
@@ -22,7 +16,7 @@ function TextQuestion(props: Props) {
     <MarkdownEditor
       value={question?.learnerTextResponse || ""}
       // update status
-      setValue={(value) => setTextResponse(value)}
+      setValue={(value) => setTextResponse(value, question.id)}
       placeholder="Type your answer here"
       maxWords={maxWords}
       maxCharacters={maxCharacters}

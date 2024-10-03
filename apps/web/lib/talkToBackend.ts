@@ -6,12 +6,14 @@ import type {
   Assignment,
   AssignmentAttempt,
   AssignmentAttemptWithQuestions,
+  AssignmentDetails,
   BaseBackendResponse,
   CreateQuestionRequest,
   GetAssignmentResponse,
   QuestionAttemptRequest,
   QuestionAttemptRequestWithId,
   QuestionAttemptResponse,
+  QuestionStore,
   ReplaceAssignmentRequest,
   SubmitAssignmentResponse,
   User,
@@ -484,6 +486,8 @@ export async function submitAssignment(
   assignmentId: number,
   attemptId: number,
   responsesForQuestions: QuestionAttemptRequestWithId[],
+  authorQuestions?: QuestionStore[],
+  authorAssignmentDetails?: ReplaceAssignmentRequest,
   cookies?: string,
 ): Promise<SubmitAssignmentResponse | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
@@ -491,7 +495,12 @@ export async function submitAssignment(
   try {
     const res = await fetch(endpointURL, {
       method: "PATCH",
-      body: JSON.stringify({ submitted: true, responsesForQuestions }),
+      body: JSON.stringify({
+        submitted: true,
+        responsesForQuestions,
+        authorQuestions: authorQuestions || undefined,
+        authorAssignmentDetails: authorAssignmentDetails || undefined,
+      }),
       headers: {
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),

@@ -1,24 +1,16 @@
+import { QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { useLearnerStore } from "@/stores/learner";
 import { useState, type ComponentPropsWithoutRef } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+interface Props extends ComponentPropsWithoutRef<"div"> {
+  question: QuestionStore;
+}
 
 function URLQuestion(props: Props) {
-  const { className, ...restOfProps } = props;
-  const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber,
-  );
-
-  const [questions, setURLResponse] = useLearnerStore((state) => [
-    state.questions,
-    state.setURLResponse,
-  ]);
-  const {
-    question,
-    id,
-    learnerUrlResponse: url,
-  } = questions[activeQuestionNumber - 1];
+  const { className, question } = props;
+  const [setURLResponse] = useLearnerStore((state) => [state.setURLResponse]);
+  const { id, learnerUrlResponse: url } = question;
   const [validURL, setValidURL] = useState<boolean>(true);
 
   const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,7 +36,7 @@ function URLQuestion(props: Props) {
     <input
       type="text"
       className={cn(
-        "w-full p-2 mt-4 border rounded",
+        "w-full p-2 border rounded",
         !validURL ? "border-red-500" : "border-gray-300",
         className,
       )}

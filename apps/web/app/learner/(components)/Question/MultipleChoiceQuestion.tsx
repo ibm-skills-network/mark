@@ -1,41 +1,36 @@
+import { QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 
-interface TrueFalseQuestionProps {
+interface MultipleChoiceQuestion {
   isSingleCorrect: boolean; // New prop to control whether the question allows single or multiple correct answers
+  question: QuestionStore;
 }
 
-function TrueFalseQuestion({ isSingleCorrect }: TrueFalseQuestionProps) {
-  const activeQuestionNumber = useLearnerStore(
-    (state) => state.activeQuestionNumber,
-  );
-
-  const [questions, addChoice, removeChoice] = useLearnerStore((state) => [
-    state.questions,
+function MultipleChoiceQuestion({
+  isSingleCorrect,
+  question,
+}: MultipleChoiceQuestion) {
+  const [addChoice, removeChoice] = useLearnerStore((state) => [
     state.addChoice,
     state.removeChoice,
   ]);
-  const { question, id, choices, learnerChoices, questionResponses } =
-    questions[activeQuestionNumber - 1];
-
-  const assignmentId = useAssignmentDetails(
-    (state) => state.assignmentDetails?.id,
-  );
+  const { choices, learnerChoices } = question;
 
   const handleChoiceClick = (choice: string) => {
     if (isSingleCorrect) {
       choices.forEach((c) => {
         // deselect all choices
-        removeChoice(c.choice);
+        removeChoice(c.choice, question.id);
       });
       // select the clicked choice
-      addChoice(choice);
+      addChoice(choice, question.id);
     } else {
       // Multiple correct behavior: toggle the choice
       if (learnerChoices?.includes(choice)) {
-        removeChoice(choice);
+        removeChoice(choice, question.id);
       } else {
-        addChoice(choice);
+        addChoice(choice, question.id);
       }
     }
   };
@@ -47,23 +42,10 @@ function TrueFalseQuestion({ isSingleCorrect }: TrueFalseQuestionProps) {
   return (
     <>
       {choices.map((choice, index) => {
-        const { isCorrect, choice: choiceText } = choice;
+        const { choice: choiceText } = choice;
         let bgColor = "";
-
-        // Determine background color based on whether question is answered
-        if (questionResponses.length) {
-          if (learnerChoices?.includes(choiceText)) {
-            if (isCorrect) {
-              bgColor = "bg-green-100"; // Selected and correct
-            } else {
-              bgColor = "bg-red-100"; // Selected but incorrect
-            }
-          }
-        } else {
-          if (learnerChoices?.includes(choiceText)) {
-            console.log("learnerChoices", learnerChoices);
-            bgColor = "bg-blue-100"; // Selected but not answered yet
-          }
+        if (learnerChoices?.includes(choiceText)) {
+          bgColor = "bg-blue-100"; // Selected but not answered yet
         }
 
         return (
@@ -84,4 +66,4 @@ function TrueFalseQuestion({ isSingleCorrect }: TrueFalseQuestionProps) {
   );
 }
 
-export default TrueFalseQuestion;
+export default MultipleChoiceQuestion;

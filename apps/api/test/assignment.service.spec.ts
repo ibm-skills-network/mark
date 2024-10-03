@@ -5,6 +5,10 @@ import each from "jest-each";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { of } from "rxjs";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import {
+  UserRole,
+  UserSessionRequest,
+} from "src/auth/interfaces/user.session.interface";
 import { AssignmentService } from "../src/api/assignment/assignment.service";
 import { AttemptService } from "../src/api/assignment/attempt/attempt.service";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "../src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
@@ -184,12 +188,51 @@ describe("AttemptService", () => {
         );
 
       // Execute the method
+      const mockUserSessionRequest = (
+        authCookie: string,
+        gradingCallbackRequired: boolean,
+        userId: string,
+        groupId: string,
+        assignmentId: number,
+        role: UserRole = UserRole.LEARNER,
+        // eslint-disable-next-line unicorn/consistent-function-scoping
+      ): UserSessionRequest => {
+        return {
+          cookies: {
+            authentication: authCookie, // Mocked auth cookie
+          },
+          userSession: {
+            gradingCallbackRequired,
+            groupId,
+            userId,
+            role,
+            assignmentId,
+          },
+          headers: {}, // Mock headers if necessary
+          body: {}, // Mock request body if necessary
+          query: {}, // Mock query parameters if necessary
+          params: {}, // Mock URL parameters if necessary
+          // Mock any other Request properties that you may need for your test case
+        } as unknown as UserSessionRequest; // Cast as UserSessionRequest type
+      };
+
+      const userId = "mocked-user-id";
+      const groupId = "mocked-group-id";
+
+      const mockRequest = mockUserSessionRequest(
+        authCookie,
+        gradingCallbackRequired,
+        userId,
+        groupId,
+        assignmentId,
+      );
       const result = await service.updateAssignmentAttempt(
         assignmentAttemptId,
         assignmentId,
         updateAssignmentAttemptDto,
         authCookie,
         gradingCallbackRequired,
+        mockRequest,
       );
       // Calculate expected grade
       const totalPointsPossible = totalPoints.reduce(

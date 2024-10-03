@@ -1,4 +1,8 @@
-import type { assignmentDetailsStore, QuestionStore } from "@/config/types";
+import type {
+  AssignmentDetails,
+  QuestionStatus,
+  QuestionStore,
+} from "@/config/types";
 import { createRef, type RefObject } from "react";
 import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
@@ -9,7 +13,9 @@ export type LearnerState = {
   activeQuestionNumber: number | null;
   expiresAt: number | undefined;
   questions: QuestionStore[];
-  submitAssignmentRef: RefObject<HTMLButtonElement>;
+  role?: "learner" | "author";
+  totalPointsEarned: number;
+  totalPointsPossible: number;
 };
 
 export type LearnerActions = {
@@ -27,24 +33,50 @@ export type LearnerActions = {
   removeChoice: (learnerChoice: string, questionId?: number) => void;
   setAnswerChoice: (learnerAnswerChoice: boolean, questionId?: number) => void;
   setLearnerStore: (learnerState: Partial<LearnerState>) => void;
+  getQuestionStatusById: (questionId: number) => QuestionStatus;
+  setQuestionStatus: (questionId: number, status?: QuestionStatus) => void;
+  setRole: (role: "learner" | "author") => void;
+  setTotalPointsEarned: (totalPointsEarned: number) => void;
+  setTotalPointsPossible: (totalPointsPossible: number) => void;
 };
 
 export type AssignmentDetailsState = {
-  assignmentDetails: assignmentDetailsStore | null;
+  assignmentDetails: AssignmentDetails | null;
   grade: number | null;
 };
 
 export type AssignmentDetailsActions = {
-  setAssignmentDetails: (assignmentDetails: assignmentDetailsStore) => void;
+  setAssignmentDetails: (assignmentDetails: AssignmentDetails) => void;
   setGrade: (grade: number) => void;
+};
+
+const isQuestionEdited = (question: QuestionStore) => {
+  const {
+    learnerTextResponse,
+    learnerUrlResponse,
+    learnerChoices,
+    learnerAnswerChoice,
+  } = question;
+
+  return (
+    (learnerTextResponse &&
+      learnerTextResponse.trim().length > 0 &&
+      learnerTextResponse !== "<p><br></p>") ||
+    (learnerUrlResponse && learnerUrlResponse.trim().length > 0) ||
+    (learnerChoices && learnerChoices.length > 0) ||
+    learnerAnswerChoice !== undefined ||
+    false
+  );
 };
 
 export const useLearnerStore = createWithEqualityFn<
   LearnerState & LearnerActions
 >()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       activeAttemptId: null,
+      totalPointsEarned: 0,
+      totalPointsPossible: 0,
       setActiveAttemptId: (id) => set({ activeAttemptId: id }),
       activeQuestionNumber: 1,
       setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
@@ -56,16 +88,16 @@ export const useLearnerStore = createWithEqualityFn<
         set({ showSubmissionFeedback }),
       addQuestion: (question) =>
         set((state) => ({
-          questions: [...(state.questions ?? []), question],
+          questions: [
+            ...(state.questions ?? []),
+            { ...question, status: "unedited" }, // Ensure status is initialized
+          ],
         })),
       setQuestion: (question) =>
         set((state) => ({
           questions: state.questions?.map((q) =>
             q.id === question.id
-              ? {
-                  ...q,
-                  ...question,
-                }
+              ? { ...q, ...question, status: q.status ?? "unedited" }
               : q,
           ),
         })),
@@ -79,50 +111,75 @@ export const useLearnerStore = createWithEqualityFn<
           });
           return { questions: updatedQuestions as QuestionStore[] };
         }),
-      setTextResponse: (learnerTextResponse, questionId) =>
-        set((state) => ({
-          questions: state.questions?.map((q) => {
-            return q.id ===
-              (questionId || state.questions[state.activeQuestionNumber - 1].id)
-              ? { ...q, learnerTextResponse }
-              : q;
-          }),
-        })),
-      setURLResponse: (learnerUrlResponse, questionId) =>
+      getQuestionStatusById: (questionId: number) => {
+        const question = get().questions.find((q) => q.id === questionId);
+        return question?.status ?? "unedited";
+      },
+      setQuestionStatus: (questionId: number, status?: QuestionStatus) => {
+        const question = get().questions.find((q) => q.id === questionId);
+        if (question && status === undefined) {
+          const isEdited = isQuestionEdited(question);
+          const newStatus = isEdited ? "edited" : "unedited";
+          set((state) => ({
+            questions: state.questions?.map((q) =>
+              q.id === questionId ? { ...q, status: newStatus } : q,
+            ),
+          }));
+        } else if (status) {
+          set((state) => ({
+            questions: state.questions?.map((q) =>
+              q.id === questionId ? { ...q, status } : q,
+            ),
+          }));
+        }
+      },
+
+      // Consolidate response updating logic
+      setTextResponse: (learnerTextResponse, questionId) => {
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id ===
-            (questionId || state.questions[state.activeQuestionNumber - 1].id)
-              ? { ...q, learnerUrlResponse }
-              : q,
+            q.id === questionId ? { ...q, learnerTextResponse } : q,
           ),
-        })),
-      setChoices: (learnerChoices, questionId) =>
+        }));
+        get().setQuestionStatus(questionId);
+      },
+
+      setURLResponse: (learnerUrlResponse, questionId) => {
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id ===
-            (questionId || state.questions[state.activeQuestionNumber - 1].id)
-              ? { ...q, learnerChoices }
-              : q,
+            q.id === questionId ? { ...q, learnerUrlResponse } : q,
           ),
-        })),
-      addChoice: (learnerChoice, questionId) =>
+        }));
+        get().setQuestionStatus(questionId);
+      },
+
+      setChoices: (learnerChoices, questionId) => {
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id ===
-            (questionId || state.questions[state.activeQuestionNumber - 1].id)
+            q.id === questionId ? { ...q, learnerChoices } : q,
+          ),
+        }));
+        get().setQuestionStatus(questionId);
+      },
+
+      addChoice: (learnerChoice, questionId) => {
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) =>
+            q.id === questionId
               ? {
                   ...q,
                   learnerChoices: [...(q.learnerChoices ?? []), learnerChoice],
                 }
               : q,
-          ),
-        })),
-      removeChoice: (learnerChoice, questionId) =>
-        set((state) => ({
-          questions: state.questions?.map((q) =>
-            q.id ===
-            (questionId || state.questions[state.activeQuestionNumber - 1].id)
+          );
+          return { questions: updatedQuestions };
+        }),
+          get().setQuestionStatus(questionId);
+      },
+      removeChoice: (learnerChoice, questionId) => {
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) =>
+            q.id === questionId
               ? {
                   ...q,
                   learnerChoices: q.learnerChoices?.filter(
@@ -130,33 +187,36 @@ export const useLearnerStore = createWithEqualityFn<
                   ),
                 }
               : q,
-          ),
-        })),
+          );
+          return { questions: updatedQuestions };
+        }),
+          get().setQuestionStatus(questionId);
+      },
       setAnswerChoice: (learnerAnswerChoice, questionId) => {
         set((state) => {
           const activeQuestionId =
             questionId || state.questions[state.activeQuestionNumber - 1].id;
-          return {
-            questions: state.questions?.map((q) => {
-              if (q.id === activeQuestionId) {
-                return {
-                  ...q,
-                  learnerAnswerChoice: Boolean(learnerAnswerChoice), // Explicitly cast to boolean
-                };
-              } else {
-                return q;
-              }
-            }),
-          };
+          const updatedQuestions = state.questions.map((q) =>
+            q.id === activeQuestionId
+              ? { ...q, learnerAnswerChoice: Boolean(learnerAnswerChoice) }
+              : q,
+          );
+          return { questions: updatedQuestions };
         });
+        get().setQuestionStatus(questionId);
       },
-
-      submitAssignmentRef: createRef<HTMLButtonElement>(),
+      setRole: (role) => set({ role }),
       setLearnerStore: (learnerState) => set(learnerState),
+      setTotalPointsEarned: (totalPointsEarned) => set({ totalPointsEarned }),
+      setTotalPointsPossible: (totalPointsPossible) =>
+        set({ totalPointsPossible }),
     }),
     {
       name: "learner",
       enabled: process.env.NODE_ENV === "development",
+      serialize: {
+        options: true, // Enable serialization to avoid large data crashes
+      },
     },
   ),
   shallow,

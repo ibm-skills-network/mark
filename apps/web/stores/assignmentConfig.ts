@@ -1,10 +1,12 @@
 import { extractAssignmentId } from "@/lib/strings";
-import type { GradingData } from "@/config/types";
+import type { GradingData, QuestionDisplayType } from "@/config/types";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 
 type GradingDataActions = {
+  questionDisplay: QuestionDisplayType;
+  setQuestionDisplay: (questionDisplay: QuestionDisplayType) => void;
   setGraded: (graded: boolean) => void;
   setNumAttempts: (numAttempts: number) => void;
   setPassingGrade: (passingGrade: number) => void;
@@ -23,6 +25,10 @@ export const useAssignmentConfig = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
+        questionDisplay: "ONE_PER_PAGE" as QuestionDisplayType,
+        setQuestionDisplay: (questionDisplay: QuestionDisplayType) => {
+          set({ questionDisplay });
+        },
         graded: undefined,
         setGraded: (graded) => set({ graded }),
         numAttempts: -1,

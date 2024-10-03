@@ -1,9 +1,9 @@
 import type { Choice, Criteria, QuestionAuthorStore } from "@/config/types";
+import { extractAssignmentId } from "@/lib/strings";
 import { createRef, type RefObject } from "react";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
-import { extractAssignmentId } from "@/lib/strings";
 import { withUpdatedAt } from "./middlewares";
 
 export type AuthorState = {
@@ -16,6 +16,7 @@ export type AuthorState = {
   questionOrder: number[];
   pageState: "loading" | "success" | "error";
   updatedAt: number | undefined;
+  focusedQuestionId?: number | undefined;
 };
 
 type OptionalQuestion = {
@@ -23,9 +24,9 @@ type OptionalQuestion = {
 };
 
 export type AuthorActions = {
+  setFocusedQuestionId: (id: number) => void;
   setActiveAssignmentId: (id: number) => void;
   setName: (name: string) => void;
-
   setIntroduction: (introduction: string) => void;
   setInstructions: (instructions: string) => void;
   setGradingCriteriaOverview: (gradingCriteriaOverview: string) => void;
@@ -132,6 +133,8 @@ export const useAuthorStore = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
+        focusedQuestionId: undefined,
+        setFocusedQuestionId: (id: number) => set({ focusedQuestionId: id }),
         activeAssignmentId: undefined,
         setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
         name: "",
@@ -274,7 +277,7 @@ export const useAuthorStore = createWithEqualityFn<
             questions: state.questions.map((q) => {
               if (q.id === questionId) {
                 // If the question already has a choice array, update it, otherwise create new
-                const updatedChoices = q.choices.map((choice) => ({
+                const updatedChoices = q.choices?.map((choice) => ({
                   ...choice,
                   points,
                 }));
@@ -305,7 +308,7 @@ export const useAuthorStore = createWithEqualityFn<
                   ...q,
                   choices: [
                     ...q.choices,
-                    { choice: "", isCorrect: false, points: 0 },
+                    { choice: "", isCorrect: false, points: -1 },
                   ],
                 };
               }
@@ -408,7 +411,16 @@ export const useAuthorStore = createWithEqualityFn<
         setPageState: (pageState) => set({ pageState }),
         updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
-        setAuthorStore: (state) => set((prev) => ({ ...prev, ...state })),
+        setAuthorStore: (state) => {
+          const currentState = get();
+          set((prev) => ({
+            ...prev,
+            ...state,
+            questions: currentState.questions.length
+              ? currentState.questions
+              : state.questions || [],
+          }));
+        },
       })),
       {
         name: "author",
@@ -425,6 +437,11 @@ export const useAuthorStore = createWithEqualityFn<
             ([_, value]) => typeof value !== "function",
           ),
         );
+      },
+      onRehydrateStorage: (state) => (storedState) => {
+        if (process.env.NODE_ENV !== "development") {
+          console.log("Rehydrated state", storedState);
+        }
       },
     },
   ),

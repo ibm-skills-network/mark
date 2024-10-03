@@ -35,4 +35,19 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
   })
   @IsOptional()
   showSubmissionFeedback: boolean;
+
+  @ApiProperty({
+    description: "The total points earned by the learner.",
+    type: Number,
+    example: 100,
+    required: true,
+  })
+  totalPointsEarned: number;
+  @ApiProperty({
+    description: "The total points possible for the assignment.",
+    type: Number,
+    example: 100,
+    required: true,
+  })
+  totalPossiblePoints: number;
 }

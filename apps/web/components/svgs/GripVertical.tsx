@@ -16,7 +16,7 @@ const GripVertical: React.FC<Props> = (props) => {
       className={className}
       {...restOfProps}
     >
-      <g clip-path="url(#clip0_871_25132)">
+      <g clipPath="url(#clip0_871_25132)">
         <path
           d="M5 2C5.82843 2 6.5 2.67157 6.5 3.5C6.5 4.32843 5.82843 5 5 5C4.17157 5 3.5 4.32843 3.5 3.5C3.5 2.67157 4.17157 2 5 2Z"
           fill="#6B7280"

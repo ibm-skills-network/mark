@@ -6,12 +6,13 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { Question, QuestionType } from "@prisma/client";
+import { Assignment, Question, QuestionType } from "@prisma/client";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
   UserRole,
   UserSession,
+  UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
@@ -29,7 +30,10 @@ import {
   TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
 } from "./api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "./dto/assignment-attempt/base.assignment.attempt.response.dto";
-import { LearnerUpdateAssignmentAttemptRequestDto } from "./dto/assignment-attempt/create.update.assignment.attempt.request.dto";
+import {
+  authorAssignmentDetailsDTO,
+  LearnerUpdateAssignmentAttemptRequestDto,
+} from "./dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
   AssignmentAttemptResponseDto,
   GetAssignmentAttemptResponseDto,
@@ -135,13 +139,15 @@ export class AttemptService {
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     gradingCallbackRequired: boolean,
+    request: UserSessionRequest,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
-    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptId },
-    });
-
-    this.validateAssignmentAttemptExpiry(assignmentAttempt.expiresAt);
-
+    const { role } = request.userSession;
+    if (role === UserRole.LEARNER) {
+      const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+        where: { id: assignmentAttemptId },
+      });
+      this.validateAssignmentAttemptExpiry(assignmentAttempt.expiresAt);
+    }
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: { questions: true },
@@ -149,34 +155,60 @@ export class AttemptService {
     const successfulQuestionResponses = await this.submitQuestions(
       updateAssignmentAttemptDto.responsesForQuestions as QuestionResponse[],
       assignmentAttemptId,
+      role,
+      updateAssignmentAttemptDto.authorQuestions,
+      updateAssignmentAttemptDto.authorAssignmentDetails,
     );
-
-    const grade = this.calculateGrade(
-      successfulQuestionResponses,
-      assignment as unknown as GetAssignmentAttemptResponseDto,
-    );
+    const { grade, totalPointsEarned, totalPossiblePoints } =
+      role === UserRole.LEARNER
+        ? this.calculateGradeForLearner(
+            successfulQuestionResponses,
+            assignment as unknown as GetAssignmentAttemptResponseDto,
+          )
+        : this.calculateGradeForAuthor(
+            successfulQuestionResponses,
+            updateAssignmentAttemptDto.authorQuestions,
+          );
 
     if (gradingCallbackRequired) {
       await this.sendGradeToLtiGateway(grade, authCookie);
     }
 
-    const result = await this.updateAssignmentAttemptInDb(
-      assignmentAttemptId,
-      updateAssignmentAttemptDto,
-      grade,
-    );
-
-    return {
-      id: result.id,
-      submitted: result.submitted,
-      success: true,
-      grade: assignment.showAssignmentScore ? result.grade : undefined,
-      showSubmissionFeedback: assignment.showSubmissionFeedback,
-      feedbacksForQuestions: this.constructFeedbacksForQuestions(
-        successfulQuestionResponses,
-        assignment as unknown as LearnerGetAssignmentResponseDto,
-      ),
-    };
+    if (role === UserRole.AUTHOR) {
+      // if the request is from the author, we don't need to reflect the grade in the database since it's just a test run
+      return {
+        id: -1,
+        submitted: true,
+        success: true,
+        totalPointsEarned,
+        totalPossiblePoints,
+        grade: assignment.showAssignmentScore ? grade : undefined,
+        showSubmissionFeedback: assignment.showSubmissionFeedback,
+        feedbacksForQuestions: this.constructFeedbacksForQuestions(
+          successfulQuestionResponses,
+          assignment as unknown as LearnerGetAssignmentResponseDto,
+        ),
+      };
+    } else {
+      const result = await this.updateAssignmentAttemptInDb(
+        assignmentAttemptId,
+        updateAssignmentAttemptDto,
+        grade,
+      );
+      return {
+        id: result.id,
+        submitted: result.submitted,
+        success: true,
+        totalPointsEarned,
+        totalPossiblePoints,
+        grade: assignment.showAssignmentScore ? result.grade : undefined,
+        showSubmissionFeedback: assignment.showSubmissionFeedback,
+        feedbacksForQuestions: this.constructFeedbacksForQuestions(
+          successfulQuestionResponses,
+          assignment as unknown as LearnerGetAssignmentResponseDto,
+        ),
+      };
+    }
   }
 
   /**
@@ -204,6 +236,10 @@ export class AttemptService {
         questions: true,
         questionOrder: true,
         displayOrder: true,
+        passingGrade: true,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
       },
     });
 
@@ -213,12 +249,35 @@ export class AttemptService {
       assignment.questions,
       assignmentAttempt.questionResponses as unknown as QuestionResponse[],
     );
-
     delete assignmentAttempt.questionResponses;
+    if (assignment.showAssignmentScore === false) {
+      delete assignmentAttempt.grade;
+    }
+    if (assignment.showSubmissionFeedback === false) {
+      for (const q of questions) {
+        if (q.questionResponses[0]?.feedback) {
+          delete q.questionResponses[0].feedback;
+        }
+      }
+    }
+    if (assignment.showQuestionScore === false) {
+      for (const q of questions) {
+        if (q.questionResponses[0]?.points !== undefined) {
+          // replace the points with -1 to indicate that the points should not be shown
+          q.questionResponses[0].points = -1;
+        }
+      }
+    }
+    console.log("returning body", {
+      ...assignmentAttempt,
+      questions,
+      passingGrade: assignment.passingGrade,
+    });
 
     return {
       ...assignmentAttempt,
       questions,
+      passingGrade: assignment.passingGrade,
     };
   }
 
@@ -233,30 +292,43 @@ export class AttemptService {
     assignmentAttemptId: number,
     questionId: number,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    role: UserRole,
+    authorQuestions?: QuestionDto[],
+    assignmentDetails?: authorAssignmentDetailsDTO,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: assignmentAttemptId },
-    });
-
-    this.checkSubmissionDeadline(assignmentAttempt.expiresAt);
-
-    const question = await this.questionService.findOne(questionId);
-
-    const assignmentContext = await this.getAssignmentContext(
-      assignmentAttempt.assignmentId,
-      question.id,
-      assignmentAttemptId,
-    );
-
+    let question: QuestionDto;
+    let assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    };
+    if (role === UserRole.LEARNER) {
+      const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+        where: { id: assignmentAttemptId },
+      });
+      this.checkSubmissionDeadline(assignmentAttempt.expiresAt);
+      question = await this.questionService.findOne(questionId);
+      assignmentContext = await this.getAssignmentContext(
+        assignmentAttempt.assignmentId,
+        question.id,
+        assignmentAttemptId,
+        role,
+      );
+    } else if (role === UserRole.AUTHOR) {
+      question = authorQuestions.find((q) => q.id === questionId);
+      assignmentContext = {
+        assignmentInstructions: assignmentDetails.instructions ?? "",
+        questionAnswerContext: [],
+      };
+    }
     const { responseDto, learnerResponse } = await this.processQuestionResponse(
       question,
       createQuestionResponseAttemptRequestDto,
       assignmentContext,
     );
-
     const result = await this.prisma.questionResponse.create({
       data: {
-        assignmentAttemptId: assignmentAttemptId,
+        assignmentAttemptId:
+          role === UserRole.LEARNER ? assignmentAttemptId : 1,
         questionId: questionId,
         learnerResponse: learnerResponse,
         points: responseDto.totalPoints,
@@ -333,7 +405,6 @@ export class AttemptService {
         TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
       );
     }
-
     if (assignment.numAttempts) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
@@ -386,6 +457,9 @@ export class AttemptService {
   private async submitQuestions(
     responsesForQuestions: QuestionResponse[],
     assignmentAttemptId: number,
+    role: UserRole,
+    authorQuestions?: QuestionDto[],
+    assignmentDetails?: authorAssignmentDetailsDTO,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
@@ -394,6 +468,9 @@ export class AttemptService {
           assignmentAttemptId,
           questionId,
           cleanedQuestionResponse,
+          role,
+          authorQuestions,
+          assignmentDetails,
         );
       },
     );
@@ -422,19 +499,46 @@ export class AttemptService {
   }
 
   /**
-   * Calculates the grade based on the question responses and assignment settings.
+   * Calculates the grade based on the question responses and assignment settings if the role is author.
+   * @param successfulQuestionResponses
+   * @param authorQuestions
+   * @returns
+   */
+  private calculateGradeForAuthor(
+    successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
+    authorQuestions: QuestionDto[],
+  ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
+    if (successfulQuestionResponses.length === 0) {
+      return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
+    }
+    const totalPointsEarned = successfulQuestionResponses.reduce(
+      (accumulator, response) => accumulator + response.totalPoints,
+      0,
+    );
+
+    const totalPossiblePoints = authorQuestions.reduce(
+      (accumulator: number, question: QuestionDto) =>
+        accumulator + question.totalPoints,
+      0,
+    );
+
+    const grade = totalPointsEarned / totalPossiblePoints;
+    return { grade, totalPointsEarned, totalPossiblePoints };
+  }
+
+  /**
+   * Calculates the grade based on the question responses and assignment settings if the role is learner.
    * @param successfulQuestionResponses The successful question responses.
    * @param assignment The assignment object.
    * @returns The calculated grade.
    */
-  private calculateGrade(
+  private calculateGradeForLearner(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
     assignment: GetAssignmentAttemptResponseDto,
-  ): number {
+  ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
     if (successfulQuestionResponses.length === 0) {
-      return 0;
+      return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
     }
-
     const totalPointsEarned = successfulQuestionResponses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
       0,
@@ -446,7 +550,8 @@ export class AttemptService {
       0,
     );
 
-    return totalPointsEarned / totalPossiblePoints;
+    const grade = totalPointsEarned / totalPossiblePoints;
+    return { grade, totalPointsEarned, totalPossiblePoints };
   }
 
   /**
@@ -487,8 +592,14 @@ export class AttemptService {
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     grade: number,
   ) {
-    const { responsesForQuestions: _, ...cleanedUpdateAssignmentAttemptDto } =
-      updateAssignmentAttemptDto;
+    // Omit fields that shouldn't be part of the update
+    const {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      responsesForQuestions,
+      authorQuestions, // removing author questions from the update request
+      authorAssignmentDetails, // removing author assignment details from the update request
+      ...cleanedUpdateAssignmentAttemptDto
+    } = updateAssignmentAttemptDto;
 
     return this.prisma.assignmentAttempt.update({
       data: {
@@ -512,7 +623,7 @@ export class AttemptService {
     return successfulQuestionResponses.map((feedbackForQuestion) => {
       const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
       return {
-        totalPoints: assignment.showQuestionScore ? totalPoints : undefined,
+        totalPoints: assignment.showQuestionScore ? totalPoints : -1,
         feedback: assignment.showSubmissionFeedback ? feedback : undefined,
         ...otherData,
       };
@@ -614,7 +725,7 @@ export class AttemptService {
     const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
       question.question,
       assignmentContext.questionAnswerContext,
-      assignmentContext.assignmentInstructions,
+      assignmentContext?.assignmentInstructions,
       learnerResponse,
       question.totalPoints,
       question.scoring?.type ?? "",
@@ -947,77 +1058,102 @@ export class AttemptService {
     assignmentId: number,
     questionId: number,
     assignmentAttemptId: number,
+    role: UserRole,
+    authorQuestions?: QuestionDto[],
+    assignmentDetails?: Assignment,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
   }> {
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      select: { instructions: true },
-    });
+    let assignmentInstructions = "";
+    let questionsAnswersContext: QuestionAnswerContext[] = [];
 
-    const question = await this.prisma.question.findUnique({
-      where: { id: questionId },
-      select: { gradingContextQuestionIds: true },
-    });
+    if (role === UserRole.AUTHOR && assignmentDetails && authorQuestions) {
+      // Use the provided assignment details and questions for the author mode
+      assignmentInstructions = assignmentDetails.instructions || "";
+      const authorQuestion = authorQuestions.find((q) => q.id === questionId);
 
-    if (!question) {
-      throw new Error("Question not found.");
-    }
-
-    const contextQuestions = await this.prisma.question.findMany({
-      where: {
-        id: {
-          in: question.gradingContextQuestionIds,
-        },
-      },
-      select: { id: true, question: true, type: true },
-    });
-
-    const allResponses = await this.prisma.questionResponse.findMany({
-      where: {
-        assignmentAttemptId: assignmentAttemptId,
-        questionId: {
-          in: question.gradingContextQuestionIds,
-        },
-      },
-      orderBy: {
-        id: "desc",
-      },
-    });
-
-    const groupedResponses: {
-      [key: number]: GetQuestionResponseAttemptResponseDto;
-    } = {};
-
-    for (const response of allResponses) {
-      if (!groupedResponses[response.questionId]) {
-        groupedResponses[response.questionId] = response;
-      }
-    }
-
-    const questionsAnswersContext: QuestionAnswerContext[] = [];
-    for (const contextQuestion of contextQuestions) {
-      let learnerResponse =
-        groupedResponses[contextQuestion.id]?.learnerResponse || "";
-
-      if (contextQuestion.type === "URL" && learnerResponse) {
-        const urlContent =
-          await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
-        learnerResponse = JSON.stringify({
-          url: learnerResponse,
-          ...urlContent,
-        });
+      if (!authorQuestion) {
+        throw new Error("Question not found in author questions.");
       }
 
-      questionsAnswersContext.push({
-        question: contextQuestion.question,
-        answer: learnerResponse,
+      questionsAnswersContext = authorQuestions.map((q) => ({
+        question: q.question,
+        answer: "", // No learner answers available in author mode
+      }));
+    } else {
+      // Default behavior for learner mode
+      const assignment = await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { instructions: true },
       });
+
+      assignmentInstructions = assignment.instructions || "";
+
+      const question = await this.prisma.question.findUnique({
+        where: { id: questionId },
+        select: { gradingContextQuestionIds: true },
+      });
+
+      if (!question) {
+        throw new Error("Question not found.");
+      }
+
+      const contextQuestions = await this.prisma.question.findMany({
+        where: {
+          id: {
+            in: question.gradingContextQuestionIds,
+          },
+        },
+        select: { id: true, question: true, type: true },
+      });
+
+      const allResponses = await this.prisma.questionResponse.findMany({
+        where: {
+          assignmentAttemptId: assignmentAttemptId,
+          questionId: {
+            in: question.gradingContextQuestionIds,
+          },
+        },
+        orderBy: {
+          id: "desc",
+        },
+      });
+
+      const groupedResponses: {
+        [key: number]: GetQuestionResponseAttemptResponseDto;
+      } = {};
+
+      for (const response of allResponses) {
+        if (!groupedResponses[response.questionId]) {
+          groupedResponses[response.questionId] = response;
+        }
+      }
+
+      questionsAnswersContext = await Promise.all(
+        contextQuestions.map(async (contextQuestion) => {
+          let learnerResponse =
+            groupedResponses[contextQuestion.id]?.learnerResponse || "";
+
+          if (contextQuestion.type === "URL" && learnerResponse) {
+            const urlContent =
+              await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+            learnerResponse = JSON.stringify({
+              url: learnerResponse,
+              ...urlContent,
+            });
+          }
+
+          return {
+            question: contextQuestion.question,
+            answer: learnerResponse,
+          };
+        }),
+      );
     }
 
     return {
-      assignmentInstructions: assignment?.instructions || "",
+      assignmentInstructions,
       questionAnswerContext: questionsAnswersContext,
     };
   }
