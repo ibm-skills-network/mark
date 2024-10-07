@@ -16,6 +16,7 @@ const Component: FC<Props> = () => {
     strictTimeLimit,
     toggleStrictTimeLimit,
     setStrictTimeLimit,
+    errors,
   ] = useAssignmentConfig((state) => [
     state.allotedTimeMinutes,
     state.setAllotedTimeMinutes,
@@ -24,6 +25,7 @@ const Component: FC<Props> = () => {
     state.strictTimeLimit,
     state.toggleStrictTimeLimit,
     state.setStrictTimeLimit,
+    state.errors,
   ]);
 
   useEffect(() => {
@@ -78,6 +80,15 @@ const Component: FC<Props> = () => {
             value={allotedTimeMinutes || ""}
           />
         )}
+        {errors.allotedTimeMinutes && (
+          <p
+            className="text-red-500 text-sm"
+            id={`error-${errors.questionDisplay}`}
+          >
+            {" "}
+            {errors.allotedTimeMinutes}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-y-1">
@@ -94,6 +105,14 @@ const Component: FC<Props> = () => {
           onChange={(e) => setTimeEstimateMinutes(~~e.target.value)}
           value={timeEstimateMinutes || ""}
         />
+        {errors.timeEstimateMinutes && (
+          <p
+            className="text-red-500 text-sm"
+            id={`error-${errors.timeEstimateMinutes}`}
+          >
+            {errors.timeEstimateMinutes}
+          </p>
+        )}
       </div>
     </SectionWithTitle>
   );

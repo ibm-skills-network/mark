@@ -10,12 +10,13 @@ import { InformationCircleIcon } from "@heroicons/react/24/solid";
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {
-  const [numAttempts, setNumAttempts, passingGrade, setPassingGrade] =
+  const [numAttempts, setNumAttempts, passingGrade, setPassingGrade, errors] =
     useAssignmentConfig((state) => [
       state.numAttempts,
       state.setNumAttempts,
       state.passingGrade,
       state.setPassingGrade,
+      state.errors,
     ]);
 
   const dropdownItems = [
@@ -42,9 +43,17 @@ const Component: FC<Props> = () => {
         </label>
         <Dropdown<number>
           items={dropdownItems}
-          selectedItem={numAttempts || -1}
+          selectedItem={numAttempts}
           setSelectedItem={setNumAttempts}
         />
+        {errors.numAttempts && (
+          <p
+            className="text-red-500 text-sm"
+            id={`error-${errors.numAttempts}`}
+          >
+            {errors.numAttempts}
+          </p>
+        )}
       </div>
       <div className="flex flex-col gap-y-1">
         <p className=" text-gray-600">
@@ -60,6 +69,14 @@ const Component: FC<Props> = () => {
           onChange={(e) => setPassingGrade(~~e.target.value)}
           value={passingGrade || ""}
         />
+        {errors.passingGrade && (
+          <p
+            className="text-red-500 text-sm"
+            id={`error-${errors.passingGrade}`}
+          >
+            {errors.passingGrade}
+          </p>
+        )}
       </div>
     </SectionWithTitle>
   );

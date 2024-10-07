@@ -1,6 +1,6 @@
 import { useAuthorStore } from "@/stores/author";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, FC } from "react";
+import { useEffect, FC, useState } from "react";
 import { motion } from "framer-motion";
 import Tooltip from "@/components/Tooltip";
 import {
@@ -14,6 +14,8 @@ import {
   publishStepOneData,
   publishStepTwoData,
 } from "@/lib/sendZustandDataToBackend";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 
 interface Step {
   id: number;
@@ -45,6 +47,11 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
   const setFocusedQuestionId = useAuthorStore(
     (state) => state.setFocusedQuestionId,
   );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const validateAssignmentConfig = useAssignmentConfig(
+    (state) => state.validate,
+  );
+  const validateAssignmentSetup = useAuthorStore((state) => state.validate);
 
   const steps: Step[] = [
     {
@@ -101,13 +108,44 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
     return false;
   };
 
+  const goToQuestionSetup = async (id: number) => {
+    if (isSubmitting) return; // Prevent multiple clicks
+    setIsSubmitting(true);
+
+    // Perform validation and wait for it to complete
+    const isAssignmentConfigValid = validateAssignmentConfig();
+
+    if (isAssignmentConfigValid) {
+      await publishStepTwoData(); // Submit the data if validation passes
+      router.push(steps[id].href);
+    } else {
+      handleScrollToFirstErrorField(); // Scroll to the first error field
+    }
+    setIsSubmitting(false); // Reset the submit state to allow retry
+  };
+  const goToAssignmentConfig = async (id: number) => {
+    if (isSubmitting) return; // Prevent multiple clicks
+    setIsSubmitting(true);
+
+    // Perform validation and wait for it to complete
+    const isAssignmentSetupValid = validateAssignmentSetup();
+
+    if (isAssignmentSetupValid) {
+      await publishStepOneData(); // Submit the data if validation passes
+      router.push(steps[id].href);
+    } else {
+      handleScrollToFirstErrorField(); // Scroll to the first error field
+    }
+    setIsSubmitting(false); // Reset the submit state to allow retry
+  };
+
   async function handleStepClick(id: number) {
     const stepActions: Record<number, () => Promise<void>> = {
       0: async () => {
-        await publishStepOneData();
+        await goToAssignmentConfig(id);
       },
       1: async () => {
-        await publishStepTwoData();
+        await goToQuestionSetup(id);
       },
     };
 
@@ -116,9 +154,9 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
 
     if (currentStepId < id && action) {
       await action();
+    } else {
+      router.push(steps[id].href);
     }
-
-    router.push(steps[id].href);
   }
 
   const getCurrentId = () => {

@@ -64,8 +64,6 @@ const Component: FC<Props> = () => {
     state.setShowSubmissionFeedback,
     state.setShowQuestionScore,
   ]);
-  console.log("verbosityLevel", verbosityLevel);
-
   const handleButtonClick = (verbosity: VerbosityLevels) => {
     setVerbosityLevel(verbosity);
     switch (verbosity) {

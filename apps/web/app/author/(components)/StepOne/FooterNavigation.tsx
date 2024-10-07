@@ -13,6 +13,7 @@ import {
 import { useQuestionsAreReadyToBePublished } from "@/app/Helpers/checkQuestionsReady";
 import { Question } from "@/config/types";
 import Tooltip from "@/components/Tooltip";
+import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 interface Props extends ComponentPropsWithoutRef<"nav"> {
   assignmentId?: string;
   nextStep?: string;
@@ -31,11 +32,17 @@ export const FooterNavigation: FC<Props> = ({
     (state) => state.setFocusedQuestionId,
   );
   const [tooltipMessage, setTooltipMessage] = useState<React.ReactNode>("");
+  const validateAssignmentSetup = useAuthorStore((state) => state.validate);
   const [disableButton, setDisableButton] = useState<boolean>(false);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
     questions as Question[],
   );
   const goToNextStep = async () => {
+    const isValid = validateAssignmentSetup();
+    if (!isValid) {
+      handleScrollToFirstErrorField();
+      return;
+    }
     router.push(`/author/${activeAssignmentId}/${nextStep}`);
     await publishStepOneData();
   };
@@ -65,7 +72,6 @@ export const FooterNavigation: FC<Props> = ({
       <Tooltip disabled={!disableButton} content={tooltipMessage} distance={3}>
         <Button
           version="secondary"
-          disabled={disableButton}
           RightIcon={ChevronRightIcon}
           onClick={goToNextStep}
         >

@@ -45,6 +45,7 @@ const MainContent = () => {
     gradingCriteriaOverview,
     setGradingCriteriaOverview,
     pageState,
+    errors,
   ] = useAuthorStore((state) => [
     state.introduction,
     state.setIntroduction,
@@ -53,6 +54,7 @@ const MainContent = () => {
     state.gradingCriteriaOverview,
     state.setGradingCriteriaOverview,
     state.pageState,
+    state.errors,
   ]);
 
   if (pageState === "loading") {
@@ -65,6 +67,7 @@ const MainContent = () => {
         title={stepOneSections.introduction.title}
         description={stepOneSections.introduction.description}
         required={stepOneSections.introduction.required}
+        error={errors.introduction}
       >
         <MarkdownEditor
           value={introduction}
@@ -76,6 +79,7 @@ const MainContent = () => {
         title={stepOneSections.instructions.title}
         description={stepOneSections.instructions.description}
         required={stepOneSections.instructions.required}
+        error={errors.instructions}
       >
         <MarkdownEditor
           value={instructions}
@@ -87,6 +91,7 @@ const MainContent = () => {
         title={stepOneSections.overview.title}
         description={stepOneSections.overview.description}
         required={stepOneSections.overview.required}
+        error={errors.gradingCriteriaOverview}
       >
         <MarkdownEditor
           value={gradingCriteriaOverview}

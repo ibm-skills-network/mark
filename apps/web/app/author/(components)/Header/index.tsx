@@ -23,6 +23,7 @@ function AuthorHeader() {
   const pathname = usePathname();
   const assignmentId = extractAssignmentId(pathname);
   const [currentStepId, setCurrentStepId] = useState<number>(0);
+  const [validate] = useAssignmentConfig((state) => [state.validate]);
   const [
     setActiveAssignmentId,
     questions,
@@ -154,7 +155,9 @@ function AuthorHeader() {
 
         {/* Right Section */}
         <div className="flex items-center space-x-4">
-          <CheckLearnerSideButton disabled={!questions} />
+          <CheckLearnerSideButton
+            disabled={!questionsAreReadyToBePublished && validate()}
+          />
           <SubmitQuestionsButton
             handlePublishButton={handlePublishButton}
             submitting={submitting}

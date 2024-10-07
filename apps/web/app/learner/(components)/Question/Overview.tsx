@@ -62,7 +62,6 @@ function Overview({ questions }: Props) {
     },
     [activeQuestionNumber],
   );
-
   return (
     <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 max-w-[250px] bg-white shadow hover:shadow-md max-h-[310px]">
       {expiresAt ? (

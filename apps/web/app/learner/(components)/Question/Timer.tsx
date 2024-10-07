@@ -6,7 +6,12 @@ import { submitAssignment } from "@/lib/talkToBackend";
 import useCountdown from "@/hooks/use-countdown";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import type { QuestionAttemptRequestWithId } from "@/config/types";
+import type {
+  QuestionAttemptRequestWithId,
+  QuestionStore,
+  ReplaceAssignmentRequest,
+} from "@/config/types";
+import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
@@ -15,18 +20,39 @@ function Timer(props: Props) {
   const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false); // New state to prevent re-submission
 
-  const [activeAttemptId, questions, setQuestion, expiresAt] = useLearnerStore(
-    (state) => [
-      state.activeAttemptId,
-      state.questions,
-      state.setQuestion,
-      state.expiresAt,
-    ],
-  );
+  const [
+    activeAttemptId,
+    questions,
+    setQuestion,
+    expiresAt,
+    setTotalPointsEarned,
+    setTotalPointsPossible,
+    setShowSubmissionFeedback,
+  ] = useLearnerStore((state) => [
+    state.activeAttemptId,
+    state.questions,
+    state.setQuestion,
+    state.expiresAt,
+    state.setTotalPointsEarned,
+    state.setTotalPointsPossible,
+    state.setShowSubmissionFeedback,
+  ]);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
   ]);
+  const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
+  const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
+    "assignmentConfig",
+    {
+      introduction: "",
+      graded: false,
+      passingGrade: 0,
+      published: false,
+      questionOrder: [],
+      updatedAt: 0,
+    },
+  );
   const assignmentId = assignmentDetails?.id;
   const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
   const seconds = Math.floor((countdown / 1000) % 60);
@@ -37,10 +63,6 @@ function Timer(props: Props) {
   };
 
   async function handleSubmitAssignment() {
-    if (isSubmitted) return; // Prevent multiple submissions
-
-    setIsSubmitted(true); // Mark as submitted to avoid duplicate submissions
-
     const responsesForOnlyEditedQuestions = editedQuestionsOnly(questions);
     const responsesForQuestions: QuestionAttemptRequestWithId[] =
       responsesForOnlyEditedQuestions.map((q) => ({
@@ -54,42 +76,42 @@ function Timer(props: Props) {
             : undefined,
         learnerFileResponse: q.learnerFileResponse || undefined,
       }));
-
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
+      authorQuestions,
+      authorAssignmentDetails,
     );
-
     if (!res || !res.success) {
       toast.error("Failed to submit assignment.");
       return;
     }
     const { grade, feedbacksForQuestions } = res;
-    if (typeof grade === "number") {
-      setGrade(grade * 100);
-    }
-
+    setIsSubmitted(true);
+    setTotalPointsEarned(res.totalPointsEarned);
+    setTotalPointsPossible(res.totalPossiblePoints);
+    setGrade(grade * 100);
+    setShowSubmissionFeedback(res.showSubmissionFeedback); // set showSubmissionFeedback boolean in zustand store
     for (const feedback of feedbacksForQuestions || []) {
       setQuestion({
         id: feedback.questionId,
         questionResponses: [
           {
             id: feedback.id,
+            learnerAnswerChoice: responsesForOnlyEditedQuestions.find(
+              (q) => q.id === feedback.questionId,
+            )?.learnerAnswerChoice,
             points: feedback.totalPoints,
             feedback: feedback.feedback,
             learnerResponse: feedback.question,
             questionId: feedback.questionId,
             assignmentAttemptId: activeAttemptId,
-            learnerAnswerChoice: responsesForOnlyEditedQuestions.find(
-              (q) => q.id === feedback.questionId,
-            )?.learnerAnswerChoice,
           },
         ],
       });
     }
-    const currentTime = Date.now();
-    router.push(`/learner/${assignmentId}?submissionTime=${currentTime}`);
+    router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
 
   useEffect(() => {

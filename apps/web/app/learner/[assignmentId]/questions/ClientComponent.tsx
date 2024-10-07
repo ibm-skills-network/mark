@@ -6,7 +6,7 @@ import type { AssignmentDetails, QuestionStore } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 interface ClientLearnerLayoutProps {
   assignmentId: number;
@@ -44,6 +44,13 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
           submitted: false,
           questions,
           assignmentDetails,
+          expiresAt:
+            assignmentDetails?.allotedTimeMinutes !== null
+              ? new Date(
+                  Date.now() +
+                    (assignmentDetails?.allotedTimeMinutes || 0) * 60000,
+                ).toISOString()
+              : null,
         }}
         assignmentId={assignmentId}
       />

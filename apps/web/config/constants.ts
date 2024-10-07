@@ -38,7 +38,7 @@ export const stepTwoSections = {
     required: true,
   },
   questionDisplay: {
-    title: "6. how should questions be displayed?",
+    title: "6. How should the questions be displayed?",
     required: false,
   },
 } as const;

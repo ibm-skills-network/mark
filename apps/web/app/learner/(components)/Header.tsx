@@ -8,7 +8,7 @@ import type {
   QuestionStore,
   ReplaceAssignmentRequest,
 } from "@/config/types";
-import { submitAssignment } from "@/lib/talkToBackend";
+import { getUser, submitAssignment } from "@/lib/talkToBackend";
 import { editedQuestionsOnly } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
@@ -60,10 +60,21 @@ function LearnerHeader() {
   const [title, setTitle] = useState<string>("Auto-Graded Assignment");
   const [toggleWarning, setToggleWarning] = useState<boolean>(false);
   const [toggleEmptyWarning, setToggleEmptyWarning] = useState<boolean>(false);
+  const [role, setRole] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (assignmentDetails) {
       setTitle(assignmentDetails.name);
     }
+  });
+  useEffect(() => {
+    // get user role
+    const getUserRole = async () => {
+      const user = await getUser();
+      if (user) {
+        setRole(user.role);
+      }
+    };
+    void getUserRole();
   });
 
   const CheckNoFlaggedQuestions = () => {
@@ -108,9 +119,10 @@ function LearnerHeader() {
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
-      authorQuestions,
-      authorAssignmentDetails,
+      role === "author" ? authorQuestions : undefined,
+      role === "author" ? authorAssignmentDetails : undefined,
     );
+
     setSubmitting(false);
     if (!res || !res.success) {
       toast.error("Failed to submit assignment.");

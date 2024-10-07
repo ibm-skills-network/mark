@@ -68,7 +68,6 @@ function SuccessPage() {
         try {
           const submissionDetails: AssignmentAttemptWithQuestions =
             await getAttempt(assignmentId, id);
-          console.log(submissionDetails.questions);
           setQuestions(submissionDetails.questions);
           setGrade(submissionDetails.grade * 100);
           if (submissionDetails.totalPointsEarned) {

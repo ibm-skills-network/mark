@@ -54,8 +54,10 @@ export type AuthorActions = {
   setPageState: (state: "loading" | "success" | "error") => void;
   setUpdatedAt: (updatedAt: number) => void;
   setQuestionTitle: (questionTitle: string, questionId: number) => void;
-  setQuestionOrder: (order: number[]) => void; // Ensure you add this method
+  setQuestionOrder: (order: number[]) => void;
   setAuthorStore: (state: Partial<AuthorState>) => void;
+  validate: () => boolean;
+  errors: Record<string, string>;
 };
 interface QuestionState {
   questionStates: {
@@ -133,6 +135,7 @@ export const useAuthorStore = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
+        errors: {},
         focusedQuestionId: undefined,
         setFocusedQuestionId: (id: number) => set({ focusedQuestionId: id }),
         activeAssignmentId: undefined,
@@ -420,6 +423,31 @@ export const useAuthorStore = createWithEqualityFn<
               ? currentState.questions
               : state.questions || [],
           }));
+        },
+        validate: () => {
+          const state = get();
+          const errors: Record<string, string> = {};
+          if (
+            !state.introduction ||
+            state.introduction.trim() === "<p><br></p>"
+          ) {
+            errors.introduction = "Introduction is required.";
+          }
+          if (
+            !state.instructions ||
+            state.instructions.trim() === "<p><br></p>"
+          ) {
+            errors.instructions = "Instructions are required.";
+          }
+          if (
+            !state.gradingCriteriaOverview ||
+            state.gradingCriteriaOverview.trim() === "<p><br></p>"
+          ) {
+            errors.gradingCriteriaOverview =
+              "Grading criteria overview is required.";
+          }
+          set({ errors });
+          return Object.keys(errors).length === 0;
         },
       })),
       {

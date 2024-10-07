@@ -126,7 +126,7 @@ function Component() {
         {renderConfigItem(
           "Assignment attempts",
           numAttempts !== null
-            ? `${numAttempts} times`
+            ? `${numAttempts === -1 ? "Unlimited" : numAttempts}`
             : "No attempts limit set",
         )}
         {renderConfigItem(

@@ -9,6 +9,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
     as?: T;
     className?: string;
     IconForTitle?: ElementType;
+    error?: string;
   },
 ) {
   const {
@@ -48,6 +49,10 @@ export function SectionWithTitle<T extends ElementType = "section">(
         </p>
       </div>
       <div className={cn("w-full", className)}>{children}</div>
+      <p className="text-sm text-red-500" id={`error-${props.error}`}>
+        {" "}
+        {props.error}
+      </p>
     </Component>
   );
 }

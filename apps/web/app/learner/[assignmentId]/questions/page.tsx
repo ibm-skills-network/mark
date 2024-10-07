@@ -71,7 +71,6 @@ async function LearnerLayout(props: Props) {
   if (!attempt) {
     return <ErrorPage error={"Attempt could not be fetched"} />;
   }
-
   return (
     role === "learner" && (
       <main className="flex flex-col h-[calc(100vh-100px)]">

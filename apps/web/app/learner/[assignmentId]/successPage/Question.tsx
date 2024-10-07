@@ -35,14 +35,11 @@ const Question: FC<Props> = ({ question, number }) => {
   const highestScoreResponse = useMemo<
     HighestScoreResponseType | undefined
   >(() => {
-    console.log("questionResponses", questionResponses);
-
     if (!questionResponses || questionResponses.length === 0) {
       return showSubmissionFeedback
         ? { points: 0, feedback: [{ feedback: "This answer was blank" }] }
         : undefined;
     }
-    console.log("questionResponses", questionResponses);
     return questionResponses.reduce((acc, curr) =>
       acc.points > curr.points ? acc : curr,
     );

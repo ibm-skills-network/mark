@@ -3,6 +3,7 @@ import Tooltip from "@/components/Tooltip";
 import { QuestionAuthorStore, QuestionStore } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
+import { useLearnerStore } from "@/stores/learner";
 import type { ComponentPropsWithoutRef, FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {

@@ -9,17 +9,16 @@ import { QuestionDisplayType } from "@/config/types";
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {
-  const [questionDisplay, setQuestionDisplay] = useAssignmentConfig((state) => [
-    state.questionDisplay,
-    state.setQuestionDisplay,
-  ]);
+  const [questionDisplay, setQuestionDisplay, errors] = useAssignmentConfig(
+    (state) => [state.questionDisplay, state.setQuestionDisplay, state.errors],
+  );
   function handleChangeQuestionDisplay(e: MouseEvent<HTMLButtonElement>) {
     setQuestionDisplay(e.currentTarget.value as QuestionDisplayType);
   }
 
   return (
     <SectionWithTitle
-      title={stepTwoSections.order.title}
+      title={stepTwoSections.questionDisplay.title}
       className="flex flex-col gap-y-6"
       required
     >
@@ -83,6 +82,14 @@ const Component: FC<Props> = () => {
           All questions will be displayed on one page for the learner to answer
         </p>
       </button>
+      {errors.questionDisplay && (
+        <p
+          className="text-red-500 text-sm"
+          id={`error-${errors.questionDisplay}`}
+        >
+          {errors.questionDisplay}
+        </p>
+      )}
     </SectionWithTitle>
   );
 };

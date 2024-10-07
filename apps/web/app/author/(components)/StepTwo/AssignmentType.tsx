@@ -13,9 +13,10 @@ import { cn } from "@/lib/strings";
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {
-  const [graded, setGraded] = useAssignmentConfig((state) => [
+  const [graded, setGraded, errors] = useAssignmentConfig((state) => [
     state.graded,
     state.setGraded,
+    state.errors,
   ]);
   function handleGradedChange(e: MouseEvent<HTMLButtonElement>) {
     setGraded(e.currentTarget.value === "graded");
@@ -75,6 +76,11 @@ const Component: FC<Props> = () => {
           The assignment will not count towards the learner&apos;s course grade.
         </p>
       </button>
+      {errors.graded && (
+        <p className="text-red-500 text-sm" id={`error-${errors.graded}`}>
+          {errors.graded}
+        </p>
+      )}
     </SectionWithTitle>
   );
 };

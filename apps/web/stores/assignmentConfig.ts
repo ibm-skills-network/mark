@@ -17,6 +17,8 @@ type GradingDataActions = {
   setUpdatedAt: (updatedAt: number) => void;
   setAssignmentConfigStore: (state: Partial<GradingData>) => void;
   setStrictTimeLimit: (strictTimeLimit: boolean) => void;
+  validate: () => boolean;
+  errors: Record<string, string>;
 };
 
 export const useAssignmentConfig = createWithEqualityFn<
@@ -29,6 +31,7 @@ export const useAssignmentConfig = createWithEqualityFn<
         setQuestionDisplay: (questionDisplay: QuestionDisplayType) => {
           set({ questionDisplay });
         },
+        errors: {},
         graded: undefined,
         setGraded: (graded) => set({ graded }),
         numAttempts: -1,
@@ -45,10 +48,50 @@ export const useAssignmentConfig = createWithEqualityFn<
         setDisplayOrder: (displayOrder) => set({ displayOrder }),
         strictTimeLimit: false,
         toggleStrictTimeLimit: () =>
-          set((state) => ({ strictTimeLimit: !state.strictTimeLimit })),
+          set((state) =>
+            // toggle strictTimeLimit and reset allotedTimeMinutes
+            state.strictTimeLimit
+              ? { strictTimeLimit: false }
+              : { strictTimeLimit: true, allotedTimeMinutes: undefined },
+          ),
         setStrictTimeLimit: (strictTimeLimit) => set({ strictTimeLimit }),
         updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
+        validate: () => {
+          const state = get();
+          const errors: Record<string, string> = {};
+          if (state.graded === null) {
+            errors.graded = "Assignment type is required.";
+          }
+          if (
+            state.strictTimeLimit &&
+            (!state.allotedTimeMinutes || state.allotedTimeMinutes <= 0)
+          ) {
+            errors.allotedTimeMinutes = "Time limit must be greater than 0.";
+          }
+          if (!state.timeEstimateMinutes || state.timeEstimateMinutes <= 0) {
+            errors.timeEstimateMinutes =
+              "Time estimate must be greater than 0.";
+          }
+          if (!state.numAttempts || state.numAttempts < -1) {
+            errors.numAttempts = "Please enter a valid number of attempts.";
+          }
+          if (
+            state.passingGrade === undefined ||
+            state.passingGrade <= 0 ||
+            state.passingGrade > 100
+          ) {
+            errors.passingGrade = "Passing grade must be between 1 and 100.";
+          }
+          if (!state.displayOrder) {
+            errors.displayOrder = "Question order is required.";
+          }
+          if (!state.questionDisplay) {
+            errors.questionDisplay = "Question display type is required.";
+          }
+          set({ errors });
+          return Object.keys(errors).length === 0;
+        },
         setAssignmentConfigStore: (state) =>
           set((prevState) => ({ ...prevState, ...state })),
       })),

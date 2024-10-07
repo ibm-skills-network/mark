@@ -37,7 +37,6 @@ function QuestionPage(props: Props) {
   useEffect(() => {
     const fetchAssignment = async () => {
       const assignment = await getAssignment(assignmentId);
-
       if (assignment) {
         // Only set assignment details if they are different from the current state
         if (

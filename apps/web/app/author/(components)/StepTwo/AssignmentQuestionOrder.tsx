@@ -8,10 +8,9 @@ import { cn } from "@/lib/strings";
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {
-  const [displayOrder, setDisplayOrder] = useAssignmentConfig((state) => [
-    state.displayOrder,
-    state.setDisplayOrder,
-  ]);
+  const [displayOrder, setDisplayOrder, errors] = useAssignmentConfig(
+    (state) => [state.displayOrder, state.setDisplayOrder, state.errors],
+  );
   function handleGradedChange(e: MouseEvent<HTMLButtonElement>) {
     setDisplayOrder(e.currentTarget.value === "DEFINED" ? "DEFINED" : "RANDOM");
   }
@@ -40,7 +39,7 @@ const Component: FC<Props> = () => {
                 : "font-medium",
             )}
           >
-            Strict Order
+            Strict
           </p>
         </div>
         <p className="text-gray-500 text-left cursor-pointer">
@@ -66,13 +65,18 @@ const Component: FC<Props> = () => {
                 : "font-medium",
             )}
           >
-            Randomized Order
+            Randomized
           </div>
         </div>
         <p className="text-gray-500 text-left cursor-pointer">
           Questions will be shuffled each time the learner loads the quiz.
         </p>
       </button>
+      {errors.displayOrder && (
+        <p className="text-red-500 text-sm" id={`error-${errors.displayOrder}`}>
+          {errors.displayOrder}
+        </p>
+      )}
     </SectionWithTitle>
   );
 };

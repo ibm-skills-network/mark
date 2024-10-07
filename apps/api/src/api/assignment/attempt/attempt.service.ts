@@ -107,6 +107,7 @@ export class AttemptService {
     await this.validateNewAttempt(assignment, userSession);
 
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
+    console.log("attemptExpiresAt", attemptExpiresAt);
 
     const result = await this.prisma.assignmentAttempt.create({
       data: {
@@ -170,7 +171,7 @@ export class AttemptService {
             updateAssignmentAttemptDto.authorQuestions,
           );
 
-    if (gradingCallbackRequired) {
+    if (gradingCallbackRequired && role === UserRole.LEARNER) {
       await this.sendGradeToLtiGateway(grade, authCookie);
     }
 
@@ -427,7 +428,10 @@ export class AttemptService {
   private calculateAttemptExpiresAt(
     assignment: LearnerGetAssignmentResponseDto,
   ): Date | null {
-    if (assignment.allotedTimeMinutes) {
+    if (
+      assignment.allotedTimeMinutes !== undefined &&
+      assignment.allotedTimeMinutes > 0
+    ) {
       return new Date(Date.now() + assignment.allotedTimeMinutes * 60 * 1000);
     }
     return undefined;
