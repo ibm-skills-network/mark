@@ -819,15 +819,15 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/core@^0.3.0":
-  version "0.3.9"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.9.tgz#1fa75be84a22d951946277bc4ad3ea656c77fafc"
-  integrity sha512-Rttr9FuFwU+CWIoEyuLqQUPYg+3pKL1YpDgo3nvoDVhinoHqwGQ7aNGzZ/Sf+qASMi76sPSLm+75pHMJwwOiWg==
+  version "0.3.10"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.10.tgz#813c2b85c9170469a2a80aff8488118a5c1aeb5e"
+  integrity sha512-MBGDcNeMLRFsEtfzYrqFpome9M2KI7wa4VcFoHPrjf5cvw1gaEAWiMST0jq42tgV3XmukiueCog6kj9Q/hxw2w==
   dependencies:
     ansi-styles "^5.0.0"
     camelcase "6"
     decamelize "1.2.0"
     js-tiktoken "^1.0.12"
-    langsmith "^0.1.56"
+    langsmith "^0.1.65"
     mustache "^4.2.0"
     p-queue "^6.6.2"
     p-retry "4"
@@ -6282,10 +6282,10 @@ langchain@^0.3.0:
     zod "^3.22.4"
     zod-to-json-schema "^3.22.3"
 
-langsmith@^0.1.56:
-  version "0.1.57"
-  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.1.57.tgz#94b53fcbd81187b0cd31c0e6d2d69402f4a22373"
-  integrity sha512-mHzZgKW+bQdyGAGx/QlcfB1mgMMsakzceN44L0CHLYVaI4j1t50PG8m5YfzSiqBisIdq/Xi2jWZTWEGZ3BR9zA==
+langsmith@^0.1.56-rc.1:
+  version "0.1.56-rc.1"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.1.56-rc.1.tgz#20900ff0dee51baea359c6f16a4acc260f07fbb7"
+  integrity sha512-XsOxlhBAlTCGR9hNEL2VSREmiz8v6czNuX3CIwec9fH9T0WbNPle8Q/7Jy/h9UCbS9vuzTjfgc4qO5Dc9cu5Ig==
   dependencies:
     "@types/uuid" "^10.0.0"
     commander "^10.0.1"
@@ -6294,10 +6294,10 @@ langsmith@^0.1.56:
     semver "^7.6.3"
     uuid "^10.0.0"
 
-langsmith@^0.1.56-rc.1:
-  version "0.1.56-rc.1"
-  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.1.56-rc.1.tgz#20900ff0dee51baea359c6f16a4acc260f07fbb7"
-  integrity sha512-XsOxlhBAlTCGR9hNEL2VSREmiz8v6czNuX3CIwec9fH9T0WbNPle8Q/7Jy/h9UCbS9vuzTjfgc4qO5Dc9cu5Ig==
+langsmith@^0.1.65:
+  version "0.1.65"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.1.65.tgz#11bc9cd033f0ce763da42266516354a096b8a74a"
+  integrity sha512-+aBft8/jUQbVPv3MWVwFwW/rMxyyA8xSRIsjWl773Nc7LDniczuf2rxZEUslV02RB36EIBgCJPNX7jz2L5YsIQ==
   dependencies:
     "@types/uuid" "^10.0.0"
     commander "^10.0.1"
