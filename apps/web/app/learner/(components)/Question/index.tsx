@@ -14,6 +14,7 @@ import {
 } from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -106,22 +107,8 @@ function QuestionPage(props: Props) {
   const [activeQuestionNumber] = useLearnerStore((state) => [
     state.activeQuestionNumber,
   ]);
-
-  /**
-   * Scrolls the page to the specified question element.
-   *
-   * @param questionId - The ID of the question element to scroll to.
-   */
-  const handleJumpToQuestion = (questionId: number) => {
-    const element = document.getElementById(`item-${String(questionId)}`);
-    if (!element) return;
-    requestAnimationFrame(() => {
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  };
-
   useEffect(() => {
-    handleJumpToQuestion(activeQuestionNumber);
+    handleJumpToQuestion(`item-${String(activeQuestionNumber)}`);
   }, [activeQuestionNumber]);
 
   if (pageState === "loading") {

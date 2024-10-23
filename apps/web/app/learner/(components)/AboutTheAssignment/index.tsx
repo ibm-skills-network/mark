@@ -1,129 +1,179 @@
+"use client";
+
+import React, { FC } from "react";
 import ErrorPage from "@/components/ErrorPage";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import Tooltip from "@/components/Tooltip";
-import { LearnerAssignmentState } from "@/config/types";
-import { getAssignment, getAttempts } from "@/lib/talkToBackend";
-import { ChevronRightIcon } from "@heroicons/react/24/outline";
-import { headers } from "next/headers";
-import { type ComponentPropsWithoutRef, type MouseEvent } from "react";
-import AssignmentMainInfo from "./AssignmentMainInfo";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
+import Link from "next/link";
+import {
+  Assignment,
+  AssignmentAttempt,
+  LearnerAssignmentState,
+} from "@/config/types";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {
+// Reusable section component for instructions and criteria
+interface AssignmentSectionProps {
+  title: string;
+  content: string;
+}
+
+const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => (
+  <div className="bg-white shadow p-6 rounded-lg">
+    <h2 className="text-xl font-semibold text-gray-800 mb-4">{title}</h2>
+    <MarkdownViewer className="text-gray-600">
+      {content || `No ${title.toLowerCase()} provided.`}
+    </MarkdownViewer>
+  </div>
+);
+
+interface AboutTheAssignmentProps {
+  assignment: Assignment;
+  attempts: AssignmentAttempt[];
+  role: "learner" | "author";
   assignmentId: number;
 }
 
-async function AboutTheAssignment(props: Props) {
-  const { assignmentId } = props;
-  const headerList = headers();
-  const cookie = headerList.get("cookie");
-  const assignment = await getAssignment(assignmentId, cookie);
-  // go to the error page if the assignment is not found
-  if (!assignment) {
-    return (
-      <ErrorPage
-        className="h-[calc(100vh-85px)]"
-        error={"Assignment not found"}
-      />
-    );
-  }
-  const listOfAttempts = await getAttempts(assignmentId, cookie);
-  // if the number of attempts of the assignment is equals to the assignment's max attempts, then the assignment state is "completed"
-  let assignmentState: LearnerAssignmentState = "not-started";
-  if (listOfAttempts?.length === assignment.numAttempts) {
-    assignmentState = "completed";
-  } else {
-    // check if there are any attempts that are not submitted and have not expired
-    const unsubmittedAssignment = listOfAttempts?.find(
-      (attempt) =>
-        attempt.submitted === false &&
-        // if the assignment does not expire, then the expiresAt is null
-        (attempt.expiresAt === null ||
-          Date.now() < Date.parse(attempt.expiresAt)),
-    );
-    if (unsubmittedAssignment) {
-      assignmentState = "in-progress";
-    }
-  }
+// Utility function to determine assignment state
+const getAssignmentState = (
+  attempts: AssignmentAttempt[],
+  numAttempts: number,
+): LearnerAssignmentState => {
+  if (numAttempts !== -1 && attempts.length >= numAttempts) return "completed";
+
+  const inProgress = attempts.find(
+    (attempt) =>
+      !attempt.submitted &&
+      (!attempt.expiresAt ||
+        Date.now() < new Date(attempt.expiresAt).getTime()),
+  );
+
+  return inProgress ? "in-progress" : "not-started";
+};
+
+const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
+  assignment,
+  attempts,
+  role,
+  assignmentId,
+}) => {
+  // Destructure assignment properties with default values
   const {
-    instructions,
-    introduction,
-    published,
-    gradingCriteriaOverview,
+    introduction = "No introduction provided.",
+    instructions = "",
+    gradingCriteriaOverview = "",
     allotedTimeMinutes,
     timeEstimateMinutes,
-    numAttempts,
+    numAttempts = -1,
     passingGrade,
-    name,
+    name = "Untitled",
     id,
+    published = false,
   } = assignment;
 
-  if (!published) {
-    assignmentState = "not-published";
-  }
+  const assignmentState =
+    !published && role === "learner"
+      ? "not-published"
+      : getAssignmentState(attempts, numAttempts);
+
+  const attemptsLeft =
+    numAttempts === -1 ? Infinity : Math.max(0, numAttempts - attempts.length);
+
+  const latestAttemptDate = attempts[0]
+    ? new Date(attempts[0].createdAt).toLocaleString()
+    : "No attempts yet";
 
   return (
-    <main className="p-20 flex flex-col gap-y-14 bg-gray-50 flex-1">
-      <div className="flex justify-between items-center">
-        {/* data passed here will also be stored in zustand store (possible to do that there because it's client-side rendered) */}
-        <AssignmentMainInfo
-          allotedTimeMinutes={allotedTimeMinutes}
-          timeEstimateMinutes={timeEstimateMinutes}
-          numAttempts={numAttempts}
-          passingGrade={passingGrade}
-          name={name}
-          assignmentId={id}
-        />
-        <BeginTheAssignmentButton
-          assignmentState={assignmentState}
-          assignmentId={id}
-        />
-        {/* )} */}
-      </div>
-      <div className="border border-gray-300 rounded-lg bg-white p-4 flex flex-col gap-y-4">
-        {introduction && (
-          <>
-            <h3 className="text-xl font-semibold text-gray-800">
-              About this Assignment
-            </h3>
+    <main className="grid grid-cols-1 md:grid-cols-[1fr_8fr_1fr] gap-4 px-4 md:px-0 flex-1 py-12 bg-gray-50">
+      <div className="hidden md:block"> </div>
+      <div className="max-w-screen-lg w-full mx-auto p-4 rounded-lg space-y-6">
+        <div className="flex gap-x-4 items-center justify-between">
+          <div className="flex flex-col">
+            <h1 className="text-4xl font-bold text-gray-900">{name}</h1>
+            <div className="flex gap-x-4 items-center text-gray-600 pt-2">
+              <span className="font-semibold">
+                Latest attempt: {latestAttemptDate}
+              </span>
+              {role === "learner" && (
+                <Link
+                  href={`/learner/${id}/attempts`}
+                  className="text-violet-600"
+                >
+                  See all attempts
+                </Link>
+              )}
+            </div>
+          </div>
+          <BeginTheAssignmentButton
+            assignmentState={assignmentState}
+            assignmentId={id}
+            role={role}
+            attemptsLeft={attemptsLeft}
+          />
+        </div>
+
+        <div className="bg-white shadow pt-4 rounded-lg">
+          <h2 className="text-xl font-semibold text-gray-800 px-6 py-2">
+            About this assignment
+          </h2>
+          <div className="flex flex-wrap justify-between px-6 py-4">
+            <div className="flex flex-col gap-y-2 text-gray-600">
+              <span className="font-semibold">Assignment type</span>
+              <span>{published ? "Graded" : "Practice"}</span>
+            </div>
+            <div className="flex flex-col gap-y-2 text-gray-600">
+              <span className="font-semibold">Time Limit</span>
+              <span>
+                {allotedTimeMinutes
+                  ? `${allotedTimeMinutes} minutes`
+                  : "Unlimited"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-y-2 text-gray-600">
+              <span className="font-semibold">Estimated Time</span>
+              <span>
+                {timeEstimateMinutes
+                  ? `${timeEstimateMinutes} minutes`
+                  : "Not provided"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-y-2 text-gray-600">
+              <span className="font-semibold">Assignment attempts</span>
+              <span>
+                {numAttempts === -1
+                  ? "Unlimited"
+                  : `${numAttempts} attempts (${attemptsLeft} remaining)`}
+              </span>
+            </div>
+            <div className="flex flex-col gap-y-2 text-gray-600">
+              <span className="font-semibold">Passing threshold</span>
+              <span>{passingGrade}%</span>
+            </div>
+          </div>
+          <div className="border-t border-gray-200 px-6 py-4">
             <MarkdownViewer className="text-gray-600">
               {introduction}
             </MarkdownViewer>
-          </>
-        )}
-        {instructions && (
-          <>
-            <h3 className="text-xl font-semibold text-gray-800">
-              Instructions
-            </h3>
-            <MarkdownViewer className="text-gray-600">
-              {instructions}
-            </MarkdownViewer>
-          </>
-        )}
-        {gradingCriteriaOverview && (
-          <>
-            <h3 className="text-xl font-semibold text-gray-800">
-              Grading Criteria
-            </h3>
-            <MarkdownViewer className="text-gray-600">
-              {gradingCriteriaOverview}
-            </MarkdownViewer>
-          </>
-        )}
-        {!introduction && !instructions && !gradingCriteriaOverview && (
-          <MarkdownViewer className="text-gray-600">
-            No information has been provided for this assignment.
-          </MarkdownViewer>
-        )}
+          </div>
+        </div>
+
+        <AssignmentSection title="Instructions" content={instructions} />
+        <AssignmentSection
+          title="Grading Criteria"
+          content={gradingCriteriaOverview}
+        />
+
+        <div className="flex justify-center mt-6">
+          <BeginTheAssignmentButton
+            assignmentState={assignmentState}
+            assignmentId={id}
+            role={role}
+            attemptsLeft={attemptsLeft}
+          />
+        </div>
       </div>
-      <BeginTheAssignmentButton
-        className="flex justify-center"
-        assignmentState={assignmentState}
-        assignmentId={id}
-      />
+      <div className="hidden md:block"> </div>
     </main>
   );
-}
+};
 
 export default AboutTheAssignment;

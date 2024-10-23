@@ -1,3 +1,4 @@
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import Spinner from "@/components/svgs/Spinner";
 import Tooltip from "@/components/Tooltip";
 import { useAuthorStore } from "@/stores/author";
@@ -53,6 +54,7 @@ const SubmitQuestionsButton: FC<Props> = ({
           <button
             onClick={() => {
               setFocusedQuestionId(invalidQuestionId);
+              handleJumpToQuestion(`indexQuestion-${invalidQuestionId}`);
             }}
             className="ml-2 text-blue-500 hover:underline"
           >

@@ -57,6 +57,7 @@ export const FooterNavigation: FC<Props> = ({
           <button
             onClick={() => {
               setFocusedQuestionId(invalidQuestionId);
+              handleScrollToFirstErrorField();
             }}
             className="ml-2 text-blue-500 hover:underline"
           >

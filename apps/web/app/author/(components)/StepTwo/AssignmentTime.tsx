@@ -70,24 +70,20 @@ const Component: FC<Props> = () => {
           </button>
         </label>
         {strictTimeLimit && (
-          <input
-            type="number"
-            className="border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 px-4 py-2 w-full"
-            placeholder="Enter time limit in minutes"
-            min={0}
-            step={5}
-            onChange={(e) => setAllotedTimeMinutes(~~e.target.value)}
-            value={allotedTimeMinutes || ""}
-          />
-        )}
-        {errors.allotedTimeMinutes && (
-          <p
-            className="text-red-500 text-sm"
-            id={`error-${errors.questionDisplay}`}
-          >
-            {" "}
-            {errors.allotedTimeMinutes}
-          </p>
+          <div className="relative">
+            <input
+              type="number"
+              className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full`}
+              placeholder="Enter time limit in minutes"
+              min={0}
+              step={5}
+              onChange={(e) => setAllotedTimeMinutes(~~e.target.value)}
+              value={allotedTimeMinutes || ""}
+            />
+            <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
+              min
+            </span>
+          </div>
         )}
       </div>
 
@@ -96,23 +92,20 @@ const Component: FC<Props> = () => {
           How long should learners expect to spend on this assignment (in
           minutes)?
         </p>
-        <input
-          type="number"
-          className="border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 px-4 py-2 w-full"
-          placeholder="Ex. 60"
-          min={0}
-          step={5}
-          onChange={(e) => setTimeEstimateMinutes(~~e.target.value)}
-          value={timeEstimateMinutes || ""}
-        />
-        {errors.timeEstimateMinutes && (
-          <p
-            className="text-red-500 text-sm"
-            id={`error-${errors.timeEstimateMinutes}`}
-          >
-            {errors.timeEstimateMinutes}
-          </p>
-        )}
+        <div className="relative">
+          <input
+            type="number"
+            className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full`}
+            placeholder="Ex. 60"
+            min={0}
+            step={5}
+            onChange={(e) => setTimeEstimateMinutes(~~e.target.value)}
+            value={timeEstimateMinutes || ""}
+          />
+          <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
+            min
+          </span>
+        </div>
       </div>
     </SectionWithTitle>
   );

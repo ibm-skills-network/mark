@@ -39,6 +39,7 @@
     "@tabler/icons-react": "^3.16.0",
     "@tsparticles/engine": "^3.5.0",
     "@tsparticles/react": "^3.0.0",
+    "cookie": "^0.7.0",
     "express": "^4.19.2",
     "framer-motion": "^11.8.0",
     "lottie-react": "^2.4.0",

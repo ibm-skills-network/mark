@@ -1,7 +1,11 @@
+import dynamic from "next/dynamic";
 import PageTitle from "../(components)/PageTitle";
 import { FooterNavigation } from "../(components)/StepOne/FooterNavigation";
 import MainContent from "../(components)/StepOne/MainContent";
-import SuccessPage from "../(components)/SuccessPage";
+const DynamicSuccessPage = dynamic(
+  () => import("../(components)/SuccessPage"),
+  { ssr: false },
+);
 
 interface Props {
   params: { assignmentId: string };
@@ -12,11 +16,11 @@ function Component(props: Props) {
   const { params, searchParams } = props;
   const { submissionTime } = searchParams;
   const { assignmentId } = params;
+
   return (
     <main className="main-author-container">
-      {/* if submission tims is within 10 seconds of now, show the submitted page, and it can't be greater than the current date in this page */}
       {submissionTime ? (
-        <SuccessPage />
+        <DynamicSuccessPage />
       ) : (
         <>
           <PageTitle

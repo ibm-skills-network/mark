@@ -162,15 +162,23 @@ function LearnerHeader() {
         </div>
         <div>
           <Title className="text-lg font-semibold">{title}</Title>
-          {pathname.includes("questions") && (
+          {(pathname.includes("questions") ||
+            pathname.includes("attempts")) && (
             <Breadcrumbs
-              homeHref={pathname.replace(/\/questions.*/, "")}
+              homeHref={pathname.replace(/\/(questions|attempts).*/, "")}
               pages={[
-                {
-                  name: "Questions",
-                  href: pathname,
-                  current: true,
-                },
+                ...(pathname.includes("questions")
+                  ? [
+                      {
+                        name: "Questions",
+                        href: pathname.replace(/\/attempts.*/, ""),
+                        current: !pathname.includes("attempts"),
+                      },
+                    ]
+                  : []),
+                ...(pathname.includes("attempts")
+                  ? [{ name: "Attempts", href: pathname, current: true }]
+                  : []),
               ]}
             />
           )}

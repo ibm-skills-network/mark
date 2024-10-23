@@ -1,4 +1,5 @@
 import type {
+  AssignmentAttempt,
   AssignmentDetails,
   QuestionStatus,
   QuestionStore,
@@ -68,6 +69,44 @@ const isQuestionEdited = (question: QuestionStore) => {
     false
   );
 };
+export type LearnerOverviewState = {
+  listOfAttempts: AssignmentAttempt[];
+  assignmentId: number | null;
+};
+export type LearnerOverviewActions = {
+  setListOfAttempts: (listOfAttempts: AssignmentAttempt[]) => void;
+  setAssignmentId: (assignmentId: number) => void;
+};
+
+export const useLearnerOverviewStore = createWithEqualityFn<
+  LearnerOverviewState & LearnerOverviewActions
+>()(
+  devtools(
+    persist(
+      (set) => ({
+        listOfAttempts: [],
+        assignmentId: undefined,
+        setListOfAttempts: (listOfAttempts) => set({ listOfAttempts }),
+        setAssignmentId: (assignmentId) => set({ assignmentId }),
+      }),
+      {
+        name: "learner-store", // storage name
+        partialize: (state) => ({
+          listOfAttempts: state.listOfAttempts,
+          assignmentId: state.assignmentId,
+        }),
+      },
+    ),
+    {
+      name: "learner",
+      enabled: process.env.NODE_ENV === "development",
+      serialize: {
+        options: true, // Enable serialization to avoid large data crashes
+      },
+    },
+  ),
+  shallow,
+);
 
 export const useLearnerStore = createWithEqualityFn<
   LearnerState & LearnerActions

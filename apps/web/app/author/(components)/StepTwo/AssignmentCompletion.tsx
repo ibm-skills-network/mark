@@ -59,16 +59,21 @@ const Component: FC<Props> = () => {
         <p className=" text-gray-600">
           What is the passing threshold (in percentage)?
         </p>
-        <input
-          type="number"
-          className="border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 px-4 py-2 w-full"
-          placeholder="Ex. 70"
-          min={0}
-          max={100}
-          step={5}
-          onChange={(e) => setPassingGrade(~~e.target.value)}
-          value={passingGrade || ""}
-        />
+        <div className="relative">
+          <input
+            type="number"
+            className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-10 py-2 focus:outline-none w-full`}
+            placeholder="Ex. 70"
+            min={0}
+            max={100}
+            step={5}
+            onChange={(e) => setPassingGrade(~~e.target.value)}
+            value={passingGrade || ""}
+          />
+          <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
+            %
+          </span>
+        </div>
         {errors.passingGrade && (
           <p
             className="text-red-500 text-sm"

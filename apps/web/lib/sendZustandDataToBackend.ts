@@ -51,9 +51,9 @@ export async function publishStepTwoData() {
     graded,
     allotedTimeMinutes: strictTimeLimit ? allotedTimeMinutes : null,
     timeEstimateMinutes: timeEstimateMinutes || null,
-    passingGrade: passingGrade || 60,
+    passingGrade: passingGrade,
     displayOrder: displayOrder || "DEFINED",
-    numAttempts: numAttempts === -1 ? null : numAttempts,
+    numAttempts: numAttempts,
     // --- feedback settings ---
     showAssignmentScore,
     showQuestionScore,

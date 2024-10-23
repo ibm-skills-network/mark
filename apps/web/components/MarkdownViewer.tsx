@@ -38,8 +38,6 @@ const MarkdownViewer: FC<Props> = (props) => {
       style={{
         overflowWrap: "anywhere",
         fontFamily: "IBM Plex Sans, sans-serif",
-        overflowY: "auto",
-        maxHeight: "200px",
         backgroundColor: "transparent",
       }}
       {...restOfProps}

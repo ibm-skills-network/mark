@@ -1,5 +1,10 @@
 "use client";
-import type { ComponentPropsWithoutRef, FC, ButtonHTMLAttributes } from "react";
+import {
+  type ComponentPropsWithoutRef,
+  type FC,
+  type ButtonHTMLAttributes,
+  useEffect,
+} from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 import { stepTwoSections } from "@/config/constants";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -64,6 +69,12 @@ const Component: FC<Props> = () => {
     state.setShowSubmissionFeedback,
     state.setShowQuestionScore,
   ]);
+  const [showAssignmentScore, showSubmissionFeedback, showQuestionScore] =
+    useAssignmentFeedbackConfig((state) => [
+      state.showAssignmentScore,
+      state.showSubmissionFeedback,
+      state.showQuestionScore,
+    ]);
   const handleButtonClick = (verbosity: VerbosityLevels) => {
     setVerbosityLevel(verbosity);
     switch (verbosity) {
@@ -78,15 +89,27 @@ const Component: FC<Props> = () => {
         setShowQuestionScore(true);
         break;
       case "None":
-        setShowAssignmentScore(true);
+        setShowAssignmentScore(false);
         setShowSubmissionFeedback(false);
         setShowQuestionScore(false);
         break;
-      // case "Custom":
       default:
         break;
     }
   };
+  useEffect(() => {
+    if (showAssignmentScore && showSubmissionFeedback && showQuestionScore) {
+      setVerbosityLevel("Full");
+    } else if (
+      !showAssignmentScore &&
+      !showSubmissionFeedback &&
+      !showQuestionScore
+    ) {
+      setVerbosityLevel("None");
+    } else {
+      setVerbosityLevel("Custom");
+    }
+  }, [showAssignmentScore, showSubmissionFeedback, showQuestionScore]);
 
   return (
     <SectionWithTitle
@@ -97,19 +120,14 @@ const Component: FC<Props> = () => {
     >
       <div className="flex gap-x-4 max-md:flex-wrap">
         <FeedbackOption
-          id="Custom"
-          title="Custom"
-          onClick={() => handleButtonClick("Custom")}
-        />
-        <FeedbackOption
           id="Full"
           title="Full Feedback"
           onClick={() => handleButtonClick("Full")}
         />
         <FeedbackOption
-          id="Partial"
-          title="Partial Feedback"
-          onClick={() => handleButtonClick("Partial")}
+          id="Custom"
+          title="Custom"
+          onClick={() => handleButtonClick("Custom")}
         />
         <FeedbackOption
           id="None"

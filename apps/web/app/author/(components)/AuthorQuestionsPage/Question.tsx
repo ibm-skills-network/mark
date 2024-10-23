@@ -14,8 +14,6 @@ import {
   Bars3BottomLeftIcon,
   DocumentDuplicateIcon,
   LinkIcon,
-  ListBulletIcon,
-  PencilIcon,
   PencilSquareIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";

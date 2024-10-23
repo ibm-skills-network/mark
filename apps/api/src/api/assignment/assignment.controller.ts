@@ -36,8 +36,8 @@ import {
 } from "./dto/get.assignment.response.dto";
 import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
-import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 import { UpdateAssignmentQuestionsDto } from "./dto/update.questions.request.dto";
+import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 
 @ApiTags(
   "Assignments (All endpoints need a user-session header (injected using the API Gateway)",
@@ -75,7 +75,14 @@ export class AssignmentController {
     @Param("id") id: number,
     @Req() request: UserSessionRequest,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    return this.assignmentService.findOne(Number(id), request.userSession);
+    const backendData = await this.assignmentService.findOne(
+      Number(id),
+      request.userSession,
+    );
+    return {
+      ...backendData,
+      alreadyInBackend: true,
+    };
   }
 
   @Get()

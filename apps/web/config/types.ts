@@ -105,6 +105,7 @@ export type Choice = {
   choice: string;
   isCorrect: boolean;
   points: number;
+  feedback?: string;
 };
 
 type QuestionResponse = {
@@ -273,6 +274,18 @@ export interface AssignmentDetails {
   name: string;
   questionDisplay?: QuestionDisplayType;
   id: number;
+  strictTimeLimit?: boolean;
+}
+
+export interface AssignmentDetailsLocal extends AssignmentDetails {
+  introduction: string;
+  instructions: string;
+  gradingCriteriaOverview: string;
+  graded: boolean;
+  updatedAt: number;
+  showAssignmentScore: boolean;
+  showQuestionScore: boolean;
+  showSubmissionFeedback: boolean;
 }
 
 export type BaseBackendResponse = {

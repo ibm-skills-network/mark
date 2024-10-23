@@ -107,7 +107,6 @@ export class AttemptService {
     await this.validateNewAttempt(assignment, userSession);
 
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
-    console.log("attemptExpiresAt", attemptExpiresAt);
 
     const result = await this.prisma.assignmentAttempt.create({
       data: {
@@ -269,12 +268,6 @@ export class AttemptService {
         }
       }
     }
-    console.log("returning body", {
-      ...assignmentAttempt,
-      questions,
-      passingGrade: assignment.passingGrade,
-    });
-
     return {
       ...assignmentAttempt,
       questions,
@@ -365,17 +358,16 @@ export class AttemptService {
           {
             submitted: false,
             expiresAt: {
-              gte: new Date(), // Get any attempt that is not submitted and has not expired yet too (is in progress)
+              gte: new Date(),
             },
           },
           {
             submitted: false,
-            // eslint-disable-next-line unicorn/no-null
-            expiresAt: null, // Get any attempt that is not submitted and has no expiry date (meaning time limit in unlimited)
+            expiresAt: undefined,
           },
           {
             createdAt: {
-              gte: timeRangeStartDate, // Get all attempt within the time range (for example within last 2 hours)
+              gte: timeRangeStartDate,
               lte: new Date(),
             },
           },
@@ -406,7 +398,8 @@ export class AttemptService {
         TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
       );
     }
-    if (assignment.numAttempts) {
+
+    if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
         assignment.id,
@@ -608,6 +601,7 @@ export class AttemptService {
     return this.prisma.assignmentAttempt.update({
       data: {
         ...cleanedUpdateAssignmentAttemptDto,
+        expiresAt: new Date(),
         grade,
       },
       where: { id: assignmentAttemptId },
@@ -919,15 +913,12 @@ export class AttemptService {
 
       if (selectedChoice) {
         totalPoints += selectedChoice.points;
-        if (selectedChoice.isCorrect) {
-          feedbackDetails.push(
-            `Correct selection: ${learnerChoice} (+${selectedChoice.points} points)`,
-          );
-        } else {
-          feedbackDetails.push(
-            `Incorrect selection: ${learnerChoice} (${selectedChoice.points} points)`,
-          );
-        }
+        const choiceFeedback =
+          selectedChoice.feedback ??
+          (selectedChoice.isCorrect
+            ? `Correct selection: ${learnerChoice} (+${selectedChoice.points} points)`
+            : `Incorrect selection: ${learnerChoice} (${selectedChoice.points} points)`);
+        feedbackDetails.push(choiceFeedback);
       } else {
         feedbackDetails.push(`Invalid selection: ${learnerChoice} (0 points)`);
       }

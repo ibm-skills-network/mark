@@ -52,6 +52,9 @@ import {
 import { toast } from "sonner";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import { shallow } from "zustand/shallow";
+import React from "react";
 
 interface Props {
   assignmentId: number;
@@ -77,7 +80,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     state.setFocusedQuestionId,
   ]);
   const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
-  const questions = useAuthorStore((state) => state.questions);
+  const questions = useAuthorStore((state) => state.questions, shallow);
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
@@ -127,19 +130,6 @@ const AuthorQuestionsPage: FC<Props> = ({
     [],
   );
 
-  /**
-   * Scrolls the page to the specified question element.
-   *
-   * @param questionId - The ID of the question element to scroll to.
-   */
-  const handleJumpToQuestion = useCallback((questionId: number) => {
-    const element = document.getElementById(`item-${String(questionId)}`);
-    if (!element) return;
-    requestAnimationFrame(() => {
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }, []);
-
   useEffect(() => {
     if (assignmentId !== activeAssignmentId) {
       const fetchAssignment = async () => {
@@ -150,12 +140,12 @@ const AuthorQuestionsPage: FC<Props> = ({
             setName(assignment.name || "Untitled Assignment");
             const questions: QuestionAuthorStore[] = assignment.questions?.map(
               (question: QuestionAuthorStore, index: number) => {
-                const criteriaWithId = question.scoring?.criteria
-                  ?.map((criteria: Criteria, criteriaIndex: number) => ({
+                const criteriaWithId = question.scoring?.criteria?.map(
+                  (criteria: Criteria, criteriaIndex: number) => ({
                     ...criteria,
                     index: criteriaIndex + 1,
-                  }))
-                  .sort((a, b) => b.points - a.points); // Sort criteria by points in descending order for existing assingments with criteria
+                  }),
+                );
                 return {
                   ...question,
                   alreadyInBackend: true,
@@ -168,6 +158,12 @@ const AuthorQuestionsPage: FC<Props> = ({
               },
             );
             if (questions?.length > 0) {
+              // sort questions criteria by points before setting
+              questions.forEach((question) => {
+                question.scoring.criteria = question.scoring.criteria.sort(
+                  (a, b) => b.points - a.points,
+                );
+              });
               setQuestions(questions);
               setFocusedQuestionId(questions[0].id);
             }
@@ -212,7 +208,7 @@ const AuthorQuestionsPage: FC<Props> = ({
    */
   useEffect(() => {
     focusRef.current = focusedQuestionId;
-    handleJumpToQuestion(focusedQuestionId);
+    handleJumpToQuestion(`item-${String(focusedQuestionId)}`);
   }, [focusedQuestionId, handleJumpToQuestion]);
 
   /**
@@ -275,7 +271,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       index: questions.length + 1,
     });
     setFocusedQuestionId(questionId);
-    handleJumpToQuestion(questionId);
+    handleJumpToQuestion(`item-${String(questionId)}`);
     toast.success("Question has been added!");
   };
 
@@ -383,91 +379,99 @@ const AuthorQuestionsPage: FC<Props> = ({
    * @param questionIndex - The index of the question.
    * @returns The rendered sortable item.
    */
-  const SortableItem = ({
-    question,
-    questionIndex,
-  }: {
-    question: QuestionAuthorStore;
-    questionIndex: number;
-  }) => {
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-    } = useSortable({ id: question.id });
+  const SortableItem = React.memo(
+    ({
+      question,
+      questionIndex,
+    }: {
+      question: QuestionAuthorStore;
+      questionIndex: number;
+    }) => {
+      const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+      } = useSortable({ id: question.id });
 
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-      opacity: isDragging ? 0 : 1, // Hide the original item while dragging
-    };
+      const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0 : 1, // Hide the original item while dragging
+      };
 
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        className="col-span-4 md:col-start-3 md:col-end-11 gap-5 mb-8"
-        id={`item-${question.id}`}
-        {...attributes}
-      >
-        {/* This is wrapper around the question component */}
+      return (
         <div
-          className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-200 w-full ${
-            focusedQuestionId === question.id
-              ? "border-1 border-violet-600 shadow-md"
-              : "shadow-sm"
-          }`}
-          onClick={() => handleFocus(question.id)}
+          ref={setNodeRef}
+          style={style}
+          className="col-span-4 md:col-start-3 md:col-end-11 gap-5 mb-8"
+          id={`item-${question.id}`}
+          {...attributes}
         >
-          <div className="absolute flex self-center max-w-8 w-8 px-2 left-0">
-            <div
-              className="opacity-0 group-hover:opacity-100 transition-all"
-              {...listeners} // Attach the listeners only to the DragHandle
-            >
-              {/* DragHandle component */}
-              <DragHandle />
+          {/* This is wrapper around the question component */}
+          <div
+            className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-200 w-full ${
+              focusedQuestionId === question.id
+                ? "border-1 border-violet-600 shadow-md"
+                : "shadow-sm"
+            }`}
+            onClick={() => handleFocus(question.id)}
+          >
+            <div className="absolute flex self-center max-w-8 w-8 px-2 left-0">
+              <div
+                className="opacity-0 group-hover:opacity-100 transition-all"
+                {...listeners} // Attach the listeners only to the DragHandle
+              >
+                {/* DragHandle component */}
+                <DragHandle />
+              </div>
             </div>
+            {/* Question component */}
+            <Question
+              question={question}
+              onDelete={handleDelete}
+              questionId={question.id}
+              duplicateThisQuestion={duplicateThisQuestion}
+              questionIndex={questionIndex + 1}
+              collapse={collapseAll}
+              isFocusedQuestion={focusedQuestionId === question.id}
+            />
           </div>
-          {/* Question component */}
-          <Question
-            question={question}
-            onDelete={handleDelete}
-            questionId={question.id}
-            duplicateThisQuestion={duplicateThisQuestion}
-            questionIndex={questionIndex + 1}
-            collapse={collapseAll}
-            isFocusedQuestion={focusedQuestionId === question.id}
-          />
         </div>
-      </div>
-    );
-  };
+      );
+    },
+    (prevProps, nextProps) => {
+      return (
+        prevProps.question.id === nextProps.question.id &&
+        prevProps.question === nextProps.question &&
+        prevProps.questionIndex === nextProps.questionIndex
+      );
+    },
+  );
 
-  const SortableList = ({
-    questions,
-  }: {
-    questions: QuestionAuthorStore[];
-  }) => {
-    return (
-      <SortableContext
-        items={questions.map((question) => question.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        {/* SortableItem component responsible for rendering each question and making it draggable */}
-
-        {questions.map((question, index) => (
-          <SortableItem
-            key={`item-${question.id}`}
-            question={question}
-            questionIndex={index}
-          />
-        ))}
-      </SortableContext>
-    );
-  };
+  const SortableList = React.memo(
+    ({ questions }: { questions: QuestionAuthorStore[] }) => {
+      return (
+        <SortableContext
+          items={questions.map((question) => question.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {questions.map((question, index) => (
+            <SortableItem
+              key={`item-${question.id}`}
+              question={question}
+              questionIndex={index}
+            />
+          ))}
+        </SortableContext>
+      );
+    },
+    (prevProps, nextProps) => {
+      return prevProps.questions === nextProps.questions;
+    },
+  );
 
   /**
    * Handles the sorting of questions after dragging.
@@ -477,21 +481,33 @@ const AuthorQuestionsPage: FC<Props> = ({
    */
   const onSortEnd = ({ active, over }: { active: Active; over: Over }) => {
     setActiveId(null);
+
     if (active.id !== over.id) {
       const oldIndex = questions.findIndex((q) => q.id === active.id);
       const newIndex = questions.findIndex((q) => q.id === over.id);
 
       const updatedQuestions = arrayMove(questions, oldIndex, newIndex);
-      updatedQuestions.forEach((q, index) => {
-        q.index = index + 1; // Update the index of each question after sorting
+
+      let questionsChanged = false;
+
+      const finalQuestions = updatedQuestions.map((q, index) => {
+        const newIndexValue = index + 1;
+        if (q.index !== newIndexValue) {
+          questionsChanged = true;
+          return { ...q, index: newIndexValue };
+        }
+        return q;
       });
 
-      setQuestions(updatedQuestions);
-      useAuthorStore
-        .getState()
-        .setQuestionOrder(updatedQuestions.map((q) => q.id));
+      if (questionsChanged) {
+        setQuestions(finalQuestions);
+        useAuthorStore
+          .getState()
+          .setQuestionOrder(finalQuestions.map((q) => q.id));
+      }
     }
   };
+
   const handleDragStart = ({ active }: { active: Active }) => {
     setActiveId(active.id as number);
   };
@@ -532,7 +548,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                 setHandleToggleTable={setHandleToggleTable}
                 onSelectQuestion={(index) => {
                   setFocusedQuestionId(questions[index].id);
-                  handleJumpToQuestion(questions[index].id);
+                  handleJumpToQuestion(`item-${String(questions[index].id)}`);
                 }}
               />
             </div>

@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -24,7 +23,6 @@ import {
   QuestionStore,
 } from "@/config/types";
 import Loading from "@/components/Loading";
-import ErrorPage from "@/components/ErrorPage";
 const DynamicConfetti = dynamic(() => import("react-confetti"), {
   ssr: false,
 });
@@ -201,13 +199,19 @@ function SuccessPage() {
     },
   };
   useEffect(() => {
-    setPageHeight(
-      Math.max(
-        document.body.scrollHeight,
-        document.documentElement.scrollHeight,
-      ),
-    );
-  });
+    const updatePageHeight = () => {
+      setPageHeight(window.innerHeight);
+    };
+
+    // Set initial height
+    updatePageHeight();
+
+    // Update height on resize
+    window.addEventListener("resize", updatePageHeight);
+    return () => {
+      window.removeEventListener("resize", updatePageHeight);
+    };
+  }, []);
 
   const sparkleOptions = {
     fullScreen: {
@@ -398,7 +402,7 @@ function SuccessPage() {
                 role?.toLowerCase() === "learner"
                   ? `/learner/${assignmentId}`
                   : role?.toLowerCase() === "author"
-                    ? `/learner/${assignmentId}/questions?authorMode=true`
+                    ? `/learner/${assignmentId}?authorMode=true`
                     : "/"
               }
               className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-md transition flex items-center gap-2 shadow-lg"

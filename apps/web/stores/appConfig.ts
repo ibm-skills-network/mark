@@ -24,7 +24,6 @@ export const useAppConfig = createWithEqualityFn<AppActions>()(
           ? createJSONStorage(() => localStorage)
           : undefined,
       partialize(state) {
-        // Store everything that is not a function
         return Object.fromEntries(
           Object.entries(state).filter(
             ([_, value]) => typeof value !== "function",

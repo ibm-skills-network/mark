@@ -17,12 +17,18 @@ export class Choice {
   @IsNotEmpty()
   @IsString()
   choice: string;
+
   @IsNotEmpty()
   @IsBoolean()
   isCorrect: boolean;
+
   @IsNotEmpty()
   @IsNumber()
   points: number;
+
+  @IsString()
+  @IsOptional()
+  feedback: string;
 }
 
 export class UpdateAssignmentQuestionsDto {

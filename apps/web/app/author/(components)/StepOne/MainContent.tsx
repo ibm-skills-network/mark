@@ -2,7 +2,7 @@
 import MarkdownEditor from "@/components/MarkDownEditor";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 import { useAuthorStore } from "@/stores/author";
-import Loading from "@/components/Loading";
+import LoadingPage from "@/app/loading";
 
 const stepOneSections = {
   introduction: {
@@ -58,7 +58,7 @@ const MainContent = () => {
   ]);
 
   if (pageState === "loading") {
-    return <Loading />;
+    return <LoadingPage />;
   }
 
   return (

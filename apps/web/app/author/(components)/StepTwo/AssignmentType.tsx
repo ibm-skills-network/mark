@@ -44,7 +44,7 @@ const Component: FC<Props> = () => {
               graded === true ? "font-bold text-violet-600" : "font-medium",
             )}
           >
-            Graded Assignment
+            Graded
           </p>
         </div>
         <p className="text-gray-500 text-left cursor-pointer">
@@ -69,7 +69,7 @@ const Component: FC<Props> = () => {
               graded === false ? "font-bold text-violet-600" : "font-medium",
             )}
           >
-            Practice Assignment
+            Practice
           </div>
         </div>
         <p className="text-gray-500 text-left cursor-pointer">

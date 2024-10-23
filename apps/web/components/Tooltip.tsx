@@ -7,6 +7,7 @@ interface Props extends Omit<ComponentPropsWithoutRef<"div">, "content"> {
   delay?: number;
   disabled?: boolean;
   distance?: number;
+  up?: number;
 }
 
 const Tooltip: FC<Props> = (props) => {
@@ -31,10 +32,10 @@ const Tooltip: FC<Props> = (props) => {
   }
 
   const classNamesFromXDistance = () => {
-    if (distance > 0) {
+    if (distance < 0) {
       return "origin-right";
     }
-    if (distance < 0) {
+    if (distance > 0) {
       return "origin-left";
     }
     return "origin-center";
@@ -58,11 +59,11 @@ const Tooltip: FC<Props> = (props) => {
           <span
             style={
               direction === "x"
-                ? { left: `${distance}rem` }
+                ? { left: `${distance}rem`, top: `${props.up}rem` }
                 : { bottom: `${distance}rem` }
             }
             className={cn(
-              "absolute rounded-lg z-50 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 dark:bg-white bg-gray-950 dark:text-gray-800 text-slate-100 min-w-max group-hover/tooltip:scale-100",
+              "absolute rounded-lg z-9000 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 dark:bg-white bg-gray-950 dark:text-gray-800 text-slate-100 min-w-max group-hover/tooltip:scale-100",
               `group-hover/tooltip:delay-${delay}`,
               getClassNamesFromDirectionAndDistance(),
             )}

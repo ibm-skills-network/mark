@@ -59,6 +59,9 @@ export class Choice {
   @IsNotEmpty()
   @IsNumber()
   points: number;
+  @IsString()
+  @IsOptional()
+  feedback: string;
 }
 
 export class CreateUpdateQuestionRequestDto {

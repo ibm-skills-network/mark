@@ -4,11 +4,11 @@ import { useEffect, FC, useState } from "react";
 import { motion } from "framer-motion";
 import Tooltip from "@/components/Tooltip";
 import {
-  IconClipboardList,
-  IconSettings,
-  IconQuestionMark,
-  IconEyeCheck,
-} from "@tabler/icons-react";
+  DocumentTextIcon,
+  Cog6ToothIcon,
+  QuestionMarkCircleIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/solid";
 import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import {
   publishStepOneData,
@@ -16,12 +16,14 @@ import {
 } from "@/lib/sendZustandDataToBackend";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
+import { ArrowRightIcon } from "@heroicons/react/24/solid";
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 
 interface Step {
   id: number;
   name: string;
   href: string;
-  icon: React.ComponentType<React.ComponentProps<typeof IconClipboardList>>;
+  icon: React.ComponentType<React.ComponentProps<typeof DocumentTextIcon>>;
   tooltip: string;
 }
 
@@ -56,30 +58,30 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
   const steps: Step[] = [
     {
       id: 0,
-      name: "Assignment Setup",
+      name: "1. Overview",
       href: `/author/${activeAssignmentId}`,
-      icon: IconClipboardList,
+      icon: DocumentTextIcon,
       tooltip: "Set up your assignment details",
     },
     {
       id: 1,
-      name: "Assignment Config",
+      name: "2. Settings",
       href: `/author/${activeAssignmentId}/config`,
-      icon: IconSettings,
+      icon: Cog6ToothIcon,
       tooltip: "Configure assignment settings",
     },
     {
       id: 2,
-      name: "Question Setup",
+      name: "3. Questions",
       href: `/author/${activeAssignmentId}/questions`,
-      icon: IconQuestionMark,
+      icon: QuestionMarkCircleIcon,
       tooltip: "Add and edit questions",
     },
     {
       id: 3,
-      name: "Review",
+      name: "4. Review",
       href: `/author/${activeAssignmentId}/review`,
-      icon: IconEyeCheck,
+      icon: MagnifyingGlassIcon,
       tooltip: "Review and publish your assignment",
     },
   ];
@@ -95,6 +97,7 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
             <button
               onClick={() => {
                 setFocusedQuestionId(invalidQuestionId);
+                handleJumpToQuestion(`indexQuestion-${invalidQuestionId}`);
               }}
               className="ml-2 text-blue-500 hover:underline"
             >
@@ -170,7 +173,7 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
 
   return (
     <nav aria-label="Progress" className="flex-1 mx-8">
-      <ol className="flex items-center justify-center space-x-4">
+      <ol className="flex items-center justify-center space-x-5">
         {steps.map((step, index) => {
           const isCompleted = index < currentStepId;
           const isActive = index === currentStepId;
@@ -186,28 +189,18 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                 <button
                   onClick={() => handleStepClick(index)}
                   disabled={handleDisabled(step.id)}
-                  className="relative flex flex-col items-center text-center focus:outline-none"
+                  className="relative flex text-center p-2 gap-x-2 focus:outline-none items-center text-nowrap"
                 >
                   <motion.div
                     initial={{ scale: 1 }}
                     animate={{ scale: isActive ? 1.2 : 1 }}
                     transition={{ duration: 0.3 }}
-                    className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors duration-500 ease-in-out ${
-                      isCompleted
-                        ? "bg-violet-600 text-white"
-                        : isActive
-                          ? "bg-white border-2 border-violet-600 text-violet-600"
-                          : "bg-gray-200 text-gray-500"
-                    }`}
+                    className={`w-5 h-5 flex items-center justify-center rounded-full  transition-colors duration-500 ease-in-out text-violet-600`}
                   >
-                    <Icon size={28} stroke={1.5} />
+                    <Icon />
                   </motion.div>
                   <span
-                    className={`mt-2 text-sm font-medium ${
-                      isCompleted || isActive
-                        ? "text-violet-600"
-                        : "text-gray-500"
-                    }`}
+                    className={`text-sm font-medium ${isActive ? "text-violet-600 font-bold" : "text-gray-500"}`}
                   >
                     {step.name}
                   </span>
@@ -217,13 +210,15 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
               {/* Render the connecting dash after the step unless it's the last one */}
               {index < steps.length - 1 && (
                 <motion.div
-                  initial={{ width: 0 }}
+                  initial={{ opacity: 0 }}
                   animate={{
-                    width: index < currentStepId ? "100%" : "0%",
+                    opacity: 1,
                   }}
                   transition={{ duration: 0.5 }}
-                  className="h-1 bg-violet-600 mx-2"
-                ></motion.div>
+                  className={`mx-2 ${index < currentStepId ? "text-violet-600" : "text-gray-300"}`}
+                >
+                  <ArrowRightIcon className="w-5 h-5" />
+                </motion.div>
               )}
             </li>
           );

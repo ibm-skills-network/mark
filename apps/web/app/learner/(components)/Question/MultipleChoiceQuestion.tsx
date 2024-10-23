@@ -1,9 +1,9 @@
 import { QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import { useLearnerStore } from "@/stores/learner";
 
 interface MultipleChoiceQuestion {
-  isSingleCorrect: boolean; // New prop to control whether the question allows single or multiple correct answers
+  isSingleCorrect: boolean;
   question: QuestionStore;
 }
 
@@ -20,13 +20,10 @@ function MultipleChoiceQuestion({
   const handleChoiceClick = (choice: string) => {
     if (isSingleCorrect) {
       choices.forEach((c) => {
-        // deselect all choices
         removeChoice(c.choice, question.id);
       });
-      // select the clicked choice
       addChoice(choice, question.id);
     } else {
-      // Multiple correct behavior: toggle the choice
       if (learnerChoices?.includes(choice)) {
         removeChoice(choice, question.id);
       } else {
@@ -40,29 +37,49 @@ function MultipleChoiceQuestion({
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-y-3 mt-4">
       {choices.map((choice, index) => {
         const { choice: choiceText } = choice;
-        let bgColor = "";
-        if (learnerChoices?.includes(choiceText)) {
-          bgColor = "bg-blue-100"; // Selected but not answered yet
-        }
+        const isSelected = learnerChoices?.includes(choiceText);
 
         return (
           <button
             key={index}
             type="button"
             className={cn(
-              "block w-full text-left p-2 mb-2 border rounded",
-              bgColor,
+              "flex items-center w-full p-3 rounded-lg transition-colors duration-200",
+              "text-lg font-medium",
+              isSelected
+                ? "  text-violet-900"
+                : "bg-white  text-gray-800 hover:bg-gray-50",
             )}
             onClick={() => handleChoiceClick(choiceText)}
           >
+            <span
+              className={cn(
+                "mr-3 flex items-center justify-center transition-all",
+                isSingleCorrect
+                  ? "w-4 h-4 rounded-full border-2 border-violet-500"
+                  : "w-4 h-4 border-2 border-violet-500 rounded",
+                isSelected &&
+                  (isSingleCorrect
+                    ? "bg-violet-500"
+                    : "bg-violet-500 text-white"),
+              )}
+            >
+              {isSelected ? (
+                isSingleCorrect ? (
+                  <span className="block w-1.5 h-1.5 bg-white rounded-full" />
+                ) : (
+                  <span className="block w-4 h-4 bg-violet-500 rounded" />
+                )
+              ) : null}
+            </span>
             {choiceText}
           </button>
         );
       })}
-    </>
+    </div>
   );
 }
 

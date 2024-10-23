@@ -8,6 +8,7 @@ import {
 } from "react";
 import Timer from "./Timer";
 import { IconBookmarkFilled } from "@tabler/icons-react";
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   questions: QuestionStore[];
@@ -21,23 +22,8 @@ function Overview({ questions }: Props) {
       state.expiresAt,
     ]);
 
-  /**
-   * Scrolls the page to the specified question element.
-   *
-   * @param questionId - The ID of the question element to scroll to.
-   */
-  const handleJumpToQuestion = useCallback((questionId: number) => {
-    const element = document.getElementById(
-      `indexQuestion-${String(questionId)}`,
-    );
-
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, []);
-
   useEffect(() => {
-    handleJumpToQuestion(activeQuestionNumber);
+    handleJumpToQuestion(`indexQuestion-${String(activeQuestionNumber)}`);
   }, [activeQuestionNumber, handleJumpToQuestion]);
 
   /**

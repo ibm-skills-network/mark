@@ -1,19 +1,24 @@
-import { type ComponentPropsWithoutRef } from "react";
-import Spinner from "./svgs/Spinner";
+"use client";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+import React from "react";
+import Lottie from "lottie-react";
+import animationData from "@/animations/LoadSN.json";
 
-function Loading(props: Props) {
-  const {} = props;
+const Loading: React.FC = () => {
+  if (typeof document === "undefined") {
+    return null;
+  }
 
   return (
-    <div className="flex items-center justify-center w-full h-full">
-      <div className="flex justify-center items-center gap-x-1 text-sm text-gray-700">
-        <Spinner className="" />
-        <div>Loading ...</div>
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
+      <Lottie
+        className="h-44 scale-150"
+        loop
+        autoplay
+        animationData={animationData}
+      />
     </div>
   );
-}
+};
 
 export default Loading;

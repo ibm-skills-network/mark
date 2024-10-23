@@ -1,22 +1,28 @@
-"use client";
-
 import { Choice as ChoiceType } from "@/config/types";
-import { useAuthorStore } from "@/stores/author";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
-import React, { useEffect, useState, type ChangeEvent } from "react";
-import { toast } from "sonner";
+import { useAuthorStore, useQuestionStore } from "@/stores/author";
+import React, { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  PencilIcon,
+  PlusIcon,
+  SparklesIcon,
+  XMarkIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+} from "@heroicons/react/24/outline";
 import { shallow } from "zustand/shallow";
-import QuestionNumberOfRetries from "../../QuestionNumberOfRetries";
-import Choice from "./Choice";
+import Tooltip from "@/components/Tooltip";
+import { toast } from "sonner";
+import { generateRubric } from "@/lib/talkToBackend";
+import SparkleLottie from "@/app/animations/sparkleLottie";
+import { IconArrowsShuffle } from "@tabler/icons-react";
 
-interface sectionProps {
+interface SectionProps {
   questionId: number;
   preview?: boolean;
+  questionTitle: string;
 }
 
-function Section(props: sectionProps) {
-  const { questionId, preview } = props;
-
+function Section({ questionId, preview, questionTitle }: SectionProps) {
   const [addChoice, removeChoice, setChoices, modifyChoice] = useAuthorStore(
     (state) => [
       state.addChoice,
@@ -25,131 +31,530 @@ function Section(props: sectionProps) {
       state.modifyChoice,
     ],
   );
-
-  const questions = useAuthorStore(
-    (state) => state.questions,
-    shallow, // Use shallow to prevent re-renders when other state doesn't change
+  const [setCriteriaMode] = useQuestionStore((state) => [
+    state.setCriteriaMode,
+  ]);
+  const criteriaMode = useQuestionStore(
+    (state) => state.questionStates[questionId]?.criteriaMode,
   );
-  const question = questions.find((question) => question.id === questionId);
-  const { choices, totalPoints: points, numRetries: retries } = question;
+  const [loading, setLoading] = useState(false);
+  const question = useAuthorStore(
+    (state) => state.questions.find((q) => q.id === questionId),
+    shallow,
+  );
+  const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null); // To track the debounce timer
+  const [backspaceCount, setBackspaceCount] = useState(0);
+  if (!question) return null;
+
+  const { choices, type } = question;
+
+  const [localChoices, setLocalChoices] = useState(
+    choices?.map((choice) => choice?.choice ?? "") || [],
+  );
+  const [localFeedback, setLocalFeedback] = useState(
+    choices?.map((choice) => choice?.feedback ?? "") || [],
+  );
+
   useEffect(() => {
-    // if choices is empty, add a default choice
-    if (!choices) {
-      setChoices(questionId, [
-        {
-          choice: "",
-          isCorrect: true,
-          points: 1,
-        },
-        {
-          choice: "",
-          isCorrect: false,
-          points: -1,
-        },
-      ]);
-    }
-  }, []);
-  const [parent, enableAnimations] = useAutoAnimate();
-  if (!choices) {
-    return null;
-  }
-  // keys are the choices, values are booleans
-  const keys = Object.keys(choices);
-  const disableAddChoice =
-    keys.length >= 10 || keys.some((key) => key === "") || preview;
+    setLocalChoices(choices?.map((choice) => choice?.choice ?? "") || []);
+    setLocalFeedback(choices?.map((choice) => choice?.feedback ?? "") || []);
+  }, [choices]);
 
-  function handleChoiceChange(
+  const handleChoiceChange = (
     choiceIndex: number,
-    choice: Partial<ChoiceType>,
-  ) {
-    modifyChoice(questionId, choiceIndex, choice);
-  }
+    updatedChoice: Partial<ChoiceType>,
+  ) => {
+    if (updatedChoice.points) {
+      if (isNaN(updatedChoice.points)) return;
+      if (updatedChoice.points > 0) {
+        updatedChoice.isCorrect = true;
+      } else {
+        updatedChoice.isCorrect = false;
+      }
+    }
+    modifyChoice(questionId, choiceIndex, updatedChoice);
+  };
 
-  function handleAddChoice() {
-    addChoice(questionId);
-  }
-
-  function handleRemoveChoice(choiceIndex: number) {
+  const handleRemoveChoice = (choiceIndex: number) => {
     removeChoice(questionId, choiceIndex);
-  }
+  };
 
-  function handleChangeChoicePoints(choiceIndex: number, points: number) {
-    handleChoiceChange(choiceIndex, { points });
-  }
+  const handleChoiceToggle = (choiceIndex: number) => {
+    if (type === "SINGLE_CORRECT") {
+      const newCorrectStatus = !choices[choiceIndex].isCorrect;
+      handleChoiceChange(choiceIndex, {
+        isCorrect: newCorrectStatus,
+        points: newCorrectStatus ? 1 : 0,
+      });
 
-  function handleChangeChoiceText(choiceIndex: number, choiceText: string) {
-    handleChoiceChange(choiceIndex, { choice: choiceText });
-  }
+      choices.forEach((_, index) => {
+        if (index !== choiceIndex && choices[index].isCorrect) {
+          handleChoiceChange(index, { isCorrect: false, points: 0 });
+        }
+      });
+    } else if (type === "MULTIPLE_CORRECT") {
+      const newCorrectStatus = !choices[choiceIndex].isCorrect;
+      if (newCorrectStatus) {
+        handleChoiceChange(choiceIndex, {
+          isCorrect: newCorrectStatus,
+          points:
+            choices[choiceIndex].points > 0 ? choices[choiceIndex].points : 1,
+        });
+      } else {
+        handleChoiceChange(choiceIndex, {
+          isCorrect: newCorrectStatus,
+          points:
+            choices[choiceIndex].points < 0 ? choices[choiceIndex].points : -1,
+        });
+      }
+    }
+  };
 
-  function handleChoiceToggle(choiceIndex: number) {
-    // Get the current question's choices
-    const question = questions.find((q) => q.id === questionId);
+  const handleBackspacePress = (
+    choiceIndex: number,
+    event: React.KeyboardEvent,
+  ) => {
+    const value = (event.currentTarget as HTMLInputElement).value;
 
-    if (!question) return; // Exit if the question doesn't exist
+    if (event.key === "Backspace" && value === "") {
+      if (backspaceTimerRef.current) {
+        clearTimeout(backspaceTimerRef.current);
+      }
 
-    const { choices } = question;
+      setBackspaceCount((prevCount) => prevCount + 1);
 
-    // Toggle the selected choice for multiple correct answers
-    const choice = choices[choiceIndex];
-    const newCorrectStatus = !choice.isCorrect;
+      backspaceTimerRef.current = setTimeout(() => {
+        setBackspaceCount(0);
+      }, 1000);
 
-    // Toggle the `isCorrect` status
-    handleChoiceChange(choiceIndex, { isCorrect: newCorrectStatus });
-  }
+      if (backspaceCount === 1) {
+        handleRemoveChoice(choiceIndex);
+
+        setTimeout(() => {
+          const prevChoiceInput = document.getElementById(
+            `Choice-${questionId}-${choiceIndex - 1}`,
+          );
+          if (prevChoiceInput) {
+            prevChoiceInput.focus();
+          }
+        }, 100);
+      }
+    } else {
+      setBackspaceCount(0);
+    }
+  };
+
+  const handleAddChoice = () => {
+    addChoice(questionId);
+  };
+
+  const focusNextInput = (index: number, column: string) => {
+    const nextIndex = index + 1;
+    if (nextIndex < choices.length) {
+      setTimeout(() => {
+        const nextInput = document.getElementById(
+          `${column}-${questionId}-${nextIndex}`,
+        );
+        if (nextInput) {
+          nextInput.focus();
+        }
+      }, 300); // Ensure input is rendered before focusing
+    } else {
+      handleAddChoice();
+      setTimeout(() => {
+        const newInput = document.getElementById(
+          `${column}-${questionId}-${choices.length}`,
+        );
+        if (newInput) {
+          newInput.focus();
+        }
+      }, 300);
+    }
+  };
+
+  const fetchAiGenChoices = async () => {
+    const questions = [
+      {
+        id: questionId,
+        questionText: questionTitle,
+        questionType: type,
+      },
+    ];
+    const assignmentId = useAuthorStore.getState().activeAssignmentId;
+
+    try {
+      const response = await generateRubric(questions, assignmentId);
+      // Access and parse choices JSON string based on questionId
+      if (response?.[questionId]) {
+        const parsedData = JSON.parse(response[questionId]) as {
+          choices: ChoiceType[];
+        };
+        const parsedChoices = parsedData.choices.map((choice: ChoiceType) => ({
+          choice: choice.choice,
+          isCorrect: choice.isCorrect,
+          points: choice.points,
+          feedback: choice.feedback,
+        }));
+
+        setChoices(questionId, parsedChoices);
+        toast.success("choices and choices generated successfully!");
+      } else {
+        toast.error("No choices found in the generated choices response.");
+      }
+    } catch (error) {
+      toast.error("Failed to generate choices. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const disableAddChoice = choices?.length >= 10 || preview;
+  const handleAiClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation(); // Prevent the click event from bubbling up to the parent0=
+    if (questionTitle.trim() === "") {
+      toast.error("Please enter a question title first.");
+      return;
+    }
+    try {
+      setLoading(true);
+      await fetchAiGenChoices();
+      setLoading(false);
+    } catch (error) {
+      toast.error("Failed to generate choices. Please try again.");
+    } finally {
+      setCriteriaMode(questionId, "AI_GEN");
+    }
+  };
+  const handleManualChoices = () => {
+    if (!choices) {
+      if (type === "MULTIPLE_CORRECT") {
+        setChoices(questionId, [
+          { choice: "", isCorrect: true, points: 1 },
+          { choice: "", isCorrect: false, points: -1 },
+          { choice: "", isCorrect: false, points: -1 },
+          { choice: "", isCorrect: false, points: -1 },
+        ]);
+      } else if (choices?.some((choice) => choice?.points === 0)) {
+        // if any choice has points 0, set points to -1
+        const updatedChoices = choices.map((choice) =>
+          choice.points === 0 ? { ...choice, points: -1 } : choice,
+        );
+        setChoices(questionId, updatedChoices);
+      } else if (type === "SINGLE_CORRECT") {
+        setChoices(questionId, [
+          { choice: "", isCorrect: true, points: 1 },
+          { choice: "", isCorrect: false, points: 0 },
+          { choice: "", isCorrect: false, points: 0 },
+          { choice: "", isCorrect: false, points: 0 },
+        ]);
+      } else if (choices?.some((choice) => choice?.points === -1)) {
+        // if any choice has points 0, set points to -1
+        const updatedChoices = choices.map((choice) =>
+          choice.points === -1 ? { ...choice, points: 0 } : choice,
+        );
+        setChoices(questionId, updatedChoices);
+      }
+    }
+  };
+  const handleShuffleChoices = () => {
+    const shuffledChoices = choices.sort(() => Math.random() - 0.5);
+    setChoices(questionId, shuffledChoices);
+  };
+  useEffect(() => {
+    if (choices?.length > 0) {
+      setCriteriaMode(questionId, "CUSTOM");
+    }
+  }, [choices]);
+
   return (
-    <div className="flex flex-col gap-y-6 w-full">
-      <div className="flex flex-col gap-y-2">
-        <label className="font-medium leading-5 text-gray-800">Choices</label>
-        {/* loop throug the key value object */}
-        <ul ref={parent}>
-          {choices.map((choice, index) => (
-            <Choice
-              key={index}
-              index={index}
-              choice={choice}
-              changeText={handleChangeChoiceText}
-              toggleChoice={handleChoiceToggle}
-              removeChoice={handleRemoveChoice}
-              addChoice={handleAddChoice}
-              changePoints={handleChangeChoicePoints}
-              isSingleChoice={false}
-              questionId={questionId}
-              preview={preview}
-              choices={choices}
-            />
-          ))}
-        </ul>
-        <button
-          type="button"
-          disabled={disableAddChoice}
-          className="flex mr-auto rounded-full bg-white px-5 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-200 disabled:opacity-50 transition"
-          onClick={() => {
-            handleAddChoice();
-          }}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="21"
-            viewBox="0 0 20 21"
-            fill="none"
-          >
-            <path
-              d="M11.3438 7.34375C11.3438 7.11997 11.2549 6.90536 11.0966 6.74713C10.9384 6.58889 10.7238 6.5 10.5 6.5C10.2762 6.5 10.0616 6.58889 9.90338 6.74713C9.74515 6.90536 9.65625 7.11997 9.65625 7.34375V10.1562H6.84375C6.61997 10.1562 6.40536 10.2451 6.24713 10.4034C6.08889 10.5616 6 10.7762 6 11C6 11.2238 6.08889 11.4384 6.24713 11.5966C6.40536 11.7549 6.61997 11.8438 6.84375 11.8438H9.65625V14.6562C9.65625 14.88 9.74515 15.0946 9.90338 15.2529C10.0616 15.4111 10.2762 15.5 10.5 15.5C10.7238 15.5 10.9384 15.4111 11.0966 15.2529C11.2549 15.0946 11.3438 14.88 11.3438 14.6562V11.8438H14.1562C14.38 11.8438 14.5946 11.7549 14.7529 11.5966C14.9111 11.4384 15 11.2238 15 11C15 10.7762 14.9111 10.5616 14.7529 10.4034C14.5946 10.2451 14.38 10.1562 14.1562 10.1562H11.3438V7.34375Z"
-              fill="#1D4ED8"
-            />
-          </svg>
-          <span
-            style={{
-              fontSize: "0.8rem",
-              whiteSpace: "nowrap", // Prevent text from wrapping
-              display: "inline-block", // Ensure it stays on one line
-            }}
-          >
-            Add Option
-          </span>
-        </button>
-      </div>
+    <div className="w-full border rounded-lg overflow-hidden bg-white">
+      <table className="min-w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-gray-50 border-b">
+            <th className="p-3 typography-body text-gray-600 border-r w-10">
+              Options
+            </th>
+            <th className="p-3 typography-body text-gray-600 border-r w-32">
+              Points
+            </th>
+            <th className="p-3 typography-body text-gray-600 border-r">
+              Choices
+            </th>
+            <th className="p-3 typography-body text-gray-600 ">
+              <div className="flex items-center justify-between">
+                <span>Feedback</span>
+                {/* randomize button */}
+                <div className="flex items-center">
+                  <Tooltip
+                    content="Shuffle choices"
+                    distance={-6.5}
+                    direction="x"
+                    up={-1.8}
+                  >
+                    <button
+                      onClick={handleShuffleChoices}
+                      className="text-gray-500 rounded-full hover:bg-gray-100 w-6 h-6 flex items-center justify-center"
+                    >
+                      <IconArrowsShuffle className="w-4 h-4" />
+                    </button>
+                  </Tooltip>
+                  {!preview && criteriaMode && (
+                    <Tooltip
+                      content="Generate choices with AI"
+                      className="cursor-pointer"
+                      distance={-10.5}
+                      direction="x"
+                      up={-1.8}
+                    >
+                      <div className="flex justify-end">
+                        <button
+                          className="text-gray-500 rounded-full hover:bg-gray-100 w-6 h-6 flex items-center justify-center"
+                          onClick={handleAiClick}
+                          disabled={loading}
+                        >
+                          <SparklesIcon className="w-4 h-4 stroke-violet-600 fill-violet-600" />
+                        </button>
+                      </div>
+                    </Tooltip>
+                  )}
+                </div>
+              </div>
+            </th>
+          </tr>
+        </thead>
+
+        {criteriaMode || choices?.length > 0 ? (
+          <>
+            <tbody>
+              {choices?.map((choice, index) => (
+                <tr
+                  key={`row-${questionId}-${index}`}
+                  id={`row-${questionId}-${index}`}
+                  className="border-b"
+                >
+                  <td
+                    className={`border-r text-center h-full p-2 gap-x-4 flex items-center`}
+                  >
+                    {loading ? (
+                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                    ) : (
+                      <>
+                        {/* arrows to order questions*/}
+                        <div className="flex flex-col items-center space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (index > 0) {
+                                const updatedChoices = [...choices];
+                                const temp = updatedChoices[index];
+                                updatedChoices[index] =
+                                  updatedChoices[index - 1];
+                                updatedChoices[index - 1] = temp;
+                                setChoices(questionId, updatedChoices);
+                              }
+                            }}
+                            disabled={index === 0}
+                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            <ChevronUpIcon className="h-4 w-4 text-gray-600" />
+                          </button>
+
+                          {/* Down Arrow Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (index < choices.length - 1) {
+                                const updatedChoices = [...choices];
+                                const temp = updatedChoices[index];
+                                updatedChoices[index] =
+                                  updatedChoices[index + 1];
+                                updatedChoices[index + 1] = temp;
+                                setChoices(questionId, updatedChoices);
+                              }
+                            }}
+                            disabled={index === choices.length - 1}
+                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            <ChevronDownIcon className="h-4 w-4 text-gray-600" />
+                          </button>
+                        </div>
+
+                        {type === "SINGLE_CORRECT" ? (
+                          <input
+                            type="radio"
+                            name={`correctChoice-${questionId}`}
+                            checked={choice.isCorrect}
+                            onChange={() => handleChoiceToggle(index)}
+                            disabled={preview}
+                            className="focus:ring-violet-500 text-violet-600"
+                          />
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={choice.isCorrect}
+                            onChange={() => handleChoiceToggle(index)}
+                            disabled={preview}
+                            className="focus:ring-violet-500 text-violet-600"
+                          />
+                        )}
+                      </>
+                    )}
+                  </td>
+
+                  <td className="p-3 border-r">
+                    {loading ? (
+                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                    ) : (
+                      <input
+                        type="number"
+                        id={`points-${questionId}-${index}`}
+                        value={choice?.points}
+                        onChange={(e) =>
+                          handleChoiceChange(index, {
+                            points: parseInt(e.target.value, 10) || 0,
+                          })
+                        }
+                        placeholder="Points"
+                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
+                        disabled={preview}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            focusNextInput(index, "points");
+                          } else {
+                            handleBackspacePress(index, event);
+                          }
+                        }}
+                      />
+                    )}
+                  </td>
+                  <td className="p-3 border-r">
+                    {loading ? (
+                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                    ) : (
+                      <input
+                        type="text"
+                        id={`choice-${questionId}-${index}`}
+                        value={localChoices[index]}
+                        onChange={(e) => {
+                          const updatedChoices = [...localChoices];
+                          updatedChoices[index] = e.target.value;
+                          setLocalChoices(updatedChoices);
+                        }}
+                        onBlur={() =>
+                          handleChoiceChange(index, {
+                            choice: localChoices[index],
+                          })
+                        }
+                        placeholder="Enter an choice."
+                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
+                        disabled={preview}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            focusNextInput(index, "choice");
+                          } else {
+                            handleBackspacePress(index, event);
+                          }
+                        }}
+                      />
+                    )}
+                  </td>
+                  <td className="p-3 flex items-center justify-between">
+                    {loading ? (
+                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          id={`feedback-${questionId}-${index}`}
+                          value={localFeedback[index]}
+                          onChange={(e) => {
+                            const updatedFeedback = [...localFeedback];
+                            updatedFeedback[index] = e.target.value;
+                            setLocalFeedback(updatedFeedback);
+                          }}
+                          onBlur={() =>
+                            handleChoiceChange(index, {
+                              feedback: localFeedback[index],
+                            })
+                          }
+                          placeholder="Provide feedback for this choice."
+                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
+                          disabled={preview}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              focusNextInput(index, "feedback");
+                            } else {
+                              handleBackspacePress(index, event);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveChoice(index)}
+                          disabled={preview}
+                        >
+                          <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            {!preview && (
+              <td colSpan={4} className="text-center">
+                <button
+                  type="button"
+                  disabled={disableAddChoice}
+                  className="w-full text-left text-sm text-gray-600 p-3 hover:bg-gray-100 flex items-center"
+                  onClick={handleAddChoice}
+                >
+                  <PlusIcon className="h-4 w-4 mr-2 text-gray-500" />
+                  Add Option
+                </button>
+              </td>
+            )}
+          </>
+        ) : (
+          <tr className="border-b border-gray-200 w-full">
+            <td colSpan={4} className="py-2 px-4 text-center">
+              <div className="flex justify-center items-center gap-x-4">
+                {loading ? (
+                  <td className="animate-pulse bg-gray-200 h-5 w-full rounded"></td>
+                ) : !preview ? (
+                  <>
+                    <button
+                      className="text-gray-500"
+                      onClick={handleAiClick}
+                      disabled={loading}
+                    >
+                      <SparkleLottie />
+                      <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
+                      Generate choices with AI
+                    </button>
+                    <span className="text-gray-500">OR</span>
+                    <button
+                      className="text-gray-500"
+                      onClick={() => {
+                        setCriteriaMode(questionId, "CUSTOM");
+                        handleManualChoices();
+                      }}
+                      disabled={loading}
+                    >
+                      <PencilIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
+                      Create choices from scratch
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-gray-500 typography-body">
+                    No criteria set up yet.
+                  </p>
+                )}
+              </div>
+            </td>
+          </tr>
+        )}
+      </table>
     </div>
   );
 }

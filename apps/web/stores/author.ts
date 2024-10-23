@@ -50,6 +50,11 @@ export type AuthorActions = {
     choiceIndex: number,
     modifiedData: Partial<Choice>,
   ) => void;
+  modifyChoiceFeedback: (
+    questionId: number,
+    choiceIndex: number,
+    feedback: string,
+  ) => void;
   setPoints: (questionId: number, points: number) => void;
   setPageState: (state: "loading" | "success" | "error") => void;
   setUpdatedAt: (updatedAt: number) => void;
@@ -154,24 +159,34 @@ export const useAuthorStore = createWithEqualityFn<
         addQuestion: (question) =>
           set((state) => ({ questions: [...state.questions, question] })),
         removeQuestion: (questionId) =>
-          set((state) => ({
-            questions: state.questions.filter((q) => q.id !== questionId),
-          })),
+          set((state) => {
+            const index = state.questions.findIndex((q) => q.id === questionId);
+            if (index === -1) return {}; // No changes
+            const updatedQuestions = state.questions.filter(
+              (q) => q.id !== questionId,
+            );
+            return { questions: updatedQuestions };
+          }),
         modifyQuestion: (questionId, modifiedData) =>
-          set((state) => ({
-            questions: state.questions.map((q) =>
-              q.id === questionId
-                ? {
-                    // keep the original data
-                    ...q,
-                    // add the modified data to the question
-                    ...modifiedData,
-                  }
-                : {
-                    ...q,
-                  },
-            ),
-          })),
+          set((state) => {
+            const index = state.questions.findIndex((q) => q.id === questionId);
+            if (index === -1) return {}; // No changes
+
+            const existingQuestion = state.questions[index];
+            const updatedQuestion = {
+              ...existingQuestion,
+              ...modifiedData,
+            };
+
+            if (existingQuestion === updatedQuestion) {
+              return {}; // No changes
+            }
+
+            const updatedQuestions = [...state.questions];
+            updatedQuestions[index] = updatedQuestion;
+
+            return { questions: updatedQuestions };
+          }),
         setCriterias: (questionId, criterias) => {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -299,7 +314,7 @@ export const useAuthorStore = createWithEqualityFn<
           const question = get().questions.find((q) => q.id === questionId);
           if (!question || !question.choices) return null; // If no question or no choices exist, return null
 
-          return question.choices.find((choice) => choice.choice === "true")
+          return question.choices.find((choice) => choice?.choice === "true")
             ? true
             : false;
         },
@@ -311,7 +326,11 @@ export const useAuthorStore = createWithEqualityFn<
                   ...q,
                   choices: [
                     ...q.choices,
-                    { choice: "", isCorrect: false, points: -1 },
+                    {
+                      choice: "",
+                      isCorrect: false,
+                      points: q.type === "MULTIPLE_CORRECT" ? -1 : 0,
+                    },
                   ],
                 };
               }
@@ -357,27 +376,47 @@ export const useAuthorStore = createWithEqualityFn<
             }),
           }));
         },
-        modifyChoice: (questionId, choiceIndex, modifiedData) => {
+        modifyChoice: (questionId, choiceIndex, modifiedData) =>
           set((state) => {
-            const updatedQuestions = state.questions.map((q) => {
+            const questions = state.questions;
+            const questionIndex = questions.findIndex(
+              (q) => q.id === questionId,
+            );
+            if (questionIndex === -1) return {}; // No changes
+            const question = questions[questionIndex];
+            const choices = question.choices;
+            const choice = choices[choiceIndex];
+            const updatedChoice = { ...choice, ...modifiedData };
+            if (choice === updatedChoice) return {};
+            const updatedChoices = [...choices];
+            updatedChoices[choiceIndex] = updatedChoice;
+            const updatedQuestion = { ...question, choices: updatedChoices };
+            const updatedQuestions = [...questions];
+            updatedQuestions[questionIndex] = updatedQuestion;
+            return { questions: updatedQuestions };
+          }),
+        modifyChoiceFeedback: (questionId, choiceIndex, feedback) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
               if (q.id === questionId) {
-                // Find the question to modify its choices
-                const updatedChoices = q.choices.map((choice, index) => {
+                const choices = q.choices.map((choice, index) => {
                   if (index === choiceIndex) {
-                    // Modify the specific choice by merging modifiedData
-                    return { ...choice, ...modifiedData };
+                    return {
+                      ...choice,
+                      feedback,
+                    };
                   }
                   return choice;
                 });
-                return { ...q, choices: updatedChoices };
+                return {
+                  ...q,
+                  choices,
+                };
               }
               return q;
-            });
-
-            return { ...state, questions: updatedQuestions }; // Return the updated state
-          });
+            }),
+          }));
         },
-
         setPoints: (questionId, points) => {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -432,19 +471,6 @@ export const useAuthorStore = createWithEqualityFn<
             state.introduction.trim() === "<p><br></p>"
           ) {
             errors.introduction = "Introduction is required.";
-          }
-          if (
-            !state.instructions ||
-            state.instructions.trim() === "<p><br></p>"
-          ) {
-            errors.instructions = "Instructions are required.";
-          }
-          if (
-            !state.gradingCriteriaOverview ||
-            state.gradingCriteriaOverview.trim() === "<p><br></p>"
-          ) {
-            errors.gradingCriteriaOverview =
-              "Grading criteria overview is required.";
           }
           set({ errors });
           return Object.keys(errors).length === 0;

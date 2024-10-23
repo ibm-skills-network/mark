@@ -8,6 +8,7 @@ import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import type { Logger } from "winston";
 import { z } from "zod";
+import { Choice } from "../assignment/dto/update.questions.request.dto";
 import type { ChoiceBasedQuestionEvaluateModel } from "./model/choice.based.question.evaluate.model";
 import {
   ChoiceBasedQuestionResponseModel,
@@ -23,8 +24,12 @@ import {
   feedbackChoiceBasedQuestionLlmTemplate,
   feedbackTrueFalseBasedQuestionLlmTemplate,
   generateMarkingRubricTemplate,
+  generateMultipleBasedMarkingRubricTemplate,
   generateQuestionsGradingContext,
   generateQuestionVariationsTemplate,
+  generateSingleBasedMarkingRubricTemplate,
+  generateTextBasedMarkingRubricTemplate,
+  generateUrlBasedMarkingRubricTemplate,
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
 } from "./templates";
@@ -97,104 +102,6 @@ export class LlmService {
       gradingContextQuestionMap[item.questionId] = item.contextQuestions;
     }
     return gradingContextQuestionMap;
-  }
-
-  async gradeTrueFalseBasedQuestion(
-    trueFalseBasedQuestionEvaluateModel: TrueFalseBasedQuestionEvaluateModel,
-  ): Promise<TrueFalseBasedQuestionResponseModel> {
-    const {
-      question,
-      answer,
-      learnerChoice,
-      assignmentInstrctions,
-      previousQuestionsAnswersContext,
-    } = trueFalseBasedQuestionEvaluateModel;
-
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.string().describe("Feedback for the choice made by the learner"),
-    );
-
-    const formatInstructions = parser.getFormatInstructions();
-
-    const prompt = new PromptTemplate({
-      template: feedbackTrueFalseBasedQuestionLlmTemplate,
-      inputVariables: [],
-      partialVariables: {
-        question: question,
-        learner_choice: JSON.stringify(learnerChoice),
-        answer: JSON.stringify(answer),
-        previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext,
-        ),
-        assignment_instructions: assignmentInstrctions,
-        format_instructions: formatInstructions,
-      },
-    });
-
-    const response = await this.processPrompt(prompt);
-    const feedback = await parser.parse(response);
-
-    const trueFalseBasedQuestionResponseModel =
-      new TrueFalseBasedQuestionResponseModel(
-        learnerChoice,
-        trueFalseBasedQuestionEvaluateModel.evaluatePoints(),
-        feedback,
-      );
-
-    return trueFalseBasedQuestionResponseModel;
-  }
-
-  async gradeChoiceBasedQuestion(
-    choiceBasedQuestionEvaluateModel: ChoiceBasedQuestionEvaluateModel,
-  ): Promise<ChoiceBasedQuestionResponseModel> {
-    const {
-      question,
-      learnerChoices,
-      validChoices,
-      previousQuestionsAnswersContext,
-      assignmentInstrctions,
-    } = choiceBasedQuestionEvaluateModel;
-
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.array(
-        z
-          .object({
-            choice: z.string().describe("The choice selected by the learner"),
-            feedback: z
-              .string()
-              .describe("Feedback provided for the learner's choice"),
-          })
-          .describe("Feedback for each choice made by the learner"),
-      ),
-    );
-
-    const formatInstructions = parser.getFormatInstructions();
-
-    const prompt = new PromptTemplate({
-      template: feedbackChoiceBasedQuestionLlmTemplate,
-      inputVariables: [],
-      partialVariables: {
-        question: question,
-        assignment_instructions: assignmentInstrctions,
-        previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext,
-        ),
-        learner_choices: JSON.stringify(learnerChoices),
-        valid_choices: JSON.stringify(validChoices),
-        format_instructions: formatInstructions,
-      },
-    });
-
-    const response = await this.processPrompt(prompt);
-
-    const choiceBasedFeedback = (await parser.parse(
-      response,
-    )) as ChoiceBasedFeedback[];
-
-    return new ChoiceBasedQuestionResponseModel(
-      choiceBasedQuestionEvaluateModel.evaluatePoints(),
-      choiceBasedFeedback,
-    );
   }
 
   async gradeTextBasedQuestion(
@@ -361,36 +268,127 @@ export class LlmService {
   }
   async createMarkingRubric(
     questions: { id: number; questionText: string; questionType: string }[],
-  ): Promise<Record<number, string>> {
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.array(
-        z
-          .object({
+  ): Promise<
+    Record<
+      number,
+      | string
+      | { choices: Choice[] }
+      | { id: number; description: string; points: number }[]
+    >
+  > {
+    const templates = {
+      TEXT: generateTextBasedMarkingRubricTemplate,
+      URL: generateUrlBasedMarkingRubricTemplate,
+      MULTIPLE_CORRECT: generateMultipleBasedMarkingRubricTemplate,
+      SINGLE_CORRECT: generateSingleBasedMarkingRubricTemplate,
+    };
+
+    const markingRubricMap: Record<
+      number,
+      | string
+      | { choices: Choice[] }
+      | { id: number; description: string; points: number }[]
+    > = {};
+
+    for (const question of questions) {
+      const selectedTemplate =
+        templates[question.questionType as keyof typeof templates];
+
+      const parser = StructuredOutputParser.fromZodSchema(
+        z.array(
+          z.object({
             questionId: z.number().describe("The id of the question"),
-            rubric: z.string().describe("The marking rubric for the question"),
-          })
-          .describe(
-            "Array of objects, where each object represents a question and its marking rubric",
-          ),
-      ),
-    );
+            rubric: z
+              .array(
+                z.object({
+                  id: z
+                    .number()
+                    .describe("Unique identifier for each criterion"),
+                  description: z.string().describe("Criterion description"),
+                  points: z
+                    .number()
+                    .describe("Points awarded for this criterion"),
+                }),
+              )
+              .optional()
+              .describe(
+                "The marking rubric for text or URL-based questions, structured as an array of criterion objects",
+              ),
+            choices: z
+              .array(
+                z.object({
+                  choice: z.string().describe("A possible answer choice"),
+                  isCorrect: z.boolean().describe("Correct answer or not"),
+                  points: z.number().describe("Points assigned"),
+                  feedback: z.string().describe("Feedback for learner"),
+                }),
+              )
+              .optional()
+              .describe("Array of choices for choice-based questions"),
+          }),
+        ),
+      );
 
-    const formatInstructions = parser.getFormatInstructions();
+      const formatInstructions = parser.getFormatInstructions();
 
-    const prompt = new PromptTemplate({
-      template: generateMarkingRubricTemplate,
-      inputVariables: [],
-      partialVariables: {
-        questions_json_array: JSON.stringify(questions),
-        format_instructions: formatInstructions,
-      },
-    });
+      const prompt = new PromptTemplate({
+        template: selectedTemplate,
+        inputVariables: [],
+        partialVariables: {
+          questions_json_array: JSON.stringify([question]),
+          format_instructions: formatInstructions,
+        },
+      });
 
-    const response = await this.processPrompt(prompt);
-    const parsedResponse = await parser.parse(response);
-    const markingRubricMap: Record<number, string> = {};
-    for (const item of parsedResponse) {
-      markingRubricMap[item.questionId] = item.rubric;
+      try {
+        const response = await this.processPrompt(prompt);
+        const parsedResponse = await parser.parse(response);
+
+        // Handling TEXT and URL question types directly
+        if (
+          question.questionType === "TEXT" ||
+          question.questionType === "URL"
+        ) {
+          markingRubricMap[question.id] = parsedResponse[0].rubric.map(
+            (item: unknown) => ({
+              id: (item as { id: number }).id ?? 0,
+              description: (item as { description: string }).description ?? "",
+              points: (item as { points: number }).points ?? 0,
+            }),
+          );
+        }
+
+        // Handling MULTIPLE_CORRECT and SINGLE_CORRECT question types
+        if (
+          question.questionType === "MULTIPLE_CORRECT" ||
+          question.questionType === "SINGLE_CORRECT"
+        ) {
+          for (const item of parsedResponse) {
+            markingRubricMap[item.questionId] = item.choices
+              ? {
+                  choices: item.choices.map((choice) => ({
+                    choice: choice.choice,
+                    isCorrect: choice.isCorrect,
+                    points: choice.points,
+                    feedback: choice.feedback,
+                  })),
+                }
+              : item.rubric.map((rubricItem) => ({
+                  id: rubricItem.id ?? 0,
+                  description: rubricItem.description ?? "",
+                  points: rubricItem.points ?? 0,
+                }));
+          }
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error processing prompt: ${(error as Error).message}`,
+        );
+        throw new HttpException(
+          "Failed to create marking rubric",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
     }
     return markingRubricMap;
   }

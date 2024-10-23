@@ -70,21 +70,21 @@ model Assignment {
   gradingCriteriaOverview String? /// Grading Criteria for the assignment
   timeEstimateMinutes     Int? /// Estimated time it will take to complete the assignment in minutes
   type                    AssignmentType /// Type of assignment
-  graded                  Boolean? /// Is the assignment graded or not
-  numAttempts             Int? /// Max number of times a learner can attempt the assignment
+  graded                  Boolean? @default(false) /// Is the assignment graded or not
+  numAttempts             Int? @default(-1) /// Max number of times a learner can attempt the assignment
   allotedTimeMinutes      Int? /// Time allotted to complete the assignment in minutes
   attemptsPerTimeRange    Int? /// Number of allowed attempts within the specified time range.
   attemptsTimeRangeHours  Int? /// Time range, in hours, over which the attempts are counted.
-  passingGrade            Int? /// The minimum grade required to pass the assignment
+  passingGrade            Int? @default(50) /// The minimum grade required to pass the assignment
   displayOrder            AssignmentQuestionDisplayOrder? /// The order in which the assignment is displayed
   questionDisplay         QuestionDisplay?                @default(ONE_PER_PAGE) /// The display of questions in the assignment
   questionOrder           Int[] /// An array of questionIds to infer in which order should they be displayed
   questions               Question[] /// The list of questions in the assignment
   groups                  AssignmentGroup[] /// List of groups associated with the assignment
   published               Boolean /// Is the assignment published or not
-  showAssignmentScore     Boolean                         @default(false) /// Should the assignment score be shown to the learner after its submission
-  showQuestionScore       Boolean                         @default(false) /// Should the question score be shown to the learner after its submission
-  showSubmissionFeedback  Boolean                         @default(false) /// Should the AI provide feedback when the learner submits a question
+  showAssignmentScore     Boolean                         @default(true) /// Should the assignment score be shown to the learner after its submission
+  showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
+  showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
 }
 

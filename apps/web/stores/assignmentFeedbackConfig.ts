@@ -26,35 +26,26 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
-        verbosityLevel: "Custom",
+        verbosityLevel: "Full", // Default initial value
+        showSubmissionFeedback: true, // Default initial value
+        showQuestionScore: true, // Default initial value
+        showAssignmentScore: true, // Default initial value
+        updatedAt: Date.now(),
         setVerbosityLevel: (verbosityLevel) => set({ verbosityLevel }),
-        // showCorrectAnswer: false,
-        // toggleShowCorrectAnswer: () =>
-        // set((state) => ({ showCorrectAnswer: !state.showCorrectAnswer })),
-        // setShowCorrectAnswer: (showCorrectAnswer: boolean) =>
-        // 	set({ showCorrectAnswer }),
-        showSubmissionFeedback: false,
         toggleShowSubmissionFeedback: () =>
           set((state) => ({
             showSubmissionFeedback: !state.showSubmissionFeedback,
           })),
         setShowSubmissionFeedback: (showSubmissionFeedback: boolean) =>
           set({ showSubmissionFeedback }),
-        showQuestionScore: false,
         toggleShowQuestionScore: () =>
           set((state) => ({ showQuestionScore: !state.showQuestionScore })),
         setShowQuestionScore: (showQuestionScore: boolean) =>
           set({ showQuestionScore }),
-        showAssignmentScore: false,
         toggleShowAssignmentScore: () =>
           set((state) => ({ showAssignmentScore: !state.showAssignmentScore })),
         setShowAssignmentScore: (showAssignmentScore: boolean) =>
           set({ showAssignmentScore }),
-        // showStatus: false,
-        // toggleShowStatus: () =>
-        // 	set((state) => ({ showStatus: !state.showStatus })),
-        // setShowStatus: (showStatus: boolean) => set({ showStatus }),
-        updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         setAssignmentFeedbackConfigStore: (state) =>
           set((prevState) => ({ ...prevState, ...state })),

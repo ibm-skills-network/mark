@@ -14,7 +14,6 @@ import {
   CreateUpdateQuestionRequestDto,
   Scoring,
 } from "./dto/create.update.question.request.dto";
-import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
 
 @Injectable()
 export class QuestionService {
@@ -148,7 +147,14 @@ export class QuestionService {
     questions: { id: number; questionText: string; questionType: string }[],
   ): Promise<Record<number, string>> {
     const markingRubric = await this.llmService.createMarkingRubric(questions);
-    return markingRubric;
+    const formattedMarkingRubric: Record<number, string> = {};
+    for (const key in markingRubric) {
+      formattedMarkingRubric[key] =
+        typeof markingRubric[key] === "string"
+          ? markingRubric[key]
+          : JSON.stringify(markingRubric[key]);
+    }
+    return formattedMarkingRubric;
   }
 
   async generateQuestionVariations(

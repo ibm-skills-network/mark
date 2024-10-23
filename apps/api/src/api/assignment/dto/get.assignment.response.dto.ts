@@ -31,6 +31,13 @@ export class GetAssignmentResponseDto extends AssignmentResponseDto {
     required: false,
   })
   error?: string;
+
+  @ApiProperty({
+    description: "Indicates if the assignment is already in the backend.",
+    type: String,
+    required: false,
+  })
+  alreadyInBackend?: boolean;
 }
 
 export class LearnerGetAssignmentResponseDto extends OmitType(

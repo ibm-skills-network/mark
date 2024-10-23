@@ -27,16 +27,22 @@ export const useAssignmentConfig = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
+        errors: {},
+        numAttempts: -1,
+        passingGrade: 50,
+        displayOrder: "DEFINED",
+        strictTimeLimit: false,
+        updatedAt: undefined,
+        graded: false,
         questionDisplay: "ONE_PER_PAGE" as QuestionDisplayType,
         setQuestionDisplay: (questionDisplay: QuestionDisplayType) => {
           set({ questionDisplay });
         },
-        errors: {},
-        graded: undefined,
         setGraded: (graded) => set({ graded }),
-        numAttempts: -1,
-        setNumAttempts: (numAttempts) => set({ numAttempts }),
-        passingGrade: 60,
+        setNumAttempts: (numAttempts) =>
+          set({
+            numAttempts: numAttempts === undefined ? -1 : numAttempts,
+          }),
         setPassingGrade: (passingGrade) => set({ passingGrade }),
         timeEstimateMinutes: undefined,
         setTimeEstimateMinutes: (timeEstimateMinutes) =>
@@ -44,34 +50,23 @@ export const useAssignmentConfig = createWithEqualityFn<
         allotedTimeMinutes: undefined,
         setAllotedTimeMinutes: (allotedTimeMinutes) =>
           set({ allotedTimeMinutes }),
-        displayOrder: "DEFINED",
         setDisplayOrder: (displayOrder) => set({ displayOrder }),
-        strictTimeLimit: false,
-        toggleStrictTimeLimit: () =>
-          set((state) =>
-            // toggle strictTimeLimit and reset allotedTimeMinutes
-            state.strictTimeLimit
-              ? { strictTimeLimit: false }
-              : { strictTimeLimit: true, allotedTimeMinutes: undefined },
-          ),
         setStrictTimeLimit: (strictTimeLimit) => set({ strictTimeLimit }),
-        updatedAt: undefined,
+        toggleStrictTimeLimit: () =>
+          set((state) => ({
+            strictTimeLimit: !state.strictTimeLimit,
+            allotedTimeMinutes:
+              state.strictTimeLimit === false
+                ? undefined
+                : state.allotedTimeMinutes,
+          })),
+
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         validate: () => {
           const state = get();
           const errors: Record<string, string> = {};
           if (state.graded === null) {
             errors.graded = "Assignment type is required.";
-          }
-          if (
-            state.strictTimeLimit &&
-            (!state.allotedTimeMinutes || state.allotedTimeMinutes <= 0)
-          ) {
-            errors.allotedTimeMinutes = "Time limit must be greater than 0.";
-          }
-          if (!state.timeEstimateMinutes || state.timeEstimateMinutes <= 0) {
-            errors.timeEstimateMinutes =
-              "Time estimate must be greater than 0.";
           }
           if (!state.numAttempts || state.numAttempts < -1) {
             errors.numAttempts = "Please enter a valid number of attempts.";
@@ -100,7 +95,6 @@ export const useAssignmentConfig = createWithEqualityFn<
       name: getAssignmentConfigName(),
       storage: createJSONStorage(() => localStorage),
       partialize(state) {
-        // store everything that is not a function
         return Object.fromEntries(
           Object.entries(state).filter(
             ([_, value]) => typeof value !== "function",

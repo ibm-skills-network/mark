@@ -127,14 +127,57 @@ export const generateMarkingRubricTemplate = `
   You are tasked with creating a JSON object of marking rubrics for the following questions:
   Questions: {questions_json_array}
   {format_instructions}
-
   Guidelines for all question types:
   - Use point values as keys and criteria descriptions as values.
   - List points in descending order, ensuring they differ for each criterion.
   - Avoid terms like "full marks" or "partial marks."
   - End each criterion with "||".
-
   Specific Criteria:
   - **Text-based questions**: Focus on correctness of the answer, and differentiate between correct and incorrect responses.
   - **URL-based questions**: Evaluate content relevance, source credibility, clarity, and quality of integration and explanation.
+  - **Choice-based**: For each option, indicate correct/incorrect with points and feedback. 
+    - MULTIPLE_CORRECT: At least two correct answers; assign negative points for incorrect choices as needed.
+    - SINGLE_CORRECT: Only one correct answer; for the rest assign negative points for incorrect choices as needed`;
+
+export const generateSingleBasedMarkingRubricTemplate = `
+    You are an AI assistant helping the author create a scoring rubric for choice-based questions.
+    Questions: {questions_json_array}
+    {format_instructions}
+    - Each option has "choice" (answer), "isCorrect" (true/false), "points", and "feedback".
+    - Provide clear and concise feedback for each choice.
+    - Only one correct answer,and make the rest incorrect choices with negative points depending on the severity.
+  `;
+export const generateMultipleBasedMarkingRubricTemplate = `
+    You are an AI assistant helping the author create a scoring rubric for choice-based questions.
+    Questions: {questions_json_array}
+    {format_instructions}
+    - Each option has "choice" (answer), "isCorrect" (true/false), "points", and "feedback".
+    - Provide clear and concise feedback for each choice.
+    - At least two correct answers; assign negative points for incorrect choices as needed.
+  `;
+export const generateUrlBasedMarkingRubricTemplate = `
+  Generate a scoring rubric for URL-based questions.
+  Questions: {questions_json_array}
+  {format_instructions}
+
+  Format each rubric item as an object with:
+  - "points" (descending order, unique per item)
+  - "description" (evaluation criteria).
+
+  Focus areas:
+  - URL relevance
+  - Credibility of content
+  - Clarity and organization.
+`;
+
+export const generateTextBasedMarkingRubricTemplate = `
+  Generate a scoring rubric for text-based questions.
+  Questions: {questions_json_array}
+  {format_instructions}
+
+  Format each rubric item as an object with:
+  - "points" (descending order, unique per item)
+  - "description" (evaluation criteria).
+
+  Focus on clear distinctions between correct, partially correct, and incorrect answers.
 `;

@@ -3,8 +3,9 @@ import Tooltip from "@/components/Tooltip";
 import { QuestionAuthorStore, QuestionStore } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
-import { useLearnerStore } from "@/stores/learner";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import type { ComponentPropsWithoutRef, FC } from "react";
+import { EyeIcon } from "@heroicons/react/24/solid";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   disabled?: boolean;
@@ -20,13 +21,17 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     questionDisplay: assignmentConfigstate.questionDisplay,
     graded: assignmentConfigstate.graded,
     numAttempts: assignmentConfigstate.numAttempts,
-    passingGrade: assignmentConfigstate.passingGrade || 60, // ensure passingGrade is never undefined
+    passingGrade: assignmentConfigstate.passingGrade, // ensure passingGrade is never undefined
     allotedTimeMinutes: assignmentConfigstate.allotedTimeMinutes,
     displayOrder: assignmentConfigstate.displayOrder,
     strictTimeLimit: assignmentConfigstate.strictTimeLimit,
     introduction: authorState.introduction,
     instructions: authorState.instructions,
+    gradingCriteriaOverview: authorState.gradingCriteriaOverview,
+    name: authorState.name,
+    id: assignmentId,
   };
+
   const handleJumpToLearnerSide = (
     questions: QuestionAuthorStore[],
     assignmentId: number,
@@ -34,7 +39,7 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     const processedQuestions = processQuestions(questions);
     localStorage.setItem("questions", JSON.stringify(processedQuestions));
     localStorage.setItem("assignmentConfig", JSON.stringify(assignmentConfig));
-    window.open(`/learner/${assignmentId}/questions?authorMode=true`, "_blank");
+    window.open(`/learner/${assignmentId}?authorMode=true`, "_blank");
   };
 
   return (
@@ -46,9 +51,10 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
         type="button"
         disabled={disabled}
         onClick={() => handleJumpToLearnerSide(questions, assignmentId)}
-        className="text-sm font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
+        className="text-sm flex font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950"
       >
-        View Learner Side
+        <EyeIcon className="w-5 h-5" />
+        <span className="ml-2">Preview</span>
       </button>
     </Tooltip>
   );

@@ -109,7 +109,9 @@ const Question: FC<Props> = ({ question, number }) => {
         </p>
       );
     }
-    return <p className="text-gray-800">No answer provided.</p>;
+    return (
+      <p className="text-gray-800">No answer was provided by the learner.</p>
+    );
   };
 
   return (

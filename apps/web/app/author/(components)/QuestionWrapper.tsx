@@ -26,7 +26,7 @@ import React, {
 } from "react";
 import { toast } from "sonner";
 import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
-import SingleAnswerSection from "./Questions/QuestionTypes/SingleAnswerSection";
+import Tooltip from "@/components/Tooltip";
 
 // Props type definition for the QuestionWrapper component
 interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
@@ -336,28 +336,18 @@ function QuestionWrapper(props: TextBoxProps) {
       const newPoints: number[] = [];
       const newCriteriaDesc: string[] = [];
       const newCriteriaIds: number[] = [];
-
       Object.keys(response).forEach((key) => {
-        const rubricText = response[key] as string;
-        // Split the rubric text by the special character "|"
-        const pairs = rubricText
-          .split("||")
-          .map((pair) => pair.trim())
-          .filter((pair) => pair);
-        pairs.forEach((pair) => {
-          // Split each pair by the first colon to separate point and description
-          const [pointText, ...descriptionParts] = pair.split(":");
-          const points = parseInt(pointText.replace("points", "").trim(), 10);
-          const description = descriptionParts.join(":").trim();
-          // Check that the points and description are valid before adding to arrays
-          if (!isNaN(points) && description) {
-            newPoints.push(points);
-            newCriteriaDesc.push(description);
-            newCriteriaIds.push(newCriteriaIds.length + 1);
-          }
+        const rubricItems = JSON.parse(response[key] as string) as {
+          id: number;
+          description: string;
+          points: number;
+        }[];
+        rubricItems.forEach((item) => {
+          newPoints.push(item.points);
+          newCriteriaDesc.push(item.description);
+          newCriteriaIds.push(item.id);
         });
       });
-
       setQuestionCriteria({
         points: newPoints,
         criteriaDesc: newCriteriaDesc,
@@ -481,10 +471,13 @@ function QuestionWrapper(props: TextBoxProps) {
       ) : null}
       {/* Criteria Table for non multiple select questions */}
 
-      {questionType === "MULTIPLE_CORRECT" ? (
-        <MultipleAnswerSection questionId={questionId} preview={preview} />
-      ) : questionType === "SINGLE_CORRECT" ? (
-        <SingleAnswerSection questionId={questionId} preview={preview} />
+      {questionType === "MULTIPLE_CORRECT" ||
+      questionType === "SINGLE_CORRECT" ? (
+        <MultipleAnswerSection
+          questionId={questionId}
+          preview={preview}
+          questionTitle={questionTitle}
+        />
       ) : questionType === "TRUE_FALSE" ? (
         <div className="flex justify-center items-center space-x-6 mt-6">
           {/* True Button */}
@@ -552,15 +545,23 @@ function QuestionWrapper(props: TextBoxProps) {
                       </div>
                       {/* gererating rubric button */}
                       {criteriaMode && !preview && (
-                        <div className="flex justify-end">
-                          <button
-                            className="text-gray-500"
-                            onClick={handleAiClick}
-                            disabled={loading}
-                          >
-                            <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
-                          </button>
-                        </div>
+                        <Tooltip
+                          content="Generate a rubric with AI"
+                          className="cursor-pointer"
+                          distance={-10.5}
+                          direction="x"
+                          up={-1.8}
+                        >
+                          <div className="flex justify-end">
+                            <button
+                              className="text-gray-500"
+                              onClick={handleAiClick}
+                              disabled={loading}
+                            >
+                              <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
+                            </button>
+                          </div>
+                        </Tooltip>
                       )}
                     </div>
                   </th>
@@ -684,7 +685,7 @@ function QuestionWrapper(props: TextBoxProps) {
                             >
                               <SparkleLottie />
                               <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
-                              Generate a rubric with Mark
+                              Generate a rubric with AI
                             </button>
                             <span className="text-gray-500">OR</span>
                             <button

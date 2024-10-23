@@ -17,7 +17,6 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   assignmentId,
   role,
 }) => {
-  const questions = getStoredData("questions", []) as QuestionStore[];
   const setAssignmentDetails = useAssignmentDetails(
     (state) => state.setAssignmentDetails,
   );
@@ -29,11 +28,10 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
     "assignmentConfig",
     {},
   ) as AssignmentDetails;
-
+  const questions = getStoredData("questions", []) as QuestionStore[];
   useEffect(() => {
     setAssignmentDetails(assignmentDetails);
   }, [assignmentDetails, setAssignmentDetails]);
-
   // Render the questions page
   return (
     <main className="flex flex-col h-[calc(100vh-100px)]">
@@ -45,7 +43,7 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
           questions,
           assignmentDetails,
           expiresAt:
-            assignmentDetails?.allotedTimeMinutes !== null
+            assignmentDetails?.strictTimeLimit === true
               ? new Date(
                   Date.now() +
                     (assignmentDetails?.allotedTimeMinutes || 0) * 60000,

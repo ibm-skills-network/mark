@@ -1,3 +1,4 @@
+"use client";
 import Title from "@/components/Title";
 import { cn } from "@/lib/strings";
 import type { ComponentPropsWithoutRef, ElementType } from "react";
