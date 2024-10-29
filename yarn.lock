@@ -6238,9 +6238,9 @@ kuler@^2.0.0:
   integrity sha512-Xq9nH7KlWZmXAtodXDDRE7vs6DU1gTU8zYDHDiWLSip45Egwq3plLHzPn27NgvzL2r1LMPC1vdqh98sQxtqj4A==
 
 langchain@^0.3.0:
-  version "0.3.4"
-  resolved "https://registry.yarnpkg.com/langchain/-/langchain-0.3.4.tgz#092cc86fa07b134da2fecba8cfd8ee1280a73f85"
-  integrity sha512-s0FAtrg22jgCSkuwhZdw4c+ksdGQjNCf2vCzV6qZpZohTKGsN7lgjWy+OpnG76L917P/l95qem+3wivS3tANXQ==
+  version "0.3.5"
+  resolved "https://registry.yarnpkg.com/langchain/-/langchain-0.3.5.tgz#87b282454bc215b12b920d4dd5e35ed58030bad1"
+  integrity sha512-Gq0xC45Sq6nszS8kQG9suCrmBsuXH0INMmiF7D2TwPb6mtG35Jiq4grCk9ykpwPsarTHdty3SzUbII/FqiYSSw==
   dependencies:
     "@langchain/openai" ">=0.1.0 <0.4.0"
     "@langchain/textsplitters" ">=0.0.0 <0.2.0"
