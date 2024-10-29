@@ -893,9 +893,9 @@
   integrity sha512-HZpPoABogPvjeJOdzCOSJsXeL/SMCBgBZMVC3X3d7YYp2gf31MfxhUoYUNwf1ERPJOnQc0wkFn9trqI6ZEdZuA==
 
 "@nestjs/axios@^3.0.0":
-  version "3.0.3"
-  resolved "https://registry.yarnpkg.com/@nestjs/axios/-/axios-3.0.3.tgz#a663cb13cff07ea6b9a7107263de2ae472d41118"
-  integrity sha512-h6TCn3yJwD6OKqqqfmtRS5Zo4E46Ip2n+gK1sqwzNBC+qxQ9xpCu+ODVRFur6V3alHSCSBxb3nNtt73VEdluyA==
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@nestjs/axios/-/axios-3.1.0.tgz#27568c56cd438d43dd8454f27ca1b2f3718859b0"
+  integrity sha512-CpeK2ickH//ml+H7kX+QPIpeTwER4yedVcw6GPe6Nv58cmKTa0sb+3A3It7ChKD4deW4UKNvZIpYkUk18q78YQ==
 
 "@nestjs/class-validator@^0.13.4":
   version "0.13.4"
