@@ -126,7 +126,8 @@ export class QuestionDto {
     type: Boolean,
   })
   @IsBoolean()
-  alreadyInBackend: boolean;
+  @IsOptional()
+  alreadyInBackend?: boolean;
 
   @ApiPropertyOptional({
     description:
