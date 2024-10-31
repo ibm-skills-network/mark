@@ -62,6 +62,7 @@ export type AuthorActions = {
   setQuestionOrder: (order: number[]) => void;
   setAuthorStore: (state: Partial<AuthorState>) => void;
   validate: () => boolean;
+  deleteStore: () => void;
   errors: Record<string, string>;
 };
 interface QuestionState {
@@ -463,6 +464,20 @@ export const useAuthorStore = createWithEqualityFn<
               : state.questions || [],
           }));
         },
+        deleteStore: () =>
+          set({
+            activeAssignmentId: undefined,
+            name: "",
+            introduction: "",
+            instructions: "",
+            gradingCriteriaOverview: "",
+            questions: [],
+            questionOrder: [],
+            pageState: "loading",
+            updatedAt: undefined,
+            focusedQuestionId: undefined,
+            errors: {},
+          }),
         validate: () => {
           const state = get();
           const errors: Record<string, string> = {};
@@ -485,7 +500,6 @@ export const useAuthorStore = createWithEqualityFn<
       name: getAuthorStoreName(),
       storage: createJSONStorage(() => localStorage),
       partialize(state) {
-        // store everything that is not a function
         return Object.fromEntries(
           Object.entries(state).filter(
             ([_, value]) => typeof value !== "function",
@@ -493,8 +507,9 @@ export const useAuthorStore = createWithEqualityFn<
         );
       },
       onRehydrateStorage: (state) => (storedState) => {
-        if (process.env.NODE_ENV !== "development") {
-          console.log("Rehydrated state", storedState);
+        const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        if (storedState?.updatedAt && storedState.updatedAt < oneWeekAgo) {
+          state?.deleteStore(); // Clear outdated data
         }
       },
     },

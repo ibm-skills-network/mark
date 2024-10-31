@@ -40,8 +40,12 @@ export function mergeData<T extends DataWithUpdatedAt>(
   const localDataExists = localData?.updatedAt;
   const localDataIsNewer =
     new Date(localData.updatedAt) > new Date(backendData.updatedAt);
-  if (localDataExists && localDataIsNewer) {
-    return localData;
+  const oneWeekAgo = new Date(); // this is configurable based on requirements. I went with a week because its not too long and not too short. 
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const localDataIsOlderThanAWeek = new Date(localData.updatedAt) < oneWeekAgo;
+
+  if (localDataExists && localDataIsNewer && !localDataIsOlderThanAWeek) {
+    return localData; // ensure that the cached data doesnt become outdated and use the backend data instead to avoid issues when mark gets an update
   }
   return backendData;
 }

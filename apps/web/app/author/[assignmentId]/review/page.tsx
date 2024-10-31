@@ -7,6 +7,7 @@ import { useAuthorStore } from "../../../../stores/author";
 import Question from "../../(components)/AuthorQuestionsPage/Question";
 import { usePathname, useRouter } from "next/navigation"; // Importing useRouter for navigation
 import { extractAssignmentId } from "@/lib/strings";
+import MarkdownViewer from "@/components/MarkdownViewer";
 
 // Reusable Component for sections with similar structure (title, content, edit button, and optional navigation link)
 const Section = ({
@@ -19,6 +20,7 @@ const Section = ({
   link?: string; // Optional link to navigate when clicking the pencil icon
 }) => {
   const router = useRouter(); // Hook for navigation
+  console.log("content", content);
 
   return (
     <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-gray-200 shadow-sm hover:shadow-md transition-all">
@@ -30,9 +32,11 @@ const Section = ({
           </button>
         )}
       </div>
-      <p className="text-gray-900 text-sm font-medium">
-        {content || "Nothing has been added yet"}
-      </p>
+      <MarkdownViewer className="text-gray-600">
+        {content.replace(/<\/?[^>]+(>|$)/g, "").trim() === ""
+          ? "Not set"
+          : content}
+      </MarkdownViewer>
     </div>
   );
 };
@@ -86,17 +90,17 @@ function Component() {
       {/* Sections with links passed for navigation */}
       <Section
         title="About this Assignment"
-        content={introduction?.replace(/<[^>]*>?/gm, "")}
+        content={introduction}
         link={`/author/${activeAssignmentId}`}
       />
       <Section
         title="Learner Instructions"
-        content={instructions?.replace(/<[^>]*>?/gm, "")}
+        content={instructions}
         link={`/author/${activeAssignmentId}`}
       />
       <Section
         title="Grading Criteria"
-        content={gradingCriteriaOverview?.replace(/<[^>]*>?/gm, "")}
+        content={gradingCriteriaOverview}
         link={`/author/${activeAssignmentId}`}
       />
 

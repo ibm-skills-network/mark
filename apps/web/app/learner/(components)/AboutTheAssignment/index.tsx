@@ -76,7 +76,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       : getAssignmentState(attempts, numAttempts);
 
   const attemptsLeft =
-    numAttempts === -1 ? Infinity : Math.max(0, numAttempts - attempts.length);
+    (numAttempts ?? -1) === -1
+      ? Infinity
+      : Math.max(0, numAttempts - attempts.length);
 
   const latestAttemptDate = attempts[0]
     ? new Date(attempts[0].createdAt).toLocaleString()
@@ -139,9 +141,13 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             <div className="flex flex-col gap-y-2 text-gray-600">
               <span className="font-semibold">Assignment attempts</span>
               <span>
-                {numAttempts === -1
-                  ? "Unlimited"
-                  : `${numAttempts} attempts (${attemptsLeft} remaining)`}
+                {
+                  numAttempts === -1
+                    ? "Unlimited"
+                    : `${attemptsLeft} attempt${
+                        attemptsLeft > 1 ? "s" : ""
+                      } left`
+                }
               </span>
             </div>
             <div className="flex flex-col gap-y-2 text-gray-600">
