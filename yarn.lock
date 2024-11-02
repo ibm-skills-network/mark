@@ -842,9 +842,9 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/core@^0.3.0":
-  version "0.3.16"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.16.tgz#60ece9762c2830eb8e5731c70b24e1707178fc67"
-  integrity sha512-g83M2Z1XlhECFUtT4C7XLsVVGt2Hk3Y/KhS5tZSsz+Gqtxwd790/MD7MxdUHpZj0VKkvrFuWARWpJmNKlkiY+g==
+  version "0.3.17"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.17.tgz#771f02d001e36d18485e0b172f5c70b73d3e5d26"
+  integrity sha512-o4lgmRcEqAyioP4Snxat1DGIT0oasOYsfo9uvAxVjwGq+XRicXm+bO3smCBSiiPQnd6jJ9ULWJlI0RFUV1oNqQ==
   dependencies:
     ansi-styles "^5.0.0"
     camelcase "6"
@@ -3980,6 +3980,8 @@ escape-string-regexp@^5.0.0:
 
 eslint-config-next@^14:
   version "14.2.16"
+  resolved "https://registry.yarnpkg.com/eslint-config-next/-/eslint-config-next-14.2.16.tgz#738adcca0b26c585e153c241293d22f0ac57825a"
+  integrity sha512-HOcnCJsyLXR7B8wmjaCgkTSpz+ijgOyAkP8OlvANvciP8PspBYFEBTmakNMxOf71fY0aKOm/blFIiKnrM4K03Q==
   dependencies:
     "@next/eslint-plugin-next" "14.2.16"
     "@rushstack/eslint-patch" "^1.3.3"
