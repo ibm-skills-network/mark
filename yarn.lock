@@ -8739,9 +8739,9 @@ sn-messaging-ts-client@^0.4.0:
     ts-nats "^1.2.15"
 
 sonner@^1.0.3:
-  version "1.5.0"
-  resolved "https://registry.yarnpkg.com/sonner/-/sonner-1.5.0.tgz#af359f817063318415326b33aab54c5d17c747b7"
-  integrity sha512-FBjhG/gnnbN6FY0jaNnqZOMmB73R+5IiyYAw8yBj7L54ER7HB3fOSE5OFiQiE2iXWxeXKvg6fIP4LtVppHEdJA==
+  version "1.6.1"
+  resolved "https://registry.yarnpkg.com/sonner/-/sonner-1.6.1.tgz#50df04bcd1f8b48010f134ba19a173133b430953"
+  integrity sha512-0iD+eDJHyJitl069BC6wVDykQD56FMKk4TD6XkcCcikcDYaGsFKlSU0mZQXYWKPpFof3jlV/u4vGZc2KCqz8OQ==
 
 source-map-js@^1.0.2, source-map-js@^1.2.1:
   version "1.2.1"
