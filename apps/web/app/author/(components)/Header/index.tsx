@@ -12,7 +12,7 @@ import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import { Nav } from "./Nav";
@@ -40,13 +40,13 @@ function AuthorHeader() {
     state.name,
   ]);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
-    questions as Question[],
+    questions as Question[]
   );
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
   const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
-    (state) => [state.setAssignmentFeedbackConfigStore],
+    (state) => [state.setAssignmentFeedbackConfigStore]
   );
   const [submitting, setSubmitting] = useState<boolean>(false);
   useEffect(() => {
@@ -57,7 +57,7 @@ function AuthorHeader() {
         // Author store
         const mergedAuthorData = mergeData(
           useAuthorStore.getState(),
-          assignment,
+          assignment
         );
         const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
         setAuthorStore({
@@ -68,7 +68,7 @@ function AuthorHeader() {
         // Assignment Config store
         const mergedAssignmentConfigData = mergeData(
           useAssignmentConfig.getState(),
-          assignment,
+          assignment
         );
         const {
           updatedAt: authorStoreUpdatedAt,
@@ -82,7 +82,7 @@ function AuthorHeader() {
         // Assignment Feedback Config store
         const mergedAssignmentFeedbackData = mergeData(
           useAssignmentFeedbackConfig.getState(),
-          assignment,
+          assignment
         );
         const {
           updatedAt: assignmentFeedbackUpdatedAt,
@@ -107,7 +107,7 @@ function AuthorHeader() {
       // Send a single request with all the processed questions
       const success = await updateQuestions(
         activeAssignmentId,
-        processQuestions(questions),
+        processQuestions(questions)
       );
 
       if (success) {
@@ -116,7 +116,7 @@ function AuthorHeader() {
           question.alreadyInBackend = true;
         });
         router.push(
-          `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
+          `/author/${activeAssignmentId}?submissionTime=${currentTime}`
         );
       } else {
         toast.error("Couldn't publish all questions. Please try again.");

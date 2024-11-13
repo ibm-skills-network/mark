@@ -16,6 +16,7 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
+import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
 import type { LearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
@@ -324,7 +325,7 @@ export class AttemptService {
         assignmentAttemptId:
           role === UserRole.LEARNER ? assignmentAttemptId : 1,
         questionId: questionId,
-        learnerResponse: learnerResponse,
+        learnerResponse: JSON.stringify(learnerResponse),
         points: responseDto.totalPoints,
         feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
       },
@@ -333,7 +334,6 @@ export class AttemptService {
     responseDto.id = result.id;
     responseDto.questionId = questionId;
     responseDto.question = question.question;
-
     return responseDto;
   }
 
@@ -475,7 +475,6 @@ export class AttemptService {
     const questionResponses = await Promise.allSettled(
       questionResponsesPromise,
     );
-
     const successfulResponses = questionResponses
       .filter((response) => response.status === "fulfilled")
       .map((response) => response.value);
@@ -657,12 +656,21 @@ export class AttemptService {
     },
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
-    learnerResponse: string;
+    learnerResponse: string | { filename: string; content: string }[];
   }> {
     switch (question.type) {
-      case QuestionType.TEXT:
-      case QuestionType.UPLOAD: {
+      case QuestionType.TEXT: {
         return this.handleTextUploadQuestionResponse(
+          question,
+          question.type,
+          createQuestionResponseAttemptRequestDto,
+          assignmentContext,
+        );
+      }
+      case QuestionType.UPLOAD:
+      case QuestionType.IMAGES:
+      case QuestionType.CODE: {
+        return this.handleFileUploadQuestionResponse(
           question,
           question.type,
           createQuestionResponseAttemptRequestDto,
@@ -698,6 +706,49 @@ export class AttemptService {
         throw new Error("Invalid question type provided.");
       }
     }
+  }
+
+  private async handleFileUploadQuestionResponse(
+    question: QuestionDto,
+    questionType: QuestionType,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    },
+  ): Promise<{
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: {
+      filename: string;
+      content: string;
+      questionId: number;
+    }[];
+  }> {
+    if (!createQuestionResponseAttemptRequestDto.learnerFileResponse) {
+      throw new BadRequestException(
+        "Expected a file-based response (learnerFileResponse), but did not receive one.",
+      );
+    }
+    const learnerResponse =
+      createQuestionResponseAttemptRequestDto.learnerFileResponse;
+    const fileUploadQuestionEvaluateModel = new FileUploadQuestionEvaluateModel(
+      question.question,
+      assignmentContext.questionAnswerContext,
+      assignmentContext?.assignmentInstructions,
+      learnerResponse,
+      question.totalPoints,
+      question.scoring?.type ?? "",
+      question.scoring?.criteria ?? {},
+      questionType,
+    );
+    const model = await this.llmService.gradeFileBasedQuestion(
+      fileUploadQuestionEvaluateModel,
+    );
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    AttemptHelper.assignFeedbackToResponse(model, responseDto);
+
+    return { responseDto, learnerResponse };
   }
 
   /**

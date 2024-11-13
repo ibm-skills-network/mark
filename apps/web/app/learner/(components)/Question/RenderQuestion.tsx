@@ -1,10 +1,10 @@
+import { QuestionStore } from "@/config/types";
 import { type FC } from "react";
+import FileUploadSection from "./FileUploadSection";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import TextQuestion from "./TextQuestion";
 import TrueFalseQuestion from "./TrueFalseQuestion";
-import UploadQuestion from "./UploadQuestion";
 import UrlQuestion from "./UrlQuestion";
-import { QuestionStore } from "@/config/types";
 
 interface Props {
   questionType: string;
@@ -29,7 +29,14 @@ const RenderQuestion: FC<Props> = (props) => {
     case "URL":
       return <UrlQuestion question={question} />;
     case "UPLOAD":
-      return <UploadQuestion question={question} />;
+    case "IMAGES":
+    case "CODE":
+      return (
+        <FileUploadSection
+          questionId={question.id}
+          questionType={questionType}
+        />
+      );
     default:
       return null;
   }

@@ -2,6 +2,7 @@
 
 import SparkleLottie from "@/app/animations/sparkleLottie";
 import MarkdownViewer from "@/components/MarkdownViewer";
+import Tooltip from "@/components/Tooltip";
 import type {
   CreateQuestionRequest,
   QuestionType,
@@ -26,7 +27,6 @@ import React, {
 } from "react";
 import { toast } from "sonner";
 import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
-import Tooltip from "@/components/Tooltip";
 
 // Props type definition for the QuestionWrapper component
 interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
@@ -62,19 +62,19 @@ function QuestionWrapper(props: TextBoxProps) {
 
   // Zustand store hooks to manage state
   const toggleTitle = useQuestionStore(
-    (state) => state.questionStates[questionId]?.toggleTitle,
+    (state) => state.questionStates[questionId]?.toggleTitle
   );
   const addTrueFalseChoice = useAuthorStore(
-    (state) => state.addTrueFalseChoice,
+    (state) => state.addTrueFalseChoice
   );
   const updatePointsTrueFalse = useAuthorStore(
-    (state) => state.updatePointsTrueFalse,
+    (state) => state.updatePointsTrueFalse
   );
   const isItTrueOrFalse = useAuthorStore((state) =>
-    state.isItTrueOrFalse(questionId),
+    state.isItTrueOrFalse(questionId)
   );
   const TrueFalsePoints = useAuthorStore((state) =>
-    state.getTrueFalsePoints(questionId),
+    state.getTrueFalsePoints(questionId)
   );
 
   // State for the local question
@@ -91,17 +91,17 @@ function QuestionWrapper(props: TextBoxProps) {
   };
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
   const showCriteriaHeader = useQuestionStore(
-    (state) => state.questionStates.showCriteriaHeader ?? true,
+    (state) => state.questionStates.showCriteriaHeader ?? true
   );
   const setShowCriteriaHeader = useQuestionStore(
-    (state) => state.setShowCriteriaHeader,
+    (state) => state.setShowCriteriaHeader
   );
 
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
   const [questionTitle2, setQuestionTitle2] = useState(questionTitle);
   const titleRef = useRef<HTMLDivElement>(null);
   const criteriaMode = useQuestionStore(
-    (state) => state.questionStates[questionId]?.criteriaMode,
+    (state) => state.questionStates[questionId]?.criteriaMode
   );
   const [loading, setLoading] = useState(false);
   const setCriteriaMode = useQuestionStore((state) => state.setCriteriaMode);
@@ -470,7 +470,6 @@ function QuestionWrapper(props: TextBoxProps) {
         </div>
       ) : null}
       {/* Criteria Table for non multiple select questions */}
-
       {questionType === "MULTIPLE_CORRECT" ||
       questionType === "SINGLE_CORRECT" ? (
         <MultipleAnswerSection

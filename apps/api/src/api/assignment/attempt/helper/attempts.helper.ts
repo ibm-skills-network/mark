@@ -46,7 +46,7 @@ export const AttemptHelper = {
     }
   },
 
-  async validateAndGetTextResponse(
+  validateAndGetTextResponse(
     questionType: QuestionType,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<string> {
@@ -56,33 +56,10 @@ export const AttemptHelper = {
           "Expected a text-based response (learnerResponse), but did not receive one.",
         );
       }
-      return createQuestionResponseAttemptRequestDto.learnerTextResponse;
+      return Promise.resolve(
+        createQuestionResponseAttemptRequestDto.learnerTextResponse,
+      );
     }
-
-    if (questionType === QuestionType.UPLOAD) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const file =
-        createQuestionResponseAttemptRequestDto.learnerFileResponse as UploadedFile;
-      if (!file) {
-        throw new BadRequestException(
-          "Expected a file-based response (learnerFileResponse), but did not receive one.",
-        );
-      }
-
-      const extension = file.originalname.split(".").pop()?.toLowerCase();
-      if (extension === "txt") {
-        return file.buffer.toString("utf8");
-      } else if (extension === "docx") {
-        // Using mammoth to extract text from the docx buffer
-        const { value } = await mammoth.extractRawText({ buffer: file.buffer });
-        return value;
-      } else {
-        throw new BadRequestException(
-          "Unsupported file type provided. Only .txt and .docx are supported.",
-        );
-      }
-    }
-
     throw new BadRequestException("Unexpected question type received.");
   },
 

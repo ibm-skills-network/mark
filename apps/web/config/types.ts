@@ -27,11 +27,16 @@ export type QuestionAttemptRequest = {
   // 3. True False
   learnerAnswerChoice?: boolean | undefined;
   // 4. Upload
-  learnerFileResponse?: File | undefined;
+  learnerFileResponse?:
+    | {
+        filename: string;
+        content: string;
+      }[]
+    | undefined;
 };
 
 export type UpdateQuestionStateParams = {
-  questionType?: "TEXT" | "URL" | "MULTIPLE_CORRECT" | "UPLOAD";
+  questionType?: QuestionType;
   maxWordCount?: number;
   questionTitle?: string;
   questionCriteria?: {
@@ -70,7 +75,9 @@ export type QuestionType =
   | "MULTIPLE_CORRECT"
   | "TRUE_FALSE"
   | "URL"
-  | "UPLOAD";
+  | "UPLOAD"
+  | "CODE"
+  | "IMAGES";
 
 export type QuestionTypeDropdown = {
   value: QuestionType;

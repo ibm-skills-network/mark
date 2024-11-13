@@ -41,6 +41,84 @@ Ensure your feedback is constructive, aiding the learner in understanding their 
 
 {format_instructions}
 `;
+export const gradeCodeFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded code file for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Accuracy**: Is the code aligned with the question requirements? Mention any discrepancies.
+- **Functionality**: Does the code execute correctly? Highlight any errors or unexpected behavior.
+- **Efficiency**: Evaluate performance. Are there potential optimizations?
+- **Style**: Assess readability, naming conventions, and comments. Note if these could be improved.
+- **Practices**: Recommend best practices to enhance maintainability and readability.
+- **Strengths**: Identify standout aspects, such as innovative approaches or well-organized structure.
+
+> Provide concise, constructive feedback. Avoid solutions, but offer guidance for improvement. Act as a mentor, not a peer.
+`;
+export const gradeDocumentFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded document for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Accuracy**: Does the document directly address the question requirements?
+- **Organization**: Is the document structured clearly, with a logical flow? Suggest ways to improve if needed.
+- **Completeness**: Are all aspects of the question fully addressed? Mention any gaps in content.
+- **Clarity**: Evaluate the document’s clarity and tone. Suggest adjustments for more precise expression.
+- **Supporting Details**: Are there relevant examples, citations, or evidence supporting the content?
+- **Strengths**: Identify strengths, such as clear organization, effective arguments, or well-used visuals.
+
+> Keep feedback concise and clear. Avoid solutions, and guide toward improvement as a mentor.
+`;
+export const gradeImageFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded image file for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Relevance**: Does the image directly support or enhance the answer to the question?
+- **Clarity**: Assess the clarity of the image. Is it well-composed, with focus on essential elements?
+- **Quality**: Evaluate the image quality (e.g., resolution, color balance). Note any issues that could detract from effectiveness.
+- **Labeling/Annotation**: If applicable, are elements clearly labeled or annotated? Suggest improvements if needed.
+- **Composition**: Is the image well-organized and visually balanced?
+- **Strengths**: Highlight strong points, such as effective use of visuals, clear labeling, or relevance to the topic.
+
+> Provide constructive, professional feedback that encourages improvement. Avoid solutions, and guide as a mentor.
+`;
 
 export const gradeTextBasedQuestionLlmTemplate = `
 As an experienced grader with over a decade of expertise, your task is to evaluate and grade a response to a question. It's essential to consider the broader context of the assignment, including the assignment's instructions and any prior questions and answers. This is crucial because some questions may refer back to or build upon answers provided earlier.
@@ -160,9 +238,9 @@ export const generateUrlBasedMarkingRubricTemplate = `
   Questions: {questions_json_array}
   {format_instructions}
 
-  Format each rubric item as an object with:
-  - "points" (descending order, unique per item)
-  - "description" (evaluation criteria).
+   Format each rubric item as an object with:
+  - "points" (listed in descending order, unique per item)
+  - "description" (detailed evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
 
   Focus areas:
   - URL relevance
@@ -176,8 +254,69 @@ export const generateTextBasedMarkingRubricTemplate = `
   {format_instructions}
 
   Format each rubric item as an object with:
-  - "points" (descending order, unique per item)
-  - "description" (evaluation criteria).
+  - "points" (listed in descending order, unique per item)
+  - "description" (detailed evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+
+  Focus areas:
+  - Content relevance: Does the content directly address the question?
+  - Clarity of explanation: Is the explanation easy to understand?
+  - Quality of integration: How well is the content integrated with supporting information or analysis?
 
   Focus on clear distinctions between correct, partially correct, and incorrect answers.
+`;
+
+export const generateDocumentFileUploadMarkingRubricTemplate = `
+  Generate a scoring rubric for document file upload questions.
+  Question: {questions_json_array}
+  {format_instructions}
+
+  Format each rubric item as an object with:
+  - "points" (listed in descending order, unique per item)
+  - "description" (specific evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+
+  Focus areas:
+  - Content relevance: Does the document directly address the question or topic?
+  - Organization: Is the document structured logically, with clear headings and flow?
+  - Clarity and style: Is the document written clearly, free of grammatical errors, and in an appropriate tone?
+  - Supporting details: Are there relevant examples, statistics, or citations that strengthen the arguments?
+  - Visuals and formatting: Are visuals used effectively, and is the document formatted for readability?
+
+  Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
+`;
+export const generateImageFileUploadMarkingRubricTemplate = `
+  Generate a scoring rubric for image file upload questions.
+  Question: {questions_json_array}
+  {format_instructions}
+
+  Format each rubric item as an object with:
+  - "points" (listed in descending order, unique per item)
+  - "description" (specific evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+
+  Focus areas:
+  - Relevance: Does the image directly support and enhance the answer to the question?
+  - Clarity: Is the image clear, focused, and free of unnecessary elements?
+  - Quality: Is the image of high quality, with appropriate resolution and no distortion?
+  - Composition: Are elements within the image well-organized to effectively convey information?
+  - Annotation and labeling: Are relevant parts of the image clearly labeled or annotated where needed?
+
+  Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
+`;
+
+export const generateCodeFileUploadMarkingRubricTemplate = `
+  Generate a scoring rubric for code file upload questions.
+  Question: {questions_json_array}
+  {format_instructions}
+
+  Format each rubric item as an object with:
+  - "points" (listed in descending order, unique per item)
+  - "description" (specific evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+
+  Focus areas:
+  - Functionality: Does the code work as intended and meet all requirements?
+  - Code quality: Is the code well-structured, maintainable, and follows best practices?
+  - Efficiency: Is the code optimized for performance and resource usage?
+  - Error handling: Does the code handle possible errors gracefully?
+  - Documentation and readability: Is the code easy to understand, with clear comments and naming conventions?
+
+  Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;

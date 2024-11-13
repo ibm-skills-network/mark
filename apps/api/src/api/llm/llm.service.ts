@@ -3,33 +3,32 @@ import type { BaseLanguageModel as BaseLLM } from "@langchain/core/language_mode
 import { PromptTemplate } from "@langchain/core/prompts";
 import { OpenAI } from "@langchain/openai";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { QuestionType } from "@prisma/client";
 import { OpenAIModerationChain } from "langchain/chains";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import type { Logger } from "winston";
 import { z } from "zod";
 import { Choice } from "../assignment/dto/update.questions.request.dto";
-import type { ChoiceBasedQuestionEvaluateModel } from "./model/choice.based.question.evaluate.model";
-import {
-  ChoiceBasedQuestionResponseModel,
-  type ChoiceBasedFeedback,
-} from "./model/choice.based.question.response.model";
+import type { FileUploadQuestionEvaluateModel } from "./model/file.based.question.evaluate.model";
+import { FileBasedQuestionResponseModel } from "./model/file.based.question.response.model";
 import type { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
 import type { TextBasedQuestionResponseModel } from "./model/text.based.question.response.model";
-import type { TrueFalseBasedQuestionEvaluateModel } from "./model/true.false.based.question.evaluate.model";
-import { TrueFalseBasedQuestionResponseModel } from "./model/true.false.based.question.response.model";
 import type { UrlBasedQuestionEvaluateModel } from "./model/url.based.question.evaluate.model";
 import type { UrlBasedQuestionResponseModel } from "./model/url.based.question.response.model";
 import {
-  feedbackChoiceBasedQuestionLlmTemplate,
-  feedbackTrueFalseBasedQuestionLlmTemplate,
-  generateMarkingRubricTemplate,
+  generateCodeFileUploadMarkingRubricTemplate,
+  generateDocumentFileUploadMarkingRubricTemplate,
+  generateImageFileUploadMarkingRubricTemplate,
   generateMultipleBasedMarkingRubricTemplate,
   generateQuestionsGradingContext,
   generateQuestionVariationsTemplate,
   generateSingleBasedMarkingRubricTemplate,
   generateTextBasedMarkingRubricTemplate,
   generateUrlBasedMarkingRubricTemplate,
+  gradeCodeFileQuestionLlmTemplate,
+  gradeDocumentFileQuestionLlmTemplate,
+  gradeImageFileQuestionLlmTemplate,
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
 } from "./templates";
@@ -65,7 +64,7 @@ export class LlmService {
   }
 
   async generateQuestionGradingContext(
-    questions: { id: number; questionText: string }[],
+    questions: { id: number; questionText: string }[]
   ): Promise<Record<number, number[]>> {
     const parser = StructuredOutputParser.fromZodSchema(
       z.array(
@@ -75,13 +74,13 @@ export class LlmService {
             contextQuestions: z
               .array(z.number())
               .describe(
-                "The ids of all the questions that this question depends upon contextually",
+                "The ids of all the questions that this question depends upon contextually"
               ),
           })
           .describe(
-            "Array of objects, where each object represents a question and its contextual dependencies.",
-          ),
-      ),
+            "Array of objects, where each object represents a question and its contextual dependencies."
+          )
+      )
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -104,8 +103,87 @@ export class LlmService {
     return gradingContextQuestionMap;
   }
 
+  async gradeFileBasedQuestion(
+    fileBasedQuestionEvaluateModel: FileUploadQuestionEvaluateModel
+  ): Promise<FileBasedQuestionResponseModel> {
+    const {
+      question,
+      learnerResponse,
+      totalPoints,
+      scoringCriteriaType,
+      scoringCriteria,
+      previousQuestionsAnswersContext,
+      assignmentInstrctions,
+      questionType,
+    } = fileBasedQuestionEvaluateModel;
+
+    const validateLearnerResponse = await this.applyGuardRails(
+      learnerResponse.map((item) => item.content).join(" ")
+    );
+    const templates = {
+      CODE: gradeCodeFileQuestionLlmTemplate,
+      IMAGE: gradeImageFileQuestionLlmTemplate,
+      UPLOAD: gradeDocumentFileQuestionLlmTemplate,
+    };
+    const selectedTemplate = templates[questionType as keyof typeof templates];
+
+    if (!validateLearnerResponse) {
+      throw new HttpException(
+        "Learner response validation failed",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const prompt = new PromptTemplate({
+      template: selectedTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question: question,
+        files: JSON.stringify(
+          learnerResponse.map((item) => {
+            return {
+              filename: item.filename,
+              content: item.content,
+            };
+          })
+        ),
+        total_points: totalPoints.toString(),
+        scoring_type: scoringCriteriaType,
+        scoring_criteria: JSON.stringify(scoringCriteria),
+      },
+    });
+
+    // Define the format for the output as separate values instead of JSON
+    const response = await this.processPrompt(prompt);
+
+    // Assuming response is a single string containing points and feedback separately, e.g.:
+    // "Points: 3\nFeedback: The response demonstrates a basic understanding but requires improvement."
+
+    const pointsMatch = response.match(/Points:\s*(\d+)/);
+    const feedbackMatch = response.match(/Feedback:\s*([\S\s]+)/);
+
+    if (!pointsMatch || !feedbackMatch) {
+      throw new HttpException(
+        "Invalid response format from LLM",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+    // Parse points and feedback
+    const points = Number.parseInt(pointsMatch[1], 10);
+    const feedback = feedbackMatch[1].trim();
+
+    // Construct the response model
+    const fileBasedQuestionResponseModel: FileBasedQuestionResponseModel = {
+      points,
+      feedback,
+    };
+
+    return fileBasedQuestionResponseModel;
+  }
+
   async gradeTextBasedQuestion(
-    textBasedQuestionEvaluateModel: TextBasedQuestionEvaluateModel,
+    textBasedQuestionEvaluateModel: TextBasedQuestionEvaluateModel
   ): Promise<TextBasedQuestionResponseModel> {
     const {
       question,
@@ -122,7 +200,7 @@ export class LlmService {
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 
@@ -133,10 +211,10 @@ export class LlmService {
           feedback: z
             .string()
             .describe(
-              "Feedback for the learner based on their response to the criteria",
+              "Feedback for the learner based on their response to the criteria"
             ),
         })
-        .describe("Object representing points and feedback"),
+        .describe("Object representing points and feedback")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -148,7 +226,7 @@ export class LlmService {
         question: question,
         assignment_instructions: assignmentInstrctions,
         previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext,
+          previousQuestionsAnswersContext
         ),
         learner_response: learnerResponse,
         total_points: totalPoints.toString(),
@@ -161,14 +239,14 @@ export class LlmService {
     const response = await this.processPrompt(prompt);
 
     const textBasedQuestionResponseModel = (await parser.parse(
-      response,
+      response
     )) as TextBasedQuestionResponseModel;
 
     return textBasedQuestionResponseModel;
   }
 
   async gradeUrlBasedQuestion(
-    urlBasedQuestionEvaluateModel: UrlBasedQuestionEvaluateModel,
+    urlBasedQuestionEvaluateModel: UrlBasedQuestionEvaluateModel
   ): Promise<UrlBasedQuestionResponseModel> {
     const {
       question,
@@ -187,7 +265,7 @@ export class LlmService {
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 
@@ -198,10 +276,10 @@ export class LlmService {
           feedback: z
             .string()
             .describe(
-              "Feedback for the learner based on their response to the criteria",
+              "Feedback for the learner based on their response to the criteria"
             ),
         })
-        .describe("Object representing points and feedback"),
+        .describe("Object representing points and feedback")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -213,7 +291,7 @@ export class LlmService {
         question: question,
         assignment_instructions: assignmentInstrctions,
         previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext,
+          previousQuestionsAnswersContext
         ),
         url_provided: urlProvided,
         url_body: urlBody,
@@ -228,14 +306,14 @@ export class LlmService {
     const response = await this.processPrompt(prompt);
 
     const urlBasedQuestionResponseModel = (await parser.parse(
-      response,
+      response
     )) as UrlBasedQuestionResponseModel;
 
     return urlBasedQuestionResponseModel;
   }
   async generateQuestionVariations(
     outline: string,
-    concepts: string[],
+    concepts: string[]
   ): Promise<string[]> {
     const parser = StructuredOutputParser.fromZodSchema(
       z
@@ -243,10 +321,10 @@ export class LlmService {
           z
             .string()
             .describe(
-              "A variation of the question based on the outline and concepts",
-            ),
+              "A variation of the question based on the outline and concepts"
+            )
         )
-        .describe("Array of question variations"),
+        .describe("Array of question variations")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -267,7 +345,11 @@ export class LlmService {
     return questionVariations;
   }
   async createMarkingRubric(
-    questions: { id: number; questionText: string; questionType: string }[],
+    questions: {
+      id: number;
+      questionText: string;
+      questionType: QuestionType;
+    }[]
   ): Promise<
     Record<
       number,
@@ -281,6 +363,9 @@ export class LlmService {
       URL: generateUrlBasedMarkingRubricTemplate,
       MULTIPLE_CORRECT: generateMultipleBasedMarkingRubricTemplate,
       SINGLE_CORRECT: generateSingleBasedMarkingRubricTemplate,
+      UPLOAD: generateDocumentFileUploadMarkingRubricTemplate,
+      CODE: generateCodeFileUploadMarkingRubricTemplate,
+      IMAGE: generateImageFileUploadMarkingRubricTemplate,
     };
 
     const markingRubricMap: Record<
@@ -308,11 +393,11 @@ export class LlmService {
                   points: z
                     .number()
                     .describe("Points awarded for this criterion"),
-                }),
+                })
               )
               .optional()
               .describe(
-                "The marking rubric for text or URL-based questions, structured as an array of criterion objects",
+                "The marking rubric for text, URL and Upload based questions, structured as an array of criterion objects"
               ),
             choices: z
               .array(
@@ -321,12 +406,12 @@ export class LlmService {
                   isCorrect: z.boolean().describe("Correct answer or not"),
                   points: z.number().describe("Points assigned"),
                   feedback: z.string().describe("Feedback for learner"),
-                }),
+                })
               )
               .optional()
               .describe("Array of choices for choice-based questions"),
-          }),
-        ),
+          })
+        )
       );
 
       const formatInstructions = parser.getFormatInstructions();
@@ -347,14 +432,17 @@ export class LlmService {
         // Handling TEXT and URL question types directly
         if (
           question.questionType === "TEXT" ||
-          question.questionType === "URL"
+          question.questionType === "URL" ||
+          question.questionType === "UPLOAD" ||
+          question.questionType === "CODE" ||
+          question.questionType === "IMAGES"
         ) {
           markingRubricMap[question.id] = parsedResponse[0].rubric.map(
             (item: unknown) => ({
               id: (item as { id: number }).id ?? 0,
               description: (item as { description: string }).description ?? "",
               points: (item as { points: number }).points ?? 0,
-            }),
+            })
           );
         }
 
@@ -382,11 +470,11 @@ export class LlmService {
         }
       } catch (error) {
         this.logger.error(
-          `Error processing prompt: ${(error as Error).message}`,
+          `Error processing prompt: ${(error as Error).message}`
         );
         throw new HttpException(
           "Failed to create marking rubric",
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
     }

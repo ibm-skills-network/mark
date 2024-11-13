@@ -31,6 +31,8 @@ enum QuestionType {
   TRUE_FALSE /// The question requires a True/False response
   URL /// The question requires a URL response
   UPLOAD /// The question requires the upload of a file as a response
+  CODE /// The question requires a code response
+  IMAGES /// The question requires an image response
 }
 
 enum QuestionDisplay {

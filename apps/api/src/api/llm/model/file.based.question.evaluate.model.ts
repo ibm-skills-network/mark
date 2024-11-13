@@ -1,0 +1,46 @@
+import { QuestionType } from "@prisma/client";
+import {
+  BaseQuestionEvaluateModel,
+  QuestionAnswerContext,
+} from "./base.question.evaluate.model";
+
+export class FileUploadQuestionEvaluateModel
+  implements BaseQuestionEvaluateModel
+{
+  readonly question: string;
+  readonly learnerResponse: {
+    filename: string;
+    content: string;
+    questionId: number;
+  }[];
+  readonly totalPoints: number;
+  readonly scoringCriteriaType: string;
+  readonly scoringCriteria: object;
+  readonly previousQuestionsAnswersContext: QuestionAnswerContext[];
+  readonly assignmentInstrctions: string;
+  readonly questionType: QuestionType;
+
+  constructor(
+    question: string,
+    previousQuestionsAnswersContext: QuestionAnswerContext[],
+    assignmentInstrctions: string,
+    learnerResponse: {
+      filename: string;
+      content: string;
+      questionId: number;
+    }[],
+    totalPoints: number,
+    scoringCriteriaType: string,
+    scoringCriteria: object,
+    questionType: QuestionType
+  ) {
+    this.question = question;
+    this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
+    this.assignmentInstrctions = assignmentInstrctions;
+    this.learnerResponse = learnerResponse;
+    this.totalPoints = totalPoints;
+    this.scoringCriteriaType = scoringCriteriaType;
+    this.scoringCriteria = scoringCriteria;
+    this.questionType = questionType;
+  }
+}

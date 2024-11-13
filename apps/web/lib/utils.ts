@@ -35,7 +35,7 @@ export interface DataWithUpdatedAt {
 
 export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
-  backendData: Partial<T>,
+  backendData: Partial<T>
 ): T | Partial<T> {
   const localDataExists = localData?.updatedAt;
   const localDataIsNewer =
@@ -69,7 +69,8 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
       q.learnerTextResponse ||
       q.learnerUrlResponse ||
       q.learnerChoices?.length > 0 ||
-      q.learnerAnswerChoice !== undefined,
+      q.learnerAnswerChoice !== undefined ||
+      q.learnerFileResponse !== undefined
   );
 
 export const generateTempQuestionId = (): number => {

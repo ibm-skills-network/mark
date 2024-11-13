@@ -39,6 +39,17 @@ export type LearnerActions = {
   setRole: (role: "learner" | "author") => void;
   setTotalPointsEarned: (totalPointsEarned: number) => void;
   setTotalPointsPossible: (totalPointsPossible: number) => void;
+  getFileUpload: (
+    questionId: number,
+  ) => { filename: string; content: string }[];
+  setFileUpload: (
+    learnerFileResponse: {
+      filename: string;
+      content: string;
+    }[],
+    questionId: number,
+  ) => void;
+  deleteFile: (fileToDelete: File, questionId: number) => void;
 };
 
 export type AssignmentDetailsState = {
@@ -113,6 +124,41 @@ export const useLearnerStore = createWithEqualityFn<
 >()(
   devtools(
     (set, get) => ({
+      getFileUpload: (questionId) => {
+        const question = get().questions.find((q) => q.id === questionId);
+        return question?.learnerFileResponse || [];
+      },
+
+      setFileUpload: (newFiles, questionId) => {
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) => {
+            if (q.id === questionId) {
+              const existingFiles = q.learnerFileResponse || [];
+              // Merge existing files with new files
+              const mergedFiles = [...existingFiles, ...newFiles];
+              return { ...q, learnerFileResponse: mergedFiles };
+            }
+            return q;
+          });
+          return { questions: updatedQuestions };
+        });
+      },
+
+      deleteFile: (fileToDelete, questionId) => {
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) => {
+            if (q.id === questionId) {
+              const existingFiles = q.learnerFileResponse || [];
+              const updatedFiles = existingFiles.filter(
+                (file) => file.filename !== fileToDelete.name,
+              );
+              return { ...q, learnerFileResponse: updatedFiles };
+            }
+            return q;
+          });
+          return { questions: updatedQuestions };
+        });
+      },
       activeAttemptId: null,
       totalPointsEarned: 0,
       totalPointsPossible: 0,

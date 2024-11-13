@@ -10,8 +10,9 @@ import { Menu, Transition } from "@headlessui/react";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import {
   ArrowPathRoundedSquareIcon,
-  ArrowUpTrayIcon,
   Bars3BottomLeftIcon,
+  CodeBracketIcon,
+  DocumentArrowUpIcon,
   DocumentDuplicateIcon,
   LinkIcon,
   PencilSquareIcon,
@@ -60,12 +61,12 @@ const Question: FC<QuestionProps> = ({
   const setQuestionTitle = useAuthorStore((state) => state.setQuestionTitle);
   const [newIndex, setNewIndex] = useState<number>(questionIndex);
   const [isFocused, setIsFocused] = useState(false);
-  const disabledMenuButtons = ["UPLOAD"]; // These question types are disabled in the dropdown menu
+  const disabledMenuButtons = [""]; // in case we want to disable some question types
   const { questionStates, setShowWordCountInput, setCountMode } =
     useQuestionStore();
   const router = useRouter();
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId,
+    (state) => state.setFocusedQuestionId
   );
 
   // Manage word count input visibility and mode (character or word count)
@@ -82,22 +83,22 @@ const Question: FC<QuestionProps> = ({
       "By default, learners will be given 0 points if they do not meet any of the criteria.",
     ],
     criteriaIds: question.scoring?.criteria?.map(
-      (c, index) => c.id || index + 1,
+      (c, index) => c.id || index + 1
     ) || [1, 2],
   });
 
   const [questionMaxPoints, setQuestionMaxPoints] = useState<number>(
-    question.totalPoints || 1,
+    question.totalPoints || 1
   );
   const [questionType, setQuestionType] = useState<QuestionType>(question.type);
   const [inputValue, setInputValue] = useState<string>(
-    questionIndex.toString(),
+    questionIndex.toString()
   );
   const [maxWordCount, setMaxWordCount] = useState<number>(
-    question.maxWords || null,
+    question.maxWords || null
   );
   const [maxCharacters, setmaxCharacters] = useState<number>(
-    question.maxCharacters || null,
+    question.maxCharacters || null
   );
 
   // Set initial question max points based on criteria if applicable
@@ -163,13 +164,7 @@ const Question: FC<QuestionProps> = ({
         useAuthorStore.getState().setQuestionOrder(questionOrder);
       }
     },
-    [
-      questionTitle,
-      questionType,
-      questionCriteria,
-      maxWordCount,
-      maxCharacters,
-    ],
+    [questionTitle, questionType, questionCriteria, maxWordCount, maxCharacters]
   );
 
   // Handle changes to the question index
@@ -211,7 +206,7 @@ const Question: FC<QuestionProps> = ({
         setNewIndex(parsedValue);
         const updatedQuestions = [...useAuthorStore.getState().questions];
         const currentQuestion = updatedQuestions.find(
-          (q) => q.id === questionId,
+          (q) => q.id === questionId
         );
         if (currentQuestion) {
           updatedQuestions.splice(questionIndex - 1, 1);
@@ -235,7 +230,6 @@ const Question: FC<QuestionProps> = ({
         label: "Text Response",
         icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
       },
-
       {
         value: "MULTIPLE_CORRECT",
         label: "Multiple Select",
@@ -257,12 +251,17 @@ const Question: FC<QuestionProps> = ({
         icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />,
       },
       {
+        value: "CODE",
+        label: "Code",
+        icon: <CodeBracketIcon className="w-5 h-5 stroke-gray-500" />,
+      },
+      {
         value: "UPLOAD",
-        label: "Repo Upload",
-        icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
+        label: "Essay",
+        icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    [],
+    []
   );
 
   const handleEditClick = (id: number) => {
@@ -358,14 +357,20 @@ const Question: FC<QuestionProps> = ({
                                 | "TEXT"
                                 | "URL"
                                 | "MULTIPLE_CORRECT"
-                                | "UPLOAD",
+                                | "UPLOAD"
+                                | "CODE"
+                                | "SINGLE_CORRECT"
+                                | "TRUE_FALSE"
                             );
                             handleUpdateQuestionState({
                               questionType: qt.value as
                                 | "TEXT"
                                 | "URL"
                                 | "MULTIPLE_CORRECT"
-                                | "UPLOAD",
+                                | "UPLOAD"
+                                | "CODE"
+                                | "SINGLE_CORRECT"
+                                | "TRUE_FALSE",
                             });
                           }}
                           disabled={
@@ -431,10 +436,10 @@ const Question: FC<QuestionProps> = ({
                     onClick={() => {
                       setCountMode(
                         questionId,
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                       handleResetCounters(
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                     }}
                   />
@@ -597,10 +602,10 @@ const Question: FC<QuestionProps> = ({
                     onClick={() => {
                       setCountMode(
                         questionId,
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                       handleResetCounters(
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                     }}
                   />
@@ -648,7 +653,7 @@ const Question: FC<QuestionProps> = ({
                             description: criteria,
                             points: questionCriteria.points[index],
                           };
-                        },
+                        }
                       ),
                     },
                     id: 0,

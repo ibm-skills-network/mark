@@ -35,11 +35,14 @@ export class CreateQuestionResponseAttemptRequestDto {
 
   @ApiPropertyOptional({
     description: "The learner's file response.",
-    type: "file",
-    format: "binary",
+    type: [Object],
   })
   @IsOptional()
-  learnerFileResponse?: Express.Multer.File;
+  learnerFileResponse?: {
+    filename: string;
+    content: string;
+    questionId: number;
+  }[];
 
   @ApiPropertyOptional({
     description: "The id of the question.",

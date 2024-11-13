@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap");
 
 * {
   font-family: "IBM Plex Sans", sans-serif;
@@ -114,7 +114,6 @@ ul {
   @apply text-violet-600 no-underline hover:text-violet-800 hover:underline dark:text-violet-400 dark:hover:text-violet-300 transition-all;
 }
 
-
 .title-placeholder::placeholder {
   font-weight: 600; /* Font weight for title */
 }
@@ -124,13 +123,12 @@ ul {
   font-weight: 450; /* Font weight for description */
 }
 
-.ql-code-block-container{
+.ql-code-block-container {
   background-color: #23241f;
   color: #f8f8f2;
   padding: 10px;
   border-radius: 5px;
   transition: background-color 0.3s ease-in-out;
-
 }
 
 .question-container {
@@ -150,14 +148,15 @@ pre {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+    monospace;
 }
 
 /* Custom Quill Styles */
 
 /* Base styling for Quill editor */
 .quill-editor {
-  border: 1px solid #E5E7EB;
+  border: 1px solid #e5e7eb;
   border-radius: 5px;
   padding: 10px;
   background-color: #fff;
@@ -182,7 +181,7 @@ code {
 
 /* Toolbar styling */
 .ql-toolbar {
-  border-bottom: 1px solid #E5E7EB;
+  border-bottom: 1px solid #e5e7eb;
   background-color: #f9f9f9;
   border-radius: 5px 5px 0 0;
   padding: 5px;
@@ -199,8 +198,9 @@ code {
   font-weight: 400;
 }
 
-.ql-container.ql-snow, .ql-toolbar.ql-snow {
-  border-color: #E5E7EB !important;
+.ql-container.ql-snow,
+.ql-toolbar.ql-snow {
+  border-color: #e5e7eb !important;
 }
 .ql-snow .ql-editor .ql-code-block-container {
   min-height: 40px !important;
@@ -208,7 +208,7 @@ code {
 
 /* Editor UI styling */
 .ql-code-block-container .ql-ui {
-  border: 1px solid #E5E7EB;
+  border: 1px solid #e5e7eb;
   border-radius: 5px;
   transition: border-color 0.3s ease-in-out;
   max-width: fit-content;
@@ -230,7 +230,6 @@ code {
   user-select: none;
 }
 
-
 /* Syntax highlighting styling */
 pre.ql-syntax {
   background-color: #f5f5f5;
@@ -240,7 +239,8 @@ pre.ql-syntax {
 }
 
 .swapping {
-  transition: background-color 0.5s ease-in-out, transform 0.5s ease-in-out, box-shadow 0.5s ease-in-out;
+  transition: background-color 0.5s ease-in-out, transform 0.5s ease-in-out,
+    box-shadow 0.5s ease-in-out;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   transform: scale(1.02);
 }
@@ -268,7 +268,6 @@ pre.ql-syntax {
     padding: 8px;
   }
 }
-
 
 /* Optional dark mode */
 /*

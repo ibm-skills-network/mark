@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, QuestionType } from "@prisma/client";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
 import { QuestionDto } from "../dto/update.questions.request.dto";
@@ -19,12 +19,12 @@ import {
 export class QuestionService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly llmService: LlmService,
+    private readonly llmService: LlmService
   ) {}
 
   async create(
     assignmentId: number,
-    createQuestionRequestDto: CreateUpdateQuestionRequestDto,
+    createQuestionRequestDto: CreateUpdateQuestionRequestDto
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(createQuestionRequestDto);
     const scoring = createQuestionRequestDto.scoring
@@ -32,7 +32,7 @@ export class QuestionService {
       : undefined;
     const choices = createQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(createQuestionRequestDto.choices),
+          JSON.stringify(createQuestionRequestDto.choices)
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
     const result = await this.prisma.question.create({
@@ -76,13 +76,13 @@ export class QuestionService {
   async update(
     assignmentId: number,
     id: number,
-    updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
+    updateQuestionRequestDto: CreateUpdateQuestionRequestDto
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring = (updateQuestionRequestDto.scoring as object) || undefined;
     const choices = updateQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(updateQuestionRequestDto.choices),
+          JSON.stringify(updateQuestionRequestDto.choices)
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
     const result = await this.prisma.question.update({
@@ -104,7 +104,7 @@ export class QuestionService {
   async replace(
     assignmentId: number,
     id: number,
-    updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
+    updateQuestionRequestDto: CreateUpdateQuestionRequestDto
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring =
@@ -113,7 +113,7 @@ export class QuestionService {
     const answer = updateQuestionRequestDto.answer || null;
     const choices = updateQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(updateQuestionRequestDto.choices),
+          JSON.stringify(updateQuestionRequestDto.choices)
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
 
@@ -144,7 +144,11 @@ export class QuestionService {
     };
   }
   async createMarkingRubric(
-    questions: { id: number; questionText: string; questionType: string }[],
+    questions: {
+      id: number;
+      questionText: string;
+      questionType: QuestionType;
+    }[]
   ): Promise<Record<number, string>> {
     const markingRubric = await this.llmService.createMarkingRubric(questions);
     const formattedMarkingRubric: Record<number, string> = {};
@@ -159,25 +163,25 @@ export class QuestionService {
 
   async generateQuestionVariations(
     outline: string,
-    concepts: string[],
+    concepts: string[]
   ): Promise<string[]> {
     const variations = await this.llmService.generateQuestionVariations(
       outline,
-      concepts,
+      concepts
     );
     return variations;
   }
 
   private async applyGuardRails(
-    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto,
+    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto
   ): Promise<void> {
     const guardRailsValidation = await this.llmService.applyGuardRails(
-      JSON.stringify(createUpdateQuestionRequestDto),
+      JSON.stringify(createUpdateQuestionRequestDto)
     );
     if (!guardRailsValidation) {
       throw new HttpException(
         "Question validation failed due to inappropriate or unacceptable content",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
   }

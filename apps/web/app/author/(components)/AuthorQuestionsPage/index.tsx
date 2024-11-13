@@ -1,5 +1,6 @@
 "use client";
 
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import GripVertical from "@/components/svgs/GripVertical";
 import MultipleChoiceSVG from "@/components/svgs/MC";
 import type {
@@ -33,14 +34,17 @@ import {
   PencilIcon,
 } from "@heroicons/react/20/solid";
 import {
-  ArrowUpTrayIcon,
+  CodeBracketIcon,
+  DocumentArrowUpIcon,
+} from "@heroicons/react/24/outline";
+import {
   Bars3BottomLeftIcon,
   LinkIcon,
   TrashIcon,
 } from "@heroicons/react/24/solid";
 import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import {
+import React, {
   Fragment,
   useCallback,
   useEffect,
@@ -50,11 +54,9 @@ import {
   type FC,
 } from "react";
 import { toast } from "sonner";
+import { shallow } from "zustand/shallow";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
-import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
-import { shallow } from "zustand/shallow";
-import React from "react";
 
 interface Props {
   assignmentId: number;
@@ -73,7 +75,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 }) => {
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes.",
+    "Are you sure you want to leave this page? You will lose any unsaved changes."
   ); // Prompt the user before leaving the page
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
     state.focusedQuestionId,
@@ -84,10 +86,10 @@ const AuthorQuestionsPage: FC<Props> = ({
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId,
+    (state) => state.activeAssignmentId
   );
   const setActiveAssignmentId = useAuthorStore(
-    (state) => state.setActiveAssignmentId,
+    (state) => state.setActiveAssignmentId
   );
   const setName = useAuthorStore((state) => state.setName);
   const focusRef = useRef(focusedQuestionId); // Ref to store the focused question ID
@@ -100,21 +102,20 @@ const AuthorQuestionsPage: FC<Props> = ({
         label: "Text Response",
         icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
       },
-
       {
         value: "MULTIPLE_CORRECT",
         label: "Multiple Select",
-        icon: <IconCheckbox className="w-5 h-5 mr-2" />,
+        icon: <IconCheckbox className="w-5 h-5" />,
       },
       {
         value: "SINGLE_CORRECT",
         label: "Multiple Choice",
-        icon: <MultipleChoiceSVG className="w-5 h-5 mr-2 " />,
+        icon: <MultipleChoiceSVG className="w-5 h-5 " />,
       },
       {
         value: "TRUE_FALSE",
         label: "True/False",
-        icon: <IconCircleCheck className="w-5 h-5 mr-2" />,
+        icon: <IconCircleCheck className="w-5 h-5" />,
       },
       {
         value: "URL",
@@ -122,12 +123,17 @@ const AuthorQuestionsPage: FC<Props> = ({
         icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />,
       },
       {
+        value: "CODE",
+        label: "Code",
+        icon: <CodeBracketIcon className="w-5 h-5 stroke-gray-500" />,
+      },
+      {
         value: "UPLOAD",
-        label: "Repo Upload",
-        icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
+        label: "Essay",
+        icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    [],
+    []
   );
 
   useEffect(() => {
@@ -144,7 +150,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   (criteria: Criteria, criteriaIndex: number) => ({
                     ...criteria,
                     index: criteriaIndex + 1,
-                  }),
+                  })
                 );
                 return {
                   ...question,
@@ -155,13 +161,13 @@ const AuthorQuestionsPage: FC<Props> = ({
                   },
                   index: index + 1,
                 };
-              },
+              }
             );
             if (questions?.length > 0) {
               // sort questions criteria by points before setting
               questions.forEach((question) => {
                 question.scoring.criteria = question.scoring.criteria.sort(
-                  (a, b) => b.points - a.points,
+                  (a, b) => b.points - a.points
                 );
               });
               setQuestions(questions);
@@ -229,7 +235,8 @@ const AuthorQuestionsPage: FC<Props> = ({
       | "MULTIPLE_CORRECT"
       | "TRUE_FALSE"
       | "URL"
-      | "UPLOAD",
+      | "CODE"
+      | "UPLOAD"
   ) => {
     const question: CreateQuestionRequest = {
       question: "",
@@ -448,7 +455,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         prevProps.question === nextProps.question &&
         prevProps.questionIndex === nextProps.questionIndex
       );
-    },
+    }
   );
 
   const SortableList = React.memo(
@@ -470,7 +477,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     },
     (prevProps, nextProps) => {
       return prevProps.questions === nextProps.questions;
-    },
+    }
   );
 
   /**
@@ -564,7 +571,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   <SortableItem
                     question={questions.find((q) => q.id === activeId)}
                     questionIndex={questions.findIndex(
-                      (q) => q.id === activeId,
+                      (q) => q.id === activeId
                     )}
                   />
                 ) : null}
@@ -615,18 +622,15 @@ const AuthorQuestionsPage: FC<Props> = ({
                                   | "MULTIPLE_CORRECT"
                                   | "TRUE_FALSE"
                                   | "URL"
-                                  | "UPLOAD",
+                                  | "UPLOAD"
+                                  | "CODE"
                               )
                             }
-                            disabled={qt.value === "UPLOAD"}
                             className={`${
                               active
                                 ? "bg-gray-100 text-gray-600"
                                 : "text-gray-600"
-                            } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
-                              qt.value === "UPLOAD" &&
-                              "cursor-not-allowed opacity-50"
-                            }`}
+                            } group flex items-center w-full py-2 px-4 gap-1.5 typography-body`}
                           >
                             <div className="size-5">{qt.icon}</div>
                             {qt.label}
@@ -826,7 +830,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     setSelectedQuestions((prevSelected: number[]) =>
       prevSelected.includes(questionId)
         ? prevSelected.filter((id: number) => id !== questionId)
-        : [...prevSelected, questionId],
+        : [...prevSelected, questionId]
     );
   };
 
@@ -844,7 +848,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     }
 
     const updatedQuestions = questions.filter(
-      (q) => !deletedQuestionIds.includes(q.id),
+      (q) => !deletedQuestionIds.includes(q.id)
     );
     updatedQuestions.forEach((q, index) => {
       q.index = index + 1;
@@ -908,7 +912,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
                     setSelectedQuestions(
                       selectedQuestions.length === questions.length
                         ? []
-                        : questions.map((q) => q.id),
+                        : questions.map((q) => q.id)
                     );
                   }}
                   className="text-gray-500 hover:text-violet-600 transition-colors duration-300"
