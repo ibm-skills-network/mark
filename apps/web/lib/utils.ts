@@ -35,12 +35,12 @@ export interface DataWithUpdatedAt {
 
 export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
-  backendData: Partial<T>
+  backendData: Partial<T>,
 ): T | Partial<T> {
   const localDataExists = localData?.updatedAt;
   const localDataIsNewer =
     new Date(localData.updatedAt) > new Date(backendData.updatedAt);
-  const oneWeekAgo = new Date(); // this is configurable based on requirements. I went with a week because its not too long and not too short. 
+  const oneWeekAgo = new Date(); // this is configurable based on requirements. I went with a week because its not too long and not too short.
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
   const localDataIsOlderThanAWeek = new Date(localData.updatedAt) < oneWeekAgo;
 
@@ -70,7 +70,7 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
       q.learnerUrlResponse ||
       q.learnerChoices?.length > 0 ||
       q.learnerAnswerChoice !== undefined ||
-      q.learnerFileResponse !== undefined
+      q.learnerFileResponse !== undefined,
   );
 
 export const generateTempQuestionId = (): number => {

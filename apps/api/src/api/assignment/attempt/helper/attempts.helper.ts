@@ -62,7 +62,9 @@ export const AttemptHelper = {
     }
     throw new BadRequestException("Unexpected question type received.");
   },
-
+  shuffleJsonArray<T>(array: T[]): T[] {
+    return array.sort(() => Math.random() - 0.5);
+  },
   async fetchPlainTextFromUrl(
     url: string,
   ): Promise<{ body: string; isFunctional: boolean }> {

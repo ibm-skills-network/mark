@@ -9,7 +9,7 @@ const escapeCurlyBraces = (content: string): string =>
 const sanitizeContent = (content: string, extension: string): string => {
   // Escape curly braces for non-code files to avoid LLM prompt issues
   const needsEscaping = ["txt", "docx", "md", "csv", "pptx", "pdf"].includes(
-    extension
+    extension,
   );
   return needsEscaping ? escapeCurlyBraces(content) : content;
 };
@@ -22,7 +22,7 @@ interface FileContent {
 // Helper function to read text-based files as plain text
 export const readAsText = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -37,7 +37,7 @@ export const readAsText = (
 // Helper function to read PDF files using react-pdftotext
 export const readPdf = async (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> => {
   try {
     const content = await pdfToText(file);
@@ -50,7 +50,7 @@ export const readPdf = async (
 // Helper function to read and parse Markdown files using remark
 export const readMarkdown = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -71,7 +71,7 @@ export const readMarkdown = (
 // Helper function to read DOCX files
 export const readDocx = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -104,7 +104,7 @@ export const readCsv = (file: File, questionId: number): Promise<FileContent> =>
   });
 export const readIpynb = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -162,7 +162,7 @@ export const readIpynb = (
 // Helper function to read PPTX files
 export const readPptx = async (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> => {
   try {
     const result = await mammoth.extractRawText({
@@ -179,7 +179,7 @@ export const readPptx = async (
 export const readPlainText = (
   file: File,
   questionId: number,
-  extenstion: string
+  extenstion: string,
 ): Promise<FileContent> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -193,7 +193,7 @@ export const readPlainText = (
 
 export const readFile = async (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> => {
   // supported file types: txt, pdf, md, docx, csv, pptx, ipynb, py, js, sh, html, css, sql, tsx
   const extension = file.name.split(".").pop()?.toLowerCase();

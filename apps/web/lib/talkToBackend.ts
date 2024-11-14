@@ -10,10 +10,13 @@ import type {
   BaseBackendResponse,
   CreateQuestionRequest,
   GetAssignmentResponse,
+  Question,
   QuestionAttemptRequest,
   QuestionAttemptRequestWithId,
   QuestionAttemptResponse,
+  QuestionAuthorStore,
   QuestionStore,
+  QuestionVariants,
   ReplaceAssignmentRequest,
   SubmitAssignmentResponse,
   User,
@@ -278,9 +281,50 @@ export async function replaceQuestion(
   }
 }
 
+export async function generateQuestionVariant(
+  questionsFromFrontend: QuestionAuthorStore[],
+  questionVariationNumber: number,
+  assignmentId: number,
+  cookies?: string,
+): Promise<QuestionAuthorStore[] | undefined> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/question/generate-variant`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({
+        questions: questionsFromFrontend,
+        questionVariationNumber,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to generate question variant");
+    }
+    const { success, error, questions } =
+      (await res.json()) as BaseBackendResponse & {
+        questions: QuestionAuthorStore[];
+      };
+
+    if (!success) {
+      throw new Error(error);
+    }
+
+    return questions;
+  } catch (err) {
+    console.error(err);
+    return undefined;
+  }
+}
+
 export async function generateRubric(
   questions: { id: number; questionText: string; questionType: string }[],
   assignmentId: number,
+  variantMode: boolean,
   cookies?: string,
 ): Promise<Record<number, string> | undefined> {
   const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/create-marking-rubric`;
@@ -292,7 +336,7 @@ export async function generateRubric(
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify({ questions }),
+      body: JSON.stringify({ questions, variantMode }),
     });
 
     if (!res.ok) {

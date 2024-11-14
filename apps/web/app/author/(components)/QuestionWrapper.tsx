@@ -4,7 +4,9 @@ import SparkleLottie from "@/app/animations/sparkleLottie";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import Tooltip from "@/components/Tooltip";
 import type {
+  Choice,
   CreateQuestionRequest,
+  QuestionAuthorStore,
   QuestionType,
   QuestionTypeDropdown,
   UpdateQuestionStateParams,
@@ -19,6 +21,7 @@ import {
   SparklesIcon,
 } from "@heroicons/react/24/solid";
 import React, {
+  FC,
   useEffect,
   useMemo,
   useRef,
@@ -29,10 +32,10 @@ import { toast } from "sonner";
 import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
 
 // Props type definition for the QuestionWrapper component
-interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
+interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
   questionId: number;
   questionTitle: string;
-  setQuestionTitle: (questionTitle: string, questionId: number) => void;
+  setQuestionTitle: (questionTitle: string) => void;
   questionType: QuestionType;
   setQuestionType: (questionType: QuestionType) => void;
   questionCriteria: {
@@ -40,41 +43,61 @@ interface TextBoxProps extends ComponentPropsWithoutRef<"div"> {
     criteriaDesc: string[];
     criteriaIds: number[];
   };
-  setQuestionCriteria: (questionCriteria: object) => void;
+  setQuestionCriteria: (questionCriteria: {
+    points: number[];
+    criteriaDesc: string[];
+    criteriaIds: number[];
+  }) => void;
   handleUpdateQuestionState: (params: UpdateQuestionStateParams) => void;
   questionIndex: number;
   preview: boolean;
+  questionFromParent: QuestionAuthorStore;
+  variantMode: boolean;
+  variantId?: number;
 }
 
 // Main component function to manage question criteria and title
-function QuestionWrapper(props: TextBoxProps) {
-  const {
-    questionId,
-    questionTitle,
-    questionCriteria,
-    setQuestionCriteria,
-    setQuestionTitle,
-    handleUpdateQuestionState,
-    questionIndex,
-    questionType,
-    preview,
-  } = props;
-
+const QuestionWrapper: FC<QuestionWrapperProps> = ({
+  questionId,
+  questionTitle,
+  setQuestionTitle,
+  questionType,
+  setQuestionType,
+  questionCriteria,
+  setQuestionCriteria,
+  handleUpdateQuestionState,
+  questionIndex,
+  preview,
+  questionFromParent,
+  variantMode,
+  variantId,
+  ...rest
+}) => {
+  const [localQuestionTitle, setLocalQuestionTitle] =
+    useState<string>(questionTitle);
+  const titleRef = useRef<HTMLDivElement>(null);
+  const { questionStates, setCriteriaMode } = useQuestionStore();
+  const criteriaMode = questionStates[questionId]?.criteriaMode || "CUSTOM";
+  const [loading, setLoading] = useState<boolean>(false);
+  const addChoice = useAuthorStore((state) => state.addChoice);
+  const removeChoice = useAuthorStore((state) => state.removeChoice);
+  const setChoices = useAuthorStore((state) => state.setChoices);
+  const modifyChoice = useAuthorStore((state) => state.modifyChoice);
   // Zustand store hooks to manage state
   const toggleTitle = useQuestionStore(
-    (state) => state.questionStates[questionId]?.toggleTitle
+    (state) => state.questionStates[questionId]?.toggleTitle,
   );
   const addTrueFalseChoice = useAuthorStore(
-    (state) => state.addTrueFalseChoice
+    (state) => state.addTrueFalseChoice,
   );
   const updatePointsTrueFalse = useAuthorStore(
-    (state) => state.updatePointsTrueFalse
+    (state) => state.updatePointsTrueFalse,
   );
   const isItTrueOrFalse = useAuthorStore((state) =>
-    state.isItTrueOrFalse(questionId)
+    state.isItTrueOrFalse(questionId),
   );
   const TrueFalsePoints = useAuthorStore((state) =>
-    state.getTrueFalsePoints(questionId)
+    state.getTrueFalsePoints(questionId),
   );
 
   // State for the local question
@@ -91,20 +114,13 @@ function QuestionWrapper(props: TextBoxProps) {
   };
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
   const showCriteriaHeader = useQuestionStore(
-    (state) => state.questionStates.showCriteriaHeader ?? true
+    (state) => state.questionStates.showCriteriaHeader ?? true,
   );
   const setShowCriteriaHeader = useQuestionStore(
-    (state) => state.setShowCriteriaHeader
+    (state) => state.setShowCriteriaHeader,
   );
 
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
-  const [questionTitle2, setQuestionTitle2] = useState(questionTitle);
-  const titleRef = useRef<HTMLDivElement>(null);
-  const criteriaMode = useQuestionStore(
-    (state) => state.questionStates[questionId]?.criteriaMode
-  );
-  const [loading, setLoading] = useState(false);
-  const setCriteriaMode = useQuestionStore((state) => state.setCriteriaMode);
   // Effect to handle clicks outside the title input to toggle it off
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -114,19 +130,19 @@ function QuestionWrapper(props: TextBoxProps) {
       ) {
         setToggleTitle(questionId, false);
         const toggleTitle = false;
-        handleQuestionTitleChange(questionTitle2, toggleTitle);
+        handleQuestionTitleChange(localQuestionTitle, toggleTitle);
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick);
     };
-  }, [questionTitle2]);
+  }, [localQuestionTitle]);
 
   // Handle changes to the question title and update the store
   const handleQuestionTitleChange = (value: string, toggleTitle: boolean) => {
     if (toggleTitle === false) {
-      setQuestionTitle(value, questionId);
+      setQuestionTitle(value);
       handleUpdateQuestionState({ questionTitle: value });
     }
   };
@@ -139,10 +155,20 @@ function QuestionWrapper(props: TextBoxProps) {
       ...questionCriteria,
       criteriaDesc: newCriteriaArray,
     });
+    // Update the store correctly
+    handleUpdateQuestionState({
+      questionCriteria: {
+        ...questionCriteria,
+        criteriaDesc: newCriteriaArray,
+      },
+    });
   };
-
   // Handle blur event on criteria input to update the state
   const handleCriteriaBlur = () => {
+    setQuestionCriteria({
+      ...questionCriteria,
+      criteriaDesc: questionCriteria.criteriaDesc.map((desc) => desc?.trim()),
+    });
     handleUpdateQuestionState({ questionCriteria });
   };
 
@@ -197,16 +223,19 @@ function QuestionWrapper(props: TextBoxProps) {
     newPointArray.splice(index, 1);
     newCriteriaArray.splice(index, 1);
     newCriteriaIds.splice(index, 1);
+
+    const updatedCriteriaIds = newCriteriaIds.map((_, idx) => idx + 1);
+
     setQuestionCriteria({
       points: newPointArray,
       criteriaDesc: newCriteriaArray,
-      criteriaIds: newCriteriaIds,
+      criteriaIds: updatedCriteriaIds,
     });
     handleUpdateQuestionState({
       questionCriteria: {
         points: newPointArray,
         criteriaDesc: newCriteriaArray,
-        criteriaIds: newCriteriaIds,
+        criteriaIds: updatedCriteriaIds,
       },
     });
   };
@@ -312,10 +341,10 @@ function QuestionWrapper(props: TextBoxProps) {
       const newPointArray = [...questionCriteria.points];
       newPointArray[index] = parsedValue;
 
-      setQuestionCriteria((prev: CreateQuestionRequest) => ({
-        ...prev,
+      setQuestionCriteria({
+        ...questionCriteria,
         points: newPointArray,
-      }));
+      });
     }
   };
 
@@ -325,14 +354,17 @@ function QuestionWrapper(props: TextBoxProps) {
       {
         id: questionId,
         questionText: questionTitle,
-        questionType:
-          useAuthorStore.getState().questions[questionIndex - 1].type,
+        questionType: questionType, // Use the questionType prop
       },
-    ]; // adding question type to the request, -1 because questionIndex is 1-based
+    ];
     const assignmentId = useAuthorStore.getState().activeAssignmentId;
 
     try {
-      const response = await generateRubric(questions, assignmentId);
+      const response = await generateRubric(
+        questions,
+        assignmentId,
+        variantMode,
+      );
       const newPoints: number[] = [];
       const newCriteriaDesc: string[] = [];
       const newCriteriaIds: number[] = [];
@@ -368,7 +400,7 @@ function QuestionWrapper(props: TextBoxProps) {
 
   const handleAiClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation(); // Prevent the click event from bubbling up to the parent0=
-    if (questionTitle.trim() === "") {
+    if (questionTitle?.trim() === "") {
       toast.error("Please enter a question title first.");
       return;
     }
@@ -382,7 +414,7 @@ function QuestionWrapper(props: TextBoxProps) {
     }
   };
   useEffect(() => {
-    if (questionCriteria.points.length > 0 && criteriaMode !== "CUSTOM") {
+    if (questionCriteria.points?.length > 0 && criteriaMode !== "CUSTOM") {
       setCriteriaMode(questionId, "CUSTOM");
     }
   }, [questionCriteria.points, criteriaMode]);
@@ -393,21 +425,15 @@ function QuestionWrapper(props: TextBoxProps) {
         <div ref={titleRef} className="w-full">
           <MarkdownEditor
             className="title-placeholder placeholder-gray-500 w-full"
-            value={questionTitle}
+            value={localQuestionTitle}
             setValue={(value) => {
-              // Remove any <p><br></p> at the end of the string
-              const cleanedValue = value
-                .replace(/<p>\s*<br>\s*<\/p>$/g, "")
-                .trim();
-              setQuestionTitle2(cleanedValue);
+              setLocalQuestionTitle(value?.trim());
             }}
             placeholder="Enter your question here..."
             onBlur={() => {
               setToggleTitle(questionId, false);
-              const cleanedValue = questionTitle
-                .replace(/<p>\s*<br>\s*<\/p>$/g, "")
-                .trim();
-              setQuestionTitle(cleanedValue, questionId);
+              setQuestionTitle(localQuestionTitle);
+              handleUpdateQuestionState({ questionTitle: localQuestionTitle });
             }}
           />
         </div>
@@ -418,22 +444,21 @@ function QuestionWrapper(props: TextBoxProps) {
         >
           <MarkdownViewer
             className={`typography-body px-1 py-0.5 ${
-              questionTitle.replace(/<\/?[^>]+(>|$)/g, "").trim() === ""
+              localQuestionTitle?.trim() === ""
                 ? "!text-gray-500"
-                : "!text-black" // Regular text color
+                : "!text-black"
             }`}
           >
-            {questionTitle.replace(/<\/?[^>]+(>|$)/g, "").trim() === ""
+            {localQuestionTitle?.trim() === ""
               ? "Enter question here"
-              : questionTitle}
+              : localQuestionTitle}
           </MarkdownViewer>
-
           <div className="border-b border-gray-200 w-full" />
         </div>
       )}
 
       {/* Criteria Header, displayed for the first question */}
-      {showCriteriaHeader && questionIndex === 1 && !preview ? (
+      {showCriteriaHeader && questionIndex === 1 && !variantMode && !preview ? (
         <div className="flex justify-between bg-violet-100 rounded py-4 pl-5 pr-7">
           <div className="flex items-start h-full">
             <ArrowDownIcon className="stroke-violet-600 fill-violet-600 h-6 w-6 p-1" />
@@ -469,13 +494,20 @@ function QuestionWrapper(props: TextBoxProps) {
           </div>
         </div>
       ) : null}
-      {/* Criteria Table for non multiple select questions */}
+      {/* Render Criteria, Multiple Choice Section, or other components based on questionType */}
       {questionType === "MULTIPLE_CORRECT" ||
       questionType === "SINGLE_CORRECT" ? (
         <MultipleAnswerSection
           questionId={questionId}
+          variantId={variantId}
           preview={preview}
-          questionTitle={questionTitle}
+          questionTitle={localQuestionTitle}
+          questionFromParent={questionFromParent}
+          addChoice={addChoice}
+          removeChoice={removeChoice}
+          setChoices={setChoices}
+          modifyChoice={modifyChoice}
+          variantMode={variantMode}
         />
       ) : questionType === "TRUE_FALSE" ? (
         <div className="flex justify-center items-center space-x-6 mt-6">
@@ -517,7 +549,7 @@ function QuestionWrapper(props: TextBoxProps) {
               onChange={(e) => setLocalPoints(parseInt(e.target.value, 10))}
               onBlur={() => updatePointsTrueFalse(questionId, localPoints)}
               style={{
-                width: `${localPoints?.toString().length + 5}ch`,
+                width: `${localPoints?.toString()?.length + 5}ch`,
               }}
             />
             <span className="ml-2 text-gray-600">pts</span>
@@ -530,12 +562,12 @@ function QuestionWrapper(props: TextBoxProps) {
             <table className="min-w-full bg-white">
               <thead className="h-min">
                 <tr className="border-b border-gray-200 w-full">
-                  <th className="py-2 px-4 text-left bg-gray-50 w-1/6 h-min border-r border-gray-200">
+                  <th className="py-2 px-4 text-left bg-white w-1/6 h-min border-r border-gray-200">
                     <div className="flex flex-col">
                       <p className="typography-body text-gray-600">Points</p>
                     </div>
                   </th>
-                  <th className="py-2 px-4 text-left bg-gray-50 w-full h-min">
+                  <th className="py-2 px-4 text-left bg-white w-full h-min">
                     <div className="flex justify-between">
                       <div className="flex flex-col">
                         <p className="typography-body text-gray-600">
@@ -565,7 +597,7 @@ function QuestionWrapper(props: TextBoxProps) {
                     </div>
                   </th>
                 </tr>
-                {criteriaMode && questionCriteria.points.length > 0 ? (
+                {criteriaMode && questionCriteria.points?.length > 0 ? (
                   questionCriteria.points.map((point, index) => (
                     <React.Fragment key={index}>
                       <tr
@@ -574,7 +606,7 @@ function QuestionWrapper(props: TextBoxProps) {
                           rowsRef.current[index] = el;
                         }}
                         className={
-                          index === questionCriteria.points.length - 1
+                          index === questionCriteria.points?.length - 1
                             ? ""
                             : "border-b"
                         }
@@ -648,7 +680,7 @@ function QuestionWrapper(props: TextBoxProps) {
                           )}
                         </th>
                       </tr>
-                      {index === questionCriteria.points.length - 1 &&
+                      {index === questionCriteria.points?.length - 1 &&
                         !preview && (
                           <tr className="border-t border-gray-200 w-full">
                             <td colSpan={2} className="py-2 px-4 text-left">
@@ -717,6 +749,6 @@ function QuestionWrapper(props: TextBoxProps) {
       )}
     </>
   );
-}
+};
 
 export default QuestionWrapper;

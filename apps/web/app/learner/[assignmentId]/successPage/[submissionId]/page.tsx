@@ -59,9 +59,10 @@ function SuccessPage() {
   );
   useEffect(() => {
     const fetchData = async () => {
-      const userRole = await getUser();
-      setRole(userRole.role);
-      if (userRole.role === "learner") {
+      const user = await getUser();
+      setRole(user.role);
+      setReturnUrl(user.returnUrl);
+      if (user.role === "learner") {
         // Fetch data from backend for learners
         try {
           const submissionDetails: AssignmentAttemptWithQuestions =
@@ -91,7 +92,7 @@ function SuccessPage() {
         } finally {
           setLoading(false);
         }
-      } else if (userRole.role === "author") {
+      } else if (user.role === "author") {
         // Use Zustand state for authors
         setQuestions(zustandQuestions);
         setGrade(zustandGrade);

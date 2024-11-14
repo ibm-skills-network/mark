@@ -45,6 +45,7 @@ export type UpdateQuestionStateParams = {
     criteriaIds: number[];
   };
   maxCharacters?: number;
+  variant?: QuestionVariants;
 };
 
 export type QuestionAttemptRequestWithId = QuestionAttemptRequest & {
@@ -164,6 +165,22 @@ export interface Question extends CreateQuestionRequest {
   assignmentId: number;
   questionOrder?: number[];
   choices?: Choice[];
+  variants?: QuestionVariants[];
+}
+
+export interface QuestionVariants {
+  id: number;
+  questionId: number;
+  type: QuestionType;
+  variantContent: string;
+  choices: string | Choice[];
+  maxWords?: number;
+  scoring?: Scoring;
+  answer?: boolean;
+  maxCharacters?: number;
+  createdAt: string;
+  difficultyLevel?: number;
+  variantType: "REWORDED" | "REPHRASED";
 }
 
 export interface QuestionAuthorStore extends Question {
@@ -202,6 +219,7 @@ export type GradingData = {
   numAttempts?: number;
   displayOrder?: "DEFINED" | "RANDOM";
   questionDisplay?: QuestionDisplayType;
+  questionVariationNumber: number;
   strictTimeLimit: boolean;
   updatedAt: number | undefined;
 };
@@ -238,6 +256,7 @@ export type ReplaceAssignmentRequest = {
   showQuestionScore?: boolean; // Should the question score be shown to the learner after its submission
   showSubmissionFeedback?: boolean; // Should the AI provide feedback when the learner submits a question
   updatedAt: number;
+  questionVariationNumber?: number;
 };
 
 export interface Assignment extends ReplaceAssignmentRequest {

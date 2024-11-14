@@ -142,6 +142,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
               <span className="font-semibold">Assignment attempts</span>
               <span>
                 {
+                  // if attempts are -1 or null then it's unlimited else
+                  // show the number of attempts left
                   numAttempts === -1
                     ? "Unlimited"
                     : `${attemptsLeft} attempt${

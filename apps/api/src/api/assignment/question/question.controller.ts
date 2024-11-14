@@ -35,7 +35,7 @@ export class QuestionController {
   private logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
-    private readonly questionService: QuestionService
+    private readonly questionService: QuestionService,
   ) {
     this.logger = parentLogger.child({ context: QuestionController.name });
   }
@@ -52,11 +52,11 @@ export class QuestionController {
   @ApiResponse({ status: 403 })
   createQuestion(
     @Param("assignmentId") assignmentId: number,
-    @Body() createQuestionRequestDto: CreateUpdateQuestionRequestDto
+    @Body() createQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     return this.questionService.create(
       Number(assignmentId),
-      createQuestionRequestDto
+      createQuestionRequestDto,
     );
   }
 
@@ -83,12 +83,12 @@ export class QuestionController {
   updateQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
-    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     return this.questionService.update(
       Number(assignmentId),
       Number(id),
-      updateQuestionRequestDto
+      updateQuestionRequestDto,
     );
   }
 
@@ -105,12 +105,12 @@ export class QuestionController {
   replaceQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
-    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     return this.questionService.replace(
       Number(assignmentId),
       Number(id),
-      updateQuestionRequestDto
+      updateQuestionRequestDto,
     );
   }
 
@@ -123,25 +123,6 @@ export class QuestionController {
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {
     return this.questionService.remove(Number(id));
   }
-
-  @Post("generate-question-variations")
-  @Roles(UserRole.AUTHOR)
-  @ApiOperation({ summary: "Generate question variations" })
-  @ApiBody({
-    type: Object,
-    description: "Outline and concepts for question variations",
-  })
-  @ApiResponse({ status: 200, type: [String] })
-  async generateQuestionVariations(
-    @Body() body: { outline: string; concepts: string[] }
-  ): Promise<string[]> {
-    const { outline, concepts } = body;
-    return await this.questionService.generateQuestionVariations(
-      outline,
-      concepts
-    );
-  }
-
   @Post("create-marking-rubric")
   @Roles(UserRole.AUTHOR)
   @ApiOperation({ summary: "Create marking rubric" })
@@ -153,14 +134,14 @@ export class QuestionController {
   async createMarkingRubric(
     @Body()
     body: {
-      questions: {
-        id: number;
-        questionText: string;
-        questionType: QuestionType;
-      }[];
-    }
+      questions: { id: number; questionText: string; questionType: string }[];
+      variantMode: boolean;
+    },
   ): Promise<Record<number, string>> {
-    const { questions } = body;
-    return await this.questionService.createMarkingRubric(questions);
+    const { questions, variantMode } = body;
+    return await this.questionService.createMarkingRubric(
+      questions,
+      variantMode,
+    );
   }
 }

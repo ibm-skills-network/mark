@@ -3,6 +3,7 @@ import type {
   CreateQuestionRequest,
   QuestionAuthorStore,
   QuestionType,
+  QuestionVariants,
   UpdateQuestionStateParams,
 } from "@/config/types";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
@@ -17,8 +18,12 @@ import {
   LinkIcon,
   PencilSquareIcon,
   TrashIcon,
+  PlusIcon,
 } from "@heroicons/react/24/outline";
-import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
+import {
+  ExclamationTriangleIcon,
+  SparklesIcon,
+} from "@heroicons/react/24/solid";
 import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
 import { useRouter } from "next/navigation"; // Importing useRouter for navigation
 import {
@@ -32,6 +37,8 @@ import {
 } from "react";
 import { toast } from "sonner";
 import QuestionWrapper from "../QuestionWrapper";
+import { generateQuestionVariant } from "@/lib/talkToBackend";
+import { generateTempQuestionId } from "@/lib/utils";
 
 // Props type definition for the Question component
 interface QuestionProps {
@@ -56,58 +63,76 @@ const Question: FC<QuestionProps> = ({
   isFocusedQuestion,
   preview = false,
 }) => {
-  const [toggleQuestion, setToggleQuestion] = useState<boolean>(false);
-  const [questionTitle] = useState<string>(question.question || "");
+  const [maxWordCount, setMaxWordCount] = useState<number | null>(
+    question.maxWords || null,
+  );
+  const [maxCharacters, setMaxCharacters] = useState<number | null>(
+    question.maxCharacters || null,
+  );
+
   const setQuestionTitle = useAuthorStore((state) => state.setQuestionTitle);
+  const setQuestionVariantTitle = useAuthorStore(
+    (state) => state.setQuestionVariantTitle,
+  );
+  const addVariant = useAuthorStore((state) => state.addVariant);
+  const editVariant = useAuthorStore((state) => state.editVariant);
+  const deleteVariant = useAuthorStore((state) => state.deleteVariant);
   const [newIndex, setNewIndex] = useState<number>(questionIndex);
   const [isFocused, setIsFocused] = useState(false);
   const disabledMenuButtons = [""]; // in case we want to disable some question types
   const { questionStates, setShowWordCountInput, setCountMode } =
     useQuestionStore();
+  const [variantLoading, setVariantLoading] = useState(false);
   const router = useRouter();
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId
+    (state) => state.setFocusedQuestionId,
   );
 
-  // Manage word count input visibility and mode (character or word count)
   const showWordCountInput =
-    questionStates[questionId]?.showWordCountInput || false;
-  const countMode = questionStates[questionId]?.countMode || "CHARACTER";
+    questionStates[question.id]?.showWordCountInput || false;
+  const countMode = questionStates[question.id]?.countMode || "CHARACTER";
 
-  // State to manage question scoring criteria and points
-  const [questionCriteria, setQuestionCriteria] = useState({
-    id: question.scoring?.criteria?.map((c) => c.id) || [2, 1],
+  const [toggleQuestion, setToggleQuestion] = useState<boolean>(
+    !collapse || isFocusedQuestion,
+  );
+  const [questionTitle, setQuestionTitleState] = useState<string>(
+    question.question || "",
+  );
+  const [questionType, setQuestionTypeState] = useState<QuestionType>(
+    question.type,
+  );
+  const [questionCriteria, setQuestionCriteriaState] = useState<{
+    points: number[];
+    criteriaDesc: string[];
+    criteriaIds: number[];
+  }>({
     points: question.scoring?.criteria?.map((c) => c.points) || [1, 0],
     criteriaDesc: question.scoring?.criteria?.map((c) => c.description) || [
       "Student must show their work and state the correct answer",
       "By default, learners will be given 0 points if they do not meet any of the criteria.",
     ],
     criteriaIds: question.scoring?.criteria?.map(
-      (c, index) => c.id || index + 1
+      (c, index) => c.id || index + 1,
     ) || [1, 2],
   });
-
   const [questionMaxPoints, setQuestionMaxPoints] = useState<number>(
-    question.totalPoints || 1
+    question.totalPoints || 1,
   );
-  const [questionType, setQuestionType] = useState<QuestionType>(question.type);
   const [inputValue, setInputValue] = useState<string>(
-    questionIndex.toString()
+    questionIndex.toString(),
   );
-  const [maxWordCount, setMaxWordCount] = useState<number>(
-    question.maxWords || null
-  );
-  const [maxCharacters, setmaxCharacters] = useState<number>(
-    question.maxCharacters || null
-  );
-
+  // Function to handle deleting a variant
+  const handleDeleteVariant = (variantId: number) => {
+    deleteVariant(question.id, variantId);
+  };
+  const modifyQuestion = useAuthorStore((state) => state.modifyQuestion);
   // Set initial question max points based on criteria if applicable
   useEffect(() => {
     if (
       (question.type === "TEXT" || question.type === "URL") &&
       question.scoring?.type === "CRITERIA_BASED" &&
       question.scoring?.criteria &&
-      question.scoring.criteria.length > 0
+      question.scoring.criteria?.length > 0
     ) {
       setQuestionMaxPoints(question.scoring.criteria.at(0).points);
     } else {
@@ -123,49 +148,113 @@ const Question: FC<QuestionProps> = ({
     }
   }, [collapse, isFocusedQuestion]);
 
-  // Handles updating the state of the question, reflecting changes to its properties
-  const handleUpdateQuestionState = useCallback(
-    (params: UpdateQuestionStateParams) => {
-      const updatedQuestion = {
+  // Function to update the main question state
+  const handleUpdateQuestionState = (
+    params: UpdateQuestionStateParams,
+    variantMode = false,
+  ) => {
+    if (variantMode) {
+      // Update variant state
+      const updatedData: Partial<QuestionVariants> = {};
+      if (params.questionTitle !== undefined) {
+        updatedData.variantContent = params.questionTitle;
+      }
+      if (params.questionType !== undefined) {
+        updatedData.type = params.questionType;
+      }
+      if (params.questionCriteria !== undefined) {
+        updatedData.scoring = {
+          type: "CRITERIA_BASED",
+          criteria: params.questionCriteria.criteriaDesc?.map((desc, idx) => ({
+            id: params.questionCriteria.criteriaIds[idx],
+            description: desc,
+            points: params.questionCriteria.points[idx],
+          })),
+        };
+      }
+      useAuthorStore.getState().modifyQuestion(questionId, {
+        ...question,
+        ...updatedData,
+        choices: Array.isArray(updatedData.choices)
+          ? updatedData.choices
+          : question.choices,
+      });
+    } else {
+      // Update main question state
+      const updatedQuestion: Partial<QuestionAuthorStore> = {
         id: questionId,
         totalPoints:
-          params.questionCriteria?.points !== undefined
-            ? params.questionCriteria.points[0]
-            : questionMaxPoints,
+          params.questionCriteria?.points?.[0] ?? question.totalPoints,
         question: params.questionTitle ?? questionTitle,
         type: params.questionType ?? questionType,
-        maxWords: params.maxWordCount ?? maxWordCount,
-        maxCharacters: params.maxCharacters ?? maxCharacters,
         scoring: {
-          type: "CRITERIA_BASED" as const,
-          criteria:
-            params.questionCriteria !== undefined
-              ? params.questionCriteria.criteriaDesc.map((criteria, index) => {
-                  return {
-                    id: params.questionCriteria.criteriaIds[index],
-                    description: criteria,
-                    points: params.questionCriteria.points[index],
-                  };
-                })
-              : questionCriteria.criteriaDesc.map((criteria, index) => {
-                  return {
-                    id: questionCriteria.criteriaIds[index],
-                    description: criteria,
-                    points: questionCriteria.points[index],
-                  };
-                }),
+          type: "CRITERIA_BASED",
+          criteria: params.questionCriteria
+            ? params.questionCriteria.criteriaDesc?.map((desc, index) => ({
+                id: params.questionCriteria.criteriaIds[index],
+                description: desc,
+                points: params.questionCriteria.points[index],
+              }))
+            : questionCriteria.criteriaDesc?.map((desc, index) => ({
+                id: questionCriteria.criteriaIds[index],
+                description: desc,
+                points: questionCriteria.points[index],
+              })),
         },
       };
       useAuthorStore.getState().modifyQuestion(questionId, updatedQuestion);
-      if (params.questionCriteria !== undefined) {
-        const questionOrder = useAuthorStore
-          .getState()
-          .questions.map((q) => q.id);
-        useAuthorStore.getState().setQuestionOrder(questionOrder);
-      }
-    },
-    [questionTitle, questionType, questionCriteria, maxWordCount, maxCharacters]
-  );
+    }
+  };
+
+  // Function to update a variant
+  const handleUpdateVariant = (
+    variantId: number,
+    updatedData: Partial<QuestionVariants>,
+  ) => {
+    useAuthorStore.getState().editVariant(questionId, variantId, updatedData);
+  };
+
+  // Function to handle adding a new variant
+  const handleAddVariant = () => {
+    const newVariant: QuestionVariants = {
+      id: generateTempQuestionId(),
+      questionId: question.id,
+      variantContent: question.question || "",
+      choices: [
+        {
+          choice: "",
+          points: 1,
+          feedback: "",
+          isCorrect: true,
+        },
+        {
+          choice: "",
+          points: 0,
+          feedback: "",
+          isCorrect: false,
+        },
+      ],
+      scoring: {
+        type: "CRITERIA_BASED",
+        criteria: [
+          {
+            id: 1,
+            description: "",
+            points: 1,
+          },
+          {
+            id: 2,
+            description: "",
+            points: 0,
+          },
+        ],
+      },
+      createdAt: new Date().toISOString(),
+      variantType: "REWORDED",
+      type: questionType,
+    };
+    addVariant(question.id, newVariant);
+  };
 
   // Handle changes to the question index
   const handleIndexChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,6 +269,20 @@ const Question: FC<QuestionProps> = ({
     }
   };
 
+  const handleAddVariantUsingAi = async () => {
+    setVariantLoading(true);
+    const questionsWithVariants = await generateQuestionVariant(
+      [question],
+      1,
+      question.assignmentId,
+    );
+    if (questionsWithVariants) {
+      modifyQuestion(questionId, questionsWithVariants[0]);
+    }
+
+    setVariantLoading(false);
+  };
+
   // Handle the reset of character or word counters based on the mode
   const handleResetCounters = (mode: "CHARACTER" | "WORD") => {
     if (mode === "CHARACTER") {
@@ -190,7 +293,7 @@ const Question: FC<QuestionProps> = ({
       });
     }
     if (mode === "WORD") {
-      setmaxCharacters(null);
+      setMaxCharacters(null);
       handleUpdateQuestionState({
         maxCharacters: null,
         maxWordCount: maxWordCount || 250,
@@ -206,7 +309,7 @@ const Question: FC<QuestionProps> = ({
         setNewIndex(parsedValue);
         const updatedQuestions = [...useAuthorStore.getState().questions];
         const currentQuestion = updatedQuestions.find(
-          (q) => q.id === questionId
+          (q) => q.id === questionId,
         );
         if (currentQuestion) {
           updatedQuestions.splice(questionIndex - 1, 1);
@@ -261,7 +364,7 @@ const Question: FC<QuestionProps> = ({
         icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    []
+    [],
   );
 
   const handleEditClick = (id: number) => {
@@ -283,7 +386,7 @@ const Question: FC<QuestionProps> = ({
               <input
                 type="text"
                 min={1}
-                max={useAuthorStore.getState().questions.length}
+                max={useAuthorStore.getState().questions?.length}
                 value={inputValue}
                 onChange={handleIndexChange}
                 onBlur={handleIndexBlur}
@@ -344,7 +447,7 @@ const Question: FC<QuestionProps> = ({
             >
               <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
                 <div className="py-1">
-                  {questionTypes.map((qt) => (
+                  {questionTypes?.map((qt) => (
                     <Menu.Item key={qt.value}>
                       {({ active }) => (
                         <button
@@ -352,7 +455,7 @@ const Question: FC<QuestionProps> = ({
                             if (disabledMenuButtons.includes(qt.value)) {
                               return;
                             }
-                            setQuestionType(
+                            setQuestionTypeState(
                               qt.value as
                                 | "TEXT"
                                 | "URL"
@@ -360,7 +463,7 @@ const Question: FC<QuestionProps> = ({
                                 | "UPLOAD"
                                 | "CODE"
                                 | "SINGLE_CORRECT"
-                                | "TRUE_FALSE"
+                                | "TRUE_FALSE",
                             );
                             handleUpdateQuestionState({
                               questionType: qt.value as
@@ -436,10 +539,10 @@ const Question: FC<QuestionProps> = ({
                     onClick={() => {
                       setCountMode(
                         questionId,
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
                       );
                       handleResetCounters(
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
                       );
                     }}
                   />
@@ -453,7 +556,7 @@ const Question: FC<QuestionProps> = ({
                         value={maxCharacters}
                         onKeyPress={(e) => {
                           if (e.key === "Enter") {
-                            setmaxCharacters(maxCharacters);
+                            setMaxCharacters(maxCharacters);
                             setMaxWordCount(null);
                             handleUpdateQuestionState({
                               maxCharacters: maxCharacters,
@@ -465,13 +568,13 @@ const Question: FC<QuestionProps> = ({
                           const value = parseInt(e.target.value, 10);
                           if (isNaN(value) || value <= 0) {
                             setShowWordCountInput(questionId, false);
-                            setmaxCharacters(null);
+                            setMaxCharacters(null);
                             setMaxWordCount(null);
                           } else if (value > 10000) {
-                            setmaxCharacters(10000);
+                            setMaxCharacters(10000);
                             setMaxWordCount(null);
                           } else {
-                            setmaxCharacters(value);
+                            setMaxCharacters(value);
                             setMaxWordCount(null);
                           }
                         }}
@@ -485,7 +588,7 @@ const Question: FC<QuestionProps> = ({
                           isFocused ? "focused" : "not-focused"
                         }`}
                         style={{
-                          width: `${maxCharacters?.toString().length + 1}ch`,
+                          width: `${maxCharacters?.toString()?.length + 1}ch`,
                         }}
                       />
                       <button
@@ -493,7 +596,7 @@ const Question: FC<QuestionProps> = ({
                         onClick={() => {
                           setShowWordCountInput(questionId, false);
                           setMaxWordCount(null);
-                          setmaxCharacters(null);
+                          setMaxCharacters(null);
                           handleUpdateQuestionState({
                             maxWordCount: null,
                             maxCharacters: null,
@@ -529,13 +632,13 @@ const Question: FC<QuestionProps> = ({
                           if (isNaN(value) || value <= 0) {
                             setShowWordCountInput(questionId, false);
                             setMaxWordCount(null);
-                            setmaxCharacters(null);
+                            setMaxCharacters(null);
                           } else if (value > 10000) {
                             setMaxWordCount(10000);
-                            setmaxCharacters(null);
+                            setMaxCharacters(null);
                           } else {
                             setMaxWordCount(value);
-                            setmaxCharacters(null);
+                            setMaxCharacters(null);
                           }
                         }}
                         onKeyDown={(e) => {
@@ -560,8 +663,8 @@ const Question: FC<QuestionProps> = ({
                         style={{
                           width: `${
                             isFocused
-                              ? maxWordCount?.toString().length + 2
-                              : maxWordCount?.toString().length + 1
+                              ? maxWordCount?.toString()?.length + 2
+                              : maxWordCount?.toString()?.length + 1
                           }ch`,
                         }}
                       />
@@ -569,7 +672,7 @@ const Question: FC<QuestionProps> = ({
                         onClick={() => {
                           setShowWordCountInput(questionId, false);
                           setMaxWordCount(null);
-                          setmaxCharacters(null);
+                          setMaxCharacters(null);
                           handleUpdateQuestionState({
                             maxWordCount: null,
                             maxCharacters: null,
@@ -602,10 +705,10 @@ const Question: FC<QuestionProps> = ({
                     onClick={() => {
                       setCountMode(
                         questionId,
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
                       );
                       handleResetCounters(
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
                       );
                     }}
                   />
@@ -646,14 +749,14 @@ const Question: FC<QuestionProps> = ({
                     index: questionIndex,
                     scoring: {
                       type: "CRITERIA_BASED",
-                      criteria: questionCriteria.criteriaDesc.map(
+                      criteria: questionCriteria.criteriaDesc?.map(
                         (criteria, index) => {
                           return {
                             id: questionCriteria.criteriaIds[index],
                             description: criteria,
                             points: questionCriteria.points[index],
                           };
-                        }
+                        },
                       ),
                     },
                     id: 0,
@@ -679,21 +782,160 @@ const Question: FC<QuestionProps> = ({
           )}
         </div>
       </div>
-
-      {/* Render the QuestionWrapper component if the question is toggled open */}
       {toggleQuestion && (
-        <QuestionWrapper
-          questionId={question.id}
-          questionTitle={questionTitle}
-          setQuestionTitle={setQuestionTitle}
-          questionType={questionType}
-          setQuestionType={setQuestionType}
-          questionCriteria={questionCriteria}
-          setQuestionCriteria={setQuestionCriteria}
-          handleUpdateQuestionState={handleUpdateQuestionState}
-          questionIndex={questionIndex}
-          preview={preview}
-        />
+        <>
+          <QuestionWrapper
+            questionId={question.id}
+            questionTitle={questionTitle}
+            setQuestionTitle={(title) => {
+              setQuestionTitle(title, question.id);
+              setQuestionTitleState(title);
+            }}
+            questionType={questionType}
+            setQuestionType={(type) => {
+              setQuestionTypeState(type);
+              handleUpdateQuestionState({ questionType: type });
+            }}
+            questionCriteria={questionCriteria}
+            setQuestionCriteria={(criteria) => {
+              setQuestionCriteriaState(criteria);
+              handleUpdateQuestionState({
+                questionCriteria: {
+                  points: criteria.points,
+                  criteriaDesc: criteria.criteriaDesc,
+                  criteriaIds: criteria.criteriaIds,
+                },
+              });
+            }}
+            handleUpdateQuestionState={handleUpdateQuestionState}
+            questionIndex={questionIndex}
+            preview={preview}
+            questionFromParent={question}
+            variantMode={false}
+          />
+
+          {/* Render Variants */}
+          {question.variants?.map((variant, index) => (
+            <div
+              key={variant.id}
+              className="border-t-2 flex flex-col border-gray-200 pt-4 w-full gap-y-6"
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="typography-body">Variant {index + 1}</span>
+                <button
+                  className="text-gray-500"
+                  onClick={() => handleDeleteVariant(variant.id)}
+                >
+                  <TrashIcon width={20} height={20} />
+                </button>
+              </div>
+              <QuestionWrapper
+                questionId={question.id}
+                questionTitle={variant.variantContent}
+                setQuestionTitle={(title) => {
+                  setQuestionVariantTitle(title, question.id, variant.id);
+                }}
+                questionType={variant.type || questionType}
+                setQuestionType={(type) => {
+                  handleUpdateVariant(variant.id, { type });
+                }}
+                questionCriteria={
+                  variant.scoring
+                    ? {
+                        points: variant.scoring.criteria?.map((c) => c.points),
+                        criteriaDesc: variant.scoring.criteria?.map(
+                          (c) => c.description,
+                        ),
+                        criteriaIds: variant.scoring.criteria?.map((c) => c.id),
+                      }
+                    : questionCriteria
+                }
+                setQuestionCriteria={(criteria) => {
+                  handleUpdateVariant(variant.id, {
+                    scoring: {
+                      type: "CRITERIA_BASED",
+                      criteria: criteria.criteriaDesc?.map((desc, idx) => ({
+                        id: criteria.criteriaIds[idx],
+                        description: desc,
+                        points: criteria.points[idx],
+                      })),
+                    },
+                  });
+                }}
+                handleUpdateQuestionState={(params) => {
+                  const updatedData: Partial<QuestionVariants> = {};
+                  if (params.questionTitle !== undefined) {
+                    updatedData.variantContent = params.questionTitle;
+                  }
+                  if (params.questionType !== undefined) {
+                    updatedData.type = params.questionType;
+                  }
+                  if (params.questionCriteria !== undefined) {
+                    updatedData.scoring = {
+                      type: "CRITERIA_BASED",
+                      criteria: params.questionCriteria.criteriaDesc?.map(
+                        (desc, idx) => ({
+                          id: params.questionCriteria.criteriaIds[idx],
+                          description: desc,
+                          points: params.questionCriteria.points[idx],
+                        }),
+                      ),
+                    };
+                  }
+                  handleUpdateVariant(variant.id, updatedData);
+                }}
+                questionIndex={index + 1}
+                preview={preview}
+                questionFromParent={{
+                  ...question,
+                  ...variant,
+                  choices: Array.isArray(variant.choices)
+                    ? variant.choices
+                    : [],
+                }}
+                variantMode={true}
+                variantId={variant.id}
+              />
+            </div>
+          ))}
+          {questionTitle?.length > 0 &&
+          !preview &&
+          (question.scoring?.criteria.length > 0 ||
+            question.choices?.length > 0) ? (
+            variantLoading ? (
+              <div className="flex items-center justify-center w-full gap-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              </div>
+            ) : (
+              <>
+                <div className="border-t-2 border-gray-200 w-full"></div>
+
+                <div className="flex items-center justify-center w-full gap-4">
+                  {/* Add New Variant Button */}
+                  <button
+                    onClick={handleAddVariant}
+                    className="flex items-center gap-2 border border-gray-200 rounded-md p-2 hover:bg-gray-100 py-2 px-4"
+                  >
+                    <PlusIcon className="w-4 h-4 text-gray-500" />
+                    <span className="text-gray-600 typography-body text-nowrap">
+                      Create Blank Variant
+                    </span>
+                  </button>
+                  {/* add variant using ai */}
+                  <button
+                    onClick={handleAddVariantUsingAi}
+                    className="flex items-center gap-2 bg-violet-100 border border-violet-200 rounded-md p-2 hover:bg-violet-100 py-2 px-4"
+                  >
+                    <SparklesIcon className="w-4 h-4 text-violet-800" />
+                    <span className="text-violet-800 typography-body text-nowrap font-bold">
+                      Add Variant
+                    </span>
+                  </button>
+                </div>
+              </>
+            )
+          ) : null}
+        </>
       )}
     </div>
   );

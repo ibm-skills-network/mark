@@ -6,6 +6,7 @@ import {
   Injectable,
   Param,
   Patch,
+  Post,
   Put,
   Req,
   UseGuards,
@@ -19,6 +20,7 @@ import {
   ApiTags,
   refs,
 } from "@nestjs/swagger";
+import { Prisma, Question } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -36,7 +38,11 @@ import {
 } from "./dto/get.assignment.response.dto";
 import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
-import { UpdateAssignmentQuestionsDto } from "./dto/update.questions.request.dto";
+import {
+  GenerateQuestionVariantDto,
+  QuestionDto,
+  UpdateAssignmentQuestionsDto,
+} from "./dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
 
 @ApiTags(
@@ -139,6 +145,30 @@ export class AssignmentController {
     return this.assignmentService.updateAssignmentQuestions(
       Number(id),
       updateAssignmentQuestionsDto,
+    );
+  }
+  @Post(":id/question/generate-variant")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "Generate a new variant for a question" })
+  @ApiParam({ name: "id", required: true })
+  @ApiBody({
+    type: UpdateAssignmentRequestDto,
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
+  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 403 })
+  async generateQuestionVariant(
+    @Param("id") id: number,
+    @Body() generateQuestionVariantDto: GenerateQuestionVariantDto,
+  ): Promise<
+    BaseAssignmentResponseDto & {
+      questions?: QuestionDto[];
+    }
+  > {
+    return this.assignmentService.generateVariantsFromQuestions(
+      Number(id),
+      generateQuestionVariantDto,
     );
   }
 

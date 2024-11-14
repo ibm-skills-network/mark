@@ -40,13 +40,16 @@ function AuthorHeader() {
     state.name,
   ]);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
-    questions as Question[]
+    questions as Question[],
   );
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
   const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
-    (state) => [state.setAssignmentFeedbackConfigStore]
+    (state) => [state.setAssignmentFeedbackConfigStore],
+  );
+  const questionVariationNumber = useAssignmentConfig(
+    (state) => state.questionVariationNumber,
   );
   const [submitting, setSubmitting] = useState<boolean>(false);
   useEffect(() => {
@@ -57,32 +60,36 @@ function AuthorHeader() {
         // Author store
         const mergedAuthorData = mergeData(
           useAuthorStore.getState(),
-          assignment
+          assignment,
         );
+
         const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
         setAuthorStore({
           ...cleanedAuthorData,
           // updatedAt: Date.now()
         });
-
         // Assignment Config store
         const mergedAssignmentConfigData = mergeData(
           useAssignmentConfig.getState(),
-          assignment
+          assignment,
         );
+        if (assignment.questionVariationNumber !== undefined) {
+          setAssignmentConfigStore({
+            questionVariationNumber: assignment.questionVariationNumber,
+          });
+        }
         const {
           updatedAt: authorStoreUpdatedAt,
           ...cleanedAssignmentConfigData
         } = mergedAssignmentConfigData;
         setAssignmentConfigStore({
           ...cleanedAssignmentConfigData,
-          // updatedAt: Date.now(),
         });
 
         // Assignment Feedback Config store
         const mergedAssignmentFeedbackData = mergeData(
           useAssignmentFeedbackConfig.getState(),
-          assignment
+          assignment,
         );
         const {
           updatedAt: assignmentFeedbackUpdatedAt,
@@ -107,7 +114,7 @@ function AuthorHeader() {
       // Send a single request with all the processed questions
       const success = await updateQuestions(
         activeAssignmentId,
-        processQuestions(questions)
+        processQuestions(questions),
       );
 
       if (success) {
@@ -116,7 +123,7 @@ function AuthorHeader() {
           question.alreadyInBackend = true;
         });
         router.push(
-          `/author/${activeAssignmentId}?submissionTime=${currentTime}`
+          `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
         );
       } else {
         toast.error("Couldn't publish all questions. Please try again.");

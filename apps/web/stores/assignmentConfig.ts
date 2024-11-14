@@ -7,6 +7,8 @@ import { withUpdatedAt } from "./middlewares";
 type GradingDataActions = {
   questionDisplay: QuestionDisplayType;
   setQuestionDisplay: (questionDisplay: QuestionDisplayType) => void;
+  questionVariationNumber: number;
+  setQuestionVariationNumber: (questionVariationNumber: number) => void;
   setGraded: (graded: boolean) => void;
   setNumAttempts: (numAttempts: number) => void;
   setPassingGrade: (passingGrade: number) => void;
@@ -34,6 +36,9 @@ export const useAssignmentConfig = createWithEqualityFn<
         strictTimeLimit: false,
         updatedAt: undefined,
         graded: false,
+        questionVariationNumber: 0,
+        setQuestionVariationNumber: (questionVariationNumber) =>
+          set({ questionVariationNumber }),
         questionDisplay: "ONE_PER_PAGE" as QuestionDisplayType,
         setQuestionDisplay: (questionDisplay: QuestionDisplayType) => {
           set({ questionDisplay });

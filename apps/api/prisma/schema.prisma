@@ -89,34 +89,70 @@ model Assignment {
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
 }
+enum VariantType {
+  REWORDED /// The variant is reworded
+  RANDOMIZED /// The variant is randomized
+  DIFFICULTY_ADJUSTED /// The variant is adjusted for difficulty
+}
 
 /// The Question model represents a question in an assignment
 model Question {
-  id                        Int          @id @default(autoincrement()) /// Unique identifier for the question
+  id                        Int              @id @default(autoincrement()) /// Unique identifier for the question
   totalPoints               Int /// Total points that can be scored for the question
   type                      QuestionType /// Type of question
   question                  String /// The text of the question
+  variants                  QuestionVariant[] /// AI-generated variants for this question
   maxWords                  Int? /// Optional maximum number of words allowed for a written response type question
   scoring                   Json? /// Scoring details for the question, stored as JSON
   choices                   Json? /// Possible choices for the question, stored as JSON
   answer                    Boolean? /// The correct answer for the question (used for auto grading)
   assignmentId              Int /// The ID of the assignment to which the question belongs
-  assignment                Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// The assignment to which the question belongs
+  assignment                Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// The assignment to which the question belongs
   gradingContextQuestionIds Int[] /// List of question Ids that are used as contextual questions when auto grading this question
   maxCharacters             Int? /// Maximum number of characters allowed for a written response type question
+  AssignmentAttemptQuestionVariant AssignmentAttemptQuestionVariant[]
+}
+model AssignmentAttempt {
+  id                Int                   @id @default(autoincrement())
+  assignmentId      Int
+  userId            String
+  questionResponses QuestionResponse[]
+  submitted         Boolean
+  grade             Float?
+  expiresAt         DateTime?
+  createdAt         DateTime              @default(now())
+  questionVariants  AssignmentAttemptQuestionVariant[]
 }
 
-/// This model represents an assignment attempt by a learner
-model AssignmentAttempt {
-  id                Int                @id @default(autoincrement()) /// Unique identifier for the assignment attempt
-  assignmentId      Int /// The ID of the assignment that has been submitted
-  userId            String /// The id of the user who created this attempt
-  questionResponses QuestionResponse[] /// The responses provided by the leaner for each question in the assignment (each question can have multiple responses if the question allows for)
-  submitted         Boolean /// Boolean value representing if the attempt is submitted by the learner or not
-  grade             Float? /// The overall LTI grade value (from 0.0 - 1.0) that the learner earned
-  expiresAt         DateTime? /// The DateTime at which the attempt window ends (can no longer submit it)
-  createdAt         DateTime           @default(now())
+model AssignmentAttemptQuestionVariant {
+  assignmentAttemptId Int
+  questionId          Int
+  questionVariantId   Int
+  assignmentAttempt   AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id], onDelete: Cascade)
+  questionVariant     QuestionVariant   @relation(fields: [questionVariantId], references: [id])
+  question            Question          @relation(fields: [questionId], references: [id])
+
+  @@id([assignmentAttemptId, questionId])
 }
+
+model QuestionVariant {
+  id              Int         @id @default(autoincrement())
+  questionId      Int
+  variantOf       Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  variantContent  String
+  choices         Json?
+  maxWords        Int?
+  scoring         Json?
+  answer          Boolean?
+  maxCharacters   Int?
+  createdAt       DateTime    @default(now())
+  difficultyLevel Int?
+  variantType     VariantType
+  assignmentAttemptVariants AssignmentAttemptQuestionVariant[]
+
+  @@unique([questionId, variantContent])
+}
+
 
 /// This model represents a student's response to a question
 model QuestionResponse {

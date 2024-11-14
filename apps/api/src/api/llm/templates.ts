@@ -194,11 +194,24 @@ Ensure your feedback is constructive, assisting the learner in recognizing and l
 
 {format_instructions}
 `;
-export const generateQuestionVariationsTemplate = `
-  Generate variations of the following question outline based on the provided concepts:
-  Outline: {outline}
-  Concepts: {concepts}
-  {format_instructions}
+export const generateQuestionRewordingsTemplate = `
+Generate {variation_count} variations of the following question text:
+Question: {question_text}
+Existing variations: {variants}
+
+Reword the question text to offer alternative wording different from the exisitng variations, while preserving their meaning and intent.
+{format_instructions}
+`;
+export const generateQuestionWithChoicesRewordingsTemplate = `
+Generate {variation_count} variations of the following question text and its choices:
+Question: {question_text}
+Choices: {choices_text}
+Existing variations: {variants}
+
+
+Reword the question text and each choice to offer alternative wording different from the exisitng variations, while preserving their meaning and intent.
+If rewording the choices, ensure they remain distinct and relevant to the question.
+{format_instructions}
 `;
 
 export const generateMarkingRubricTemplate = `

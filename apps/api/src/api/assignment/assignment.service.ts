@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, QuestionType } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { isNumber } from "class-validator";
 import {
   UserRole,
   type UserSession,
@@ -19,8 +20,18 @@ import type {
 } from "./dto/get.assignment.response.dto";
 import type { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
 import type { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
-import { UpdateAssignmentQuestionsDto } from "./dto/update.questions.request.dto";
-import { CreateUpdateQuestionRequestDto } from "./question/dto/create.update.question.request.dto";
+import {
+  Choice,
+  GenerateQuestionVariantDto,
+  QuestionDto,
+  UpdateAssignmentQuestionsDto,
+  VariantDto,
+  VariantType,
+} from "./dto/update.questions.request.dto";
+import {
+  CreateUpdateQuestionRequestDto,
+  Scoring,
+} from "./question/dto/create.update.question.request.dto";
 
 @Injectable()
 export class AssignmentService {
@@ -35,16 +46,36 @@ export class AssignmentService {
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession.role === UserRole.LEARNER;
 
+    // Fetch the assignment including question variants
     const result = await this.prisma.assignment.findUnique({
       where: { id },
-      include: { questions: !isLearner },
+      include: { questions: { include: { variants: !isLearner } } },
     });
 
     if (!result) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
-    // If learner then get rid of irrelevant/sensitive fields like questions, displayOrder and questionOrder
+    // Parse choices in each variant of each question if it's a string
+    if (result.questions) {
+      for (const question of result.questions) {
+        if (question.variants) {
+          for (const variant of question.variants) {
+            if (typeof variant.choices === "string") {
+              try {
+                variant.choices = JSON.parse(
+                  variant.choices,
+                ) as unknown as Prisma.JsonValue;
+              } catch (error) {
+                console.error("Error parsing choices:", error);
+                variant.choices = [];
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (isLearner) {
       result.displayOrder = undefined;
       result.questionOrder = undefined;
@@ -54,7 +85,6 @@ export class AssignmentService {
       } as LearnerGetAssignmentResponseDto;
     }
 
-    // sort the questions
     if (result.questions && result.questionOrder) {
       result.questions.sort(
         (a, b) =>
@@ -111,7 +141,6 @@ export class AssignmentService {
     updateAssignmentDto: UpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     if (updateAssignmentDto.published && updateAssignmentDto.questionOrder) {
-      // Generate grading context for questions when publishing the assignment
       await this.handleQuestionGradingContext(
         id,
         updateAssignmentDto.questionOrder,
@@ -134,18 +163,43 @@ export class AssignmentService {
   ): Promise<BaseAssignmentResponseDto> {
     const { questions } = updateAssignmentQuestionsDto;
 
-    // Fetch existing questions for the assignment
+    // Fetch existing questions with their variants in one query
     const existingQuestions = await this.prisma.question.findMany({
       where: { assignmentId },
+      include: { variants: true },
     });
 
-    // Track all processed IDs to identify which existing questions need to be deleted
-    const processedIds = new Set<number>();
+    // Map existing questions and variants for quick access
+    const existingQuestionsMap = new Map<
+      number,
+      (typeof existingQuestions)[0]
+    >();
+    for (const q of existingQuestions) existingQuestionsMap.set(q.id, q);
 
-    // A map to store the upserted questions with their original indexes
-    const upsertedQuestionsMap = new Map<number, number>();
+    const newQuestionIds = new Set<number>(questions.map((q) => q.id));
+
+    // Identify and delete questions that are no longer present
+    const questionsToDelete = existingQuestions
+      .filter((q) => !newQuestionIds.has(q.id))
+      .map((q) => q.id);
+
+    if (questionsToDelete.length > 0) {
+      await this.prisma.assignmentAttemptQuestionVariant.deleteMany({
+        where: { questionId: { in: questionsToDelete } },
+      });
+      await this.prisma.questionVariant.deleteMany({
+        where: { questionId: { in: questionsToDelete } },
+      });
+      await this.prisma.question.deleteMany({
+        where: { id: { in: questionsToDelete } },
+      });
+    }
+
+    const processedQuestionIds = new Set<number>();
+
+    // Process each question
     await Promise.all(
-      questions.map(async (question, index) => {
+      questions.map(async (question) => {
         const questionData: Prisma.QuestionUpsertArgs["create"] = {
           choices: question.choices
             ? (JSON.parse(
@@ -157,86 +211,246 @@ export class AssignmentService {
                 JSON.stringify(question.scoring),
               ) as Prisma.InputJsonValue)
             : Prisma.JsonNull,
-          answer: question.answer ?? false, // Ensure answer is provided or default to false
-          type: question.type as QuestionType, // Cast type correctly to QuestionType
-          totalPoints: question.totalPoints ?? 0, // Set a default if undefined
+          answer: question.answer ?? false,
+          type: question.type,
+          totalPoints: question.totalPoints ?? 0,
           question: question.question,
           maxWords: question.maxWords,
           maxCharacters: question.maxCharacters,
-          assignment: {
-            connect: {
-              id: assignmentId,
-            },
-          },
+          assignment: { connect: { id: assignmentId } },
         };
 
+        // Apply guard rails before database operation
         await this.applyGuardRails(
           questionData as unknown as CreateUpdateQuestionRequestDto,
         );
 
-        // Upsert the question (update if it exists, create if it doesn't)
+        // Upsert the question
         const upsertedQuestion = await this.prisma.question.upsert({
           where: { id: question.id },
-          update: {
-            ...questionData,
-          },
+          update: questionData,
           create: questionData,
         });
 
-        // Mark this ID as processed
-        processedIds.add(upsertedQuestion.id);
+        processedQuestionIds.add(upsertedQuestion.id);
 
-        // Store the upserted question ID in the map with its original index
-        upsertedQuestionsMap.set(index, upsertedQuestion.id);
+        // Handle variants
+        const existingVariants =
+          existingQuestionsMap.get(upsertedQuestion.id)?.variants || [];
+        const existingVariantsMap = new Map<
+          string,
+          (typeof existingVariants)[0]
+        >();
+        for (const v of existingVariants)
+          existingVariantsMap.set(v.variantContent, v);
+
+        const newVariantContents = new Set<string>(
+          question.variants.map((v) => v.variantContent),
+        );
+
+        // Identify and delete variants that are no longer present
+        const variantsToDelete = existingVariants.filter(
+          (v) => !newVariantContents.has(v.variantContent),
+        );
+
+        if (variantsToDelete.length > 0) {
+          await this.prisma.assignmentAttemptQuestionVariant.deleteMany({
+            where: {
+              questionVariantId: { in: variantsToDelete.map((v) => v.id) },
+            },
+          });
+          await this.prisma.questionVariant.deleteMany({
+            where: {
+              id: { in: variantsToDelete.map((v) => v.id) },
+            },
+          });
+        }
+
+        // Upsert each variant
+        await Promise.all(
+          question.variants.map(async (variant) => {
+            const existingVariant = existingVariantsMap.get(
+              variant.variantContent,
+            );
+
+            const variantData: Prisma.QuestionVariantCreateInput = {
+              variantContent: variant.variantContent,
+              choices: variant.choices
+                ? (JSON.parse(
+                    JSON.stringify(variant.choices),
+                  ) as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
+              maxWords: variant.maxWords,
+              maxCharacters: variant.maxCharacters,
+              variantType: variant.variantType,
+              createdAt: new Date(),
+              variantOf: { connect: { id: upsertedQuestion.id } },
+            };
+
+            if (existingVariant) {
+              // Check if content or choices have changed
+              const contentChanged =
+                existingVariant.variantContent !== variant.variantContent;
+              const choicesChanged =
+                JSON.stringify(existingVariant.choices) !==
+                JSON.stringify(variant.choices);
+
+              if (contentChanged || choicesChanged) {
+                // Delete and recreate the variant if content has changed
+                await this.prisma.questionVariant.delete({
+                  where: { id: existingVariant.id },
+                });
+                await this.prisma.questionVariant.create({
+                  data: variantData,
+                });
+              } else {
+                // Update existing variant
+                await this.prisma.questionVariant.update({
+                  where: { id: existingVariant.id },
+                  data: {
+                    maxWords: variant.maxWords,
+                    maxCharacters: variant.maxCharacters,
+                    variantType: variant.variantType,
+                  },
+                });
+              }
+            } else {
+              // Create new variant
+              await this.prisma.questionVariant.create({
+                data: variantData,
+              });
+            }
+          }),
+        );
       }),
     );
 
-    // Delete questions that were not processed (i.e., they were not included in the incoming DTO)
-    const questionsToDelete = existingQuestions
-      .filter((q) => !processedIds.has(q.id))
-      .map((q) => q.id);
+    const questionOrder = [...processedQuestionIds];
 
-    if (questionsToDelete.length > 0) {
-      await this.prisma.question.deleteMany({
-        where: { id: { in: questionsToDelete } },
-      });
-    }
+    // Handle grading context
+    await this.handleQuestionGradingContext(assignmentId, questionOrder);
 
-    // Construct the questionOrder array by mapping the original question array's indexes to the upserted IDs
-    const questionOrder = questions.map((_, index) =>
-      upsertedQuestionsMap.get(index),
-    );
-
-    await this.handleQuestionGradingContext(
-      assignmentId,
-      questionOrder.filter((q) => q !== undefined),
-    );
-
-    // Save the question order for the assignment
+    // Update assignment
     await this.prisma.assignment.update({
       where: { id: assignmentId },
-      data: {
-        questionOrder,
-        published: true,
-      },
+      data: { questionOrder, published: true },
     });
+
+    return { id: assignmentId, success: true };
+  }
+  async generateVariantsFromQuestions(
+    assignmentId: number,
+    generateQuestionVariantDto: GenerateQuestionVariantDto,
+  ): Promise<
+    BaseAssignmentResponseDto & {
+      questions?: QuestionDto[];
+    }
+  > {
+    const { questions, questionVariationNumber } = generateQuestionVariantDto;
+
+    await Promise.all(
+      questions.map(async (question) => {
+        if (question.variants === undefined) question.variants = [];
+        if (
+          (questions.length > 1 &&
+            question.variants?.length < questionVariationNumber) ||
+          questions.length === 1
+        ) {
+          let variantId = 1;
+          const numberOfRequiredVariants =
+            questions.length > 1
+              ? questionVariationNumber - (question.variants?.length || 0)
+              : questionVariationNumber; // if the size of the question array is 1, we need to generate the number of variants specified in the request, if its more then it means we need to generate the difference between the number of variants and the number of variants already present in the question
+
+          if (numberOfRequiredVariants <= 0) {
+            return;
+          }
+
+          const newVariants = await this.generateVariantsFromQuestion(
+            question,
+            numberOfRequiredVariants,
+          );
+          if (Array.isArray(question.variants)) {
+            question.variants.push(
+              ...(newVariants.map((variant) => ({
+                ...variant,
+                questionId: question.id,
+                id: Number(`${question.id}${variantId++}`),
+                choices: variant.choices,
+                scoring: variant.scoring,
+              })) as VariantDto[]),
+            );
+          } else {
+            question.variants = newVariants.map((variant) => ({
+              ...variant,
+              choices: variant.choices,
+              scoring: variant.scoring,
+              id: Number(`${question.id}${variantId++}`),
+              questionId: question.id,
+              variantType: variant.variantType,
+            })) as VariantDto[];
+          }
+        }
+      }),
+    );
 
     return {
       id: assignmentId,
       success: true,
+      questions,
     };
+  }
+
+  private async generateVariantsFromQuestion(
+    question: QuestionDto,
+    numberOfVariants = 1,
+  ): Promise<VariantDto[]> {
+    try {
+      if (!question) {
+        throw new HttpException(
+          "Question not found",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+      const variants = await this.llmService.generateQuestionRewordings(
+        question.question,
+        numberOfVariants,
+        question.type,
+        question.choices,
+        question.variants,
+      );
+
+      const variantData = variants.map((variant) => ({
+        questionId: question.id,
+        variantContent: variant.variantContent,
+        choices: variant.choices,
+        maxWords: question.maxWords,
+        scoring: question.scoring,
+        answer: question.answer,
+        maxCharacters: question.maxCharacters,
+        createdAt: new Date(),
+        difficultyLevel: undefined,
+        variantType: VariantType.REWORDED,
+      }));
+      return variantData;
+    } catch (error) {
+      console.error("Error generating and saving reworded variants:", error);
+      throw new HttpException(
+        "Failed to generate and save reworded variants",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   // private methods
   private createEmptyDto(): Partial<ReplaceAssignmentRequestDto> {
-    /* eslint-disable unicorn/no-null */
     return {
-      instructions: null,
-      numAttempts: null,
-      allotedTimeMinutes: null,
-      attemptsPerTimeRange: null,
-      attemptsTimeRangeHours: null,
-      displayOrder: null,
+      instructions: undefined,
+      numAttempts: undefined,
+      allotedTimeMinutes: undefined,
+      attemptsPerTimeRange: undefined,
+      attemptsTimeRangeHours: undefined,
+      displayOrder: undefined,
     };
   }
 

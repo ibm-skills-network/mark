@@ -29,7 +29,7 @@ const AttemptCard: React.FC<AttemptCardProps> = ({
   return (
     <div className="border border-gray-200 bg-white rounded p-4 mt-4 relative shadow-sm">
       <h3 className="text-lg">
-        Attempt {attemptNumber}{" "}
+        Attempt {attemptNumber}
         {isLatest && (
           <span className="text-sm font-normal text-gray-500">
             (latest attempt)
@@ -111,18 +111,12 @@ const AssignmentAttempts: React.FC = () => {
     if (attempt.createdAt && attempt.expiresAt) {
       const createdAt = new Date(attempt.createdAt);
       const expiresAt = new Date(attempt.expiresAt);
-      console.log(
-        "expiresAt.getTime() - createdAt.getTime()",
-        expiresAt.getTime() - createdAt.getTime(),
-      );
       const timeTaken = (expiresAt.getTime() - createdAt.getTime()) / 1000;
       const hours = Math.floor(timeTaken / 3600);
       const minutes = Math.floor((timeTaken % 3600) / 60);
       const seconds = Math.floor(timeTaken % 60);
       time = `${hours}h ${minutes}m ${seconds}s`;
     }
-    console.log(attempt);
-
     return {
       id: attempt.id,
       attemptNumber: sortedAttempts.length - index,

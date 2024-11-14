@@ -35,7 +35,6 @@ function MultipleChoiceQuestion({
   if (!choices || choices.length === 0) {
     return null;
   }
-
   return (
     <div className="flex flex-col gap-y-3 mt-4">
       {choices.map((choice, index) => {

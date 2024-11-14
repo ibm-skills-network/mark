@@ -15,6 +15,7 @@ import {
 } from "class-validator";
 
 //making properties optional because user might just patch one or two fields
+
 export class UpdateAssignmentRequestDto {
   @ApiProperty({
     description: "The introduction of the assignment.",

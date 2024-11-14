@@ -1,4 +1,5 @@
 import { QuestionAuthorStore } from "@/config/types";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
 
 export const processQuestions = (questions: QuestionAuthorStore[]) => {
   return questions.map((question) => {

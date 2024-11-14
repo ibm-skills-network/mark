@@ -4,12 +4,14 @@ import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import GripVertical from "@/components/svgs/GripVertical";
 import MultipleChoiceSVG from "@/components/svgs/MC";
 import type {
+  Choice,
   CreateQuestionRequest,
   Criteria,
   QuestionAuthorStore,
+  QuestionVariants,
 } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
-import { getAssignment } from "@/lib/talkToBackend";
+import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
 import {
@@ -40,6 +42,7 @@ import {
 import {
   Bars3BottomLeftIcon,
   LinkIcon,
+  SparklesIcon,
   TrashIcon,
 } from "@heroicons/react/24/solid";
 import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
@@ -54,10 +57,10 @@ import React, {
   type FC,
 } from "react";
 import { toast } from "sonner";
-import { shallow } from "zustand/shallow";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
-
+import { shallow } from "zustand/shallow";
+import Dropdown from "@/components/Dropdown";
 interface Props {
   assignmentId: number;
   defaultQuestionRetries: number;
@@ -75,7 +78,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 }) => {
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes."
+    "Are you sure you want to leave this page? You will lose any unsaved changes.",
   ); // Prompt the user before leaving the page
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
     state.focusedQuestionId,
@@ -86,11 +89,14 @@ const AuthorQuestionsPage: FC<Props> = ({
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId
+    (state) => state.activeAssignmentId,
   );
   const setActiveAssignmentId = useAuthorStore(
-    (state) => state.setActiveAssignmentId
+    (state) => state.setActiveAssignmentId,
   );
+  const [isMassVariationLoading, setIsMassVariationLoading] = useState(false);
+  const [questionVariationNumber, setQuestionVariationNumber] =
+    useState<number>(null);
   const setName = useAuthorStore((state) => state.setName);
   const focusRef = useRef(focusedQuestionId); // Ref to store the focused question ID
   const [collapseAll, setCollapseAll] = useState(false); // State to collapse all questions
@@ -133,7 +139,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    []
+    [],
   );
 
   useEffect(() => {
@@ -150,24 +156,34 @@ const AuthorQuestionsPage: FC<Props> = ({
                   (criteria: Criteria, criteriaIndex: number) => ({
                     ...criteria,
                     index: criteriaIndex + 1,
-                  })
+                  }),
                 );
+                const parsedVariants: QuestionVariants[] =
+                  question.variants?.map((variant: QuestionVariants) => ({
+                    ...variant,
+                    choices:
+                      typeof variant.choices === "string"
+                        ? (JSON.parse(variant.choices) as Choice[])
+                        : variant.choices,
+                  })) || [];
+
                 return {
                   ...question,
                   alreadyInBackend: true,
+                  variants: parsedVariants,
                   scoring: {
                     type: "CRITERIA_BASED",
                     criteria: criteriaWithId || [],
                   },
                   index: index + 1,
                 };
-              }
+              },
             );
             if (questions?.length > 0) {
-              // sort questions criteria by points before setting
               questions.forEach((question) => {
+                // parse choices in variants to make it choices object
                 question.scoring.criteria = question.scoring.criteria.sort(
-                  (a, b) => b.points - a.points
+                  (a, b) => b.points - a.points,
                 );
               });
               setQuestions(questions);
@@ -236,7 +252,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       | "TRUE_FALSE"
       | "URL"
       | "CODE"
-      | "UPLOAD"
+      | "UPLOAD",
   ) => {
     const question: CreateQuestionRequest = {
       question: "",
@@ -280,6 +296,26 @@ const AuthorQuestionsPage: FC<Props> = ({
     setFocusedQuestionId(questionId);
     handleJumpToQuestion(`item-${String(questionId)}`);
     toast.success("Question has been added!");
+  };
+
+  const handleMassVariation = async (questions: QuestionAuthorStore[]) => {
+    if (!questionVariationNumber) {
+      toast.error("Please select the number of variations to generate");
+      return;
+    }
+    setIsMassVariationLoading(true);
+    const questionsWithVariants = await generateQuestionVariant(
+      questions,
+      questionVariationNumber,
+      assignmentId,
+    );
+    if (questionsWithVariants) {
+      setQuestions(questionsWithVariants);
+      toast.success("Variants generated successfully!");
+    } else {
+      toast.error("Failed to generate variants");
+    }
+    setIsMassVariationLoading(false);
   };
 
   /**
@@ -455,7 +491,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         prevProps.question === nextProps.question &&
         prevProps.questionIndex === nextProps.questionIndex
       );
-    }
+    },
   );
 
   const SortableList = React.memo(
@@ -477,7 +513,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     },
     (prevProps, nextProps) => {
       return prevProps.questions === nextProps.questions;
-    }
+    },
   );
 
   /**
@@ -571,7 +607,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   <SortableItem
                     question={questions.find((q) => q.id === activeId)}
                     questionIndex={questions.findIndex(
-                      (q) => q.id === activeId
+                      (q) => q.id === activeId,
                     )}
                   />
                 ) : null}
@@ -623,7 +659,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                                   | "TRUE_FALSE"
                                   | "URL"
                                   | "UPLOAD"
-                                  | "CODE"
+                                  | "CODE",
                               )
                             }
                             className={`${
@@ -648,15 +684,57 @@ const AuthorQuestionsPage: FC<Props> = ({
           </div>
         </div>
         {/* If there are questions, render the collapse all button */}
+        {/* Render the collapse all button and mass variations options if there are questions */}
         {questions.length > 0 && (
           <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
-            <div className="flex items-center sticky top-4">
+            <div className="flex flex-col items-center sticky top-4 w-full p-2">
+              {/* Collapse/Expand Button */}
               <button
                 onClick={() => setCollapseAll(!collapseAll)}
-                className="p-3 border border-gray-300 rounded-lg shadow-sm hover:shadow-md transition-all bg-white duration-300 ease-in-out"
+                className="p-2 mb-2 border w-full border-gray-300 rounded-lg shadow-sm hover:shadow-md transition-all bg-white duration-300 ease-in-out"
               >
-                {collapseAll ? "Expand All" : "Collapse All"}
+                {collapseAll ? "Expand Questions" : "Collapse Questions"}
               </button>
+
+              <div className="flex flex-col w-full bg-white p-4 rounded-lg shadow-sm border border-gray-300">
+                {/* Mass Variations Section */}
+                <span className="text-lg mb-2">Mass Variations</span>
+                <Dropdown
+                  options={[1, 2, 3, 4, 5] as number[]}
+                  selectedItem={questionVariationNumber}
+                  setSelectedItem={setQuestionVariationNumber}
+                  items={[
+                    { value: 1, label: "1" },
+                    { value: 2, label: "2" },
+                    { value: 3, label: "3" },
+                    { value: 4, label: "4" },
+                    { value: 5, label: "5" },
+                  ]}
+                />
+                <p className="text-gray-500 mt-2 text-wrap">
+                  Variation(s) will automatically generate on all existing
+                  questions using AI. These variants are editable.
+                </p>
+
+                {/* Add Mass Variants Button */}
+                <button
+                  className="mt-4 px-4 py-2 bg-violet-50 text-white justify-center items-center text-wrap rounded-lg border hover:bg-violet-100 transition-colors duration-300 ease-in-out flex flex-col md:flex-row"
+                  onClick={() => {
+                    void handleMassVariation(questions);
+                  }}
+                >
+                  {isMassVariationLoading ? (
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 flex justify-center items-center"></div>
+                  ) : (
+                    <>
+                      <SparklesIcon className="w-4 h-4 mr-2 text-violet-800" />
+                      <span className="mr-2 text-violet-800">
+                        Add Mass Variants
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -830,7 +908,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     setSelectedQuestions((prevSelected: number[]) =>
       prevSelected.includes(questionId)
         ? prevSelected.filter((id: number) => id !== questionId)
-        : [...prevSelected, questionId]
+        : [...prevSelected, questionId],
     );
   };
 
@@ -848,7 +926,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     }
 
     const updatedQuestions = questions.filter(
-      (q) => !deletedQuestionIds.includes(q.id)
+      (q) => !deletedQuestionIds.includes(q.id),
     );
     updatedQuestions.forEach((q, index) => {
       q.index = index + 1;
@@ -890,7 +968,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
       onDragEnd={handleNavSortEnd}
     >
       <div
-        className={`sticky overflow-y-auto top-4 p-3 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all bg-white overflow-hidden duration-300 ease-in-out ${
+        className={`sticky top-4 p-3 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all bg-white overflow-hidden duration-300 ease-in-out ${
           handleToggleTable ? "w-full max-h-[700px]" : "w-12"
         }`}
       >
@@ -912,7 +990,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
                     setSelectedQuestions(
                       selectedQuestions.length === questions.length
                         ? []
-                        : questions.map((q) => q.id)
+                        : questions.map((q) => q.id),
                     );
                   }}
                   className="text-gray-500 hover:text-violet-600 transition-colors duration-300"

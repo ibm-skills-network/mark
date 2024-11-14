@@ -1,4 +1,9 @@
-import type { Choice, Criteria, QuestionAuthorStore } from "@/config/types";
+import type {
+  Choice,
+  Criteria,
+  QuestionAuthorStore,
+  QuestionVariants,
+} from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
 import { createRef, type RefObject } from "react";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
@@ -37,28 +42,54 @@ export type AuthorActions = {
   setCriterias: (questionId: number, criterias: Criteria[]) => Criteria[];
   addCriteria: (questionId: number, criteria: Criteria) => void;
   removeCriteria: (questionId: number, criteriaIndex: number) => void;
-  setChoices: (questionId: number, choices: Choice[]) => void;
-  addChoice: (questionId: number, choice?: boolean) => void;
   addTrueFalseChoice: (questionId: number, isTrueOrFalse: boolean) => void;
   getTrueFalsePoints: (questionId: number) => number;
   updatePointsTrueFalse: (questionId: number, points: number) => void;
   isItTrueOrFalse: (questionId: number) => boolean;
-  removeChoice: (questionId: number, choiceIndex: number) => void;
-  toggleChoice: (questionId: number, choiceIndex: number) => void;
+  setChoices: (
+    questionId: number,
+    choices: Choice[],
+    variantId?: number,
+  ) => void;
+  addChoice: (questionId: number, choice?: Choice, variantId?: number) => void;
+  removeChoice: (
+    questionId: number,
+    choiceIndex: number,
+    variantId?: number,
+  ) => void;
+  toggleChoice: (
+    questionId: number,
+    choiceIndex: number,
+    variantId?: number,
+  ) => void;
   modifyChoice: (
     questionId: number,
     choiceIndex: number,
     modifiedData: Partial<Choice>,
+    variantId?: number,
   ) => void;
   modifyChoiceFeedback: (
     questionId: number,
     choiceIndex: number,
     feedback: string,
+    variantId?: number,
   ) => void;
   setPoints: (questionId: number, points: number) => void;
   setPageState: (state: "loading" | "success" | "error") => void;
   setUpdatedAt: (updatedAt: number) => void;
   setQuestionTitle: (questionTitle: string, questionId: number) => void;
+  setQuestionVariantTitle: (
+    questionVariantTitle: string,
+    questionId: number,
+    variantId: number,
+  ) => void;
+  addVariant: (questionId: number, newVariant: QuestionVariants) => void;
+  editVariant: (
+    questionId: number,
+    variantId: number,
+    updatedData: Partial<QuestionVariants>,
+  ) => void;
+  deleteVariant: (questionId: number, variantId: number) => void;
   setQuestionOrder: (order: number[]) => void;
   setAuthorStore: (state: Partial<AuthorState>) => void;
   validate: () => boolean;
@@ -239,26 +270,52 @@ export const useAuthorStore = createWithEqualityFn<
             }),
           }));
         },
-        setChoices: (questionId, choices) => {
-          set((state) => ({
-            questions: state.questions.map((q) => {
-              if (q.id === questionId) {
-                return {
-                  ...q,
-                  choices,
-                };
-              }
-              return q;
-            }),
-          }));
-        },
+        setChoices: (questionId, choices, variantId) =>
+          set((state) => {
+            if (variantId) {
+              // Set choices for variant
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    const updatedVariants = q.variants.map((variant) => {
+                      if (variant.id === variantId) {
+                        return {
+                          ...variant,
+                          choices,
+                        };
+                      }
+                      return variant;
+                    });
+                    return {
+                      ...q,
+                      variants: updatedVariants,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            } else {
+              // Set choices for main question
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    return {
+                      ...q,
+                      choices,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            }
+          }),
         // Add or update a question's choice to be either "True" or "False"
         addTrueFalseChoice: (questionId, isTrue) => {
           return set((state) => ({
             questions: state.questions.map((q) => {
               if (q.id === questionId && q.choices) {
                 // Only update the choice and isCorrect, keep the points unchanged
-                const updatedChoices = q.choices.map((choice) => ({
+                const updatedChoices = q.choices?.map((choice) => ({
                   ...choice,
                   choice: isTrue ? "true" : "false", // Toggle between True and False
                   isCorrect: true,
@@ -319,42 +376,109 @@ export const useAuthorStore = createWithEqualityFn<
             ? true
             : false;
         },
-        addChoice: (questionId, choice) => {
-          set((state) => ({
-            questions: state.questions.map((q) => {
-              if (q.id === questionId) {
-                return {
-                  ...q,
-                  choices: [
-                    ...q.choices,
-                    {
-                      choice: "",
-                      isCorrect: false,
-                      points: q.type === "MULTIPLE_CORRECT" ? -1 : 0,
-                    },
-                  ],
-                };
-              }
-              return q;
-            }),
-          }));
-        },
-        removeChoice: (questionId, choiceIndex) => {
-          set((state) => ({
-            questions: state.questions.map((q) => {
-              if (q.id === questionId) {
-                const choices = q.choices.filter(
-                  (_, index) => index !== choiceIndex,
-                );
-                return {
-                  ...q,
-                  choices,
-                };
-              }
-              return q;
-            }),
-          }));
-        },
+        addChoice: (questionId, choice, variantId) =>
+          set((state) => {
+            if (variantId) {
+              // Update variant choices
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    const updatedVariants = q.variants.map((variant) => {
+                      if (variant.id === variantId) {
+                        return {
+                          ...variant,
+                          choices: [
+                            ...(Array.isArray(variant.choices)
+                              ? variant.choices
+                              : []),
+                            {
+                              choice: "",
+                              isCorrect: false,
+                              points:
+                                variant.type === "MULTIPLE_CORRECT" ? -1 : 0,
+                            },
+                          ],
+                        };
+                      }
+                      return variant;
+                    });
+                    return {
+                      ...q,
+                      variants: updatedVariants,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            } else {
+              // Update main question choices
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    return {
+                      ...q,
+                      choices: [
+                        ...(q.choices || []),
+                        {
+                          choice: "",
+                          isCorrect: false,
+                          points: q.type === "MULTIPLE_CORRECT" ? -1 : 0,
+                        },
+                      ],
+                    };
+                  }
+                  return q;
+                }),
+              };
+            }
+          }),
+        removeChoice: (questionId, choiceIndex, variantId) =>
+          set((state) => {
+            if (variantId) {
+              // Remove choice from variant
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    const updatedVariants = q.variants.map((variant) => {
+                      if (variant.id === variantId) {
+                        const updatedChoices = Array.isArray(variant.choices)
+                          ? variant.choices.filter(
+                              (_, index) => index !== choiceIndex,
+                            )
+                          : [];
+                        return {
+                          ...variant,
+                          choices: updatedChoices,
+                        };
+                      }
+                      return variant;
+                    });
+                    return {
+                      ...q,
+                      variants: updatedVariants,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            } else {
+              // Remove choice from main question
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    const updatedChoices = q.choices.filter(
+                      (_, index) => index !== choiceIndex,
+                    );
+                    return {
+                      ...q,
+                      choices: updatedChoices,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            }
+          }),
         toggleChoice: (questionId, choiceIndex) => {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -377,24 +501,56 @@ export const useAuthorStore = createWithEqualityFn<
             }),
           }));
         },
-        modifyChoice: (questionId, choiceIndex, modifiedData) =>
+        modifyChoice: (questionId, choiceIndex, modifiedData, variantId) =>
           set((state) => {
-            const questions = state.questions;
-            const questionIndex = questions.findIndex(
-              (q) => q.id === questionId,
-            );
-            if (questionIndex === -1) return {}; // No changes
-            const question = questions[questionIndex];
-            const choices = question.choices;
-            const choice = choices[choiceIndex];
-            const updatedChoice = { ...choice, ...modifiedData };
-            if (choice === updatedChoice) return {};
-            const updatedChoices = [...choices];
-            updatedChoices[choiceIndex] = updatedChoice;
-            const updatedQuestion = { ...question, choices: updatedChoices };
-            const updatedQuestions = [...questions];
-            updatedQuestions[questionIndex] = updatedQuestion;
-            return { questions: updatedQuestions };
+            if (variantId) {
+              // Modify choice in variant
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    const updatedVariants = q.variants.map((variant) => {
+                      if (variant.id === variantId) {
+                        const updatedChoices = Array.isArray(variant.choices)
+                          ? variant.choices.map((choice, index) =>
+                              index === choiceIndex
+                                ? { ...choice, ...modifiedData }
+                                : choice,
+                            )
+                          : variant.choices;
+                        return {
+                          ...variant,
+                          choices: updatedChoices,
+                        };
+                      }
+                      return variant;
+                    });
+                    return {
+                      ...q,
+                      variants: updatedVariants,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            } else {
+              // Modify choice in main question
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    const updatedChoices = q.choices.map((choice, index) =>
+                      index === choiceIndex
+                        ? { ...choice, ...modifiedData }
+                        : choice,
+                    );
+                    return {
+                      ...q,
+                      choices: updatedChoices,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            }
           }),
         modifyChoiceFeedback: (questionId, choiceIndex, feedback) => {
           set((state) => ({
@@ -444,6 +600,92 @@ export const useAuthorStore = createWithEqualityFn<
             ),
           }));
         },
+        setQuestionVariantTitle: (
+          questionVariantTitle,
+          questionId,
+          variantId,
+        ) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                const updatedVariants = q.variants.map((variant) => {
+                  if (variant.id === variantId) {
+                    return {
+                      ...variant,
+                      variantContent: questionVariantTitle,
+                    };
+                  }
+                  return variant;
+                });
+
+                return {
+                  ...q,
+                  variants: updatedVariants,
+                };
+              }
+              return q;
+            });
+            return { questions: updatedQuestions };
+          });
+        },
+
+        addVariant: (questionId, newVariant) =>
+          set((state) => {
+            const questionIndex = state.questions.findIndex(
+              (q) => q.id === questionId,
+            );
+            if (questionIndex === -1) return {};
+
+            const updatedQuestions = [...state.questions];
+            const question = { ...updatedQuestions[questionIndex] };
+            question.variants = [
+              ...(question.variants || []),
+              { ...newVariant },
+            ]; // Deep copy the variant array
+            updatedQuestions[questionIndex] = question;
+
+            return { questions: updatedQuestions };
+          }),
+
+        editVariant: (questionId, variantId, updatedData) =>
+          set((state) => {
+            const questionIndex = state.questions.findIndex(
+              (q) => q.id === questionId,
+            );
+            if (questionIndex === -1) {
+              console.warn(`Question with ID ${questionId} not found.`);
+              return state;
+            }
+            const updatedQuestions = [...state.questions];
+            const question = { ...updatedQuestions[questionIndex] };
+
+            const updatedVariants = question.variants.map((variant) =>
+              variant.id === variantId
+                ? { ...variant, ...updatedData }
+                : { ...variant },
+            );
+            question.variants = updatedVariants;
+            updatedQuestions[questionIndex] = question;
+            return { questions: updatedQuestions };
+          }),
+
+        deleteVariant: (questionId, variantId) =>
+          set((state) => {
+            const questionIndex = state.questions.findIndex(
+              (q) => q.id === questionId,
+            );
+            if (questionIndex === -1) return {}; // No changes if question not found
+
+            const updatedQuestions = [...state.questions];
+            const question = { ...updatedQuestions[questionIndex] };
+            question.variants = question.variants.filter(
+              (variant) => variant.id !== variantId,
+            );
+            updatedQuestions[questionIndex] = question;
+
+            return { questions: updatedQuestions };
+          }),
+
         setQuestionOrder: (order) => {
           set((state) => ({
             ...state,

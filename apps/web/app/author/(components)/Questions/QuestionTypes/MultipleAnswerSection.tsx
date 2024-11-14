@@ -1,4 +1,8 @@
-import { Choice as ChoiceType } from "@/config/types";
+import {
+  Choice,
+  Choice as ChoiceType,
+  QuestionAuthorStore,
+} from "@/config/types";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import React, { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
@@ -15,22 +19,44 @@ import { toast } from "sonner";
 import { generateRubric } from "@/lib/talkToBackend";
 import SparkleLottie from "@/app/animations/sparkleLottie";
 import { IconArrowsShuffle } from "@tabler/icons-react";
-
 interface SectionProps {
   questionId: number;
+  variantId?: number; // Add variantId
   preview?: boolean;
   questionTitle: string;
+  questionFromParent: QuestionAuthorStore;
+  addChoice: (questionId: number, choice: Choice, variantId?: number) => void;
+  removeChoice: (
+    questionId: number,
+    choiceIndex: number,
+    variantId?: number,
+  ) => void;
+  setChoices: (
+    questionId: number,
+    choices: Choice[],
+    variantId?: number,
+  ) => void;
+  modifyChoice: (
+    questionId: number,
+    choiceIndex: number,
+    updatedChoice: Partial<Choice>,
+    variantId?: number,
+  ) => void;
+  variantMode: boolean;
 }
 
-function Section({ questionId, preview, questionTitle }: SectionProps) {
-  const [addChoice, removeChoice, setChoices, modifyChoice] = useAuthorStore(
-    (state) => [
-      state.addChoice,
-      state.removeChoice,
-      state.setChoices,
-      state.modifyChoice,
-    ],
-  );
+function Section({
+  questionId,
+  variantId,
+  preview,
+  questionTitle,
+  questionFromParent: question,
+  addChoice,
+  removeChoice,
+  setChoices,
+  modifyChoice,
+  variantMode,
+}: SectionProps) {
   const [setCriteriaMode] = useQuestionStore((state) => [
     state.setCriteriaMode,
   ]);
@@ -38,16 +64,11 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
     (state) => state.questionStates[questionId]?.criteriaMode,
   );
   const [loading, setLoading] = useState(false);
-  const question = useAuthorStore(
-    (state) => state.questions.find((q) => q.id === questionId),
-    shallow,
-  );
   const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null); // To track the debounce timer
   const [backspaceCount, setBackspaceCount] = useState(0);
   if (!question) return null;
 
   const { choices, type } = question;
-
   const [localChoices, setLocalChoices] = useState(
     choices?.map((choice) => choice?.choice ?? "") || [],
   );
@@ -60,23 +81,26 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
     setLocalFeedback(choices?.map((choice) => choice?.feedback ?? "") || []);
   }, [choices]);
 
+  const handleAddChoice = () => {
+    addChoice(questionId, undefined, variantId);
+  };
+
+  // When removing a choice
+  const handleRemoveChoice = (choiceIndex: number) => {
+    removeChoice(questionId, choiceIndex, variantId);
+  };
+
+  // When modifying a choice
   const handleChoiceChange = (
     choiceIndex: number,
     updatedChoice: Partial<ChoiceType>,
   ) => {
-    if (updatedChoice.points) {
-      if (isNaN(updatedChoice.points)) return;
-      if (updatedChoice.points > 0) {
-        updatedChoice.isCorrect = true;
-      } else {
-        updatedChoice.isCorrect = false;
-      }
-    }
-    modifyChoice(questionId, choiceIndex, updatedChoice);
+    modifyChoice(questionId, choiceIndex, updatedChoice, variantId);
   };
 
-  const handleRemoveChoice = (choiceIndex: number) => {
-    removeChoice(questionId, choiceIndex);
+  // When setting choices
+  const handleSetChoices = (choices: ChoiceType[]) => {
+    setChoices(questionId, choices, variantId);
   };
 
   const handleChoiceToggle = (choiceIndex: number) => {
@@ -144,10 +168,6 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
     }
   };
 
-  const handleAddChoice = () => {
-    addChoice(questionId);
-  };
-
   const focusNextInput = (index: number, column: string) => {
     const nextIndex = index + 1;
     if (nextIndex < choices.length) {
@@ -183,23 +203,26 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
     const assignmentId = useAuthorStore.getState().activeAssignmentId;
 
     try {
-      const response = await generateRubric(questions, assignmentId);
-      // Access and parse choices JSON string based on questionId
+      const response = await generateRubric(
+        questions,
+        assignmentId,
+        variantMode,
+      );
       if (response?.[questionId]) {
         const parsedData = JSON.parse(response[questionId]) as {
           choices: ChoiceType[];
         };
-        const parsedChoices = parsedData.choices.map((choice: ChoiceType) => ({
+        const parsedChoices = parsedData.choices?.map((choice: ChoiceType) => ({
           choice: choice.choice,
           isCorrect: choice.isCorrect,
           points: choice.points,
           feedback: choice.feedback,
         }));
 
-        setChoices(questionId, parsedChoices);
-        toast.success("choices and choices generated successfully!");
+        setChoices(questionId, parsedChoices, variantId); // Pass variantId
+        toast.success("Choices generated successfully!");
       } else {
-        toast.error("No choices found in the generated choices response.");
+        toast.error("No choices found in the generated response.");
       }
     } catch (error) {
       toast.error("Failed to generate choices. Please try again.");
@@ -236,7 +259,7 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
         ]);
       } else if (choices?.some((choice) => choice?.points === 0)) {
         // if any choice has points 0, set points to -1
-        const updatedChoices = choices.map((choice) =>
+        const updatedChoices = choices?.map((choice) =>
           choice.points === 0 ? { ...choice, points: -1 } : choice,
         );
         setChoices(questionId, updatedChoices);
@@ -249,7 +272,7 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
         ]);
       } else if (choices?.some((choice) => choice?.points === -1)) {
         // if any choice has points 0, set points to -1
-        const updatedChoices = choices.map((choice) =>
+        const updatedChoices = choices?.map((choice) =>
           choice.points === -1 ? { ...choice, points: 0 } : choice,
         );
         setChoices(questionId, updatedChoices);
@@ -270,7 +293,7 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
     <div className="w-full border rounded-lg overflow-hidden bg-white">
       <table className="min-w-full text-left border-collapse">
         <thead>
-          <tr className="bg-gray-50 border-b">
+          <tr className="bg-white border-b">
             <th className="p-3 typography-body text-gray-600 border-r w-10">
               Options
             </th>
@@ -382,7 +405,7 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
                         {type === "SINGLE_CORRECT" ? (
                           <input
                             type="radio"
-                            name={`correctChoice-${questionId}`}
+                            name={`correctChoice-${question.id ?? questionId}`}
                             checked={choice.isCorrect}
                             onChange={() => handleChoiceToggle(index)}
                             disabled={preview}
@@ -445,7 +468,7 @@ function Section({ questionId, preview, questionTitle }: SectionProps) {
                             choice: localChoices[index],
                           })
                         }
-                        placeholder="Enter an choice."
+                        placeholder="Enter a choice."
                         className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
                         disabled={preview}
                         onKeyDown={(event) => {

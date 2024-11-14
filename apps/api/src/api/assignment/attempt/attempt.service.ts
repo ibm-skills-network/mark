@@ -7,6 +7,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { Assignment, Question, QuestionType } from "@prisma/client";
+import { JsonValue } from "@prisma/client/runtime/library";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
@@ -21,7 +22,10 @@ import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.quest
 import { AssignmentService } from "../assignment.service";
 import type { LearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
 import { QuestionDto } from "../dto/update.questions.request.dto";
-import { Choice } from "../question/dto/create.update.question.request.dto";
+import {
+  Choice,
+  Scoring,
+} from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
@@ -106,21 +110,77 @@ export class AttemptService {
     );
 
     await this.validateNewAttempt(assignment, userSession);
-
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
 
-    const result = await this.prisma.assignmentAttempt.create({
+    // Create the assignment attempt
+    const assignmentAttempt = await this.prisma.assignmentAttempt.create({
       data: {
         expiresAt: attemptExpiresAt,
         submitted: false,
-        assignmentId: assignmentId,
+        assignmentId,
         grade: undefined,
         userId: userSession.userId,
       },
     });
 
+    // Fetch all questions and their variants
+    const questions = await this.prisma.question.findMany({
+      where: { assignmentId },
+      include: { variants: true },
+    });
+    const randomizedQuestions = questions.map((question) => {
+      if (
+        question.type === QuestionType.SINGLE_CORRECT ||
+        question.type === QuestionType.MULTIPLE_CORRECT
+      ) {
+        if (question.variants && question.variants.length > 0) {
+          for (const variant of question.variants) {
+            if (variant.choices) {
+              variant.choices = AttemptHelper.shuffleJsonArray<Choice>(
+                typeof variant.choices === "string"
+                  ? (JSON.parse(variant.choices) as Choice[])
+                  : (variant.choices as unknown as Choice[]),
+              ) as unknown as JsonValue;
+            }
+          }
+        } else if (question.choices) {
+          question.choices = AttemptHelper.shuffleJsonArray<Choice>(
+            typeof question.choices === "string"
+              ? (JSON.parse(question.choices) as Choice[])
+              : (question.choices as unknown as Choice[]),
+          ) as unknown as JsonValue;
+        }
+      }
+      return question;
+    });
+
+    const attemptQuestionVariants = randomizedQuestions.map((question) => {
+      const selectedVariant =
+        question.variants && question.variants.length > 0
+          ? question.variants[
+              Math.floor(Math.random() * question.variants.length)
+            ]
+          : undefined;
+
+      return {
+        assignmentAttemptId: assignmentAttempt.id,
+        questionId: question.id,
+        questionVariantId: selectedVariant ? selectedVariant.id : undefined,
+      };
+    });
+
+    const validAttemptQuestionVariants = attemptQuestionVariants.filter(
+      (aqv) => aqv.questionVariantId !== undefined,
+    );
+
+    if (validAttemptQuestionVariants.length > 0) {
+      await this.prisma.assignmentAttemptQuestionVariant.createMany({
+        data: validAttemptQuestionVariants,
+      });
+    }
+
     return {
-      id: result.id,
+      id: assignmentAttempt.id,
       success: true,
     };
   }
@@ -222,7 +282,14 @@ export class AttemptService {
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
-      include: { questionResponses: true },
+      include: {
+        questionResponses: true,
+        questionVariants: {
+          include: {
+            questionVariant: true,
+          },
+        },
+      },
     });
 
     if (!assignmentAttempt) {
@@ -246,32 +313,66 @@ export class AttemptService {
 
     this.sortAssignmentQuestions(assignment as LearnerGetAssignmentResponseDto);
 
-    const questions = this.constructQuestionsWithResponses(
-      assignment.questions,
+    const questionsWithVariants = assignment.questions.map((question) => {
+      const variantMapping = assignmentAttempt.questionVariants.find(
+        (qv) => qv.questionId === question.id,
+      );
+      const variant = variantMapping?.questionVariant;
+      return {
+        id: question.id,
+        question: variant?.variantContent ?? question.question,
+        choices: variant?.choices ?? question.choices,
+        maxWords: variant?.maxWords ?? question.maxWords,
+        maxCharacters: variant?.maxCharacters ?? question.maxCharacters,
+        scoring: variant?.scoring ?? question.scoring,
+        totalPoints: question.totalPoints,
+        answer: variant?.answer ?? question.answer,
+        type: question.type,
+        assignmentId: question.assignmentId,
+        gradingContextQuestionIds: question?.gradingContextQuestionIds,
+      };
+    });
+
+    const questionsWithResponses = this.constructQuestionsWithResponses(
+      questionsWithVariants,
       assignmentAttempt.questionResponses as unknown as QuestionResponse[],
     );
+
     delete assignmentAttempt.questionResponses;
+
     if (assignment.showAssignmentScore === false) {
       delete assignmentAttempt.grade;
     }
     if (assignment.showSubmissionFeedback === false) {
-      for (const q of questions) {
+      for (const q of questionsWithResponses) {
         if (q.questionResponses[0]?.feedback) {
           delete q.questionResponses[0].feedback;
         }
       }
     }
     if (assignment.showQuestionScore === false) {
-      for (const q of questions) {
+      for (const q of questionsWithResponses) {
         if (q.questionResponses[0]?.points !== undefined) {
-          // replace the points with -1 to indicate that the points should not be shown
           q.questionResponses[0].points = -1;
         }
       }
     }
+    // randomize the order of question choices for single and multiple correct questions
+    const randomizedQuestions = questionsWithResponses.map((question) => {
+      if (
+        (question.type === QuestionType.SINGLE_CORRECT ||
+          question.type === QuestionType.MULTIPLE_CORRECT) &&
+        question.choices.length > 0
+      ) {
+        question.choices = AttemptHelper.shuffleJsonArray<Choice>(
+          question.choices,
+        );
+      }
+      return question;
+    });
     return {
       ...assignmentAttempt,
-      questions,
+      questions: randomizedQuestions,
       passingGrade: assignment.passingGrade,
     };
   }
@@ -296,22 +397,75 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     };
+
     if (role === UserRole.LEARNER) {
+      // Fetch the assignment attempt, including the selected variants
       const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
         where: { id: assignmentAttemptId },
+        include: {
+          questionVariants: {
+            select: {
+              questionId: true,
+              questionVariant: {
+                include: {
+                  variantOf: true,
+                },
+              },
+            },
+          },
+        },
       });
-      this.checkSubmissionDeadline(assignmentAttempt.expiresAt);
-      question = await this.questionService.findOne(questionId);
+      if (!assignmentAttempt) {
+        throw new NotFoundException(
+          `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+        );
+      }
+      const variantMapping = assignmentAttempt.questionVariants.find(
+        (qv) => qv.questionId === questionId,
+      );
+      if (variantMapping && variantMapping.questionVariant) {
+        const variant = variantMapping.questionVariant;
+        const baseQuestion = variant.variantOf;
+        question = {
+          id: variant.id,
+          question: variant.variantContent,
+          type: baseQuestion.type,
+          assignmentId: baseQuestion.assignmentId,
+          maxWords: variant.maxWords ?? baseQuestion.maxWords,
+          maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
+          scoring:
+            typeof variant.scoring === "string"
+              ? (JSON.parse(variant.scoring) as Scoring)
+              : ((variant.scoring as unknown as Scoring) ??
+                (typeof baseQuestion.scoring === "string"
+                  ? (JSON.parse(baseQuestion.scoring) as Scoring)
+                  : (baseQuestion.scoring as unknown as Scoring))),
+          choices:
+            typeof variant.choices === "string"
+              ? (JSON.parse(variant.choices) as Choice[])
+              : ((variant.choices as unknown as Choice[]) ??
+                (typeof baseQuestion.choices === "string"
+                  ? (JSON.parse(baseQuestion.choices) as Choice[])
+                  : (baseQuestion.choices as unknown as Choice[]))),
+
+          answer: variant.answer ?? baseQuestion.answer,
+          alreadyInBackend: true,
+          totalPoints: baseQuestion.totalPoints,
+        };
+      } else {
+        question = await this.questionService.findOne(questionId);
+      }
+
       assignmentContext = await this.getAssignmentContext(
         assignmentAttempt.assignmentId,
-        question.id,
+        questionId,
         assignmentAttemptId,
         role,
       );
     } else if (role === UserRole.AUTHOR) {
       question = authorQuestions.find((q) => q.id === questionId);
       assignmentContext = {
-        assignmentInstructions: assignmentDetails.instructions ?? "",
+        assignmentInstructions: assignmentDetails?.instructions ?? "",
         questionAnswerContext: [],
       };
     }
@@ -330,7 +484,6 @@ export class AttemptService {
         feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
       },
     });
-
     responseDto.id = result.id;
     responseDto.questionId = questionId;
     responseDto.question = question.question;
@@ -890,9 +1043,13 @@ export class AttemptService {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   } {
+    // Ensure choices is an array
+    const choices = this.parseChoices(question.choices);
+
     const learnerChoice =
       createQuestionResponseAttemptRequestDto.learnerChoices[0];
-    const correctChoice = question.choices?.find((choice) => choice.isCorrect);
+
+    const correctChoice = choices.find((choice) => choice.isCorrect);
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
 
@@ -947,8 +1104,8 @@ export class AttemptService {
 
     const learnerChoices =
       createQuestionResponseAttemptRequestDto.learnerChoices;
-    const correctChoices =
-      question.choices?.filter((choice) => choice.isCorrect) || [];
+    const choices = this.parseChoices(question.choices);
+    const correctChoices = choices.filter((choice) => choice.isCorrect) || [];
     const correctChoiceTexts = correctChoices.map((choice) => choice.choice);
     let totalPoints = 0;
     const maxPoints = correctChoices.reduce(
@@ -1074,9 +1231,43 @@ export class AttemptService {
           feedback: response.feedback,
         }));
 
-      const choices = question.choices
-        ? (JSON.parse(JSON.stringify(question.choices)) as Choice[])
-        : undefined;
+      // If choices are stored as JSON, ensure they are parsed properly into an array of objects
+      const choices: {
+        choice: string;
+        points: number;
+        feedback: string;
+        isCorrect: boolean;
+      }[] = question.choices
+        ? // eslint-disable-next-line unicorn/no-nested-ternary
+          typeof question.choices === "string"
+          ? (JSON.parse(question.choices) as {
+              choice: string;
+              points: number;
+              feedback: string;
+              isCorrect: boolean;
+            }[])
+          : (question.choices as {
+              choice: string;
+              points: number;
+              feedback: string;
+              isCorrect: boolean;
+            }[])
+        : [];
+
+      // Ensure the choices are in the expected format
+      const formattedChoices = choices.map(
+        (choice: {
+          choice: string;
+          points: number;
+          feedback: string;
+          isCorrect: boolean;
+        }) => ({
+          choice: choice.choice,
+          points: choice.points,
+          feedback: choice.feedback,
+          isCorrect: choice.isCorrect,
+        }),
+      );
 
       return {
         id: question.id,
@@ -1085,12 +1276,21 @@ export class AttemptService {
         maxCharacters: question.maxCharacters,
         type: question.type,
         question: question.question,
-        choices: choices,
+        choices: formattedChoices, // Use the formatted choices
         assignmentId: question.assignmentId,
         alreadyInBackend: true,
         questionResponses: correspondingResponses,
       };
     });
+  }
+  private parseChoices(choices: unknown): Choice[] {
+    if (!choices) {
+      return [];
+    }
+    if (typeof choices === "string") {
+      return JSON.parse(choices) as Choice[];
+    }
+    return choices as Choice[];
   }
 
   /**

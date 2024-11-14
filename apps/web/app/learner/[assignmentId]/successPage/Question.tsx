@@ -29,7 +29,6 @@ const Question: FC<Props> = ({ question, number }) => {
     learnerAnswerChoice,
     learnerFileResponse,
   } = question;
-  console.log(question);
   const showSubmissionFeedback = useLearnerStore(
     (state) => state.showSubmissionFeedback,
   );
@@ -64,7 +63,6 @@ const Question: FC<Props> = ({ question, number }) => {
     learnerResponse = learnerTextResponse;
   } else if (learnerFileResponse) {
     learnerResponse = learnerFileResponse;
-    console.log(learnerResponse);
   } else if (learnerUrlResponse) {
     learnerResponse = learnerUrlResponse;
   } else if (learnerAnswerChoice) {

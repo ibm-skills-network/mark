@@ -49,7 +49,7 @@ function Dropdown<T>({
   }, []);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative w-full" ref={dropdownRef}>
       <Tooltip distance={0} content="" disabled={true}>
         <button
           type="button"

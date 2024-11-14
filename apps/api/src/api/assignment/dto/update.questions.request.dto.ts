@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { QuestionType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   ArrayNotEmpty,
@@ -12,6 +13,12 @@ import {
   ValidateIf,
   ValidateNested,
 } from "class-validator";
+
+export enum VariantType {
+  REWORDED = "REWORDED",
+  RANDOMIZED = "RANDOMIZED",
+  DIFFICULTY_ADJUSTED = "DIFFICULTY_ADJUSTED",
+}
 
 export class Choice {
   @IsNotEmpty()
@@ -30,18 +37,6 @@ export class Choice {
   @IsOptional()
   feedback: string;
 }
-
-export class UpdateAssignmentQuestionsDto {
-  @ApiProperty({
-    description: "Array of questions for the assignment",
-    type: [Object],
-  })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => QuestionDto)
-  questions: QuestionDto[];
-}
-
 class CriteriaDto {
   @ApiProperty({ description: "Description of the criteria", type: String })
   @IsString()
@@ -54,7 +49,6 @@ class CriteriaDto {
   @IsInt()
   points: number;
 }
-
 class ScoringDto {
   @ApiProperty({ description: "Type of scoring", type: String })
   @IsString()
@@ -68,6 +62,49 @@ class ScoringDto {
   @ValidateNested({ each: true })
   @Type(() => CriteriaDto)
   criteria: CriteriaDto[];
+}
+export class VariantDto {
+  @ApiProperty({ description: "Variant content of the question", type: String })
+  @IsString()
+  variantContent: string;
+
+  @ApiProperty({
+    description: "Choices for the variant (if applicable)",
+    type: [Choice],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => Choice)
+  choices?: Choice[];
+
+  //scoring
+  @ApiPropertyOptional({
+    description: "Scoring configuration",
+    type: ScoringDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ScoringDto)
+  scoring?: ScoringDto;
+
+  @ApiPropertyOptional({ description: "Maximum words allowed", type: Number })
+  @IsOptional()
+  @IsInt()
+  maxWords?: number;
+
+  @ApiPropertyOptional({
+    description: "Maximum characters allowed",
+    type: Number,
+  })
+  @IsOptional()
+  @IsInt()
+  maxCharacters?: number;
+
+  @ApiProperty({ description: "Variant type", enum: VariantType })
+  @IsNotEmpty()
+  @IsString()
+  variantType: VariantType;
 }
 
 export class QuestionDto {
@@ -95,7 +132,7 @@ export class QuestionDto {
 
   @ApiProperty({ description: "Type of question", type: String })
   @IsString()
-  type: string;
+  type: QuestionType;
 
   @ApiProperty({ description: "Max words allowed", type: Number })
   @IsOptional()
@@ -149,5 +186,40 @@ export class QuestionDto {
   @IsString()
   success?: boolean;
 
-  //
+  @ApiProperty({
+    description:
+      "Variants of the question for reworded or difficulty-based changes",
+    type: [VariantDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => VariantDto)
+  variants?: VariantDto[];
+}
+export class GenerateQuestionVariantDto {
+  @ApiProperty({
+    description: "Question object",
+    type: QuestionDto,
+  })
+  @ValidateNested()
+  @Type(() => QuestionDto)
+  questions: QuestionDto[];
+  @ApiProperty({
+    description: "Number of variants",
+    type: Number,
+  })
+  @IsInt()
+  @IsOptional()
+  questionVariationNumber: number;
+}
+export class UpdateAssignmentQuestionsDto {
+  @ApiProperty({
+    description: "Array of questions for the assignment",
+    type: [Object],
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => QuestionDto)
+  questions: QuestionDto[];
 }
