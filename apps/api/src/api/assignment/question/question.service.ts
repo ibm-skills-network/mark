@@ -146,11 +146,13 @@ export class QuestionService {
   async createMarkingRubric(
     questions: { id: number; questionText: string; questionType: string }[],
     variantMode: boolean,
+    assignmentId: number,
   ): Promise<Record<number, string>> {
     // apply guard rails
     const markingRubric = await this.llmService.createMarkingRubric(
       questions,
       variantMode,
+      assignmentId,
     );
     const formattedMarkingRubric: Record<number, string> = {};
     for (const key in markingRubric) {

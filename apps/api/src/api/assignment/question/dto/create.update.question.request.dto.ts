@@ -28,7 +28,21 @@ export class Criteria {
   @IsString()
   description: string;
 }
-
+export interface LLMResponseQuestion {
+  question: string;
+  totalPoints: number;
+  type: QuestionType;
+  scoring: {
+    type: string;
+    criteria?: { id: number; description: string; points: number }[];
+  };
+  choices?: {
+    choice: string;
+    isCorrect: boolean;
+    points: number;
+    feedback: string;
+  }[];
+}
 export class Scoring {
   @ApiProperty({
     description: "The type of scoring.",

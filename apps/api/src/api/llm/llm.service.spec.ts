@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { PrismaService } from "src/prisma.service";
 import { Logger } from "winston";
 import { LlmService } from "./llm.service";
 
@@ -13,8 +14,12 @@ describe("LlmService", () => {
         {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: {
-            child: jest.fn().mockReturnValue({}), // assuming 'child' method returns an object in real implementation.
-          } as Partial<Logger>, // Partial<Logger> makes Logger optional, so that it's not necessary to implement every method of Logger.
+            child: jest.fn().mockReturnValue({}), // Mock implementation for winston child logger
+          } as Partial<Logger>,
+        },
+        {
+          provide: PrismaService,
+          useValue: {}, // Mock PrismaService or replace with an actual mock implementation if needed
         },
       ],
     }).compile();

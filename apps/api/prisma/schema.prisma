@@ -5,6 +5,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// prisma/schema.prisma
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -46,6 +47,39 @@ enum ScoringType {
   LOSS_PER_MISTAKE /// Points are deducted for each mistake in the assignment
   AI_GRADED /// The assignment is graded by an AI
 }
+model Job {
+  id          Int       @id @default(autoincrement())
+  userId       String
+  assignmentId Int
+  status      String
+  progress    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  result       Json?    // Add this field to store generated questions
+}
+/// This model tracks the AI usage for each assignment and usage type
+model AIUsage {
+  id                Int         @id @default(autoincrement()) /// Unique identifier for the AI usage log
+  assignmentId      Int         /// The ID of the assignment for which the AI was used
+  assignment        Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
+  usageType         AIUsageType /// Enum to define the type of AI usage (e.g., question generation, assignment generation, grading)
+  tokensIn          Int         @default(0) /// The number of tokens sent to the AI (input)
+  tokensOut         Int         @default(0) /// The number of tokens received from the AI (output)
+  usageCount        Int         @default(0) /// Tracks how many times this AI feature was used for this assignment
+  usageDetails      Json?       /// Optional field to store additional details about the AI usage
+  createdAt         DateTime    @default(now()) /// Timestamp for when the AI was used
+  updatedAt         DateTime    @updatedAt     /// Timestamp for when the usage record was last updated
+
+  @@unique([assignmentId, usageType]) /// Ensure each assignment has a unique usage record for each AI feature
+}
+
+/// Enum to track different types of AI usage
+enum AIUsageType {
+  QUESTION_GENERATION /// AI was used to generate questions
+  ASSIGNMENT_GENERATION /// AI was used to generate an entire assignment
+  ASSIGNMENT_GRADING /// AI was used for grading the assignment
+}
+
 
 /// The Group model represents a particular group of assignments (having the same groupID)
 model Group {
@@ -88,6 +122,8 @@ model Assignment {
   showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
+
+  AIUsage AIUsage[]
 }
 enum VariantType {
   REWORDED /// The variant is reworded

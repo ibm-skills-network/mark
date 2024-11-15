@@ -3,12 +3,22 @@ import type { BaseLanguageModel as BaseLLM } from "@langchain/core/language_mode
 import { PromptTemplate } from "@langchain/core/prompts";
 import { OpenAI } from "@langchain/openai";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
-import { Question, QuestionType, QuestionVariant } from "@prisma/client";
+import {
+  AIUsage,
+  AIUsageType,
+  Question,
+  QuestionType,
+  QuestionVariant,
+} from "@prisma/client";
+import { sanitize } from "isomorphic-dompurify";
 import { OpenAIModerationChain } from "langchain/chains";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import type { Logger } from "winston";
 import { z } from "zod";
+import { PrismaService } from "../../prisma.service";
+import { QuestionsToGenerate } from "../assignment/dto/post.assignment.request.dto";
+import { AssignmentTypeEnum } from "../assignment/dto/update.assignment.request.dto";
 import {
   Choice,
   QuestionDto,
@@ -22,6 +32,9 @@ import type { TextBasedQuestionResponseModel } from "./model/text.based.question
 import type { UrlBasedQuestionEvaluateModel } from "./model/url.based.question.evaluate.model";
 import type { UrlBasedQuestionResponseModel } from "./model/url.based.question.response.model";
 import {
+  generateAssignmentQuestionsFromFileAndObjectivesTemplate,
+  generateAssignmentQuestionsFromFileTemplate,
+  generateAssignmentQuestionsFromObjectivesTemplate,
   generateCodeFileUploadMarkingRubricTemplate,
   generateDocumentFileUploadMarkingRubricTemplate,
   generateImageFileUploadMarkingRubricTemplate,
@@ -44,10 +57,12 @@ export class LlmService {
   private readonly logger: Logger;
   private llm: BaseLLM;
   private tiktokenEncoding: Tiktoken;
+  static readonly llmModelName: string = "gpt-4o-2024-08-06";
 
-  static readonly llmModelName: string = "gpt-4o-2024-05-13";
-
-  constructor(@Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger) {
+  constructor(
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    private readonly prisma: PrismaService,
+  ) {
     this.logger = parentLogger.child({ context: LlmService.name });
     this.llm = new OpenAI({
       temperature: 0.5,
@@ -69,8 +84,56 @@ export class LlmService {
     );
   }
 
+  /**
+   * Sanitize the content by removing any potentially harmful or unnecessary elements.
+   * This method uses DOMPurify to remove scripts or other dangerous HTML content.
+   * @param content The content to be sanitized.
+   * @returns The sanitized content.
+   */
+  sanitizeContent(content: string): string {
+    this.logger.info("Sanitizing content...");
+    const sanitizedContent = sanitize(content);
+    this.logger.info("Content sanitized.");
+    return sanitizedContent;
+  }
+
+  /**
+   * Moderate the content using OpenAI's moderation API to detect harmful or inappropriate content.
+   * @param content The content to be moderated.
+   * @returns An object containing moderation status.
+   */
+  async moderateContent(
+    content: string,
+  ): Promise<{ flagged: boolean; details: string }> {
+    try {
+      this.logger.info("Moderating content...");
+      const moderationChain = new OpenAIModerationChain();
+      const moderationResult = await moderationChain.invoke({ input: content });
+
+      const flagged = moderationResult.output !== "No issues found.";
+      const details: string = moderationResult.output as string;
+
+      if (flagged) {
+        this.logger.warn(`Content flagged: ${details}`);
+      } else {
+        this.logger.info("Content passed moderation.");
+      }
+
+      return { flagged, details };
+    } catch (error) {
+      this.logger.error(
+        `Content moderation failed: ${(error as Error).message}`,
+      );
+      throw new HttpException(
+        "Content moderation failed",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   async generateQuestionGradingContext(
     questions: { id: number; questionText: string }[],
+    assignmentId: number,
   ): Promise<Record<number, number[]>> {
     const parser = StructuredOutputParser.fromZodSchema(
       z.array(
@@ -100,7 +163,11 @@ export class LlmService {
       },
     });
 
-    const response = await this.processPrompt(prompt);
+    const response = await this.processPrompt(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GENERATION,
+    );
     const parsedResponse = await parser.parse(response);
     const gradingContextQuestionMap: Record<number, number[]> = {};
     for (const item of parsedResponse) {
@@ -111,6 +178,7 @@ export class LlmService {
 
   async gradeFileBasedQuestion(
     fileBasedQuestionEvaluateModel: FileUploadQuestionEvaluateModel,
+    assignmentId: number,
   ): Promise<FileBasedQuestionResponseModel> {
     const {
       question,
@@ -160,7 +228,11 @@ export class LlmService {
     });
 
     // Define the format for the output as separate values instead of JSON
-    const response = await this.processPrompt(prompt);
+    const response = await this.processPrompt(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+    );
 
     // Assuming response is a single string containing points and feedback separately, e.g.:
     // "Points: 3\nFeedback: The response demonstrates a basic understanding but requires improvement."
@@ -190,6 +262,7 @@ export class LlmService {
 
   async gradeTextBasedQuestion(
     textBasedQuestionEvaluateModel: TextBasedQuestionEvaluateModel,
+    assignmentId: number,
   ): Promise<TextBasedQuestionResponseModel> {
     const {
       question,
@@ -241,8 +314,13 @@ export class LlmService {
         format_instructions: formatInstructions,
       },
     });
+    console.log("assignmentId", assignmentId);
 
-    const response = await this.processPrompt(prompt);
+    const response = await this.processPrompt(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+    );
 
     const textBasedQuestionResponseModel = (await parser.parse(
       response,
@@ -253,6 +331,7 @@ export class LlmService {
 
   async gradeUrlBasedQuestion(
     urlBasedQuestionEvaluateModel: UrlBasedQuestionEvaluateModel,
+    assignmentId: number,
   ): Promise<UrlBasedQuestionResponseModel> {
     const {
       question,
@@ -309,7 +388,11 @@ export class LlmService {
       },
     });
 
-    const response = await this.processPrompt(prompt);
+    const response = await this.processPrompt(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+    );
 
     const urlBasedQuestionResponseModel = (await parser.parse(
       response,
@@ -321,6 +404,7 @@ export class LlmService {
     questionText: string,
     variationCount: number,
     questionType: QuestionType,
+    assignmentId: number,
     choices?: {
       choice: string;
       points: number;
@@ -375,10 +459,14 @@ export class LlmService {
       },
     });
 
-    const response = await this.processPrompt(prompt);
+    const response = await this.processPrompt(
+      prompt,
+      assignmentId,
+      AIUsageType.QUESTION_GENERATION,
+    );
     const parsedResponse = await parser.parse(response);
     return parsedResponse.map((item, index) => ({
-      id: item.id ?? index,
+      id: index,
       variantContent: item.variantContent ?? "",
       choices: (item.choices ?? []).map((rewordedChoice, index_) => ({
         choice: rewordedChoice,
@@ -391,6 +479,7 @@ export class LlmService {
   async createMarkingRubric(
     questions: { id: number; questionText: string; questionType: string }[],
     variantMode: boolean,
+    assignmentId: number,
   ): Promise<
     Record<
       number,
@@ -481,7 +570,11 @@ export class LlmService {
       });
 
       try {
-        const response = await this.processPrompt(prompt);
+        const response = await this.processPrompt(
+          prompt,
+          assignmentId,
+          AIUsageType.QUESTION_GENERATION,
+        );
         const parsedResponse = await parser.parse(response);
         if (
           question.questionType === "TEXT" ||
@@ -525,6 +618,7 @@ export class LlmService {
             question.questionText,
             2, // Number of variants to generate, adjust as needed
             question.questionType as QuestionType,
+            assignmentId,
             (markingRubricMap[question.id] as { choices: Choice[] })?.choices,
           );
 
@@ -550,19 +644,249 @@ export class LlmService {
     return markingRubricMap;
   }
 
+  /**
+   * Process the file content to generate assignment questions using an LLM (e.g., ChatGPT).
+   * @param files Array of file data, each containing filename and content.
+   * @returns An array of generated questions in the required format.
+   */
+  /**
+   * Process the merged content to generate assignment questions using an LLM (e.g., ChatGPT).
+   * @param content The merged content of all files.
+   * @returns An array of generated questions.
+   */
+  async processMergedContent(
+    assignmentId: number,
+    assignmentType: AssignmentTypeEnum,
+    questionsToGenerate: QuestionsToGenerate,
+    content?: string,
+    learningObjectives?: string[],
+  ): Promise<
+    {
+      question: string;
+      totalPoints: number;
+      type: QuestionType;
+      scoring: {
+        type: string;
+        criteria?: {
+          id: number;
+          description: string;
+          points: number;
+        }[];
+      };
+      choices?: {
+        choice: string;
+        isCorrect: boolean;
+        points: number;
+        feedback: string;
+      }[];
+    }[]
+  > {
+    const response = await this.processPromptWithQuestionTemplate(
+      assignmentId,
+      assignmentType,
+      questionsToGenerate,
+      content,
+      learningObjectives,
+    );
+
+    // Return the array of generated questions
+    return response.questions as {
+      question: string;
+      totalPoints: number;
+      type: QuestionType;
+      assignmentId: number;
+      scoring: {
+        type: string;
+        criteria?: {
+          id: number;
+          description: string;
+          points: number;
+        }[];
+      };
+      choices?: {
+        choice: string;
+        isCorrect: boolean;
+        points: number;
+        feedback: string;
+      }[];
+    }[]; // Ensure the response contains a `questions` array
+  }
+
+  private async processPromptWithQuestionTemplate(
+    assignmentId: number,
+    assignmentType: AssignmentTypeEnum,
+    questionsToGenerate: QuestionsToGenerate,
+    content?: string,
+    learningObjectives?: string[],
+  ): Promise<{ questions: any[] }> {
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.object({
+        questions: z.array(
+          z.object({
+            question: z.string().describe("The question text"),
+            type: z
+              .enum([
+                "TEXT",
+                "MULTIPLE_CORRECT",
+                "SINGLE_CORRECT",
+                "TRUE_FALSE",
+              ])
+              .describe("The question type"),
+            scoring: z
+              .object({
+                type: z.enum(["CRITERIA_BASED", "AI_GRADED"]).optional(),
+                criteria: z
+                  .array(
+                    z.object({
+                      points: z
+                        .number()
+                        .int()
+                        .describe("Points for the criterion"),
+                      description: z
+                        .string()
+                        .describe("Description for this criterion"),
+                    }),
+                  )
+                  .optional(),
+              })
+              .nullable()
+              .optional()
+              .describe("Scoring criteria for text-based questions"),
+            choices: z
+              .array(
+                z.object({
+                  choice: z.string().describe("Answer choice text"),
+                  id: z.number().describe("Unique identifier for the choice"),
+                  isCorrect: z
+                    .boolean()
+                    .describe("Is this the correct answer?"),
+                  points: z
+                    .number()
+                    .int()
+                    .describe("Points assigned for this choice"),
+                  feedback: z
+                    .string()
+                    .optional()
+                    .describe("Feedback for this choice"),
+                }),
+              )
+              .nullable()
+              .optional()
+              .describe(
+                "Answer choices for MULTIPLE_CHOICE/SINGLE_CHOICE or TRUE_FALSE questions",
+              ),
+          }),
+        ),
+      }),
+    );
+    let pickGenerateAssignmentQuestionsTemplate: string;
+    if (content && learningObjectives) {
+      pickGenerateAssignmentQuestionsTemplate =
+        generateAssignmentQuestionsFromFileAndObjectivesTemplate;
+    } else if (content) {
+      pickGenerateAssignmentQuestionsTemplate =
+        generateAssignmentQuestionsFromFileTemplate;
+    } else if (learningObjectives) {
+      pickGenerateAssignmentQuestionsTemplate =
+        generateAssignmentQuestionsFromObjectivesTemplate;
+    } else {
+      throw new HttpException(
+        "Provide either content, learning objectives, or both",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const formatInstructions = parser.getFormatInstructions();
+    const promptTemplate = new PromptTemplate({
+      template: pickGenerateAssignmentQuestionsTemplate,
+      inputVariables: [],
+      partialVariables: {
+        format_instructions: formatInstructions,
+        content: content ?? "",
+        learning_objectives: JSON.stringify(learningObjectives ?? []),
+        questionsToGenerate: JSON.stringify(questionsToGenerate),
+        assignment_type: assignmentType,
+      },
+    });
+    const response = await this.processPrompt(
+      promptTemplate,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GENERATION,
+    );
+    const parsedResponse = await parser.parse(response);
+
+    return { questions: parsedResponse.questions ?? [] };
+  }
+
   // private methods
-  private async processPrompt(prompt: PromptTemplate): Promise<string> {
+  private async processPrompt(
+    prompt: PromptTemplate,
+    assignmentId: number, // Add assignmentId for tracking
+    usageType: AIUsageType, // Add usageType for AI usage tracking
+  ): Promise<string> {
     const input = await prompt.format({});
 
     // Get tokens for the input and compute token count
-    const inputTokens = this.tiktokenEncoding.encode(input);
-    this.logger.info(`Input token count: ${inputTokens.length}`);
+    const inputTokens = this.tiktokenEncoding.encode(input).length;
+    this.logger.info(`Input token count: ${inputTokens}`);
 
     const response: string = (await this.llm.invoke(input)) as string;
+
     // Get tokens for the response and compute token count
-    const responseTokens = this.tiktokenEncoding.encode(response);
-    this.logger.info(`Output token count: ${responseTokens.length}`);
+    const responseTokens = this.tiktokenEncoding.encode(response).length;
+    this.logger.info(`Output token count: ${responseTokens}`);
+
+    // Track AI usage in the database
+    await this.trackAIUsage(
+      assignmentId,
+      usageType,
+      inputTokens,
+      responseTokens,
+    );
 
     return response;
+  }
+
+  private async trackAIUsage(
+    assignmentId: number,
+    usageType: AIUsageType,
+    tokensIn: number,
+    tokensOut: number,
+  ): Promise<void> {
+    // Ensure that the assignment exists
+    const assignmentExists = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+    });
+
+    if (!assignmentExists) {
+      throw new HttpException(
+        `Assignment with ID ${assignmentId} does not exist`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Proceed with the upsert if assignment exists
+    await this.prisma.aIUsage.upsert({
+      where: {
+        assignmentId_usageType: {
+          assignmentId,
+          usageType,
+        },
+      },
+      update: {
+        tokensIn: { increment: tokensIn },
+        tokensOut: { increment: tokensOut },
+        usageCount: { increment: 1 },
+        updatedAt: new Date(),
+      },
+      create: {
+        assignmentId,
+        usageType,
+        tokensIn,
+        tokensOut,
+        usageCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
   }
 }

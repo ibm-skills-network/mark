@@ -83,10 +83,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const removeChoice = useAuthorStore((state) => state.removeChoice);
   const setChoices = useAuthorStore((state) => state.setChoices);
   const modifyChoice = useAuthorStore((state) => state.modifyChoice);
-  // Zustand store hooks to manage state
-  const toggleTitle = useQuestionStore(
-    (state) => state.questionStates[questionId]?.toggleTitle,
-  );
   const addTrueFalseChoice = useAuthorStore(
     (state) => state.addTrueFalseChoice,
   );
@@ -112,12 +108,17 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const handleSelectAnswer = (answer: boolean) => {
     addTrueFalseChoice(questionId, answer);
   };
+  const getToggleTitle = useQuestionStore((state) => state.getToggleTitle);
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
   const showCriteriaHeader = useQuestionStore(
     (state) => state.questionStates.showCriteriaHeader ?? true,
   );
   const setShowCriteriaHeader = useQuestionStore(
     (state) => state.setShowCriteriaHeader,
+  );
+  const toggleTitle = getToggleTitle(
+    questionId,
+    variantMode ? variantId : undefined,
   );
 
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
@@ -128,7 +129,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         titleRef.current &&
         !titleRef.current.contains(event.target as Node)
       ) {
-        setToggleTitle(questionId, false);
+        setToggleTitle(questionId, false, variantMode ? variantId : undefined);
         const toggleTitle = false;
         handleQuestionTitleChange(localQuestionTitle, toggleTitle);
       }
@@ -431,7 +432,11 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             }}
             placeholder="Enter your question here..."
             onBlur={() => {
-              setToggleTitle(questionId, false);
+              setToggleTitle(
+                questionId,
+                false,
+                variantMode ? variantId : undefined,
+              );
               setQuestionTitle(localQuestionTitle);
               handleUpdateQuestionState({ questionTitle: localQuestionTitle });
             }}
@@ -440,7 +445,13 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       ) : (
         <div
           className="text-gray-500 cursor-pointer w-full"
-          onClick={() => setToggleTitle(questionId, true)}
+          onClick={() =>
+            setToggleTitle(
+              questionId,
+              true,
+              variantMode ? variantId : undefined,
+            )
+          }
         >
           <MarkdownViewer
             className={`typography-body px-1 py-0.5 ${

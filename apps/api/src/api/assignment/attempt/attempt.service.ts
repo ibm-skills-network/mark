@@ -217,6 +217,7 @@ export class AttemptService {
       updateAssignmentAttemptDto.responsesForQuestions as QuestionResponse[],
       assignmentAttemptId,
       role,
+      assignmentId,
       updateAssignmentAttemptDto.authorQuestions,
       updateAssignmentAttemptDto.authorAssignmentDetails,
     );
@@ -389,6 +390,7 @@ export class AttemptService {
     questionId: number,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
     role: UserRole,
+    assignmentId: number,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
@@ -473,6 +475,7 @@ export class AttemptService {
       question,
       createQuestionResponseAttemptRequestDto,
       assignmentContext,
+      assignmentId,
     );
     const result = await this.prisma.questionResponse.create({
       data: {
@@ -551,7 +554,6 @@ export class AttemptService {
         TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
       );
     }
-
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
@@ -608,6 +610,7 @@ export class AttemptService {
     responsesForQuestions: QuestionResponse[],
     assignmentAttemptId: number,
     role: UserRole,
+    assignmentId: number,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
@@ -619,6 +622,7 @@ export class AttemptService {
           questionId,
           cleanedQuestionResponse,
           role,
+          assignmentId,
           authorQuestions,
           assignmentDetails,
         );
@@ -807,6 +811,7 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
+    assignmentId: number,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string | { filename: string; content: string }[];
@@ -818,6 +823,7 @@ export class AttemptService {
           question.type,
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
+          assignmentId,
         );
       }
       case QuestionType.UPLOAD:
@@ -835,6 +841,7 @@ export class AttemptService {
           question,
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
+          assignmentId,
         );
       }
       case QuestionType.TRUE_FALSE: {
@@ -896,6 +903,7 @@ export class AttemptService {
     );
     const model = await this.llmService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,
+      question.assignmentId,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -915,6 +923,7 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
+    assignmentId: number,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -936,6 +945,7 @@ export class AttemptService {
 
     const model = await this.llmService.gradeTextBasedQuestion(
       textBasedQuestionEvaluateModel,
+      assignmentId,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -954,6 +964,7 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
+    assignmentId: number,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -984,6 +995,7 @@ export class AttemptService {
 
     const model = await this.llmService.gradeUrlBasedQuestion(
       urlBasedQuestionEvaluateModel,
+      assignmentId,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();

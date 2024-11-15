@@ -2,7 +2,7 @@
 
 import MarkdownViewer from "@/components/MarkdownViewer";
 import type { QuestionStore } from "@/config/types";
-import { getFeedbackColors } from "@/lib/utils";
+import { getFeedbackColors, parseLearnerResponse } from "@/lib/utils";
 import { useLearnerStore } from "@/stores/learner";
 import { motion } from "framer-motion";
 import { FC, useMemo, useState } from "react";
@@ -16,6 +16,13 @@ interface HighestScoreResponseType {
   points: number;
   feedback: { feedback: string }[];
 }
+
+export type LearnerResponseType =
+  | string
+  | string[]
+  | boolean
+  | { filename: string; content: string }[]
+  | undefined;
 
 const Question: FC<Props> = ({ question, number }) => {
   const {
@@ -52,88 +59,63 @@ const Question: FC<Props> = ({ question, number }) => {
 
   const questionResponse = questionResponses?.[0];
 
-  // Determine the learner's response, falling back to learnerResponse if it exists in zustand for author
-  let learnerResponse:
-    | string
-    | string[]
-    | boolean
-    | { filename: string; content: string }[]
-    | undefined = undefined;
-  if (learnerTextResponse) {
-    learnerResponse = learnerTextResponse;
-  } else if (learnerFileResponse) {
-    learnerResponse = learnerFileResponse;
-  } else if (learnerUrlResponse) {
-    learnerResponse = learnerUrlResponse;
-  } else if (learnerAnswerChoice) {
-    learnerResponse = learnerAnswerChoice;
-  } else if (learnerChoices && learnerChoices.length > 0) {
-    learnerResponse = learnerChoices;
-  } else if (questionResponse?.learnerResponse) {
-    try {
-      learnerResponse = JSON.parse(
-        questionResponse?.learnerResponse,
-      ) as string[];
-    } catch (e) {
-      learnerResponse = questionResponse?.learnerResponse;
-    }
-  }
+  // Determine the learner's response
+  const learnerResponse: LearnerResponseType =
+    learnerTextResponse ??
+    learnerFileResponse ??
+    learnerUrlResponse ??
+    learnerAnswerChoice ??
+    (learnerChoices && learnerChoices.length > 0
+      ? learnerChoices
+      : undefined) ??
+    (questionResponse?.learnerResponse
+      ? parseLearnerResponse(questionResponse.learnerResponse)
+      : undefined);
 
   // Function to display the learner's answer based on the question type
   const renderLearnerAnswer = () => {
-    if (type === "TEXT" && learnerResponse) {
+    if (
+      type === "TEXT" &&
+      learnerResponse &&
+      (typeof learnerResponse === "string" ||
+        typeof learnerResponse === "boolean")
+    ) {
       return (
         <MarkdownViewer className="text-gray-800">
-          {typeof learnerResponse === "string" ||
-          typeof learnerResponse === "boolean"
-            ? learnerResponse.toString()
-            : Array.isArray(learnerResponse)
-              ? learnerResponse.join(", ")
-              : learnerResponse}
+          {learnerResponse.toString()}
         </MarkdownViewer>
       );
-    }
-    if (type === "URL" && learnerResponse) {
+    } else if (type === "URL" && typeof learnerResponse === "string") {
       return (
         <a
-          href={learnerResponse as string}
+          href={learnerResponse}
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-600 underline break-all"
         >
-          {typeof learnerResponse === "string" ||
-          typeof learnerResponse === "boolean"
-            ? learnerResponse.toString()
-            : Array.isArray(learnerResponse)
-              ? learnerResponse.join(", ")
-              : JSON.stringify(learnerResponse)}
+          {learnerResponse}
         </a>
       );
-    }
-    if (
+    } else if (
       (type === "SINGLE_CORRECT" || type === "MULTIPLE_CORRECT") &&
-      Array.isArray(learnerResponse) &&
-      learnerResponse.every((choice) => typeof choice === "string")
+      Array.isArray(learnerResponse)
     ) {
       return (
         <ul className="list-disc ml-5 text-gray-800">
-          {learnerResponse.map((choice: string, idx: number) => (
+          {(learnerResponse as string[]).map((choice: string, idx: number) => (
             <li key={idx} className="font-bold">
               {choice}
             </li>
           ))}
         </ul>
       );
-    }
-    if (type === "TRUE_FALSE") {
+    } else if (type === "TRUE_FALSE") {
       return (
         <p className={`text-gray-800 font-bold`}>
           {learnerResponse ? "True" : "False"}
         </p>
       );
-    }
-    if (type === "CODE" || type === "IMAGES" || type === "UPLOAD") {
-      // Check if learnerFileResponse is defined and is an array
+    } else if (type === "CODE" || type === "IMAGES" || type === "UPLOAD") {
       if (Array.isArray(learnerResponse) && learnerResponse.length > 0) {
         return (
           <ul className="list-disc ml-5 text-gray-800">
@@ -167,11 +149,11 @@ const Question: FC<Props> = ({ question, number }) => {
           </p>
         );
       }
+    } else {
+      return (
+        <p className="text-gray-800">No answer was provided by the learner.</p>
+      );
     }
-
-    return (
-      <p className="text-gray-800">No answer was provided by the learner.</p>
-    );
   };
 
   return (

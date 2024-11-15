@@ -101,6 +101,10 @@ export class VariantDto {
   @IsInt()
   maxCharacters?: number;
 
+  @ApiProperty({ description: "ID of the variant", type: Number })
+  @IsInt()
+  id: number;
+
   @ApiProperty({ description: "Variant type", enum: VariantType })
   @IsNotEmpty()
   @IsString()

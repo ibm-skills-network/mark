@@ -33,9 +33,11 @@ const Section = ({
         )}
       </div>
       <MarkdownViewer className="text-gray-600">
-        {content.replace(/<\/?[^>]+(>|$)/g, "").trim() === ""
-          ? "Not set"
-          : content}
+        {content
+          ? content.replace(/<\/?[^>]+(>|$)/g, "").trim() === ""
+            ? "Not set"
+            : content
+          : "Not set"}
       </MarkdownViewer>
     </div>
   );

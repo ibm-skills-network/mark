@@ -1,3 +1,4 @@
+import { extname } from "node:path";
 import {
   Body,
   Controller,
@@ -9,13 +10,17 @@ import {
   Patch,
   Post,
   Put,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
-import { UserRole } from "../../..//auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSessionRequest,
+} from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
 import { ASSIGNMENT_SCHEMA_URL } from "../constants";
 import { QuestionDto } from "../dto/update.questions.request.dto";
@@ -137,11 +142,13 @@ export class QuestionController {
       questions: { id: number; questionText: string; questionType: string }[];
       variantMode: boolean;
     },
+    @Req() request: UserSessionRequest,
   ): Promise<Record<number, string>> {
     const { questions, variantMode } = body;
     return await this.questionService.createMarkingRubric(
       questions,
       variantMode,
+      request.userSession.assignmentId,
     );
   }
 }

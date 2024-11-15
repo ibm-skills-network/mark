@@ -25,9 +25,9 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     allotedTimeMinutes: assignmentConfigstate.allotedTimeMinutes,
     displayOrder: assignmentConfigstate.displayOrder,
     strictTimeLimit: assignmentConfigstate.strictTimeLimit,
-    introduction: authorState.introduction,
-    instructions: authorState.instructions,
-    gradingCriteriaOverview: authorState.gradingCriteriaOverview,
+    introduction: authorState.introduction ?? "",
+    instructions: authorState.instructions ?? "",
+    gradingCriteriaOverview: authorState.gradingCriteriaOverview ?? "",
     name: authorState.name,
     id: assignmentId,
   };

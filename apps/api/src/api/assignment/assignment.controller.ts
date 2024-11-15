@@ -1,14 +1,18 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Inject,
   Injectable,
+  NotFoundException,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Put,
   Req,
+  Sse,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -20,8 +24,10 @@ import {
   ApiTags,
   refs,
 } from "@nestjs/swagger";
-import { Prisma, Question } from "@prisma/client";
+import { Prisma, Question, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { interval, Observable } from "rxjs";
+import { map, mergeMap } from "rxjs/operators";
 import { Logger } from "winston";
 import {
   UserRole,
@@ -36,6 +42,7 @@ import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
+import { QuestionGenerationPayload } from "./dto/post.assignment.request.dto";
 import { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
 import {
@@ -44,6 +51,7 @@ import {
   UpdateAssignmentQuestionsDto,
 } from "./dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "./guards/assignment.access.control.guard";
+import { LLMResponseQuestion } from "./question/dto/create.update.question.request.dto";
 
 @ApiTags(
   "Assignments (All endpoints need a user-session header (injected using the API Gateway)",
@@ -191,5 +199,111 @@ export class AssignmentController {
       Number(id),
       replaceAssignmentRequestDto,
     );
+  }
+
+  @Get("jobs/:jobId/status")
+  async getJobStatus(@Param("jobId", ParseIntPipe) jobId: number): Promise<{
+    status: string;
+    progress: string;
+    questions?: LLMResponseQuestion[];
+  }> {
+    const job = await this.assignmentService.getJobStatus(jobId);
+    if (!job) {
+      throw new NotFoundException("Job not found");
+    }
+    return job.status === "Completed"
+      ? {
+          status: job.status,
+          progress: job.progress,
+          questions: job.result as unknown as LLMResponseQuestion[],
+        }
+      : { status: job.status, progress: job.progress };
+  }
+
+  @Sse("jobs/:jobId/status-stream")
+  sendJobStatus(@Param("jobId") jobId: number): Observable<MessageEvent> {
+    return interval(1000).pipe(
+      mergeMap(async () => {
+        const job = await this.assignmentService.getJobStatus(jobId);
+        if (!job) {
+          throw new NotFoundException("Job not found");
+        }
+        return { data: { status: job.status, progress: job.progress } };
+      }),
+      map((data) => ({ data }) as MessageEvent),
+    );
+  }
+  @Post(":assignmentId/upload-files")
+  @ApiOperation({ summary: "Upload contents of files for the assignment" })
+  @ApiBody({
+    description: "Upload file contents for an assignment",
+    schema: {
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              filename: { type: "string" },
+              content: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Files content uploaded successfully",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Invalid file contents or no contents",
+  })
+  async uploadFileContents(
+    @Param("assignmentId") assignmentId: number,
+    @Body() body: QuestionGenerationPayload,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ message: string; jobId: number }> {
+    const {
+      fileContents,
+      learningObjectives,
+      assignmentType,
+      questionsToGenerate,
+      assignmentId: assignmentIdNumber,
+    } = body;
+
+    if (!fileContents && !learningObjectives) {
+      throw new BadRequestException(
+        "Either file contents or learning objectives are required",
+      );
+    }
+    if (Number.isNaN(assignmentIdNumber)) {
+      throw new BadRequestException("Invalid assignment ID");
+    }
+    // Create a new job in the database
+    const userId = request.userSession.userId;
+    if (typeof userId !== "string" || userId.trim() === "") {
+      throw new BadRequestException("Invalid user ID");
+    }
+
+    // Create a new job in the database
+    const job = await this.assignmentService.createJob(
+      assignmentIdNumber,
+      userId,
+    );
+    // Start the job processing
+    void this.assignmentService.handleFileContents(
+      assignmentIdNumber,
+      job.id,
+      assignmentType,
+      questionsToGenerate,
+      fileContents,
+      learningObjectives,
+    );
+
+    // Start the worker thread (as previously discussed)
+    return { message: "File processing started", jobId: job.id };
   }
 }

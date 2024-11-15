@@ -1,10 +1,12 @@
+import * as fs from "node:fs/promises"; // Use fs/promises to read files asynchronously
 import {
+  BadRequestException,
   HttpException,
   HttpStatus,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Job, Prisma, QuestionType } from "@prisma/client";
 import { isNumber } from "class-validator";
 import {
   UserRole,
@@ -18,8 +20,12 @@ import type {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "./dto/get.assignment.response.dto";
+import { QuestionsToGenerate } from "./dto/post.assignment.request.dto";
 import type { ReplaceAssignmentRequestDto } from "./dto/replace.assignment.request.dto";
-import type { UpdateAssignmentRequestDto } from "./dto/update.assignment.request.dto";
+import type {
+  AssignmentTypeEnum,
+  UpdateAssignmentRequestDto,
+} from "./dto/update.assignment.request.dto";
 import {
   Choice,
   GenerateQuestionVariantDto,
@@ -30,6 +36,7 @@ import {
 } from "./dto/update.questions.request.dto";
 import {
   CreateUpdateQuestionRequestDto,
+  LLMResponseQuestion,
   Scoring,
 } from "./question/dto/create.update.question.request.dto";
 
@@ -40,6 +47,22 @@ export class AssignmentService {
     private readonly llmService: LlmService,
   ) {}
 
+  async createJob(assignmentId: number, userId: string): Promise<Job> {
+    return await this.prisma.job.create({
+      data: {
+        assignmentId,
+        userId,
+        status: "Pending",
+        progress: "Job created",
+      },
+    });
+  }
+
+  async getJobStatus(jobId: number): Promise<Job> {
+    return await this.prisma.job.findUnique({
+      where: { id: jobId },
+    });
+  }
   async findOne(
     id: number,
     userSession: UserSession,
@@ -134,6 +157,128 @@ export class AssignmentService {
       id: result.id,
       success: true,
     };
+  }
+
+  /**
+   * Handles the uploaded files by processing their content asynchronously.
+   * @param assignmentId The id of the assignment.
+   * @param files The uploaded files array.
+   * @param jobId The ID of the job to update status and progress.
+   */
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async handleFileContents(
+    assignmentId: number,
+    jobId: number,
+    assignmentType: AssignmentTypeEnum,
+    questionsToGenerate: QuestionsToGenerate,
+    files?: { filename: string; content: string }[],
+    learningObjectives?: string[],
+  ): Promise<void> {
+    // Start the job processing asynchronously
+    setImmediate(() => {
+      this.processJob(
+        assignmentId,
+        jobId,
+        assignmentType,
+        questionsToGenerate,
+        files,
+        learningObjectives,
+      ).catch((error) => {
+        console.error(`Error processing job ID ${jobId}:`, error);
+      });
+    });
+  }
+  private async processJob(
+    assignmentId: number,
+    jobId: number,
+    assignmentType: AssignmentTypeEnum,
+    questionsToGenerate: QuestionsToGenerate,
+    files?: { filename: string; content: string }[],
+    learningObjectives?: string[],
+  ): Promise<void> {
+    try {
+      let content = "";
+      if (files) {
+        // Update progress
+        await this.prisma.job.update({
+          where: { id: jobId },
+          data: {
+            progress: "Mark is organizing the notes... merging file contents.",
+          },
+        });
+        // Merge all file contents into a single string
+        const mergedContent = files.map((file) => file.content).join("\n");
+
+        await this.prisma.job.update({
+          where: { id: jobId },
+          data: {
+            progress:
+              "Mark is proofreading the content... sanitizing material.",
+          },
+        });
+        // Sanitize the merged content
+        content = this.llmService.sanitizeContent(mergedContent);
+      }
+      // // Moderate the content
+      // const moderationResult = await this.llmService.moderateContent(
+      //   sanitizedContent,
+      // );
+      // if (moderationResult.flagged) {
+      //   await this.prisma.job.update({
+      //     where: { id: jobId },
+      //     data: {
+      //       status: 'Failed',
+      //       progress: 'Content contains prohibited material',
+      //     },
+      //   });
+      //   console.warn(`Job ID ${jobId} failed due to flagged content`);
+      //   return;
+      // }
+
+      // await this.prisma.job.update({
+      //   where: { id: jobId },
+      //   data: {
+      //     progress: 'Content passed moderation, processing with LLM...',
+      //   },
+      // });
+      // Add message before LLM processing, which takes the longest
+      await this.prisma.job.update({
+        where: { id: jobId },
+        data: {
+          progress: "Mark is thinking... generating questions.",
+        },
+      });
+
+      const llmResponse = (await this.llmService.processMergedContent(
+        assignmentId,
+        assignmentType,
+        questionsToGenerate,
+        content,
+        learningObjectives,
+      )) as LLMResponseQuestion[];
+
+      // Update job status and store the generated questions
+      await this.prisma.job.update({
+        where: { id: jobId },
+        data: {
+          status: "Completed",
+          progress:
+            "Mark has prepared the questions. Job completed successfully.",
+          result: JSON.stringify(llmResponse),
+        },
+      });
+    } catch (error) {
+      console.error(`Error processing job ID ${jobId}:`, error);
+
+      // Update job status to 'Failed'
+      await this.prisma.job.update({
+        where: { id: jobId },
+        data: {
+          status: "Failed",
+          progress: "Mark hit a snag, we are sorry for the inconvenience",
+        },
+      });
+    }
   }
 
   async update(
@@ -375,7 +520,9 @@ export class AssignmentService {
               ...(newVariants.map((variant) => ({
                 ...variant,
                 questionId: question.id,
-                id: Number(`${question.id}${variantId++}`),
+                id: Number(
+                  `${question.id}${question.variants.length + variantId++}`,
+                ),
                 choices: variant.choices,
                 scoring: variant.scoring,
               })) as VariantDto[]),
@@ -416,11 +563,13 @@ export class AssignmentService {
         question.question,
         numberOfVariants,
         question.type,
+        question.assignmentId,
         question.choices,
         question.variants,
       );
 
       const variantData = variants.map((variant) => ({
+        id: variant.id,
         questionId: question.id,
         variantContent: variant.variantContent,
         choices: variant.choices,
@@ -487,6 +636,7 @@ export class AssignmentService {
     const questionGradingContextMap =
       await this.llmService.generateQuestionGradingContext(
         questionsForGradingContext,
+        assignmentId,
       );
 
     const updates = [];

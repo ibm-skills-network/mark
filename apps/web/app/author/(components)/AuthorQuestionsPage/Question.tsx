@@ -75,7 +75,7 @@ const Question: FC<QuestionProps> = ({
     (state) => state.setQuestionVariantTitle,
   );
   const addVariant = useAuthorStore((state) => state.addVariant);
-  const editVariant = useAuthorStore((state) => state.editVariant);
+  const replaceQuestion = useAuthorStore((state) => state.replaceQuestion);
   const deleteVariant = useAuthorStore((state) => state.deleteVariant);
   const [newIndex, setNewIndex] = useState<number>(questionIndex);
   const [isFocused, setIsFocused] = useState(false);
@@ -101,6 +101,8 @@ const Question: FC<QuestionProps> = ({
   const [questionType, setQuestionTypeState] = useState<QuestionType>(
     question.type,
   );
+  const [toggleDeleteConfirmation, setToggleDeleteConfirmation] =
+    useState<boolean>(false);
   const [questionCriteria, setQuestionCriteriaState] = useState<{
     points: number[];
     criteriaDesc: string[];
@@ -123,7 +125,12 @@ const Question: FC<QuestionProps> = ({
   );
   // Function to handle deleting a variant
   const handleDeleteVariant = (variantId: number) => {
-    deleteVariant(question.id, variantId);
+    try {
+      deleteVariant(questionId, variantId);
+      toast.success("Variant deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete variant");
+    }
   };
   const modifyQuestion = useAuthorStore((state) => state.modifyQuestion);
   // Set initial question max points based on criteria if applicable
@@ -270,6 +277,16 @@ const Question: FC<QuestionProps> = ({
   };
 
   const handleAddVariantUsingAi = async () => {
+    // if choices in some variants are empty then return
+    if (
+      Array.isArray(question.variants) &&
+      question.variants.some(
+        (v) => Array.isArray(v.choices) && v.choices.some((c) => !c.choice),
+      )
+    ) {
+      toast.error("Please fill in all choices before generating variants");
+      return;
+    }
     setVariantLoading(true);
     const questionsWithVariants = await generateQuestionVariant(
       [question],
@@ -277,7 +294,8 @@ const Question: FC<QuestionProps> = ({
       question.assignmentId,
     );
     if (questionsWithVariants) {
-      modifyQuestion(questionId, questionsWithVariants[0]);
+      console.log(questionsWithVariants);
+      replaceQuestion(questionId, questionsWithVariants[0]);
     }
 
     setVariantLoading(false);
@@ -774,7 +792,7 @@ const Question: FC<QuestionProps> = ({
               {/* Delete question button */}
               <button
                 className="text-gray-500"
-                onClick={() => onDelete(question.id)}
+                onClick={() => setToggleDeleteConfirmation(true)}
               >
                 <TrashIcon width={20} height={20} />
               </button>
@@ -936,6 +954,33 @@ const Question: FC<QuestionProps> = ({
             )
           ) : null}
         </>
+      )}
+      {toggleDeleteConfirmation && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white p-6 rounded-lg max-w-xl w-full max-h-[80vh] overflow-y-auto">
+            <h2 className="text-lg font-bold mb-4">Delete Question</h2>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete this question?
+            </p>
+            <div className="flex items-center gap-4 justify-end">
+              <button
+                onClick={() => {
+                  onDelete && onDelete(questionId);
+                  setToggleDeleteConfirmation(false);
+                }}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setToggleDeleteConfirmation(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

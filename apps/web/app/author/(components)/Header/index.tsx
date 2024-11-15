@@ -9,6 +9,7 @@ import { mergeData } from "@/lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
+import Modal from "@components/Modal";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { usePathname, useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ import SubmitQuestionsButton from "./SubmitQuestionsButton";
 
 function AuthorHeader() {
   const router = useRouter();
+  const [isModalOpen, setModalOpen] = useState(false);
   const pathname = usePathname();
   const assignmentId = extractAssignmentId(pathname);
   const [currentStepId, setCurrentStepId] = useState<number>(0);
@@ -138,6 +140,15 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
+  // Function to handle file upload inside the modal
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      // Process the files
+      console.log(files);
+    }
+  };
+
   return (
     <div className="fixed w-full z-50">
       <header className="border-b border-gray-300 px-6 py-4 bg-white flex items-center justify-between">
@@ -159,7 +170,6 @@ function AuthorHeader() {
           currentStepId={currentStepId}
           setCurrentStepId={setCurrentStepId}
         />
-
         {/* Right Section */}
         <div className="flex items-center space-x-4">
           <CheckLearnerSideButton

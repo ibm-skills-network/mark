@@ -13,6 +13,7 @@ import { withUpdatedAt } from "./middlewares";
 
 export type AuthorState = {
   activeAssignmentId?: number | undefined;
+  learningObjectives: string[];
   name: string;
   introduction: string;
   instructions: string;
@@ -29,6 +30,7 @@ type OptionalQuestion = {
 };
 
 export type AuthorActions = {
+  setLearningObjectives: (learningObjectives: string[]) => void;
   setFocusedQuestionId: (id: number) => void;
   setActiveAssignmentId: (id: number) => void;
   setName: (name: string) => void;
@@ -38,6 +40,10 @@ export type AuthorActions = {
   setQuestions: (questions: QuestionAuthorStore[]) => void;
   addQuestion: (question: QuestionAuthorStore) => void;
   removeQuestion: (question: number) => void;
+  replaceQuestion: (
+    questionId: number,
+    newQuestion: QuestionAuthorStore,
+  ) => void;
   modifyQuestion: (questionId: number, modifiedData: OptionalQuestion) => void;
   setCriterias: (questionId: number, criterias: Criteria[]) => Criteria[];
   addCriteria: (questionId: number, criteria: Criteria) => void;
@@ -99,72 +105,133 @@ export type AuthorActions = {
 interface QuestionState {
   questionStates: {
     [key: number]: {
-      showWordCountInput: boolean;
-      countMode: "CHARACTER" | "WORD";
-      toggleTitle: boolean;
-      criteriaMode: "AI_GEN" | "CUSTOM";
+      showWordCountInput?: boolean;
+      countMode?: "CHARACTER" | "WORD";
+      toggleTitle?: boolean;
+      criteriaMode?: "AI_GEN" | "CUSTOM";
+      variants?: {
+        [variantId: number]: {
+          toggleTitle?: boolean;
+        };
+      };
     };
     showCriteriaHeader: boolean;
   };
+  clearQuestionState: (questionId: number, variantId?: number) => void;
   setShowWordCountInput: (questionId: number, value: boolean) => void;
   setCountMode: (questionId: number, mode: "CHARACTER" | "WORD") => void;
-  setToggleTitle: (questionId: number, value: boolean) => void;
+  getToggleTitle: (questionId: number, variantId?: number) => boolean;
+  setToggleTitle: (
+    questionId: number,
+    value: boolean,
+    variantId?: number,
+  ) => void;
   setShowCriteriaHeader: (value: boolean) => void;
   setCriteriaMode: (questionId: number, mode: "AI_GEN" | "CUSTOM") => void;
 }
 
-export const useQuestionStore = createWithEqualityFn<QuestionState>((set) => ({
-  questionStates: {
-    showCriteriaHeader: true,
-  },
-  setShowWordCountInput: (questionId, value) =>
-    set((state) => ({
+export const useQuestionStore = createWithEqualityFn<QuestionState>()(
+  devtools(
+    (set, get) => ({
       questionStates: {
-        ...state.questionStates,
-        [questionId]: {
-          ...state.questionStates[questionId],
-          showWordCountInput: value,
-        },
+        showCriteriaHeader: true,
       },
-    })),
-  setCountMode: (questionId, mode) =>
-    set((state) => ({
-      questionStates: {
-        ...state.questionStates,
-        [questionId]: {
-          ...state.questionStates[questionId],
-          countMode: mode,
-        },
+      setShowWordCountInput: (questionId, value) =>
+        set((state) => ({
+          questionStates: {
+            ...state.questionStates,
+            [questionId]: {
+              ...state.questionStates[questionId],
+              showWordCountInput: value,
+            },
+          },
+        })),
+      setCountMode: (questionId, mode) =>
+        set((state) => ({
+          questionStates: {
+            ...state.questionStates,
+            [questionId]: {
+              ...state.questionStates[questionId],
+              countMode: mode,
+            },
+          },
+        })),
+      getToggleTitle: (questionId, variantId) => {
+        const state = get();
+        if (variantId) {
+          return !!state.questionStates[questionId]?.variants?.[variantId]
+            ?.toggleTitle;
+        }
+        return !!state.questionStates[questionId]?.toggleTitle;
       },
-    })),
-  setToggleTitle: (questionId, value) =>
-    set((state) => ({
-      questionStates: {
-        ...state.questionStates,
-        [questionId]: {
-          ...state.questionStates[questionId],
-          toggleTitle: value,
-        },
-      },
-    })),
-  setShowCriteriaHeader: (value) =>
-    set((state) => ({
-      questionStates: {
-        ...state.questionStates,
-        showCriteriaHeader: value,
-      },
-    })),
-  setCriteriaMode: (questionId, mode) =>
-    set((state) => ({
-      questionStates: {
-        ...state.questionStates,
-        [questionId]: {
-          ...state.questionStates[questionId],
-          criteriaMode: mode,
-        },
-      },
-    })),
-}));
+      clearQuestionState: (questionId, variantId) =>
+        // if variantId is provided delete the variant state only, otherwise delete the main question state
+        set((state) => ({
+          questionStates: {
+            ...state.questionStates,
+            [questionId]: {
+              ...(variantId
+                ? {
+                    ...state.questionStates[questionId],
+                    variants: Object.fromEntries(
+                      Object.entries(
+                        state.questionStates[questionId]?.variants || {},
+                      ).filter(([key]) => key !== variantId.toString()),
+                    ),
+                  }
+                : {}),
+            },
+          },
+        })),
+
+      setToggleTitle: (questionId, value, variantId) =>
+        set((state) => ({
+          questionStates: {
+            ...state.questionStates,
+            [questionId]: {
+              ...state.questionStates[questionId],
+              ...(variantId
+                ? {
+                    variants: {
+                      ...state.questionStates[questionId]?.variants,
+                      [variantId]: {
+                        ...state.questionStates[questionId]?.variants?.[
+                          variantId
+                        ],
+                        toggleTitle: value,
+                      },
+                    },
+                  }
+                : {
+                    toggleTitle: value,
+                  }),
+            },
+          },
+        })),
+
+      setShowCriteriaHeader: (value) =>
+        set((state) => ({
+          questionStates: {
+            ...state.questionStates,
+            showCriteriaHeader: value,
+          },
+        })),
+      setCriteriaMode: (questionId, mode) =>
+        set((state) => ({
+          questionStates: {
+            ...state.questionStates,
+            [questionId]: {
+              ...state.questionStates[questionId],
+              criteriaMode: mode,
+            },
+          },
+        })),
+    }),
+    {
+      name: "QuestionStore", // Optional: Name your store for easier identification in DevTools
+    },
+  ),
+);
 
 export const useAuthorStore = createWithEqualityFn<
   AuthorState & AuthorActions
@@ -172,6 +239,9 @@ export const useAuthorStore = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
+        learningObjectives: [],
+        setLearningObjectives: (learningObjectives) =>
+          set({ learningObjectives }),
         errors: {},
         focusedQuestionId: undefined,
         setFocusedQuestionId: (id: number) => set({ focusedQuestionId: id }),
@@ -197,6 +267,15 @@ export const useAuthorStore = createWithEqualityFn<
             const updatedQuestions = state.questions.filter(
               (q) => q.id !== questionId,
             );
+            useQuestionStore.getState().clearQuestionState(questionId);
+            return { questions: updatedQuestions };
+          }),
+        replaceQuestion: (questionId, newQuestion) =>
+          set((state) => {
+            const index = state.questions.findIndex((q) => q.id === questionId);
+            if (index === -1) return {}; // No changes
+            const updatedQuestions = [...state.questions];
+            updatedQuestions[index] = newQuestion;
             return { questions: updatedQuestions };
           }),
         modifyQuestion: (questionId, modifiedData) =>
@@ -372,7 +451,9 @@ export const useAuthorStore = createWithEqualityFn<
           const question = get().questions.find((q) => q.id === questionId);
           if (!question || !question.choices) return null; // If no question or no choices exist, return null
 
-          return question.choices.find((choice) => choice?.choice === "true")
+          return question.choices.find(
+            (choice) => choice?.choice.toLowerCase() === "true",
+          )
             ? true
             : false;
         },
@@ -682,6 +763,10 @@ export const useAuthorStore = createWithEqualityFn<
               (variant) => variant.id !== variantId,
             );
             updatedQuestions[questionIndex] = question;
+            // delete from questionStates
+            useQuestionStore
+              .getState()
+              .clearQuestionState(questionId, variantId);
 
             return { questions: updatedQuestions };
           }),

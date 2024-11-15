@@ -1,3 +1,4 @@
+import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
 import { useAppConfig } from "@/stores/appConfig";
 
@@ -62,6 +63,25 @@ export const useDebugLog = () => {
 
   return useDebugLog;
 };
+
+export function parseLearnerResponse(response: string, attempts = 0) {
+  try {
+    let parsedResponse: LearnerResponseType = response;
+    let attempts = 0;
+    const maxAttempts = 5;
+    while (typeof parsedResponse === "string" && attempts < maxAttempts) {
+      parsedResponse = JSON.parse(parsedResponse) as LearnerResponseType;
+      attempts++;
+    }
+    return parsedResponse;
+  } catch (e) {
+    console.error(
+      `Failed to parse learnerResponse after ${attempts} attempts:`,
+      e,
+    );
+    return response;
+  }
+}
 
 export const editedQuestionsOnly = (questions: QuestionStore[]) =>
   questions.filter(

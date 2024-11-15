@@ -2,6 +2,7 @@ import { ValidationPipe, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
+import { json, urlencoded } from "express"; // Import these
 import helmet from "helmet";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
@@ -25,10 +26,15 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
+
+  // Increase the JSON and URL-encoded body size limit to 10mb
+  app.use(json({ limit: "10mb" }));
+  app.use(urlencoded({ limit: "10mb", extended: true }));
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.useGlobalGuards(app.select(AuthModule).get(RolesGlobalGuard));
 
-  // TODO(user): customize the title, description, etc.
+  // Swagger setup (if any)
   const config = new DocumentBuilder()
     .setTitle("API")
     .setDescription("API Description")

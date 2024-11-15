@@ -44,7 +44,6 @@ interface SectionProps {
   ) => void;
   variantMode: boolean;
 }
-
 function Section({
   questionId,
   variantId,
@@ -64,7 +63,7 @@ function Section({
     (state) => state.questionStates[questionId]?.criteriaMode,
   );
   const [loading, setLoading] = useState(false);
-  const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null); // To track the debounce timer
+  const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [backspaceCount, setBackspaceCount] = useState(0);
   if (!question) return null;
 
@@ -75,10 +74,16 @@ function Section({
   const [localFeedback, setLocalFeedback] = useState(
     choices?.map((choice) => choice?.feedback ?? "") || [],
   );
+  const [localPoints, setLocalPoints] = useState(
+    choices?.map((choice) => choice?.points?.toString() ?? "") || [],
+  );
 
   useEffect(() => {
     setLocalChoices(choices?.map((choice) => choice?.choice ?? "") || []);
     setLocalFeedback(choices?.map((choice) => choice?.feedback ?? "") || []);
+    setLocalPoints(
+      choices?.map((choice) => choice?.points?.toString() ?? "") || [],
+    );
   }, [choices]);
 
   const handleAddChoice = () => {
@@ -431,10 +436,15 @@ function Section({
                       <input
                         type="number"
                         id={`points-${questionId}-${index}`}
-                        value={choice?.points}
-                        onChange={(e) =>
+                        value={localPoints[index]}
+                        onChange={(e) => {
+                          const updatedPoints = [...localPoints];
+                          updatedPoints[index] = e.target.value;
+                          setLocalPoints(updatedPoints);
+                        }}
+                        onBlur={() =>
                           handleChoiceChange(index, {
-                            points: parseInt(e.target.value, 10) || 0,
+                            points: parseInt(localPoints[index], 10) || 0,
                           })
                         }
                         placeholder="Points"
@@ -481,11 +491,11 @@ function Section({
                       />
                     )}
                   </td>
-                  <td className="p-3 flex items-center justify-between">
+                  <td className="p-3 ">
                     {loading ? (
                       <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
                     ) : (
-                      <>
+                      <div className="flex items-center gap-x-2">
                         <input
                           type="text"
                           id={`feedback-${questionId}-${index}`}
@@ -518,7 +528,7 @@ function Section({
                         >
                           <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>

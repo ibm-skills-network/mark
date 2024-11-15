@@ -194,23 +194,96 @@ Ensure your feedback is constructive, assisting the learner in recognizing and l
 
 {format_instructions}
 `;
+
+export const generateAssignmentQuestionsFromFileTemplate = `
+You are an expert teacher tasked with creating a set of questions based on the provided content.
+Content: {content}
+
+Guidelines:
+- Create {questionsToGenerate} ONLY. Ensure that each question covers the entire scope of the content.- Make it {assignment_type} assessment level.
+- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
+- For True/False questions (if any):
+  - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
+  - Do **not** generate multiple choices for true/false questions.
+- For Text-based questions (if any):
+  - Provide a scoring rubric with clear criteria.
+  - Criteria should have unique points and a concise description.
+  - Points must be in descending order, with clear distinctions between levels.
+- Avoid unnecessary tokens; keep descriptions short and concise.
+Output format:
+{format_instructions}
+`;
+export const generateAssignmentQuestionsFromObjectivesTemplate = `
+You are an expert teacher tasked with creating a set of questions based on the provided learning objectives.
+Learning Objectives: {learning_objectives}
+
+Guidelines:
+- Create {questionsToGenerate} ONLY. Ensure that each question covers key elements of the learning objectives.
+- Make it {assignment_type} assessment level.
+- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
+- For True/False questions (if any):
+  - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
+  - Do **not** generate multiple choices for true/false questions.
+- For Text-based questions (if any):
+  - Provide a scoring rubric with clear criteria.
+  - Criteria should have unique points and a concise description.
+  - Points must be in descending order, with clear distinctions between levels.
+- Avoid unnecessary tokens; keep descriptions short and concise.
+Output format:
+{format_instructions}
+`;
+export const generateAssignmentQuestionsFromFileAndObjectivesTemplate = `
+You are an expert teacher tasked with creating a set of questions based on the provided learning objectives and content.
+Content: {content}
+Learning Objectives: {learning_objectives}
+
+Guidelines:
+- Create {questionsToGenerate} ONLY. Ensure that each question covers key elements of the learning objectives and content.
+- Make it {assignment_type} assessment level.
+- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
+- For True/False questions (if any):
+  - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
+  - Do **not** generate multiple choices for true/false questions.
+- For Text-based questions (if any):
+  - Provide a scoring rubric with clear criteria.
+  - Criteria should have unique points and a concise description.
+  - Points must be in descending order, with clear distinctions between levels.
+- Avoid unnecessary tokens; keep descriptions short and concise.
+Output format:
+{format_instructions}
+`;
 export const generateQuestionRewordingsTemplate = `
-Generate {variation_count} variations of the following question text:
+Generate {variation_count} unique variations of the following question text:
 Question: {question_text}
 Existing variations: {variants}
 
-Reword the question text to offer alternative wording different from the exisitng variations, while preserving their meaning and intent.
+Your goal:
+- Main purpose is to avoid cheating.
+- Provide alternative wordings for the question that differ significantly from the existing variations.
+- Preserve the original intent, meaning, and context of the question.
+
+Additional Notes:
+- Avoid simply rephrasing; aim to present the question from different angles or perspectives.
+
 {format_instructions}
 `;
+
 export const generateQuestionWithChoicesRewordingsTemplate = `
-Generate {variation_count} variations of the following question text and its choices:
+Generate {variation_count} unique variations of the following question text and its associated choices:
 Question: {question_text}
 Choices: {choices_text}
 Existing variations: {variants}
 
+Your goal:
+- Provide a different variation of the question and its choices that maintains the original context, meaning, and intent. Main purpose is to avoid cheating.
+- Rewrite the question and its choices to offer meaningful alternatives.
+- Maintain the original intent and purpose while ensuring the choices remain relevant.
+- If a choice cannot be changed without losing meaning, reword it creatively.
 
-Reword the question text and each choice to offer alternative wording different from the exisitng variations, while preserving their meaning and intent.
-If rewording the choices, ensure they remain distinct and relevant to the question.
+Additional Notes:
+- Avoid providing trivial rewordings; think about how the question and its choices could be interpreted differently but still lead to the same understanding.
+- Use diverse vocabulary and phrasing to make each variation feel fresh and distinct.
+
 {format_instructions}
 `;
 
@@ -253,7 +326,7 @@ export const generateUrlBasedMarkingRubricTemplate = `
 
    Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
-  - "description" (detailed evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+  - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
 
   Focus areas:
   - URL relevance
@@ -268,7 +341,7 @@ export const generateTextBasedMarkingRubricTemplate = `
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
-  - "description" (detailed evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+  - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
 
   Focus areas:
   - Content relevance: Does the content directly address the question?
@@ -285,7 +358,7 @@ export const generateDocumentFileUploadMarkingRubricTemplate = `
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
-  - "description" (specific evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+  - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
 
   Focus areas:
   - Content relevance: Does the document directly address the question or topic?
@@ -303,7 +376,7 @@ export const generateImageFileUploadMarkingRubricTemplate = `
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
-  - "description" (specific evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+  - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
 
   Focus areas:
   - Relevance: Does the image directly support and enhance the answer to the question?
@@ -322,7 +395,7 @@ export const generateCodeFileUploadMarkingRubricTemplate = `
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
-  - "description" (specific evaluation criteria for what is required to achieve this score. Points should not be cumulative; each score should have independent criteria.)
+  - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
 
   Focus areas:
   - Functionality: Does the code work as intended and meet all requirements?

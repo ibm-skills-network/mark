@@ -8,11 +8,8 @@ import {
   Patch,
   Post,
   Req,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -153,7 +150,6 @@ export class AttemptController {
   @Post(":attemptId/questions/:questionId/responses")
   @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentAttemptAccessControlGuard)
-  @UseInterceptors(FileInterceptor("learnerFileResponse"))
   @ApiOperation({
     summary: "Create a question response for a question in an assignment.",
   })
@@ -182,6 +178,7 @@ export class AttemptController {
       Number(questionId),
       createQuestionResponseAttemptRequestDto,
       request.userSession.role,
+      Number(request.userSession.userId),
     );
   }
 }

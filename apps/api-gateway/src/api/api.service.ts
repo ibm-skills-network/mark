@@ -82,7 +82,6 @@ export class ApiService {
       // Delete potentially problematic headers.
       delete originalHeaders["host"];
       delete originalHeaders["content-length"];
-      delete originalHeaders["connection"];
 
       const config: AxiosRequestConfig = {
         method: request.method.toLowerCase() as Method,

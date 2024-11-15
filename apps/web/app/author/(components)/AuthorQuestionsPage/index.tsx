@@ -10,6 +10,7 @@ import type {
   QuestionAuthorStore,
   QuestionVariants,
 } from "@/config/types";
+import SparkleLottie from "@/app/animations/sparkleLottie";
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
@@ -60,6 +61,8 @@ import { toast } from "sonner";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
 import { shallow } from "zustand/shallow";
+import FileUploadModal from "@/components/FileUploadModal";
+
 import Dropdown from "@/components/Dropdown";
 interface Props {
   assignmentId: number;
@@ -101,6 +104,8 @@ const AuthorQuestionsPage: FC<Props> = ({
   const focusRef = useRef(focusedQuestionId); // Ref to store the focused question ID
   const [collapseAll, setCollapseAll] = useState(false); // State to collapse all questions
   const [activeId, setActiveId] = useState<number | null>(null); // State to store the active assignment ID
+  const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false); // State to toggle the file upload modal
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const questionTypes = useMemo(
     () => [
       {
@@ -683,62 +688,86 @@ const AuthorQuestionsPage: FC<Props> = ({
             <FooterNavigation nextStep="review" />
           </div>
         </div>
-        {/* If there are questions, render the collapse all button */}
-        {/* Render the collapse all button and mass variations options if there are questions */}
-        {questions.length > 0 && (
-          <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
-            <div className="flex flex-col items-center sticky top-4 w-full p-2">
-              {/* Collapse/Expand Button */}
-              <button
-                onClick={() => setCollapseAll(!collapseAll)}
-                className="p-2 mb-2 border w-full border-gray-300 rounded-lg shadow-sm hover:shadow-md transition-all bg-white duration-300 ease-in-out"
-              >
-                {collapseAll ? "Expand Questions" : "Collapse Questions"}
-              </button>
-
-              <div className="flex flex-col w-full bg-white p-4 rounded-lg shadow-sm border border-gray-300">
-                {/* Mass Variations Section */}
-                <span className="text-lg mb-2">Mass Variations</span>
-                <Dropdown
-                  options={[1, 2, 3, 4, 5] as number[]}
-                  selectedItem={questionVariationNumber}
-                  setSelectedItem={setQuestionVariationNumber}
-                  items={[
-                    { value: 1, label: "1" },
-                    { value: 2, label: "2" },
-                    { value: 3, label: "3" },
-                    { value: 4, label: "4" },
-                    { value: 5, label: "5" },
-                  ]}
-                />
-                <p className="text-gray-500 mt-2 text-wrap">
-                  Variation(s) will automatically generate on all existing
-                  questions using AI. These variants are editable.
-                </p>
-
-                {/* Add Mass Variants Button */}
+        <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
+          <div className="flex flex-col sticky top-0 gap-4 items-center p-4 ">
+            {/* Collapse/Expand all button */}
+            {questions.length > 0 && (
+              <>
                 <button
-                  className="mt-4 px-4 py-2 bg-violet-50 text-white justify-center items-center text-wrap rounded-lg border hover:bg-violet-100 transition-colors duration-300 ease-in-out flex flex-col md:flex-row"
-                  onClick={() => {
-                    void handleMassVariation(questions);
-                  }}
+                  onClick={() => setCollapseAll(!collapseAll)}
+                  className={`px-4 py-2 border border-gray-300 rounded-lg shadow-md transition-all duration-300 ease-in-out w-full text-sm font-medium ${
+                    collapseAll
+                      ? "bg-violet-600 text-white"
+                      : "bg-white text-violet-600"
+                  } hover:bg-violet-100`}
                 >
-                  {isMassVariationLoading ? (
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 flex justify-center items-center"></div>
-                  ) : (
-                    <>
-                      <SparklesIcon className="w-4 h-4 mr-2 text-violet-800" />
-                      <span className="mr-2 text-violet-800">
-                        Add Mass Variants
-                      </span>
-                    </>
-                  )}
+                  {collapseAll ? "Expand Questions" : "Collapse Questions"}
                 </button>
-              </div>
-            </div>
+                <div className="flex flex-col w-full bg-white p-4 rounded-lg shadow-sm border border-gray-300">
+                  {/* Mass Variations Section */}
+                  <span className="text-lg mb-2">Mass Variations (Beta)</span>
+                  <Dropdown
+                    options={[1, 2, 3, 4, 5] as number[]}
+                    selectedItem={questionVariationNumber}
+                    setSelectedItem={setQuestionVariationNumber}
+                    items={[
+                      { value: 1, label: "1" },
+                      { value: 2, label: "2" },
+                      { value: 3, label: "3" },
+                      { value: 4, label: "4" },
+                      { value: 5, label: "5" },
+                    ]}
+                  />
+                  <p className="text-gray-500 mt-2 text-wrap">
+                    Variation(s) will automatically generate on all existing
+                    questions using AI. These variants are editable.
+                  </p>
+
+                  {/* Add Mass Variants Button */}
+                  <button
+                    className="mt-4 px-4 py-2 bg-violet-50 text-white justify-center items-center text-wrap rounded-lg border hover:bg-violet-100 transition-colors duration-300 ease-in-out flex flex-col md:flex-row"
+                    onClick={() => {
+                      void handleMassVariation(questions);
+                    }}
+                  >
+                    {isMassVariationLoading ? (
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 flex justify-center items-center"></div>
+                    ) : (
+                      <>
+                        <SparklesIcon className="w-4 h-4 mr-2 text-violet-800" />
+                        <span className="mr-2 text-violet-800">
+                          Add Mass Variants
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Generate Questions using AI button */}
+            <button
+              onClick={() => setFileUploadModalOpen(true)}
+              className="px-4 py-2 border border-gray-300 rounded-lg shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
+            >
+              <span className="flex items-center gap-2 text-wrap">
+                <div className="flex items-center gap-1">
+                  <SparkleLottie className="w-5 h-5 text-violet-600" />
+                  <SparklesIcon className="w-4 h-4 text-violet-600" />
+                </div>
+                <span className="text-sm font-medium">
+                  Generate Questions using AI (Beta)
+                </span>
+              </span>
+            </button>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* FileUploadModal component */}
+      {fileUploadModalOpen && (
+        <FileUploadModal onClose={() => setFileUploadModalOpen(false)} />
+      )}
     </DndContext>
   );
 };

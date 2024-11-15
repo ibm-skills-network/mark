@@ -14,6 +14,13 @@ import {
   IsString,
 } from "class-validator";
 
+export enum AssignmentTypeEnum {
+  PRACTICE = "PRACTICE",
+  QUIZ = "QUIZ",
+  ASSINGMENT = "ASSINGMENT",
+  MIDTERM = "MIDTERM",
+  FINAL = "FINAL",
+}
 //making properties optional because user might just patch one or two fields
 
 export class UpdateAssignmentRequestDto {

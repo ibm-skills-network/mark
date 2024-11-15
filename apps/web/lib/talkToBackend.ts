@@ -15,6 +15,8 @@ import type {
   QuestionAttemptRequestWithId,
   QuestionAttemptResponse,
   QuestionAuthorStore,
+  QuestionGenerationPayload,
+  QuestionType,
   QuestionStore,
   QuestionVariants,
   ReplaceAssignmentRequest,
@@ -558,6 +560,101 @@ export async function submitAssignment(
     return data;
   } catch (err) {
     console.error(err);
+    return undefined;
+  }
+}
+
+// src/lib/talkToBackend.ts
+
+export async function uploadFiles(
+  payload: QuestionGenerationPayload,
+  cookies?: string,
+): Promise<{ success: boolean; jobId?: number }> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${payload.assignmentId}/upload-files`;
+  const TIMEOUT = 1000000;
+
+  try {
+    const res = (await Promise.race([
+      fetch(endpointURL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Connection: "keep-alive",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+        body: JSON.stringify({ ...payload }),
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timed out")), TIMEOUT),
+      ),
+    ])) as Response;
+
+    if (!res.ok) {
+      throw new Error("Failed to upload files");
+    }
+
+    // Parse the response
+    const data = (await res.json()) as {
+      success: boolean;
+      jobId?: number;
+    };
+
+    // Return the data if successful
+    if (data.jobId) {
+      return {
+        success: true,
+        jobId: data.jobId, // Include the jobId for progress tracking
+      };
+    } else {
+      return { success: false };
+    }
+  } catch (err) {
+    console.error("Error uploading files:", err);
+    return { success: false };
+  }
+}
+
+/**
+ * Fetches the status of a job by its ID.
+ * @param jobId The ID of the job to check.
+ * @param cookies Optional cookies for authentication.
+ * @returns An object containing the job status and progress.
+ */
+export async function getJobStatus(
+  jobId: number,
+  cookies?: string,
+): Promise<
+  | {
+      status: string;
+      progress: string;
+      progressPercentage: string;
+      questions?: string;
+    }
+  | undefined
+> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/jobs/${jobId}/status`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch job status");
+    }
+
+    const data = (await res.json()) as {
+      status: string;
+      progress: string;
+      progressPercentage: string;
+      questions?: string;
+    };
+    return data;
+  } catch (err) {
+    console.error("Error fetching job status:", err);
     return undefined;
   }
 }

@@ -339,3 +339,23 @@ export type VerbosityState = {
   verbosity: VerbosityLevels;
   loading: boolean;
 };
+interface QuestionsToGenerate {
+  multipleChoice: number;
+  multipleSelect: number;
+  textResponse: number;
+  trueFalse: number;
+}
+export interface QuestionGenerationPayload {
+  assignmentId: number;
+  assignmentType: AssignmentTypeEnum;
+  questionsToGenerate: QuestionsToGenerate;
+  fileContents: { filename: string; content: string }[];
+  learningObjectives: string[];
+}
+export enum AssignmentTypeEnum {
+  PRACTICE = "PRACTICE",
+  QUIZ = "QUIZ",
+  ASSINGMENT = "ASSINGMENT",
+  MIDTERM = "MIDTERM",
+  FINAL = "FINAL",
+}
