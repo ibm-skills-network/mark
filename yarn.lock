@@ -1028,9 +1028,9 @@
     zod-to-json-schema "^3.22.3"
 
 "@langchain/openai@>=0.1.0 <0.4.0", "@langchain/openai@^0.3.0":
-  version "0.3.13"
-  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.3.13.tgz#f7a1456b424c71d60ff2ad57b47cb78589430dff"
-  integrity sha512-lfiauYttb1Vv1GVGDNZlse8475RUsKm9JJ7X9kMVtYoOQnK8xxzMVSrpW7HYLmJokrtVgF6STwRzNJI2gZ3uBw==
+  version "0.3.14"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.3.14.tgz#c2f50fe963769851287f0171385232a344a5484a"
+  integrity sha512-lNWjUo1tbvsss45IF7UQtMu1NJ6oUKvhgPYWXnX9f/d6OmuLu7D99HQ3Y88vLcUo9XjjOy417olYHignMduMjA==
   dependencies:
     js-tiktoken "^1.0.12"
     openai "^4.71.0"
@@ -4535,6 +4535,8 @@ escape-string-regexp@^5.0.0:
 
 eslint-config-next@^14:
   version "14.2.18"
+  resolved "https://registry.yarnpkg.com/eslint-config-next/-/eslint-config-next-14.2.18.tgz#e689e348a1db4bc563580cf77705eec894eaece1"
+  integrity sha512-SuDRcpJY5VHBkhz5DijJ4iA4bVnBA0n48Rb+YSJSCDr+h7kKAcb1mZHusLbW+WA8LDB6edSolomXA55eG3eOVA==
   dependencies:
     "@next/eslint-plugin-next" "14.2.18"
     "@rushstack/eslint-patch" "^1.3.3"
