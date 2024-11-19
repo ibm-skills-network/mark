@@ -1,14 +1,20 @@
 {
   "name": "mark",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "packageManager": "yarn@1.22.22",
   "engines": {
     "node": ">=20.9.0",
     "npm": ">=7.0.0"
+  },
+  "workspaces": {
+    "packages": [
+      "packages/*",
+      "apps/*"
+    ],
+    "nohoist": [
+      "**/@nestjs/*",
+      "**/@nestjs/**"
+    ]
   },
   "scripts": {
     "build": "turbo run build",
@@ -34,6 +40,9 @@
     "start": "set -e && yarn db && yarn seed && yarn setup && yarn dev"
   },
   "dependencies": {
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/platform-express": "^10.0.0",
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/sortable": "^8.0.0",
     "@tabler/icons-react": "^3.16.0",

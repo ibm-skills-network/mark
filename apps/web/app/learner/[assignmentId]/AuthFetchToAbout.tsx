@@ -8,6 +8,7 @@ import AboutTheAssignment from "../(components)/AboutTheAssignment";
 import ErrorPage from "@/components/ErrorPage";
 import LoadingPage from "@/app/loading";
 import { useLearnerOverviewStore } from "@/stores/learner";
+import animationData from "@/animations/LoadSN.json";
 
 interface AuthFetchToAboutProps {
   assignmentId: number;
@@ -72,7 +73,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   }, [assignmentId, cookie, role, setAssignmentId, setListOfAttempts]);
 
   if (isLoading) {
-    return <LoadingPage />;
+    return <LoadingPage animationData={animationData} />;
   }
 
   if (!assignment) {

@@ -15,6 +15,7 @@ import {
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import animationData from "@/animations/LoadSN.json";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -112,7 +113,7 @@ function QuestionPage(props: Props) {
   }, [activeQuestionNumber]);
 
   if (pageState === "loading") {
-    return <Loading />;
+    return <Loading animationData={animationData} />;
   }
   if (pageState === "no-questions") {
     return (

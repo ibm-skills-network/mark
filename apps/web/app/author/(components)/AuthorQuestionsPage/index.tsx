@@ -15,6 +15,7 @@ import useBeforeUnload from "@/hooks/use-before-unload";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
+import { handleJumpToQuestionTitle } from "@/app/Helpers/handleJumpToQuestion";
 import {
   closestCenter,
   DndContext,
@@ -235,8 +236,8 @@ const AuthorQuestionsPage: FC<Props> = ({
    */
   useEffect(() => {
     focusRef.current = focusedQuestionId;
-    handleJumpToQuestion(`item-${String(focusedQuestionId)}`);
-  }, [focusedQuestionId, handleJumpToQuestion]);
+    handleJumpToQuestionTitle(`${String(focusedQuestionId)}`);
+  }, [focusedQuestionId, handleJumpToQuestionTitle]);
 
   /**
    * Adds a text box question to the author questions page.
@@ -299,7 +300,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       index: questions.length + 1,
     });
     setFocusedQuestionId(questionId);
-    handleJumpToQuestion(`item-${String(questionId)}`);
+    handleJumpToQuestionTitle(`${String(focusedQuestionId)}`);
     toast.success("Question has been added!");
   };
 
@@ -596,7 +597,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                 setHandleToggleTable={setHandleToggleTable}
                 onSelectQuestion={(index) => {
                   setFocusedQuestionId(questions[index].id);
-                  handleJumpToQuestion(`item-${String(questions[index].id)}`);
+                  handleJumpToQuestionTitle(`${String(questions[index].id)}`);
                 }}
               />
             </div>

@@ -13,7 +13,7 @@ import { withUpdatedAt } from "./middlewares";
 
 export type AuthorState = {
   activeAssignmentId?: number | undefined;
-  learningObjectives: string[];
+  learningObjectives: string;
   name: string;
   introduction: string;
   instructions: string;
@@ -30,7 +30,7 @@ type OptionalQuestion = {
 };
 
 export type AuthorActions = {
-  setLearningObjectives: (learningObjectives: string[]) => void;
+  setLearningObjectives: (learningObjectives: string) => void;
   setFocusedQuestionId: (id: number) => void;
   setActiveAssignmentId: (id: number) => void;
   setName: (name: string) => void;
@@ -239,7 +239,7 @@ export const useAuthorStore = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
-        learningObjectives: [],
+        learningObjectives: "",
         setLearningObjectives: (learningObjectives) =>
           set({ learningObjectives }),
         errors: {},
@@ -777,7 +777,7 @@ export const useAuthorStore = createWithEqualityFn<
             questionOrder: order,
           }));
         },
-        pageState: "loading",
+        pageState: "loading" as const,
         setPageState: (pageState) => set({ pageState }),
         updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),

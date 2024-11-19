@@ -1,3 +1,4 @@
+import { Reflector } from "@nestjs/core";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -16,6 +17,7 @@ describe("AssignmentController", () => {
         AssignmentService,
         PrismaService,
         LlmService,
+        Reflector,
         {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: {

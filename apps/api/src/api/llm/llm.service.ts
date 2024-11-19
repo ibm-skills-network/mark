@@ -83,7 +83,28 @@ export class LlmService {
       "Text was found that violates OpenAI's content policy."
     );
   }
-
+  getDifficultyDescription = (difficulty: AssignmentTypeEnum) => {
+    switch (difficulty) {
+      case AssignmentTypeEnum.PRACTICE: {
+        return "Surface-level, simple questions to reinforce understanding.";
+      }
+      case AssignmentTypeEnum.QUIZ: {
+        return "Moderately challenging questions to test comprehension.";
+      }
+      case AssignmentTypeEnum.ASSINGMENT: {
+        return "In-depth questions requiring detailed explanations or calculations.";
+      }
+      case AssignmentTypeEnum.MIDTERM: {
+        return "Comprehensive questions that assess understanding of multiple topics.";
+      }
+      case AssignmentTypeEnum.FINAL: {
+        return "Advanced, in-depth questions with follow-ups to evaluate mastery.";
+      }
+      default: {
+        return "";
+      }
+    }
+  };
   /**
    * Sanitize the content by removing any potentially harmful or unnecessary elements.
    * This method uses DOMPurify to remove scripts or other dangerous HTML content.
@@ -314,8 +335,6 @@ export class LlmService {
         format_instructions: formatInstructions,
       },
     });
-    console.log("assignmentId", assignmentId);
-
     const response = await this.processPrompt(
       prompt,
       assignmentId,
@@ -659,7 +678,7 @@ export class LlmService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     content?: string,
-    learningObjectives?: string[],
+    learningObjectives?: string,
   ): Promise<
     {
       question: string;
@@ -717,7 +736,7 @@ export class LlmService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     content?: string,
-    learningObjectives?: string[],
+    learningObjectives?: string,
   ): Promise<{ questions: any[] }> {
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
@@ -796,14 +815,20 @@ export class LlmService {
       );
     }
     const formatInstructions = parser.getFormatInstructions();
+
     const promptTemplate = new PromptTemplate({
       template: pickGenerateAssignmentQuestionsTemplate,
       inputVariables: [],
       partialVariables: {
         format_instructions: formatInstructions,
         content: content ?? "",
-        learning_objectives: JSON.stringify(learningObjectives ?? []),
+        learning_objectives: learningObjectives ?? "",
         questionsToGenerate: JSON.stringify(questionsToGenerate),
+        multipleChoice: questionsToGenerate.multipleChoice.toString(),
+        multipleSelect: questionsToGenerate.multipleSelect.toString(),
+        textResponse: questionsToGenerate.textResponse.toString(),
+        trueFalse: questionsToGenerate.trueFalse.toString(),
+        difficultyDescription: this.getDifficultyDescription(assignmentType),
         assignment_type: assignmentType,
       },
     });

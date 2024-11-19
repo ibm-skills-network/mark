@@ -23,6 +23,10 @@ import {
 } from "@/config/types";
 import Tooltip from "./Tooltip";
 const MAX_CHAR_LIMIT = 40000;
+import MarkQuestionGenAnimation from "@/animations/MarkQuestionGenAnimation.json";
+import MarkQuestionGenCompleted from "@/animations/MarkQuestionGenCompleted.json";
+import Lottie from "lottie-react";
+import { toast } from "sonner";
 
 interface FileUploadModalProps {
   onClose: () => void;
@@ -33,6 +37,11 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
   const [progress, setProgress] = useState<number | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [jobId, setJobId] = useState<number | null>(null);
+  const [statusData, setStatusData] = useState<{
+    status: string;
+    progress: string;
+    questions?: string;
+  } | null>(null);
   const activeAssignmentId = useAuthorStore(
     (state) => state.activeAssignmentId,
   );
@@ -46,7 +55,6 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
     setFiles((prevFiles) => [...prevFiles, ...acceptedFiles]);
     setError(null); // Clear error when files are added
   };
-  const [selectedVariation, setSelectedVariation] = useState(0);
   const [selectedDifficulty, setSelectedDifficulty] =
     useState<AssignmentTypeEnum>(AssignmentTypeEnum.PRACTICE);
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -75,7 +83,7 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
     { value: AssignmentTypeEnum.PRACTICE, label: "Practice" },
     { value: AssignmentTypeEnum.QUIZ, label: "Quiz" },
     { value: AssignmentTypeEnum.ASSINGMENT, label: "Assignment" },
-    { value: AssignmentTypeEnum.MIDTERM, label: "Midterm" },
+    { value: AssignmentTypeEnum.MIDTERM, label: "Semi-Final" },
     { value: AssignmentTypeEnum.FINAL, label: "Final" },
   ];
 
@@ -94,8 +102,16 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
     setError(null);
 
     if (files.length === 0 && learningObjectives.length === 0) {
-      setError(
-        "Please upload at least one file or enter at least one learning objective.",
+      toast.error("Please upload files or enter learning objectives.");
+      return;
+    } else if (
+      Object.values(selectedQuestionTypes).reduce((a, b) => a + b, 0) === 0
+    ) {
+      toast.error("Please select at least one question type to generate.");
+      return;
+    } else if (learningObjectives.length > MAX_CHAR_LIMIT) {
+      toast.error(
+        `Learning objectives are too long (${learningObjectives.length} characters). Please shorten the objectives.`,
       );
       return;
     }
@@ -170,6 +186,7 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
       intervalId = setInterval(async () => {
         try {
           const statusData = await getJobStatus(jobId);
+          setStatusData(statusData);
           if (!statusData) {
             throw new Error("Failed to fetch job status");
           }
@@ -264,10 +281,10 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
 
           {/* Single text box to display all objectives */}
           <textarea
-            value={learningObjectives.join(", ")}
-            onChange={(e) => setLearningObjectives(e.target.value.split(", "))}
+            value={learningObjectives}
+            onChange={(e) => setLearningObjectives(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-violet-500 focus:border-violet-500 sm:text-sm"
-            placeholder="Enter topics, learning objectives, or additional content separated by commas here..."
+            placeholder="Enter topics, learning objectives, or additional content here..."
           />
         </div>
 
@@ -346,9 +363,7 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
               </div> */}
 
               <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Difficulty
-                </label>
+                <h1 className="text-lg font-medium text-gray-800">Styles</h1>
                 <div className="mt-2 space-y-4">
                   {difficultyOptions.map((option) => (
                     <div
@@ -521,10 +536,29 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
               exit={{ scale: 0.8 }}
               transition={{ duration: 0.2 }}
             >
-              {/* Progress Status */}
-              <p className="text-gray-700 text-lg text-center px-4">
-                {progressMessage}
-              </p>
+              <div className="flex flex-col items-center">
+                {statusData?.status !== "Completed" ? (
+                  <Lottie
+                    animationData={MarkQuestionGenAnimation}
+                    style={{ width: 200, height: 200 }}
+                  />
+                ) : (
+                  <Lottie
+                    animationData={MarkQuestionGenCompleted}
+                    style={{ width: 200, height: 200 }}
+                  />
+                )}
+                <motion.span
+                  className="text-xl font-medium text-gray-800 transition-all duration-200"
+                  key={progressMessage} // Ensure motion triggers on change
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {progressMessage}
+                </motion.span>
+              </div>
             </motion.div>
           </motion.div>
         )}

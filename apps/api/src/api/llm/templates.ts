@@ -200,12 +200,18 @@ You are an expert teacher tasked with creating a set of questions based on the p
 Content: {content}
 
 Guidelines:
-- Create {questionsToGenerate} ONLY. Ensure that each question covers the entire scope of the content.- Make it {assignment_type} assessment level.
+- Generate exactly this number of questions based on the distribution specified below. No more, no less:
+  - MULTIPLE_CHOICE: {multipleChoice} questions.
+  - MULTIPLE_SELECT: {multipleSelect} questions.
+  - TEXT_RESPONSE: {textResponse} questions.
+  - TRUE_FALSE: {trueFalse} questions.
+- Questions should align with the following difficulty type: {difficultyDescription}.
+- Ensure each question covers the entire scope of the content.
 - For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
-- For True/False questions (if any):
+- For TRUE_FALSE questions (if any):
   - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
-  - Do **not** generate multiple choices for true/false questions.
-- For Text-based questions (if any):
+  - Do **not** generate multiple choices for TRUE/FALSE questions.
+- For TEXT_RESPONSE questions (if any):
   - Provide a scoring rubric with clear criteria.
   - Criteria should have unique points and a concise description.
   - Points must be in descending order, with clear distinctions between levels.
@@ -213,18 +219,24 @@ Guidelines:
 Output format:
 {format_instructions}
 `;
+
 export const generateAssignmentQuestionsFromObjectivesTemplate = `
 You are an expert teacher tasked with creating a set of questions based on the provided learning objectives.
 Learning Objectives: {learning_objectives}
 
 Guidelines:
-- Create {questionsToGenerate} ONLY. Ensure that each question covers key elements of the learning objectives.
-- Make it {assignment_type} assessment level.
+- Generate exactly this number of questions based on the distribution specified below. No more, no less:
+  - MULTIPLE_CHOICE: {multipleChoice} questions.
+  - MULTIPLE_SELECT: {multipleSelect} questions.
+  - TEXT_RESPONSE: {textResponse} questions.
+  - TRUE_FALSE: {trueFalse} questions.
+- Questions should align with the following difficulty type: {difficultyDescription}.
+- Ensure each question covers key elements of the learning objectives. Do not deviate from the objectives and maintain a clear focus with no redundancy.
 - For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
-- For True/False questions (if any):
+- For TRUE_FALSE questions (if any):
   - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
-  - Do **not** generate multiple choices for true/false questions.
-- For Text-based questions (if any):
+  - Do **not** generate multiple choices for TRUE/FALSE questions.
+- For TEXT_RESPONSE questions (if any):
   - Provide a scoring rubric with clear criteria.
   - Criteria should have unique points and a concise description.
   - Points must be in descending order, with clear distinctions between levels.
@@ -232,19 +244,25 @@ Guidelines:
 Output format:
 {format_instructions}
 `;
+
 export const generateAssignmentQuestionsFromFileAndObjectivesTemplate = `
 You are an expert teacher tasked with creating a set of questions based on the provided learning objectives and content.
 Content: {content}
 Learning Objectives: {learning_objectives}
 
 Guidelines:
-- Create {questionsToGenerate} ONLY. Ensure that each question covers key elements of the learning objectives and content.
-- Make it {assignment_type} assessment level.
+- Generate exactly this number of questions based on the distribution specified below. No more, no less:
+  - MULTIPLE_CHOICE: {multipleChoice} questions.
+  - MULTIPLE_SELECT: {multipleSelect} questions.
+  - TEXT_RESPONSE: {textResponse} questions.
+  - TRUE_FALSE: {trueFalse} questions.
+- Questions should align with the following difficulty type: {difficultyDescription}.
+- Ensure each question covers key elements of the learning objectives. Do not deviate from the objectives and maintain a clear focus with no redundancy.
 - For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
-- For True/False questions (if any):
+- For TRUE_FALSE questions (if any):
   - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
-  - Do **not** generate multiple choices for true/false questions.
-- For Text-based questions (if any):
+  - Do **not** generate multiple choices for TRUE/FALSE questions.
+- For TEXT_RESPONSE questions (if any):
   - Provide a scoring rubric with clear criteria.
   - Criteria should have unique points and a concise description.
   - Points must be in descending order, with clear distinctions between levels.
@@ -252,38 +270,40 @@ Guidelines:
 Output format:
 {format_instructions}
 `;
+
 export const generateQuestionRewordingsTemplate = `
-Generate {variation_count} unique variations of the following question text:
+Generate {variation_count} creative variants of the following question:
 Question: {question_text}
-Existing variations: {variants}
+Existing variants: {variants}
 
 Your goal:
-- Main purpose is to avoid cheating.
-- Provide alternative wordings for the question that differ significantly from the existing variations.
-- Preserve the original intent, meaning, and context of the question.
+- Create distinct versions of the question that can replace the original, maintaining the same intent, meaning, and context.
+- Change the question structure, focus, or angle while staying within the same topic and purpose.
+- Avoid simple paraphrasing; instead, introduce subtle contextual or structural changes to make the question feel new and engaging.
 
 Additional Notes:
-- Avoid simply rephrasing; aim to present the question from different angles or perspectives.
+- Keep the level of difficulty and intent consistent with the original question.
+- Variants should be creative, thoughtful, and test the same knowledge or skill as the original.
+- Avoid introducing unrelated ideas or deviating from the original intent.
 
 {format_instructions}
 `;
 
 export const generateQuestionWithChoicesRewordingsTemplate = `
-Generate {variation_count} unique variations of the following question text and its associated choices:
+Generate {variation_count} creative variants of the following question and its associated choices:
 Question: {question_text}
 Choices: {choices_text}
-Existing variations: {variants}
+Existing variants: {variants}
 
 Your goal:
-- Provide a different variation of the question and its choices that maintains the original context, meaning, and intent. Main purpose is to avoid cheating.
-- Rewrite the question and its choices to offer meaningful alternatives.
-- Maintain the original intent and purpose while ensuring the choices remain relevant.
-- If a choice cannot be changed without losing meaning, reword it creatively.
+- Create distinct versions of the question and its choices, ensuring they remain relevant, meaningful, and aligned with the original intent.
+- Change the question focus, structure, or context to make it feel fresh, while still testing the same concept or knowledge.
+- Generate alternative choices where possible, replacing distractors (incorrect options) with new, plausible alternatives that fit the new question phrasing or context.
 
 Additional Notes:
-- Avoid providing trivial rewordings; think about how the question and its choices could be interpreted differently but still lead to the same understanding.
-- Use diverse vocabulary and phrasing to make each variation feel fresh and distinct.
-
+- Correct answers should remain accurate but can be reworded or framed differently to align with the new question.
+- Distractors should be realistic, thoughtfully created, and align with the topic, while differing slightly from the original distractors.
+- Avoid trivial rephrasing; aim for medium-difference variations that are distinct but interchangeable with the original.
 {format_instructions}
 `;
 
@@ -309,7 +329,7 @@ export const generateSingleBasedMarkingRubricTemplate = `
     {format_instructions}
     - Each option has "choice" (answer), "isCorrect" (true/false), "points", and "feedback".
     - Provide clear and concise feedback for each choice.
-    - Only one correct answer,and make the rest incorrect choices with negative points depending on the severity.
+    - Only one correct answer,and make the rest incorrect choices with zero points.
   `;
 export const generateMultipleBasedMarkingRubricTemplate = `
     You are an AI assistant helping the author create a scoring rubric for choice-based questions.

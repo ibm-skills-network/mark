@@ -521,6 +521,7 @@ const Question: FC<QuestionProps> = ({
           </Menu>
         </div>
         {/* Word count and other controls */}
+
         <div className="flex items-center gap-4 flex-wrap">
           {preview ? (
             <div className="flex items-center gap-2 text-gray-600 text-nowrap ">

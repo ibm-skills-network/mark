@@ -172,7 +172,7 @@ export class AssignmentService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     files?: { filename: string; content: string }[],
-    learningObjectives?: string[],
+    learningObjectives?: string,
   ): Promise<void> {
     // Start the job processing asynchronously
     setImmediate(() => {
@@ -194,7 +194,7 @@ export class AssignmentService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     files?: { filename: string; content: string }[],
-    learningObjectives?: string[],
+    learningObjectives?: string,
   ): Promise<void> {
     try {
       let content = "";
@@ -389,8 +389,9 @@ export class AssignmentService {
         for (const v of existingVariants)
           existingVariantsMap.set(v.variantContent, v);
 
+        // Safely handle undefined or empty variants
         const newVariantContents = new Set<string>(
-          question.variants.map((v) => v.variantContent),
+          (question.variants || []).map((v) => v.variantContent),
         );
 
         // Identify and delete variants that are no longer present
@@ -410,63 +411,59 @@ export class AssignmentService {
             },
           });
         }
+        if (question.variants && question.variants.length > 0) {
+          await Promise.all(
+            question.variants.map(async (variant) => {
+              const existingVariant = existingVariantsMap.get(
+                variant.variantContent,
+              );
 
-        // Upsert each variant
-        await Promise.all(
-          question.variants.map(async (variant) => {
-            const existingVariant = existingVariantsMap.get(
-              variant.variantContent,
-            );
+              const variantData: Prisma.QuestionVariantCreateInput = {
+                variantContent: variant.variantContent,
+                choices: variant.choices
+                  ? (JSON.parse(
+                      JSON.stringify(variant.choices),
+                    ) as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
+                maxWords: variant.maxWords,
+                maxCharacters: variant.maxCharacters,
+                variantType: variant.variantType,
+                createdAt: new Date(),
+                variantOf: { connect: { id: upsertedQuestion.id } },
+              };
 
-            const variantData: Prisma.QuestionVariantCreateInput = {
-              variantContent: variant.variantContent,
-              choices: variant.choices
-                ? (JSON.parse(
-                    JSON.stringify(variant.choices),
-                  ) as Prisma.InputJsonValue)
-                : Prisma.JsonNull,
-              maxWords: variant.maxWords,
-              maxCharacters: variant.maxCharacters,
-              variantType: variant.variantType,
-              createdAt: new Date(),
-              variantOf: { connect: { id: upsertedQuestion.id } },
-            };
+              if (existingVariant) {
+                const contentChanged =
+                  existingVariant.variantContent !== variant.variantContent;
+                const choicesChanged =
+                  JSON.stringify(existingVariant.choices) !==
+                  JSON.stringify(variant.choices);
 
-            if (existingVariant) {
-              // Check if content or choices have changed
-              const contentChanged =
-                existingVariant.variantContent !== variant.variantContent;
-              const choicesChanged =
-                JSON.stringify(existingVariant.choices) !==
-                JSON.stringify(variant.choices);
-
-              if (contentChanged || choicesChanged) {
-                // Delete and recreate the variant if content has changed
-                await this.prisma.questionVariant.delete({
-                  where: { id: existingVariant.id },
-                });
+                if (contentChanged || choicesChanged) {
+                  await this.prisma.questionVariant.delete({
+                    where: { id: existingVariant.id },
+                  });
+                  await this.prisma.questionVariant.create({
+                    data: variantData,
+                  });
+                } else {
+                  await this.prisma.questionVariant.update({
+                    where: { id: existingVariant.id },
+                    data: {
+                      maxWords: variant.maxWords,
+                      maxCharacters: variant.maxCharacters,
+                      variantType: variant.variantType,
+                    },
+                  });
+                }
+              } else {
                 await this.prisma.questionVariant.create({
                   data: variantData,
                 });
-              } else {
-                // Update existing variant
-                await this.prisma.questionVariant.update({
-                  where: { id: existingVariant.id },
-                  data: {
-                    maxWords: variant.maxWords,
-                    maxCharacters: variant.maxCharacters,
-                    variantType: variant.variantType,
-                  },
-                });
               }
-            } else {
-              // Create new variant
-              await this.prisma.questionVariant.create({
-                data: variantData,
-              });
-            }
-          }),
-        );
+            }),
+          );
+        }
       }),
     );
 

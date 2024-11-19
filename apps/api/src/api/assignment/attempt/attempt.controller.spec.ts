@@ -1,4 +1,5 @@
 import { HttpModule } from "@nestjs/axios";
+import { Reflector } from "@nestjs/core";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -21,6 +22,7 @@ describe("AttemptController", () => {
         LlmService,
         QuestionService,
         AssignmentService,
+        Reflector,
         {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: {

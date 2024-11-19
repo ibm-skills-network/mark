@@ -17,6 +17,7 @@ import Image, { StaticImageData } from "next/image";
 import ExitIcon from "@/components/svgs/ExitIcon";
 import { IconRefresh } from "@tabler/icons-react";
 import { getAttempt, getUser } from "@/lib/talkToBackend";
+import animationData from "@/animations/LoadSN.json";
 import {
   AssignmentAttemptWithQuestions,
   AssignmentDetails,
@@ -265,7 +266,7 @@ function SuccessPage() {
     },
   };
   if (loading) {
-    return <Loading />;
+    return <Loading animationData={animationData} />;
   }
   const getGradeMessage = (grade: number): string => {
     if (grade >= 80) return "Impressive Mastery! 🌟";

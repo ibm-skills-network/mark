@@ -3,6 +3,7 @@ import MarkdownEditor from "@/components/MarkDownEditor";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 import { useAuthorStore } from "@/stores/author";
 import LoadingPage from "@/app/loading";
+import animationData from "@/animations/LoadSN.json";
 
 const stepOneSections = {
   introduction: {
@@ -58,7 +59,7 @@ const MainContent = () => {
   ]);
 
   if (pageState === "loading") {
-    return <LoadingPage />;
+    return <LoadingPage animationData={animationData} />;
   }
 
   return (

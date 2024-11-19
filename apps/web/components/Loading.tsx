@@ -2,9 +2,10 @@
 
 import React from "react";
 import Lottie from "lottie-react";
-import animationData from "@/animations/LoadSN.json";
-
-const Loading: React.FC = () => {
+interface LoadingProps {
+  animationData: object;
+}
+const Loading: React.FC<LoadingProps> = ({ animationData }) => {
   if (typeof document === "undefined") {
     return null;
   }

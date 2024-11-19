@@ -11,5 +11,5 @@ export interface QuestionGenerationPayload {
   assignmentType: AssignmentTypeEnum;
   questionsToGenerate: QuestionsToGenerate;
   fileContents: { filename: string; content: string }[];
-  learningObjectives: string[];
+  learningObjectives: string;
 }

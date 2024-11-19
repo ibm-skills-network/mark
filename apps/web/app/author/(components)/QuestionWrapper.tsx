@@ -420,7 +420,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   }, [questionCriteria.points, criteriaMode]);
   return (
-    <>
+    <div id={`question-title-${questionId}`} className="w-full">
       {/* Markdown editor for the question title */}
       {toggleTitle && !preview ? (
         <div ref={titleRef} className="w-full">
@@ -758,7 +758,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           </div>
         </>
       )}
-    </>
+    </div>
   );
 };
 

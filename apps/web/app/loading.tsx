@@ -1,13 +1,18 @@
 "use client";
-import React from "react";
-import Loading from "@components/Loading";
+import React, { FC } from "react";
 import dynamic from "next/dynamic";
-const DynamicLoading = dynamic(() => import("@/components/Loading"), {
-  ssr: false,
-});
 
-const LoadingPage: React.FC = () => {
-  return <DynamicLoading />;
+const DynamicLoading = dynamic<{ animationData: any }>(
+  () => import("@/components/Loading"),
+  {
+    ssr: false,
+  },
+);
+interface LoadingPageProps {
+  animationData: object;
+}
+const LoadingPage: FC<LoadingPageProps> = ({ animationData }) => {
+  return <DynamicLoading animationData={animationData} />;
 };
 
 export default LoadingPage;
