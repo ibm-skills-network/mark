@@ -893,9 +893,9 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/core@^0.3.0":
-  version "0.3.18"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.18.tgz#bbe3c518f3b48b0cecd426b36d22bac88486a214"
-  integrity sha512-IEZCrFs1Xd0J2FTH1D3Lnm3/Yk2r8LSpwDeLYwcCom3rNAK5k4mKQ2rwIpNq3YuqBdrTNMKRO+PopjkP1SB17A==
+  version "0.3.19"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.19.tgz#8e2038dbb7cb70264d892cf9c3b506125ee68d77"
+  integrity sha512-pJVOAHShefu1SRO8uhzUs0Pexah/Ib66WETLMScIC2w9vXlpwQy3DzXJPJ5X7ixry9N666jYO5cHtM2Z1DnQIQ==
   dependencies:
     ansi-styles "^5.0.0"
     camelcase "6"
