@@ -22,6 +22,7 @@ import type {
   ReplaceAssignmentRequest,
   SubmitAssignmentResponse,
   User,
+  ResponseType,
 } from "@config/types";
 
 // TODO: change the error message to use the error message from the backend
@@ -324,7 +325,12 @@ export async function generateQuestionVariant(
 }
 
 export async function generateRubric(
-  questions: { id: number; questionText: string; questionType: string }[],
+  questions: {
+    id: number;
+    questionText: string;
+    questionType: string;
+    responseType: ResponseType;
+  }[],
   assignmentId: number,
   variantMode: boolean,
   cookies?: string,
@@ -580,6 +586,7 @@ export async function uploadFiles(
         headers: {
           "Content-Type": "application/json",
           Connection: "keep-alive",
+          KeepAlive: "timeout=1000000",
           ...(cookies ? { Cookie: cookies } : {}),
         },
         body: JSON.stringify({ ...payload }),

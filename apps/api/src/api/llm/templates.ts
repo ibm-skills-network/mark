@@ -39,6 +39,10 @@ Based on these parameters and the content of the URL, assign points and provide 
 
 Ensure your feedback is constructive, aiding the learner in understanding their mistakes and offering guidance on improvement. Speak directly to the learner, as if you are a grader offering feedback, and ensure to provide context about the URL contents when necessary.
 
+Mark the question as {grading_type} based on the provided criteria and the content of the URL.
+
+{responseSpecificInstruction}
+
 {format_instructions}
 `;
 export const gradeCodeFileQuestionLlmTemplate = `
@@ -121,7 +125,7 @@ Feedback:
 `;
 
 export const gradeTextBasedQuestionLlmTemplate = `
-As an experienced grader with over a decade of expertise, your task is to evaluate and grade a response to a question. It's essential to consider the broader context of the assignment, including the assignment's instructions and any prior questions and answers. This is crucial because some questions may refer back to or build upon answers provided earlier.
+As an experienced grader with over a decade of expertise, your task is to evaluate and grade a response to a question. It's essential to provide feedback structured into key areas of evaluation. 
 
 **Assignment Instructions:** "{assignment_instructions}"
 
@@ -131,19 +135,15 @@ As an experienced grader with over a decade of expertise, your task is to evalua
 **Current Question:** "{question}".
 **Learner's Response:** "{learner_response}". 
 
-The question offers a maximum of {total_points} points, utilizes a scoring method of {scoring_type}, and follows the scoring criteria presented in the JSON format as follows: {scoring_criteria}. 
+The question offers a maximum of {total_points} points and follows the scoring criteria presented in the JSON format as follows: {scoring_criteria}. 
 
-Based on these parameters and keeping the assignment's broader context in mind, assign points and provide constructive feedback:
+**Scoring Rules:**
+- If the scoring type is "CRITERIA_BASED", award points based on the most relevant criterion in the list. Each criterion is standalone and represents a distinct quality level. Select the single criterion that best matches the learner's response.
+- If the scoring type is "AI_GRADED", allocate points out of the possible {total_points} based on the overall assessment of the response quality.
 
-1. If the scoring type is "CRITERIA_BASED", you are to evaluate the learner's response against the provided list of criteria in a sequential manner. Remember, all criteria are sequential and build on top of each other. The task is to find that one criterion which perfectly encapsulates the learner's actions. Do not split points across multiple criteria. Instead, aim to select the single criterion that best represents the learner's response. If you find that the learner's actions fit between two criteria, interpolate and choose the closest match based on your expertise. Once you have selected the most appropriate criterion, award the corresponding points and provide feedback that reflects how the learner performed in regard to that specific criterion. Your feedback should guide the learner on how they can improve or maintain their current performance level.
+If the response is irrelevant (e.g., "I don't know"), state: "The answer you provided is not relevant to the question. Please try again."
 
-2. If the scoring type is "AI_GRADED", use your analytical capabilities to comprehensively assess the response in context. Allocate points out of the possible {total_points}. Provide feedback detailing the quality of the learner's answer and the rationale behind the points awarded.
-
-Ensure your feedback is concise and constructive, helping the learner understand their mistakes and learn from them. Speak to the learner directly in the first person, as if you are a grader communicating feedback.
-
-You are not allowed to reveal the correct answer in any circumstances. When providing feedback to the learner the most you can do is lightly hint at the answer.The correct answer is usually implied from the criteria descriptions. Not revealing the correct answer is crucial to ensure that the learner doesn't cheat. Follow what is stated in the scoring criteria descriptions and construct your feedback based on that.
-
-If the learner provides an answer that is not relevant to the question like "I don't know" or anything of that sort, you should not give any constructive feedback and just say something along the lines of "The answer you provided is not relevant to the question. Please try again."
+**Additional Instructions for Response Type:** "{responseSpecificInstruction}"
 
 {format_instructions}
 `;
@@ -207,7 +207,7 @@ Guidelines:
   - TRUE_FALSE: {trueFalse} questions.
 - Questions should align with the following difficulty type: {difficultyDescription}.
 - Ensure each question covers the entire scope of the content.
-- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
+- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice. Make at least 4 choices for each question.
 - For TRUE_FALSE questions (if any):
   - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
   - Do **not** generate multiple choices for TRUE/FALSE questions.
@@ -232,7 +232,7 @@ Guidelines:
   - TRUE_FALSE: {trueFalse} questions.
 - Questions should align with the following difficulty type: {difficultyDescription}.
 - Ensure each question covers key elements of the learning objectives. Do not deviate from the objectives and maintain a clear focus with no redundancy.
-- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
+- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice. Make at least 4 choices for each question.
 - For TRUE_FALSE questions (if any):
   - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
   - Do **not** generate multiple choices for TRUE/FALSE questions.
@@ -258,7 +258,7 @@ Guidelines:
   - TRUE_FALSE: {trueFalse} questions.
 - Questions should align with the following difficulty type: {difficultyDescription}.
 - Ensure each question covers key elements of the learning objectives. Do not deviate from the objectives and maintain a clear focus with no redundancy.
-- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice.
+- For MULTIPLE_CHOICE/SINGLE_CHOICE questions (if any), include defined feedback for each choice. Make at least 4 choices for each question.
 - For TRUE_FALSE questions (if any):
   - Only provide one choice as "true" with \`isCorrect\` set to \`true\` and \`points: 1\`.
   - Do **not** generate multiple choices for TRUE/FALSE questions.
@@ -307,6 +307,22 @@ Additional Notes:
 {format_instructions}
 `;
 
+export const generateQuestionWithTrueFalseRewordingsTemplate = `
+Generate {variation_count} creative variants of the following true/false question:
+Question: {question_text}
+Existing variants: {variants}
+
+Your goal:
+- Create distinct versions of the true/false question that maintain the same core concept and difficulty level.
+- Alter the question structure, wording, or context to provide fresh, engaging alternatives.
+- Ensure the true/false statement remains accurate and aligned with the new question phrasing.
+
+Additional Notes:
+- Maintain the accuracy of the true/false statement while rephrasing it to fit the new question.
+- Avoid trivial rewording; aim for medium-difference variations that are distinct but interchangeable with the original.
+{format_instructions}
+`;
+
 export const generateMarkingRubricTemplate = `
   You are tasked with creating a JSON object of marking rubrics for the following questions:
   Questions: {questions_json_array}
@@ -327,6 +343,7 @@ export const generateSingleBasedMarkingRubricTemplate = `
     You are an AI assistant helping the author create a scoring rubric for choice-based questions.
     Questions: {questions_json_array}
     {format_instructions}
+    {grading_style}
     - Each option has "choice" (answer), "isCorrect" (true/false), "points", and "feedback".
     - Provide clear and concise feedback for each choice.
     - Only one correct answer,and make the rest incorrect choices with zero points.
@@ -335,6 +352,7 @@ export const generateMultipleBasedMarkingRubricTemplate = `
     You are an AI assistant helping the author create a scoring rubric for choice-based questions.
     Questions: {questions_json_array}
     {format_instructions}
+    {grading_style}
     - Each option has "choice" (answer), "isCorrect" (true/false), "points", and "feedback".
     - Provide clear and concise feedback for each choice.
     - At least two correct answers; assign negative points for incorrect choices as needed.
@@ -347,6 +365,8 @@ export const generateUrlBasedMarkingRubricTemplate = `
    Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
+  
+  {grading_style}
 
   Focus areas:
   - URL relevance
@@ -368,6 +388,8 @@ export const generateTextBasedMarkingRubricTemplate = `
   - Clarity of explanation: Is the explanation easy to understand?
   - Quality of integration: How well is the content integrated with supporting information or analysis?
 
+  {grading_style}
+
   Focus on clear distinctions between correct, partially correct, and incorrect answers.
 `;
 
@@ -379,13 +401,31 @@ export const generateDocumentFileUploadMarkingRubricTemplate = `
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-
+  {grading_style}
   Focus areas:
   - Content relevance: Does the document directly address the question or topic?
   - Organization: Is the document structured logically, with clear headings and flow?
   - Clarity and style: Is the document written clearly, free of grammatical errors, and in an appropriate tone?
   - Supporting details: Are there relevant examples, statistics, or citations that strengthen the arguments?
   - Visuals and formatting: Are visuals used effectively, and is the document formatted for readability?
+
+  Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
+`;
+export const generateLinkFileUploadMarkingRubricTemplate = `
+  Generate a scoring rubric for link/file upload questions.
+  Question: {questions_json_array}
+  {format_instructions}
+
+  Format each rubric item as an object with:
+  - "points" (listed in descending order, unique per item)
+  - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
+  {grading_style}
+  Focus areas:
+  - Relevance: Does the linked content directly address the question or topic?
+  - Credibility: Is the source of the linked content reliable and trustworthy?
+  - Clarity: Is the content of the link clear and easy to understand?
+  - Integration: How well is the linked content integrated with the learner's response?
+  - Supporting details: Does the linked content provide relevant examples, statistics, or evidence?
 
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;
@@ -397,7 +437,7 @@ export const generateImageFileUploadMarkingRubricTemplate = `
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-
+  {grading_style}
   Focus areas:
   - Relevance: Does the image directly support and enhance the answer to the question?
   - Clarity: Is the image clear, focused, and free of unnecessary elements?
@@ -416,7 +456,7 @@ export const generateCodeFileUploadMarkingRubricTemplate = `
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-
+  {grading_style}
   Focus areas:
   - Functionality: Does the code work as intended and meet all requirements?
   - Code quality: Is the code well-structured, maintainable, and follows best practices?
@@ -425,4 +465,135 @@ export const generateCodeFileUploadMarkingRubricTemplate = `
   - Documentation and readability: Is the code easy to understand, with clear comments and naming conventions?
 
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
+`;
+
+export const gradeEssayFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded essay for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Content**: Does the essay address the question thoroughly and insightfully?
+- **Organization**: Is the essay structured logically with clear introductions, body, and conclusions?
+- **Analysis**: Does the essay demonstrate critical thinking and analysis?
+- **Writing Quality**: Evaluate grammar, vocabulary, and style.
+- **References**: Are sources cited properly, if required?
+- **Strengths**: Highlight the strongest aspects of the essay.
+
+> Provide constructive feedback to guide improvement. Avoid providing solutions.
+`;
+export const gradePresentationFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded presentation for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Content Quality**: Does the presentation cover all required topics effectively?
+- **Design and Visual Appeal**: Assess the aesthetics and readability of slides.
+- **Organization**: Is the information presented in a logical sequence?
+- **Clarity**: Evaluate the clarity of text and visuals.
+- **Engagement**: Does the presentation engage the audience?
+- **Strengths**: Mention any particularly strong elements.
+
+> Provide constructive feedback without revealing solutions.
+`;
+export const gradeVideoFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded video for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Content Accuracy**: Does the video accurately address the question?
+- **Presentation Skills**: Assess clarity of speech and engagement.
+- **Production Quality**: Evaluate video and audio quality.
+- **Creativity**: Consider originality and creative elements.
+- **Structure**: Is the video well-organized with a clear flow?
+- **Strengths**: Highlight standout aspects.
+
+> Offer constructive feedback to aid improvement.
+`;
+export const gradeAudioFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded audio file for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Content Relevance**: Does the audio address the question effectively?
+- **Clarity**: Is the speech clear and understandable?
+- **Audio Quality**: Assess background noise and sound quality.
+- **Engagement**: Does the audio keep the listener engaged?
+- **Structure**: Is there a logical flow?
+- **Strengths**: Point out strong elements.
+
+> Provide guidance for improvement without giving away answers.
+`;
+export const gradeSpreadsheetFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded spreadsheet for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Data Accuracy**: Are the data entries correct?
+- **Formulas and Functions**: Are formulas used appropriately and correctly?
+- **Formatting**: Is the spreadsheet well-formatted for readability?
+- **Data Visualization**: Evaluate any charts or graphs included.
+- **Efficiency**: Assess the use of advanced features (e.g., pivot tables).
+- **Strengths**: Highlight particularly well-executed aspects.
+
+> Provide constructive feedback to help the learner improve.
 `;

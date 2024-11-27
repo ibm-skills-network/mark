@@ -38,6 +38,7 @@ import {
   PencilIcon,
 } from "@heroicons/react/20/solid";
 import {
+  ArrowUpTrayIcon,
   CodeBracketIcon,
   DocumentArrowUpIcon,
 } from "@heroicons/react/24/outline";
@@ -110,24 +111,26 @@ const AuthorQuestionsPage: FC<Props> = ({
   const questionTypes = useMemo(
     () => [
       {
-        value: "TEXT",
-        label: "Text Response",
-        icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
-      },
-      {
         value: "MULTIPLE_CORRECT",
         label: "Multiple Select",
         icon: <IconCheckbox className="w-5 h-5" />,
       },
+
       {
         value: "SINGLE_CORRECT",
         label: "Multiple Choice",
         icon: <MultipleChoiceSVG className="w-5 h-5 " />,
       },
+
       {
         value: "TRUE_FALSE",
         label: "True/False",
         icon: <IconCircleCheck className="w-5 h-5" />,
+      },
+      {
+        value: "TEXT",
+        label: "Text Response",
+        icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
       },
       {
         value: "URL",
@@ -135,14 +138,14 @@ const AuthorQuestionsPage: FC<Props> = ({
         icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />,
       },
       {
-        value: "CODE",
-        label: "Code",
-        icon: <CodeBracketIcon className="w-5 h-5 stroke-gray-500" />,
+        value: "UPLOAD",
+        label: "File Upload",
+        icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
       {
-        value: "UPLOAD",
-        label: "Essay",
-        icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
+        value: "LINK_FILE",
+        label: "File or Link",
+        icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
     [],
@@ -258,7 +261,8 @@ const AuthorQuestionsPage: FC<Props> = ({
       | "TRUE_FALSE"
       | "URL"
       | "CODE"
-      | "UPLOAD",
+      | "UPLOAD"
+      | "LINK_FILE",
   ) => {
     const question: CreateQuestionRequest = {
       question: "",
@@ -664,6 +668,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                                   | "MULTIPLE_CORRECT"
                                   | "TRUE_FALSE"
                                   | "URL"
+                                  | "LINK_FILE"
                                   | "UPLOAD"
                                   | "CODE",
                               )
@@ -690,13 +695,13 @@ const AuthorQuestionsPage: FC<Props> = ({
           </div>
         </div>
         <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
-          <div className="flex flex-col sticky top-0 gap-4 items-center p-4 ">
+          <div className="flex flex-col sticky top-0 gap-4 items-center px-4 pb-4">
             {/* Collapse/Expand all button */}
             {questions.length > 0 && (
               <>
                 <button
                   onClick={() => setCollapseAll(!collapseAll)}
-                  className={`px-4 py-2 border border-gray-300 rounded-lg shadow-md transition-all duration-300 ease-in-out w-full text-sm font-medium ${
+                  className={`px-4 py-2 border border-gray-300 text-wrap rounded-lg shadow-md transition-all duration-300 ease-in-out w-full text-sm font-medium ${
                     collapseAll
                       ? "bg-violet-600 text-white"
                       : "bg-white text-violet-600"
@@ -706,7 +711,9 @@ const AuthorQuestionsPage: FC<Props> = ({
                 </button>
                 <div className="flex flex-col w-full bg-white p-4 rounded-lg shadow-sm border border-gray-300">
                   {/* Mass Variations Section */}
-                  <span className="text-lg mb-2">Mass Variations (Beta)</span>
+                  <span className="text-lg mb-2 text-wrap">
+                    Mass Variations (Beta)
+                  </span>
                   <Dropdown
                     options={[1, 2, 3, 4, 5] as number[]}
                     selectedItem={questionVariationNumber}

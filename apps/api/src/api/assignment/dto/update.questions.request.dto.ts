@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { QuestionType } from "@prisma/client";
+import { QuestionType, ResponseType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   ArrayNotEmpty,
@@ -133,6 +133,11 @@ export class QuestionDto {
   @IsOptional()
   @IsInt()
   numRetries?: number;
+
+  @ApiProperty({ description: "Response Question Type", type: String })
+  @IsString()
+  @IsOptional()
+  responseType?: ResponseType;
 
   @ApiProperty({ description: "Type of question", type: String })
   @IsString()

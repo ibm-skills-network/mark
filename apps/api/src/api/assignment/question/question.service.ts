@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, QuestionType } from "@prisma/client";
+import { Prisma, QuestionType, ResponseType } from "@prisma/client";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
 import { QuestionDto } from "../dto/update.questions.request.dto";
@@ -144,7 +144,12 @@ export class QuestionService {
     };
   }
   async createMarkingRubric(
-    questions: { id: number; questionText: string; questionType: string }[],
+    questions: {
+      id: number;
+      questionText: string;
+      questionType: string;
+      responseType?: ResponseType;
+    }[],
     variantMode: boolean,
     assignmentId: number,
   ): Promise<Record<number, string>> {

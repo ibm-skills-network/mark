@@ -32,8 +32,17 @@ enum QuestionType {
   TRUE_FALSE /// The question requires a True/False response
   URL /// The question requires a URL response
   UPLOAD /// The question requires the upload of a file as a response
-  CODE /// The question requires a code response
-  IMAGES /// The question requires an image response
+  LINK_FILE /// The question requires the upload of a file or a URL as a response
+}
+enum ResponseType{
+  CODE
+  ESSAY
+  REPORT
+  PRESENTATION
+  VIDEO
+  AUDIO
+  SPREADSHEET
+  OTHER
 }
 
 enum QuestionDisplay {
@@ -136,6 +145,7 @@ model Question {
   id                        Int              @id @default(autoincrement()) /// Unique identifier for the question
   totalPoints               Int /// Total points that can be scored for the question
   type                      QuestionType /// Type of question
+  responseType              ResponseType? /// Type of response expected from the learner
   question                  String /// The text of the question
   variants                  QuestionVariant[] /// AI-generated variants for this question
   maxWords                  Int? /// Optional maximum number of words allowed for a written response type question

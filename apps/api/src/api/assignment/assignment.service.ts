@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Job, Prisma, QuestionType } from "@prisma/client";
+import { Job, Prisma, QuestionType, ResponseType } from "@prisma/client";
 import { isNumber } from "class-validator";
 import {
   UserRole,
@@ -362,6 +362,7 @@ export class AssignmentService {
           question: question.question,
           maxWords: question.maxWords,
           maxCharacters: question.maxCharacters,
+          responseType: question.responseType,
           assignment: { connect: { id: assignmentId } },
         };
 
@@ -391,7 +392,7 @@ export class AssignmentService {
 
         // Safely handle undefined or empty variants
         const newVariantContents = new Set<string>(
-          (question.variants || []).map((v) => v.variantContent),
+          question.variants?.map((v) => v.variantContent),
         );
 
         // Identify and delete variants that are no longer present
@@ -411,7 +412,9 @@ export class AssignmentService {
             },
           });
         }
-        if (question.variants && question.variants.length > 0) {
+
+        if (question.variants) {
+          // Upsert each variant
           await Promise.all(
             question.variants.map(async (variant) => {
               const existingVariant = existingVariantsMap.get(
@@ -433,6 +436,7 @@ export class AssignmentService {
               };
 
               if (existingVariant) {
+                // Check if content or choices have changed
                 const contentChanged =
                   existingVariant.variantContent !== variant.variantContent;
                 const choicesChanged =
@@ -440,6 +444,7 @@ export class AssignmentService {
                   JSON.stringify(variant.choices);
 
                 if (contentChanged || choicesChanged) {
+                  // Delete and recreate the variant if content has changed
                   await this.prisma.questionVariant.delete({
                     where: { id: existingVariant.id },
                   });
@@ -447,6 +452,7 @@ export class AssignmentService {
                     data: variantData,
                   });
                 } else {
+                  // Update existing variant
                   await this.prisma.questionVariant.update({
                     where: { id: existingVariant.id },
                     data: {
@@ -457,6 +463,7 @@ export class AssignmentService {
                   });
                 }
               } else {
+                // Create new variant
                 await this.prisma.questionVariant.create({
                   data: variantData,
                 });

@@ -85,7 +85,10 @@ const Question: FC<Props> = ({ question, number }) => {
           {learnerResponse.toString()}
         </MarkdownViewer>
       );
-    } else if (type === "URL" && typeof learnerResponse === "string") {
+    } else if (
+      (type === "URL" || type === "LINK_FILE") &&
+      typeof learnerResponse === "string"
+    ) {
       return (
         <a
           href={learnerResponse}
@@ -115,7 +118,12 @@ const Question: FC<Props> = ({ question, number }) => {
           {learnerResponse ? "True" : "False"}
         </p>
       );
-    } else if (type === "CODE" || type === "IMAGES" || type === "UPLOAD") {
+    } else if (
+      type === "CODE" ||
+      type === "IMAGES" ||
+      type === "UPLOAD" ||
+      type === "LINK_FILE"
+    ) {
       if (Array.isArray(learnerResponse) && learnerResponse.length > 0) {
         return (
           <ul className="list-disc ml-5 text-gray-800">

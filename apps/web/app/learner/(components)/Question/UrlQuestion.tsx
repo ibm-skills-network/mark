@@ -5,10 +5,11 @@ import { useState, type ComponentPropsWithoutRef } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   question: QuestionStore;
+  onUrlChange: (url: string, questionId: number) => void;
 }
 
 function URLQuestion(props: Props) {
-  const { className, question } = props;
+  const { className, question, onUrlChange } = props;
   const [setURLResponse] = useLearnerStore((state) => [state.setURLResponse]);
   const { id, learnerUrlResponse: url } = question;
   const [validURL, setValidURL] = useState<boolean>(true);
@@ -16,7 +17,8 @@ function URLQuestion(props: Props) {
   const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newUrl = e.target.value;
     setURLResponse(newUrl, id);
-    setValidURL(newUrl ? validateURL(url) : true);
+    setValidURL(newUrl ? validateURL(newUrl) : true);
+    onUrlChange(newUrl, id);
   };
 
   const validateURL = (str: string) => {

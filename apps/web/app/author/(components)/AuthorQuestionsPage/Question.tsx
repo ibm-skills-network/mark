@@ -4,6 +4,7 @@ import type {
   QuestionAuthorStore,
   QuestionType,
   QuestionVariants,
+  ResponseType,
   UpdateQuestionStateParams,
 } from "@/config/types";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
@@ -19,6 +20,13 @@ import {
   PencilSquareIcon,
   TrashIcon,
   PlusIcon,
+  ArrowUpTrayIcon,
+  PresentationChartBarIcon,
+  DocumentTextIcon,
+  DocumentChartBarIcon,
+  CameraIcon,
+  MicrophoneIcon,
+  TableCellsIcon,
 } from "@heroicons/react/24/outline";
 import {
   ExclamationTriangleIcon,
@@ -79,7 +87,7 @@ const Question: FC<QuestionProps> = ({
   const deleteVariant = useAuthorStore((state) => state.deleteVariant);
   const [newIndex, setNewIndex] = useState<number>(questionIndex);
   const [isFocused, setIsFocused] = useState(false);
-  const disabledMenuButtons = [""]; // in case we want to disable some question types
+  const disabledMenuButtons = ["VIDEO", "AUDIO"]; // in case we want to disable some question types
   const { questionStates, setShowWordCountInput, setCountMode } =
     useQuestionStore();
   const [variantLoading, setVariantLoading] = useState(false);
@@ -100,6 +108,9 @@ const Question: FC<QuestionProps> = ({
   );
   const [questionType, setQuestionTypeState] = useState<QuestionType>(
     question.type,
+  );
+  const [responseType, setResponseType] = useState<ResponseType>(
+    question.responseType || "OTHER", // Default value
   );
   const [toggleDeleteConfirmation, setToggleDeleteConfirmation] =
     useState<boolean>(false);
@@ -190,6 +201,7 @@ const Question: FC<QuestionProps> = ({
       // Update main question state
       const updatedQuestion: Partial<QuestionAuthorStore> = {
         id: questionId,
+        responseType: params.responseType ?? responseType,
         totalPoints:
           params.questionCriteria?.points?.[0] ?? question.totalPoints,
         question: params.questionTitle ?? questionTitle,
@@ -294,7 +306,6 @@ const Question: FC<QuestionProps> = ({
       question.assignmentId,
     );
     if (questionsWithVariants) {
-      console.log(questionsWithVariants);
       replaceQuestion(questionId, questionsWithVariants[0]);
     }
 
@@ -347,24 +358,26 @@ const Question: FC<QuestionProps> = ({
   const questionTypes = useMemo(
     () => [
       {
-        value: "TEXT",
-        label: "Text Response",
-        icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
-      },
-      {
         value: "MULTIPLE_CORRECT",
         label: "Multiple Select",
         icon: <IconCheckbox className="w-5 h-5" />,
       },
+
       {
         value: "SINGLE_CORRECT",
         label: "Multiple Choice",
         icon: <MultipleChoiceSVG className="w-5 h-5 " />,
       },
+
       {
         value: "TRUE_FALSE",
         label: "True/False",
         icon: <IconCircleCheck className="w-5 h-5" />,
+      },
+      {
+        value: "TEXT",
+        label: "Text Response",
+        icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
       },
       {
         value: "URL",
@@ -372,15 +385,59 @@ const Question: FC<QuestionProps> = ({
         icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />,
       },
       {
+        value: "UPLOAD",
+        label: "File Upload",
+        icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
+      },
+      {
+        value: "LINK_FILE",
+        label: "File or Link",
+        icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
+      },
+    ],
+    [],
+  );
+  const responseTypes = useMemo(
+    () => [
+      {
         value: "CODE",
         label: "Code",
         icon: <CodeBracketIcon className="w-5 h-5 stroke-gray-500" />,
       },
       {
-        value: "UPLOAD",
+        value: "ESSAY",
         label: "Essay",
-        icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
+        icon: <DocumentTextIcon className="w-5 h-5  stroke-gray-500" />,
       },
+      {
+        value: "REPORT",
+        label: "Report",
+        icon: <DocumentChartBarIcon className="w-5 h-5 stroke-gray-500" />,
+      },
+      // {
+      //   value: "PRESENTATION",
+      //   label: "Presentation",
+      //   icon: <PresentationChartBarIcon className="w-5 h-5 stroke-gray-500" />,
+      // },
+      // {
+      //   value: "SPREADSHEET",
+      //   label: "Spreadsheet",
+      //   icon: <TableCellsIcon className="w-5 h-5 stroke-gray-500" />,
+      // },
+      {
+        value: "OTHER",
+        label: "Other",
+      },
+      // {
+      //   value: "VIDEO",
+      //   label: "Video",
+      //   icon: <CameraIcon className="w-5 h-5 stroke-gray-500" />,
+      // },
+      // {
+      //   value: "AUDIO",
+      //   label: "Audio",
+      //   icon: <MicrophoneIcon className="w-5 h-5  stroke-gray-500" />,
+      // },
     ],
     [],
   );
@@ -414,7 +471,6 @@ const Question: FC<QuestionProps> = ({
             )}
           </div>
 
-          {/* Dropdown menu for selecting question type */}
           <Menu as="div" className="relative inline-block text-left">
             <div>
               <Menu.Button
@@ -519,6 +575,98 @@ const Question: FC<QuestionProps> = ({
               </Menu.Items>
             </Transition>
           </Menu>
+          {/* Dropdown menu for selecting question type */}
+          {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) ? (
+            <Menu as="div" className="relative inline-block text-left">
+              <div>
+                <Menu.Button
+                  className="inline-flex justify-between items-center px-4 py-2 border border-gray-200 rounded-md bg-white text-gray-700 min-w-[208px] h-min body-typography gap-1.5 hover:bg-gray-100"
+                  disabled={preview}
+                >
+                  {responseTypes ? (
+                    <div className="flex items-center gap-1.5 typography-body text-gray-600">
+                      {
+                        responseTypes.find((qt) => qt.value === responseType)
+                          ?.icon
+                      }
+                      {
+                        responseTypes.find((qt) => qt.value === responseType)
+                          ?.label
+                      }
+                    </div>
+                  ) : null}
+                  {preview ? null : (
+                    <ChevronDownIcon
+                      className="w-5 h-5 text-gray-500"
+                      aria-hidden="true"
+                    />
+                  )}
+                </Menu.Button>
+              </div>
+
+              <Transition
+                as={Fragment}
+                enter="transition ease-out duration-100"
+                enterFrom="transform opacity-0 scale-95"
+                enterTo="transform opacity-100 scale-100"
+                leave="transition ease-in duration-75"
+                leaveFrom="transform opacity-100 scale-100"
+                leaveTo="transform opacity-0 scale-95"
+              >
+                <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
+                  <div className="py-1">
+                    {responseTypes
+                      ?.filter((qt) => {
+                        // Exclude specific response types for TEXT questionType
+                        if (questionType === "TEXT") {
+                          return ![
+                            "SPREADSHEET",
+                            "VIDEO",
+                            "AUDIO",
+                            "PRESENTATION",
+                          ].includes(qt.value);
+                        }
+                        return true; // Include all for other question types
+                      })
+                      .map((qt) => (
+                        <Menu.Item key={qt.value}>
+                          {({ active }) => (
+                            <button
+                              onClick={() => {
+                                if (disabledMenuButtons.includes(qt.value)) {
+                                  return;
+                                }
+                                setResponseType(qt.value as ResponseType);
+                                handleUpdateQuestionState({
+                                  responseType: qt.value as ResponseType,
+                                });
+                              }}
+                              disabled={
+                                disabledMenuButtons.includes(qt.value)
+                                  ? true
+                                  : false
+                              }
+                              className={`${
+                                active
+                                  ? "bg-gray-100 text-gray-600"
+                                  : "text-gray-600"
+                              } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
+                                disabledMenuButtons.includes(qt.value)
+                                  ? "cursor-not-allowed opacity-50"
+                                  : "cursor-pointer"
+                              }`}
+                            >
+                              <div className="stroke-gray-500">{qt.icon}</div>
+                              {qt.label}
+                            </button>
+                          )}
+                        </Menu.Item>
+                      ))}
+                  </div>
+                </Menu.Items>
+              </Transition>
+            </Menu>
+          ) : null}
         </div>
         {/* Word count and other controls */}
 
@@ -831,6 +979,7 @@ const Question: FC<QuestionProps> = ({
             preview={preview}
             questionFromParent={question}
             variantMode={false}
+            responseType={question.responseType ?? ("OTHER" as const)}
           />
 
           {/* Render Variants */}
@@ -914,6 +1063,7 @@ const Question: FC<QuestionProps> = ({
                 }}
                 variantMode={true}
                 variantId={variant.id}
+                responseType={question.responseType ?? ("OTHER" as const)}
               />
             </div>
           ))}

@@ -140,15 +140,6 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
-  // Function to handle file upload inside the modal
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files) {
-      // Process the files
-      console.log(files);
-    }
-  };
-
   return (
     <div className="fixed w-full z-50">
       <header className="border-b border-gray-300 px-6 py-4 bg-white flex items-center justify-between">

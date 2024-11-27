@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Assignment, Question, QuestionType } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
+import e from "express";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
@@ -331,6 +332,7 @@ export class AttemptService {
         type: question.type,
         assignmentId: question.assignmentId,
         gradingContextQuestionIds: question?.gradingContextQuestionIds,
+        responseType: question.responseType,
       };
     });
 
@@ -826,9 +828,30 @@ export class AttemptService {
           assignmentId,
         );
       }
-      case QuestionType.UPLOAD:
-      case QuestionType.IMAGES:
-      case QuestionType.CODE: {
+      case QuestionType.LINK_FILE: {
+        if (createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
+          return this.handleUrlQuestionResponse(
+            question,
+            createQuestionResponseAttemptRequestDto,
+            assignmentContext,
+            assignmentId,
+          );
+        } else if (
+          createQuestionResponseAttemptRequestDto.learnerFileResponse
+        ) {
+          return this.handleFileUploadQuestionResponse(
+            question,
+            question.type,
+            createQuestionResponseAttemptRequestDto,
+            assignmentContext,
+          );
+        } else {
+          throw new BadRequestException(
+            "Expected a file-based response (learnerFileResponse) or URL-based response (learnerUrlResponse), but did not receive one.",
+          );
+        }
+      }
+      case QuestionType.UPLOAD: {
         return this.handleFileUploadQuestionResponse(
           question,
           question.type,
@@ -900,6 +923,7 @@ export class AttemptService {
       question.scoring?.type ?? "",
       question.scoring?.criteria ?? {},
       questionType,
+      question.responseType ?? "OTHER",
     );
     const model = await this.llmService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,
@@ -941,6 +965,7 @@ export class AttemptService {
       question.totalPoints,
       question.scoring?.type ?? "",
       question.scoring?.criteria ?? {},
+      question.responseType ?? "OTHER",
     );
 
     const model = await this.llmService.gradeTextBasedQuestion(
@@ -980,6 +1005,11 @@ export class AttemptService {
 
     const urlFetchResponse =
       await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+    if (!urlFetchResponse.isFunctional) {
+      throw new BadRequestException(
+        `Unable to extract content from the provided URL: ${learnerResponse}`,
+      );
+    }
 
     const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
       question.question,
@@ -987,10 +1017,11 @@ export class AttemptService {
       assignmentContext.assignmentInstructions,
       learnerResponse,
       urlFetchResponse.isFunctional,
-      urlFetchResponse.body,
+      JSON.stringify(urlFetchResponse.body),
       question.totalPoints,
       question.scoring?.type ?? "",
       question.scoring?.criteria ?? {},
+      question.responseType ?? "OTHER",
     );
 
     const model = await this.llmService.gradeUrlBasedQuestion(

@@ -1,4 +1,4 @@
-import { QuestionType } from "@prisma/client";
+import { QuestionType, ResponseType } from "@prisma/client";
 import {
   BaseQuestionEvaluateModel,
   QuestionAnswerContext,
@@ -19,6 +19,7 @@ export class FileUploadQuestionEvaluateModel
   readonly previousQuestionsAnswersContext: QuestionAnswerContext[];
   readonly assignmentInstrctions: string;
   readonly questionType: QuestionType;
+  readonly responseType: ResponseType;
 
   constructor(
     question: string,
@@ -33,6 +34,7 @@ export class FileUploadQuestionEvaluateModel
     scoringCriteriaType: string,
     scoringCriteria: object,
     questionType: QuestionType,
+    responseType: ResponseType,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
@@ -42,5 +44,6 @@ export class FileUploadQuestionEvaluateModel
     this.scoringCriteriaType = scoringCriteriaType;
     this.scoringCriteria = scoringCriteria;
     this.questionType = questionType;
+    this.responseType = responseType;
   }
 }

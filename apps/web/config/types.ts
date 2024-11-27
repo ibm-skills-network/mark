@@ -37,6 +37,7 @@ export type QuestionAttemptRequest = {
 
 export type UpdateQuestionStateParams = {
   questionType?: QuestionType;
+  responseType?: ResponseType;
   maxWordCount?: number;
   questionTitle?: string;
   questionCriteria?: {
@@ -78,7 +79,18 @@ export type QuestionType =
   | "URL"
   | "UPLOAD"
   | "CODE"
+  | "LINK_FILE"
   | "IMAGES";
+
+export type ResponseType =
+  | "CODE"
+  | "ESSAY"
+  | "REPORT"
+  | "PRESENTATION"
+  | "VIDEO"
+  | "AUDIO"
+  | "SPREADSHEET"
+  | "OTHER";
 
 export type QuestionTypeDropdown = {
   value: QuestionType;
@@ -132,6 +144,7 @@ export interface BaseQuestion {
   numRetries?: number;
   question: string;
   questionResponses?: QuestionResponse[];
+  responseType?: ResponseType;
 }
 
 export interface LearnerGetQuestionResponse extends BaseQuestion {

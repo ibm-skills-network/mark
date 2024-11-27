@@ -1,8 +1,8 @@
 // FileUploadSection.js
 import { readFile } from "@/app/Helpers/fileReader";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import { QuestionType } from "@/config/types";
-import { useLearnerStore } from "@/stores/learner";
+import { QuestionType, ResponseType } from "@/config/types";
+import { learnerFileResponse, useLearnerStore } from "@/stores/learner";
 import { IconCloudUpload, IconEye, IconX } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
@@ -13,11 +13,15 @@ const MAX_CHAR_LIMIT = 40000;
 interface FileUploadSectionProps {
   questionId: number;
   questionType: QuestionType;
+  responseType: ResponseType;
+  onFileChange: (files: learnerFileResponse[], questionId: number) => void;
 }
 
 const FileUploadSection = ({
   questionId,
   questionType,
+  responseType,
+  onFileChange,
 }: FileUploadSectionProps) => {
   const [files, setFiles] = useState<File[]>([]);
   const [currentFileContent, setCurrentFileContent] = useState<string | null>(
@@ -27,7 +31,6 @@ const FileUploadSection = ({
   const [showContent, setShowContent] = useState(false);
 
   const getFileUpload = useLearnerStore((state) => state.getFileUpload);
-  const setFileUpload = useLearnerStore((state) => state.setFileUpload);
   const deleteFile = useLearnerStore((state) => state.deleteFile);
 
   useEffect(() => {
@@ -54,7 +57,7 @@ const FileUploadSection = ({
           };
         }),
       );
-      setFileUpload(fileContents, questionId); // Merge new files with existing ones in store
+      onFileChange(fileContents, questionId);
     } catch (error) {
       setError(error as string);
     }
@@ -89,8 +92,13 @@ const FileUploadSection = ({
     deleteFile(file, questionId);
   };
 
-  const getAcceptedFileTypes = (questionType: QuestionType) => {
-    switch (questionType) {
+  const getAcceptedFileTypes = (
+    questionType: QuestionType,
+    responseType?: ResponseType,
+  ) => {
+    const fileType =
+      responseType && responseType !== undefined ? responseType : questionType;
+    switch (fileType) {
       case "CODE":
         return {
           "text/x-python": [".py"],
@@ -112,6 +120,8 @@ const FileUploadSection = ({
           "image/svg+xml": [".svg"],
         };
       case "UPLOAD":
+      case "REPORT":
+      case "SPREADSHEET":
         return {
           "text/plain": [".txt"],
           "application/pdf": [".pdf"],
@@ -131,13 +141,13 @@ const FileUploadSection = ({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: getAcceptedFileTypes(questionType),
+    accept: getAcceptedFileTypes(questionType, responseType),
     multiple: true,
   });
 
   return (
     <motion.div
-      className="relative overflow-y-auto max-h-[80vh] w-full px-6 py-2"
+      className="relative overflow-y-auto max-h-[80vh] w-full p-2"
       initial={{ y: 50, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 50, opacity: 0 }}

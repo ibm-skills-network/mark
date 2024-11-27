@@ -25,6 +25,7 @@ import Tooltip from "./Tooltip";
 const MAX_CHAR_LIMIT = 40000;
 import MarkQuestionGenAnimation from "@/animations/MarkQuestionGenAnimation.json";
 import MarkQuestionGenCompleted from "@/animations/MarkQuestionGenCompleted.json";
+import MarkQuestionGenFailed from "@/animations/MarkQuestionGenFailed.json";
 import Lottie from "lottie-react";
 import { toast } from "sonner";
 
@@ -537,20 +538,27 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
               transition={{ duration: 0.2 }}
             >
               <div className="flex flex-col items-center">
-                {statusData?.status !== "Completed" ? (
+                {statusData?.status === "Completed" ? (
+                  <Lottie
+                    animationData={MarkQuestionGenCompleted}
+                    loop={false}
+                    style={{ width: 200, height: 200 }}
+                  />
+                ) : statusData?.status === "Failed" ? (
+                  <Lottie
+                    animationData={MarkQuestionGenFailed}
+                    loop={false}
+                    style={{ width: 200, height: 200 }}
+                  />
+                ) : statusData?.status === "Pending" ? (
                   <Lottie
                     animationData={MarkQuestionGenAnimation}
                     style={{ width: 200, height: 200 }}
                   />
-                ) : (
-                  <Lottie
-                    animationData={MarkQuestionGenCompleted}
-                    style={{ width: 200, height: 200 }}
-                  />
-                )}
+                ) : null}
                 <motion.span
                   className="text-xl font-medium text-gray-800 transition-all duration-200"
-                  key={progressMessage} // Ensure motion triggers on change
+                  key={progressMessage} // Trigger motion on progress change
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -558,6 +566,13 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
                 >
                   {progressMessage}
                 </motion.span>
+                <div className="fixed bottom-0 left-0 w-full bg-gray-100 py-3 shadow-lg">
+                  <span className="text-sm text-gray-700 text-center block px-4">
+                    Generating more questions might take longer and could
+                    include occasional mistakes, but we're constantly optimizing
+                    to improve accuracy and efficiency.
+                  </span>
+                </div>
               </div>
             </motion.div>
           </motion.div>

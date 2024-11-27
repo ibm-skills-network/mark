@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { generateRubric } from "@/lib/talkToBackend";
 import SparkleLottie from "@/app/animations/sparkleLottie";
 import { IconArrowsShuffle } from "@tabler/icons-react";
+import WarningAlert from "@/components/WarningAlert";
 interface SectionProps {
   questionId: number;
   variantId?: number; // Add variantId
@@ -62,6 +63,7 @@ function Section({
   const criteriaMode = useQuestionStore(
     (state) => state.questionStates[questionId]?.criteriaMode,
   );
+  const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [backspaceCount, setBackspaceCount] = useState(0);
@@ -198,11 +200,13 @@ function Section({
   };
 
   const fetchAiGenChoices = async () => {
+    setLoading(true);
     const questions = [
       {
         id: questionId,
         questionText: questionTitle,
         questionType: type,
+        responseType: question.responseType,
       },
     ];
     const assignmentId = useAuthorStore.getState().activeAssignmentId;
@@ -237,21 +241,34 @@ function Section({
   };
 
   const disableAddChoice = choices?.length >= 10 || preview;
-  const handleAiClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation(); // Prevent the click event from bubbling up to the parent0=
-    if (questionTitle.trim() === "") {
+  const handleAiClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (question.scoring?.criteria?.length > 0) {
+      setModalOpen(true);
+    } else {
+      void fetchAiGenChoices();
+    }
+  };
+
+  const handleConfirm = async () => {
+    setModalOpen(false); // Close the modal
+    if (questionTitle?.trim() === "") {
       toast.error("Please enter a question title first.");
       return;
     }
+
+    setCriteriaMode(questionId, "AI_GEN");
+
     try {
-      setLoading(true);
       await fetchAiGenChoices();
-      setLoading(false);
     } catch (error) {
-      toast.error("Failed to generate choices. Please try again.");
-    } finally {
-      setCriteriaMode(questionId, "AI_GEN");
+      console.error("Failed to generate rubric:", error);
+      toast.error("Failed to generate rubric. Please try again.");
     }
+  };
+
+  const handleCancel = () => {
+    setModalOpen(false); // Close the modal
   };
   const handleManualChoices = () => {
     if (!choices) {
@@ -588,6 +605,14 @@ function Section({
           </tr>
         )}
       </table>
+      <WarningAlert
+        isOpen={modalOpen}
+        onClose={handleCancel}
+        onConfirm={handleConfirm}
+        description="This will overwrite your current rubric. Are you sure you want to proceed?"
+        confirmText="Confirm"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

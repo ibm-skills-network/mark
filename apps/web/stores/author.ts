@@ -68,6 +68,10 @@ export type AuthorActions = {
     choiceIndex: number,
     variantId?: number,
   ) => void;
+  handleUpdateAllVariantsCriteria: (
+    questionId: number,
+    criteria: Criteria[],
+  ) => void;
   modifyChoice: (
     questionId: number,
     choiceIndex: number,
@@ -105,6 +109,7 @@ export type AuthorActions = {
 interface QuestionState {
   questionStates: {
     [key: number]: {
+      isloading?: boolean;
       showWordCountInput?: boolean;
       countMode?: "CHARACTER" | "WORD";
       toggleTitle?: boolean;
@@ -112,6 +117,7 @@ interface QuestionState {
       variants?: {
         [variantId: number]: {
           toggleTitle?: boolean;
+          isloading?: boolean;
         };
       };
     };
@@ -128,6 +134,11 @@ interface QuestionState {
   ) => void;
   setShowCriteriaHeader: (value: boolean) => void;
   setCriteriaMode: (questionId: number, mode: "AI_GEN" | "CUSTOM") => void;
+  toggleLoading: (
+    questionId: number,
+    value: boolean,
+    variantId?: number,
+  ) => void;
 }
 
 export const useQuestionStore = createWithEqualityFn<QuestionState>()(
@@ -146,6 +157,7 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
             },
           },
         })),
+
       setCountMode: (questionId, mode) =>
         set((state) => ({
           questionStates: {
@@ -183,6 +195,55 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
             },
           },
         })),
+      // In useQuestionStore
+      toggleLoading: (questionId, value, variantId) =>
+        set((state) => {
+          if (variantId !== undefined) {
+            // Set loading state for a specific variant
+            return {
+              questionStates: {
+                ...state.questionStates,
+                [questionId]: {
+                  ...state.questionStates[questionId],
+                  variants: {
+                    ...state.questionStates[questionId]?.variants,
+                    [variantId]: {
+                      ...state.questionStates[questionId]?.variants?.[
+                        variantId
+                      ],
+                      isloading: value,
+                    },
+                  },
+                },
+              },
+            };
+          } else {
+            // Set loading state for the question and all its variants
+            const questionState = {
+              ...state.questionStates[questionId],
+              isloading: value,
+            };
+
+            if (questionState.variants) {
+              questionState.variants = Object.fromEntries(
+                Object.entries(questionState.variants).map(([vid, vstate]) => [
+                  vid,
+                  {
+                    ...vstate,
+                    isloading: value,
+                  },
+                ]),
+              );
+            }
+
+            return {
+              questionStates: {
+                ...state.questionStates,
+                [questionId]: questionState,
+              },
+            };
+          }
+        }),
 
       setToggleTitle: (questionId, value, variantId) =>
         set((state) => ({
@@ -243,6 +304,25 @@ export const useAuthorStore = createWithEqualityFn<
         setLearningObjectives: (learningObjectives) =>
           set({ learningObjectives }),
         errors: {},
+        handleUpdateAllVariantsCriteria: (questionId, criteria) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId && q.variants) {
+                return {
+                  ...q,
+                  variants: q.variants.map((variant) => ({
+                    ...variant,
+                    scoring: {
+                      ...variant.scoring,
+                      criteria,
+                    },
+                  })),
+                };
+              }
+              return q;
+            }),
+          }));
+        },
         focusedQuestionId: undefined,
         setFocusedQuestionId: (id: number) => set({ focusedQuestionId: id }),
         activeAssignmentId: undefined,

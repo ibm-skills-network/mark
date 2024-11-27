@@ -1,3 +1,4 @@
+import { ResponseType } from "@prisma/client";
 import {
   BaseQuestionEvaluateModel,
   QuestionAnswerContext,
@@ -13,6 +14,7 @@ export class TextBasedQuestionEvaluateModel
   readonly scoringCriteria: object;
   readonly previousQuestionsAnswersContext: QuestionAnswerContext[];
   readonly assignmentInstrctions: string;
+  readonly responseType: ResponseType;
 
   constructor(
     question: string,
@@ -22,6 +24,7 @@ export class TextBasedQuestionEvaluateModel
     totalPoints: number,
     scoringCriteriaType: string,
     scoringCriteria: object,
+    responseType: ResponseType,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
@@ -30,5 +33,6 @@ export class TextBasedQuestionEvaluateModel
     this.totalPoints = totalPoints;
     this.scoringCriteriaType = scoringCriteriaType;
     this.scoringCriteria = scoringCriteria;
+    this.responseType = responseType;
   }
 }

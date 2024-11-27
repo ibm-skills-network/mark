@@ -9,6 +9,7 @@ import {
   Question,
   QuestionType,
   QuestionVariant,
+  ResponseType,
 } from "@prisma/client";
 import { sanitize } from "isomorphic-dompurify";
 import { OpenAIModerationChain } from "langchain/chains";
@@ -38,19 +39,110 @@ import {
   generateCodeFileUploadMarkingRubricTemplate,
   generateDocumentFileUploadMarkingRubricTemplate,
   generateImageFileUploadMarkingRubricTemplate,
+  generateLinkFileUploadMarkingRubricTemplate,
   generateMultipleBasedMarkingRubricTemplate,
   generateQuestionRewordingsTemplate,
   generateQuestionsGradingContext,
   generateQuestionWithChoicesRewordingsTemplate,
+  generateQuestionWithTrueFalseRewordingsTemplate,
   generateSingleBasedMarkingRubricTemplate,
   generateTextBasedMarkingRubricTemplate,
   generateUrlBasedMarkingRubricTemplate,
+  gradeAudioFileQuestionLlmTemplate,
   gradeCodeFileQuestionLlmTemplate,
   gradeDocumentFileQuestionLlmTemplate,
-  gradeImageFileQuestionLlmTemplate,
+  gradeEssayFileQuestionLlmTemplate,
+  gradePresentationFileQuestionLlmTemplate,
+  gradeSpreadsheetFileQuestionLlmTemplate,
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
+  gradeVideoFileQuestionLlmTemplate,
 } from "./templates";
+
+// this function defines custome templates for each response type
+export const responseTypeSpecificInstructions: {
+  [key in ResponseType]: string;
+} = {
+  [ResponseType.CODE]: `
+    **Feedback Structure:**
+    Provide feedback in the following format:
+
+    1. **Accuracy**: Assess whether the response meets the task requirements and identify any discrepancies.
+    2. **Functionality**: Evaluate whether the response works as expected and achieves the intended outcome.
+    3. **Efficiency**: Discuss the approach taken and identify any areas for optimization.
+    4. **Style**: Examine the clarity, readability, and presentation of the response, noting areas for improvement.
+    5. **Practices**: Comment on adherence to best practices, including maintainability, modularity, and clarity.
+    6. **Strengths**: Highlight notable features or aspects of the response that demonstrate understanding or innovation.
+
+    **Instructions for Feedback:**
+    - Ensure feedback is constructive and actionable.
+    - Avoid revealing the correct answer directly.
+    - Provide concise, professional feedback to guide the learner's improvement.
+  `,
+  [ResponseType.ESSAY]: `
+    Critique the essay based on:
+    - **Depth of Analysis**: Assess how well the essay examines the topic, including insights and critical thinking.
+    - **Structure**: Comment on the clarity of the introduction, body, and conclusion.
+    - **Clarity and Writing Style**: Evaluate grammar, vocabulary, and sentence structure for precision and readability.
+    - **Evidence and References**: Determine the quality and appropriateness of sources cited or evidence provided.
+    - **Argument Development**: Critique how well the arguments are articulated and supported.
+    - **Creativity**: Note any unique perspectives or original ideas presented in the essay.
+  `,
+  [ResponseType.REPORT]: `
+    Critique the report based on:
+    - **Completeness**: Does the report cover all required points and provide sufficient depth?
+    - **Data Presentation**: Evaluate the clarity and accuracy of tables, charts, or other visual aids.
+    - **Organization**: Assess logical flow, headings, and layout for readability.
+    - **Clarity of Communication**: Comment on grammar, syntax, and overall writing quality.
+    - **Relevance**: Ensure that the content strictly adheres to the assignment objectives.
+    - **Actionable Insights**: Highlight the value of conclusions or recommendations, if any.
+  `,
+  [ResponseType.PRESENTATION]: `
+    Critique the presentation based on:
+    - **Content Depth**: Evaluate the quality of information provided and its alignment with the question.
+    - **Slide Design**: Assess visual appeal, readability, and effective use of graphics and text.
+    - **Organization**: Comment on the sequence of ideas and how effectively they are conveyed.
+    - **Engagement**: Determine whether the presentation would capture and maintain audience attention.
+    - **Clarity of Explanation**: Ensure all points are clearly communicated with minimal ambiguity.
+    - **Professionalism**: Evaluate adherence to professional standards in tone and design.
+  `,
+  [ResponseType.VIDEO]: `
+    Critique the video submission based on:
+    - **Content Accuracy**: Ensure the video covers the required material correctly and thoroughly.
+    - **Presentation Skills**: Evaluate speech clarity, tone, pacing, and overall communication effectiveness.
+    - **Visual and Audio Quality**: Assess lighting, sound, and any video effects used.
+    - **Structure**: Comment on the logical flow and coherence of ideas.
+    - **Engagement and Creativity**: Highlight how well the video captures attention and uses creative elements.
+    - **Relevance**: Ensure all content aligns with the question's requirements.
+  `,
+  [ResponseType.AUDIO]: `
+    Critique the audio submission based on:
+    - **Content Relevance**: Verify that the audio content directly addresses the question or topic.
+    - **Speech Clarity**: Assess pronunciation, tone, and pacing for effective communication.
+    - **Audio Quality**: Identify issues like background noise, distortions, or low-quality recording.
+    - **Engagement**: Highlight how effectively the audio holds listener attention.
+    - **Logical Structure**: Ensure the audio follows a clear and logical progression.
+    - **Creativity**: Recognize any unique or innovative approaches in the audio response.
+  `,
+  [ResponseType.SPREADSHEET]: `
+    Critique the spreadsheet based on:
+    - **Data Accuracy**: Verify correctness of all data inputs and outputs.
+    - **Formulas and Functions**: Evaluate the correctness, efficiency, and clarity of formulas used.
+    - **Formatting and Organization**: Comment on readability, cell alignment, and use of colors or themes.
+    - **Visualization**: Assess the relevance and clarity of charts, graphs, or pivot tables included.
+    - **Integration and Analysis**: Critique how well the spreadsheet integrates data and provides actionable insights.
+    - **Complexity**: Recognize any advanced features (e.g., macros, advanced formulas) effectively implemented.
+  `,
+  [ResponseType.OTHER]: `
+    Critique the submission based on:
+    - **Relevance**: Ensure the response aligns with the question and context.
+    - **Completeness**: Verify that the submission addresses all parts of the question.
+    - **Quality of Execution**: Evaluate technical, visual, or written quality, depending on the medium.
+    - **Originality**: Identify and commend any unique or creative approaches.
+    - **Clarity**: Comment on how clearly the submission communicates its ideas.
+    - **Adaptability**: Provide suggestions for improving areas that may require refinement.
+  `,
+};
 
 @Injectable()
 export class LlmService {
@@ -210,17 +302,25 @@ export class LlmService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
       questionType,
+      responseType,
     } = fileBasedQuestionEvaluateModel;
-
     const validateLearnerResponse = await this.applyGuardRails(
       learnerResponse.map((item) => item.content).join(" "),
     );
-    const templates = {
-      CODE: gradeCodeFileQuestionLlmTemplate,
-      IMAGE: gradeImageFileQuestionLlmTemplate,
-      UPLOAD: gradeDocumentFileQuestionLlmTemplate,
+
+    // Define a mapping from responseType to templates
+    const templates: { [key in ResponseType]: string } = {
+      [ResponseType.CODE]: gradeCodeFileQuestionLlmTemplate,
+      [ResponseType.ESSAY]: gradeEssayFileQuestionLlmTemplate,
+      [ResponseType.REPORT]: gradeEssayFileQuestionLlmTemplate,
+      [ResponseType.PRESENTATION]: gradePresentationFileQuestionLlmTemplate,
+      [ResponseType.VIDEO]: gradeVideoFileQuestionLlmTemplate,
+      [ResponseType.AUDIO]: gradeAudioFileQuestionLlmTemplate,
+      [ResponseType.SPREADSHEET]: gradeSpreadsheetFileQuestionLlmTemplate,
+      [ResponseType.OTHER]: gradeDocumentFileQuestionLlmTemplate,
     };
-    const selectedTemplate = templates[questionType as keyof typeof templates];
+
+    const selectedTemplate = templates[responseType];
 
     if (!validateLearnerResponse) {
       throw new HttpException(
@@ -235,16 +335,15 @@ export class LlmService {
       partialVariables: {
         question: question,
         files: JSON.stringify(
-          learnerResponse.map((item) => {
-            return {
-              filename: item.filename,
-              content: item.content,
-            };
-          }),
+          learnerResponse.map((item) => ({
+            filename: item.filename,
+            content: item.content,
+          })),
         ),
         total_points: totalPoints.toString(),
         scoring_type: scoringCriteriaType,
         scoring_criteria: JSON.stringify(scoringCriteria),
+        grading_type: responseType,
       },
     });
 
@@ -254,10 +353,6 @@ export class LlmService {
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
     );
-
-    // Assuming response is a single string containing points and feedback separately, e.g.:
-    // "Points: 3\nFeedback: The response demonstrates a basic understanding but requires improvement."
-
     const pointsMatch = response.match(/Points:\s*(\d+)/);
     const feedbackMatch = response.match(/Feedback:\s*([\S\s]+)/);
 
@@ -293,6 +388,7 @@ export class LlmService {
       scoringCriteria,
       previousQuestionsAnswersContext,
       assignmentInstrctions,
+      responseType,
     } = textBasedQuestionEvaluateModel;
 
     // Since question and scoring criteria are also validated with guard rails, only validate learnerResponse
@@ -318,13 +414,16 @@ export class LlmService {
     );
 
     const formatInstructions = parser.getFormatInstructions();
-
+    // Add response-specific instructions
+    const responseSpecificInstruction =
+      responseTypeSpecificInstructions[responseType] ?? "";
     const prompt = new PromptTemplate({
       template: gradeTextBasedQuestionLlmTemplate,
       inputVariables: [],
       partialVariables: {
         question: question,
         assignment_instructions: assignmentInstrctions,
+        responseSpecificInstruction: responseSpecificInstruction,
         previous_questions_and_answers: JSON.stringify(
           previousQuestionsAnswersContext,
         ),
@@ -333,6 +432,7 @@ export class LlmService {
         scoring_type: scoringCriteriaType,
         scoring_criteria: JSON.stringify(scoringCriteria),
         format_instructions: formatInstructions,
+        grading_type: responseType,
       },
     });
     const response = await this.processPrompt(
@@ -362,6 +462,7 @@ export class LlmService {
       scoringCriteria,
       previousQuestionsAnswersContext,
       assignmentInstrctions,
+      responseType,
     } = urlBasedQuestionEvaluateModel;
 
     // Since question and scoring criteria are also validated with guard rails, only validate learnerResponse
@@ -388,22 +489,28 @@ export class LlmService {
 
     const formatInstructions = parser.getFormatInstructions();
 
+    // Add response-specific instructions
+    const responseSpecificInstruction =
+      responseTypeSpecificInstructions[responseType] ?? "";
+
     const prompt = new PromptTemplate({
       template: gradeUrlBasedQuestionLlmTemplate,
       inputVariables: [],
       partialVariables: {
         question: question,
         assignment_instructions: assignmentInstrctions,
+        responseSpecificInstruction: responseSpecificInstruction,
         previous_questions_and_answers: JSON.stringify(
           previousQuestionsAnswersContext,
         ),
         url_provided: urlProvided,
         url_body: urlBody,
-        is_url_functional: isUrlFunctional ? "funtional" : "not functional",
+        is_url_functional: isUrlFunctional ? "functional" : "not functional",
         total_points: totalPoints.toString(),
         scoring_type: scoringCriteriaType,
         scoring_criteria: JSON.stringify(scoringCriteria),
         format_instructions: formatInstructions,
+        grading_type: responseType,
       },
     });
 
@@ -461,11 +568,20 @@ export class LlmService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    const promptTemplate =
-      questionType === QuestionType.MULTIPLE_CORRECT ||
-      questionType === QuestionType.SINGLE_CORRECT
-        ? generateQuestionWithChoicesRewordingsTemplate
-        : generateQuestionRewordingsTemplate;
+    const promptTemplate = (() => {
+      switch (questionType) {
+        case QuestionType.MULTIPLE_CORRECT:
+        case QuestionType.SINGLE_CORRECT: {
+          return generateQuestionWithChoicesRewordingsTemplate;
+        }
+        case QuestionType.TRUE_FALSE: {
+          return generateQuestionWithTrueFalseRewordingsTemplate;
+        }
+        default: {
+          return generateQuestionRewordingsTemplate;
+        }
+      }
+    })();
     const prompt = new PromptTemplate({
       template: promptTemplate,
       inputVariables: [],
@@ -496,7 +612,12 @@ export class LlmService {
     }));
   }
   async createMarkingRubric(
-    questions: { id: number; questionText: string; questionType: string }[],
+    questions: {
+      id: number;
+      questionText: string;
+      questionType: string;
+      responseType?: ResponseType;
+    }[],
     variantMode: boolean,
     assignmentId: number,
   ): Promise<
@@ -520,8 +641,7 @@ export class LlmService {
       MULTIPLE_CORRECT: generateMultipleBasedMarkingRubricTemplate,
       SINGLE_CORRECT: generateSingleBasedMarkingRubricTemplate,
       UPLOAD: generateDocumentFileUploadMarkingRubricTemplate,
-      CODE: generateCodeFileUploadMarkingRubricTemplate,
-      IMAGE: generateImageFileUploadMarkingRubricTemplate,
+      LINK_FILE: generateDocumentFileUploadMarkingRubricTemplate,
     };
 
     const markingRubricMap: Record<
@@ -576,18 +696,20 @@ export class LlmService {
           }),
         ),
       );
-
+      const responseType = question.responseType;
       const formatInstructions = parser.getFormatInstructions();
-
       const prompt = new PromptTemplate({
         template: selectedTemplate,
         inputVariables: [],
         partialVariables: {
           questions_json_array: JSON.stringify([question]),
           format_instructions: formatInstructions,
+          grading_style:
+            responseType !== "OTHER" && responseType !== undefined
+              ? `The rubric should ensure that the learner responds in ${responseType} format. Focus on evaluating the structure, content organization, and adherence to the expected conventions of a ${responseType}, including clarity, relevance, and formatting requirements.`
+              : "",
         },
       });
-
       try {
         const response = await this.processPrompt(
           prompt,
@@ -600,7 +722,8 @@ export class LlmService {
           question.questionType === "URL" ||
           question.questionType === "UPLOAD" ||
           question.questionType === "CODE" ||
-          question.questionType === "IMAGES"
+          question.questionType === "IMAGES" ||
+          question.questionType === "LINK_FILE"
         ) {
           markingRubricMap[question.id] = parsedResponse[0].rubric.map(
             (item: unknown) => ({

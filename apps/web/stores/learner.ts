@@ -19,6 +19,11 @@ export type LearnerState = {
   totalPointsPossible: number;
 };
 
+export type learnerFileResponse = {
+  filename: string;
+  content: string;
+};
+
 export type LearnerActions = {
   setActiveAttemptId: (id: number) => void;
   setActiveQuestionNumber: (id: number) => void;
@@ -39,9 +44,14 @@ export type LearnerActions = {
   setRole: (role: "learner" | "author") => void;
   setTotalPointsEarned: (totalPointsEarned: number) => void;
   setTotalPointsPossible: (totalPointsPossible: number) => void;
-  getFileUpload: (
+  onUrlChange: (url: string, questionId: number) => void;
+  onFileChange: (files: learnerFileResponse[], questionId: number) => void;
+  onModeChange: (
+    mode: "file" | "link",
+    data: learnerFileResponse[] | string,
     questionId: number,
-  ) => { filename: string; content: string }[];
+  ) => void;
+  getFileUpload: (questionId: number) => learnerFileResponse[];
   setFileUpload: (
     learnerFileResponse: {
       filename: string;
@@ -68,8 +78,8 @@ const isQuestionEdited = (question: QuestionStore) => {
     learnerUrlResponse,
     learnerChoices,
     learnerAnswerChoice,
+    learnerFileResponse,
   } = question;
-
   return (
     (learnerTextResponse &&
       learnerTextResponse.trim().length > 0 &&
@@ -77,6 +87,7 @@ const isQuestionEdited = (question: QuestionStore) => {
     (learnerUrlResponse && learnerUrlResponse.trim().length > 0) ||
     (learnerChoices && learnerChoices.length > 0) ||
     learnerAnswerChoice !== undefined ||
+    learnerFileResponse?.map((file) => file?.content).join("") !== "" ||
     false
   );
 };
@@ -128,6 +139,44 @@ export const useLearnerStore = createWithEqualityFn<
         const question = get().questions.find((q) => q.id === questionId);
         return question?.learnerFileResponse || [];
       },
+      onFileChange: (files, questionId) => {
+        const formattedFiles = files.map((file: learnerFileResponse) => ({
+          filename: file.filename,
+          content: file.content,
+        }));
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) => {
+            if (q.id === questionId) {
+              return { ...q, learnerFileResponse: formattedFiles };
+            }
+            return q;
+          });
+          return { questions: updatedQuestions };
+        });
+        get().setQuestionStatus(questionId);
+      },
+      onUrlChange: (url, questionId) => {
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) => {
+            if (q.id === questionId) {
+              return { ...q, learnerUrlResponse: url };
+            }
+            return q;
+          });
+          return { questions: updatedQuestions };
+        });
+      },
+      onModeChange: (mode, data, questionId) => {
+        if (mode === "file") {
+          const formattedData = (data as learnerFileResponse[]).map((file) => ({
+            filename: file.filename,
+            content: file.content,
+          }));
+          get().onFileChange(formattedData, questionId);
+        } else {
+          get().onUrlChange(data as string, questionId);
+        }
+      },
 
       setFileUpload: (newFiles, questionId) => {
         set((state) => {
@@ -142,6 +191,7 @@ export const useLearnerStore = createWithEqualityFn<
           });
           return { questions: updatedQuestions };
         });
+        get().setQuestionStatus(questionId);
       },
 
       deleteFile: (fileToDelete, questionId) => {
@@ -158,6 +208,7 @@ export const useLearnerStore = createWithEqualityFn<
           });
           return { questions: updatedQuestions };
         });
+        get().setQuestionStatus(questionId);
       },
       activeAttemptId: null,
       totalPointsEarned: 0,

@@ -10,6 +10,8 @@ import type {
   QuestionType,
   QuestionTypeDropdown,
   UpdateQuestionStateParams,
+  ResponseType,
+  Criteria,
 } from "@/config/types";
 import { generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
@@ -23,13 +25,13 @@ import {
 import React, {
   FC,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
 } from "react";
 import { toast } from "sonner";
 import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
+import WarningAlert from "@/components/WarningAlert";
 
 // Props type definition for the QuestionWrapper component
 interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
@@ -53,6 +55,7 @@ interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
   preview: boolean;
   questionFromParent: QuestionAuthorStore;
   variantMode: boolean;
+  responseType: ResponseType;
   variantId?: number;
 }
 
@@ -71,7 +74,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   questionFromParent,
   variantMode,
   variantId,
-  ...rest
+  responseType,
 }) => {
   const [localQuestionTitle, setLocalQuestionTitle] =
     useState<string>(questionTitle);
@@ -83,6 +86,10 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const removeChoice = useAuthorStore((state) => state.removeChoice);
   const setChoices = useAuthorStore((state) => state.setChoices);
   const modifyChoice = useAuthorStore((state) => state.modifyChoice);
+  const [isModalOpen, setModalOpen] = useState(false);
+  const handleUpdateAllVariantsCriteria = useAuthorStore(
+    (state) => state.handleUpdateAllVariantsCriteria,
+  );
   const addTrueFalseChoice = useAuthorStore(
     (state) => state.addTrueFalseChoice,
   );
@@ -120,7 +127,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     questionId,
     variantMode ? variantId : undefined,
   );
-
+  const toggleLoading = useQuestionStore((state) => state.toggleLoading);
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
   // Effect to handle clicks outside the title input to toggle it off
   useEffect(() => {
@@ -173,32 +180,36 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     handleUpdateQuestionState({ questionCriteria });
   };
 
-  // Add new criteria to the list
   const handleShiftCriteria = () => {
     const newPointArray = [...questionCriteria.points];
     const newCriteriaArray = [...questionCriteria.criteriaDesc];
     const newCriteriaIds = [...questionCriteria.criteriaIds];
 
-    // Find the correct index to insert the new point
-    let insertIndex = 0;
+    let hasGap = false;
     for (let i = 0; i < newPointArray.length - 1; i++) {
       if (newPointArray[i] - newPointArray[i + 1] > 1) {
-        insertIndex = i + 1;
+        hasGap = true;
         break;
       }
     }
 
-    if (insertIndex > 0) {
-      // If there's a gap, insert a point with value one less than the previous point
+    if (hasGap) {
+      let insertIndex = 0;
+      for (let i = 0; i < newPointArray.length - 1; i++) {
+        if (newPointArray[i] - newPointArray[i + 1] > 1) {
+          insertIndex = i + 1;
+          break;
+        }
+      }
+
       newPointArray.splice(insertIndex, 0, newPointArray[insertIndex - 1] - 1);
       newCriteriaArray.splice(insertIndex, 0, "");
       newCriteriaIds.splice(insertIndex, 0, newCriteriaIds.length + 1);
     } else {
-      // If no gap found, increase the first point by 1 and add the new criteria
-      newPointArray[0] += 1;
-      newPointArray.splice(1, 0, newPointArray[0] - 1);
-      newCriteriaArray.splice(1, 0, "");
-      newCriteriaIds.splice(1, 0, newCriteriaIds.length + 1);
+      const newPoint = Math.max(...newPointArray) + 1;
+      newPointArray.unshift(newPoint);
+      newCriteriaArray.unshift("");
+      newCriteriaIds.unshift(newCriteriaIds.length + 1);
     }
 
     setQuestionCriteria({
@@ -240,6 +251,24 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       },
     });
   };
+  const isloading = useQuestionStore((state) => {
+    if (variantMode) {
+      return (
+        state.questionStates[questionId]?.variants?.[variantId]?.isloading ||
+        state.questionStates[questionId]?.isloading
+      );
+    } else {
+      return state.questionStates[questionId]?.isloading;
+    }
+  });
+
+  useEffect(() => {
+    if (isloading) {
+      setLoading(true);
+    } else {
+      setLoading(false);
+    }
+  }, [isloading]);
 
   // Manage swapping indices for animation during criteria sorting
   const [swappingIndices, setSwappingIndices] = useState<number[]>([]);
@@ -355,7 +384,8 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       {
         id: questionId,
         questionText: questionTitle,
-        questionType: questionType, // Use the questionType prop
+        questionType: questionType,
+        responseType: responseType,
       },
     ];
     const assignmentId = useAuthorStore.getState().activeAssignmentId;
@@ -375,7 +405,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           description: string;
           points: number;
         }[];
-        rubricItems.forEach((item) => {
+        Object.values(rubricItems).forEach((item) => {
           newPoints.push(item.points);
           newCriteriaDesc.push(item.description);
           newCriteriaIds.push(item.id);
@@ -394,25 +424,51 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           criteriaIds: newCriteriaIds,
         },
       });
+      if (!variantMode) {
+        const criteria: Criteria[] = newCriteriaIds.map((id, index) => ({
+          id,
+          points: newPoints[index],
+          description: newCriteriaDesc[index],
+        }));
+        handleUpdateAllVariantsCriteria(questionId, criteria);
+      }
     } catch (error) {
       toast.error("Failed to generate rubric. Please try again.");
     }
   };
 
-  const handleAiClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation(); // Prevent the click event from bubbling up to the parent0=
+  const handleAiClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (questionCriteria && questionCriteria.points?.length > 0) {
+      setModalOpen(true);
+    } else {
+      void handleConfirm();
+    }
+  };
+
+  const handleConfirm = async () => {
+    setModalOpen(false); // Close the modal
+
     if (questionTitle?.trim() === "") {
       toast.error("Please enter a question title first.");
       return;
     }
+
     setCriteriaMode(questionId, "AI_GEN");
+
     try {
-      setLoading(true);
+      toggleLoading(questionId, true, variantMode ? variantId : undefined);
       await fetchRubric();
-      setLoading(false);
     } catch (error) {
+      console.error("Failed to generate rubric:", error);
       toast.error("Failed to generate rubric. Please try again.");
+    } finally {
+      toggleLoading(questionId, false, variantMode ? variantId : undefined);
     }
+  };
+
+  const handleCancel = () => {
+    setModalOpen(false); // Close the modal
   };
   useEffect(() => {
     if (questionCriteria.points?.length > 0 && criteriaMode !== "CUSTOM") {
@@ -420,7 +476,10 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   }, [questionCriteria.points, criteriaMode]);
   return (
-    <div id={`question-title-${questionId}`} className="w-full">
+    <div
+      id={`question-title-${questionId}`}
+      className="flex flex-col w-full gap-y-2"
+    >
       {/* Markdown editor for the question title */}
       {toggleTitle && !preview ? (
         <div ref={titleRef} className="w-full">
@@ -756,6 +815,14 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               </thead>
             </table>
           </div>
+          <WarningAlert
+            isOpen={isModalOpen}
+            onClose={handleCancel}
+            onConfirm={handleConfirm}
+            description="This will overwrite your current rubric. Are you sure you want to proceed?"
+            confirmText="Confirm"
+            cancelText="Cancel"
+          />
         </>
       )}
     </div>

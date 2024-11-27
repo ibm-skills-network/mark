@@ -20,8 +20,6 @@ const Section = ({
   link?: string; // Optional link to navigate when clicking the pencil icon
 }) => {
   const router = useRouter(); // Hook for navigation
-  console.log("content", content);
-
   return (
     <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-gray-200 shadow-sm hover:shadow-md transition-all">
       <div className="flex items-center justify-between w-full">
@@ -157,19 +155,25 @@ function Component() {
 
       {/* Questions Section */}
       <h1 className="text-violet-800 text-2xl font-bold">Questions</h1>
-      {questions.map((question, index) => (
-        <div
-          key={index}
-          className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-gray-200 shadow-sm hover:shadow-md transition-all"
-        >
-          <Question
-            question={question}
-            questionId={question.id}
-            questionIndex={index + 1}
-            preview={true}
-          />
-        </div>
-      ))}
+      {questions && questions.length > 0 ? (
+        <>
+          {questions.map((question, index) => (
+            <div
+              key={index}
+              className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-gray-200 shadow-sm hover:shadow-md transition-all"
+            >
+              <Question
+                question={question}
+                questionId={question.id}
+                questionIndex={index + 1}
+                preview={true}
+              />
+            </div>
+          ))}
+        </>
+      ) : (
+        <p className="text-gray-500">No questions added yet.</p>
+      )}
     </main>
   );
 }

@@ -14,7 +14,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { QuestionType } from "@prisma/client";
+import { QuestionType, ResponseType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -139,7 +139,12 @@ export class QuestionController {
   async createMarkingRubric(
     @Body()
     body: {
-      questions: { id: number; questionText: string; questionType: string }[];
+      questions: {
+        id: number;
+        questionText: string;
+        questionType: string;
+        responseType?: ResponseType;
+      }[];
       variantMode: boolean;
     },
     @Req() request: UserSessionRequest,

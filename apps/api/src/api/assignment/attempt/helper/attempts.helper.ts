@@ -1,8 +1,11 @@
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { BadRequestException } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import mammoth from "mammoth";
 import { ChoiceBasedQuestionResponseModel } from "../../../../api/llm/model/choice.based.question.response.model";
 import { TextBasedQuestionResponseModel } from "../../../../api/llm/model/text.based.question.response.model";
 import { TrueFalseBasedQuestionResponseModel } from "../../../../api/llm/model/true.false.based.question.response.model";
@@ -14,11 +17,6 @@ import {
   GeneralFeedbackDto,
   TrueFalseBasedFeedbackDto,
 } from "../dto/question-response/create.question.response.attempt.response.dto";
-
-interface UploadedFile {
-  originalname: string;
-  buffer: Buffer;
-}
 
 export const AttemptHelper = {
   assignFeedbackToResponse(
@@ -68,23 +66,52 @@ export const AttemptHelper = {
   async fetchPlainTextFromUrl(
     url: string,
   ): Promise<{ body: string; isFunctional: boolean }> {
+    const MAX_CONTENT_SIZE = 100_000;
     try {
-      const response = await axios.get<string>(url);
-      const $ = cheerio.load(response.data);
+      if (url.includes("github.com")) {
+        const rawUrl = convertGitHubUrlToRaw(url);
+        if (!rawUrl) {
+          return { body: "", isFunctional: false };
+        }
 
-      // Remove script tags and other potentially irrelevant elements
-      $("script, style, noscript, iframe, noembed, embed, object").remove();
+        const rawContentResponse = await axios.get<string>(rawUrl);
+        if (rawContentResponse.status === 200) {
+          let body = rawContentResponse.data;
+          if (body.length > MAX_CONTENT_SIZE) {
+            body = body.slice(0, MAX_CONTENT_SIZE);
+          }
+          return { body, isFunctional: true };
+        }
 
-      const plainText = $("body")
-        .text()
-        .trim() // remove spaces from start and end
-        // eslint-disable-next-line unicorn/prefer-string-replace-all
-        .replace(/\s+/g, " "); // replace multiple spaces with a single space
+        return { body: "", isFunctional: false };
+      } else {
+        const response = await axios.get<string>(url);
+        const $ = cheerio.load(response.data);
 
-      return { body: plainText, isFunctional: true };
+        // Remove script tags and other potentially irrelevant elements
+        $("script, style, noscript, iframe, noembed, embed, object").remove();
+
+        const plainText = $("body")
+          .text()
+          .trim() // remove spaces from start and end
+          // eslint-disable-next-line unicorn/prefer-string-replace-all
+          .replace(/\s+/g, " "); // replace multiple spaces with a single space
+
+        return { body: plainText, isFunctional: true };
+      }
     } catch (error) {
-      console.error(`Unable to fetch or parse the URL: ${url}`, error);
+      console.error("Error fetching content from URL:", error);
       return { body: "", isFunctional: false };
     }
   },
 };
+function convertGitHubUrlToRaw(url: string): string | null {
+  const match = url.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
+  );
+  if (!match) {
+    return;
+  }
+  const [, user, repo, path] = match;
+  return `https://raw.githubusercontent.com/${user}/${repo}/${path}`;
+}
