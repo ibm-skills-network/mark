@@ -4237,10 +4237,10 @@ domhandler@^5.0.2, domhandler@^5.0.3:
   dependencies:
     domelementtype "^2.3.0"
 
-dompurify@^3.2.1:
-  version "3.2.1"
-  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-3.2.1.tgz#d480972aeb1a59eb8ac47cba95558fbd72a0127b"
-  integrity sha512-NBHEsc0/kzRYQd+AY6HR6B/IgsqzBABrqJbpCDQII/OK6h7B7LXzweZTDsqSW2LkTRpoxf18YUP+YjGySk6B3w==
+dompurify@^3.2.2:
+  version "3.2.2"
+  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-3.2.2.tgz#6c0518745e81686c74a684f5af1e5613e7cc0246"
+  integrity sha512-YMM+erhdZ2nkZ4fTNRTSI94mb7VG7uVF5vj5Zde7tImgnhZE3R6YW/IACGIHb2ux+QkEXMhe591N+5jWOmL4Zw==
   optionalDependencies:
     "@types/trusted-types" "^2.0.7"
 
@@ -6325,11 +6325,11 @@ isexe@^2.0.0:
   integrity sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==
 
 isomorphic-dompurify@^2.16.0:
-  version "2.17.0"
-  resolved "https://registry.yarnpkg.com/isomorphic-dompurify/-/isomorphic-dompurify-2.17.0.tgz#35f9d43ab0b6c0b588d86474336cae4f18654ee3"
-  integrity sha512-W9RC9aPgEAFF55VMo/9AUQ+GYkQ68gTRMLqS8fP9rw1VoYCsI7RdrRMAePhhqyCLfZS3JNjA4ahFi1L4aczUUg==
+  version "2.18.0"
+  resolved "https://registry.yarnpkg.com/isomorphic-dompurify/-/isomorphic-dompurify-2.18.0.tgz#ab043055f4140818122a352cf7d21f2330469866"
+  integrity sha512-e0AaROtWPy6ofSTCnUuBvXFidt1eFmrwEbi+Acpz0du6v2H+fq+3svPBn0g/AfBXz24FTWA9ccle7HSFT3HG7A==
   dependencies:
-    dompurify "^3.2.1"
+    dompurify "^3.2.2"
     jsdom "^25.0.1"
 
 istanbul-lib-coverage@^3.0.0, istanbul-lib-coverage@^3.2.0:
