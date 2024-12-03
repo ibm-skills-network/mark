@@ -26,6 +26,7 @@ function AuthorHeader() {
   const assignmentId = extractAssignmentId(pathname);
   const [currentStepId, setCurrentStepId] = useState<number>(0);
   const [validate] = useAssignmentConfig((state) => [state.validate]);
+  const setQuestions = useAuthorStore((state) => state.setQuestions);
   const [
     setActiveAssignmentId,
     questions,
@@ -114,13 +115,16 @@ function AuthorHeader() {
 
     try {
       // Send a single request with all the processed questions
-      const success = await updateQuestions(
+      const response = await updateQuestions(
         activeAssignmentId,
         processQuestions(questions),
       );
 
-      if (success) {
+      if (response.success) {
+        setQuestions(response.questions);
+        toast.success("Questions published successfully!");
         const currentTime = Date.now();
+
         questions.forEach((question) => {
           question.alreadyInBackend = true;
         });

@@ -200,11 +200,9 @@ const AuthorQuestionsPage: FC<Props> = ({
             }
           } else {
             toast.error("Failed to get assignment details");
-            router.push("/");
           }
         } catch (error) {
           toast.error("Failed to get assignment details");
-          router.push("/");
         }
       };
       void fetchAssignment();
@@ -215,7 +213,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     setActiveAssignmentId,
     setName,
     setQuestions,
-    router,
+    setFocusedQuestionId,
   ]);
   useEffect(() => {
     const currentQuestionOrder = useAuthorStore.getState().questionOrder;
@@ -774,7 +772,10 @@ const AuthorQuestionsPage: FC<Props> = ({
 
       {/* FileUploadModal component */}
       {fileUploadModalOpen && (
-        <FileUploadModal onClose={() => setFileUploadModalOpen(false)} />
+        <FileUploadModal
+          onClose={() => setFileUploadModalOpen(false)}
+          questionId={focusedQuestionId}
+        />
       )}
     </DndContext>
   );

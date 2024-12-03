@@ -32,7 +32,7 @@ export const useAssignmentConfig = createWithEqualityFn<
         errors: {},
         numAttempts: -1,
         passingGrade: 50,
-        displayOrder: "DEFINED",
+        displayOrder: "DEFINED" as const,
         strictTimeLimit: false,
         updatedAt: undefined,
         graded: false,

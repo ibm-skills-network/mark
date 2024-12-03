@@ -14,7 +14,10 @@ import {
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../prisma.service";
 import { LlmService } from "../llm/llm.service";
-import type { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
+import type {
+  BaseAssignmentResponseDto,
+  UpdateAssignmentQuestionsResponseDto,
+} from "./dto/base.assignment.response.dto";
 import type {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
@@ -100,7 +103,7 @@ export class AssignmentService {
     }
 
     if (isLearner) {
-      result.displayOrder = undefined;
+      result.displayOrder = "DEFINED";
       result.questionOrder = undefined;
       return {
         ...result,
@@ -305,7 +308,7 @@ export class AssignmentService {
   async updateAssignmentQuestions(
     assignmentId: number,
     updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<UpdateAssignmentQuestionsResponseDto> {
     const { questions } = updateAssignmentQuestionsDto;
 
     // Fetch existing questions with their variants in one query
@@ -327,7 +330,6 @@ export class AssignmentService {
     const questionsToDelete = existingQuestions
       .filter((q) => !newQuestionIds.has(q.id))
       .map((q) => q.id);
-
     if (questionsToDelete.length > 0) {
       await this.prisma.assignmentAttemptQuestionVariant.deleteMany({
         where: { questionId: { in: questionsToDelete } },
@@ -340,9 +342,8 @@ export class AssignmentService {
       });
     }
 
-    const processedQuestionIds = new Set<number>();
+    const frontendToBackendIdMap = new Map<number, number>();
 
-    // Process each question
     await Promise.all(
       questions.map(async (question) => {
         const questionData: Prisma.QuestionUpsertArgs["create"] = {
@@ -373,12 +374,14 @@ export class AssignmentService {
 
         // Upsert the question
         const upsertedQuestion = await this.prisma.question.upsert({
-          where: { id: question.id },
+          where: { id: question.id || 0 }, // Fallback to 0 for non-existent IDs
           update: questionData,
           create: questionData,
         });
 
-        processedQuestionIds.add(upsertedQuestion.id);
+        // Map frontend ID to backend ID
+        frontendToBackendIdMap.set(question.id, upsertedQuestion.id);
+        console.log("Frontend to backend ID map:", frontendToBackendIdMap);
 
         // Handle variants
         const existingVariants =
@@ -474,8 +477,11 @@ export class AssignmentService {
       }),
     );
 
-    const questionOrder = [...processedQuestionIds];
-
+    const questionOrder = questions.map((q) => {
+      const backendId = frontendToBackendIdMap.get(q.id);
+      return backendId || q.id;
+    });
+    console.log("Question order:", questionOrder);
     // Handle grading context
     await this.handleQuestionGradingContext(assignmentId, questionOrder);
 
@@ -485,7 +491,16 @@ export class AssignmentService {
       data: { questionOrder, published: true },
     });
 
-    return { id: assignmentId, success: true };
+    const allQuestions = await this.prisma.question.findMany({
+      where: { assignmentId },
+      include: { variants: true },
+    });
+
+    allQuestions.sort(
+      (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id),
+    );
+
+    return { id: assignmentId, questions: allQuestions, success: true };
   }
   async generateVariantsFromQuestions(
     assignmentId: number,

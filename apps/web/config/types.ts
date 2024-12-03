@@ -332,6 +332,9 @@ export type BaseBackendResponse = {
   success: boolean;
   error?: string;
 };
+export type UpdateAssignmentQuestionsResponse = BaseBackendResponse & {
+  questions?: Question[];
+};
 
 export interface SubmitAssignmentResponse extends BaseBackendResponse {
   grade?: number;

@@ -23,6 +23,7 @@ import type {
   SubmitAssignmentResponse,
   User,
   ResponseType,
+  UpdateAssignmentQuestionsResponse,
 } from "@config/types";
 
 // TODO: change the error message to use the error message from the backend
@@ -215,7 +216,14 @@ export async function updateQuestions(
   assignmentId: number,
   questions: CreateQuestionRequest[],
   cookies?: string,
-): Promise<boolean> {
+): Promise<
+  | {
+      id: number;
+      success: boolean;
+      questions: Question[];
+    }
+  | undefined
+> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
 
   try {
@@ -231,15 +239,18 @@ export async function updateQuestions(
     if (!res.ok) {
       throw new Error("Failed to update questions");
     }
-    const { success, error } = (await res.json()) as BaseBackendResponse;
+    const {
+      id,
+      success,
+      questions: updatedQuestions,
+      error,
+    } = (await res.json()) as UpdateAssignmentQuestionsResponse;
     if (!success) {
       throw new Error(error);
     }
-
-    return true;
+    return { id, success, questions: updatedQuestions };
   } catch (err) {
     console.error(err);
-    return false;
   }
 }
 

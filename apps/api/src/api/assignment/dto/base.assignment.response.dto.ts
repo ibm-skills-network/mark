@@ -18,3 +18,11 @@ export class BaseAssignmentResponseDto {
   @ApiPropertyOptional({ description: "Optional error message.", type: String })
   error?: string;
 }
+export class UpdateAssignmentQuestionsResponseDto extends BaseAssignmentResponseDto {
+  // questions
+  @ApiPropertyOptional({
+    description: "Array of questions for the assignment",
+    type: [Object],
+  })
+  questions?: object[];
+}

@@ -36,7 +36,10 @@ import {
 import { Roles } from "../../auth/role/roles.global.guard";
 import { AssignmentService } from "./assignment.service";
 import { ASSIGNMENT_SCHEMA_URL } from "./constants";
-import { BaseAssignmentResponseDto } from "./dto/base.assignment.response.dto";
+import {
+  BaseAssignmentResponseDto,
+  UpdateAssignmentQuestionsResponseDto,
+} from "./dto/base.assignment.response.dto";
 import {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
@@ -149,7 +152,7 @@ export class AssignmentController {
   async updateAssignmentQuestions(
     @Param("id") id: number,
     @Body() updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<UpdateAssignmentQuestionsResponseDto> {
     return this.assignmentService.updateAssignmentQuestions(
       Number(id),
       updateAssignmentQuestionsDto,

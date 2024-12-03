@@ -1,10 +1,3 @@
-import {
-  readAsText,
-  readCsv,
-  readDocx,
-  readMarkdown,
-  readPdf,
-} from "@/app/Helpers/FileReaders";
 import { getJobStatus, uploadFiles } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
@@ -28,12 +21,14 @@ import MarkQuestionGenCompleted from "@/animations/MarkQuestionGenCompleted.json
 import MarkQuestionGenFailed from "@/animations/MarkQuestionGenFailed.json";
 import Lottie from "lottie-react";
 import { toast } from "sonner";
+import { readFile } from "@/app/Helpers/fileReader";
 
 interface FileUploadModalProps {
   onClose: () => void;
+  questionId: number;
 }
 
-const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
+const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   const [files, setFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<number | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
@@ -68,6 +63,7 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
       "application/vnd.ms-excel": [".xls", ".xlsx"],
       "text/csv": [".csv"],
       "text/markdown": [".md"],
+      "application/x-ipynb+json": [".ipynb"],
     },
     multiple: true,
   });
@@ -120,18 +116,8 @@ const FileUploadModal = ({ onClose }: FileUploadModalProps) => {
     try {
       const fileContents = await Promise.all(
         files.map(async (file: File) => {
-          let result = { filename: file.name, content: "" };
-          if (file.type === "text/plain") result = await readAsText(file);
-          else if (file.type === "application/pdf")
-            result = await readPdf(file);
-          else if (
-            file.type ===
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          )
-            result = await readDocx(file);
-          else if (file.type === "text/csv") result = await readCsv(file);
-          else if (file.type === "text/markdown")
-            result = await readMarkdown(file);
+          let result = { filename: file.name, content: "", questionId: null };
+          result = await readFile(file, questionId);
           result.content = truncateContent(result.content);
           return result;
         }),
