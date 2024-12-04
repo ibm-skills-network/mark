@@ -4602,6 +4602,8 @@ escodegen@^2.1.0:
 
 eslint-config-next@^14:
   version "14.2.19"
+  resolved "https://registry.yarnpkg.com/eslint-config-next/-/eslint-config-next-14.2.19.tgz#cea3a769a3ce41867975f95a85755defbdf69534"
+  integrity sha512-o932XAAq6VSjrPEgTCxEACNgeAeNB7lLMtM9Oy7BD4OwKFqNCROFxo/95U23xeTKXEtCnp0yy8mvJuHksdGapg==
   dependencies:
     "@next/eslint-plugin-next" "14.2.19"
     "@rushstack/eslint-patch" "^1.3.3"
