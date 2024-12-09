@@ -77,7 +77,6 @@ const Question: FC<QuestionProps> = ({
   const [maxCharacters, setMaxCharacters] = useState<number | null>(
     question.maxCharacters || null,
   );
-
   const setQuestionTitle = useAuthorStore((state) => state.setQuestionTitle);
   const setQuestionVariantTitle = useAuthorStore(
     (state) => state.setQuestionVariantTitle,
@@ -95,7 +94,6 @@ const Question: FC<QuestionProps> = ({
   const setFocusedQuestionId = useAuthorStore(
     (state) => state.setFocusedQuestionId,
   );
-
   const showWordCountInput =
     questionStates[question.id]?.showWordCountInput || false;
   const countMode = questionStates[question.id]?.countMode || "CHARACTER";
@@ -110,7 +108,7 @@ const Question: FC<QuestionProps> = ({
     question.type,
   );
   const [responseType, setResponseType] = useState<ResponseType>(
-    question.responseType || "OTHER", // Default value
+    question.responseType || "OTHER",
   );
   const [toggleDeleteConfirmation, setToggleDeleteConfirmation] =
     useState<boolean>(false);

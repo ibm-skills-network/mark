@@ -30,6 +30,13 @@ import { AttemptService } from "./attempt.service";
 import { BaseAssignmentAttemptResponseDto } from "./dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "./dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
+  AssignmentFeedbackDto,
+  AssignmentFeedbackResponseDto,
+  RegradingRequestDto,
+  RegradingStatusResponseDto,
+  RequestRegradingResponseDto,
+} from "./dto/assignment-attempt/feedback.request.dto";
+import {
   AssignmentAttemptResponseDto,
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
@@ -182,6 +189,84 @@ export class AttemptController {
       createQuestionResponseAttemptRequestDto,
       request.userSession.role,
       Number(request.userSession.userId),
+    );
+  }
+  @Post(":attemptId/feedback")
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({ summary: "Submit feedback for an assignment attempt." })
+  @ApiResponse({ status: 201, type: AssignmentFeedbackResponseDto })
+  @ApiResponse({ status: 400, description: "Bad Request" })
+  @ApiResponse({ status: 403, description: "Forbidden" })
+  submitFeedback(
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") attemptId: string,
+    @Body() body: { feedback: AssignmentFeedbackDto },
+    @Req() request: UserSessionRequest,
+  ): Promise<AssignmentFeedbackResponseDto> {
+    const feedbackDto = body.feedback;
+    return this.attemptService.submitFeedback(
+      Number(assignmentId),
+      Number(attemptId),
+      feedbackDto,
+      request.userSession,
+    );
+  }
+
+  // get status from feedback
+  @Get(":attemptId/feedback")
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({ summary: "Get feedback for an assignment attempt." })
+  @ApiResponse({ status: 200, type: AssignmentFeedbackDto })
+  @ApiResponse({ status: 403 })
+  getFeedback(
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") attemptId: string,
+    @Req() request: UserSessionRequest,
+  ): Promise<AssignmentFeedbackDto> {
+    return this.attemptService.getFeedback(
+      Number(assignmentId),
+      Number(attemptId),
+      request.userSession,
+    );
+  }
+  // post request for regrading
+  @Post(":attemptId/regrade")
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({ summary: "Request regrading for an assignment attempt." })
+  @ApiResponse({ status: 201, type: RequestRegradingResponseDto })
+  @ApiResponse({ status: 403 })
+  processRegradingRequest(
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") attemptId: string,
+    @Body() body: { regradingRequest: RegradingRequestDto },
+    @Req() request: UserSessionRequest,
+  ): Promise<AssignmentFeedbackResponseDto> {
+    return this.attemptService.processRegradingRequest(
+      Number(assignmentId),
+      Number(attemptId),
+      body.regradingRequest,
+      request.userSession,
+    );
+  }
+
+  @Get(":attemptId/regrade")
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({ summary: "Get regrading status for an assignment attempt." })
+  @ApiResponse({ status: 200, type: RegradingStatusResponseDto })
+  @ApiResponse({ status: 403 })
+  getRegradingStatus(
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") attemptId: string,
+    @Req() request: UserSessionRequest,
+  ): Promise<RegradingStatusResponseDto> {
+    return this.attemptService.getRegradingStatus(
+      Number(assignmentId),
+      Number(attemptId),
+      request.userSession,
     );
   }
 }

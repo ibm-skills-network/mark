@@ -1,12 +1,18 @@
 import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { Assignment, Question, QuestionType } from "@prisma/client";
+import {
+  Assignment,
+  Question,
+  QuestionType,
+  RegradingStatus,
+} from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import e from "express";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
@@ -41,6 +47,13 @@ import {
   LearnerUpdateAssignmentAttemptRequestDto,
 } from "./dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
+  AssignmentFeedbackDto,
+  AssignmentFeedbackResponseDto,
+  RegradingRequestDto,
+  RegradingStatusResponseDto,
+  RequestRegradingResponseDto,
+} from "./dto/assignment-attempt/feedback.request.dto";
+import {
   AssignmentAttemptResponseDto,
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
@@ -72,6 +85,192 @@ export class AttemptService {
     private readonly assignmentService: AssignmentService,
     private readonly httpService: HttpService,
   ) {}
+
+  async submitFeedback(
+    assignmentId: number,
+    attemptId: number,
+    feedbackDto: AssignmentFeedbackDto,
+    userSession: UserSession,
+  ): Promise<AssignmentFeedbackResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+    });
+
+    if (!assignmentAttempt) {
+      throw new NotFoundException(
+        `Assignment attempt with ID ${attemptId} not found.`,
+      );
+    }
+
+    if (assignmentAttempt.assignmentId !== assignmentId) {
+      throw new BadRequestException(
+        "Assignment ID does not match the attempt.",
+      );
+    }
+
+    if (assignmentAttempt.userId !== userSession.userId) {
+      throw new ForbiddenException(
+        "You do not have permission to submit feedback for this attempt.",
+      );
+    }
+
+    const existingFeedback = await this.prisma.assignmentFeedback.findFirst({
+      where: {
+        assignmentId: assignmentId,
+        attemptId: attemptId,
+        userId: userSession.userId,
+      },
+    });
+
+    if (existingFeedback) {
+      const updatedFeedback = await this.prisma.assignmentFeedback.update({
+        where: { id: existingFeedback.id },
+        data: {
+          comments: feedbackDto.comments,
+          aiGradingRating: feedbackDto.aiGradingRating,
+          assignmentRating: feedbackDto.assignmentRating,
+          updatedAt: new Date(),
+        },
+      });
+
+      return {
+        success: true,
+        id: updatedFeedback.id,
+      };
+    } else {
+      const feedback = await this.prisma.assignmentFeedback.create({
+        data: {
+          assignmentId: assignmentId,
+          attemptId: attemptId,
+          userId: userSession.userId,
+          comments: feedbackDto.comments,
+          aiGradingRating: feedbackDto.aiGradingRating,
+          assignmentRating: feedbackDto.assignmentRating,
+        },
+      });
+      return {
+        success: true,
+        id: feedback.id,
+      };
+    }
+  }
+  async getFeedback(
+    assignmentId: number,
+    attemptId: number,
+    userSession: UserSession,
+  ): Promise<AssignmentFeedbackDto> {
+    const feedback = await this.prisma.assignmentFeedback.findFirst({
+      where: {
+        assignmentId: assignmentId,
+        attemptId: attemptId,
+        userId: userSession.userId,
+      },
+    });
+
+    if (!feedback) {
+      throw new NotFoundException(
+        `Feedback for assignment ${assignmentId} and attempt ${attemptId} not found.`,
+      );
+    }
+
+    return {
+      comments: feedback.comments,
+      aiGradingRating: feedback.aiGradingRating,
+      assignmentRating: feedback.assignmentRating,
+    };
+  }
+  async processRegradingRequest(
+    assignmentId: number,
+    attemptId: number,
+    regradingRequestDto: RegradingRequestDto,
+    userSession: UserSession,
+  ): Promise<RequestRegradingResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+    });
+
+    if (!assignmentAttempt) {
+      throw new NotFoundException(
+        `Assignment attempt with ID ${attemptId} not found.`,
+      );
+    }
+
+    if (assignmentAttempt.assignmentId !== assignmentId) {
+      throw new BadRequestException(
+        "Assignment ID does not match the attempt.",
+      );
+    }
+
+    if (assignmentAttempt.userId !== userSession.userId) {
+      throw new ForbiddenException(
+        "You do not have permission to request regrading for this attempt.",
+      );
+    }
+
+    const existingRegradingRequest =
+      await this.prisma.assignmentFeedback.findFirst({
+        where: {
+          assignmentId: assignmentId,
+          attemptId: attemptId,
+          userId: userSession.userId,
+        },
+      });
+
+    if (existingRegradingRequest) {
+      const updatedRegradingRequest = await this.prisma.regradingRequest.update(
+        {
+          where: { id: existingRegradingRequest.id },
+          data: {
+            regradingReason: regradingRequestDto.reason,
+            regradingStatus: RegradingStatus.PENDING,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      return {
+        success: true,
+        id: updatedRegradingRequest.id,
+      };
+    } else {
+      const regradingRequest = await this.prisma.regradingRequest.create({
+        data: {
+          assignmentId: assignmentId,
+          attemptId: attemptId,
+          userId: userSession.userId,
+          regradingReason: regradingRequestDto.reason,
+          regradingStatus: RegradingStatus.PENDING,
+        },
+      });
+      return {
+        success: true,
+        id: regradingRequest.id,
+      };
+    }
+  }
+  async getRegradingStatus(
+    assignmentId: number,
+    attemptId: number,
+    userSession: UserSession,
+  ): Promise<RegradingStatusResponseDto> {
+    const regradingRequest = await this.prisma.regradingRequest.findFirst({
+      where: {
+        assignmentId: assignmentId,
+        attemptId: attemptId,
+        userId: userSession.userId,
+      },
+    });
+
+    if (!regradingRequest) {
+      throw new NotFoundException(
+        `Regrading request for assignment ${assignmentId} and attempt ${attemptId} not found.`,
+      );
+    }
+
+    return {
+      status: regradingRequest.regradingStatus,
+    };
+  }
 
   /**
    * Lists assignment attempts for the given assignment and user session.
@@ -360,22 +559,22 @@ export class AttemptService {
         }
       }
     }
-    // randomize the order of question choices for single and multiple correct questions
-    const randomizedQuestions = questionsWithResponses.map((question) => {
-      if (
-        (question.type === QuestionType.SINGLE_CORRECT ||
-          question.type === QuestionType.MULTIPLE_CORRECT) &&
-        question.choices.length > 0
-      ) {
-        question.choices = AttemptHelper.shuffleJsonArray<Choice>(
-          question.choices,
-        );
-      }
-      return question;
-    });
+    // // randomize the order of question choices for single and multiple correct questions
+    // const randomizedQuestions = questionsWithResponses.map((question) => {
+    //   if (
+    //     (question.type === QuestionType.SINGLE_CORRECT ||
+    //       question.type === QuestionType.MULTIPLE_CORRECT) &&
+    //     question.choices.length > 0
+    //   ) {
+    //     question.choices = AttemptHelper.shuffleJsonArray<Choice>(
+    //       question.choices
+    //     );
+    //   }
+    //   return question;
+    // });
     return {
       ...assignmentAttempt,
-      questions: randomizedQuestions,
+      questions: questionsWithResponses,
       passingGrade: assignment.passingGrade,
     };
   }
@@ -1077,7 +1276,19 @@ export class AttemptService {
   }
 
   /**
-   * Handles single correct question responses.
+   * Formats the feedback string by replacing placeholders with actual values.
+   */
+  private formatFeedback(
+    feedbackTemplate: string,
+    data: { [key: string]: unknown },
+  ): string {
+    return feedbackTemplate.replaceAll(
+      /\${(.*?)}/g,
+      (_, g: string) => (data[g] as string) || "",
+    );
+  }
+  /**
+   * Handles single correct question responses with custom feedbacks in Markdown format.
    */
   private handleSingleCorrectQuestionResponse(
     question: QuestionDto,
@@ -1094,22 +1305,46 @@ export class AttemptService {
 
     const correctChoice = choices.find((choice) => choice.isCorrect);
 
+    const selectedChoice = choices.find(
+      (choice) => choice.choice === learnerChoice,
+    );
+
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
 
-    if (correctChoice && correctChoice.choice === learnerChoice) {
-      responseDto.totalPoints = correctChoice.points;
+    const data = {
+      learnerChoice,
+      correctChoice: correctChoice?.choice,
+      points: selectedChoice?.points || 0,
+    };
+
+    if (selectedChoice) {
+      let choiceFeedback = "";
+      if (selectedChoice.feedback) {
+        // Use custom feedback from the selected choice
+        choiceFeedback = this.formatFeedback(selectedChoice.feedback, data);
+      } else {
+        // Use default feedback if custom feedback is not provided
+        choiceFeedback = selectedChoice.isCorrect
+          ? `**Correct selection:** ${learnerChoice} (+${selectedChoice.points} points)`
+          : `**Incorrect selection:** ${learnerChoice} (${selectedChoice.points} points)`;
+      }
+
+      responseDto.totalPoints = selectedChoice.isCorrect
+        ? selectedChoice.points
+        : 0;
       responseDto.feedback = [
         {
           choice: learnerChoice,
-          feedback: "Correct! You selected the right answer.",
+          feedback: choiceFeedback,
         },
       ] as ChoiceBasedFeedbackDto[];
     } else {
+      // The learner selected an invalid choice
       responseDto.totalPoints = 0;
       responseDto.feedback = [
         {
           choice: learnerChoice,
-          feedback: `Incorrect. The correct answer is: ${correctChoice?.choice}`,
+          feedback: `**Invalid selection:** ${learnerChoice}`,
         },
       ] as ChoiceBasedFeedbackDto[];
     }
@@ -1119,7 +1354,7 @@ export class AttemptService {
   }
 
   /**
-   * Handles multiple correct question responses.
+   * Handles multiple correct question responses with custom feedbacks in Markdown format.
    */
   private handleMultipleCorrectQuestionResponse(
     question: QuestionDto,
@@ -1138,7 +1373,7 @@ export class AttemptService {
       responseDto.feedback = [
         {
           choice: [],
-          feedback: "You didn't select any option.",
+          feedback: "**You didn't select any option.**",
         },
       ] as unknown as ChoiceBasedFeedbackDto[];
       const learnerResponse = JSON.stringify([]);
@@ -1158,33 +1393,48 @@ export class AttemptService {
     const feedbackDetails: string[] = [];
 
     for (const learnerChoice of learnerChoices) {
-      const selectedChoice = question.choices.find(
+      const selectedChoice = choices.find(
         (choice) => choice.choice === learnerChoice,
       );
 
+      const data = {
+        learnerChoice,
+        points: selectedChoice?.points || 0,
+      };
+
       if (selectedChoice) {
         totalPoints += selectedChoice.points;
-        const choiceFeedback =
-          selectedChoice.feedback ??
-          (selectedChoice.isCorrect
-            ? `Correct selection: ${learnerChoice} (+${selectedChoice.points} points)`
-            : `Incorrect selection: ${learnerChoice} (${selectedChoice.points} points)`);
+
+        let choiceFeedback = "";
+        if (selectedChoice.feedback) {
+          choiceFeedback = this.formatFeedback(selectedChoice.feedback, data);
+        } else {
+          choiceFeedback = selectedChoice.isCorrect
+            ? `**Correct selection:** ${learnerChoice} (+${selectedChoice.points} points)`
+            : `**Incorrect selection:** ${learnerChoice} (${selectedChoice.points} points)`;
+        }
         feedbackDetails.push(choiceFeedback);
       } else {
-        feedbackDetails.push(`Invalid selection: ${learnerChoice} (0 points)`);
+        feedbackDetails.push(
+          `**Invalid selection:** ${learnerChoice} (0 points)`,
+        );
       }
     }
 
     const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
+    const allCorrectSelected = correctChoiceTexts.every((choice) =>
+      learnerChoices.includes(choice),
+    );
+
     const feedbackMessage = `
-      ${feedbackDetails.join(". ")}.
-      ${
-        totalPoints < maxPoints ||
-        !learnerChoices.every((choice) => correctChoiceTexts.includes(choice))
-          ? `The correct option(s) were: ${correctChoiceTexts.join(", ")}.`
-          : "You selected all correct options!"
-      }
-    `;
+${feedbackDetails.join(".\n")}.
+${
+  totalPoints < maxPoints || !allCorrectSelected
+    ? `\nThe correct option(s) were: **${correctChoiceTexts.join(", ")}**.`
+    : "\n**You selected all correct options!**"
+}
+`;
+
     const feedback: ChoiceBasedFeedbackDto[] = [
       {
         choice: learnerChoices.join(", "),

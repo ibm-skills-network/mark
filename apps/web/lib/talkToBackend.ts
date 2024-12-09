@@ -23,6 +23,8 @@ import type {
   SubmitAssignmentResponse,
   User,
   ResponseType,
+  AssignmentFeedback,
+  RegradingRequest,
   UpdateAssignmentQuestionsResponse,
 } from "@config/types";
 
@@ -674,5 +676,84 @@ export async function getJobStatus(
   } catch (err) {
     console.error("Error fetching job status:", err);
     return undefined;
+  }
+}
+export async function getFeedback(
+  assignmentId: number,
+  attemptId: number,
+  cookies?: string,
+): Promise<AssignmentFeedback | undefined> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/feedback`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch feedback");
+    }
+
+    const data = (await res.json()) as AssignmentFeedback;
+    return data;
+  } catch (err) {
+    console.error(err);
+    return undefined;
+  }
+}
+export async function submitFeedback(
+  assignmentId: number,
+  attemptId: number,
+  feedback: AssignmentFeedback,
+  cookies?: string,
+): Promise<boolean> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/feedback`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({ feedback }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to submit feedback");
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+export async function submitRegradingRequest(
+  regradingRequest: RegradingRequest,
+  cookies?: string,
+): Promise<boolean> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${regradingRequest.assignmentId}/attempts/${regradingRequest.attemptId}/regrade`;
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({ regradingRequest }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to submit regrading request");
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
   }
 }

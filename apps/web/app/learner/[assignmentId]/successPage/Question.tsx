@@ -6,6 +6,8 @@ import { getFeedbackColors, parseLearnerResponse } from "@/lib/utils";
 import { useLearnerStore } from "@/stores/learner";
 import { motion } from "framer-motion";
 import { FC, useMemo, useState } from "react";
+import { CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { SparklesIcon } from "@heroicons/react/24/solid";
 
 interface Props {
   question: QuestionStore;
@@ -35,6 +37,7 @@ const Question: FC<Props> = ({ question, number }) => {
     learnerUrlResponse,
     learnerAnswerChoice,
     learnerFileResponse,
+    choices,
   } = question;
   const showSubmissionFeedback = useLearnerStore(
     (state) => state.showSubmissionFeedback,
@@ -101,15 +104,72 @@ const Question: FC<Props> = ({ question, number }) => {
       );
     } else if (
       (type === "SINGLE_CORRECT" || type === "MULTIPLE_CORRECT") &&
-      Array.isArray(learnerResponse)
+      Array.isArray(choices)
     ) {
+      if (
+        !learnerResponse ||
+        (Array.isArray(learnerResponse) && learnerResponse.length === 0)
+      ) {
+        return (
+          <p className="text-gray-800">
+            No answer was provided by the learner.
+          </p>
+        );
+      }
+
+      const isSingleChoice = type === "SINGLE_CORRECT";
+
       return (
-        <ul className="list-disc ml-5 text-gray-800">
-          {(learnerResponse as string[]).map((choice: string, idx: number) => (
-            <li key={idx} className="font-bold">
-              {choice}
-            </li>
-          ))}
+        <ul className="list-none text-gray-800 w-full flex flex-col justify-start gap-y-2">
+          {choices.map((choiceObj, idx) => {
+            const isSelected = Array.isArray(learnerResponse)
+              ? (learnerResponse as string[]).includes(choiceObj.choice)
+              : false;
+
+            const isCorrect = choiceObj.isCorrect;
+
+            return (
+              <li
+                key={idx}
+                className={`flex items-center justify-between mb-2 px-2 py-2 ${
+                  isSelected
+                    ? isCorrect
+                      ? "bg-green-50 border border-green-500 rounded"
+                      : "bg-red-50 border border-red-700 rounded"
+                    : isCorrect
+                      ? "bg-green-50 border border-green-500 rounded"
+                      : ""
+                }`}
+              >
+                <div className="flex items-center">
+                  {isSingleChoice ? (
+                    <input
+                      type="radio"
+                      checked={isSelected}
+                      readOnly
+                      className="form-radio text-violet-600 mr-2"
+                    />
+                  ) : (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      readOnly
+                      className="form-checkbox text-violet-600 mr-2"
+                    />
+                  )}
+                  <span className="font-medium">{choiceObj.choice}</span>
+                </div>
+                <div className="flex items-center">
+                  {isCorrect && (
+                    <CheckIcon className="w-5 h-5 text-green-500 ml-2" />
+                  )}
+                  {!isCorrect && isSelected && (
+                    <XMarkIcon className="w-5 h-5 text-red-500 ml-2" />
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       );
     } else if (type === "TRUE_FALSE") {
@@ -188,27 +248,22 @@ const Question: FC<Props> = ({ question, number }) => {
         </div>
 
         {/* Question Text */}
-        <MarkdownViewer className="mb-4 text-gray-700">
+        <MarkdownViewer className="mb-4 pb-4 border-b text-gray-700">
           {questionText}
         </MarkdownViewer>
 
         {/* Learner's Answer */}
-        <div className="mb-4">
-          <p className="font-medium text-gray-700 mb-2">Your Answer:</p>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            {renderLearnerAnswer()}
-          </div>
+        <div className="flex items-center justify-between mb-4">
+          {renderLearnerAnswer()}
         </div>
 
         {/* Feedback */}
         {highestScoreResponse?.feedback && (
-          <div
-            className={`p-4 mt-4 rounded-lg ${getFeedbackColors(
-              highestScoreResponse.points,
-              totalPoints,
-            )}`}
-          >
-            <MarkdownViewer>
+          <div className="p-4 mt-4 rounded-lg bg-gray-50 flex items-center gap-4">
+            <div className="flex-shrink-0 w-6 justify-center items-center flex">
+              <SparklesIcon className="w-4 h-4 text-violet-600" />
+            </div>
+            <MarkdownViewer className="text-gray-800 flex-1">
               {highestScoreResponse?.feedback[0]?.feedback}
             </MarkdownViewer>
           </div>

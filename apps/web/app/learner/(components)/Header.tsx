@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
 import Breadcrumbs from "./Breadcrumbs";
+import Link from "next/link";
 
 function LearnerHeader() {
   const pathname = usePathname();
@@ -54,7 +55,7 @@ function LearnerHeader() {
       updatedAt: 0,
     },
   );
-
+  const [returnUrl, setReturnUrl] = useState<string>("");
   const assignmentId = assignmentDetails?.id;
   const isInQuestionPage = pathname.includes("questions");
   const [title, setTitle] = useState<string>("Auto-Graded Assignment");
@@ -72,6 +73,7 @@ function LearnerHeader() {
       const user = await getUser();
       if (user) {
         setRole(user.role);
+        setReturnUrl(user.returnUrl || "");
       }
     };
     void getUserRole();
@@ -184,7 +186,14 @@ function LearnerHeader() {
           )}
         </div>
       </div>
-
+      {returnUrl && pathname.includes("successPage") && (
+        <Link
+          href={returnUrl}
+          className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center gap-2 shadow-lg"
+        >
+          Return to Course
+        </Link>
+      )}
       {activeAttemptId && isInQuestionPage && (
         <Button
           disabled={editedQuestionsOnly(questions).length === 0 || submitting}

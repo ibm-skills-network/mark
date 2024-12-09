@@ -133,6 +133,10 @@ model Assignment {
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
 
   AIUsage AIUsage[]
+
+  AssignmentFeedback AssignmentFeedback[]
+
+  RegradingRequest RegradingRequest[]
 }
 enum VariantType {
   REWORDED /// The variant is reworded
@@ -168,6 +172,9 @@ model AssignmentAttempt {
   expiresAt         DateTime?
   createdAt         DateTime              @default(now())
   questionVariants  AssignmentAttemptQuestionVariant[]
+  AssignmentFeedback AssignmentFeedback[]
+
+  RegradingRequest RegradingRequest[]
 }
 
 model AssignmentAttemptQuestionVariant {
@@ -209,4 +216,40 @@ model QuestionResponse {
   learnerResponse     String /// The student's response to the question
   points              Float /// The points earned by the student for this response
   feedback            Json /// Feedback on the student's response, stored as JSON
+}
+
+/// This model captures feedback and regrading requests for assignments
+model AssignmentFeedback {
+  id                Int              @id @default(autoincrement()) /// Unique identifier for the feedback
+  assignmentId      Int              /// The ID of the assignment for which feedback is provided
+  assignment        Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
+  attemptId         Int              /// The ID of the assignment attempt
+  assignmentAttempt AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  userId            String           /// The ID of the user providing feedback
+  comments          String?          /// Additional comments or suggestions
+  aiGradingRating   Int?             /// Rating for AI grading (1-5 scale)
+  assignmentRating  Int?             /// Rating for the overall assignment (1-5 scale)
+  aiFeedbackRating  Int?             /// Rating for the feedback provided by AI (1-5 scale)
+  createdAt         DateTime         @default(now()) /// Timestamp for when the feedback was created
+  updatedAt         DateTime         @updatedAt       /// Timestamp for the last update to the feedback
+}
+
+model RegradingRequest {
+  id                Int              @id @default(autoincrement()) /// Unique identifier for the regrading request
+  assignmentId      Int              /// The ID of the assignment for which feedback is provided
+  userId            String           /// The ID of the user requesting regrading
+  assignment        Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
+  attemptId         Int              /// The ID of the assignment attempt
+  assignmentAttempt AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  regradingReason   String?          /// Reason for requesting regrading
+  regradingStatus   RegradingStatus  @default(PENDING) /// Status of the regrading request
+  createdAt         DateTime         @default(now()) /// Timestamp for when the regrading request was created
+  updatedAt         DateTime         @updatedAt       /// Timestamp for the last update to the regrading request
+}
+
+enum RegradingStatus {
+  PENDING    /// The regrading request is pending review
+  APPROVED   /// The regrading request has been approved
+  REJECTED   /// The regrading request has been rejected
+  COMPLETED  /// The regrading process is completed
 }

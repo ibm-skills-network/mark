@@ -10,7 +10,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
     let message = "";
     const nonValidQuestionsIds: number[] = [];
 
-    questions.some((eachQuestion, index) => {
+    questions?.some((eachQuestion, index) => {
       const { type, question, choices, scoring, id } = eachQuestion;
       debugLog(`Checking question ${index + 1}:`, eachQuestion);
 

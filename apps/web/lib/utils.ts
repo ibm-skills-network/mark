@@ -64,15 +64,29 @@ export const useDebugLog = () => {
   return useDebugLog;
 };
 
+/**
+ * Parses a learner's response string into a JSON object if possible.
+ * The function attempts to parse the response up to a maximum of 5 times.
+ * If the response is not a valid JSON string, it returns the original response.
+ *
+ * @param response - The learner's response as a string.
+ * @param attempts - The number of attempts made to parse the response (default is 0).
+ * @returns The parsed response as a JSON object or the original response string if parsing fails.
+ */
 export function parseLearnerResponse(response: string, attempts = 0) {
   try {
     let parsedResponse: LearnerResponseType = response;
     let attempts = 0;
     const maxAttempts = 5;
     while (typeof parsedResponse === "string" && attempts < maxAttempts) {
-      parsedResponse = JSON.parse(parsedResponse) as LearnerResponseType;
+      if (isValidJSON(parsedResponse)) {
+        parsedResponse = JSON.parse(parsedResponse) as LearnerResponseType;
+      } else {
+        break; // if the response is not a string or a valid JSON, then break out of the loop
+      }
       attempts++;
     }
+
     return parsedResponse;
   } catch (e) {
     console.error(
@@ -80,6 +94,14 @@ export function parseLearnerResponse(response: string, attempts = 0) {
       e,
     );
     return response;
+  }
+}
+function isValidJSON(str: string): boolean {
+  try {
+    JSON.parse(str);
+    return true;
+  } catch (e) {
+    return false;
   }
 }
 

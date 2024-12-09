@@ -103,6 +103,19 @@ export type Criteria = {
   points: number;
   description: string;
 };
+export type AssignmentFeedback = {
+  assignmentId: number;
+  userId: string;
+  comments: string;
+  assignmentRating: number;
+  aiGradingRating: number;
+};
+export type RegradingRequest = {
+  assignmentId: number;
+  userId: string;
+  attemptId: number;
+  reason: string;
+};
 
 export type Scoring = {
   type: // | "SINGLE_CRITERIA"

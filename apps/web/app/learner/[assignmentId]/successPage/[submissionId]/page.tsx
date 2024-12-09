@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import {
   CircularProgressbarWithChildren,
@@ -10,20 +10,32 @@ import {
 } from "react-circular-progressbar";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Question from "../Question";
-import Particles, { initParticlesEngine } from "@tsparticles/react";
-import { loadFull } from "tsparticles";
+import Particles from "@tsparticles/react";
 import Crown from "@/public/Crown.svg";
 import Image, { StaticImageData } from "next/image";
-import ExitIcon from "@/components/svgs/ExitIcon";
 import { IconRefresh } from "@tabler/icons-react";
-import { getAttempt, getUser } from "@/lib/talkToBackend";
+import {
+  getAttempt,
+  getFeedback,
+  getUser,
+  submitFeedback,
+  submitRegradingRequest,
+} from "@/lib/talkToBackend";
 import animationData from "@/animations/LoadSN.json";
 import {
   AssignmentAttemptWithQuestions,
   AssignmentDetails,
+  AssignmentFeedback,
   QuestionStore,
+  RegradingRequest,
 } from "@/config/types";
 import Loading from "@/components/Loading";
+import { Rating, RoundedStar } from "@smastrom/react-rating";
+import "@smastrom/react-rating/style.css"; // Import rating component styles
+import { toast } from "sonner";
+import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
+import { XMarkIcon } from "@heroicons/react/24/outline";
+
 const DynamicConfetti = dynamic(() => import("react-confetti"), {
   ssr: false,
 });
@@ -31,7 +43,7 @@ const DynamicConfetti = dynamic(() => import("react-confetti"), {
 function SuccessPage() {
   const pathname: string = usePathname();
   const router = useRouter();
-  const id = parseInt(pathname.split("/")?.[4], 10);
+  const attemptId = parseInt(pathname.split("/")?.[4], 10);
   const assignmentId = parseInt(pathname.split("/")?.[2], 10);
 
   // Local state variables
@@ -58,16 +70,38 @@ function SuccessPage() {
   const [role, setRole] = useState<"learner" | "author" | "undefined">(
     "undefined",
   );
+  const [init, setInit] = useState(false);
+  const [playAnimations, setPlayAnimations] = useState(true);
+
+  // New state variables for feedback form
+  // New state variables for feedback modal
+  const [comments, setComments] = useState("");
+  const [aiGradingRating, setAiGradingRating] = useState(0);
+  const [assignmentRating, setAssignmentRating] = useState(0);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+
+  // State variables for regrading request modal
+  const [regradingRequest, setRegradingRequest] = useState(false);
+  const [regradingReason, setRegradingReason] = useState("");
+  const [isRegradingModalOpen, setIsRegradingModalOpen] = useState(false);
+
+  const [userId, setUserId] = useState<string>(null);
+
+  const [regradingStatus, setRegradingStatus] = useState<
+    "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED"
+  >("PENDING");
+  const [isOpen, setIsOpen] = useState(false);
+
   useEffect(() => {
     const fetchData = async () => {
       const user = await getUser();
       setRole(user.role);
-      setReturnUrl(user.returnUrl);
+      setUserId(user.userId);
       if (user.role === "learner") {
         // Fetch data from backend for learners
         try {
           const submissionDetails: AssignmentAttemptWithQuestions =
-            await getAttempt(assignmentId, id);
+            await getAttempt(assignmentId, attemptId);
           setQuestions(submissionDetails.questions);
           setGrade(submissionDetails.grade * 100);
           if (submissionDetails.totalPointsEarned) {
@@ -88,6 +122,13 @@ function SuccessPage() {
             id: submissionDetails.id,
             name: submissionDetails.name,
           });
+          const response = await getFeedback(assignmentId, attemptId);
+          if (response) {
+            setComments(response.comments);
+            setAiGradingRating(response.aiGradingRating);
+            setAssignmentRating(response.assignmentRating);
+          }
+          setInit(true);
         } catch (err) {
           console.error("Error fetching submission details:", err);
         } finally {
@@ -110,7 +151,7 @@ function SuccessPage() {
     void fetchData();
   }, [
     assignmentId,
-    id,
+    attemptId,
     zustandQuestions,
     zustandGrade,
     zustandTotalPointsEarned,
@@ -118,32 +159,20 @@ function SuccessPage() {
     zustandAssignmentDetails,
   ]);
 
-  const [returnUrl, setReturnUrl] = useState<string>("");
-  const { passingGrade } = assignmentDetails || {
-    passingGrade: 50,
-    id: null,
-  };
-  const [init, setInit] = useState(false);
-
-  // Initialize tsparticles
+  // Use Effect to Play Animations Once
   useEffect(() => {
-    initParticlesEngine(async (engine) => {
-      await loadFull(engine);
-    })
-      .then(() => {
-        setInit(true);
-      })
-      .catch((error) => {
-        console.error(error);
-      });
-  }, []);
+    setPlayAnimations(true); // Trigger animations only once
+    const timeout = setTimeout(() => setPlayAnimations(false), 5000); // Stop animations after 5 seconds
+    return () => clearTimeout(timeout); // Cleanup timeout on unmount
+  }, [grade]); // Trigger only when `grade` changes
 
   // Animation for the crown falling effect
   const crownAnimation = {
-    initial: { y: -200, opacity: 0 },
-    animate: { y: 60, opacity: 1 },
+    initial: { y: -250, x: 340, opacity: 0 },
+    animate: { y: 108, opacity: 1 },
     transition: { type: "spring", stiffness: 50, damping: 10, duration: 1 },
   };
+
   // Custom animations based on grade
   const fireworksOptions = {
     fullScreen: {
@@ -200,6 +229,10 @@ function SuccessPage() {
       },
     },
   };
+  const toggleFeedbackBar = () => {
+    setIsOpen(!isOpen);
+  };
+
   useEffect(() => {
     const updatePageHeight = () => {
       setPageHeight(window.innerHeight);
@@ -265,9 +298,15 @@ function SuccessPage() {
       },
     },
   };
+
   if (loading) {
     return <Loading animationData={animationData} />;
   }
+  const { passingGrade } = assignmentDetails || {
+    passingGrade: 50,
+    id: null,
+  };
+
   const getGradeMessage = (grade: number): string => {
     if (grade >= 80) return "Impressive Mastery! 🌟";
     if (grade >= 70) return "Strong Progress! 🚀";
@@ -276,11 +315,89 @@ function SuccessPage() {
     return "Keep Pushing Forward! 💡";
   };
 
-  const newLocal = getGradeMessage(grade);
+  const handleSubmitFeedback = async () => {
+    if (assignmentId === null || attemptId === null) {
+      console.error("Missing assignmentId or attemptId");
+      return;
+    }
+    if (comments === "") {
+      toast.error("Please provide your feedback comments.");
+      return;
+    }
+    if (aiGradingRating === 0 || assignmentRating === 0) {
+      toast.error("Please rate the assignment and AI grading.");
+      return;
+    }
+    // Construct feedback object
+    const feedbackData: AssignmentFeedback = {
+      assignmentId: assignmentDetails?.id || assignmentId,
+      userId: userId,
+      comments,
+      aiGradingRating,
+      assignmentRating,
+    };
+
+    try {
+      // Submit feedback to backend
+      const response = await submitFeedback(
+        assignmentId,
+        attemptId,
+        feedbackData,
+      );
+      if (response === true) {
+        toast.success("Feedback submitted successfully!");
+        setIsFeedbackModalOpen(false);
+      } else {
+        toast.error("Failed to submit feedback. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      toast.error("Failed to submit feedback. Please try again.");
+    }
+  };
+  const handleSubmitRegradingRequest = async () => {
+    // Construct regrading request object
+    const regradingData: RegradingRequest = {
+      assignmentId: assignmentId,
+      userId: userId,
+      attemptId: attemptId,
+      reason: regradingReason,
+    };
+    if (regradingReason === "") {
+      toast.error("Please provide a reason for regrading.");
+      return;
+    }
+    if (assignmentDetails?.id === null) {
+      console.error("Missing assignmentId");
+      return;
+    }
+    if (userId === null) {
+      console.error("Missing userId");
+      return;
+    }
+    if (attemptId === null) {
+      console.error("Missing attemptId");
+      return;
+    }
+    try {
+      // Submit regrading request to backend
+      const response = await submitRegradingRequest(regradingData);
+      if (response === true) {
+        toast.success("Regrading request submitted successfully!");
+        setIsRegradingModalOpen(false);
+      } else {
+        toast.error("Failed to submit regrading request. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error submitting regrading request:", error);
+      toast.error("Failed to submit regrading request. Please try again.");
+    }
+  };
+
   return (
     <div className="relative pt-12 flex flex-col items-center justify-center w-full h-full gap-y-10 bg-gradient-to-b">
       {/* Fireworks Animation for Perfect Score */}
-      {init && grade >= 90 && (
+      {init && grade >= 90 && playAnimations && (
         <Particles
           id="fireworks"
           options={fireworksOptions}
@@ -289,14 +406,13 @@ function SuccessPage() {
       )}
 
       {/* Sparkles Animation for Medium Grade */}
-      {init && grade >= 60 && grade < 90 && (
+      {init && grade >= 60 && grade < 90 && playAnimations && (
         <Particles
           id="sparkles"
           options={sparkleOptions}
           className="absolute inset-0 z-0"
         />
       )}
-
       {/* Confetti Animation */}
       {grade >= passingGrade && (
         <DynamicConfetti
@@ -324,68 +440,82 @@ function SuccessPage() {
           )}
           {!Number.isNaN(grade) ? (
             <>
-              <motion.div
-                initial={{ scale: 0.8 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.5, type: "spring" }}
-                className="w-48 h-48"
-              >
-                <CircularProgressbarWithChildren
-                  value={Math.round(grade)}
-                  styles={buildStyles({
-                    pathColor: grade >= passingGrade ? "#10B981" : "#EF4444",
-                    textColor: "#374151",
-                    trailColor: "#D1D5DB",
-                    backgroundColor: "#fff",
-                  })}
+              <div className="flex items-center justify-center w-full gap-x-16 bg-white p-6 rounded-lg shadow-md">
+                <div className="flex flex-col items-start gap-4">
+                  <motion.h1
+                    className="text-5xl font-extrabold text-gray-800 text-nowrap"
+                    initial={{ opacity: 0, y: -30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    {grade >= 90
+                      ? "Legendary Performance! 🏆"
+                      : getGradeMessage(grade)}
+                  </motion.h1>
+                  <motion.p
+                    className="text-xl text-gray-600"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    {grade >= passingGrade
+                      ? "You've successfully completed the assignment."
+                      : "Review your answers and try again."}
+                  </motion.p>
+                  {/* required passing grade  */}
+                  <motion.p
+                    className="text-xl text-black"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    Required passing grade: {passingGrade}%
+                  </motion.p>
+                  {/* status */}
+                  <motion.p
+                    className="text-xl "
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    Status:
+                    <span
+                      className={`ml-1 font-semibold
+                        ${
+                          grade >= passingGrade
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                    >
+                      {grade >= passingGrade ? "Passed" : "Failed"}
+                    </span>
+                  </motion.p>
+                  <motion.p
+                    className="text-xl "
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    Final Score: {Math.round(totalPointsEarned)} /{" "}
+                    {Math.round(totalPoints)} ({Math.round(grade)}%)
+                  </motion.p>
+                </div>
+                <motion.div
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.5, type: "spring" }}
+                  className="w-48 h-30"
                 >
-                  <div className="text-[40px] text-gray-500">
-                    {Math.round(grade)}%
-                  </div>
-                </CircularProgressbarWithChildren>
-              </motion.div>
-              <motion.h1
-                className="text-5xl font-extrabold text-gray-800"
-                initial={{ opacity: 0, y: -30 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                {grade >= 90 ? "Legendary Performance! 🏆" : newLocal}
-              </motion.h1>
-              <motion.p
-                className="text-xl text-gray-600"
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                {grade >= passingGrade
-                  ? "You've successfully completed the assignment."
-                  : "Review your answers and try again."}
-              </motion.p>
-              {/* Performance Metrics */}
-              <motion.div
-                className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-8 w-full"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <div className="p-6 bg-white rounded-lg shadow-md text-center">
-                  <p className="text-sm text-gray-500">Total Score</p>
-                  <p className="text-3xl font-bold text-gray-800">
-                    {Math.round(grade)}%
-                  </p>
-                </div>
-                <div className="p-6 bg-white rounded-lg shadow-md text-center">
-                  <p className="text-sm text-gray-500">Total Points</p>
-                  <p className="text-3xl font-bold text-gray-800">
-                    {/*round to 2 decimal places*/}
-                    {Math.round(totalPointsEarned)} / {Math.round(totalPoints)}
-                  </p>
-                </div>
-                <div className="p-6 bg-white rounded-lg shadow-md text-center">
-                  <p className="text-sm text-gray-500">Passing Grade</p>
-                  <p className="text-3xl font-bold text-gray-800">
-                    {Math.round(passingGrade * 100) / 100}%
-                  </p>
-                </div>
-              </motion.div>
+                  <CircularProgressbarWithChildren
+                    value={Math.round(grade)}
+                    styles={buildStyles({
+                      pathColor: grade >= passingGrade ? "#10B981" : "#EF4444",
+                      textColor: "#374151",
+                      trailColor: "#D1D5DB",
+                      backgroundColor: "#fff",
+                    })}
+                  >
+                    <div className="text-[35px] font-bold text-gray-500">
+                      {Math.round(grade)}%
+                    </div>
+                  </CircularProgressbarWithChildren>
+                </motion.div>
+              </div>
             </>
           ) : (
             <motion.h1
@@ -397,50 +527,22 @@ function SuccessPage() {
               viewing them.
             </motion.h1>
           )}
-          {/* Action Buttons */}
-          <div className="flex flex-wrap justify-center gap-6 mt-10">
-            <Link
-              href={
-                role?.toLowerCase() === "learner"
-                  ? `/learner/${assignmentId}`
-                  : role?.toLowerCase() === "author"
-                    ? `/learner/${assignmentId}?authorMode=true`
-                    : "/"
-              }
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-md transition flex items-center gap-2 shadow-lg"
-            >
-              {/* SVG Icon */}
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <IconRefresh className="w-6 h-6 text-white" />
-              </svg>
-              Retake Assignment
-            </Link>
-            {returnUrl && (
-              <Link
-                href={returnUrl}
-                className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-md transition flex items-center gap-2 shadow-lg"
-              >
-                {/* SVG Icon */}
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <ExitIcon className="w-6 h-6 text-white" />
-                </svg>
-                Back to Course
-              </Link>
-            )}
-          </div>
         </div>
+
+        {role === "learner" && (
+          <div className="flex items-center gap-x-4 justify-center p-4">
+            <button
+              onClick={() => setIsFeedbackModalOpen(true)}
+              className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition "
+            >
+              <div className="flex items-center gap-x-2">
+                Provide Assignment Feedback
+              </div>
+            </button>
+          </div>
+        )}
         {/* Questions Summary */}
-        <div className="mt-16">
+        <div className="mt-4">
           {questions.map((question: QuestionStore, index: number) => (
             <Question
               key={question.id}
@@ -449,7 +551,215 @@ function SuccessPage() {
             />
           ))}
         </div>
+        {/* Action Buttons */}
+        <div className="flex flex-wrap justify-between mb-10 px-5">
+          {/* <button
+            onClick={() => setIsRegradingModalOpen(true)}
+            className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition "
+          >
+            <div className="flex items-center gap-x-2">Request Regrading</div> //TODO: this is commented out until there is an interface for authors to approve regrading requests
+          </button> */}
+          <div></div>
+          <Link
+            href={
+              role?.toLowerCase() === "learner"
+                ? `/learner/${assignmentId}`
+                : role?.toLowerCase() === "author"
+                  ? `/learner/${assignmentId}?authorMode=true`
+                  : "/"
+            }
+            className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg"
+          >
+            {/* SVG Icon */}
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <IconRefresh className="w-6 h-6 text-white" />
+            </svg>
+            Retake Assignment
+          </Link>
+        </div>
       </div>
+      {/* Feedback Modal */}
+      <AnimatePresence>
+        {isFeedbackModalOpen && (
+          <Dialog
+            as={motion.div}
+            static
+            className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50"
+            open={isFeedbackModalOpen}
+            onClose={() => setIsFeedbackModalOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="min-h-screen px-4 text-center">
+              {/* Centering Modal Content */}
+              <span
+                className="inline-block h-screen align-middle"
+                aria-hidden="true"
+              >
+                &#8203;
+              </span>
+              <motion.div
+                className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg"
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.9 }}
+              >
+                <DialogPanel>
+                  <DialogTitle
+                    as="h3"
+                    className="text-lg font-medium leading-6 text-gray-900 mb-4"
+                  >
+                    <div className="flex justify-between items-center">
+                      We Value Your Feedback
+                      <XMarkIcon
+                        className="w-6 h-6 text-gray-500 "
+                        onClick={() => setIsFeedbackModalOpen(false)}
+                      />
+                    </div>
+                  </DialogTitle>
+
+                  <div className="flex flex-col items-center gap-4 mb-4">
+                    {/* Assignment Rating */}
+                    <div className="text-center">
+                      <label className="block text-gray-700 font-semibold mb-2">
+                        Rate the Assignment
+                      </label>
+                      <Rating
+                        value={assignmentRating}
+                        onChange={setAssignmentRating}
+                        style={{ maxWidth: 200 }}
+                        itemStyles={{
+                          itemShapes: RoundedStar,
+                          activeFillColor: "#7C3AED",
+                          inactiveFillColor: "#72777C",
+                        }}
+                      />
+                    </div>
+                    {/* AI Grading Rating */}
+                    <div className="text-center">
+                      <label className="block text-gray-700 font-semibold mb-2">
+                        Rate the AI Grading
+                      </label>
+                      <Rating
+                        value={aiGradingRating}
+                        onChange={setAiGradingRating}
+                        style={{ maxWidth: 200 }}
+                        itemStyles={{
+                          itemShapes: RoundedStar,
+                          activeFillColor: "#7C3AED",
+                          inactiveFillColor: "#72777C",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Comments */}
+                  <div>
+                    <label className="block text-gray-700 font-semibold mb-2">
+                      Your Comments:
+                    </label>
+                    <textarea
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows={3}
+                      value={comments}
+                      onChange={(e) => setComments(e.target.value)}
+                      placeholder="Share your thoughts or suggestions..."
+                    ></textarea>
+                  </div>
+                  {/* Submit Button */}
+                  <div className="text-center">
+                    <button
+                      onClick={handleSubmitFeedback}
+                      className="px-6 py-2 mt-2 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition shadow-lg"
+                    >
+                      Submit Feedback
+                    </button>
+                  </div>
+                </DialogPanel>
+              </motion.div>
+            </div>
+          </Dialog>
+        )}
+      </AnimatePresence>
+
+      {/* Regrading Request Modal */}
+      <AnimatePresence>
+        {isRegradingModalOpen && (
+          <Dialog
+            as={motion.div}
+            static
+            className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50"
+            open={isRegradingModalOpen}
+            onClose={() => setIsRegradingModalOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="min-h-screen px-4 text-center">
+              {/* Centering Modal Content */}
+              <span
+                className="inline-block h-screen align-middle"
+                aria-hidden="true"
+              >
+                &#8203;
+              </span>
+              <motion.div
+                className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg"
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.9 }}
+              >
+                <DialogPanel>
+                  <DialogTitle
+                    as="h3"
+                    className="text-lg font-medium leading-6 text-gray-900 mb-4"
+                  >
+                    <div className="flex justify-between items-center">
+                      Regrading Form Request
+                      <XMarkIcon
+                        className="w-6 h-6 text-gray-500 "
+                        onClick={() => setIsRegradingModalOpen(false)}
+                      />
+                    </div>
+                  </DialogTitle>
+                  <div className="space-y-4">
+                    <div className="text-gray-600">
+                      Regraded will be sent to and completed an instructor.
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 font-semibold mb-2">
+                        Reason for Regrading:
+                      </label>
+                      <textarea
+                        className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={5}
+                        value={regradingReason}
+                        onChange={(e) => setRegradingReason(e.target.value)}
+                        placeholder="Provide details for your regrading request..."
+                      ></textarea>
+                    </div>
+                    {/* Submit Button */}
+                    <div className="text-center">
+                      <button
+                        onClick={handleSubmitRegradingRequest}
+                        className="px-6 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition shadow-lg"
+                      >
+                        Submit Regrading Request
+                      </button>
+                    </div>
+                  </div>
+                </DialogPanel>
+              </motion.div>
+            </div>
+          </Dialog>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

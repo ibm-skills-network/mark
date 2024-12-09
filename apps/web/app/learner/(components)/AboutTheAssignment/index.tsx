@@ -67,9 +67,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     passingGrade,
     name = "Untitled",
     id,
+    graded,
     published = false,
   } = assignment;
-
   const assignmentState =
     !published && role === "learner"
       ? "not-published"
@@ -120,7 +120,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
           <div className="flex flex-wrap justify-between px-6 py-4">
             <div className="flex flex-col gap-y-2 text-gray-600">
               <span className="font-semibold">Assignment type</span>
-              <span>{published ? "Graded" : "Practice"}</span>
+              <span>{graded ? "Graded" : "Practice"}</span>
             </div>
             <div className="flex flex-col gap-y-2 text-gray-600">
               <span className="font-semibold">Time Limit</span>

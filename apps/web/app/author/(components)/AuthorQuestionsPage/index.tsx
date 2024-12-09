@@ -629,68 +629,81 @@ const AuthorQuestionsPage: FC<Props> = ({
               </p>
             </div>
           )}
-          <div className="mx-auto items-center justify-center mb-8 hover:no-underline typography-btn flex rounded-md shadow-sm hover:shadow-md transition-all focus:none disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 bg-white w-fit whitespace-nowrap border-gray-200 border border-solid col-span-4 md:col-start-5 md:col-end-8 ">
-            {/* Add Question button */}
-            <button
-              type="button"
-              className="hover:no-underline text-gray-600 hover:text-gray-600 typography-btn px-4 py-2 border-r border-solid border-r-gray-200 border-l-0 border-t-0 border-b-0 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-l-md focus:rounded-md bg-white hover:bg-gray-100 ring-offset-white "
-              onClick={() => handleAddEmptyQuestion()}
-            >
-              Add Question
-            </button>
-            <Menu as="div" className="relative inline-block text-left">
-              <Menu.Button className="text-gray-500 hover:text-gray-500 px-2 py-2.5 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-r-md focus:rounded-md hover:bg-gray-100 leading-[0] ring-offset-white">
-                <ChevronDownIcon width={20} height={20} />
-              </Menu.Button>
-
-              <Transition
-                as={Fragment}
-                enter="transition ease-out duration-100"
-                enterFrom="transform opacity-0 scale-95"
-                enterTo="transform opacity-100 scale-100"
-                leave="transition ease-in duration-75"
-                leaveFrom="transform opacity-100 scale-100"
-                leaveTo="transform opacity-0 scale-95"
+          <div className="mx-auto items-center justify-center mb-8 hover:no-underline typography-btn flex transition-all focus:none disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 col-span-4 md:col-start-5 md:col-end-8 w-fit gap-x-2">
+            <div className="bg-white w-fit whitespace-nowrap border-gray-200 border border-solid shadow-sm hover:shadow-md rounded-md flex justify-center items-center">
+              {/* Add Question button */}
+              <button
+                type="button"
+                className="hover:no-underline text-gray-600 hover:text-gray-600 typography-btn px-4 py-2 border-r border-solid border-r-gray-200 border-l-0 border-t-0 border-b-0 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-l-md focus:rounded-md bg-white hover:bg-gray-100 ring-offset-white "
+                onClick={() => handleAddEmptyQuestion()}
               >
-                <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-sm hover:shadow-md transition-all ring-1 ring-black ring-opacity-5 focus:outline-none">
-                  <div className="py-1">
-                    {questionTypes.map((qt) => (
-                      <Menu.Item key={qt.value}>
-                        {({ active }) => (
-                          <button
-                            onClick={() =>
-                              handleAddTextBox(
-                                qt.value as
-                                  | "TEXT"
-                                  | "SINGLE_CORRECT"
-                                  | "MULTIPLE_CORRECT"
-                                  | "TRUE_FALSE"
-                                  | "URL"
-                                  | "LINK_FILE"
-                                  | "UPLOAD"
-                                  | "CODE",
-                              )
-                            }
-                            className={`${
-                              active
-                                ? "bg-gray-100 text-gray-600"
-                                : "text-gray-600"
-                            } group flex items-center w-full py-2 px-4 gap-1.5 typography-body`}
-                          >
-                            <div className="size-5">{qt.icon}</div>
-                            {qt.label}
-                          </button>
-                        )}
-                      </Menu.Item>
-                    ))}
-                  </div>
-                </Menu.Items>
-              </Transition>
-            </Menu>
+                Add Question
+              </button>
+              <Menu as="div" className="relative inline-block text-left">
+                <Menu.Button className="text-gray-500 hover:text-gray-500 px-2 py-2.5 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-r-md focus:rounded-md hover:bg-gray-100 leading-[0] ring-offset-white">
+                  <ChevronDownIcon width={20} height={20} />
+                </Menu.Button>
+
+                <Transition
+                  as={Fragment}
+                  enter="transition ease-out duration-100"
+                  enterFrom="transform opacity-0 scale-95"
+                  enterTo="transform opacity-100 scale-100"
+                  leave="transition ease-in duration-75"
+                  leaveFrom="transform opacity-100 scale-100"
+                  leaveTo="transform opacity-0 scale-95"
+                >
+                  <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-sm hover:shadow-md transition-all ring-1 ring-black ring-opacity-5 focus:outline-none">
+                    <div className="py-1">
+                      {questionTypes.map((qt) => (
+                        <Menu.Item key={qt.value}>
+                          {({ active }) => (
+                            <button
+                              onClick={() =>
+                                handleAddTextBox(
+                                  qt.value as
+                                    | "TEXT"
+                                    | "SINGLE_CORRECT"
+                                    | "MULTIPLE_CORRECT"
+                                    | "TRUE_FALSE"
+                                    | "URL"
+                                    | "LINK_FILE"
+                                    | "UPLOAD"
+                                    | "CODE",
+                                )
+                              }
+                              className={`${
+                                active
+                                  ? "bg-gray-100 text-gray-600"
+                                  : "text-gray-600"
+                              } group flex items-center w-full py-2 px-4 gap-1.5 typography-body`}
+                            >
+                              <div className="size-5">{qt.icon}</div>
+                              {qt.label}
+                            </button>
+                          )}
+                        </Menu.Item>
+                      ))}
+                    </div>
+                  </Menu.Items>
+                </Transition>
+              </Menu>
+            </div>
+            <button
+              onClick={() => setFileUploadModalOpen(true)}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg hover:shadow-md transition-all items-center gap-x-2 justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-violet-100 text-violet-800 hover:bg-violet-100 hover:text-violet-600"
+            >
+              <SparklesIcon className="w-4 h-4 text-violet-600" />
+              <span className="text-sm font-medium">
+                Generate Questions using AI (Beta)
+              </span>
+            </button>
           </div>
-          <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-9 md:col-end-11 lg:col-start-9 lg:col-end-11 mb-8">
-            <FooterNavigation nextStep="review" />
-          </div>
+          {questions.length > 0 && (
+            <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-9 md:col-end-11 lg:col-start-9 lg:col-end-11 mb-8">
+              <FooterNavigation nextStep="review" />
+            </div>
+          )}
         </div>
         <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
           <div className="flex flex-col sticky top-0 gap-4 items-center px-4 pb-4">
@@ -748,24 +761,23 @@ const AuthorQuestionsPage: FC<Props> = ({
                     )}
                   </button>
                 </div>
+                {/* Generate Questions using AI button */}
+                <button
+                  onClick={() => setFileUploadModalOpen(true)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
+                >
+                  <span className="flex items-center gap-2 text-wrap">
+                    <div className="flex items-center gap-1">
+                      <SparkleLottie className="w-5 h-5 text-violet-600" />
+                      <SparklesIcon className="w-4 h-4 text-violet-600" />
+                    </div>
+                    <span className="text-sm font-medium">
+                      Generate Questions using AI (Beta)
+                    </span>
+                  </span>
+                </button>
               </>
             )}
-
-            {/* Generate Questions using AI button */}
-            <button
-              onClick={() => setFileUploadModalOpen(true)}
-              className="px-4 py-2 border border-gray-300 rounded-lg shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
-            >
-              <span className="flex items-center gap-2 text-wrap">
-                <div className="flex items-center gap-1">
-                  <SparkleLottie className="w-5 h-5 text-violet-600" />
-                  <SparklesIcon className="w-4 h-4 text-violet-600" />
-                </div>
-                <span className="text-sm font-medium">
-                  Generate Questions using AI (Beta)
-                </span>
-              </span>
-            </button>
           </div>
         </div>
       </div>
