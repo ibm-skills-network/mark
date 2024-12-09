@@ -7028,9 +7028,9 @@ jws@^3.2.2:
     safe-buffer "^5.0.1"
 
 katex@^0.16.10:
-  version "0.16.11"
-  resolved "https://registry.yarnpkg.com/katex/-/katex-0.16.11.tgz#4bc84d5584f996abece5f01c6ad11304276a33f5"
-  integrity sha512-RQrI8rlHY92OLf3rho/Ts8i/XvjgguEjOkO1BEXcU3N8BqPpSzBNwV/G0Ukr+P/l3ivvJUE/Fa/CwbS6HesGNQ==
+  version "0.16.14"
+  resolved "https://registry.yarnpkg.com/katex/-/katex-0.16.14.tgz#888e230b82403425f3ddf1d26b34f7f894ce1a98"
+  integrity sha512-tnUUAL/S+f/w8KrRpCFcCW/msuIlBkOmVnTmvdEK6WCkx6uDPRj3d9SBAP+qB5x0MCeOyUbdbIMtT5cUJD8aRw==
   dependencies:
     commander "^8.3.0"
 
