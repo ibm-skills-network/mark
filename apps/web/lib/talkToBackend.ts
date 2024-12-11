@@ -26,7 +26,9 @@ import type {
   AssignmentFeedback,
   RegradingRequest,
   UpdateAssignmentQuestionsResponse,
+  REPORT_TYPE,
 } from "@config/types";
+import { toast } from "sonner";
 
 // TODO: change the error message to use the error message from the backend
 
@@ -755,5 +757,50 @@ export async function submitRegradingRequest(
   } catch (err) {
     console.error(err);
     return false;
+  }
+}
+export async function submitReport(
+  assignmentId: number,
+  attemptId: number,
+  issueType: REPORT_TYPE,
+  description: string,
+  cookies?: string,
+): Promise<{ success: boolean } | undefined> {
+  try {
+    const response:
+      | Response
+      | {
+          status: number;
+          message: string;
+        } = await fetch(
+      `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/report`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+        body: JSON.stringify({
+          issueType,
+          description,
+        }),
+      },
+    );
+
+    if (response.status === 422) {
+      throw new Error(
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
+      );
+    } else if (!response.ok) {
+      throw new Error("Failed to submit report");
+    }
+
+    return (await response.json()) as { success: boolean };
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      toast.error(error.message);
+    } else {
+      toast.error("Failed to submit report");
+    }
   }
 }

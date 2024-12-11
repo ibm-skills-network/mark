@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Inject,
   Injectable,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Req,
@@ -12,7 +14,14 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { ReportType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -40,6 +49,7 @@ import {
   AssignmentAttemptResponseDto,
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
+import { ReportRequestDTO } from "./dto/assignment-attempt/post.assignment.report.dto";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
@@ -268,5 +278,52 @@ export class AttemptController {
       Number(attemptId),
       request.userSession,
     );
+  }
+
+  @Post(":attemptId/report")
+  @Roles(UserRole.AUTHOR, UserRole.LEARNER)
+  @ApiOperation({ summary: "Submit a report for an assignment" })
+  @ApiParam({
+    name: "assignmentId",
+    required: true,
+    description: "ID of the assignment",
+  })
+  @ApiBody({
+    description: "Report details",
+    type: ReportRequestDTO,
+  })
+  @ApiResponse({ status: 201, description: "Report submitted successfully" })
+  @ApiResponse({ status: 400, description: "Invalid input or missing fields" })
+  @ApiResponse({ status: 403 })
+  async submitReport(
+    @Param("attemptId") attemptId: number,
+    @Param("assignmentId") assignmentId: number,
+    @Body() body: ReportRequestDTO,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ message: string }> {
+    const { issueType, description } = body;
+
+    if (!issueType || !description) {
+      throw new BadRequestException("Issue type and description are required");
+    }
+
+    const validIssueTypes = ["BUG", "FEEDBACK", "SUGGESTION", "PERFORMANCE"];
+    if (!validIssueTypes.includes(issueType)) {
+      throw new BadRequestException("Invalid issue type");
+    }
+
+    const userId = request.userSession.userId;
+    if (!userId || userId.trim() === "") {
+      throw new BadRequestException("Invalid user ID");
+    }
+    await this.attemptService.createReport(
+      Number(assignmentId),
+      Number(attemptId),
+      issueType,
+      description,
+      userId,
+    );
+
+    return { message: "Report submitted successfully" };
   }
 }

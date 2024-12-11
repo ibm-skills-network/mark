@@ -20,6 +20,7 @@ import {
   getUser,
   submitFeedback,
   submitRegradingRequest,
+  submitReport,
 } from "@/lib/talkToBackend";
 import animationData from "@/animations/LoadSN.json";
 import {
@@ -28,6 +29,7 @@ import {
   AssignmentFeedback,
   QuestionStore,
   RegradingRequest,
+  REPORT_TYPE,
 } from "@/config/types";
 import Loading from "@/components/Loading";
 import { Rating, RoundedStar } from "@smastrom/react-rating";
@@ -85,6 +87,12 @@ function SuccessPage() {
   const [regradingReason, setRegradingReason] = useState("");
   const [isRegradingModalOpen, setIsRegradingModalOpen] = useState(false);
 
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportIssueType, setReportIssueType] = useState<REPORT_TYPE>(
+    REPORT_TYPE.BUG,
+  );
+  const [reportDescription, setReportDescription] = useState("");
+
   const [userId, setUserId] = useState<string>(null);
 
   const [regradingStatus, setRegradingStatus] = useState<
@@ -124,13 +132,11 @@ function SuccessPage() {
           });
           const response = await getFeedback(assignmentId, attemptId);
           if (response) {
-            setComments(response.comments);
-            setAiGradingRating(response.aiGradingRating);
-            setAssignmentRating(response.assignmentRating);
+            setComments(response.comments || "");
+            setAiGradingRating(response.aiGradingRating || 0);
+            setAssignmentRating(response.assignmentRating || 0);
           }
           setInit(true);
-        } catch (err) {
-          console.error("Error fetching submission details:", err);
         } finally {
           setLoading(false);
         }
@@ -355,6 +361,29 @@ function SuccessPage() {
       toast.error("Failed to submit feedback. Please try again.");
     }
   };
+
+  const handleSubmitReport = async () => {
+    if (!reportDescription.trim()) {
+      toast.error("Please provide a description for the report.");
+      return;
+    }
+
+    try {
+      const response = await submitReport(
+        assignmentId,
+        attemptId,
+        reportIssueType,
+        reportDescription,
+      );
+      if (response) {
+        toast.success("Report submitted successfully!");
+        setIsReportModalOpen(false);
+      }
+    } catch (error) {
+      console.error("Error submitting report:", error);
+    }
+  };
+
   const handleSubmitRegradingRequest = async () => {
     // Construct regrading request object
     const regradingData: RegradingRequest = {
@@ -553,13 +582,23 @@ function SuccessPage() {
         </div>
         {/* Action Buttons */}
         <div className="flex flex-wrap justify-between mb-10 px-5">
+          {/* This should stay commented until the author new interface is ready */}
           {/* <button
             onClick={() => setIsRegradingModalOpen(true)}
             className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition "
           >
-            <div className="flex items-center gap-x-2">Request Regrading</div> //TODO: this is commented out until there is an interface for authors to approve regrading requests
+            <div className="flex items-center gap-x-2">Report a Mark Error</div>
           </button> */}
-          <div></div>
+          {role === "learner" && (
+            <div className="flex items-center gap-x-4 justify-center">
+              <button
+                onClick={() => setIsReportModalOpen(true)}
+                className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition"
+              >
+                <div className="flex items-center gap-x-2">Submit a Report</div>
+              </button>
+            </div>
+          )}
           <Link
             href={
               role?.toLowerCase() === "learner"
@@ -687,9 +726,100 @@ function SuccessPage() {
           </Dialog>
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {isReportModalOpen && (
+          <Dialog
+            as={motion.div}
+            static
+            className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50"
+            open={isReportModalOpen}
+            onClose={() => setIsReportModalOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="min-h-screen px-4 text-center">
+              <span
+                className="inline-block h-screen align-middle"
+                aria-hidden="true"
+              >
+                &#8203;
+              </span>
+              <motion.div
+                className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg"
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.9 }}
+              >
+                <DialogPanel>
+                  <DialogTitle
+                    as="h3"
+                    className="text-lg font-medium leading-6 text-gray-900 mb-4"
+                  >
+                    <div className="flex justify-between items-center">
+                      Submit a Report
+                      <XMarkIcon
+                        className="w-6 h-6 text-gray-500"
+                        onClick={() => setIsReportModalOpen(false)}
+                      />
+                    </div>
+                  </DialogTitle>
+                  <span className="text-gray-600 ">
+                    Report issues, bugs, or provide feedback about the
+                    assignment. Our team will review your report and take action
+                    as needed.
+                  </span>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-gray-700 font-semibold my-2">
+                        Issue Type
+                      </label>
+                      <select
+                        className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={reportIssueType}
+                        onChange={(e) =>
+                          setReportIssueType(e.target.value as REPORT_TYPE)
+                        }
+                      >
+                        <option value="BUG">Bug</option>
+                        <option value="FEEDBACK">Feedback</option>
+                        <option value="SUGGESTION">Suggestion</option>
+                        <option value="PERFORMANCE">Performance</option>
+                        <option value="FALSE_MARKING">False Marking</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 font-semibold mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={5}
+                        value={reportDescription}
+                        onChange={(e) => setReportDescription(e.target.value)}
+                        placeholder="Provide details about the issue..."
+                      ></textarea>
+                    </div>
+                    <div className="text-center">
+                      <button
+                        onClick={handleSubmitReport}
+                        className="px-6 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition shadow-lg"
+                      >
+                        Submit Report
+                      </button>
+                    </div>
+                  </div>
+                </DialogPanel>
+              </motion.div>
+            </div>
+          </Dialog>
+        )}
+      </AnimatePresence>
 
       {/* Regrading Request Modal */}
-      <AnimatePresence>
+      {/* This should stay commented until the author new interface is ready */}
+      {/* <AnimatePresence>
         {isRegradingModalOpen && (
           <Dialog
             as={motion.div}
@@ -702,7 +832,6 @@ function SuccessPage() {
             exit={{ opacity: 0 }}
           >
             <div className="min-h-screen px-4 text-center">
-              {/* Centering Modal Content */}
               <span
                 className="inline-block h-screen align-middle"
                 aria-hidden="true"
@@ -744,7 +873,6 @@ function SuccessPage() {
                         placeholder="Provide details for your regrading request..."
                       ></textarea>
                     </div>
-                    {/* Submit Button */}
                     <div className="text-center">
                       <button
                         onClick={handleSubmitRegradingRequest}
@@ -759,7 +887,7 @@ function SuccessPage() {
             </div>
           </Dialog>
         )}
-      </AnimatePresence>
+      </AnimatePresence> */}
     </div>
   );
 }

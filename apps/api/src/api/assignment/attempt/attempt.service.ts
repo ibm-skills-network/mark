@@ -12,6 +12,7 @@ import {
   Question,
   QuestionType,
   RegradingStatus,
+  ReportType,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import e from "express";
@@ -168,9 +169,11 @@ export class AttemptService {
     });
 
     if (!feedback) {
-      throw new NotFoundException(
-        `Feedback for assignment ${assignmentId} and attempt ${attemptId} not found.`,
-      );
+      return {
+        comments: "",
+        aiGradingRating: undefined,
+        assignmentRating: undefined,
+      };
     }
 
     return {
@@ -1695,5 +1698,55 @@ ${
       assignmentInstructions,
       questionAnswerContext: questionsAnswersContext,
     };
+  }
+
+  async createReport(
+    assignmentId: number,
+    attemptId: number,
+    issueType: ReportType,
+    description: string,
+    userId: string,
+  ): Promise<void> {
+    // Ensure the assignment exists
+    const assignmentExists = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+    });
+
+    if (!assignmentExists) {
+      throw new NotFoundException("Assignment not found");
+    }
+    // check if assignment attempt exists
+    const assignmentAttemptExists =
+      await this.prisma.assignmentAttempt.findUnique({
+        where: { id: attemptId },
+      });
+    if (!assignmentAttemptExists) {
+      throw new NotFoundException("Assignment attempt not found");
+    }
+    // if the user created more than 5 reports in the last 24 hours, throw an error
+    const reports = await this.prisma.report.findMany({
+      where: {
+        reporterId: userId,
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+    if (reports.length >= 5) {
+      throw new UnprocessableEntityException(
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
+      );
+    }
+
+    // Create a new report
+    await this.prisma.report.create({
+      data: {
+        assignmentId,
+        attemptId,
+        issueType,
+        description,
+        reporterId: userId,
+      },
+    });
   }
 }

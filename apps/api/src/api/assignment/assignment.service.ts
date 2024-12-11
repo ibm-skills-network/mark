@@ -6,7 +6,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Job, Prisma, QuestionType, ResponseType } from "@prisma/client";
+import {
+  Job,
+  Prisma,
+  QuestionType,
+  ReportType,
+  ResponseType,
+} from "@prisma/client";
 import { isNumber } from "class-validator";
 import {
   UserRole,

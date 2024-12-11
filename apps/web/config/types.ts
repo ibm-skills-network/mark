@@ -117,6 +117,15 @@ export type RegradingRequest = {
   reason: string;
 };
 
+export enum REPORT_TYPE {
+  BUG = "BUG",
+  FEEDBACK = "FEEDBACK",
+  SUGGESTION = "SUGGESTION",
+  PERFORMANCE = "PERFORMANCE",
+  FALSE_MARKING = "FALSE_MARKING",
+  OTHER = "OTHER",
+}
+
 export type Scoring = {
   type: // | "SINGLE_CRITERIA"
   // | "MULTIPLE_CRITERIA"

@@ -24,7 +24,7 @@ import {
   ApiTags,
   refs,
 } from "@nestjs/swagger";
-import { Prisma, Question, QuestionType } from "@prisma/client";
+import { Prisma, Question, QuestionType, ReportType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { interval, Observable } from "rxjs";
 import { map, mergeMap } from "rxjs/operators";
@@ -35,6 +35,7 @@ import {
 } from "../../auth/interfaces/user.session.interface";
 import { Roles } from "../../auth/role/roles.global.guard";
 import { AssignmentService } from "./assignment.service";
+import { ReportRequestDTO } from "./attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "./constants";
 import {
   BaseAssignmentResponseDto,
@@ -285,18 +286,15 @@ export class AssignmentController {
     if (Number.isNaN(assignmentIdNumber)) {
       throw new BadRequestException("Invalid assignment ID");
     }
-    // Create a new job in the database
     const userId = request.userSession.userId;
     if (typeof userId !== "string" || userId.trim() === "") {
       throw new BadRequestException("Invalid user ID");
     }
 
-    // Create a new job in the database
     const job = await this.assignmentService.createJob(
       assignmentIdNumber,
       userId,
     );
-    // Start the job processing
     void this.assignmentService.handleFileContents(
       assignmentIdNumber,
       job.id,
@@ -306,7 +304,6 @@ export class AssignmentController {
       learningObjectives,
     );
 
-    // Start the worker thread (as previously discussed)
     return { message: "File processing started", jobId: job.id };
   }
 }

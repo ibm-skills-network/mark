@@ -137,6 +137,8 @@ model Assignment {
   AssignmentFeedback AssignmentFeedback[]
 
   RegradingRequest RegradingRequest[]
+
+  Report Report[]
 }
 enum VariantType {
   REWORDED /// The variant is reworded
@@ -252,4 +254,34 @@ enum RegradingStatus {
   APPROVED   /// The regrading request has been approved
   REJECTED   /// The regrading request has been rejected
   COMPLETED  /// The regrading process is completed
+}
+/// The Report model represents user or system-generated reports for developers
+model Report {
+  id          Int        @id @default(autoincrement())
+  reporterId  String     /// ID of the user reporting the issue
+  assignmentId Int       /// ID of the associated assignment
+  attemptId  Int       /// ID of the associated assignment attempt
+  assignment  Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  issueType   ReportType /// Type of the issue
+  description String     /// Detailed description of the issue
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+/// Enum representing different types of reports
+enum ReportType {
+  BUG          /// Bug report
+  FEEDBACK     /// General feedback
+  SUGGESTION   /// Suggestion for improvement
+  PERFORMANCE  /// Performance-related issue
+  FALSE_MARKING /// Report for false marking
+  OTHER        /// Other types of reports
+}
+
+/// Enum representing the status of a report
+enum ReportStatus {
+  OPEN         /// Report is open and requires attention
+  IN_PROGRESS  /// Report is being investigated or resolved
+  RESOLVED     /// Report has been resolved
+  CLOSED       /// Report is closed without resolution
 }
