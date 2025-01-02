@@ -3,6 +3,23 @@ entries:
   mark:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2025-01-02T18:12:05.553255446Z"
+    dependencies:
+    - name: lti-gateway
+      repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
+      version: 1.0.2
+    - name: sn-common
+      repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
+      version: 1.x.x
+    description: A Helm chart for Kubernetes
+    digest: 8f68a839be2e8c48da2c9d50b8d32dde29569296c06f59de40028be9e677b3a4
+    name: mark
+    type: application
+    urls:
+    - mark-1.0.6.tgz
+    version: 1.0.6
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2024-01-24T21:51:24.256123023Z"
     dependencies:
     - name: lti-gateway
@@ -103,4 +120,4 @@ entries:
     urls:
     - mark-1.0.0.tgz
     version: 1.0.0
-generated: "2024-01-24T21:51:24.256327526Z"
+generated: "2025-01-02T18:12:05.553291704Z"
