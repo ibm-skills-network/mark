@@ -16,10 +16,10 @@ spec:
       {{- include "mark.api-gateway.labels" $ | nindent 6 }}
   template:
     metadata:
-      {{- with .podAnnotations }}
       annotations:
-        checksum/secrets: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/api-gateway/secret.yaml") $ | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/api-gateway/configmap.yaml") $ | sha256sum }}
+        {{- with .podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
