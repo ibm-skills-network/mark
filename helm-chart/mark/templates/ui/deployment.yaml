@@ -18,6 +18,8 @@ spec:
     metadata:
       {{- with .podAnnotations }}
       annotations:
+        checksum/secrets: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
