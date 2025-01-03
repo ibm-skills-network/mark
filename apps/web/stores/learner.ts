@@ -3,11 +3,129 @@ import type {
   AssignmentDetails,
   QuestionStatus,
   QuestionStore,
+  RepoContentItem,
+  RepoType,
 } from "@/config/types";
 import { createRef, type RefObject } from "react";
 import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
+type GitHubQuestionState = {
+  repos: RepoType[];
+  owner: string | null;
+  selectedRepo: string | null;
+  repoContents: RepoContentItem[];
+  currentPath: string[];
+  selectedFiles: learnerFileResponse[];
+  isGithubModalOpen: boolean;
+};
+
+type GitHubState = {
+  questionGitHubState: Record<number, GitHubQuestionState>;
+  activeQuestionId: number | null;
+  setGithubModalOpen: (isOpen: boolean) => void;
+  setActiveQuestionId: (questionId: number) => void;
+  repos: RepoType[];
+  owner: string | null;
+  selectedRepo: string | null;
+  repoContents: RepoContentItem[];
+  currentPath: string[];
+  selectedFiles: learnerFileResponse[];
+  isGithubModalOpen: boolean;
+  setRepos: (repos: RepoType[]) => void;
+  setOwner: (owner: string | null) => void;
+  setSelectedRepo: (repo: string | null) => void;
+  setRepoContents: (contents: RepoContentItem[]) => void;
+  setCurrentPath: (path: string[]) => void;
+  addToPath: (path: string) => void;
+  setSelectedFiles: (files: learnerFileResponse[]) => void;
+  persistStateForQuestion: () => void;
+  clearGithubStore: () => void;
+};
+
+export const useGitHubStore = createWithEqualityFn<GitHubState>()(
+  persist(
+    devtools(
+      (set, get) => ({
+        questionGitHubState: {},
+        activeQuestionId: null,
+        setActiveQuestionId: (questionId) => {
+          const { questionGitHubState, persistStateForQuestion } = get();
+
+          if (get().activeQuestionId !== null) {
+            persistStateForQuestion();
+          }
+
+          set({
+            activeQuestionId: questionId,
+            ...questionGitHubState[questionId],
+          });
+        },
+
+        repos: [],
+        owner: null,
+        selectedRepo: null,
+        repoContents: [],
+        currentPath: [],
+        selectedFiles: [],
+        isGithubModalOpen: false,
+        setGithubModalOpen: (isOpen) => set({ isGithubModalOpen: isOpen }),
+        addToPath: (path) => set({ currentPath: [...get().currentPath, path] }),
+        setRepos: (repos) => set({ repos }),
+        setOwner: (owner) => set({ owner }),
+        setSelectedRepo: (repo) => set({ selectedRepo: repo }),
+        setRepoContents: (contents) => set({ repoContents: contents }),
+        setCurrentPath: (path) => set({ currentPath: path }),
+        setSelectedFiles: (files) => set({ selectedFiles: files }),
+        clearGithubStore: () => {
+          set({
+            questionGitHubState: {},
+          });
+        },
+        persistStateForQuestion: () => {
+          const {
+            activeQuestionId,
+            repos,
+            owner,
+            selectedRepo,
+            repoContents,
+            currentPath,
+            selectedFiles,
+            questionGitHubState,
+            isGithubModalOpen,
+          } = get();
+
+          if (activeQuestionId === null) return;
+
+          // Save the current state to the specific questionId
+          set({
+            questionGitHubState: {
+              ...questionGitHubState,
+              [activeQuestionId]: {
+                repos,
+                owner,
+                selectedRepo,
+                repoContents,
+                currentPath,
+                selectedFiles,
+                isGithubModalOpen,
+              },
+            },
+          });
+        },
+      }),
+      { name: "github-store" },
+    ),
+    {
+      name: "github-store",
+      partialize: (state) => ({
+        questionGitHubState: state.questionGitHubState,
+        activeQuestionId: state.activeQuestionId,
+      }),
+    },
+  ),
+  shallow,
+);
 
 export type LearnerState = {
   activeAttemptId: number | null;
@@ -22,8 +140,9 @@ export type LearnerState = {
 export type learnerFileResponse = {
   filename: string;
   content: string;
+  githubUrl?: string;
 };
-
+// 4af839a54dd1732f834599b6e9491ec41f1aa67b
 export type LearnerActions = {
   setActiveAttemptId: (id: number) => void;
   setActiveQuestionNumber: (id: number) => void;
@@ -46,6 +165,8 @@ export type LearnerActions = {
   setTotalPointsPossible: (totalPointsPossible: number) => void;
   onUrlChange: (url: string, questionId: number) => void;
   onFileChange: (files: learnerFileResponse[], questionId: number) => void;
+  removeFileUpload: (file: learnerFileResponse, questionId: number) => void;
+  addFileUpload: (file: learnerFileResponse, questionId: number) => void;
   onModeChange: (
     mode: "file" | "link",
     data: learnerFileResponse[] | string,
@@ -53,13 +174,10 @@ export type LearnerActions = {
   ) => void;
   getFileUpload: (questionId: number) => learnerFileResponse[];
   setFileUpload: (
-    learnerFileResponse: {
-      filename: string;
-      content: string;
-    }[],
+    learnerFileResponse: learnerFileResponse[],
     questionId: number,
   ) => void;
-  deleteFile: (fileToDelete: File, questionId: number) => void;
+  deleteFile: (fileToDelete: learnerFileResponse, questionId: number) => void;
 };
 
 export type AssignmentDetailsState = {
@@ -139,10 +257,43 @@ export const useLearnerStore = createWithEqualityFn<
         const question = get().questions.find((q) => q.id === questionId);
         return question?.learnerFileResponse || [];
       },
+      addFileUpload: (file, questionId) => {
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) => {
+            if (q.id === questionId) {
+              return {
+                ...q,
+                learnerFileResponse: [...(q.learnerFileResponse || []), file],
+              };
+            }
+            return q;
+          });
+          return { questions: updatedQuestions };
+        });
+        get().setQuestionStatus(questionId);
+      },
+      removeFileUpload: (file, questionId) => {
+        set((state) => {
+          const updatedQuestions = state.questions.map((q) => {
+            if (q.id === questionId) {
+              return {
+                ...q,
+                learnerFileResponse: q.learnerFileResponse?.filter(
+                  (f) => f.filename !== file.filename,
+                ),
+              };
+            }
+            return q;
+          });
+          return { questions: updatedQuestions };
+        });
+        get().setQuestionStatus(questionId);
+      },
       onFileChange: (files, questionId) => {
         const formattedFiles = files.map((file: learnerFileResponse) => ({
           filename: file.filename,
           content: file.content,
+          githubUrl: file.githubUrl,
         }));
         set((state) => {
           const updatedQuestions = state.questions.map((q) => {
@@ -200,7 +351,7 @@ export const useLearnerStore = createWithEqualityFn<
             if (q.id === questionId) {
               const existingFiles = q.learnerFileResponse || [];
               const updatedFiles = existingFiles.filter(
-                (file) => file.filename !== fileToDelete.name,
+                (file) => file.filename !== fileToDelete.filename,
               );
               return { ...q, learnerFileResponse: updatedFiles };
             }

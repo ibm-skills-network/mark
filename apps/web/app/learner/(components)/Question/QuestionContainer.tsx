@@ -35,7 +35,6 @@ function Component(props: Props) {
   const getQuestionStatusById = useLearnerStore(
     (state) => state.getQuestionStatusById,
   );
-
   // Get the questionStatus directly from the store
   const questionStatus = getQuestionStatusById
     ? getQuestionStatusById(questionId)

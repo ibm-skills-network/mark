@@ -1,5 +1,6 @@
+import { Optional } from "@nestjs/common";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { QuestionResponse, QuestionType } from "@prisma/client";
+import { QuestionResponse, QuestionType, ResponseType } from "@prisma/client";
 import { Type } from "class-transformer";
 import { Choice } from "../../../../../api/assignment/question/dto/create.update.question.request.dto";
 
@@ -59,6 +60,24 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     required: true,
   })
   passingGrade: number;
+  @ApiProperty({
+    description: "Show submission feedback",
+    type: Boolean,
+    required: false,
+  })
+  showSubmissionFeedback: boolean;
+  @ApiProperty({
+    description: "Show assignment score",
+    type: Boolean,
+    required: false,
+  })
+  showAssignmentScore: boolean;
+  @ApiProperty({
+    description: "Show question score",
+    type: Boolean,
+    required: false,
+  })
+  showQuestionScore: boolean;
 }
 
 export class AssignmentAttemptQuestions {
@@ -118,4 +137,13 @@ export class AssignmentAttemptQuestions {
     isArray: true,
   })
   questionResponses: QuestionResponse[];
+
+  // response type
+  @ApiPropertyOptional({
+    description: "The response type for the question.",
+    type: ResponseType,
+    required: false,
+  })
+  @Optional()
+  responseType?: ResponseType;
 }

@@ -29,6 +29,8 @@ import type {
   REPORT_TYPE,
 } from "@config/types";
 import { toast } from "sonner";
+import { absoluteUrl } from "./utils";
+const BASE_API_PATH = absoluteUrl("/api/v1");
 
 // TODO: change the error message to use the error message from the backend
 
@@ -477,7 +479,7 @@ export async function createAttempt(
 }
 
 /**
- * gets the questions for a given attempt and assignment
+ * gets the questions for a given uncompleted attempt and assignment
  * @param assignmentId The id of the assignment to get the questions for.
  * @param attemptId The id of the attempt to get the questions for.
  * @returns An array of questions.
@@ -489,6 +491,37 @@ export async function getAttempt(
   cookies?: string,
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+    if (!res.ok) {
+      throw new Error("Failed to get attempt questions");
+    }
+    const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
+    return attempt;
+  } catch (err) {
+    console.error(err);
+    return undefined;
+  }
+}
+
+/**
+ * gets the questions for a given compelted attempt and assignment
+ * @param assignmentId The id of the assignment to get the questions for.
+ * @param attemptId The id of the attempt to get the questions for.
+ * @returns An array of questions.
+ * @throws An error if the request fails.
+ */
+export async function getCompletedAttempt(
+  assignmentId: number,
+  attemptId: number,
+  cookies?: string,
+): Promise<AssignmentAttemptWithQuestions | undefined> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/completed`;
 
   try {
     const res = await fetch(endpointURL, {
@@ -759,7 +792,134 @@ export async function submitRegradingRequest(
     return false;
   }
 }
-export async function submitReport(
+export async function submitReportAuthor(
+  assignmentId: number,
+  issueType: REPORT_TYPE,
+  description: string,
+  cookies?: string,
+): Promise<{ success: boolean } | undefined> {
+  try {
+    const response:
+      | Response
+      | {
+          status: number;
+          message: string;
+        } = await fetch(
+      `${BASE_API_ROUTES.assignments}/${assignmentId}/report`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+        body: JSON.stringify({
+          issueType,
+          description,
+        }),
+      },
+    );
+
+    if (response.status === 422) {
+      throw new Error(
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
+      );
+    } else if (!response.ok) {
+      throw new Error("Failed to submit report");
+    }
+
+    return (await response.json()) as { success: boolean };
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      toast.error(error.message);
+    } else {
+      toast.error("Failed to submit report");
+    }
+  }
+}
+export async function AuthorizeGithubBackend(
+  assignmentId: number,
+  redirectUrl: string,
+  cookies?: string,
+): Promise<{ url: string } | undefined> {
+  try {
+    const res = await fetch(`${BASE_API_PATH}/github/oauth-url`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({ assignmentId, redirectUrl }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch OAuth URL");
+    }
+
+    return (await res.json()) as { url: string };
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      toast.error(error.message);
+    } else {
+      toast.error("Failed to fetch OAuth URL");
+    }
+  }
+}
+/**
+ * Fetches a stored GitHub token for the current user from the backend.
+ *
+ * @param cookies Optional cookies for server-side calls.
+ * @returns The GitHub token if found, or null if not found or expired.
+ */
+export async function getStoredGithubToken(
+  cookies?: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE_API_PATH}/github/github_token`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const token = await res.text();
+
+    if (!token || !token.trim()) {
+      return null;
+    }
+
+    return token;
+  } catch (err) {
+    console.error("Error fetching token from backend:", err);
+    return null;
+  }
+}
+export async function exchangeGithubCodeForToken(
+  code: string,
+  cookies?: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE_API_PATH}/github/oauth-callback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({ code }),
+    });
+
+    const data = ((await res.json()) as { token: string }) || null;
+    return data?.token || null;
+  } catch (error) {
+    console.error("Error exchanging code for token:", error);
+    return null;
+  }
+}
+
+export async function submitReportLearner(
   assignmentId: number,
   attemptId: number,
   issueType: REPORT_TYPE,

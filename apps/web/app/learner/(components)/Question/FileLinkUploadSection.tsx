@@ -3,7 +3,7 @@ import FileUploadSection from "./FileUploadSection";
 import URLQuestion from "./UrlQuestion";
 import { QuestionType, ResponseType, QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
-import { learnerFileResponse } from "@/stores/learner";
+import { learnerFileResponse, useLearnerStore } from "@/stores/learner";
 
 interface FileLinkUploadSectionProps {
   questionId: number;
@@ -27,7 +27,7 @@ const FileLinkUploadSection = ({
   const [isFileUpload, setIsFileUpload] = useState(true); // Toggle state
   const [files, setFiles] = useState<learnerFileResponse[]>([]);
   const [url, setUrl] = useState<string>("");
-
+  const removeFileUpload = useLearnerStore((state) => state.removeFileUpload);
   const toggleUploadType = (type: "file" | "link") => {
     setIsFileUpload(type === "file");
     if (type === "file") onModeChange("file", files, questionId);
@@ -80,6 +80,7 @@ const FileLinkUploadSection = ({
           questionType={questionType}
           responseType={responseType}
           onFileChange={handleFileChange}
+          removeFileUpload={removeFileUpload}
         />
       ) : (
         <URLQuestion question={question} onUrlChange={handleUrlChange} />

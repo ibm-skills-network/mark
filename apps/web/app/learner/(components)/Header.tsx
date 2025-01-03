@@ -10,7 +10,11 @@ import type {
 } from "@/config/types";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
 import { editedQuestionsOnly } from "@/lib/utils";
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import {
+  useAssignmentDetails,
+  useGitHubStore,
+  useLearnerStore,
+} from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { usePathname, useRouter } from "next/navigation";
@@ -39,6 +43,7 @@ function LearnerHeader() {
     state.setTotalPointsEarned,
     state.setTotalPointsPossible,
   ]);
+  const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
@@ -103,19 +108,17 @@ function LearnerHeader() {
   };
 
   async function handleSubmitAssignment() {
-    const responsesForOnlyEditedQuestions = editedQuestionsOnly(questions);
-    const responsesForQuestions: QuestionAttemptRequestWithId[] =
-      responsesForOnlyEditedQuestions.map((q) => ({
+    const responsesForQuestions: QuestionAttemptRequestWithId[] = questions.map(
+      (q) => ({
         id: q.id,
-        learnerTextResponse: q.learnerTextResponse || undefined,
-        learnerUrlResponse: q.learnerUrlResponse || undefined,
-        learnerChoices: q.learnerChoices || undefined,
-        learnerAnswerChoice:
-          q.learnerAnswerChoice !== undefined
-            ? q.learnerAnswerChoice
-            : undefined,
-        learnerFileResponse: q.learnerFileResponse || undefined,
-      }));
+        learnerTextResponse: q.learnerTextResponse || "",
+        learnerUrlResponse: q.learnerUrlResponse || "",
+        learnerChoices: q.learnerChoices || [],
+        learnerAnswerChoice: q.learnerAnswerChoice ?? null,
+        learnerFileResponse: q.learnerFileResponse || [],
+      }),
+    );
+
     setSubmitting(true);
     const res = await submitAssignment(
       assignmentId,
@@ -134,14 +137,14 @@ function LearnerHeader() {
     setTotalPointsEarned(res.totalPointsEarned);
     setTotalPointsPossible(res.totalPossiblePoints);
     setGrade(grade * 100);
-    setShowSubmissionFeedback(res.showSubmissionFeedback); // set showSubmissionFeedback boolean in zustand store
+    setShowSubmissionFeedback(res.showSubmissionFeedback);
     for (const feedback of feedbacksForQuestions || []) {
       setQuestion({
         id: feedback.questionId,
         questionResponses: [
           {
             id: feedback.id,
-            learnerAnswerChoice: responsesForOnlyEditedQuestions.find(
+            learnerAnswerChoice: responsesForQuestions.find(
               (q) => q.id === feedback.questionId,
             )?.learnerAnswerChoice,
             points: feedback.totalPoints,
@@ -153,6 +156,7 @@ function LearnerHeader() {
         ],
       });
     }
+    clearGithubStore();
     router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
 

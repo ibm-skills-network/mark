@@ -1,4 +1,5 @@
 import type {
+  AuthorFileUploads,
   Choice,
   Criteria,
   QuestionAuthorStore,
@@ -20,6 +21,7 @@ export type AuthorState = {
   gradingCriteriaOverview: string;
   questions: QuestionAuthorStore[];
   questionOrder: number[];
+  fileUploaded: AuthorFileUploads[];
   pageState: "loading" | "success" | "error";
   updatedAt: number | undefined;
   focusedQuestionId?: number | undefined;
@@ -31,6 +33,7 @@ type OptionalQuestion = {
 
 export type AuthorActions = {
   setLearningObjectives: (learningObjectives: string) => void;
+  setFilesUploaded: (filesUploaded: AuthorFileUploads[]) => void;
   setFocusedQuestionId: (id: number) => void;
   setActiveAssignmentId: (id: number) => void;
   setName: (name: string) => void;
@@ -301,6 +304,9 @@ export const useAuthorStore = createWithEqualityFn<
     devtools(
       withUpdatedAt((set, get) => ({
         learningObjectives: "",
+        fileUploaded: [],
+        setFilesUploaded: (filesUploaded) =>
+          set({ fileUploaded: filesUploaded }),
         setLearningObjectives: (learningObjectives) =>
           set({ learningObjectives }),
         errors: {},

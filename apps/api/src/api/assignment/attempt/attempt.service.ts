@@ -15,7 +15,6 @@ import {
   ReportType,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
-import e from "express";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
@@ -59,6 +58,7 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import type { AssignmentAttemptQuestions } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
+import { LearnerFileUpload } from "./dto/assignment-attempt/types";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
 import {
@@ -76,6 +76,35 @@ type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
   points: number;
   feedback: object;
 };
+
+interface AssignmentAttempt {
+  id: number;
+  assignmentId: number;
+  userId: string;
+  expiresAt: Date | null;
+  submitted: boolean;
+  grade: number | null;
+  attemptQuestionIds: number[];
+  questionResponses: {
+    id: number;
+    questionId: number;
+    assignmentAttemptId: number;
+    feedback: JsonValue;
+    learnerResponse: string;
+    points: number;
+  }[];
+  questionVariants: {
+    questionVariant: {
+      id: number;
+      variantContent: string;
+      choices: JsonValue;
+      maxWords: number;
+      maxCharacters: number;
+      scoring: JsonValue;
+      answer: string;
+    };
+  }[];
+}
 
 @Injectable()
 export class AttemptService {
@@ -414,10 +443,14 @@ export class AttemptService {
     }
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
-      include: { questions: true },
+      include: {
+        questions: {
+          where: { isDeleted: false },
+        },
+      },
     });
     const successfulQuestionResponses = await this.submitQuestions(
-      updateAssignmentAttemptDto.responsesForQuestions as QuestionResponse[],
+      updateAssignmentAttemptDto.responsesForQuestions as unknown as QuestionResponse[],
       assignmentAttemptId,
       role,
       assignmentId,
@@ -475,6 +508,125 @@ export class AttemptService {
       };
     }
   }
+  async getLearnerAssignmentAttempt(
+    assignmentAttemptId: number,
+  ): Promise<GetAssignmentAttemptResponseDto> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptId },
+      include: {
+        questionResponses: true,
+        questionVariants: {
+          include: {
+            questionVariant: {
+              include: {
+                variantOf: true, // Original question data
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!assignmentAttempt) {
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+      );
+    }
+    // Fetch all questions, including deleted ones
+    const questions = await this.prisma.question.findMany({
+      where: { assignmentId: assignmentAttempt.assignmentId },
+    });
+    if (!questions) {
+      throw new NotFoundException(
+        `Questions for assignment with Id ${assignmentAttempt.assignmentId} not found.`,
+      );
+    }
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentAttempt.assignmentId },
+      select: {
+        questions: true,
+        questionOrder: true,
+        displayOrder: true,
+        passingGrade: true,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+      },
+    });
+
+    this.sortAssignmentQuestions(assignment as LearnerGetAssignmentResponseDto);
+    // Filter questions by attemptQuestionIds
+    const filteredQuestions = questions.filter((q) =>
+      assignmentAttempt.questionResponses.some((qr) => qr.questionId === q.id),
+    );
+
+    const questionsWithVariants = filteredQuestions.map((question) => {
+      const variantMapping = assignmentAttempt.questionVariants.find(
+        (qv) => qv.questionId === question.id,
+      );
+      const variant = variantMapping?.questionVariant;
+      return {
+        id: question.id,
+        question: variant?.variantContent ?? question.question,
+        choices: variant?.choices ?? question.choices,
+        maxWords: variant?.maxWords ?? question.maxWords,
+        maxCharacters: variant?.maxCharacters ?? question.maxCharacters,
+        scoring: variant?.scoring ?? question.scoring,
+        totalPoints: question.totalPoints,
+        answer: variant?.answer ?? question.answer,
+        type: question.type,
+        assignmentId: question.assignmentId,
+        gradingContextQuestionIds: question?.gradingContextQuestionIds,
+        responseType: question.responseType,
+        isDeleted: question.isDeleted,
+      };
+    });
+    const questionsWithResponses = this.constructQuestionsWithResponses(
+      questionsWithVariants,
+      assignmentAttempt.questionResponses as unknown as QuestionResponse[],
+    );
+    // Ensure all chosen questions appear, even if no responses or variants
+    const allQuestions = questionsWithVariants.map((question) => {
+      const existing = questionsWithResponses.find((q) => q.id === question.id);
+      return existing || { ...question, questionResponses: [] };
+    });
+    delete assignmentAttempt.questionResponses;
+    // sort questions by display order
+    allQuestions.sort((a, b) => a.id - b.id);
+
+    if (assignment.showAssignmentScore === false) {
+      delete assignmentAttempt.grade;
+    }
+    if (assignment.showSubmissionFeedback === false) {
+      for (const q of questionsWithResponses) {
+        if (q.questionResponses[0]?.feedback) {
+          delete q.questionResponses[0].feedback;
+        }
+      }
+    }
+    if (assignment.showQuestionScore === false) {
+      for (const q of questionsWithResponses) {
+        if (q.questionResponses[0]?.points !== undefined) {
+          q.questionResponses[0].points = -1;
+        }
+      }
+    }
+    // get assignment showAssignmentScore, showSubmissionFeedback, showQuestionScore from assignment and return
+    return {
+      ...assignmentAttempt,
+      showAssignmentScore: assignment.showAssignmentScore,
+      showSubmissionFeedback: assignment.showSubmissionFeedback,
+      showQuestionScore: assignment.showQuestionScore,
+      questions: allQuestions.map((question) => ({
+        ...question,
+        choices:
+          typeof question.choices === "string"
+            ? (JSON.parse(question.choices) as Choice[])
+            : (question.choices as Choice[]),
+      })),
+      passingGrade: assignment.passingGrade,
+    };
+  }
 
   /**
    * Retrieves an assignment attempt along with its questions and responses.
@@ -502,10 +654,14 @@ export class AttemptService {
       );
     }
 
-    const assignment = await this.prisma.assignment.findUnique({
+    const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
-        questions: true,
+        questions: {
+          where: {
+            isDeleted: false,
+          },
+        },
         questionOrder: true,
         displayOrder: true,
         passingGrade: true,
@@ -513,9 +669,9 @@ export class AttemptService {
         showSubmissionFeedback: true,
         showQuestionScore: true,
       },
-    });
+    })) as LearnerGetAssignmentResponseDto;
 
-    this.sortAssignmentQuestions(assignment as LearnerGetAssignmentResponseDto);
+    this.sortAssignmentQuestions(assignment);
 
     const questionsWithVariants = assignment.questions.map((question) => {
       const variantMapping = assignmentAttempt.questionVariants.find(
@@ -535,14 +691,13 @@ export class AttemptService {
         assignmentId: question.assignmentId,
         gradingContextQuestionIds: question?.gradingContextQuestionIds,
         responseType: question.responseType,
+        isDeleted: question.isDeleted,
       };
     });
-
     const questionsWithResponses = this.constructQuestionsWithResponses(
       questionsWithVariants,
       assignmentAttempt.questionResponses as unknown as QuestionResponse[],
     );
-
     delete assignmentAttempt.questionResponses;
 
     if (assignment.showAssignmentScore === false) {
@@ -579,6 +734,9 @@ export class AttemptService {
       ...assignmentAttempt,
       questions: questionsWithResponses,
       passingGrade: assignment.passingGrade,
+      showAssignmentScore: assignment.showAssignmentScore,
+      showSubmissionFeedback: assignment.showSubmissionFeedback,
+      showQuestionScore: assignment.showQuestionScore,
     };
   }
 
@@ -1020,6 +1178,29 @@ export class AttemptService {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string | { filename: string; content: string }[];
   }> {
+    if (
+      Array.isArray(
+        createQuestionResponseAttemptRequestDto.learnerFileResponse,
+      ) &&
+      createQuestionResponseAttemptRequestDto.learnerFileResponse.length ===
+        0 &&
+      createQuestionResponseAttemptRequestDto.learnerUrlResponse.trim() ===
+        "" &&
+      createQuestionResponseAttemptRequestDto.learnerTextResponse.trim() ===
+        "" &&
+      Array.isArray(createQuestionResponseAttemptRequestDto.learnerChoices) &&
+      createQuestionResponseAttemptRequestDto.learnerChoices.length === 0
+    ) {
+      const responseDto = new CreateQuestionResponseAttemptResponseDto();
+      responseDto.totalPoints = 0;
+      responseDto.feedback = [
+        {
+          feedback: "You did not provide a response to this question.",
+        },
+      ];
+      return { responseDto, learnerResponse: "" };
+    }
+
     switch (question.type) {
       case QuestionType.TEXT: {
         return this.handleTextUploadQuestionResponse(
@@ -1103,11 +1284,7 @@ export class AttemptService {
     },
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
-    learnerResponse: {
-      filename: string;
-      content: string;
-      questionId: number;
-    }[];
+    learnerResponse: LearnerFileUpload[];
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerFileResponse) {
       throw new BadRequestException(
@@ -1576,6 +1753,7 @@ ${
         assignmentId: question.assignmentId,
         alreadyInBackend: true,
         questionResponses: correspondingResponses,
+        responseType: question.responseType,
       };
     });
   }
@@ -1746,6 +1924,7 @@ ${
         issueType,
         description,
         reporterId: userId,
+        author: false,
       },
     });
   }

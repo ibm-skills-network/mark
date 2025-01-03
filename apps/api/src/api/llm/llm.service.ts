@@ -53,6 +53,7 @@ import {
   gradeDocumentFileQuestionLlmTemplate,
   gradeEssayFileQuestionLlmTemplate,
   gradePresentationFileQuestionLlmTemplate,
+  gradeRepoQuestionLlmTemplate,
   gradeSpreadsheetFileQuestionLlmTemplate,
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
@@ -141,6 +142,15 @@ export const responseTypeSpecificInstructions: {
     - **Originality**: Identify and commend any unique or creative approaches.
     - **Clarity**: Comment on how clearly the submission communicates its ideas.
     - **Adaptability**: Provide suggestions for improving areas that may require refinement.
+  `,
+  [ResponseType.REPO]: `
+    Critique the repository based on:
+    - **Code Quality**: Assess the cleanliness, readability, and maintainability of the code.
+    - **Functionality**: Evaluate whether the code meets the requirements and functions as expected.
+    - **Documentation**: Comment on the clarity and completeness of comments and documentation.
+    - **Testing**: Evaluate the presence and effectiveness of tests and test coverage.
+    - **Structure**: Assess the organization and modularity of the codebase.
+    - **Best Practices**: Identify adherence to coding standards and best practices.
   `,
 };
 
@@ -311,6 +321,7 @@ export class LlmService {
     // Define a mapping from responseType to templates
     const templates: { [key in ResponseType]: string } = {
       [ResponseType.CODE]: gradeCodeFileQuestionLlmTemplate,
+      [ResponseType.REPO]: gradeRepoQuestionLlmTemplate,
       [ResponseType.ESSAY]: gradeEssayFileQuestionLlmTemplate,
       [ResponseType.REPORT]: gradeEssayFileQuestionLlmTemplate,
       [ResponseType.PRESENTATION]: gradePresentationFileQuestionLlmTemplate,

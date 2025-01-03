@@ -7,6 +7,7 @@ import TrueFalseQuestion from "./TrueFalseQuestion";
 import UrlQuestion from "./UrlQuestion";
 import FileLinkUploadSection from "./FileLinkUploadSection";
 import { useLearnerStore } from "@/stores/learner";
+import FileCodeUploadSection from "./FileCodeUploadSection";
 
 interface Props {
   questionType: QuestionType;
@@ -16,9 +17,10 @@ interface Props {
 const RenderQuestion: FC<Props> = (props) => {
   const { questionType, question } = props;
   const onModeChange = useLearnerStore((state) => state.onModeChange);
-  const onFileChange = useLearnerStore((state) => state.onFileChange);
+  const addFileUpload = useLearnerStore((state) => state.addFileUpload);
   const onUrlChange = useLearnerStore((state) => state.onUrlChange);
-
+  const removeFileUpload = useLearnerStore((state) => state.removeFileUpload);
+  const onFileChange = useLearnerStore((state) => state.onFileChange);
   switch (questionType) {
     case "TEXT":
       return <TextQuestion question={question} />;
@@ -35,14 +37,26 @@ const RenderQuestion: FC<Props> = (props) => {
     case "URL":
       return <UrlQuestion question={question} onUrlChange={onUrlChange} />;
     case "UPLOAD":
-    case "IMAGES":
-    case "CODE":
       return (
         <FileUploadSection
           questionId={question.id}
           questionType={questionType}
           responseType={question.responseType}
           onFileChange={onFileChange}
+          removeFileUpload={removeFileUpload}
+        />
+      );
+    case "IMAGES":
+    case "CODE":
+      return (
+        <FileCodeUploadSection
+          questionId={question.id}
+          questionType={questionType}
+          responseType={question.responseType}
+          question={question}
+          onFileChange={onFileChange}
+          addFileUpload={addFileUpload}
+          removeFileUpload={removeFileUpload}
         />
       );
     case "LINK_FILE":

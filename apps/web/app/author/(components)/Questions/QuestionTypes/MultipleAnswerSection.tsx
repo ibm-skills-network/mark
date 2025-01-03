@@ -450,33 +450,70 @@ function Section({
                     {loading ? (
                       <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
                     ) : (
-                      <input
-                        type="number"
-                        id={`points-${questionId}-${index}`}
-                        value={localPoints[index]}
-                        onChange={(e) => {
-                          const updatedPoints = [...localPoints];
-                          updatedPoints[index] = e.target.value;
-                          setLocalPoints(updatedPoints);
-                        }}
-                        onBlur={() =>
-                          handleChoiceChange(index, {
-                            points: parseInt(localPoints[index], 10) || 0,
-                          })
-                        }
-                        placeholder="Points"
-                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
-                        disabled={preview}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            focusNextInput(index, "points");
-                          } else {
-                            handleBackspacePress(index, event);
+                      <div className="flex items-center">
+                        <input
+                          type="text"
+                          id={`points-${questionId}-${index}`}
+                          value={localPoints[index]}
+                          onChange={(e) => {
+                            const updatedPoints = [...localPoints];
+                            updatedPoints[index] = e.target.value;
+                            setLocalPoints(updatedPoints);
+                          }}
+                          onBlur={() =>
+                            handleChoiceChange(index, {
+                              points: parseInt(localPoints[index], 10) || 0,
+                            })
                           }
-                        }}
-                      />
+                          placeholder="Points"
+                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
+                          disabled={preview}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              focusNextInput(index, "points");
+                            } else {
+                              handleBackspacePress(index, event);
+                            }
+                          }}
+                        />
+                        <div className="flex flex-col items-center space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedPoints = [...localPoints];
+                              updatedPoints[index] = (
+                                parseInt(localPoints[index], 10) || 0
+                              ).toString();
+                              handleChoiceChange(index, {
+                                points: parseInt(updatedPoints[index], 10) + 1,
+                              });
+                              setLocalPoints(updatedPoints);
+                            }}
+                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            <ChevronUpIcon className="h-4 w-4 text-gray-600" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedPoints = [...localPoints];
+                              updatedPoints[index] = (
+                                parseInt(localPoints[index], 10) || 0
+                              ).toString();
+                              handleChoiceChange(index, {
+                                points: parseInt(updatedPoints[index], 10) - 1,
+                              });
+                              setLocalPoints(updatedPoints);
+                            }}
+                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            <ChevronDownIcon className="h-4 w-4 text-gray-600" />
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </td>
+
                   <td className="p-3 border-r">
                     {loading ? (
                       <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>

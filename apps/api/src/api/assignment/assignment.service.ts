@@ -1,19 +1,11 @@
-import * as fs from "node:fs/promises"; // Use fs/promises to read files asynchronously
 import {
-  BadRequestException,
   HttpException,
   HttpStatus,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
-import {
-  Job,
-  Prisma,
-  QuestionType,
-  ReportType,
-  ResponseType,
-} from "@prisma/client";
-import { isNumber } from "class-validator";
+import { Job, Prisma, ReportType } from "@prisma/client";
 import {
   UserRole,
   type UserSession,
@@ -36,7 +28,6 @@ import type {
   UpdateAssignmentRequestDto,
 } from "./dto/update.assignment.request.dto";
 import {
-  Choice,
   GenerateQuestionVariantDto,
   QuestionDto,
   UpdateAssignmentQuestionsDto,
@@ -46,7 +37,6 @@ import {
 import {
   CreateUpdateQuestionRequestDto,
   LLMResponseQuestion,
-  Scoring,
 } from "./question/dto/create.update.question.request.dto";
 
 @Injectable()
@@ -78,15 +68,21 @@ export class AssignmentService {
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession.role === UserRole.LEARNER;
 
-    // Fetch the assignment including question variants
     const result = await this.prisma.assignment.findUnique({
       where: { id },
-      include: { questions: { include: { variants: !isLearner } } },
+      include: {
+        questions: {
+          include: { variants: true },
+        },
+      },
     });
-
     if (!result) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
+
+    // Filter out deleted questions
+    const filteredQuestions = result.questions.filter((q) => !q.isDeleted);
+    result.questions = filteredQuestions;
 
     // Parse choices in each variant of each question if it's a string
     if (result.questions) {
@@ -323,28 +319,24 @@ export class AssignmentService {
       include: { variants: true },
     });
 
-    // Map existing questions and variants for quick access
-    const existingQuestionsMap = new Map<
-      number,
-      (typeof existingQuestions)[0]
-    >();
-    for (const q of existingQuestions) existingQuestionsMap.set(q.id, q);
+    // Properly filter out deleted questions
+    const activeQuestions = existingQuestions.filter((q) => !q.isDeleted);
 
+    // Map existing questions and variants for quick access
+    const existingQuestionsMap = new Map<number, (typeof activeQuestions)[0]>();
+    for (const q of activeQuestions) existingQuestionsMap.set(q.id, q);
     const newQuestionIds = new Set<number>(questions.map((q) => q.id));
 
     // Identify and delete questions that are no longer present
-    const questionsToDelete = existingQuestions
-      .filter((q) => !newQuestionIds.has(q.id))
-      .map((q) => q.id);
+    // Mark questions as deleted instead of hard deleting
+    const questionsToDelete = activeQuestions.filter(
+      (q) => !newQuestionIds.has(q.id),
+    );
+
     if (questionsToDelete.length > 0) {
-      await this.prisma.assignmentAttemptQuestionVariant.deleteMany({
-        where: { questionId: { in: questionsToDelete } },
-      });
-      await this.prisma.questionVariant.deleteMany({
-        where: { questionId: { in: questionsToDelete } },
-      });
-      await this.prisma.question.deleteMany({
-        where: { id: { in: questionsToDelete } },
+      await this.prisma.question.updateMany({
+        where: { id: { in: questionsToDelete.map((q) => q.id) } },
+        data: { isDeleted: true },
       });
     }
 
@@ -387,11 +379,11 @@ export class AssignmentService {
 
         // Map frontend ID to backend ID
         frontendToBackendIdMap.set(question.id, upsertedQuestion.id);
-        console.log("Frontend to backend ID map:", frontendToBackendIdMap);
 
         // Handle variants
         const existingVariants =
           existingQuestionsMap.get(upsertedQuestion.id)?.variants || [];
+
         const existingVariantsMap = new Map<
           string,
           (typeof existingVariants)[0]
@@ -487,7 +479,6 @@ export class AssignmentService {
       const backendId = frontendToBackendIdMap.get(q.id);
       return backendId || q.id;
     });
-    console.log("Question order:", questionOrder);
     // Handle grading context
     await this.handleQuestionGradingContext(assignmentId, questionOrder);
 
@@ -498,7 +489,7 @@ export class AssignmentService {
     });
 
     const allQuestions = await this.prisma.question.findMany({
-      where: { assignmentId },
+      where: { assignmentId, isDeleted: false },
       include: { variants: true },
     });
 
@@ -507,6 +498,46 @@ export class AssignmentService {
     );
 
     return { id: assignmentId, questions: allQuestions, success: true };
+  }
+  async createReport(
+    assignmentId: number,
+    issueType: ReportType,
+    description: string,
+    userId: string,
+  ): Promise<void> {
+    // Ensure the assignment exists
+    const assignmentExists = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+    });
+
+    if (!assignmentExists) {
+      throw new NotFoundException("Assignment not found");
+    }
+    // if the user created more than 5 reports in the last 24 hours, throw an error
+    const reports = await this.prisma.report.findMany({
+      where: {
+        reporterId: userId,
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+    if (reports.length >= 5) {
+      throw new UnprocessableEntityException(
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
+      );
+    }
+
+    // Create a new report
+    await this.prisma.report.create({
+      data: {
+        assignmentId,
+        issueType,
+        description,
+        reporterId: userId,
+        author: true,
+      },
+    });
   }
   async generateVariantsFromQuestions(
     assignmentId: number,
@@ -646,10 +677,14 @@ export class AssignmentService {
     assignmentId: number,
     questionOrder: number[],
   ) {
-    const assignment = await this.prisma.assignment.findUnique({
+    const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
-      include: { questions: true },
-    });
+      include: {
+        questions: {
+          where: { isDeleted: false },
+        },
+      },
+    })) as { questions: { id: number; question: string }[] };
 
     const questionsForGradingContext = assignment.questions
       .sort((a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id))

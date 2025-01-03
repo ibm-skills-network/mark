@@ -163,13 +163,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       ...questionCriteria,
       criteriaDesc: newCriteriaArray,
     });
-    // Update the store correctly
-    handleUpdateQuestionState({
-      questionCriteria: {
-        ...questionCriteria,
-        criteriaDesc: newCriteriaArray,
-      },
-    });
   };
   // Handle blur event on criteria input to update the state
   const handleCriteriaBlur = () => {

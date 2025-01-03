@@ -1,4 +1,5 @@
 import { QuestionType, ResponseType } from "@prisma/client";
+import { LearnerFileUpload } from "src/api/assignment/attempt/dto/assignment-attempt/types";
 import {
   BaseQuestionEvaluateModel,
   QuestionAnswerContext,
@@ -25,11 +26,7 @@ export class FileUploadQuestionEvaluateModel
     question: string,
     previousQuestionsAnswersContext: QuestionAnswerContext[],
     assignmentInstrctions: string,
-    learnerResponse: {
-      filename: string;
-      content: string;
-      questionId: number;
-    }[],
+    learnerResponse: LearnerFileUpload[],
     totalPoints: number,
     scoringCriteriaType: string,
     scoringCriteria: object,

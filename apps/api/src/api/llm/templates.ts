@@ -220,6 +220,33 @@ Output format:
 {format_instructions}
 `;
 
+export const gradeRepoQuestionLlmTemplate = `
+As an expert grader, review the learner's GitHub repository for the question:
+{question}
+
+Repository: {repository}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+
+Points: <number>
+Feedback:
+- **Content**: Does the repository address the question requirements?
+- **Completeness**: Are all necessary components present and functional?
+- **Organization**: Is the repository well-structured and easy to navigate?
+- **Documentation**: Evaluate the quality and clarity of comments and documentation.
+- **Code Quality**: Assess the code's readability, efficiency, and adherence to best practices.
+- **Strengths**: Identify standout elements or areas of excellence.
+
+> Provide constructive feedback to guide improvement. Avoid providing solutions.
+`;
+
 export const generateAssignmentQuestionsFromObjectivesTemplate = `
 You are an expert teacher tasked with creating a set of questions based on the provided learning objectives.
 Learning Objectives: {learning_objectives}

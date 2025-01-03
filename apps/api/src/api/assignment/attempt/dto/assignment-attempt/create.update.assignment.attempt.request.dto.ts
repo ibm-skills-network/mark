@@ -16,6 +16,7 @@ import type { CreateQuestionResponseAttemptRequestDto } from "../question-respon
 
 type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
   id: number;
+  question: string;
 };
 
 export class authorAssignmentDetailsDTO {

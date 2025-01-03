@@ -237,6 +237,51 @@ export class AssignmentController {
       map((data) => ({ data }) as MessageEvent),
     );
   }
+
+  @Post(":assignmentId/report")
+  @Roles(UserRole.AUTHOR)
+  @ApiOperation({ summary: "Submit a report for an assignment" })
+  @ApiParam({
+    name: "assignmentId",
+    required: true,
+    description: "ID of the assignment",
+  })
+  @ApiBody({
+    description: "Report details",
+    type: ReportRequestDTO,
+  })
+  @ApiResponse({ status: 201, description: "Report submitted successfully" })
+  @ApiResponse({ status: 400, description: "Invalid input or missing fields" })
+  @ApiResponse({ status: 403 })
+  async submitReport(
+    @Param("assignmentId") assignmentId: number,
+    @Body() body: ReportRequestDTO,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ message: string }> {
+    const { issueType, description } = body;
+
+    if (!issueType || !description) {
+      throw new BadRequestException("Issue type and description are required");
+    }
+
+    const validIssueTypes = ["BUG", "FEEDBACK", "SUGGESTION", "PERFORMANCE"];
+    if (!validIssueTypes.includes(issueType)) {
+      throw new BadRequestException("Invalid issue type");
+    }
+
+    const userId = request.userSession.userId;
+    if (!userId || userId.trim() === "") {
+      throw new BadRequestException("Invalid user ID");
+    }
+    await this.assignmentService.createReport(
+      Number(assignmentId),
+      issueType,
+      description,
+      userId,
+    );
+
+    return { message: "Report submitted successfully" };
+  }
   @Post(":assignmentId/upload-files")
   @ApiOperation({ summary: "Upload contents of files for the assignment" })
   @ApiBody({

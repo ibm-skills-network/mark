@@ -35,6 +35,7 @@ enum QuestionType {
   LINK_FILE /// The question requires the upload of a file or a URL as a response
 }
 enum ResponseType{
+  REPO
   CODE
   ESSAY
   REPORT
@@ -89,6 +90,12 @@ enum AIUsageType {
   ASSIGNMENT_GRADING /// AI was used for grading the assignment
 }
 
+model UserCredential {
+  userId      String   @id /// The unique ID of the user
+  githubToken String?  /// The GitHub token for the user
+  createdAt   DateTime @default(now()) /// The DateTime at which the user was created
+  updatedAt   DateTime @updatedAt /// The DateTime at which the user was last updated
+}
 
 /// The Group model represents a particular group of assignments (having the same groupID)
 model Group {
@@ -163,6 +170,8 @@ model Question {
   gradingContextQuestionIds Int[] /// List of question Ids that are used as contextual questions when auto grading this question
   maxCharacters             Int? /// Maximum number of characters allowed for a written response type question
   AssignmentAttemptQuestionVariant AssignmentAttemptQuestionVariant[]
+  isDeleted      Boolean  @default(false) // New flag for archiving
+
 }
 model AssignmentAttempt {
   id                Int                   @id @default(autoincrement())
@@ -260,10 +269,11 @@ model Report {
   id          Int        @id @default(autoincrement())
   reporterId  String     /// ID of the user reporting the issue
   assignmentId Int       /// ID of the associated assignment
-  attemptId  Int       /// ID of the associated assignment attempt
+  attemptId  Int?       /// ID of the associated assignment attempt
   assignment  Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   issueType   ReportType /// Type of the issue
   description String     /// Detailed description of the issue
+  author    Boolean     @default(false) /// Is the reporter the author of the assignment
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }

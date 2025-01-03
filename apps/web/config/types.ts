@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { learnerFileResponse } from "@/stores/learner";
 
 export type User = {
   userId: string;
@@ -27,12 +27,39 @@ export type QuestionAttemptRequest = {
   // 3. True False
   learnerAnswerChoice?: boolean | undefined;
   // 4. Upload
-  learnerFileResponse?:
-    | {
-        filename: string;
-        content: string;
-      }[]
-    | undefined;
+  learnerFileResponse?: learnerFileResponse[] | undefined;
+};
+export type RepoType = {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  owner: {
+    login: string;
+  };
+  license?: {
+    key?: string;
+    name?: string;
+    spdx_id?: string;
+    url?: string;
+    node_id?: string;
+  };
+  default_branch?: string;
+};
+export type RepoContentItem = {
+  type: "file" | "dir" | "symlink" | "submodule";
+  name: string;
+  path: string;
+  sha: string;
+  url: string;
+  download_url: string | null;
+};
+export type AuthorFileUploads = {
+  filename: string;
+  content: string;
+  size: number;
+  tokenCount: number;
+  githubUrl?: string;
 };
 
 export type UpdateQuestionStateParams = {
@@ -89,6 +116,7 @@ export type ResponseType =
   | "PRESENTATION"
   | "VIDEO"
   | "AUDIO"
+  | "REPO"
   | "SPREADSHEET"
   | "OTHER";
 
@@ -326,6 +354,9 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   totalPossiblePoints?: number;
   passingGrade?: number;
   name?: string;
+  showSubmissionFeedback?: boolean;
+  showAssignmentScore?: boolean;
+  showQuestionScore?: boolean;
 }
 
 export interface AssignmentDetails {
@@ -387,7 +418,7 @@ export interface QuestionGenerationPayload {
   assignmentId: number;
   assignmentType: AssignmentTypeEnum;
   questionsToGenerate: QuestionsToGenerate;
-  fileContents: { filename: string; content: string }[];
+  fileContents: AuthorFileUploads[];
   learningObjectives: string;
 }
 export enum AssignmentTypeEnum {

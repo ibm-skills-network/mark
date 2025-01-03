@@ -32,7 +32,11 @@ import {
   ExclamationTriangleIcon,
   SparklesIcon,
 } from "@heroicons/react/24/solid";
-import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
+import {
+  IconBrandGithub,
+  IconCheckbox,
+  IconCircleCheck,
+} from "@tabler/icons-react";
 import { useRouter } from "next/navigation"; // Importing useRouter for navigation
 import {
   FC,
@@ -384,7 +388,7 @@ const Question: FC<QuestionProps> = ({
       },
       {
         value: "UPLOAD",
-        label: "File Upload",
+        label: "Upload",
         icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
       {
@@ -402,6 +406,11 @@ const Question: FC<QuestionProps> = ({
         label: "Code",
         icon: <CodeBracketIcon className="w-5 h-5 stroke-gray-500" />,
       },
+      // {
+      //   value: "REPO",
+      //   label: "GitHub Repository",
+      //   icon: <IconBrandGithub className="w-5 h-5 stroke-gray-500" />,
+      // },
       {
         value: "ESSAY",
         label: "Essay",
@@ -964,13 +973,6 @@ const Question: FC<QuestionProps> = ({
             questionCriteria={questionCriteria}
             setQuestionCriteria={(criteria) => {
               setQuestionCriteriaState(criteria);
-              handleUpdateQuestionState({
-                questionCriteria: {
-                  points: criteria.points,
-                  criteriaDesc: criteria.criteriaDesc,
-                  criteriaIds: criteria.criteriaIds,
-                },
-              });
             }}
             handleUpdateQuestionState={handleUpdateQuestionState}
             questionIndex={questionIndex}

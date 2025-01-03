@@ -1,8 +1,12 @@
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import {
+  useAssignmentDetails,
+  useGitHubStore,
+  useLearnerStore,
+} from "@/stores/learner";
 import { cn } from "@/lib/strings";
 import { editedQuestionsOnly } from "@/lib/utils";
-import { submitAssignment } from "@/lib/talkToBackend";
+import { getUser, submitAssignment } from "@/lib/talkToBackend";
 import useCountdown from "@/hooks/use-countdown";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -19,7 +23,7 @@ function Timer(props: Props) {
   const router = useRouter();
   const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false); // New state to prevent re-submission
-
+  const [role, setRole] = useState<"author" | "learner">("learner");
   const [
     activeAttemptId,
     questions,
@@ -53,6 +57,7 @@ function Timer(props: Props) {
       updatedAt: 0,
     },
   );
+  const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   const assignmentId = assignmentDetails?.id;
   const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
   const seconds = Math.floor((countdown / 1000) % 60);
@@ -61,45 +66,52 @@ function Timer(props: Props) {
   const twoDigit = (num: number) => {
     return num < 10 ? `0${num}` : num;
   };
-
+  useEffect(() => {
+    // get user role
+    const getUserRole = async () => {
+      const user = await getUser();
+      if (user) {
+        setRole(user.role);
+      }
+    };
+    void getUserRole();
+  });
   async function handleSubmitAssignment() {
-    const responsesForOnlyEditedQuestions = editedQuestionsOnly(questions);
-    const responsesForQuestions: QuestionAttemptRequestWithId[] =
-      responsesForOnlyEditedQuestions.map((q) => ({
+    const responsesForQuestions: QuestionAttemptRequestWithId[] = questions.map(
+      (q) => ({
         id: q.id,
-        learnerTextResponse: q.learnerTextResponse || undefined,
-        learnerUrlResponse: q.learnerUrlResponse || undefined,
-        learnerChoices: q.learnerChoices || undefined,
-        learnerAnswerChoice:
-          q.learnerAnswerChoice !== undefined
-            ? q.learnerAnswerChoice
-            : undefined,
-        learnerFileResponse: q.learnerFileResponse || undefined,
-      }));
+        learnerTextResponse: q.learnerTextResponse || "",
+        learnerUrlResponse: q.learnerUrlResponse || "",
+        learnerChoices: q.learnerChoices || [],
+        learnerAnswerChoice: q.learnerAnswerChoice ?? null,
+        learnerFileResponse: q.learnerFileResponse || [],
+      }),
+    );
+
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
-      authorQuestions,
-      authorAssignmentDetails,
+      role === "author" ? authorQuestions : undefined,
+      role === "author" ? authorAssignmentDetails : undefined,
     );
+
     if (!res || !res.success) {
       toast.error("Failed to submit assignment.");
       return;
     }
     const { grade, feedbacksForQuestions } = res;
-    setIsSubmitted(true);
     setTotalPointsEarned(res.totalPointsEarned);
     setTotalPointsPossible(res.totalPossiblePoints);
     setGrade(grade * 100);
-    setShowSubmissionFeedback(res.showSubmissionFeedback); // set showSubmissionFeedback boolean in zustand store
+    setShowSubmissionFeedback(res.showSubmissionFeedback);
     for (const feedback of feedbacksForQuestions || []) {
       setQuestion({
         id: feedback.questionId,
         questionResponses: [
           {
             id: feedback.id,
-            learnerAnswerChoice: responsesForOnlyEditedQuestions.find(
+            learnerAnswerChoice: responsesForQuestions.find(
               (q) => q.id === feedback.questionId,
             )?.learnerAnswerChoice,
             points: feedback.totalPoints,
@@ -111,6 +123,7 @@ function Timer(props: Props) {
         ],
       });
     }
+    clearGithubStore();
     router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
 

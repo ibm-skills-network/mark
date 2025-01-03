@@ -66,6 +66,7 @@ import { shallow } from "zustand/shallow";
 import FileUploadModal from "@/components/FileUploadModal";
 
 import Dropdown from "@/components/Dropdown";
+import ReportModal from "@/components/ReportModal";
 interface Props {
   assignmentId: number;
   defaultQuestionRetries: number;
@@ -107,7 +108,7 @@ const AuthorQuestionsPage: FC<Props> = ({
   const [collapseAll, setCollapseAll] = useState(false); // State to collapse all questions
   const [activeId, setActiveId] = useState<number | null>(null); // State to store the active assignment ID
   const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false); // State to toggle the file upload modal
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false); // State to toggle the report modal
   const questionTypes = useMemo(
     () => [
       {
@@ -139,7 +140,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       },
       {
         value: "UPLOAD",
-        label: "File Upload",
+        label: "Upload",
         icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
       {
@@ -586,7 +587,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       onDragEnd={onSortEnd}
       onDragStart={handleDragStart}
     >
-      <div className="grid grid-cols-4 gap-x-4 mx-6 md:grid-cols-12 md:mx-8 md:gap-x-6 mt-8">
+      <div className="grid grid-cols-4 gap-x-4 mx-6 md:grid-cols-12 md:mx-8 md:gap-x-6 mt-8 min-h-[90vh] grid-rows-[auto,auto,auto]">
         {questions.length > 0 && (
           <>
             {/* NavigationBox component */}
@@ -605,7 +606,11 @@ const AuthorQuestionsPage: FC<Props> = ({
             </div>
           </>
         )}
-        <div className="col-span-8 md:col-span-8 md:col-start-3 md:col-end-11">
+        <div
+          className={`col-span-4 md:col-span-4 md:col-start-3 md:col-end-11 flex flex-col ${
+            questions.length === 0 ? "justify-center" : ""
+          }`}
+        >
           {questions.length > 0 ? (
             <>
               {/* If there are questions, render the SortableList component, all the question components renders here */}
@@ -622,9 +627,9 @@ const AuthorQuestionsPage: FC<Props> = ({
               </DragOverlay>
             </>
           ) : (
-            <div className="col-span-4 md:col-start-5 md:col-end-8">
+            <div className="col-span-4 md:col-start-5 md:col-end-8 pb-16">
               {/* If there are no questions, render the empty state */}
-              <p className="text-center text-gray-500 text-base leading-5 my-12">
+              <p className="text-center text-gray-500 text-2xl leading-5 my-12">
                 Begin writing the questions for your assignment below.
               </p>
             </div>
@@ -699,12 +704,20 @@ const AuthorQuestionsPage: FC<Props> = ({
               </span>
             </button>
           </div>
-          {questions.length > 0 && (
-            <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-9 md:col-end-11 lg:col-start-9 lg:col-end-11 mb-8">
+        </div>
+        {questions.length > 0 && (
+          <div className="col-span-4 md:col-span-8 lg:col-span-12 md:col-start-3 md:col-end-11 lg:col-start-3 lg:col-end-11 row-start-3 flex flex-col justify-end mb-10">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => setIsReportModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 border bg-violet-100 text-violet-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 ease-in-out"
+              >
+                <span className="text-sm font-medium">Report Issue</span>
+              </button>
               <FooterNavigation nextStep="review" />
             </div>
-          )}
-        </div>
+          </div>
+        )}
         <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
           <div className="flex flex-col sticky top-0 gap-4 items-center px-4 pb-4">
             {/* Collapse/Expand all button */}
@@ -781,7 +794,17 @@ const AuthorQuestionsPage: FC<Props> = ({
           </div>
         </div>
       </div>
-
+      {
+        /* ReportModal component */
+        isReportModalOpen && (
+          <ReportModal
+            assignmentId={assignmentId}
+            isReportModalOpen={isReportModalOpen}
+            setIsReportModalOpen={setIsReportModalOpen}
+            isAuthor={true}
+          />
+        )
+      }
       {/* FileUploadModal component */}
       {fileUploadModalOpen && (
         <FileUploadModal
@@ -1018,9 +1041,9 @@ const NavigationBox: FC<NavigationBoxProps> = ({
       onDragEnd={handleNavSortEnd}
     >
       <div
-        className={`sticky top-4 p-3 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all bg-white overflow-hidden duration-300 ease-in-out ${
+        className={`sticky top-4 p-3 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all bg-white overflow-y-scroll duration-300 ease-in-out ${
           handleToggleTable ? "w-full max-h-[700px]" : "w-12"
-        }`}
+        } scrollbar-hide`}
       >
         <button
           onClick={() => setHandleToggleTable(!handleToggleTable)}

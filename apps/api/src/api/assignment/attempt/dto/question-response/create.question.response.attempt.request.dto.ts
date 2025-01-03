@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { IsArray, IsBoolean, IsOptional, IsString } from "class-validator";
+import { LearnerFileUpload } from "../assignment-attempt/types";
 
 export class CreateQuestionResponseAttemptRequestDto {
   @ApiPropertyOptional({
@@ -38,11 +39,7 @@ export class CreateQuestionResponseAttemptRequestDto {
     type: [Object],
   })
   @IsOptional()
-  learnerFileResponse?: {
-    filename: string;
-    content: string;
-    questionId: number;
-  }[];
+  learnerFileResponse?: LearnerFileUpload[];
 
   @ApiPropertyOptional({
     description: "The id of the question.",

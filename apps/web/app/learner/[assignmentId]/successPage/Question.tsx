@@ -2,13 +2,20 @@
 
 import MarkdownViewer from "@/components/MarkdownViewer";
 import type { QuestionStore } from "@/config/types";
-import { getFeedbackColors, parseLearnerResponse } from "@/lib/utils";
-import { useLearnerStore } from "@/stores/learner";
+import { parseLearnerResponse } from "@/lib/utils";
+import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
 import { motion } from "framer-motion";
-import { FC, useMemo, useState } from "react";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { SparklesIcon } from "@heroicons/react/24/solid";
-
+import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
+import { Octokit } from "@octokit/rest";
+import {
+  AuthorizeGithubBackend,
+  exchangeGithubCodeForToken,
+  getStoredGithubToken,
+} from "@/lib/talkToBackend";
+import { toast } from "sonner";
 interface Props {
   question: QuestionStore;
   number: number;
@@ -46,6 +53,121 @@ const Question: FC<Props> = ({ question, number }) => {
     null,
   );
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [octokit, setOctokit] = useState<Octokit | null>(null);
+  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
+  const [token, setToken] = useState<string | null>(null);
+  const showErrorOnce = (message: string) => {
+    if (!errorShownRef.current) {
+      toast.error(message);
+      errorShownRef.current = true;
+    }
+  };
+  const errorShownRef = useRef<boolean>(false);
+  const urlParams = new URLSearchParams(window.location.search);
+  useEffect(() => {
+    const initialize = async () => {
+      if (token) return;
+
+      const code = urlParams.get("code");
+
+      if (code) {
+        const returnedToken = await exchangeGithubCodeForToken(code);
+        if (returnedToken && (await validateToken(returnedToken))) {
+          setToken(returnedToken);
+          setOctokit(new Octokit({ auth: returnedToken }));
+          // remove code from url
+          const newUrl = window.location.href.replace(
+            window.location.search,
+            "",
+          );
+          window.history.replaceState({}, document.title, newUrl);
+          toast.success(
+            "Github token has been authenticated successfully. You can now view files.",
+          );
+        } else {
+          toast.warning(
+            "Looks like there was an issue with the authentication. Please try to check your github file again.",
+          );
+        }
+        return;
+      }
+
+      const backendToken = await getStoredGithubToken();
+      if (backendToken && (await validateToken(backendToken))) {
+        setToken(backendToken);
+        setOctokit(new Octokit({ auth: backendToken }));
+      } else {
+        void authenticateUser();
+      }
+    };
+    // check if any question include github url, if so, initialize octokit
+    if (questionResponses) {
+      for (const response of questionResponses) {
+        if (response.learnerResponse) {
+          const learnerResponse = parseLearnerResponse(
+            response.learnerResponse,
+          );
+          if (Array.isArray(learnerResponse)) {
+            for (const file of learnerResponse as {
+              filename: string;
+              content: string;
+              githubUrl?: string;
+            }[]) {
+              if (file.githubUrl) {
+                void initialize();
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }, [token, urlParams, questionResponses]);
+  const validateToken = async (testToken: string): Promise<boolean> => {
+    const testOctokit = new Octokit({ auth: testToken });
+    try {
+      await testOctokit.request("GET /user");
+      return true;
+    } catch (error) {
+      console.error("Token validation failed:", error);
+      return false;
+    }
+  };
+
+  const authenticateUser = async () => {
+    try {
+      const redirectUrl = window.location.href;
+      const { url } = await AuthorizeGithubBackend(assignmentId, redirectUrl);
+      if (url) window.open(url, "_self");
+      return;
+    } catch (error) {
+      console.error("GitHub authentication error:", error);
+      toast.error("Failed to authenticate with GitHub.");
+    }
+  };
+
+  const handleFileView = async (githubUrl: string) => {
+    if (!octokit && !token) {
+      await initializeOctokit(githubUrl);
+    } else {
+      void openFileInNewTab(githubUrl, octokit);
+    }
+  };
+  const initializeOctokit = async (githubUrl: string) => {
+    const backendToken = await getStoredGithubToken();
+    if (backendToken && (await validateToken(backendToken))) {
+      setToken(backendToken);
+      setOctokit(new Octokit({ auth: backendToken }));
+    } else {
+      // make sure url doesnt have code
+      if (urlParams.get("code")) {
+        // remove code from url
+        const newUrl = window.location.href.replace(window.location.search, "");
+        window.history.replaceState({}, document.title, newUrl);
+      }
+      void authenticateUser();
+    }
+  };
 
   const highestScoreResponse = useMemo<
     HighestScoreResponseType | undefined
@@ -62,7 +184,6 @@ const Question: FC<Props> = ({ question, number }) => {
 
   const questionResponse = questionResponses?.[0];
 
-  // Determine the learner's response
   const learnerResponse: LearnerResponseType =
     learnerTextResponse ??
     learnerFileResponse ??
@@ -75,7 +196,6 @@ const Question: FC<Props> = ({ question, number }) => {
       ? parseLearnerResponse(questionResponse.learnerResponse)
       : undefined);
 
-  // Function to display the learner's answer based on the question type
   const renderLearnerAnswer = () => {
     if (
       type === "TEXT" &&
@@ -127,16 +247,15 @@ const Question: FC<Props> = ({ question, number }) => {
               : false;
 
             const isCorrect = choiceObj.isCorrect;
-
             return (
               <li
                 key={idx}
                 className={`flex items-center justify-between mb-2 px-2 py-2 ${
-                  isSelected
+                  isSelected && showSubmissionFeedback
                     ? isCorrect
                       ? "bg-green-50 border border-green-500 rounded"
                       : "bg-red-50 border border-red-700 rounded"
-                    : isCorrect
+                    : isCorrect && showSubmissionFeedback
                       ? "bg-green-50 border border-green-500 rounded"
                       : ""
                 }`}
@@ -160,10 +279,10 @@ const Question: FC<Props> = ({ question, number }) => {
                   <span className="font-medium">{choiceObj.choice}</span>
                 </div>
                 <div className="flex items-center">
-                  {isCorrect && (
+                  {isCorrect && showSubmissionFeedback && (
                     <CheckIcon className="w-5 h-5 text-green-500 ml-2" />
                   )}
-                  {!isCorrect && isSelected && (
+                  {!isCorrect && isSelected && showSubmissionFeedback && (
                     <XMarkIcon className="w-5 h-5 text-red-500 ml-2" />
                   )}
                 </div>
@@ -191,14 +310,14 @@ const Question: FC<Props> = ({ question, number }) => {
               learnerResponse as unknown as {
                 filename: string;
                 content: string;
+                githubUrl?: string;
               }[]
             ).map((file, idx) => (
               <li key={idx}>
                 {file.filename}
                 <button
                   onClick={() => {
-                    setSelectedFileContent(file.content);
-                    setSelectedFileName(file.filename);
+                    void handleFileView(file?.githubUrl || "");
                   }}
                   className="ml-2 text-blue-600 underline"
                 >

@@ -1,13 +1,21 @@
 import { getJobStatus, uploadFiles } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
-import { IconCloudUpload, IconInfoCircle, IconX } from "@tabler/icons-react";
+import {
+  IconCloudUpload,
+  IconEye,
+  IconFile,
+  IconInfoCircle,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion"; // For animations
 import { useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import Modal from "./Modal";
 import {
   AssignmentTypeEnum,
+  AuthorFileUploads,
   Choice,
   Criteria,
   QuestionAuthorStore,
@@ -29,7 +37,10 @@ interface FileUploadModalProps {
 }
 
 const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
-  const [files, setFiles] = useState<File[]>([]);
+  const [fileUploaded, setFileUploaded] = useAuthorStore((state) => [
+    state.fileUploaded,
+    state.setFilesUploaded,
+  ]);
   const [progress, setProgress] = useState<number | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [jobId, setJobId] = useState<number | null>(null);
@@ -41,16 +52,42 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   const activeAssignmentId = useAuthorStore(
     (state) => state.activeAssignmentId,
   );
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [selectedFileContent, setSelectedFileContent] = useState<string | null>(
+    null,
+  );
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const [learningObjectives, setLearningObjectives] = useAuthorStore(
     (state) => [state.learningObjectives, state.setLearningObjectives],
   );
   const [error, setError] = useState<string | null>(null);
   const questions = useAuthorStore((state) => state.questions);
-  const onDrop = (acceptedFiles: File[]) => {
-    setFiles((prevFiles) => [...prevFiles, ...acceptedFiles]);
-    setError(null); // Clear error when files are added
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    else if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    else return `${(bytes / 1048576).toFixed(1)} MB`;
   };
+
+  const countTokens = (content: string): number => {
+    return content.split(/\s+/).length; // Example: tokenizes by spaces
+  };
+  const onDrop = async (acceptedFiles: File[]) => {
+    const fileContents = await Promise.all(
+      acceptedFiles.map(async (file: File) => {
+        const content = await readFile(file, questionId);
+        return {
+          filename: file.name,
+          content: content.content,
+          size: file.size,
+          tokenCount: countTokens(content.content),
+        };
+      }),
+    );
+    // append to existing files
+    setFileUploaded(fileUploaded.concat(fileContents));
+  };
+
+  const [fileInspectorModalOpen, setFileInspectorModalOpen] = useState(false);
   const [selectedDifficulty, setSelectedDifficulty] =
     useState<AssignmentTypeEnum>(AssignmentTypeEnum.PRACTICE);
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -96,9 +133,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
 
   const handleSend = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setStatusData(null);
     setError(null);
 
-    if (files.length === 0 && learningObjectives.length === 0) {
+    if (fileUploaded.length === 0 && learningObjectives.length === 0) {
       toast.error("Please upload files or enter learning objectives.");
       return;
     } else if (
@@ -114,15 +152,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     }
 
     try {
-      const fileContents = await Promise.all(
-        files.map(async (file: File) => {
-          let result = { filename: file.name, content: "", questionId: null };
-          result = await readFile(file, questionId);
-          result.content = truncateContent(result.content);
-          return result;
-        }),
-      );
-
       const payload: QuestionGenerationPayload = {
         assignmentId: activeAssignmentId,
         assignmentType: selectedDifficulty,
@@ -132,7 +161,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           textResponse: selectedQuestionTypes.textResponse,
           trueFalse: selectedQuestionTypes.trueFalse,
         },
-        fileContents,
+        fileContents: fileUploaded,
         learningObjectives,
       };
 
@@ -241,16 +270,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     };
   }, [jobId, setQuestions, onClose]);
 
-  // Determine if the submit button should be disabled
-  const isSubmitDisabled =
-    progress !== null ||
-    !(files.length > 0 || learningObjectives.length > 0) ||
-    error !== null;
-
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} Title="Generate Questions for your assignment">
       <motion.div
-        className="relative overflow-y-auto max-h-[80vh] p-6"
+        className="relative overflow-y-auto max-h-[80vh] pb-24 p-6 scrollbar-hide"
         initial={{ y: 50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 50, opacity: 0 }}
@@ -298,36 +321,80 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   </p>
                   <p className="text-gray-500">
                     Allowed file types: .txt .pdf .docx .xls .xlsx .csv .md
+                    .ipynb
                   </p>
                 </>
               )}
             </motion.div>
           </div>
           <div className="mt-4 w-full">
-            {files.length > 0 ? (
-              <ul className="text-gray-600">
-                {files.map((file) => (
-                  <li
-                    className="flex items-center justify-between bg-gray-100 rounded-md px-3 py-2 mb-2"
-                    key={file.name}
-                  >
-                    <span>{file.name}</span>
-                    <button
-                      onClick={() =>
-                        setFiles((prevFiles) =>
-                          prevFiles.filter((f) => f.name !== file.name),
-                        )
-                      }
-                      className="text-red-500 hover:text-red-600"
-                      aria-label={`Remove file ${file.name}`}
+            {fileUploaded.length > 0 ? (
+              <ul className="space-y-3">
+                <AnimatePresence>
+                  {fileUploaded.map((file) => (
+                    <motion.li
+                      key={file.filename}
+                      className="flex flex-col border-gray-300 border rounded-md px-4 py-3 hover:shadow-md"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      transition={{ duration: 0.3 }}
                     >
-                      <IconX size={20} />
-                    </button>
-                  </li>
-                ))}
+                      <div className="flex items-center justify-between space-x-3 px-4">
+                        {/* File Icon and Details */}
+                        <div className="flex items-center space-x-3">
+                          <IconFile size={32} className="text-gray-500" />
+                          <div>
+                            <p className="text-gray-700 font-medium">
+                              {file.filename}
+                            </p>
+                            <div className="flex items-center space-x-2">
+                              <p className="text-sm text-gray-500">
+                                {formatFileSize(file.size)}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {file.tokenCount} tokens
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <button
+                          className="text-red-500 hover:text-red-600"
+                          onClick={() =>
+                            setFileUploaded(
+                              fileUploaded.filter(
+                                (f) => f.filename !== file.filename,
+                              ),
+                            )
+                          }
+                          aria-label={`Remove file ${file.filename}`}
+                        >
+                          <IconTrash size={20} />
+                        </button>
+                      </div>
+                      {/* Progress Bar and Status */}
+                      <div className="flex-1 mx-4">
+                        <p className="text-right text-sm  mb-2">SUCCESS</p>
+                        <div className="relative h-1 w-full bg-gray-200 rounded">
+                          <motion.div
+                            className="absolute h-1 bg-purple-500 rounded"
+                            initial={{ width: "0%" }}
+                            animate={{ width: "100%" }}
+                            transition={{ duration: 0.5 }}
+                            style={{ width: "100%" }}
+                          ></motion.div>
+                        </div>
+                      </div>
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
               </ul>
             ) : (
-              <p className="text-gray-500">No files uploaded yet.</p>
+              <p className="text-gray-500 text-center">
+                No files uploaded yet.
+              </p>
             )}
           </div>
         </div>
@@ -564,6 +631,30 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* File Inspector Modal */}
+      {fileInspectorModalOpen && (
+        <Modal
+          onClose={() => setFileInspectorModalOpen(false)}
+          Title="File Viewer"
+        >
+          <motion.div
+            className="p-6 bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h2 className="text-lg font-bold mb-4">{selectedFileName}</h2>
+            <pre className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
+              {selectedFileContent}
+            </pre>
+            <button
+              onClick={() => setFileInspectorModalOpen(false)}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Close
+            </button>
+          </motion.div>
+        </Modal>
+      )}
     </Modal>
   );
 };
