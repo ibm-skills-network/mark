@@ -9123,9 +9123,9 @@ quill-better-table@^1.2.10:
   integrity sha512-CFwxAQzt4EPCQuynQ65R/FU7Yu//kcDBb/rmBBOsFfO758+q50zvG/PDt4Lenv9DcrSgwnyNkfo4yeA5fzzVYQ==
 
 quill-cursors@^4.0.3:
-  version "4.0.3"
-  resolved "https://registry.yarnpkg.com/quill-cursors/-/quill-cursors-4.0.3.tgz#b929388137d6a9b7f49a8f02532b9cc9780ed17d"
-  integrity sha512-CXJ0eCCiZVwUWWASI9paXFTeVdVVBXdd/S+MC2j9lMIQB9V8dhWq4mPU2M5THSg1gSEM6R1z9YFiNMuu4zOq0A==
+  version "4.0.4"
+  resolved "https://registry.yarnpkg.com/quill-cursors/-/quill-cursors-4.0.4.tgz#4e6e05ea332cb5bc0f02484093812961a21eed61"
+  integrity sha512-beHOYwRZ/I+Ift3bsvMnNWZ7gX25upW3b0aREpklUTR273MFJgxsCYmlgd/6otBE0FtFefOfh2/xU6xbkkxgIg==
 
 quill-delta-to-html@^0.12.1:
   version "0.12.1"
