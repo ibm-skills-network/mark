@@ -3,11 +3,9 @@ import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
 import {
   IconCloudUpload,
-  IconEye,
   IconFile,
   IconInfoCircle,
   IconTrash,
-  IconX,
 } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion"; // For animations
 import { useEffect, useState } from "react";
@@ -15,12 +13,10 @@ import { useDropzone } from "react-dropzone";
 import Modal from "./Modal";
 import {
   AssignmentTypeEnum,
-  AuthorFileUploads,
   Choice,
   Criteria,
   QuestionAuthorStore,
   QuestionGenerationPayload,
-  QuestionType,
 } from "@/config/types";
 import Tooltip from "./Tooltip";
 const MAX_CHAR_LIMIT = 40000;
@@ -342,10 +338,19 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                     >
                       <div className="flex items-center justify-between space-x-3 px-4">
                         {/* File Icon and Details */}
-                        <div className="flex items-center space-x-3">
+                        <button
+                          className="flex items-center space-x-3"
+                          onClick={() => {
+                            setSelectedFileName(file.filename);
+                            setSelectedFileContent(
+                              truncateContent(file.content),
+                            );
+                            setFileInspectorModalOpen(true);
+                          }}
+                        >
                           <IconFile size={32} className="text-gray-500" />
                           <div>
-                            <p className="text-gray-700 font-medium">
+                            <p className="text-gray-700 font-medium text-left">
                               {file.filename}
                             </p>
                             <div className="flex items-center space-x-2">
@@ -357,7 +362,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                               </p>
                             </div>
                           </div>
-                        </div>
+                        </button>
 
                         {/* Action Buttons */}
                         <button

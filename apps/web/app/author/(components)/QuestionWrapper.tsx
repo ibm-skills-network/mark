@@ -97,23 +97,19 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     (state) => state.updatePointsTrueFalse,
   );
   const isItTrueOrFalse = useAuthorStore((state) =>
-    state.isItTrueOrFalse(questionId),
+    state.isItTrueOrFalse(questionId, variantId),
   );
   const TrueFalsePoints = useAuthorStore((state) =>
     state.getTrueFalsePoints(questionId),
   );
-
-  // State for the local question
-  const [localPoints, setLocalPoints] = useState<number>(TrueFalsePoints || 0);
-
+  const [localPoints, setLocalPoints] = useState<number>(TrueFalsePoints || 1);
   useEffect(() => {
     if (localPoints !== TrueFalsePoints) {
       setLocalPoints(TrueFalsePoints);
     }
   }, [TrueFalsePoints]);
-
   const handleSelectAnswer = (answer: boolean) => {
-    addTrueFalseChoice(questionId, answer);
+    addTrueFalseChoice(questionId, answer, variantId);
   };
   const getToggleTitle = useQuestionStore((state) => state.getToggleTitle);
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
@@ -610,6 +606,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               value={localPoints}
               disabled={preview}
               onChange={(e) => setLocalPoints(parseInt(e.target.value, 10))}
+              min={1}
               onBlur={() => updatePointsTrueFalse(questionId, localPoints)}
               style={{
                 width: `${localPoints?.toString()?.length + 5}ch`,

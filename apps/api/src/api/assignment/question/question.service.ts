@@ -168,6 +168,88 @@ export class QuestionService {
     }
     return formattedMarkingRubric;
   }
+  /**
+   * Generate translations for the relevant parts of a question (text and choices) if not already present in the database.
+   * @param questionId The ID of the question to translate.
+   * @param languageCode The target language code for translation.
+   * @param language The target language name (e.g., French, Spanish) for context.
+   * @returns The translated question text and choices (if applicable).
+   */
+  async generateTranslationIfNotExists(
+    assignmentId: number,
+    question: QuestionDto,
+    languageCode: string,
+    language: string,
+  ): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
+    // Check if the translation already exists
+    const questionId = question.id;
+    const existingTranslation = await this.prisma.translation.findUnique({
+      where: {
+        questionId_languageCode: { questionId, languageCode },
+      },
+    });
+
+    if (existingTranslation) {
+      // check if the saved question is the same as the current question
+      if (
+        existingTranslation.untranslatedText === question.question &&
+        existingTranslation.translatedText
+      ) {
+        return {
+          translatedQuestion: existingTranslation.translatedText,
+          translatedChoices: existingTranslation.translatedChoices
+            ? (existingTranslation.translatedChoices as unknown as Choice[])
+            : undefined,
+        };
+      } else {
+        // delete the existing translation if the question has been updated
+        await this.prisma.translation.delete({
+          where: {
+            questionId_languageCode: { questionId, languageCode },
+          },
+        });
+      }
+    }
+
+    if (!question) {
+      throw new NotFoundException(`Question with ID ${questionId} not found.`);
+    }
+
+    // Generate translations for the question text and choices using the LLM service
+    const translatedQuestion =
+      await this.llmService.generateQuestionTranslation(
+        assignmentId,
+        question.question,
+        language,
+      );
+
+    // let translatedChoices: Choice[] | undefined;
+    // if (question.choices) {
+    //   translatedChoices = await this.llmService.generateChoicesTranslation(
+    //     question.choices as unknown as Choice[],
+    //     language
+    //   );
+    // }
+
+    // Save the new translation to the database
+    await this.prisma.translation.create({
+      data: {
+        questionId,
+        languageCode,
+        translatedText: translatedQuestion,
+        untranslatedText: question.question,
+        // translatedChoices: translatedChoices
+        //   ? (translatedChoices as unknown as Prisma.JsonValue)
+        //   : undefined,
+      },
+    });
+
+    return {
+      translatedQuestion,
+      // , translatedChoices
+    };
+  }
+
   private async applyGuardRails(
     createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<void> {

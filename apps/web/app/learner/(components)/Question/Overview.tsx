@@ -7,8 +7,8 @@ import {
   type ComponentPropsWithoutRef,
 } from "react";
 import Timer from "./Timer";
-import { IconBookmarkFilled } from "@tabler/icons-react";
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import { TagIcon } from "@heroicons/react/20/solid";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   questions: QuestionStore[];
@@ -49,7 +49,7 @@ function Overview({ questions }: Props) {
     [activeQuestionNumber],
   );
   return (
-    <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 max-w-[250px] bg-white shadow hover:shadow-md max-h-[310px]">
+    <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 w-full md:max-w-[250px] bg-white shadow hover:shadow-md md:max-h-[310px]">
       {expiresAt ? (
         <Timer />
       ) : (
@@ -61,7 +61,7 @@ function Overview({ questions }: Props) {
       <h3 className="text-gray-600 leading-tight">Questions</h3>
 
       {/* Grid for question numbers */}
-      <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(35px,1fr))] overflow-y-auto">
+      <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(35px,1fr))] overflow-y-auto overflow-x-hidden scrollbar-hide">
         {questions.map((question: QuestionStore, index) => (
           <button
             key={index}
@@ -71,7 +71,7 @@ function Overview({ questions }: Props) {
           >
             <div className="font-bold text-lg mb-2">{index + 1}</div>
             {question.status === "flagged" && (
-              <IconBookmarkFilled className="text-yellow-700" size={16} />
+              <TagIcon className="text-yellow-700" />
             )}
           </button>
         ))}

@@ -16,20 +16,10 @@ const BeginTheAssignment: FC<Props> = (props) => {
   const { assignmentState, assignmentId, className, role, attemptsLeft } =
     props;
   return (
-    // if the assignment is completed(no more attempts), then show the "View Results" button */}
-    // {assignmentState === "completed" ? (
-    //   <Button className="group flex gap-x-2" onClick={handleViewResults}>
-    //     View Results
-    //     <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200 disabled:opacity-50" />
-    //   </Button>
-    // ) : (
-    // it's either "not-started" or "in-progress"
-
-    <div className={className}>
+    <div className={cn(className, "w-full lg:w-auto")}>
       <Tooltip
         distance={3}
         disabled={
-          // disable should be true if the assignment is not published and the role is learner or if the role is undefined
           (assignmentState !== "not-published" || role === "learner") &&
           role !== undefined &&
           attemptsLeft !== 0
@@ -48,7 +38,7 @@ const BeginTheAssignment: FC<Props> = (props) => {
           }
         >
           <Button
-            className="group flex gap-x-2 disabled:opacity-50"
+            className="group flex items-center justify-center w-full sm:w-auto gap-x-2 disabled:opacity-50 text-center"
             disabled={
               (assignmentState === "not-published" && role === "learner") ||
               role === undefined ||

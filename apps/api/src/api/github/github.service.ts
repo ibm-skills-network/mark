@@ -14,7 +14,10 @@ export class GithubService {
   private readonly GITHUB_API_URL = "https://api.github.com";
 
   getOAuthUrl(assignmentId: number, redirectUrl: string): Promise<string> {
-    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientId =
+      process.env.NODE_ENV === "development"
+        ? process.env.GITHUB_CLIENT_ID_LOCAL
+        : process.env.GITHUB_CLIENT_ID;
     if (!clientId) {
       throw new BadRequestException("GitHub client ID is missing");
     }
@@ -26,8 +29,14 @@ export class GithubService {
     );
   }
   async exchangeCodeForToken(code: string, userId: string): Promise<string> {
-    const clientId = process.env.GITHUB_CLIENT_ID;
-    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+    const clientId =
+      process.env.NODE_ENV === "development"
+        ? process.env.GITHUB_CLIENT_ID_LOCAL
+        : process.env.GITHUB_CLIENT_ID;
+    const clientSecret =
+      process.env.NODE_ENV === "development"
+        ? process.env.GITHUB_CLIENT_SECRET_LOCAL
+        : process.env.GITHUB_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
       throw new BadRequestException(

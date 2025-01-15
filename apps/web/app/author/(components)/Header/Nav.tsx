@@ -10,10 +10,6 @@ import {
   MagnifyingGlassIcon,
 } from "@heroicons/react/24/solid";
 import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
-import {
-  publishStepOneData,
-  publishStepTwoData,
-} from "@/lib/sendZustandDataToBackend";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 import { ArrowRightIcon } from "@heroicons/react/24/solid";
@@ -111,7 +107,7 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
     return false;
   };
 
-  const goToQuestionSetup = async (id: number) => {
+  const goToQuestionSetup = (id: number) => {
     if (isSubmitting) return; // Prevent multiple clicks
     setIsSubmitting(true);
 
@@ -119,14 +115,13 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
     const isAssignmentConfigValid = validateAssignmentConfig();
 
     if (isAssignmentConfigValid) {
-      await publishStepTwoData(); // Submit the data if validation passes
       router.push(steps[id].href);
     } else {
       handleScrollToFirstErrorField(); // Scroll to the first error field
     }
     setIsSubmitting(false); // Reset the submit state to allow retry
   };
-  const goToAssignmentConfig = async (id: number) => {
+  const goToAssignmentConfig = (id: number) => {
     if (isSubmitting) return; // Prevent multiple clicks
     setIsSubmitting(true);
 
@@ -134,7 +129,6 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
     const isAssignmentSetupValid = validateAssignmentSetup();
 
     if (isAssignmentSetupValid) {
-      await publishStepOneData(); // Submit the data if validation passes
       router.push(steps[id].href);
     } else {
       handleScrollToFirstErrorField(); // Scroll to the first error field
@@ -144,12 +138,8 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
 
   async function handleStepClick(id: number) {
     const stepActions: Record<number, () => Promise<void>> = {
-      0: async () => {
-        await goToAssignmentConfig(id);
-      },
-      1: async () => {
-        await goToQuestionSetup(id);
-      },
+      0: void goToAssignmentConfig(id),
+      1: void goToQuestionSetup(id),
     };
 
     // Check if the action exists for the current step

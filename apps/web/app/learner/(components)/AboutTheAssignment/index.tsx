@@ -88,17 +88,19 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     <main className="grid grid-cols-1 md:grid-cols-[1fr_8fr_1fr] gap-4 px-4 md:px-0 flex-1 py-12 bg-gray-50">
       <div className="hidden md:block"> </div>
       <div className="max-w-screen-lg w-full mx-auto p-4 rounded-lg space-y-6">
-        <div className="flex gap-x-4 items-center justify-between">
+        <div className="flex flex-col lg:flex-row gap-y-4 lg:gap-x-4 items-start lg:items-center justify-between">
           <div className="flex flex-col">
-            <h1 className="text-4xl font-bold text-gray-900">{name}</h1>
-            <div className="flex gap-x-4 items-center text-gray-600 pt-2">
-              <span className="font-semibold">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900">
+              {name}
+            </h1>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 items-center text-gray-600 pt-2">
+              <span className="font-semibold text-sm sm:text-base">
                 Latest attempt: {latestAttemptDate}
               </span>
               {role === "learner" && (
                 <Link
                   href={`/learner/${id}/attempts`}
-                  className="text-violet-600"
+                  className="text-violet-600 text-sm sm:text-base"
                 >
                   See all attempts
                 </Link>
@@ -106,6 +108,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             </div>
           </div>
           <BeginTheAssignmentButton
+            className="w-full lg:w-auto"
             assignmentState={assignmentState}
             assignmentId={id}
             role={role}

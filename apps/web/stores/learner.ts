@@ -1,6 +1,7 @@
 import type {
   AssignmentAttempt,
   AssignmentDetails,
+  Choice,
   QuestionStatus,
   QuestionStore,
   RepoContentItem,
@@ -135,12 +136,17 @@ export type LearnerState = {
   role?: "learner" | "author";
   totalPointsEarned: number;
   totalPointsPossible: number;
+  translationOn: boolean;
+  globalLanguage: string;
 };
 
 export type learnerFileResponse = {
   filename: string;
   content: string;
   githubUrl?: string;
+  path?: string;
+  repo?: RepoType;
+  owner?: string;
 };
 // 4af839a54dd1732f834599b6e9491ec41f1aa67b
 export type LearnerActions = {
@@ -178,6 +184,18 @@ export type LearnerActions = {
     questionId: number,
   ) => void;
   deleteFile: (fileToDelete: learnerFileResponse, questionId: number) => void;
+  setTranslationOn: (questionId: number, translationOn: boolean) => void;
+  getTranslationOn: (questionId: number) => boolean;
+  setSelectedLanguage: (questionId: number, language: string) => void;
+  setTranslatedQuestion: (
+    questionId: number,
+    translatedQuestion: string,
+  ) => void;
+  setTranslatedChoices: (
+    questionId: number,
+    translatedChoices: Choice[],
+  ) => void;
+  setGlobalLanguage: (language: string) => void;
 };
 
 export type AssignmentDetailsState = {
@@ -253,6 +271,48 @@ export const useLearnerStore = createWithEqualityFn<
 >()(
   devtools(
     (set, get) => ({
+      setTranslatedQuestion: (questionId, translatedQuestion) =>
+        set((state) => {
+          const question = state.questions.find((q) => q.id === questionId);
+          if (question) {
+            return {
+              ...state,
+              questions: state.questions.map((q) =>
+                q.id === questionId ? { ...q, translatedQuestion } : q,
+              ),
+            };
+          }
+          return state;
+        }),
+
+      setTranslatedChoices: (questionId, translatedChoices) =>
+        set((state) => {
+          const question = state.questions.find((q) => q.id === questionId);
+          if (question) {
+            question.translatedChoices = translatedChoices;
+          }
+          return state;
+        }),
+
+      setSelectedLanguage: (questionId, language) => {
+        set((state) => ({
+          questions: state.questions.map((q) =>
+            q.id === questionId ? { ...q, selectedLanguage: language } : q,
+          ),
+        }));
+      },
+      translationOn: true,
+      setTranslationOn: (questionId, translationOn) => {
+        set((state) => ({
+          questions: state.questions.map((q) =>
+            q.id === questionId ? { ...q, translationOn } : q,
+          ),
+        }));
+      },
+      getTranslationOn: (questionId) => {
+        const question = get().questions.find((q) => q.id === questionId);
+        return question?.translationOn || false;
+      },
       getFileUpload: (questionId) => {
         const question = get().questions.find((q) => q.id === questionId);
         return question?.learnerFileResponse || [];
@@ -268,7 +328,7 @@ export const useLearnerStore = createWithEqualityFn<
             }
             return q;
           });
-          return { questions: updatedQuestions };
+          return { ...state, questions: updatedQuestions };
         });
         get().setQuestionStatus(questionId);
       },
@@ -328,7 +388,7 @@ export const useLearnerStore = createWithEqualityFn<
           get().onUrlChange(data as string, questionId);
         }
       },
-
+      setGlobalLanguage: (language) => set({ globalLanguage: language }),
       setFileUpload: (newFiles, questionId) => {
         set((state) => {
           const updatedQuestions = state.questions.map((q) => {
@@ -361,6 +421,7 @@ export const useLearnerStore = createWithEqualityFn<
         });
         get().setQuestionStatus(questionId);
       },
+      globalLanguage: "English",
       activeAttemptId: null,
       totalPointsEarned: 0,
       totalPointsPossible: 0,
@@ -377,7 +438,10 @@ export const useLearnerStore = createWithEqualityFn<
         set((state) => ({
           questions: [
             ...(state.questions ?? []),
-            { ...question, status: "unedited" }, // Ensure status is initialized
+            {
+              ...question,
+              status: "unedited",
+            },
           ],
         })),
       setQuestion: (question) =>

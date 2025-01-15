@@ -192,6 +192,12 @@ const Question: FC<QuestionProps> = ({
           })),
         };
       }
+      if (params.maxCharacters !== undefined) {
+        updatedData.maxCharacters = params.maxCharacters;
+      }
+      if (params.maxWordCount !== undefined) {
+        updatedData.maxWords = params.maxWordCount;
+      }
       useAuthorStore.getState().modifyQuestion(questionId, {
         ...question,
         ...updatedData,
@@ -208,6 +214,8 @@ const Question: FC<QuestionProps> = ({
           params.questionCriteria?.points?.[0] ?? question.totalPoints,
         question: params.questionTitle ?? questionTitle,
         type: params.questionType ?? questionType,
+        maxWords: params.maxWordCount,
+        maxCharacters: params.maxCharacters,
         scoring: {
           type: "CRITERIA_BASED",
           criteria: params.questionCriteria
@@ -241,39 +249,46 @@ const Question: FC<QuestionProps> = ({
       id: generateTempQuestionId(),
       questionId: question.id,
       variantContent: question.question || "",
-      choices: [
-        {
-          choice: "",
-          points: 1,
-          feedback: "",
-          isCorrect: true,
-        },
-        {
-          choice: "",
-          points: 0,
-          feedback: "",
-          isCorrect: false,
-        },
-      ],
-      scoring: {
-        type: "CRITERIA_BASED",
-        criteria: [
-          {
-            id: 1,
-            description: "",
-            points: 1,
-          },
-          {
-            id: 2,
-            description: "",
-            points: 0,
-          },
-        ],
-      },
+      choices:
+        questionType === "MULTIPLE_CORRECT" || questionType === "SINGLE_CORRECT"
+          ? [
+              {
+                choice: "",
+                points: 1,
+                feedback: "",
+                isCorrect: true,
+              },
+              {
+                choice: "",
+                points: 0,
+                feedback: "",
+                isCorrect: false,
+              },
+            ]
+          : undefined,
+      scoring:
+        questionType === "TEXT" || questionType === "URL"
+          ? {
+              type: "CRITERIA_BASED",
+              criteria: [
+                {
+                  id: 1,
+                  description: "",
+                  points: 1,
+                },
+                {
+                  id: 2,
+                  description: "",
+                  points: 0,
+                },
+              ],
+            }
+          : undefined,
       createdAt: new Date().toISOString(),
       variantType: "REWORDED",
       type: questionType,
     };
+
     addVariant(question.id, newVariant);
   };
 
@@ -689,7 +704,7 @@ const Question: FC<QuestionProps> = ({
               ) : (
                 maxWordCount && (
                   <div className="flex items-center">
-                    <span className="text-gray-600 typography-body">
+                    <span className="text-gray-600 typography-body shit">
                       Word Count: {maxWordCount}
                     </span>
                   </div>
@@ -795,7 +810,7 @@ const Question: FC<QuestionProps> = ({
                     </div>
                   ) : (
                     <div className="flex items-center">
-                      <span className="text-gray-600 typography-body">
+                      <span className="text-gray-600 typography-body test">
                         Word Count:
                       </span>
                       <input
@@ -886,7 +901,17 @@ const Question: FC<QuestionProps> = ({
                       );
                     }}
                   />
-                  <span className="text-gray-600 typography-body">
+                  <span
+                    className="text-gray-600 typography-body"
+                    onClick={() => {
+                      setShowWordCountInput(questionId, true);
+                      if (maxCharacters) {
+                        setCountMode(questionId, "CHARACTER");
+                      } else if (maxWordCount) {
+                        setCountMode(questionId, "WORD");
+                      }
+                    }}
+                  >
                     {maxCharacters
                       ? `Character Count: ${maxCharacters}`
                       : `Word Count: ${maxWordCount}`}
@@ -983,90 +1008,95 @@ const Question: FC<QuestionProps> = ({
           />
 
           {/* Render Variants */}
-          {question.variants?.map((variant, index) => (
-            <div
-              key={variant.id}
-              className="border-t-2 flex flex-col border-gray-200 pt-4 w-full gap-y-6"
-            >
-              <div className="flex items-center justify-between w-full">
-                <span className="typography-body">Variant {index + 1}</span>
-                <button
-                  className="text-gray-500"
-                  onClick={() => handleDeleteVariant(variant.id)}
-                >
-                  <TrashIcon width={20} height={20} />
-                </button>
-              </div>
-              <QuestionWrapper
-                questionId={question.id}
-                questionTitle={variant.variantContent}
-                setQuestionTitle={(title) => {
-                  setQuestionVariantTitle(title, question.id, variant.id);
-                }}
-                questionType={variant.type || questionType}
-                setQuestionType={(type) => {
-                  handleUpdateVariant(variant.id, { type });
-                }}
-                questionCriteria={
-                  variant.scoring
-                    ? {
-                        points: variant.scoring.criteria?.map((c) => c.points),
-                        criteriaDesc: variant.scoring.criteria?.map(
-                          (c) => c.description,
+          {question.variants?.map((variant, index) => {
+            // Local states for variant properties
+            const [localVariantContent, setLocalVariantContent] = useState(
+              variant.variantContent || "",
+            );
+            const [localType, setLocalType] = useState(
+              variant.type || questionType,
+            );
+            const [localCriteria, setLocalCriteria] = useState(() =>
+              variant.scoring?.criteria
+                ? {
+                    points: variant.scoring.criteria.map((c) => c.points),
+                    criteriaDesc: variant.scoring.criteria.map(
+                      (c) => c.description,
+                    ),
+                    criteriaIds: variant.scoring.criteria.map((c) => c.id),
+                  }
+                : {
+                    points: [1, 0],
+                    criteriaDesc: [
+                      "Student must show their work and state the correct answer",
+                      "By default, learners will be given 0 points if they do not meet any of the criteria.",
+                    ],
+                    criteriaIds: [1, 2],
+                  },
+            );
+
+            return (
+              <div
+                key={variant.id}
+                className="border-t-2 flex flex-col border-gray-200 pt-4 w-full gap-y-6"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="typography-body">Variant {index + 1}</span>
+                  <button
+                    className="text-gray-500"
+                    onClick={() => handleDeleteVariant(variant.id)}
+                  >
+                    <TrashIcon width={20} height={20} />
+                  </button>
+                </div>
+                <QuestionWrapper
+                  questionId={question.id}
+                  questionTitle={localVariantContent}
+                  setQuestionTitle={setLocalVariantContent}
+                  questionType={localType}
+                  setQuestionType={setLocalType}
+                  questionCriteria={localCriteria}
+                  setQuestionCriteria={setLocalCriteria}
+                  handleUpdateQuestionState={(params) => {
+                    const updatedData: Partial<QuestionVariants> = {};
+                    if (params.questionTitle !== undefined) {
+                      updatedData.variantContent = params.questionTitle;
+                    }
+                    if (params.questionType !== undefined) {
+                      updatedData.type = params.questionType;
+                    }
+                    if (params.questionCriteria !== undefined) {
+                      updatedData.scoring = {
+                        type: "CRITERIA_BASED",
+                        criteria: params.questionCriteria.criteriaDesc?.map(
+                          (desc, idx) => ({
+                            id: params.questionCriteria.criteriaIds[idx],
+                            description:
+                              params.questionCriteria.criteriaDesc[idx],
+                            points: params.questionCriteria.points[idx],
+                          }),
                         ),
-                        criteriaIds: variant.scoring.criteria?.map((c) => c.id),
-                      }
-                    : questionCriteria
-                }
-                setQuestionCriteria={(criteria) => {
-                  handleUpdateVariant(variant.id, {
-                    scoring: {
-                      type: "CRITERIA_BASED",
-                      criteria: criteria.criteriaDesc?.map((desc, idx) => ({
-                        id: criteria.criteriaIds[idx],
-                        description: desc,
-                        points: criteria.points[idx],
-                      })),
-                    },
-                  });
-                }}
-                handleUpdateQuestionState={(params) => {
-                  const updatedData: Partial<QuestionVariants> = {};
-                  if (params.questionTitle !== undefined) {
-                    updatedData.variantContent = params.questionTitle;
-                  }
-                  if (params.questionType !== undefined) {
-                    updatedData.type = params.questionType;
-                  }
-                  if (params.questionCriteria !== undefined) {
-                    updatedData.scoring = {
-                      type: "CRITERIA_BASED",
-                      criteria: params.questionCriteria.criteriaDesc?.map(
-                        (desc, idx) => ({
-                          id: params.questionCriteria.criteriaIds[idx],
-                          description: desc,
-                          points: params.questionCriteria.points[idx],
-                        }),
-                      ),
-                    };
-                  }
-                  handleUpdateVariant(variant.id, updatedData);
-                }}
-                questionIndex={index + 1}
-                preview={preview}
-                questionFromParent={{
-                  ...question,
-                  ...variant,
-                  choices: Array.isArray(variant.choices)
-                    ? variant.choices
-                    : [],
-                }}
-                variantMode={true}
-                variantId={variant.id}
-                responseType={question.responseType ?? ("OTHER" as const)}
-              />
-            </div>
-          ))}
+                      };
+                    }
+                    handleUpdateVariant(variant.id, updatedData);
+                  }}
+                  questionIndex={index + 1}
+                  preview={preview}
+                  questionFromParent={{
+                    ...question,
+                    ...variant,
+                    choices: Array.isArray(variant.choices)
+                      ? variant.choices
+                      : [],
+                  }}
+                  variantMode={true}
+                  variantId={variant.id}
+                  responseType={question.responseType ?? ("OTHER" as const)}
+                />
+              </div>
+            );
+          })}
+
           {questionTitle?.length > 0 &&
           !preview &&
           (question.scoring?.criteria.length > 0 ||

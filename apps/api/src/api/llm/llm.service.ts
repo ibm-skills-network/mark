@@ -58,6 +58,7 @@ import {
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
   gradeVideoFileQuestionLlmTemplate,
+  translateQuestionTemplate,
 } from "./templates";
 
 // this function defines custome templates for each response type
@@ -562,20 +563,122 @@ export class LlmService {
     }[]
   > {
     const choiceTexts = choices?.map((choice) => choice.choice) || [];
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.array(
-        z.object({
-          id: z.number().describe("Unique identifier for the variation"),
-          variantContent: z
-            .string()
-            .describe("A reworded variation of the question text"),
-          choices: z
-            .array(z.string())
-            .optional()
-            .describe("Array of reworded choices"),
-        }),
-      ),
-    );
+    // Base schema for a question
+    const baseQuestionSchema = z.object({
+      id: z.number().describe("Unique identifier for the variation"),
+      variantContent: z
+        .string()
+        .describe("A reworded variation of the question text"),
+    });
+
+    // Schema for TRUE_FALSE questions
+    const trueFalseQuestionItemSchema = baseQuestionSchema.extend({
+      type: z.literal("TRUE_FALSE"),
+      choices: z
+        .array(
+          z.object({
+            choice: z.enum(["True", "False"]),
+            points: z.number().min(1),
+            feedback: z.string().optional(),
+            isCorrect: z
+              .boolean()
+              .refine(
+                (value) => value === true,
+                "Only true can be correct for a true/false question",
+              ),
+          }),
+        )
+        .length(1),
+    });
+
+    // Schema for MULTIPLE_CORRECT questions
+    const multipleCorrectQuestionItemSchema = baseQuestionSchema.extend({
+      type: z.literal("MULTIPLE_CORRECT"),
+      choices: z
+        .array(
+          z.object({
+            choice: z.string(),
+            points: z.number(),
+            feedback: z.string().optional(),
+            isCorrect: z.boolean(),
+          }),
+        )
+        .min(2), // Ensures at least two choices
+    });
+
+    // Schema for SINGLE_CORRECT questions
+    const singleCorrectQuestionItemSchema = baseQuestionSchema.extend({
+      type: z.literal("SINGLE_CORRECT"),
+      choices: z
+        .array(
+          z.object({
+            choice: z.string(),
+            points: z.number().min(0),
+            feedback: z.string().optional(),
+            isCorrect: z.boolean(),
+          }),
+        )
+        .refine(
+          (choices) =>
+            choices.filter((choice) => choice.isCorrect).length === 1,
+          { message: "Exactly one choice must be marked as correct" },
+        ),
+    });
+    const singleCorrectQuestionSchema = z
+      .array(singleCorrectQuestionItemSchema)
+      .min(1)
+      .max(variationCount);
+    const multipleCorrectQuestionSchema = z
+      .array(multipleCorrectQuestionItemSchema)
+      .min(1)
+      .max(variationCount);
+    const trueFalseQuestionSchema = z
+      .array(trueFalseQuestionItemSchema)
+      .min(1)
+      .max(variationCount);
+
+    const textBasedQuestionSchema = baseQuestionSchema
+      .extend({
+        type: z.literal("TEXT"),
+      })
+      .array()
+      .min(1)
+      .max(variationCount);
+    const urlBasedQuestionSchema = baseQuestionSchema
+      .extend({
+        type: z.literal("URL"),
+      })
+      .array()
+      .min(1)
+      .max(variationCount);
+    const parser = (() => {
+      switch (questionType) {
+        case QuestionType.TRUE_FALSE: {
+          return StructuredOutputParser.fromZodSchema(trueFalseQuestionSchema);
+        }
+        case QuestionType.MULTIPLE_CORRECT: {
+          return StructuredOutputParser.fromZodSchema(
+            multipleCorrectQuestionSchema,
+          );
+        }
+        case QuestionType.SINGLE_CORRECT: {
+          return StructuredOutputParser.fromZodSchema(
+            singleCorrectQuestionSchema,
+          );
+        }
+        case QuestionType.TEXT: {
+          return StructuredOutputParser.fromZodSchema(textBasedQuestionSchema);
+        }
+        case QuestionType.UPLOAD:
+        case QuestionType.LINK_FILE:
+        case QuestionType.URL: {
+          return StructuredOutputParser.fromZodSchema(urlBasedQuestionSchema);
+        }
+        default: {
+          return StructuredOutputParser.fromZodSchema(baseQuestionSchema);
+        }
+      }
+    })();
 
     const formatInstructions = parser.getFormatInstructions();
 
@@ -593,6 +696,7 @@ export class LlmService {
         }
       }
     })();
+
     const prompt = new PromptTemplate({
       template: promptTemplate,
       inputVariables: [],
@@ -610,18 +714,48 @@ export class LlmService {
       assignmentId,
       AIUsageType.QUESTION_GENERATION,
     );
+
     const parsedResponse = await parser.parse(response);
-    return parsedResponse.map((item, index) => ({
-      id: index,
-      variantContent: item.variantContent ?? "",
-      choices: (item.choices ?? []).map((rewordedChoice, index_) => ({
-        choice: rewordedChoice,
-        points: choices?.[index_]?.points ?? 0,
-        feedback: choices?.[index_]?.feedback ?? "",
-        isCorrect: choices?.[index_]?.isCorrect ?? false,
-      })),
+    return (
+      Array.isArray(parsedResponse) // Check if parsedResponse is an array
+        ? parsedResponse
+        : [parsedResponse]
+    ).map((item, index) => ({
+      id:
+        (item as { id: number }).id ??
+        (typeof index === "number" ? index + 1 : 1),
+      variantContent: (item as { variantContent: string }).variantContent ?? "",
+      choices: (
+        (
+          item as {
+            choices: {
+              choice: string;
+              feedback: string;
+              isCorrect: boolean;
+              points: number;
+            }[];
+          }
+        ).choices ?? []
+      ).map(
+        (
+          rewordedChoice: {
+            choice: string;
+            feedback: string;
+            isCorrect: boolean;
+            points: number;
+          },
+          choiceIndex: number,
+        ) => ({
+          choice: rewordedChoice.choice ?? choices?.[choiceIndex]?.choice ?? "",
+          points: rewordedChoice.points ?? choices?.[choiceIndex]?.points ?? 1,
+          feedback:
+            rewordedChoice.feedback ?? choices?.[choiceIndex]?.feedback ?? "",
+          isCorrect: rewordedChoice.isCorrect === true,
+        }),
+      ),
     }));
   }
+
   async createMarkingRubric(
     questions: {
       id: number;
@@ -864,7 +998,67 @@ export class LlmService {
       }[];
     }[]; // Ensure the response contains a `questions` array
   }
+  // Helper to ensure the array length matches a desired count
+  ensureCount = (
+    array: any[],
+    needed: number,
+    defaultQuestion: Partial<(typeof array)[number]>,
+  ) => {
+    // If the LLM provided too many, slice
+    if (array.length > needed) {
+      return array.slice(0, needed) as {
+        question: string;
+        type: QuestionType;
+        scoring?: {
+          type: string;
+          criteria?: {
+            id: number;
+            description: string;
+            points: number;
+          }[];
+        };
+        choices?: {
+          choice: string;
+          id: number;
+          isCorrect: boolean;
+          points: number;
+          feedback?: string;
+        }[];
+      }[];
+    }
+    // If too few, add placeholders
+    while (array.length < needed) {
+      array.push({
+        ...defaultQuestion,
+        // A naive ID generator—replace with your own logic if needed
+        id: Date.now() + Math.floor(Math.random() * 10_000),
+      });
+    }
+    return array as {
+      question: string;
+      type: QuestionType;
+      scoring?: {
+        type: string;
+        criteria?: {
+          id: number;
+          description: string;
+          points: number;
+        }[];
+      };
+      choices?: {
+        choice: string;
+        id: number;
+        isCorrect: boolean;
+        points: number;
+        feedback?: string;
+      }[];
+    }[];
+  };
 
+  /**
+   * This function ensures the final output always has the exact number of
+   * questions requested for each type (without hard failing).
+   */
   private async processPromptWithQuestionTemplate(
     assignmentId: number,
     assignmentType: AssignmentTypeEnum,
@@ -872,6 +1066,14 @@ export class LlmService {
     content?: string,
     learningObjectives?: string,
   ): Promise<{ questions: any[] }> {
+    // 1. Figure out how many total questions the user wants
+    const totalQuestionsToGenerate =
+      questionsToGenerate.multipleChoice +
+      questionsToGenerate.multipleSelect +
+      questionsToGenerate.textResponse +
+      questionsToGenerate.trueFalse;
+
+    // 2. Define a Zod schema (without a .refine that throws)
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         questions: z.array(
@@ -932,6 +1134,8 @@ export class LlmService {
         ),
       }),
     );
+
+    // 3. Select the appropriate template for the LLM based on parameters
     let pickGenerateAssignmentQuestionsTemplate: string;
     if (content && learningObjectives) {
       pickGenerateAssignmentQuestionsTemplate =
@@ -948,8 +1152,10 @@ export class LlmService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    // 4. Get the parser format instructions
     const formatInstructions = parser.getFormatInstructions();
 
+    // 5. Build the PromptTemplate
     const promptTemplate = new PromptTemplate({
       template: pickGenerateAssignmentQuestionsTemplate,
       inputVariables: [],
@@ -966,14 +1172,270 @@ export class LlmService {
         assignment_type: assignmentType,
       },
     });
+
+    // 6. Send to LLM & parse the response with Zod
     const response = await this.processPrompt(
       promptTemplate,
       assignmentId,
       AIUsageType.ASSIGNMENT_GENERATION,
     );
     const parsedResponse = await parser.parse(response);
+    let { questions } = parsedResponse;
 
-    return { questions: parsedResponse.questions ?? [] };
+    // 7. Separate questions by their type
+    const singleCorrectQs = questions.filter(
+      (q) => q.type === "SINGLE_CORRECT",
+    );
+    const multipleCorrectQs = questions.filter(
+      (q) => q.type === "MULTIPLE_CORRECT",
+    );
+    const textQs = questions.filter((q) => q.type === "TEXT");
+    const trueFalseQs = questions.filter((q) => q.type === "TRUE_FALSE");
+
+    // 8. Match the requested counts for each type
+    const finalSingleCorrect = this.ensureCount(
+      singleCorrectQs,
+      questionsToGenerate.multipleChoice,
+      {
+        question: "Placeholder single-correct question",
+        type: "SINGLE_CORRECT",
+        scoring: undefined,
+        choices: [],
+      },
+    );
+
+    const finalMultipleCorrect = this.ensureCount(
+      multipleCorrectQs,
+      questionsToGenerate.multipleSelect,
+      {
+        question: "Placeholder multiple-correct question",
+        type: "MULTIPLE_CORRECT",
+        scoring: undefined,
+        choices: [],
+      },
+    );
+
+    const finalText = this.ensureCount(
+      textQs,
+      questionsToGenerate.textResponse,
+      {
+        question: "Placeholder text question",
+        type: "TEXT",
+        scoring: undefined,
+        choices: undefined,
+      },
+    );
+
+    const finalTrueFalse = this.ensureCount(
+      trueFalseQs,
+      questionsToGenerate.trueFalse,
+      {
+        question: "Placeholder true/false question",
+        type: "TRUE_FALSE",
+        scoring: undefined,
+        choices: [
+          {
+            choice: "True",
+            id: 1,
+            isCorrect: false,
+            points: 0,
+            feedback: "Placeholder feedback for True",
+          },
+          {
+            choice: "False",
+            id: 2,
+            isCorrect: false,
+            points: 0,
+            feedback: "Placeholder feedback for False",
+          },
+        ],
+      },
+    );
+
+    // 9. Combine the final arrays into one array
+    questions = [
+      ...(finalSingleCorrect as {
+        type: "SINGLE_CORRECT";
+        question: string;
+        choices: {
+          points: number;
+          feedback: string;
+          id: number;
+          choice: string;
+          isCorrect: boolean;
+        }[];
+        scoring: {
+          type: "CRITERIA_BASED" | "AI_GRADED";
+          criteria?: { id: number; description: string; points: number }[];
+        };
+      }[]),
+      ...(finalMultipleCorrect as {
+        type: "MULTIPLE_CORRECT";
+        question: string;
+        choices: {
+          points: number;
+          feedback: string;
+          id: number;
+          choice: string;
+          isCorrect: boolean;
+        }[];
+        scoring: {
+          type: "CRITERIA_BASED" | "AI_GRADED";
+          criteria?: { id: number; description: string; points: number }[];
+        };
+      }[]),
+      ...(finalText as {
+        type: "TEXT";
+        question: string;
+        scoring: {
+          type: "CRITERIA_BASED" | "AI_GRADED";
+          criteria?: { id: number; description: string; points: number }[];
+        };
+      }[]),
+      ...(finalTrueFalse as {
+        type: "TRUE_FALSE";
+        question: string;
+        choices: {
+          points: number;
+          feedback: string;
+          id: number;
+          choice: string;
+          isCorrect: boolean;
+        }[];
+        scoring: {
+          type: "CRITERIA_BASED" | "AI_GRADED";
+          criteria?: { id: number; description: string; points: number }[];
+        };
+      }[]),
+    ];
+
+    // 10. Return final distribution
+    return { questions };
+  }
+  /**
+   * Translates the choices of a question into the specified target language.
+   * @param choices The array of choices to translate.
+   * @param targetLanguage The target language for translation.
+   * @returns The translated choices.
+   */
+  async generateChoicesTranslation(
+    choices: Choice[],
+    targetLanguage: string,
+  ): Promise<Choice[]> {
+    // Define the Zod schema for validating LLM response
+    const choicesTranslationSchema = z.object({
+      translatedChoices: z.array(
+        z.object({
+          choice: z.string().nonempty("Choice text cannot be empty"),
+          isCorrect: z.boolean(),
+          points: z.number(),
+          feedback: z.string().optional(),
+        }),
+      ),
+    });
+
+    const promptTemplate = `
+  Translate the following choices into {target_language}. Ensure the output adheres to the specified JSON format.
+  Choices: {choices_json}
+  {format_instructions}
+  `;
+    const parser = StructuredOutputParser.fromZodSchema(
+      choicesTranslationSchema,
+    );
+    const formatInstructions = parser.getFormatInstructions();
+    const prompt = new PromptTemplate({
+      template: promptTemplate,
+      inputVariables: [],
+      partialVariables: {
+        choices_json: JSON.stringify(choices),
+        target_language: targetLanguage,
+        format_instructions: formatInstructions,
+      },
+    });
+
+    const formattedPrompt = await prompt.format({});
+
+    try {
+      // Send the formatted prompt to LLM and get the raw response
+      const rawResponse: string = (await this.llm.invoke(
+        formattedPrompt,
+      )) as string;
+
+      // Clean the raw response to remove Markdown-style code block markers
+      const cleanedResponse = rawResponse
+        .replaceAll(/```(?:json|)/g, "")
+        .trim();
+
+      // Validate the response using the Zod schema
+      const parsedResponse = choicesTranslationSchema.parse(
+        JSON.parse(cleanedResponse),
+      );
+
+      // Map the parsed response to the expected structure
+      return parsedResponse.translatedChoices.map((choice) => ({
+        choice: choice.choice.trim(),
+        isCorrect: choice.isCorrect,
+        points: choice.points,
+        feedback: choice.feedback?.trim() || undefined, // Ensure feedback is optional
+      }));
+    } catch (error) {
+      this.logger.error(
+        `Error translating choices: ${(error as Error).message}`,
+      );
+      throw new HttpException(
+        "Failed to translate choices",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Generate a machine translation for the given text.
+   * @param text The text to be translated.
+   * @param language The target language for translation (e.g., French, Spanish).
+   * @returns The translated text.
+   */
+  async generateQuestionTranslation(
+    assignmentId: number,
+    questionText: string,
+    targetLanguage: string,
+  ): Promise<string> {
+    // remove any html tags from the question text
+    questionText = questionText.replaceAll(/<[^>]*>?/gm, "");
+    const questionTranslationSchema = StructuredOutputParser.fromZodSchema(
+      z.object({
+        translatedText: z.string().nonempty("Translated text cannot be empty"),
+      }),
+    );
+    const format_instructions =
+      questionTranslationSchema.getFormatInstructions();
+    const prompt = new PromptTemplate({
+      template: translateQuestionTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question_text: questionText,
+        target_language: targetLanguage,
+        format_instructions: format_instructions,
+      },
+    });
+
+    try {
+      const response = await this.processPrompt(
+        prompt,
+        assignmentId,
+        AIUsageType.TRANSLATION,
+      );
+      const parsedResponse = await questionTranslationSchema.parse(response);
+      return parsedResponse.translatedText;
+    } catch (error) {
+      this.logger.error(
+        `Error translating question: ${(error as Error).message}`,
+      );
+      throw new HttpException(
+        "Failed to translate question",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   // private methods

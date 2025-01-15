@@ -23,7 +23,6 @@ const Tooltip: FC<Props> = (props) => {
     maxWidth,
     ...restOfProps
   } = props;
-
   function getClassNamesFromDirectionAndDistance() {
     switch (direction) {
       case "x":

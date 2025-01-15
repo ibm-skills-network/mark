@@ -63,15 +63,9 @@ function LearnerHeader() {
   const [returnUrl, setReturnUrl] = useState<string>("");
   const assignmentId = assignmentDetails?.id;
   const isInQuestionPage = pathname.includes("questions");
-  const [title, setTitle] = useState<string>("Auto-Graded Assignment");
   const [toggleWarning, setToggleWarning] = useState<boolean>(false);
   const [toggleEmptyWarning, setToggleEmptyWarning] = useState<boolean>(false);
   const [role, setRole] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    if (assignmentDetails) {
-      setTitle(assignmentDetails.name);
-    }
-  });
   useEffect(() => {
     // get user role
     const getUserRole = async () => {
@@ -167,7 +161,9 @@ function LearnerHeader() {
           <SNIcon />
         </div>
         <div>
-          <Title className="text-lg font-semibold">{title}</Title>
+          <Title className="text-lg font-semibold">
+            {assignmentDetails?.name || "Untitled Assignment"}
+          </Title>
           {(pathname.includes("questions") ||
             pathname.includes("attempts")) && (
             <Breadcrumbs

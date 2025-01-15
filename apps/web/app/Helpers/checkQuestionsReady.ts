@@ -1,10 +1,13 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Question } from "../../config/types";
 import { useDebugLog } from "../../lib/utils";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { useAuthorStore } from "@/stores/author";
 
 export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
   const debugLog = useDebugLog();
-
+  const assignmentConfig = useAssignmentConfig((state) => state);
+  const introduction = useAuthorStore((state) => state.introduction);
   const questionsAreReadyToBePublished = useCallback(() => {
     let isValid = true;
     let message = "";
@@ -19,12 +22,29 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
         message = `Question ${index + 1} has empty text.`;
         nonValidQuestionsIds.push(id);
         isValid = false;
-        return true; // Continue to the next question, but mark this as invalid
+        return true;
       }
-
-      if (["URL", "TEXT"].includes(type)) {
+      if (["URL", "TEXT", "UPLOAD", "LINK_FILE"].includes(type)) {
+        if (
+          (eachQuestion.variants?.length &&
+            eachQuestion.variants?.some(
+              (variant) =>
+                !variant.scoring?.criteria?.some((criteria) =>
+                  criteria.description?.trim(),
+                ),
+            )) ||
+          eachQuestion.variants?.some(
+            (variant) => !variant.variantContent?.trim(),
+          )
+        ) {
+          nonValidQuestionsIds.push(id);
+          debugLog(`Question ${index + 1} has missing or invalid variants.`);
+          message = `Question ${index + 1} has missing or invalid variants.`;
+          isValid = false;
+          return true;
+        }
         const criteriaValid = scoring?.criteria?.every(
-          (criteria) => criteria.description.trim().length > 0,
+          (criteria) => criteria.description?.trim().length > 0,
         );
         if (!scoring?.criteria?.length || !criteriaValid) {
           nonValidQuestionsIds.push(id);
@@ -37,8 +57,27 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
 
       if (type === "TRUE_FALSE") {
         if (
+          eachQuestion.variants?.length &&
+          eachQuestion.variants?.some((variant) => {
+            !variant.variantContent?.trim() ||
+              variant.choices?.length !== 2 ||
+              (Array.isArray(variant.choices) &&
+                variant.choices.some(
+                  (choice) => !choice.choice.trim() || choice.points <= 0,
+                ));
+          })
+        ) {
+          nonValidQuestionsIds.push(id);
+          debugLog(`Question ${index + 1} has missing or invalid variants.`);
+          message = `Question ${index + 1} has missing or invalid variants.`;
+          isValid = false;
+          return true;
+        }
+        if (
           !choices ||
-          choices?.some((choice) => !choice.choice.trim() || choice.points <= 0)
+          choices?.some(
+            (choice) => !choice.choice?.trim() || choice?.points <= 0,
+          )
         ) {
           nonValidQuestionsIds.push(id);
           debugLog(`Question ${index + 1} has invalid True/False choices.`);
@@ -49,9 +88,26 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
       }
 
       if (["MULTIPLE_CORRECT", "SINGLE_CORRECT"].includes(type)) {
+        // check their variants and choices
+        if (
+          eachQuestion.variants?.length &&
+          eachQuestion.variants?.some(
+            (variant) =>
+              !variant.variantContent.trim() ||
+              variant.choices?.length < 2 ||
+              (Array.isArray(variant.choices) &&
+                variant.choices.some((choice) => !choice.choice?.trim())),
+          )
+        ) {
+          nonValidQuestionsIds.push(id);
+          debugLog(`Question ${index + 1} has missing or invalid variants.`);
+          message = `Question ${index + 1} has missing or invalid variants.`;
+          isValid = false;
+          return true;
+        }
         if (
           choices?.length < 2 ||
-          choices?.some((choice) => !choice.choice.trim()) ||
+          choices?.some((choice) => !choice.choice?.trim()) ||
           !choices?.some((choice) => choice.isCorrect)
         ) {
           nonValidQuestionsIds.push(id);
@@ -69,7 +125,40 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
       debugLog(`Question ${index + 1} passed all checks.`);
       return false; // Keep checking other questions
     });
-
+    if (introduction?.trim() === "" || introduction?.trim() === "<p><br></p>") {
+      debugLog(`Introduction is empty.`);
+      message = `Introduction is empty.`;
+      isValid = false;
+    }
+    if (assignmentConfig.graded === null) {
+      debugLog(`Assignment type is required.`);
+      message = `Assignment type is required.`;
+      isValid = false;
+    }
+    if (!assignmentConfig.numAttempts || assignmentConfig.numAttempts < -1) {
+      debugLog(`Please enter a valid number of attempts.`);
+      message = `Please enter a valid number of attempts.`;
+      isValid = false;
+    }
+    if (
+      assignmentConfig.passingGrade === undefined ||
+      assignmentConfig.passingGrade <= 0 ||
+      assignmentConfig.passingGrade > 100
+    ) {
+      debugLog(`Passing grade must be between 1 and 100.`);
+      message = `Passing grade must be between 1 and 100.`;
+      isValid = false;
+    }
+    if (!assignmentConfig.displayOrder) {
+      debugLog(`Question order is required.`);
+      message = `Question order is required.`;
+      isValid = false;
+    }
+    if (!assignmentConfig.questionDisplay) {
+      debugLog(`Question display type is required.`);
+      message = `Question display type is required.`;
+      isValid = false;
+    }
     return {
       isValid,
       message,

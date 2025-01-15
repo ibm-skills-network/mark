@@ -1,4 +1,5 @@
 import type {
+  AuthorAssignmentState,
   AuthorFileUploads,
   Choice,
   Criteria,
@@ -6,7 +7,6 @@ import type {
   QuestionVariants,
 } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
-import { createRef, type RefObject } from "react";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
@@ -25,6 +25,7 @@ export type AuthorState = {
   pageState: "loading" | "success" | "error";
   updatedAt: number | undefined;
   focusedQuestionId?: number | undefined;
+  originalAssignment: AuthorAssignmentState;
 };
 
 type OptionalQuestion = {
@@ -32,6 +33,7 @@ type OptionalQuestion = {
 };
 
 export type AuthorActions = {
+  setOriginalAssignment: (assignment: any) => void;
   setLearningObjectives: (learningObjectives: string) => void;
   setFilesUploaded: (filesUploaded: AuthorFileUploads[]) => void;
   setFocusedQuestionId: (id: number) => void;
@@ -51,10 +53,14 @@ export type AuthorActions = {
   setCriterias: (questionId: number, criterias: Criteria[]) => Criteria[];
   addCriteria: (questionId: number, criteria: Criteria) => void;
   removeCriteria: (questionId: number, criteriaIndex: number) => void;
-  addTrueFalseChoice: (questionId: number, isTrueOrFalse: boolean) => void;
+  addTrueFalseChoice: (
+    questionId: number,
+    isTrueOrFalse: boolean,
+    variantId?: number,
+  ) => void;
   getTrueFalsePoints: (questionId: number) => number;
   updatePointsTrueFalse: (questionId: number, points: number) => void;
-  isItTrueOrFalse: (questionId: number) => boolean;
+  isItTrueOrFalse: (questionId: number, variantId?: number) => boolean | null;
   setChoices: (
     questionId: number,
     choices: Choice[],
@@ -304,6 +310,9 @@ export const useAuthorStore = createWithEqualityFn<
     devtools(
       withUpdatedAt((set, get) => ({
         learningObjectives: "",
+        originalAssignment: null,
+        setOriginalAssignment: (assignment: AuthorAssignmentState) =>
+          set({ originalAssignment: assignment }),
         fileUploaded: [],
         setFilesUploaded: (filesUploaded) =>
           set({ fileUploaded: filesUploaded }),
@@ -474,43 +483,66 @@ export const useAuthorStore = createWithEqualityFn<
               };
             }
           }),
-        // Add or update a question's choice to be either "True" or "False"
-        addTrueFalseChoice: (questionId, isTrue) => {
+        addTrueFalseChoice: (questionId, isTrue, variantId) => {
           return set((state) => ({
             questions: state.questions.map((q) => {
-              if (q.id === questionId && q.choices) {
-                // Only update the choice and isCorrect, keep the points unchanged
-                const updatedChoices = q.choices?.map((choice) => ({
-                  ...choice,
-                  choice: isTrue ? "true" : "false", // Toggle between True and False
-                  isCorrect: true,
-                }));
+              if (q.id === questionId) {
+                if (variantId) {
+                  const updatedVariants = q.variants.map((variant) => {
+                    if (variant.id === variantId) {
+                      return {
+                        ...variant,
+                        choices: Array.isArray(variant.choices)
+                          ? variant.choices.map((choice) => ({
+                              ...choice,
+                              choice:
+                                choice.choice === "true" ? "false" : "true",
+                              isCorrect: choice.choice !== "true",
+                            }))
+                          : [
+                              {
+                                choice: isTrue ? "true" : "false",
+                                isCorrect: true,
+                                points: 1,
+                              },
+                            ],
+                      };
+                    }
+                    return variant;
+                  });
+                  return {
+                    ...q,
+                    variants: updatedVariants,
+                  };
+                } else {
+                  const updatedChoices = Array.isArray(q.choices)
+                    ? q.choices.map((choice) => ({
+                        ...choice,
+                        choice: choice.choice === "true" ? "false" : "true",
+                        isCorrect: choice.choice !== "true",
+                      }))
+                    : [
+                        {
+                          choice: isTrue ? "true" : "false",
+                          isCorrect: true,
+                          points: 1,
+                        },
+                      ];
 
-                return {
-                  ...q,
-                  choices: updatedChoices,
-                };
-              } else if (q.id === questionId && !q.choices) {
-                return {
-                  ...q,
-                  choices: [
-                    {
-                      choice: isTrue ? "true" : "false",
-                      isCorrect: true,
-                      points: 0,
-                    },
-                  ],
-                };
+                  return {
+                    ...q,
+                    choices: updatedChoices,
+                  };
+                }
               }
               return q;
             }),
           }));
         },
-
         getTrueFalsePoints: (questionId) => {
           const question = get().questions.find((q) => q.id === questionId);
-          if (!question || !question.choices) return 0; // If no question or no choices exist, return 0
-          return question.choices[0]?.points || 0; // Return the points for the first choice
+          if (!question || !question.choices) return 1; // If no question or no choices exist, return 1
+          return question.choices[0]?.points || 1; // Return the points for the first choice
         },
 
         updatePointsTrueFalse: (questionId, points) => {
@@ -518,35 +550,57 @@ export const useAuthorStore = createWithEqualityFn<
             questions: state.questions.map((q) => {
               if (q.id === questionId) {
                 // If the question already has a choice array, update it, otherwise create new
-                const updatedChoices = q.choices?.map((choice) => ({
-                  ...choice,
-                  points,
-                }));
-
-                return {
-                  ...q,
-                  choices: updatedChoices,
-                };
+                if (q.choices) {
+                  const updatedChoices = q.choices.map((choice) => ({
+                    ...choice,
+                    points,
+                  }));
+                  return {
+                    ...q,
+                    choices: updatedChoices,
+                  };
+                } else {
+                  return {
+                    ...q,
+                    choices: [
+                      {
+                        choice: undefined,
+                        isCorrect: undefined,
+                        points,
+                      },
+                    ],
+                  };
+                }
               }
               return q;
             }),
           }));
         },
         // Function to retrieve whether the question has only "True" or "False" choices
-        isItTrueOrFalse: (questionId) => {
+        isItTrueOrFalse: (questionId, variantId) => {
           const question = get().questions.find((q) => q.id === questionId);
-          if (!question || !question.choices) return null; // If no question or no choices exist, return null
-
-          return question.choices.find(
-            (choice) => choice?.choice.toLowerCase() === "true",
-          )
-            ? true
-            : false;
+          if (!question || !question.choices) return null;
+          if (variantId) {
+            const variant = question.variants?.find((v) => v.id === variantId);
+            if (!variant || !variant.choices) return null;
+            return (
+              Array.isArray(variant.choices) &&
+              variant.choices.every((choice) => {
+                return choice.choice.toLowerCase() === "true";
+              })
+            );
+          } else {
+            return (
+              Array.isArray(question.choices) &&
+              question.choices.every((choice) => {
+                return choice.choice.toLowerCase() === "true";
+              })
+            );
+          }
         },
         addChoice: (questionId, choice, variantId) =>
           set((state) => {
             if (variantId) {
-              // Update variant choices
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
@@ -810,7 +864,6 @@ export const useAuthorStore = createWithEqualityFn<
               { ...newVariant },
             ]; // Deep copy the variant array
             updatedQuestions[questionIndex] = question;
-
             return { questions: updatedQuestions };
           }),
 

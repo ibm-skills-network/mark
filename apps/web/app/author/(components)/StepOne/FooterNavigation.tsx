@@ -1,6 +1,5 @@
 "use client";
 import Button from "@/components/Button";
-import { publishStepOneData } from "@/lib/sendZustandDataToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
@@ -37,14 +36,13 @@ export const FooterNavigation: FC<Props> = ({
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
     questions as Question[],
   );
-  const goToNextStep = async () => {
+  const goToNextStep = () => {
     const isValid = validateAssignmentSetup();
     if (!isValid) {
       handleScrollToFirstErrorField();
       return;
     }
     router.push(`/author/${activeAssignmentId}/${nextStep}`);
-    await publishStepOneData();
   };
   useEffect(() => {
     const { isValid, message, invalidQuestionId } =

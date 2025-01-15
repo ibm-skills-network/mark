@@ -400,7 +400,7 @@ function SuccessPage() {
   };
 
   return (
-    <div className="relative pt-12 flex flex-col items-center justify-center w-full h-full gap-y-10 bg-gradient-to-b">
+    <div className="relative pt-12 md:pt-16 flex flex-col items-center justify-start w-full min-h-screen gap-y-6 bg-gradient-to-b overflow-y-auto">
       {/* Fireworks Animation for Perfect Score */}
       {init && grade >= 90 && playAnimations && (
         <Particles
@@ -427,7 +427,7 @@ function SuccessPage() {
           height={pageHeight}
         />
       )}
-      <div className="w-full max-w-4xl z-10">
+      <div className="w-full max-w-4xl z-10 px-4 sm:px-6 md:px-8">
         <div className="flex flex-col items-center text-center gap-y-6">
           {/* Achievement Badge */}
           {Math.round(grade) === 100 && (
@@ -445,10 +445,10 @@ function SuccessPage() {
           )}
           {!Number.isNaN(grade) ? (
             <>
-              <div className="flex items-center justify-center w-full gap-x-16 bg-white p-6 rounded-lg shadow-md">
+              <div className="w-full flex flex-col md:flex-row md:items-center justify-center gap-6 md:gap-16 bg-white p-6 rounded-lg shadow-md">
                 <div className="flex flex-col items-start gap-4">
                   <motion.h1
-                    className="text-5xl font-extrabold text-gray-800 text-nowrap"
+                    className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-800 text-center"
                     initial={{ opacity: 0, y: -30 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
@@ -456,6 +456,7 @@ function SuccessPage() {
                       ? "Legendary Performance! 🏆"
                       : getGradeMessage(grade)}
                   </motion.h1>
+
                   <motion.p
                     className="text-xl text-gray-600"
                     initial={{ opacity: 0, y: 30 }}
@@ -504,7 +505,7 @@ function SuccessPage() {
                   initial={{ scale: 0.8 }}
                   animate={{ scale: 1 }}
                   transition={{ duration: 0.5, type: "spring" }}
-                  className="w-48 h-30"
+                  className="w-36 h-36 md:w-48 md:h-30 mx-auto"
                 >
                   <CircularProgressbarWithChildren
                     value={Math.round(grade)}
@@ -535,7 +536,7 @@ function SuccessPage() {
         </div>
 
         {role === "learner" && (
-          <div className="flex items-center gap-x-4 justify-center p-4">
+          <div className="flex flex-col sm:flex-row items-center gap-y-4 sm:gap-y-0 gap-x-4 justify-center p-4">
             <button
               onClick={() => setIsFeedbackModalOpen(true)}
               className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition "
@@ -549,11 +550,9 @@ function SuccessPage() {
         {/* Questions Summary */}
         <div className="mt-4">
           {questions.map((question: QuestionStore, index: number) => (
-            <Question
-              key={question.id}
-              number={index + 1}
-              question={question}
-            />
+            <div key={question.id} className="mb-6">
+              <Question number={index + 1} question={question} />
+            </div>
           ))}
         </div>
         {/* Action Buttons */}
@@ -569,7 +568,7 @@ function SuccessPage() {
             <div className="flex items-center gap-x-4 justify-center">
               <button
                 onClick={() => setIsReportModalOpen(true)}
-                className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition"
+                className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition mb-2 sm:mb-0"
               >
                 <div className="flex items-center gap-x-2">Report an issue</div>
               </button>
@@ -583,7 +582,7 @@ function SuccessPage() {
                   ? `/learner/${assignmentId}?authorMode=true`
                   : "/"
             }
-            className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg"
+            className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg mt-2"
           >
             {/* SVG Icon */}
             <svg

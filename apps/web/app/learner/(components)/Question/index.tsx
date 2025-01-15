@@ -16,6 +16,9 @@ import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import animationData from "@/animations/LoadSN.json";
+import TipsView from "./TipsView";
+import { useAppConfig } from "@/stores/appConfig";
+import { cn } from "@/lib/strings";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -35,7 +38,11 @@ function QuestionPage(props: Props) {
   const [pageState, setPageState] = useState<
     "loading" | "success" | "no-questions"
   >("loading");
-
+  const tips = useAppConfig((state) => state.tips);
+  const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
+  useEffect(() => {
+    setTipsVersion("v1.0"); // change this version to update the tips
+  });
   useEffect(() => {
     const fetchAssignment = async () => {
       const assignment = await getAssignment(assignmentId);
@@ -124,15 +131,19 @@ function QuestionPage(props: Props) {
   }
 
   return (
-    <div className="grid grid-cols-[260px_1fr] bg-gray-50 flex-grow min-h-0">
-      {/* Overview section with fixed width */}
-      <div className="rounded-md h-auto pt-12 px-4">
+    <div
+      className={cn(
+        "bg-gray-50 flex-grow min-h-0 grid gap-4",
+        tips
+          ? "grid-cols-1 md:grid-cols-[260px_1fr_260px]"
+          : "grid-cols-1 md:grid-cols-[260px_1fr]",
+      )}
+    >
+      <div className="rounded-md h-auto pt-6 px-4 w-full md:w-auto">
         <Overview questions={questionsStore} />
       </div>
-
       {/* Questions section that takes the remaining space */}
-      <div className="flex flex-col gap-y-5 py-12 overflow-y-auto px-4 h-full">
-        {/* Conditional rendering based on questionDisplay */}
+      <div className="flex flex-col gap-y-5 py-6 overflow-y-auto px-4 h-full scrollbar-hide">
         {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
           ? // Display all questions
             questionsStore.map((question, index) => (
@@ -159,6 +170,11 @@ function QuestionPage(props: Props) {
               ) : null,
             )}
       </div>
+      {tips && (
+        <div className="rounded-md h-auto pt-6 px-4 w-full md:w-auto">
+          <TipsView />
+        </div>
+      )}
     </div>
   );
 }

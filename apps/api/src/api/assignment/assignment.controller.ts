@@ -139,7 +139,7 @@ export class AssignmentController {
       updateAssignmentRequestDto,
     );
   }
-  @Put(":id/questions")
+  @Put(":id/publish")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Update all questions for an assignment" })
@@ -152,11 +152,14 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   async updateAssignmentQuestions(
     @Param("id") id: number,
-    @Body() updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
+    @Body() updatedAssignment: UpdateAssignmentQuestionsDto,
   ): Promise<UpdateAssignmentQuestionsResponseDto> {
-    return this.assignmentService.updateAssignmentQuestions(
+    if (updatedAssignment === null || updatedAssignment === undefined) {
+      throw new BadRequestException("No data was provided");
+    }
+    return this.assignmentService.publishAssignment(
       Number(id),
-      updateAssignmentQuestionsDto,
+      updatedAssignment,
     );
   }
   @Post(":id/question/generate-variant")
@@ -264,7 +267,7 @@ export class AssignmentController {
       throw new BadRequestException("Issue type and description are required");
     }
 
-    const validIssueTypes = ["BUG", "FEEDBACK", "SUGGESTION", "PERFORMANCE"];
+    const validIssueTypes = Object.values(ReportType);
     if (!validIssueTypes.includes(issueType)) {
       throw new BadRequestException("Invalid issue type");
     }

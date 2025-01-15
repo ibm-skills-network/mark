@@ -88,6 +88,7 @@ enum AIUsageType {
   QUESTION_GENERATION /// AI was used to generate questions
   ASSIGNMENT_GENERATION /// AI was used to generate an entire assignment
   ASSIGNMENT_GRADING /// AI was used for grading the assignment
+  TRANSLATION /// AI was used for translation
 }
 
 model UserCredential {
@@ -171,7 +172,7 @@ model Question {
   maxCharacters             Int? /// Maximum number of characters allowed for a written response type question
   AssignmentAttemptQuestionVariant AssignmentAttemptQuestionVariant[]
   isDeleted      Boolean  @default(false) // New flag for archiving
-
+  translations              Translation[]    /// List of translations for the question
 }
 model AssignmentAttempt {
   id                Int                   @id @default(autoincrement())
@@ -213,6 +214,7 @@ model QuestionVariant {
   difficultyLevel Int?
   variantType     VariantType
   assignmentAttemptVariants AssignmentAttemptQuestionVariant[]
+  isDeleted      Boolean  @default(false) // New flag for archiving
 
   @@unique([questionId, variantContent])
 }
@@ -294,4 +296,15 @@ enum ReportStatus {
   IN_PROGRESS  /// Report is being investigated or resolved
   RESOLVED     /// Report has been resolved
   CLOSED       /// Report is closed without resolution
+}
+model Translation {
+  id             Int      @id @default(autoincrement()) /// Unique identifier for the translation
+  questionId     Int      /// The ID of the question being translated
+  question       Question  @relation(fields: [questionId], references: [id], onDelete: Cascade) /// Relation to the Question model
+  languageCode   String    /// The code of the language for the translation (e.g., "en", "fr", "es")
+  translatedText String    /// The machine-generated translation of the question
+  untranslatedText String /// The original text of the question (optional)
+  translatedChoices Json?  /// The machine-generated translation of the choices (optional)
+  createdAt      DateTime  @default(now()) /// Timestamp for when the translation was created
+  @@unique([questionId, languageCode]) /// Ensure each question has a unique translation per language
 }

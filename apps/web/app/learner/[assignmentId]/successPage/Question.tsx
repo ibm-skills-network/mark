@@ -113,7 +113,7 @@ const Question: FC<Props> = ({ question, number }) => {
               content: string;
               githubUrl?: string;
             }[]) {
-              if (file.githubUrl) {
+              if (file?.githubUrl) {
                 void initialize();
                 return;
               }
@@ -346,16 +346,16 @@ const Question: FC<Props> = ({ question, number }) => {
   return (
     <>
       <motion.div
-        className="p-6 mb-6 bg-white rounded-lg shadow-lg"
+        className="p-4 sm:p-6 mb-4 sm:mb-6 bg-white rounded-lg shadow-lg w-full max-w-3xl mx-auto"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-800">
             Question {number}
           </h2>
           {highestScoreResponse?.points === -1 ? (
-            <p className="text-sm text-gray-600">Points hidden</p>
+            <p className="text-sm text-gray-600 mt-2 md:mt-0">Points hidden</p>
           ) : (
             <p className="text-sm text-gray-600">
               Score:{" "}
@@ -367,12 +367,12 @@ const Question: FC<Props> = ({ question, number }) => {
         </div>
 
         {/* Question Text */}
-        <MarkdownViewer className="mb-4 pb-4 border-b text-gray-700">
+        <MarkdownViewer className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700">
           {questionText}
         </MarkdownViewer>
 
         {/* Learner's Answer */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 mb-4">
           {renderLearnerAnswer()}
         </div>
 
@@ -382,7 +382,7 @@ const Question: FC<Props> = ({ question, number }) => {
             <div className="flex-shrink-0 w-6 justify-center items-center flex">
               <SparklesIcon className="w-4 h-4 text-violet-600" />
             </div>
-            <MarkdownViewer className="text-gray-800 flex-1">
+            <MarkdownViewer className="text-gray-800 flex-1 mt-2 sm:mt-0">
               {highestScoreResponse?.feedback[0]?.feedback}
             </MarkdownViewer>
           </div>
@@ -390,7 +390,7 @@ const Question: FC<Props> = ({ question, number }) => {
       </motion.div>
       {selectedFileContent && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+          <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-lg font-bold mb-4">{selectedFileName}</h2>
             <MarkdownViewer className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
               {selectedFileContent}

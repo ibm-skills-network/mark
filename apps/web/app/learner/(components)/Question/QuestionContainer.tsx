@@ -1,15 +1,19 @@
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionDisplayType, QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
-import { useLearnerStore } from "@/stores/learner";
+import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
+  LanguageIcon,
+  TagIcon as OutlineTagIcon,
 } from "@heroicons/react/24/outline";
-import { IconBookmark, IconBookmarkFilled } from "@tabler/icons-react";
-import { ComponentPropsWithoutRef, useEffect, useMemo, useState } from "react";
+import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
-
+import { TagIcon } from "@heroicons/react/24/solid";
+import languages from "@/public/languages.json";
+import { translateQuestion } from "@/lib/talkToBackend";
+import { motion } from "framer-motion";
 interface Props extends ComponentPropsWithoutRef<"section"> {
   question: QuestionStore;
   questionNumber: number;
@@ -27,13 +31,16 @@ function Component(props: Props) {
     questionDisplay,
     lastQuestionNumber,
   } = props;
-
+  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
     (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber],
   );
   const setQuestionStatus = useLearnerStore((state) => state.setQuestionStatus);
   const getQuestionStatusById = useLearnerStore(
     (state) => state.getQuestionStatusById,
+  );
+  const setSelectedLanguage = useLearnerStore(
+    (state) => state.setSelectedLanguage,
   );
   // Get the questionStatus directly from the store
   const questionStatus = getQuestionStatusById
@@ -59,7 +66,108 @@ function Component(props: Props) {
       setQuestionStatus(questionId, "flagged");
     }
   };
+  const translationOn = useLearnerStore((state) =>
+    state.getTranslationOn(questionId),
+  );
+  const setTranslatedQuestion = useLearnerStore(
+    (state) => state.setTranslatedQuestion,
+  );
+  const setTranslatedChoices = useLearnerStore(
+    (state) => state.setTranslatedChoices,
+  );
+  const translatingWords = [
+    "Translating",
+    "Traduciendo",
+    "Traduction",
+    "Traduzione",
+    "Übersetzen",
+    "Tradução",
+    "번역 중",
+    "翻訳中",
+    "ترجمة",
+  ];
+  const setTranslationOn = useLearnerStore((state) => state.setTranslationOn);
+  const toggleTranslation = () => {
+    setTranslationOn(questionId, !translationOn);
+    // if translation is toggled on, fetch the translation
+    if (!translationOn && question.selectedLanguage !== "English") {
+      void fetchTranslation();
+    }
+  };
+  // Global language preference
+  const [globalLanguage, setGlobalLanguage] = useLearnerStore((state) => [
+    state.globalLanguage,
+    state.setGlobalLanguage,
+  ]);
+  const [loadingTranslation, setLoadingTranslation] = useState(false);
+  const [currentWord, setCurrentWord] = useState(translatingWords[0]);
 
+  useEffect(() => {
+    if (!loadingTranslation) return;
+
+    let index = 0;
+    const interval = setInterval(() => {
+      index = (index + 1) % translatingWords.length;
+      setCurrentWord(translatingWords[index]);
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, [loadingTranslation]);
+  const fetchTranslation = async () => {
+    try {
+      setLoadingTranslation(true);
+      const translation = await translateQuestion(
+        assignmentId,
+        questionId,
+        question,
+        question.selectedLanguage,
+        languages.find((lang) => lang.name === question.selectedLanguage)
+          ?.code || "en",
+      );
+
+      setTranslatedQuestion(questionId, translation.translatedQuestion);
+      if (translation.translatedChoices) {
+        setTranslatedChoices(questionId, translation.translatedChoices);
+      }
+    } catch (error) {
+      console.error("Failed to fetch translation:", error);
+    } finally {
+      setLoadingTranslation(false);
+    }
+  };
+  useEffect(() => {
+    if (translationOn && question.selectedLanguage !== "English") {
+      void fetchTranslation();
+    }
+    if (question.selectedLanguage === "English") {
+      setTranslatedQuestion(questionId, question.question);
+    }
+  }, [question.selectedLanguage]);
+  useEffect(() => {
+    if (!globalLanguage) {
+      const browserLanguage = navigator.language || navigator.languages[0];
+      const detectedLanguage =
+        languages.find((lang) => lang.code === browserLanguage)?.name ||
+        "English";
+
+      setGlobalLanguage(detectedLanguage); // Set the global language to browser's language
+    }
+  }, [globalLanguage, setGlobalLanguage]);
+
+  // Initialize question language to global language on mount
+  useEffect(() => {
+    if (!question.selectedLanguage) {
+      setSelectedLanguage(questionId, globalLanguage || "English");
+    }
+  }, [questionId, globalLanguage, setSelectedLanguage]);
+
+  const handleLanguageChange = (newLanguage: string) => {
+    // Update global language and question language
+    setSelectedLanguage(questionId, newLanguage);
+    if (newLanguage !== "English") {
+      setGlobalLanguage(newLanguage);
+    }
+  };
   return (
     <section
       id={`item-${questionNumber}`}
@@ -75,7 +183,7 @@ function Component(props: Props) {
       )}
     >
       {/* Question Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center pb-4 border-b">
         <div className="flex items-center gap-x-2">
           <p className="text-gray-700 text-xl font-semibold">
             Question {questionNumber}
@@ -98,9 +206,109 @@ function Component(props: Props) {
       </div>
 
       {/* Question Card */}
-      <MarkdownViewer className="text-gray-800 border-b border-gray-300 pb-4">
-        {question.question}
-      </MarkdownViewer>
+      <div className="flex flex-col gap-y-4">
+        <div className="flex justify-between items-center">
+          <MarkdownViewer className="text-gray-800 px-2 border-gray-300 ">
+            {question.question}
+          </MarkdownViewer>
+          <div className="flex items-center gap-x-2">
+            <LanguageIcon
+              className={`h-6 w-6 ${translationOn ? "text-violet-600" : "text-gray-600"}`}
+            />
+            <button
+              type="button"
+              onClick={toggleTranslation}
+              className={cn(
+                "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                translationOn ? "bg-violet-600" : "bg-gray-200",
+              )}
+              role="switch"
+              aria-checked={translationOn}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                  translationOn ? "translate-x-5" : "translate-x-0",
+                )}
+              />
+            </button>
+          </div>
+        </div>
+        {/* translation container */}
+        {translationOn && (
+          <div className="flex flex-col gap-y-4 bg-gray-100 rounded-md p-4">
+            {/* translation conversion */}
+            <div className="flex items-center gap-x-2">
+              <span className="text-gray-600 font-medium">English</span>
+              <ArrowLongRightIcon className="w-5 h-5 text-gray-600" />
+              <select
+                className="border border-gray-300 rounded-md p-2 w-[150px]"
+                value={question.selectedLanguage}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+              >
+                {languages.map((lang) => (
+                  <option key={lang.code} value={lang.name}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {loadingTranslation ? (
+              <motion.div
+                className="flex items-center gap-x-3"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                {/* Spinner Icon */}
+                <svg
+                  className="animate-spin h-5 w-5 text-violet-600"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8H4z"
+                  ></path>
+                </svg>
+
+                {/* Shimmer + Animated Text */}
+                <motion.div
+                  key={currentWord}
+                  className="text-violet-600 font-semibold text-lg shimmer"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  {currentWord}
+                </motion.div>
+
+                {/* Optional Dots Animation */}
+                <div className="dots text-violet-600 font-semibold">...</div>
+              </motion.div>
+            ) : (
+              <MarkdownViewer className="text-gray-800 px-2 border-gray-300">
+                {question.translatedQuestion || question.question}
+              </MarkdownViewer>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Render the question based on the type */}
       <RenderQuestion questionType={question.type} question={question} />
 
       {questionDisplay === "ONE_PER_PAGE" && (
@@ -137,8 +345,8 @@ export default Component;
 
 function Bookmark({ questionStatus }) {
   return questionStatus === "flagged" ? (
-    <IconBookmarkFilled className="w-5 h-5 text-violet-600" />
+    <TagIcon className="w-5 h-5 text-violet-600" />
   ) : (
-    <IconBookmark className="w-5 h-5 text-violet-600" />
+    <OutlineTagIcon className="w-5 h-5 text-violet-600" />
   );
 }

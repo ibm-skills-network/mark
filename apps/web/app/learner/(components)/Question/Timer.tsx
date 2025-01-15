@@ -55,6 +55,7 @@ function Timer(props: Props) {
       published: false,
       questionOrder: [],
       updatedAt: 0,
+      questions: [],
     },
   );
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
@@ -75,7 +76,7 @@ function Timer(props: Props) {
       }
     };
     void getUserRole();
-  });
+  }, [assignmentId]);
   async function handleSubmitAssignment() {
     const responsesForQuestions: QuestionAttemptRequestWithId[] = questions.map(
       (q) => ({

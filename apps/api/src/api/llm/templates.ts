@@ -314,7 +314,13 @@ Additional Notes:
 - Avoid introducing unrelated ideas or deviating from the original intent.
 
 {format_instructions}
+Return your answer **as a JSON array** with {variation_count} objects
 `;
+export const translateQuestionTemplate = `
+Translate the following question into {target_language}. Ensure the output adheres to the specified JSON format.
+Question: {question_text}
+{format_instructions}
+  `;
 
 export const generateQuestionWithChoicesRewordingsTemplate = `
 Generate {variation_count} creative variants of the following question and its associated choices:
@@ -326,12 +332,14 @@ Your goal:
 - Create distinct versions of the question and its choices, ensuring they remain relevant, meaningful, and aligned with the original intent.
 - Change the question focus, structure, or context to make it feel fresh, while still testing the same concept or knowledge.
 - Generate alternative choices where possible, replacing distractors (incorrect options) with new, plausible alternatives that fit the new question phrasing or context.
+- Provide meaningful feedback for each choice in choice-based questions, ensuring they align with the reworded question.
 
 Additional Notes:
 - Correct answers should remain accurate but can be reworded or framed differently to align with the new question.
 - Distractors should be realistic, thoughtfully created, and align with the topic, while differing slightly from the original distractors.
 - Avoid trivial rephrasing; aim for medium-difference variations that are distinct but interchangeable with the original.
 {format_instructions}
+Return your answer **as a JSON array** with {variation_count} objects
 `;
 
 export const generateQuestionWithTrueFalseRewordingsTemplate = `
@@ -339,15 +347,18 @@ Generate {variation_count} creative variants of the following true/false questio
 Question: {question_text}
 Existing variants: {variants}
 
-Your goal:
-- Create distinct versions of the true/false question that maintain the same core concept and difficulty level.
-- Alter the question structure, wording, or context to provide fresh, engaging alternatives.
-- Ensure the true/false statement remains accurate and aligned with the new question phrasing.
+Goals:
+- Maintain the same core concept or context while presenting fresh and engaging variations.
+- Include both **true** and **false** statements, aiming for a balanced mix.
+- For **false** statements, use plausible but incorrect alternatives.
 
-Additional Notes:
-- Maintain the accuracy of the true/false statement while rephrasing it to fit the new question.
-- Avoid trivial rewording; aim for medium-difference variations that are distinct but interchangeable with the original.
+Guidelines:
+- Avoid trivial changes (e.g., simple negations or word swaps).
+- Ensure factual accuracy for **true** statements and clear incorrectness for **false** ones.
+- Keep the phrasing clear and concise.
+
 {format_instructions}
+Return your answer **as a JSON array** with {variation_count} objects
 `;
 
 export const generateMarkingRubricTemplate = `

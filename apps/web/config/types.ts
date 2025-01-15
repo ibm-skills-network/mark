@@ -53,6 +53,31 @@ export type RepoContentItem = {
   sha: string;
   url: string;
   download_url: string | null;
+  repo: RepoType;
+  owner: {
+    login: string;
+  };
+};
+export type AuthorAssignmentState = {
+  assignmentId: number;
+  assignmentType: AssignmentTypeEnum;
+  questions: QuestionAuthorStore[];
+  questionOrder: number[];
+  introduction: string;
+  instructions: string;
+  gradingCriteriaOverview: string;
+  graded: boolean;
+  numAttempts: number;
+  allotedTimeMinutes: number;
+  timeEstimateMinutes: number;
+  passingGrade: number;
+  displayOrder: "DEFINED" | "RANDOM";
+  questionDisplay: QuestionDisplayType;
+  published: boolean;
+  showAssignmentScore: boolean;
+  showQuestionScore: boolean;
+  showSubmissionFeedback: boolean;
+  updatedAt: number;
 };
 export type AuthorFileUploads = {
   filename: string;
@@ -261,6 +286,10 @@ export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
     status: QuestionStatus;
     learnerResponse: string;
+    translationOn: boolean;
+    selectedLanguage: string;
+    translatedQuestion: string;
+    translatedChoices: Choice[];
     // feedback: string[];
   };
 
@@ -314,6 +343,7 @@ export type ReplaceAssignmentRequest = {
   displayOrder?: "DEFINED" | "RANDOM";
   questionDisplay?: QuestionDisplayType;
   published: boolean;
+  questions?: Question[];
   questionOrder: number[];
   showAssignmentScore?: boolean; // Should the assignment score be shown to the learner after its submission
   showQuestionScore?: boolean; // Should the question score be shown to the learner after its submission
@@ -326,7 +356,6 @@ export interface Assignment extends ReplaceAssignmentRequest {
   id: number;
   name?: string;
   type?: "AI_GRADED" | "MANUAL";
-  questions: Question[];
 }
 
 export interface GetAssignmentResponse extends Assignment {

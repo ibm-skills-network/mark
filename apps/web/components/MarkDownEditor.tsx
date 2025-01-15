@@ -84,7 +84,7 @@ const MarkdownEditor: React.FC<Props> = ({
         quill.on("text-change", () => {
           const text = quill.getText().trim();
 
-          if (maxCharacters) {
+          if (maxCharacters && maxCharacters > 0) {
             const charCount = text.length;
             if (charCount <= maxCharacters) {
               setCharCount(charCount);
@@ -92,7 +92,7 @@ const MarkdownEditor: React.FC<Props> = ({
             } else {
               quill.deleteText(charCount - 1, charCount); // Prevent typing beyond the character limit
             }
-          } else if (maxWords) {
+          } else if (maxWords && maxWords > 0) {
             const wordsArray = text.split(/\s+/).filter(Boolean);
             const wordCount = wordsArray.length;
 

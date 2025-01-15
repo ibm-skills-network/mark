@@ -212,29 +212,42 @@ const GithubModal: React.FC<{
   };
 
   const fetchRepoContents = async (repo: string, path: string[] = []) => {
-    if (!octokit || !owner) return;
-    // if the repo from org, fetch the contents from org, else fetch from user
-    const ownerType = repos.find((r) => r.name === repo)?.owner.login;
-    const ownerName = ownerType === owner ? owner : ownerType;
-    const { data } = await octokit.repos.getContent({
-      owner: ownerName,
-      repo,
-      path: path.join("/"),
-    });
+    if (!octokit) return;
 
-    const contentArray = Array.isArray(data) ? data : [];
-    // Sort directories first, then files
-    contentArray.sort((a, b) => {
-      if (a.type === b.type) {
-        return a.name.localeCompare(b.name);
-      }
-      if (a.type === "dir" && b.type !== "dir") return -1;
-      if (b.type === "dir" && a.type !== "dir") return 1;
-      return 0;
-    });
-    setRepoContents(contentArray);
-    setCurrentPath(path);
-    setSelectedRepo(repo);
+    const selectedRepoData = repos.find((r) => r.name === repo);
+
+    try {
+      const ownerName = selectedRepoData?.owner?.login || owner;
+
+      const { data } = await octokit.repos.getContent({
+        owner: ownerName,
+        repo,
+        path: path.join("/"),
+      });
+
+      const contentArray = Array.isArray(data) ? data : [];
+      contentArray.sort((a, b) => {
+        if (a.type === b.type) {
+          return a.name.localeCompare(b.name);
+        }
+        if (a.type === "dir" && b.type !== "dir") return -1;
+        if (b.type === "dir" && a.type !== "dir") return 1;
+        return 0;
+      });
+
+      const updatedContentArray = contentArray.map((item) => ({
+        ...item,
+        owner: { login: ownerName },
+        repo: selectedRepoData,
+      }));
+      setRepoContents(updatedContentArray);
+      setCurrentPath(path);
+      setSelectedRepo(repo);
+      setOwner(ownerName);
+    } catch (error) {
+      console.error("Error fetching repo contents:", error);
+      showErrorOnce("Failed to load repository contents.");
+    }
   };
 
   const handleDeselectRepo = () => {
@@ -304,6 +317,8 @@ const GithubModal: React.FC<{
                   path: item.path,
                   sha: item.sha,
                   url: item.html_url,
+                  owner: { login: repoOwner },
+                  repo: repos.find((r) => r.name === repoName),
                 };
               },
             );
@@ -361,7 +376,7 @@ const GithubModal: React.FC<{
   };
 
   const handleSaveSelection = async () => {
-    if (!octokit || !owner || !selectedRepo) {
+    if (!octokit) {
       showErrorOnce("Missing required data to fetch file content.");
       return;
     }
@@ -369,58 +384,31 @@ const GithubModal: React.FC<{
     try {
       const fileContents = await Promise.all(
         selectedFiles.map(async (file) => {
-          try {
-            // Validate `githubUrl`
-            if (!file.githubUrl) {
-              console.error("Invalid file URL:", file.githubUrl);
-              throw new Error(`Invalid file URL: ${file.githubUrl}`);
-            }
-
-            let filePath: string | undefined;
-
-            if (file.githubUrl.includes("raw.githubusercontent.com")) {
-              const urlParts = new URL(file.githubUrl).pathname.split("/");
-              const repoIndex = urlParts.indexOf(selectedRepo);
-              if (repoIndex === -1) {
-                throw new Error(
-                  `Failed to parse file path for URL: ${file.githubUrl}`,
-                );
-              }
-              filePath = urlParts.slice(repoIndex + 2).join("/");
-            }
-
-            if (!filePath) {
-              const urlParts = new URL(file.githubUrl).pathname.split("/");
-              filePath = urlParts.slice(4).join("/");
-            }
-
-            if (!filePath) {
-              throw new Error(
-                `Failed to parse file path from URL: ${file.githubUrl}`,
-              );
-            }
-
-            const { data } = await octokit.repos.getContent({
-              owner,
-              repo: selectedRepo,
-              path: filePath,
-            });
-
-            if (data && "content" in data && data.content) {
-              return {
-                filename: file.filename,
-                content: atob(data.content),
-                githubUrl: file.githubUrl,
-              } as learnerFileResponse;
-            } else {
-              throw new Error(`Content not available for file: ${filePath}`);
-            }
-          } catch (error) {
-            console.error(
-              `Error fetching content for file: ${file.githubUrl}`,
-              error,
+          // 1) Validate we have the necessary info
+          if (!file.owner || !file.repo || !file.path) {
+            throw new Error(
+              `File missing owner/repo/path: ${JSON.stringify(file, null, 2)}`,
             );
-            throw error;
+          }
+
+          // 2) Fetch the content
+          const { data } = await octokit.repos.getContent({
+            owner: file.owner, // from file
+            repo: file.repo.name, // from file
+            path: file.path, // from file
+          });
+
+          // 3) Convert the Base64 content
+          if (data && "content" in data && data.content) {
+            return {
+              filename: file.filename,
+              content: atob(data.content),
+              githubUrl: file.githubUrl,
+            } as learnerFileResponse;
+          } else {
+            throw new Error(
+              `Content not available for file: ${file.path} in ${file.repo.name}`,
+            );
           }
         }),
       );
@@ -617,8 +605,11 @@ const GithubModal: React.FC<{
                                         ...selectedFiles,
                                         {
                                           filename: content.name,
-                                          content: "",
+                                          path: content.path,
+                                          owner: content.owner?.login || owner,
+                                          repo: content.repo,
                                           githubUrl: content.download_url,
+                                          content: "",
                                         },
                                       ]);
                                     }

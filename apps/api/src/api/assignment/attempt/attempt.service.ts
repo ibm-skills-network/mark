@@ -1189,7 +1189,8 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto.learnerTextResponse.trim() ===
         "" &&
       Array.isArray(createQuestionResponseAttemptRequestDto.learnerChoices) &&
-      createQuestionResponseAttemptRequestDto.learnerChoices.length === 0
+      createQuestionResponseAttemptRequestDto.learnerChoices.length === 0 &&
+      createQuestionResponseAttemptRequestDto.learnerAnswerChoice === null
     ) {
       const responseDto = new CreateQuestionResponseAttemptResponseDto();
       responseDto.totalPoints = 0;
@@ -1432,15 +1433,12 @@ export class AttemptService {
         "Expected a true/false response (learnerAnswerChoice), but did not receive one.",
       );
     }
-
-    const correctAnswer = question.choices?.[0]?.choice === "true";
+    const correctAnswer =
+      question.choices?.[0]?.choice.toLowerCase() === "true";
     const correctPoints = question.choices?.[0]?.points || 0;
-
     const learnerChoice =
       createQuestionResponseAttemptRequestDto.learnerAnswerChoice;
-
     const isCorrect = learnerChoice === correctAnswer;
-
     const feedback = isCorrect
       ? "Correct! Your answer is right."
       : `Incorrect. The correct answer is ${correctAnswer ? "True" : "False"}.`;

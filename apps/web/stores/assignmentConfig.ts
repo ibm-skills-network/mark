@@ -54,18 +54,27 @@ export const useAssignmentConfig = createWithEqualityFn<
           set({ timeEstimateMinutes }),
         allotedTimeMinutes: undefined,
         setAllotedTimeMinutes: (allotedTimeMinutes) =>
-          set({ allotedTimeMinutes }),
-        setDisplayOrder: (displayOrder) => set({ displayOrder }),
-        setStrictTimeLimit: (strictTimeLimit) => set({ strictTimeLimit }),
-        toggleStrictTimeLimit: () =>
-          set((state) => ({
-            strictTimeLimit: !state.strictTimeLimit,
+          set({
             allotedTimeMinutes:
-              state.strictTimeLimit === false
-                ? undefined
-                : state.allotedTimeMinutes,
-          })),
-
+              allotedTimeMinutes === 0 ? 1 : allotedTimeMinutes,
+          }),
+        setDisplayOrder: (displayOrder) => set({ displayOrder }),
+        setStrictTimeLimit: (strictTimeLimit) => {
+          set({ strictTimeLimit });
+          if (!strictTimeLimit) {
+            set({ allotedTimeMinutes: 0 });
+          }
+        },
+        toggleStrictTimeLimit: () => {
+          set((state) => {
+            const newStrictTimeLimit = !state.strictTimeLimit;
+            return {
+              ...state,
+              strictTimeLimit: newStrictTimeLimit,
+              allotedTimeMinutes: newStrictTimeLimit ? 1 : null,
+            };
+          });
+        },
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         validate: () => {
           const state = get();

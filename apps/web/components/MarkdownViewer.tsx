@@ -20,7 +20,6 @@ const MdViewer = dynamic(
 
 const MarkdownViewer: FC<Props> = (props) => {
   const { className, children, ...restOfProps } = props;
-
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
@@ -29,6 +28,18 @@ const MarkdownViewer: FC<Props> = (props) => {
       font-size: 16px !important;
       font-weight: 450 !important;
       line-height: 1.3 !important;
+    }
+      .wmde-markdown li[data-list="bullet"],
+   .markdown-viewer li[data-list="bullet"] {
+     list-style-type: disc !important;
+     display: list-item !important;
+     margin-left: 1.5em !important;
+   }
+    .wmde-markdown li[data-list="ordered"],
+    .markdown-viewer li[data-list="ordered"] {
+      list-style-type: decimal !important;
+      display: list-item !important;
+      margin-left: 1.5em !important;
     }
 
     .wmde-markdown p,
@@ -94,6 +105,7 @@ const MarkdownViewer: FC<Props> = (props) => {
       {...restOfProps}
       source={children as string}
       rehypePlugins={[rehypeHighlight]}
+      skipHtml={false}
     />
   );
 };

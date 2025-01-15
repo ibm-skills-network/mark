@@ -23,7 +23,7 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
 import { ASSIGNMENT_SCHEMA_URL } from "../constants";
-import { QuestionDto } from "../dto/update.questions.request.dto";
+import { Choice, QuestionDto } from "../dto/update.questions.request.dto";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
@@ -155,5 +155,38 @@ export class QuestionController {
       variantMode,
       request.userSession.assignmentId,
     );
+  }
+
+  @Post(":id/translations")
+  @Roles(UserRole.AUTHOR, UserRole.LEARNER)
+  @UseGuards(AssignmentQuestionAccessControlGuard)
+  @ApiOperation({ summary: "Request a translation for a question" })
+  @ApiBody({
+    type: Object,
+    description:
+      "Provide selectedLanguage and selectedLanguageCode for the translation request",
+  })
+  @ApiResponse({ status: 200, type: Object })
+  @ApiResponse({ status: 404, description: "Question not found" })
+  async getOrCreateTranslation(
+    @Param("id") questionId: number,
+    @Body()
+    body: {
+      question: QuestionDto;
+      selectedLanguage: string;
+      selectedLanguageCode: string;
+    },
+  ): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
+    const { selectedLanguage, selectedLanguageCode, question } = body;
+    const { assignmentId } = question;
+    const { translatedQuestion, translatedChoices } =
+      await this.questionService.generateTranslationIfNotExists(
+        assignmentId,
+        question,
+        selectedLanguageCode,
+        selectedLanguage,
+      );
+
+    return { translatedQuestion, translatedChoices };
   }
 }

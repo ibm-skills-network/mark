@@ -26,10 +26,10 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
-        verbosityLevel: "Full", // Default initial value
-        showSubmissionFeedback: true, // Default initial value
-        showQuestionScore: true, // Default initial value
-        showAssignmentScore: true, // Default initial value
+        verbosityLevel: "Full",
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showAssignmentScore: true,
         updatedAt: Date.now(),
         setVerbosityLevel: (verbosityLevel) => set({ verbosityLevel }),
         toggleShowSubmissionFeedback: () =>

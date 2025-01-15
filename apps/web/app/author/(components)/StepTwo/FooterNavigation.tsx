@@ -1,6 +1,5 @@
 "use client";
 import Button from "@/components/Button";
-import { publishStepTwoData } from "@/lib/sendZustandDataToBackend";
 import { useAuthorStore } from "@/stores/author";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
@@ -17,7 +16,7 @@ export const FooterNavigation = () => {
     (state) => state.validate,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const goToNextStep = async () => {
+  const goToNextStep = () => {
     if (isSubmitting) return; // Prevent multiple clicks
     setIsSubmitting(true);
 
@@ -25,7 +24,6 @@ export const FooterNavigation = () => {
     const isAssignmentConfigValid = validateAssignmentConfig();
 
     if (isAssignmentConfigValid) {
-      await publishStepTwoData(); // Submit the data if validation passes
       router.push(`/author/${activeAssignmentId}/questions`);
     } else {
       handleScrollToFirstErrorField(); // Scroll to the first error field

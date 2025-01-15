@@ -20,12 +20,13 @@ export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
     displayOrder: state.displayOrder,
   }));
 
-  const { introduction, instructions, questionOrder, updatedAt } =
+  const { introduction, instructions, questionOrder, updatedAt, questions } =
     useAuthorStore((state) => ({
       introduction: state.introduction,
       instructions: state.instructions,
       questionOrder: state.questionOrder,
       updatedAt: state.updatedAt,
+      questions: state.questions,
     }));
 
   return {
@@ -37,8 +38,9 @@ export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
     displayOrder,
     introduction,
     instructions,
+    questionOrder,
     published: false,
-    questionOrder: questionOrder,
     updatedAt: updatedAt,
+    questions: questions,
   };
 };

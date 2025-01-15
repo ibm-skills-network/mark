@@ -27,6 +27,7 @@ import type {
   RegradingRequest,
   UpdateAssignmentQuestionsResponse,
   REPORT_TYPE,
+  Choice,
 } from "@config/types";
 import { toast } from "sonner";
 import { absoluteUrl } from "./utils";
@@ -218,9 +219,9 @@ export async function createQuestion(
   }
 }
 
-export async function updateQuestions(
+export async function publishAssignment(
   assignmentId: number,
-  questions: CreateQuestionRequest[],
+  updatedAssignment: ReplaceAssignmentRequest,
   cookies?: string,
 ): Promise<
   | {
@@ -230,7 +231,26 @@ export async function updateQuestions(
     }
   | undefined
 > {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/publish`;
+  // Manually define the payload fields
+  const payload = {
+    introduction: updatedAssignment.introduction,
+    instructions: updatedAssignment.instructions,
+    gradingCriteriaOverview: updatedAssignment.gradingCriteriaOverview,
+    numAttempts: updatedAssignment.numAttempts,
+    passingGrade: updatedAssignment.passingGrade,
+    displayOrder: updatedAssignment.displayOrder,
+    graded: updatedAssignment.graded,
+    questionDisplay: updatedAssignment.questionDisplay,
+    allotedTimeMinutes: updatedAssignment.allotedTimeMinutes,
+    updatedAt: updatedAssignment.updatedAt,
+    questionOrder: updatedAssignment.questionOrder,
+    published: updatedAssignment.published,
+    showSubmissionFeedback: updatedAssignment.showSubmissionFeedback,
+    showQuestionScore: updatedAssignment.showQuestionScore,
+    showAssignmentScore: updatedAssignment.showAssignmentScore,
+    questions: updatedAssignment.questions,
+  };
 
   try {
     const res = await fetch(endpointURL, {
@@ -239,7 +259,7 @@ export async function updateQuestions(
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify({ questions }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -916,6 +936,43 @@ export async function exchangeGithubCodeForToken(
   } catch (error) {
     console.error("Error exchanging code for token:", error);
     return null;
+  }
+}
+export async function translateQuestion(
+  assignmentId: number,
+  questionId: number,
+  question: QuestionStore,
+  selectedLanguage: string,
+  selectedLanguageCode: string,
+  cookies?: string,
+): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}/translations`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({
+        selectedLanguage,
+        selectedLanguageCode,
+        question,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to translate question");
+    }
+
+    return (await res.json()) as {
+      translatedQuestion: string;
+      translatedChoices?: Choice[];
+    };
+  } catch (err) {
+    console.error(err);
+    throw err; // Ensure errors are handled appropriately in the UI
   }
 }
 
