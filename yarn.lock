@@ -937,9 +937,9 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/core@^0.3.0":
-  version "0.3.32"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.32.tgz#3d6cd0da6e8335fd049520a1215714129e064385"
-  integrity sha512-QesrB7qPrvdIKgCL6/hfa1e7+5dCCgunN5nRGvr0LYWEVuLBrUd93PDvpPP9Fk43+HZnS16adTCYOwX0Jad5Bw==
+  version "0.3.33"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.33.tgz#7efcbdc06b1e9f24b774e5aa1c594203d28c9e18"
+  integrity sha512-gIszaRKWmP1HEgOhJLJaMiTMH8U3W9hG6raWihwpCTb0Ns7owjrmaqmgMa9h3W4/0xriaKfrfFBd6tepKsfxZA==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
