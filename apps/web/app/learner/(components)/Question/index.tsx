@@ -1,9 +1,13 @@
 "use client";
 
+import animationData from "@/animations/LoadSN.json";
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import Loading from "@/components/Loading";
 import type { AssignmentAttemptWithQuestions } from "@/config/types";
+import { cn } from "@/lib/strings";
 import { getAssignment } from "@/lib/talkToBackend";
 import { useDebugLog } from "@/lib/utils";
+import { useAppConfig } from "@/stores/appConfig";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { useRouter } from "next/navigation";
 import {
@@ -14,11 +18,7 @@ import {
 } from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
-import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
-import animationData from "@/animations/LoadSN.json";
 import TipsView from "./TipsView";
-import { useAppConfig } from "@/stores/appConfig";
-import { cn } from "@/lib/strings";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -33,7 +33,7 @@ function QuestionPage(props: Props) {
   const questionsStore = useLearnerStore((state) => state.questions);
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.setAssignmentDetails],
+    (state) => [state.assignmentDetails, state.setAssignmentDetails]
   );
   const [pageState, setPageState] = useState<
     "loading" | "success" | "no-questions"
@@ -43,6 +43,7 @@ function QuestionPage(props: Props) {
   useEffect(() => {
     setTipsVersion("v1.0"); // change this version to update the tips
   });
+
   useEffect(() => {
     const fetchAssignment = async () => {
       const assignment = await getAssignment(assignmentId);
@@ -115,9 +116,6 @@ function QuestionPage(props: Props) {
   const [activeQuestionNumber] = useLearnerStore((state) => [
     state.activeQuestionNumber,
   ]);
-  useEffect(() => {
-    handleJumpToQuestion(`item-${String(activeQuestionNumber)}`);
-  }, [activeQuestionNumber]);
 
   if (pageState === "loading") {
     return <Loading animationData={animationData} />;
@@ -135,15 +133,15 @@ function QuestionPage(props: Props) {
       className={cn(
         "bg-gray-50 flex-grow min-h-0 grid gap-4",
         tips
-          ? "grid-cols-1 md:grid-cols-[260px_1fr_260px]"
-          : "grid-cols-1 md:grid-cols-[260px_1fr]",
+          ? "grid-cols-1 md:grid-cols-[260px_1fr_265px]"
+          : "grid-cols-1 md:grid-cols-[260px_1fr]"
       )}
     >
       <div className="rounded-md h-auto pt-6 px-4 w-full md:w-auto">
         <Overview questions={questionsStore} />
       </div>
       {/* Questions section that takes the remaining space */}
-      <div className="flex flex-col gap-y-5 py-6 overflow-y-auto px-4 h-full scrollbar-hide">
+      <div className="flex flex-col gap-y-5 py-6 overflow-y-auto px-4 h-full">
         {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
           ? // Display all questions
             questionsStore.map((question, index) => (
@@ -167,11 +165,11 @@ function QuestionPage(props: Props) {
                   questionDisplay={assignmentDetails.questionDisplay}
                   lastQuestionNumber={questionsStore.length}
                 />
-              ) : null,
+              ) : null
             )}
       </div>
       {tips && (
-        <div className="rounded-md h-auto pt-6 px-4 w-full md:w-auto">
+        <div className="rounded-md h-auto pt-6 w-full md:w-auto">
           <TipsView />
         </div>
       )}

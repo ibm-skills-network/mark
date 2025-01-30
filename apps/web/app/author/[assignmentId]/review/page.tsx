@@ -8,6 +8,7 @@ import Question from "../../(components)/AuthorQuestionsPage/Question";
 import { usePathname, useRouter } from "next/navigation"; // Importing useRouter for navigation
 import { extractAssignmentId } from "@/lib/strings";
 import MarkdownViewer from "@/components/MarkdownViewer";
+import Title from "@/components/Title";
 
 // Reusable Component for sections with similar structure (title, content, edit button, and optional navigation link)
 const Section = ({
@@ -85,7 +86,7 @@ function Component() {
 
   return (
     <main className="main-author-container">
-      <h1 className="text-grey-900 text-4xl">Review</h1>
+      <Title>Review</Title>
 
       {/* Sections with links passed for navigation */}
       <Section
@@ -154,7 +155,7 @@ function Component() {
       </div>
 
       {/* Questions Section */}
-      <h1 className="text-violet-800 text-2xl font-bold">Questions</h1>
+      <Title>Questions</Title>
       {questions && questions.length > 0 ? (
         <>
           {questions.map((question, index) => (

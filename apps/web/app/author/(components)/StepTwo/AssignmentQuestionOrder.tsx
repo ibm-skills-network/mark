@@ -69,7 +69,7 @@ const Component: FC<Props> = () => {
           </div>
         </div>
         <p className="text-gray-500 text-left cursor-pointer">
-          Questions will be shuffled each time the learner loads the quiz.
+          Questions will be shuffled each time the learner loads the assignment.
         </p>
       </button>
       {errors.displayOrder && (

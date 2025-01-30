@@ -14,32 +14,31 @@ function TrueFalseQuestion(props: Props) {
     setAnswerChoice(choice, question.id);
   };
 
-  const buttonStyle = (choice: boolean) => {
-    if (learnerAnswerChoice === choice) {
-      return "bg-blue-100 text-black"; // Highlight selected choice
-    }
-    return "text-black"; // Default style for unselected choice
-  };
-
   return (
-    <>
-      <button
-        className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
-          true,
-        )}`}
-        onClick={() => handleChoiceClick(true)}
-      >
+    <div>
+      <label className={`flex items-center w-full p-2 mb-2  rounded`}>
+        <input
+          type="radio"
+          name={`question-${question.id}`}
+          value="true"
+          checked={learnerAnswerChoice === true}
+          onChange={() => handleChoiceClick(true)}
+          className="mr-2 accent-violet-600  text-violet-600"
+        />
         True
-      </button>
-      <button
-        className={`block w-full text-left p-2 mb-2 border rounded ${buttonStyle(
-          false,
-        )}`}
-        onClick={() => handleChoiceClick(false)}
-      >
+      </label>
+      <label className={`flex items-center w-full p-2 mb-2  rounded`}>
+        <input
+          type="radio"
+          name={`question-${question.id}`}
+          value="false"
+          checked={learnerAnswerChoice === false}
+          onChange={() => handleChoiceClick(false)}
+          className="mr-2 accent-violet-600 text-violet-600"
+        />
         False
-      </button>
-    </>
+      </label>
+    </div>
   );
 }
 

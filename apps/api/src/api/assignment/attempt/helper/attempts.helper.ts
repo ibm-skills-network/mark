@@ -61,7 +61,11 @@ export const AttemptHelper = {
     throw new BadRequestException("Unexpected question type received.");
   },
   shuffleJsonArray<T>(array: T[]): T[] {
-    return array.sort(() => Math.random() - 0.5);
+    for (let index = array.length - 1; index > 0; index--) {
+      const index_ = Math.floor(Math.random() * (index + 1)); // Pick a random index
+      [array[index], array[index_]] = [array[index_], array[index]]; // Swap elements
+    }
+    return array;
   },
   async fetchPlainTextFromUrl(
     url: string,

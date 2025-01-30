@@ -24,7 +24,7 @@ import {
   ApiTags,
   refs,
 } from "@nestjs/swagger";
-import { Prisma, Question, QuestionType, ReportType } from "@prisma/client";
+import { ReportType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { interval, Observable } from "rxjs";
 import { map, mergeMap } from "rxjs/operators";
@@ -97,6 +97,14 @@ export class AssignmentController {
       Number(id),
       request.userSession,
     );
+    // remove questions from the response for learners
+    if (request.userSession.role === UserRole.LEARNER) {
+      return {
+        ...backendData,
+        questions: undefined,
+      };
+    }
+
     return {
       ...backendData,
       alreadyInBackend: true,

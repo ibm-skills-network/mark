@@ -8,7 +8,7 @@ import {
   ReplaceAssignmentRequest,
 } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
-import { getAssignment, publishAssignment } from "@/lib/talkToBackend";
+import { getAssignment, getUser, publishAssignment } from "@/lib/talkToBackend";
 import { mergeData } from "@/lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -140,13 +140,42 @@ function AuthorHeader() {
       setPageState("error");
     }
   };
+  const getUserRole = async () => {
+    const user = await getUser();
+    if (user) {
+      useAuthorStore.getState().setRole(user.role);
+    }
+    return user.role;
+  };
+
   useEffect(() => {
-    setActiveAssignmentId(~~assignmentId);
-    void fetchAssignment();
+    const fetchData = async () => {
+      setActiveAssignmentId(~~assignmentId);
+      const role = await getUserRole();
+      if (role === "author") {
+        void fetchAssignment();
+      } else {
+        toast.error(
+          "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
+        );
+      }
+    };
+
+    void fetchData();
   }, [assignmentId]);
 
   async function handlePublishButton() {
     setSubmitting(true);
+    // check the user role, if its learner, then throw an error asking to switch to author mode
+    const role = await getUserRole();
+    if (role !== "author") {
+      toast.error(
+        "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
+      );
+      setSubmitting(false);
+      return;
+    }
+
     const clonedCurrentQuestions: QuestionAuthorStore[] = JSON.parse(
       JSON.stringify(questions),
     ) as QuestionAuthorStore[];
@@ -157,6 +186,9 @@ function AuthorHeader() {
     function removeEphemeralFields(questionArray: QuestionAuthorStore[]) {
       questionArray.forEach((q) => {
         delete q.alreadyInBackend;
+        if (q.type !== "MULTIPLE_CORRECT" && q.type !== "SINGLE_CORRECT") {
+          delete q.randomizedChoices; // remove randomizedChoices for all question types except MULTIPLE_CORRECT and SINGLE_CORRECT
+        }
       });
     }
     removeEphemeralFields(clonedCurrentQuestions);

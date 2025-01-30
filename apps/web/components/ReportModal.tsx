@@ -77,7 +77,7 @@ const ReportModal: FC<{
               <div className="flex justify-between items-center">
                 Report an issue
                 <XMarkIcon
-                  className="w-6 h-6 text-gray-500"
+                  className="w-6 h-6 text-gray-500 hover:cursor-pointer"
                   onClick={() => setIsReportModalOpen(false)}
                 />
               </div>

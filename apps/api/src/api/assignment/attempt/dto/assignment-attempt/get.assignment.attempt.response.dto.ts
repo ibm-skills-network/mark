@@ -136,7 +136,8 @@ export class AssignmentAttemptQuestions {
       "The list of responses provided by the learner for this question",
     isArray: true,
   })
-  questionResponses: QuestionResponse[];
+  @Optional()
+  questionResponses?: QuestionResponse[];
 
   // response type
   @ApiPropertyOptional({

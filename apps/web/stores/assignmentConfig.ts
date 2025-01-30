@@ -57,6 +57,8 @@ export const useAssignmentConfig = createWithEqualityFn<
           set({
             allotedTimeMinutes:
               allotedTimeMinutes === 0 ? 1 : allotedTimeMinutes,
+            timeEstimateMinutes:
+              allotedTimeMinutes === 0 ? 1 : allotedTimeMinutes,
           }),
         setDisplayOrder: (displayOrder) => set({ displayOrder }),
         setStrictTimeLimit: (strictTimeLimit) => {

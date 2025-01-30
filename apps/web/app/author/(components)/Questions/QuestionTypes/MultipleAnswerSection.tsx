@@ -68,8 +68,8 @@ function Section({
   const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [backspaceCount, setBackspaceCount] = useState(0);
   if (!question) return null;
-
   const { choices, type } = question;
+
   const [localChoices, setLocalChoices] = useState(
     choices?.map((choice) => choice?.choice ?? "") || [],
   );
@@ -243,6 +243,10 @@ function Section({
   const disableAddChoice = choices?.length >= 10 || preview;
   const handleAiClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
+    if (questionTitle?.trim() === "") {
+      toast.error("Please enter a question title first.");
+      return;
+    }
     if (question.scoring?.criteria?.length > 0) {
       setModalOpen(true);
     } else {
@@ -301,10 +305,7 @@ function Section({
       }
     }
   };
-  const handleShuffleChoices = () => {
-    const shuffledChoices = choices.sort(() => Math.random() - 0.5);
-    setChoices(questionId, shuffledChoices);
-  };
+
   useEffect(() => {
     if (choices?.length > 0) {
       setCriteriaMode(questionId, "CUSTOM");
@@ -330,19 +331,6 @@ function Section({
                 <span>Feedback</span>
                 {/* randomize button */}
                 <div className="flex items-center">
-                  <Tooltip
-                    content="Shuffle choices"
-                    distance={-6.5}
-                    direction="x"
-                    up={-1.8}
-                  >
-                    <button
-                      onClick={handleShuffleChoices}
-                      className="text-gray-500 rounded-full hover:bg-gray-100 w-6 h-6 flex items-center justify-center"
-                    >
-                      <IconArrowsShuffle className="w-4 h-4" />
-                    </button>
-                  </Tooltip>
                   {!preview && criteriaMode && (
                     <Tooltip
                       content="Generate choices with AI"
@@ -615,7 +603,6 @@ function Section({
                       onClick={handleAiClick}
                       disabled={loading}
                     >
-                      <SparkleLottie />
                       <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                       Generate choices with AI
                     </button>

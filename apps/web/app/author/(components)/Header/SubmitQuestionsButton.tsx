@@ -81,27 +81,27 @@ const SubmitQuestionsButton: FC<Props> = ({
     // check for added questions
     const addedQuestions = questions.filter(
       (question) =>
-        !originalAssignment.questions.some(
+        !originalAssignment?.questions?.some(
           (originalQuestion) => originalQuestion.id === question.id,
         ),
     );
     if (addedQuestions?.length > 0)
       diffs.push(`${addedQuestions?.length} questions added.`);
     // check for deleted questions
-    const deletedQuestions = originalAssignment.questions.filter(
+    const deletedQuestions = originalAssignment?.questions?.filter(
       (originalQuestion) =>
         !questions.some((question) => question.id === originalQuestion.id),
     );
-    if (deletedQuestions.length > 0)
+    if (deletedQuestions?.length > 0)
       diffs.push(`${deletedQuestions.length} questions deleted.`);
     // check for modified questions
-    const modifiedQuestions = questions.filter((question) =>
-      originalAssignment.questions.some(
+    const modifiedQuestions = questions?.filter((question) =>
+      originalAssignment?.questions?.some(
         (originalQuestion) => originalQuestion.id === question.id,
       ),
     );
     modifiedQuestions.forEach((question) => {
-      const originalQuestion = originalAssignment.questions.find(
+      const originalQuestion = originalAssignment?.questions?.find(
         (originalQuestion) => originalQuestion.id === question.id,
       );
       if (question.type !== originalQuestion.type && question.type !== "EMPTY")
@@ -130,6 +130,11 @@ const SubmitQuestionsButton: FC<Props> = ({
         question.scoring
       )
         diffs.push(`Updated scoring for question ${question.id}.`);
+      if (
+        question.randomizedChoices !== originalQuestion.randomizedChoices &&
+        question.randomizedChoices !== null
+      )
+        diffs.push(`Updated randomized choices for question ${question.id}.`);
       if (question.responseType !== originalQuestion.responseType)
         diffs.push(`Changed response type for question ${question.id}.`);
       if (question.maxWords !== originalQuestion.maxWords)
@@ -159,6 +164,22 @@ const SubmitQuestionsButton: FC<Props> = ({
         )
       )
         diffs.push(`Deleted variants for question ${question.id}.`);
+
+      if (
+        question.variants?.length &&
+        originalQuestion.variants?.length &&
+        question.variants.some((variant) => {
+          // check if variant.randomizedChoices is modified
+          const originalVariant = originalQuestion.variants.find(
+            (originalVariant) => originalVariant.id === variant.id,
+          );
+          return (
+            variant.randomizedChoices !== originalVariant?.randomizedChoices
+          );
+        })
+      )
+        diffs.push(`Modified randomized choices for question ${question.id}.`);
+
       if (
         question.variants?.length &&
         originalQuestion.variants?.length &&
@@ -200,7 +221,7 @@ const SubmitQuestionsButton: FC<Props> = ({
       questions.some(
         (question) =>
           question?.variants?.length <
-          originalAssignment.questions.find(
+          originalAssignment?.questions?.find(
             (originalQuestion) => originalQuestion.id === question.id,
           )?.variants?.length,
       )
@@ -212,7 +233,7 @@ const SubmitQuestionsButton: FC<Props> = ({
       questions.some(
         (question) =>
           question?.variants?.length >
-          originalAssignment.questions.find(
+          originalAssignment?.questions?.find(
             (originalQuestion) => originalQuestion.id === question.id,
           )?.variants?.length,
       )

@@ -130,7 +130,55 @@ const MarkdownEditor: React.FC<Props> = ({
       quillInstance.root.innerHTML = value;
     }
   }, [quillInstance]);
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+      .ql-container.ql-snow {
+        min-height: auto !important;
+        overflow: visible !important;
+      }
+      .ql-container.ql-snow .ql-editor {
+        font-family: "IBM Plex Sans", sans-serif !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        line-height: 1.3 !important;
+        background-color: transparent !important;
+        min-height: auto !important;
+        overflow: visible !important;
+       padding: 0 !important;
+      }
+      /* Optional: Adjust spacing for list items, paragraphs, etc. */
+      .ql-editor p,
+      .ql-editor li,
+      .ql-editor blockquote {
+        margin: 0.25em 0 !important; 
+      }
+      .ql-editor ul,
+      .ql-editor ol {
+        padding-left: 1em !important; 
+        margin: 0.25em 0 !important; 
+      }
+      .ql-editor code {
+        white-space: pre-wrap !important;
+        line-height: 1 !important; 
+        padding: 0.1em 0.2em !important;
+        background-color: #f5f5f5 !important;
+      }
+      .ql-editor pre {
+        background-color: #f5f5f5 !important;
+      }
+      /* Syntax highlighting tweak */
+      .ql-editor .hljs {
+        padding: 0.2em !important;
+        font-size: 0.95em !important;
+      }
+    `;
+    document.head.appendChild(style);
 
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   return (
     <div className={cn("flex flex-col", className)}>
       <div

@@ -1,4 +1,6 @@
+import TipsView from "@/app/learner/(components)/Question/TipsView";
 import MultipleChoiceSVG from "@/components/svgs/MC";
+import Tooltip from "@/components/Tooltip";
 import type {
   CreateQuestionRequest,
   QuestionAuthorStore,
@@ -7,32 +9,36 @@ import type {
   ResponseType,
   UpdateQuestionStateParams,
 } from "@/config/types";
+import { cn } from "@/lib/strings";
+import { generateQuestionVariant } from "@/lib/talkToBackend";
+import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import { Menu, Transition } from "@headlessui/react";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import {
   ArrowPathRoundedSquareIcon,
+  ArrowUpTrayIcon,
   Bars3BottomLeftIcon,
+  CameraIcon,
   CodeBracketIcon,
   DocumentArrowUpIcon,
-  DocumentDuplicateIcon,
-  LinkIcon,
-  PencilSquareIcon,
-  TrashIcon,
-  PlusIcon,
-  ArrowUpTrayIcon,
-  PresentationChartBarIcon,
-  DocumentTextIcon,
   DocumentChartBarIcon,
-  CameraIcon,
+  DocumentDuplicateIcon,
+  DocumentTextIcon,
+  LinkIcon,
   MicrophoneIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  PresentationChartBarIcon,
   TableCellsIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import {
   ExclamationTriangleIcon,
   SparklesIcon,
 } from "@heroicons/react/24/solid";
 import {
+  IconArrowsShuffle,
   IconBrandGithub,
   IconCheckbox,
   IconCircleCheck,
@@ -49,8 +55,6 @@ import {
 } from "react";
 import { toast } from "sonner";
 import QuestionWrapper from "../QuestionWrapper";
-import { generateQuestionVariant } from "@/lib/talkToBackend";
-import { generateTempQuestionId } from "@/lib/utils";
 
 // Props type definition for the Question component
 interface QuestionProps {
@@ -192,6 +196,9 @@ const Question: FC<QuestionProps> = ({
           })),
         };
       }
+      if (params.randomizedChoices !== undefined) {
+        updatedData.randomizedChoices = params.randomizedChoices;
+      }
       if (params.maxCharacters !== undefined) {
         updatedData.maxCharacters = params.maxCharacters;
       }
@@ -216,6 +223,8 @@ const Question: FC<QuestionProps> = ({
         type: params.questionType ?? questionType,
         maxWords: params.maxWordCount,
         maxCharacters: params.maxCharacters,
+        randomizedChoices:
+          params.randomizedChoices ?? question.randomizedChoices,
         scoring: {
           type: "CRITERIA_BASED",
           criteria: params.questionCriteria
@@ -287,6 +296,7 @@ const Question: FC<QuestionProps> = ({
       createdAt: new Date().toISOString(),
       variantType: "REWORDED",
       type: questionType,
+      randomizedChoices: true,
     };
 
     addVariant(question.id, newVariant);
@@ -463,7 +473,30 @@ const Question: FC<QuestionProps> = ({
     ],
     [],
   );
-
+  const toggleRandomizedChoicesMode = useAuthorStore(
+    (state) => state.toggleRandomizedChoicesMode,
+  );
+  const randomizedChoices = (
+    questionId: number,
+    variantId?: number,
+    variantIndex?: number,
+  ) => {
+    if (variantId) {
+      const randomizedMode = toggleRandomizedChoicesMode(questionId, variantId);
+      toast.info(
+        `Randomized choice order for question ${question.index}  ${
+          variantIndex ? `: variant ${variantIndex}` : ""
+        } has been ${randomizedMode ? "ENABLED" : "DISABLED"}`,
+      );
+      return;
+    }
+    const randomizedMode = toggleRandomizedChoicesMode(questionId);
+    toast.info(
+      `Randomized choice order for question number ${question.index} has been ${
+        randomizedMode ? "ENABLED" : "DISABLED"
+      }`,
+    );
+  };
   const handleEditClick = (id: number) => {
     setFocusedQuestionId(id);
     router.push(`/author/${question.assignmentId}/questions`);
@@ -690,8 +723,8 @@ const Question: FC<QuestionProps> = ({
             </Menu>
           ) : null}
         </div>
-        {/* Word count and other controls */}
 
+        {/* Word count and other controls */}
         <div className="flex items-center gap-4 flex-wrap">
           {preview ? (
             <div className="flex items-center gap-2 text-gray-600 text-nowrap ">
@@ -928,6 +961,44 @@ const Question: FC<QuestionProps> = ({
                   + Add character/word limit
                 </button>
               ) : null}
+              {question.type === "MULTIPLE_CORRECT" ||
+              question.type === "SINGLE_CORRECT" ? (
+                <Tooltip
+                  content={
+                    question.randomizedChoices
+                      ? "Disable randomized choice order"
+                      : "Enable randomized choice order"
+                  }
+                  className="flex items-center gap-2"
+                >
+                  <IconArrowsShuffle className="w-6 h-6 text-gray-500 cursor-pointer" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      randomizedChoices(question.id);
+                    }}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                      question.randomizedChoices
+                        ? "bg-violet-600"
+                        : "bg-gray-200",
+                    )}
+                    role="switch"
+                    aria-checked={question.randomizedChoices}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                        question.randomizedChoices
+                          ? "translate-x-5"
+                          : "translate-x-0",
+                      )}
+                    />
+                  </button>
+                </Tooltip>
+              ) : null}
+
               <button
                 className="text-gray-500"
                 onClick={() => {
@@ -1042,12 +1113,56 @@ const Question: FC<QuestionProps> = ({
               >
                 <div className="flex items-center justify-between w-full">
                   <span className="typography-body">Variant {index + 1}</span>
-                  <button
-                    className="text-gray-500"
-                    onClick={() => handleDeleteVariant(variant.id)}
-                  >
-                    <TrashIcon width={20} height={20} />
-                  </button>
+                  <div className="flex items-center gap-4">
+                    {question.type === "MULTIPLE_CORRECT" ||
+                    question.type === "SINGLE_CORRECT" ? (
+                      <Tooltip
+                        content={
+                          variant.randomizedChoices
+                            ? "Disable randomized choice order"
+                            : "Enable randomized choice order"
+                        }
+                        className="flex items-center gap-2"
+                      >
+                        <IconArrowsShuffle className="w-6 h-6 text-gray-500 cursor-pointer" />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            randomizedChoices(
+                              question.id,
+                              variant.id,
+                              index + 1,
+                            );
+                          }}
+                          className={cn(
+                            "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                            variant.randomizedChoices
+                              ? "bg-violet-600"
+                              : "bg-gray-200",
+                          )}
+                          role="switch"
+                          aria-checked={variant.randomizedChoices}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                              variant.randomizedChoices
+                                ? "translate-x-5"
+                                : "translate-x-0",
+                            )}
+                          />
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                    <button
+                      className="text-gray-500"
+                      onClick={() => handleDeleteVariant(variant.id)}
+                    >
+                      <TrashIcon width={20} height={20} />
+                    </button>
+                  </div>
                 </div>
                 <QuestionWrapper
                   questionId={question.id}

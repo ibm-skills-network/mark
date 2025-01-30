@@ -1,21 +1,21 @@
 "use client";
 
+import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
+import FeedbackFormatter from "@/components/FeedbackFormatter";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import type { QuestionStore } from "@/config/types";
-import { parseLearnerResponse } from "@/lib/utils";
-import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
-import { motion } from "framer-motion";
-import { FC, useEffect, useMemo, useRef, useState } from "react";
-import { CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
-import { SparklesIcon } from "@heroicons/react/24/solid";
-import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
-import { Octokit } from "@octokit/rest";
 import {
   AuthorizeGithubBackend,
   exchangeGithubCodeForToken,
   getStoredGithubToken,
 } from "@/lib/talkToBackend";
+import { parseLearnerResponse } from "@/lib/utils";
+import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
+import { CheckIcon, SparklesIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { Octokit } from "@octokit/rest";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 interface Props {
   question: QuestionStore;
   number: number;
@@ -204,9 +204,21 @@ const Question: FC<Props> = ({ question, number }) => {
         typeof learnerResponse === "boolean")
     ) {
       return (
-        <MarkdownViewer className="text-gray-800">
-          {learnerResponse.toString()}
-        </MarkdownViewer>
+        <p
+          className={`text-gray-800 w-full ${
+            highestScoreResponse?.points === totalPoints
+              ? "bg-green-50 border border-green-500 rounded p-2"
+              : highestScoreResponse?.points > 0
+                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                : "bg-red-50 border border-red-700 rounded p-2"
+          }
+          
+          `}
+        >
+          <MarkdownViewer className="text-gray-800 ">
+            {learnerResponse.toString()}
+          </MarkdownViewer>
+        </p>
       );
     } else if (
       (type === "URL" || type === "LINK_FILE") &&
@@ -231,8 +243,9 @@ const Question: FC<Props> = ({ question, number }) => {
         (Array.isArray(learnerResponse) && learnerResponse.length === 0)
       ) {
         return (
-          <p className="text-gray-800">
-            No answer was provided by the learner.
+          <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
+            <span className="w-full">No answer was provided by the learner.</span>
+            <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
           </p>
         );
       }
@@ -283,7 +296,7 @@ const Question: FC<Props> = ({ question, number }) => {
                     <CheckIcon className="w-5 h-5 text-green-500 ml-2" />
                   )}
                   {!isCorrect && isSelected && showSubmissionFeedback && (
-                    <XMarkIcon className="w-5 h-5 text-red-500 ml-2" />
+                    <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
                   )}
                 </div>
               </li>
@@ -293,7 +306,17 @@ const Question: FC<Props> = ({ question, number }) => {
       );
     } else if (type === "TRUE_FALSE") {
       return (
-        <p className={`text-gray-800 font-bold`}>
+        <p
+          className={`text-gray-800 w-full ${
+            highestScoreResponse?.points === totalPoints
+              ? "bg-green-50 border border-green-500 rounded p-2"
+              : highestScoreResponse?.points > 0
+                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                : "bg-red-50 border border-red-700 rounded p-2"
+          }
+          
+          `}
+        >
           {learnerResponse ? "True" : "False"}
         </p>
       );
@@ -328,66 +351,78 @@ const Question: FC<Props> = ({ question, number }) => {
           </ul>
         );
       } else if (typeof learnerResponse === "string") {
-        return <p className="text-gray-800">{learnerResponse}</p>;
+        return (
+          <p
+            className={`text-gray-800 w-full ${
+              highestScoreResponse?.points === totalPoints
+                ? "bg-green-50 border border-green-500 rounded p-2"
+                : highestScoreResponse?.points > 0
+                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                  : "bg-red-50 border border-red-700 rounded p-2"
+            }
+          
+          `}
+          >
+            {learnerResponse}
+          </p>
+        );
       } else {
         return (
-          <p className="text-gray-800">
-            No answer was provided by the learner.
+          <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
+            <span className="w-full">No answer was provided by the learner.</span>
+            <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
           </p>
         );
       }
     } else {
       return (
-        <p className="text-gray-800">No answer was provided by the learner.</p>
+        <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
+            <span className="w-full">No answer was provided by the learner.</span>
+            <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
+          </p>
       );
     }
   };
 
   return (
     <>
-      <motion.div
-        className="p-4 sm:p-6 mb-4 sm:mb-6 bg-white rounded-lg shadow-lg w-full max-w-3xl mx-auto"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">
-            Question {number}
-          </h2>
-          {highestScoreResponse?.points === -1 ? (
-            <p className="text-sm text-gray-600 mt-2 md:mt-0">Points hidden</p>
-          ) : (
-            <p className="text-sm text-gray-600">
-              Score:{" "}
-              <span className="font-bold text-gray-800">
-                {highestScoreResponse?.points || 0}/{totalPoints}
-              </span>
-            </p>
-          )}
-        </div>
-
-        {/* Question Text */}
-        <MarkdownViewer className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700">
-          {questionText}
-        </MarkdownViewer>
-
-        {/* Learner's Answer */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 mb-4">
-          {renderLearnerAnswer()}
-        </div>
-
-        {/* Feedback */}
-        {highestScoreResponse?.feedback && (
-          <div className="p-4 mt-4 rounded-lg bg-gray-50 flex items-center gap-4">
-            <div className="flex-shrink-0 w-6 justify-center items-center flex">
-              <SparklesIcon className="w-4 h-4 text-violet-600" />
-            </div>
-            <MarkdownViewer className="text-gray-800 flex-1 mt-2 sm:mt-0">
-              {highestScoreResponse?.feedback[0]?.feedback}
-            </MarkdownViewer>
-          </div>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold text-gray-800">
+          Question {number}
+        </h2>
+        {highestScoreResponse?.points === -1 ? (
+          <p className="text-sm text-gray-600 mt-2 md:mt-0">Points hidden</p>
+        ) : (
+          <p className="text-sm text-gray-600">
+            Score:{" "}
+            <span className="font-bold text-gray-800">
+              {highestScoreResponse?.points || 0}/{totalPoints}
+            </span>
+          </p>
         )}
-      </motion.div>
+      </div>
+
+      {/* Question Text */}
+      <MarkdownViewer className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700">
+        {questionText}
+      </MarkdownViewer>
+
+      {/* Learner's Answer */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 mb-4">
+        {renderLearnerAnswer()}
+      </div>
+
+      {/* Feedback */}
+      {highestScoreResponse?.feedback && (
+        <div className="p-4 mt-4 rounded-lg bg-gray-50 flex items-center gap-4">
+          <div className="flex-shrink-0 w-6 justify-center items-center flex">
+            <SparklesIcon className="w-4 h-4 text-violet-600" />
+          </div>
+          <FeedbackFormatter className="text-gray-800 flex-1 mt-2 sm:mt-0">
+            {highestScoreResponse?.feedback[0]?.feedback}
+          </FeedbackFormatter>
+        </div>
+      )}
       {selectedFileContent && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">

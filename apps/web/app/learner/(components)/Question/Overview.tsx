@@ -1,5 +1,7 @@
+import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import { useLearnerStore } from "@/stores/learner";
 import type { QuestionStore } from "@config/types";
+import { TagIcon } from "@heroicons/react/20/solid";
 import {
   useCallback,
   useEffect,
@@ -7,8 +9,6 @@ import {
   type ComponentPropsWithoutRef,
 } from "react";
 import Timer from "./Timer";
-import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
-import { TagIcon } from "@heroicons/react/20/solid";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   questions: QuestionStore[];
@@ -32,22 +32,27 @@ function Overview({ questions }: Props) {
   const getQuestionButtonClasses = useCallback(
     (question: QuestionStore, index: number) => {
       let baseClasses =
-        "pb-2 w-10 h-14 border rounded-md text-center cursor-pointer focus:outline-none flex flex-col items-center";
-      if (question.status === "flagged") {
-        baseClasses += " bg-yellow-200 border-yellow-400 text-yellow-700";
-      } else if (question.status === "edited") {
-        baseClasses += " bg-indigo-100 border-gray-400 text-gray-500";
-      } else {
-        baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
-      }
+        "w-10 h-11 border rounded-md text-center cursor-pointer focus:outline-none flex flex-col items-center";
+
       if (index === activeQuestionNumber - 1) {
-        baseClasses += " border-violet-700 text-violet-700 bg-violet-100";
+        // Focused question: white background, violet border, violet text
+        baseClasses += " bg-gray-100 border-violet-700 text-violet-600";
+      } else if (question.status === "flagged") {
+        // Flagged question: violet-200 background
+        baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
+      } else if (question.status === "edited") {
+        // Edited question: violet-100 background
+        baseClasses += " bg-violet-100 border-gray-400 text-violet-800 ";
+      } else {
+        // Unanswered question: white background
+        baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
       }
 
       return baseClasses;
     },
-    [activeQuestionNumber],
+    [activeQuestionNumber]
   );
+
   return (
     <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 w-full md:max-w-[250px] bg-white shadow hover:shadow-md md:max-h-[310px]">
       {expiresAt ? (
@@ -66,13 +71,27 @@ function Overview({ questions }: Props) {
           <button
             key={index}
             id={`indexQuestion-${index + 1}`}
-            onClick={() => setActiveQuestionNumber(index + 1)}
-            className={getQuestionButtonClasses(question, index)}
+            onClick={() => {
+              setActiveQuestionNumber(index + 1);
+              void handleJumpToQuestion(`item-${String(index + 1)}`);
+            }}
+            className={`${getQuestionButtonClasses(
+              question,
+              index
+            )} relative flex items-center justify-center`}
           >
-            <div className="font-bold text-lg mb-2">{index + 1}</div>
+            {/* Add Notch for flagged questions */}
             {question.status === "flagged" && (
-              <TagIcon className="text-yellow-700" />
+              <div
+                className="absolute top-0 right-0 w-4 h-4 bg-violet-500"
+                style={{
+                  clipPath: "polygon(100% 0, 0 0, 100% 100%)",
+                  borderTopRightRadius: "0.25rem",
+                }}
+                aria-hidden="true"
+              ></div>
             )}
+            <div className="font-bold text-lg">{index + 1}</div>
           </button>
         ))}
       </div>

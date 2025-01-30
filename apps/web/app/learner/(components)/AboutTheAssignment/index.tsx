@@ -1,15 +1,16 @@
 "use client";
 
-import React, { FC } from "react";
 import ErrorPage from "@/components/ErrorPage";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
-import Link from "next/link";
 import {
   Assignment,
   AssignmentAttempt,
   LearnerAssignmentState,
 } from "@/config/types";
+import { useLearnerOverviewStore } from "@/stores/learner";
+import Link from "next/link";
+import React, { FC, use, useEffect } from "react";
+import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 
 // Reusable section component for instructions and criteria
 interface AssignmentSectionProps {
@@ -36,15 +37,14 @@ interface AboutTheAssignmentProps {
 // Utility function to determine assignment state
 const getAssignmentState = (
   attempts: AssignmentAttempt[],
-  numAttempts: number,
+  numAttempts: number
 ): LearnerAssignmentState => {
   if (numAttempts !== -1 && attempts.length >= numAttempts) return "completed";
 
   const inProgress = attempts.find(
     (attempt) =>
       !attempt.submitted &&
-      (!attempt.expiresAt ||
-        Date.now() < new Date(attempt.expiresAt).getTime()),
+      (!attempt.expiresAt || Date.now() < new Date(attempt.expiresAt).getTime())
   );
 
   return inProgress ? "in-progress" : "not-started";
@@ -80,10 +80,21 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       ? Infinity
       : Math.max(0, numAttempts - attempts.length);
 
-  const latestAttemptDate = attempts[0]
-    ? new Date(attempts[0].createdAt).toLocaleString()
+  // find the latest attempt date
+  const latestAttempt = attempts.reduce((latest, attempt) => {
+    if (!latest) return attempt;
+    if (
+      new Date(attempt.createdAt).getTime() >
+      new Date(latest.createdAt).getTime()
+    ) {
+      return attempt;
+    }
+    return latest;
+  }, null);
+  console.log(latestAttempt);
+  const latestAttemptDate = latestAttempt
+    ? new Date(latestAttempt.createdAt).toLocaleString()
     : "No attempts yet";
-
   return (
     <main className="grid grid-cols-1 md:grid-cols-[1fr_8fr_1fr] gap-4 px-4 md:px-0 flex-1 py-12 bg-gray-50">
       <div className="hidden md:block"> </div>

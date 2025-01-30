@@ -148,7 +148,6 @@ export type learnerFileResponse = {
   repo?: RepoType;
   owner?: string;
 };
-// 4af839a54dd1732f834599b6e9491ec41f1aa67b
 export type LearnerActions = {
   setActiveAttemptId: (id: number) => void;
   setActiveQuestionNumber: (id: number) => void;
@@ -230,10 +229,12 @@ const isQuestionEdited = (question: QuestionStore) => {
 export type LearnerOverviewState = {
   listOfAttempts: AssignmentAttempt[];
   assignmentId: number | null;
+  assignmentName: string;
 };
 export type LearnerOverviewActions = {
   setListOfAttempts: (listOfAttempts: AssignmentAttempt[]) => void;
   setAssignmentId: (assignmentId: number) => void;
+  setAssignmentName: (assignmentName: string) => void;
 };
 
 export const useLearnerOverviewStore = createWithEqualityFn<
@@ -246,6 +247,8 @@ export const useLearnerOverviewStore = createWithEqualityFn<
         assignmentId: undefined,
         setListOfAttempts: (listOfAttempts) => set({ listOfAttempts }),
         setAssignmentId: (assignmentId) => set({ assignmentId }),
+        assignmentName: "",
+        setAssignmentName: (assignmentName) => set({ assignmentName }),
       }),
       {
         name: "learner-store", // storage name
@@ -425,7 +428,10 @@ export const useLearnerStore = createWithEqualityFn<
       activeAttemptId: null,
       totalPointsEarned: 0,
       totalPointsPossible: 0,
-      setActiveAttemptId: (id) => set({ activeAttemptId: id }),
+      setActiveAttemptId: (id) => {
+        console.log("setActiveAttemptId", id);
+        set({ activeAttemptId: id });
+      },
       activeQuestionNumber: 1,
       setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
       assignmentDetails: null,
@@ -468,20 +474,25 @@ export const useLearnerStore = createWithEqualityFn<
       },
       setQuestionStatus: (questionId: number, status?: QuestionStatus) => {
         const question = get().questions.find((q) => q.id === questionId);
-        if (question && status === undefined) {
-          const isEdited = isQuestionEdited(question);
-          const newStatus = isEdited ? "edited" : "unedited";
-          set((state) => ({
-            questions: state.questions?.map((q) =>
-              q.id === questionId ? { ...q, status: newStatus } : q,
-            ),
-          }));
-        } else if (status) {
-          set((state) => ({
-            questions: state.questions?.map((q) =>
-              q.id === questionId ? { ...q, status } : q,
-            ),
-          }));
+        if (
+          question &&
+          (question.status !== "flagged" || status === "unflagged")
+        ) {
+          if (status === undefined) {
+            const isEdited = isQuestionEdited(question);
+            const newStatus = isEdited ? "edited" : "unedited";
+            set((state) => ({
+              questions: state.questions?.map((q) =>
+                q.id === questionId ? { ...q, status: newStatus } : q,
+              ),
+            }));
+          } else {
+            set((state) => ({
+              questions: state.questions?.map((q) =>
+                q.id === questionId ? { ...q, status } : q,
+              ),
+            }));
+          }
         }
       },
 

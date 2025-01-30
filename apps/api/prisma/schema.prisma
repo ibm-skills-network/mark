@@ -165,6 +165,7 @@ model Question {
   maxWords                  Int? /// Optional maximum number of words allowed for a written response type question
   scoring                   Json? /// Scoring details for the question, stored as JSON
   choices                   Json? /// Possible choices for the question, stored as JSON
+  randomizedChoices         Boolean? /// Are the choices randomized?
   answer                    Boolean? /// The correct answer for the question (used for auto grading)
   assignmentId              Int /// The ID of the assignment to which the question belongs
   assignment                Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// The assignment to which the question belongs
@@ -185,18 +186,18 @@ model AssignmentAttempt {
   createdAt         DateTime              @default(now())
   questionVariants  AssignmentAttemptQuestionVariant[]
   AssignmentFeedback AssignmentFeedback[]
-
+  questionOrder    Int[]
   RegradingRequest RegradingRequest[]
 }
 
 model AssignmentAttemptQuestionVariant {
   assignmentAttemptId Int
   questionId          Int
-  questionVariantId   Int
+  questionVariantId   Int?
   assignmentAttempt   AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id], onDelete: Cascade)
-  questionVariant     QuestionVariant   @relation(fields: [questionVariantId], references: [id])
-  question            Question          @relation(fields: [questionId], references: [id])
-
+  questionVariant     QuestionVariant?   @relation(fields: [questionVariantId], references: [id])
+  question            Question           @relation(fields: [questionId], references: [id])
+  randomizedChoices   Json?
   @@id([assignmentAttemptId, questionId])
 }
 
@@ -213,6 +214,7 @@ model QuestionVariant {
   createdAt       DateTime    @default(now())
   difficultyLevel Int?
   variantType     VariantType
+  randomizedChoices Boolean?
   assignmentAttemptVariants AssignmentAttemptQuestionVariant[]
   isDeleted      Boolean  @default(false) // New flag for archiving
 

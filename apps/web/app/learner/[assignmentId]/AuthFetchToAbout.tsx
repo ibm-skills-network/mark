@@ -80,7 +80,9 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
     const errorMessage =
       role === "learner"
         ? "Assignment could not be fetched from server"
-        : "Assignment could not be fetched from localStorage";
+        : role === "author"
+          ? "Assignment could not be fetched from local storage"
+          : "You are not authorized to view this page";
     return <ErrorPage error={errorMessage} />;
   }
 

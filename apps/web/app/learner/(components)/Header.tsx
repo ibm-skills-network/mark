@@ -21,7 +21,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
-import Breadcrumbs from "./Breadcrumbs";
 import Link from "next/link";
 
 function LearnerHeader() {
@@ -63,6 +62,8 @@ function LearnerHeader() {
   const [returnUrl, setReturnUrl] = useState<string>("");
   const assignmentId = assignmentDetails?.id;
   const isInQuestionPage = pathname.includes("questions");
+  const isAttemptPage = pathname.includes("attempts");
+  const isSubmissionPage = pathname.includes("successPage");
   const [toggleWarning, setToggleWarning] = useState<boolean>(false);
   const [toggleEmptyWarning, setToggleEmptyWarning] = useState<boolean>(false);
   const [role, setRole] = useState<string | undefined>(undefined);
@@ -151,59 +152,49 @@ function LearnerHeader() {
       });
     }
     clearGithubStore();
+    // clear focused question
+    useLearnerStore.getState().setActiveQuestionNumber(null);
     router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
 
   return (
     <header className="border-b border-gray-300 w-full px-6 py-6 flex justify-between h-[100px]">
       <div className="flex">
-        <div className="flex flex-col justify-center mr-4">
+        <div className="flex justify-center gap-x-6 items-center">
           <SNIcon />
-        </div>
-        <div>
           <Title className="text-lg font-semibold">
             {assignmentDetails?.name || "Untitled Assignment"}
           </Title>
-          {(pathname.includes("questions") ||
-            pathname.includes("attempts")) && (
-            <Breadcrumbs
-              homeHref={pathname.replace(/\/(questions|attempts).*/, "")}
-              pages={[
-                ...(pathname.includes("questions")
-                  ? [
-                      {
-                        name: "Questions",
-                        href: pathname.replace(/\/attempts.*/, ""),
-                        current: !pathname.includes("attempts"),
-                      },
-                    ]
-                  : []),
-                ...(pathname.includes("attempts")
-                  ? [{ name: "Attempts", href: pathname, current: true }]
-                  : []),
-              ]}
-            />
-          )}
         </div>
       </div>
-      {returnUrl && pathname.includes("successPage") && (
+
+      <div className="flex items-center gap-x-4">
+        {isAttemptPage || isInQuestionPage ? (
+          <Button
+            className="btn-tertiary"
+            onClick={() => router.push(`/learner/${assignmentId}`)}
+          >
+            Return to Assignment Details
+          </Button>
+        ) : null}
+        {isInQuestionPage ? (
+          <Button
+            disabled={editedQuestionsOnly(questions).length === 0 || submitting}
+            className="disabled:opacity-70 btn-secondary"
+            onClick={CheckNoFlaggedQuestions}
+          >
+            {submitting ? <Spinner className="w-8" /> : "Submit assignment"}
+          </Button>
+        ) : null}
+      </div>
+      {returnUrl && pathname.includes("successPage") ? (
         <Link
           href={returnUrl}
-          className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center gap-2 shadow-lg"
+          className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center gap-2"
         >
           Return to Course
         </Link>
-      )}
-      {activeAttemptId && isInQuestionPage && (
-        <Button
-          disabled={editedQuestionsOnly(questions).length === 0 || submitting}
-          className="disabled:opacity-70"
-          onClick={CheckNoFlaggedQuestions}
-        >
-          {submitting ? <Spinner className="w-8" /> : "Submit assignment"}
-        </Button>
-      )}
-
+      ) : null}
       {/* Modal for confirming submission when there are flagged questions */}
       <WarningAlert
         isOpen={toggleWarning}

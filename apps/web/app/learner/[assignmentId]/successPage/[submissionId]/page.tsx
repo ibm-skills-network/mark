@@ -1,19 +1,14 @@
 "use client";
-import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
-import dynamic from "next/dynamic";
+
+import animationData from "@/animations/LoadSN.json";
+import Loading from "@/components/Loading";
 import {
-  CircularProgressbarWithChildren,
-  buildStyles,
-} from "react-circular-progressbar";
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
-import Question from "../Question";
-import Particles from "@tsparticles/react";
-import Crown from "@/public/Crown.svg";
-import Image, { StaticImageData } from "next/image";
-import { IconRefresh } from "@tabler/icons-react";
+  AssignmentAttemptWithQuestions,
+  AssignmentDetails,
+  AssignmentFeedback,
+  QuestionStore,
+  RegradingRequest,
+} from "@/config/types";
 import {
   getAttempt,
   getCompletedAttempt,
@@ -22,21 +17,29 @@ import {
   submitFeedback,
   submitRegradingRequest,
 } from "@/lib/talkToBackend";
-import animationData from "@/animations/LoadSN.json";
-import {
-  AssignmentAttemptWithQuestions,
-  AssignmentDetails,
-  AssignmentFeedback,
-  QuestionStore,
-  RegradingRequest,
-} from "@/config/types";
-import Loading from "@/components/Loading";
+import Crown from "@/public/Crown.svg";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { Rating, RoundedStar } from "@smastrom/react-rating";
+import { IconRefresh } from "@tabler/icons-react";
+import Particles from "@tsparticles/react";
+import { AnimatePresence, motion } from "framer-motion";
+import dynamic from "next/dynamic";
+import Image, { StaticImageData } from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+  buildStyles,
+  CircularProgressbarWithChildren,
+} from "react-circular-progressbar";
+import Question from "../Question";
 import "@smastrom/react-rating/style.css"; // Import rating component styles
-import { toast } from "sonner";
+
+import Button from "@/components/Button";
+import ReportModal from "@/components/ReportModal";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import ReportModal from "@/components/ReportModal";
+import { toast } from "sonner";
 
 const DynamicConfetti = dynamic(() => import("react-confetti"), {
   ssr: false,
@@ -173,8 +176,8 @@ function SuccessPage() {
 
   // Animation for the crown falling effect
   const crownAnimation = {
-    initial: { y: -250, x: 340, opacity: 0 },
-    animate: { y: 108, opacity: 1 },
+    initial: { y: -250, x: 0, opacity: 0 },
+    animate: { y: 0, opacity: 1 },
     transition: { type: "spring", stiffness: 50, damping: 10, duration: 1 },
   };
 
@@ -430,19 +433,7 @@ function SuccessPage() {
       <div className="w-full max-w-4xl z-10 px-4 sm:px-6 md:px-8">
         <div className="flex flex-col items-center text-center gap-y-6">
           {/* Achievement Badge */}
-          {Math.round(grade) === 100 && (
-            <motion.div
-              className="w-24 h-24 mb-4"
-              {...crownAnimation} // Apply falling animation
-            >
-              <Image
-                src={Crown as StaticImageData}
-                alt="Crown"
-                width={96}
-                height={96}
-              />
-            </motion.div>
-          )}
+
           {!Number.isNaN(grade) ? (
             <>
               <div className="w-full flex flex-col md:flex-row md:items-center justify-center gap-6 md:gap-16 bg-white p-6 rounded-lg shadow-md">
@@ -458,14 +449,38 @@ function SuccessPage() {
                   </motion.h1>
 
                   <motion.p
-                    className="text-xl text-gray-600"
+                    className="text-xl text-left text-gray-600"
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
-                    {grade >= passingGrade
-                      ? "You've successfully completed the assignment."
-                      : "Review your answers and try again."}
+                    {grade >= passingGrade ? (
+                      <>
+                        <strong className="text-green-600">
+                          Congrats on successfully completing this assignment!
+                        </strong>{" "}
+                        Your grade has been recorded. Feel free to close this
+                        tab and return to the main course page.
+                      </>
+                    ) : (
+                      <>
+                        <strong>
+                          Keep going! Mistakes are opportunities to learn and
+                          grow.
+                        </strong>{" "}
+                        Review your answers and{" "}
+                        <strong
+                          className="cursor-pointer underline"
+                          onClick={() =>
+                            (window.location.href = `/learner/${assignmentId}/`)
+                          }
+                        >
+                          try again
+                        </strong>{" "}
+                        to achieve your best result.
+                      </>
+                    )}
                   </motion.p>
+
                   {/* required passing grade  */}
                   <motion.p
                     className="text-xl text-black"
@@ -501,25 +516,41 @@ function SuccessPage() {
                     {Math.round(totalPoints)} ({Math.round(grade)}%)
                   </motion.p>
                 </div>
-                <motion.div
-                  initial={{ scale: 0.8 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 0.5, type: "spring" }}
-                  className="w-36 h-36 md:w-48 md:h-30 mx-auto"
-                >
-                  <CircularProgressbarWithChildren
-                    value={Math.round(grade)}
-                    styles={buildStyles({
-                      pathColor: grade >= passingGrade ? "#10B981" : "#EF4444",
-                      textColor: "#374151",
-                      trailColor: "#D1D5DB",
-                      backgroundColor: "#fff",
-                    })}
+                <motion.div className="flex flex-col items-center h-full mb-10 ">
+                  {Math.round(grade) === 100 && (
+                    <motion.div
+                      {...crownAnimation}
+                      className="w-full h-full flex items-center justify-center mb-2"
+                    >
+                      <Image
+                        src={Crown as StaticImageData}
+                        alt="Crown"
+                        width={96}
+                        height={96}
+                      />
+                    </motion.div>
+                  )}
+                  <motion.div
+                    initial={{ scale: 0.8 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.5, type: "spring" }}
+                    className="w-36 h-36 md:w-48 md:h-30 mx-auto"
                   >
-                    <div className="text-[35px] font-bold text-gray-500">
-                      {Math.round(grade)}%
-                    </div>
-                  </CircularProgressbarWithChildren>
+                    <CircularProgressbarWithChildren
+                      value={Math.round(grade)}
+                      styles={buildStyles({
+                        pathColor:
+                          grade >= passingGrade ? "#10B981" : "#EF4444",
+                        textColor: "#374151",
+                        trailColor: "#D1D5DB",
+                        backgroundColor: "#fff",
+                      })}
+                    >
+                      <div className="text-[35px] font-bold text-gray-500">
+                        {Math.round(grade)}%
+                      </div>
+                    </CircularProgressbarWithChildren>
+                  </motion.div>
                 </motion.div>
               </div>
             </>
@@ -550,9 +581,14 @@ function SuccessPage() {
         {/* Questions Summary */}
         <div className="mt-4">
           {questions.map((question: QuestionStore, index: number) => (
-            <div key={question.id} className="mb-6">
+            <motion.div
+              className="p-4 sm:p-6  bg-white rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              key={question.id}
+            >
               <Question number={index + 1} question={question} />
-            </div>
+            </motion.div>
           ))}
         </div>
         {/* Action Buttons */}
@@ -574,13 +610,13 @@ function SuccessPage() {
               </button>
             </div>
           )}
-          <Link
-            href={
+          <Button
+            onClick={() =>
               role?.toLowerCase() === "learner"
-                ? `/learner/${assignmentId}`
+                ? (window.location.href = `/learner/${assignmentId}/`)
                 : role?.toLowerCase() === "author"
-                  ? `/learner/${assignmentId}?authorMode=true`
-                  : "/"
+                  ? (window.location.href = `/learner/${assignmentId}/?authorMode=true`)
+                  : (window.location.href = "/")
             }
             className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg mt-2"
           >
@@ -594,7 +630,7 @@ function SuccessPage() {
               <IconRefresh className="w-6 h-6 text-white" />
             </svg>
             Retake Assignment
-          </Link>
+          </Button>
         </div>
       </div>
       {/* Feedback Modal */}
@@ -632,7 +668,7 @@ function SuccessPage() {
                     <div className="flex justify-between items-center">
                       We Value Your Feedback
                       <XMarkIcon
-                        className="w-6 h-6 text-gray-500 "
+                        className="w-6 h-6 text-gray-500 hover:cursor-pointer"
                         onClick={() => setIsFeedbackModalOpen(false)}
                       />
                     </div>
@@ -645,8 +681,9 @@ function SuccessPage() {
                         Rate the Assignment
                       </label>
                       <Rating
+                        key={`assignment-rating-${assignmentRating}`}
                         value={assignmentRating}
-                        onChange={setAssignmentRating}
+                        onChange={(value: number) => setAssignmentRating(value)}
                         style={{ maxWidth: 200 }}
                         itemStyles={{
                           itemShapes: RoundedStar,
@@ -661,8 +698,9 @@ function SuccessPage() {
                         Rate the AI Grading
                       </label>
                       <Rating
+                        key={`ai-grading-rating-${aiGradingRating}`}
                         value={aiGradingRating}
-                        onChange={setAiGradingRating}
+                        onChange={(value: number) => setAiGradingRating(value)}
                         style={{ maxWidth: 200 }}
                         itemStyles={{
                           itemShapes: RoundedStar,
@@ -748,7 +786,7 @@ function SuccessPage() {
                     <div className="flex justify-between items-center">
                       Regrading Form Request
                       <XMarkIcon
-                        className="w-6 h-6 text-gray-500 "
+                        className="w-6 h-6 text-gray-500 hover:cursor-pointer"
                         onClick={() => setIsRegradingModalOpen(false)}
                       />
                     </div>

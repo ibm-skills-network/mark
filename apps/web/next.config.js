@@ -2,6 +2,9 @@
 
 const nextConfig = {
   reactStrictMode: true, // for development
+  compiler: {
+    styledComponents: true,
+  },
   // ignore typescript errors
   // typescript: {
   //   ignoreBuildErrors: true,

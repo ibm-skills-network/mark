@@ -87,26 +87,28 @@ const Component: FC<Props> = () => {
         )}
       </div>
 
-      <div className="flex flex-col gap-y-1">
-        <p className=" text-gray-600">
-          How long should learners expect to spend on this assignment (in
-          minutes)?
-        </p>
-        <div className="relative">
-          <input
-            type="number"
-            className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full`}
-            placeholder="Ex. 60"
-            min={0}
-            step={5}
-            onChange={(e) => setTimeEstimateMinutes(~~e.target.value)}
-            value={timeEstimateMinutes || ""}
-          />
-          <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
-            min
-          </span>
+      {!strictTimeLimit && (
+        <div className="flex flex-col gap-y-1">
+          <p className=" text-gray-600">
+            How long should learners expect to spend on this assignment (in
+            minutes)?
+          </p>
+          <div className="relative">
+            <input
+              type="number"
+              className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full`}
+              placeholder="Ex. 60"
+              min={0}
+              step={5}
+              onChange={(e) => setTimeEstimateMinutes(~~e.target.value)}
+              value={timeEstimateMinutes || ""}
+            />
+            <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
+              min
+            </span>
+          </div>
         </div>
-      </div>
+      )}
     </SectionWithTitle>
   );
 };

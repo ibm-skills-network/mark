@@ -23,6 +23,18 @@ body .w-md-editor-content {
 ul {
   list-style: disc;
 }
+input:focus {
+  outline: 0px solid #7c3aed !important; /* Outer violet-600 outline */
+  border-color: #7c3aed !important; /* Ensures the inner border is also violet-600 */
+  box-shadow: 0 0 0 0px #e9d5ff !important; /* Inner violet-600 effect */
+  outline-offset: 0; /* Ensure no gap between outline and element */
+}
+textarea:focus {
+  outline: 0px solid #7c3aed !important; /* Outer violet-600 outline */
+  border-color: #7c3aed !important; /* Ensures the inner border is also violet-600 */
+  box-shadow: none !important; /* Removes any box-shadow effects */
+  outline-offset: 0; /* No gap between outline and textarea */
+}
 
 .main-author-container {
   @apply flex flex-col gap-y-8 mx-auto w-full max-w-6xl py-24 px-4;
@@ -239,7 +251,9 @@ pre.ql-syntax {
 }
 
 .swapping {
-  transition: background-color 0.5s ease-in-out, transform 0.5s ease-in-out,
+  transition:
+    background-color 0.5s ease-in-out,
+    transform 0.5s ease-in-out,
     box-shadow 0.5s ease-in-out;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   transform: scale(1.02);

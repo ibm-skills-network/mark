@@ -26,6 +26,7 @@ export type AuthorState = {
   updatedAt: number | undefined;
   focusedQuestionId?: number | undefined;
   originalAssignment: AuthorAssignmentState;
+  role?: string;
 };
 
 type OptionalQuestion = {
@@ -113,6 +114,11 @@ export type AuthorActions = {
   setAuthorStore: (state: Partial<AuthorState>) => void;
   validate: () => boolean;
   deleteStore: () => void;
+  setRole: (role: string) => void;
+  toggleRandomizedChoicesMode: (
+    questionId: number,
+    variantId?: number,
+  ) => boolean;
   errors: Record<string, string>;
 };
 interface QuestionState {
@@ -309,6 +315,8 @@ export const useAuthorStore = createWithEqualityFn<
   persist(
     devtools(
       withUpdatedAt((set, get) => ({
+        role: undefined,
+        setRole: (role) => set({ role }),
         learningObjectives: "",
         originalAssignment: null,
         setOriginalAssignment: (assignment: AuthorAssignmentState) =>
@@ -483,6 +491,58 @@ export const useAuthorStore = createWithEqualityFn<
               };
             }
           }),
+        toggleRandomizedChoicesMode: (questionId: number, variantId: number) =>
+          // Toggle randomized choices mode (boolean) for a question or variant (if variantId is provided)
+          {
+            set((state) => {
+              if (variantId) {
+                return {
+                  questions: state.questions.map((q) => {
+                    if (q.id === questionId) {
+                      const updatedVariants = q.variants.map((variant) => {
+                        if (variant.id === variantId) {
+                          return {
+                            ...variant,
+                            randomizedChoices: !variant.randomizedChoices,
+                          };
+                        }
+                        return variant;
+                      });
+                      return {
+                        ...q,
+                        variants: updatedVariants,
+                      };
+                    }
+                    return q;
+                  }),
+                };
+              } else {
+                return {
+                  questions: state.questions.map((q) => {
+                    if (q.id === questionId) {
+                      return {
+                        ...q,
+                        randomizedChoices: !q.randomizedChoices,
+                      };
+                    }
+                    return q;
+                  }),
+                };
+              }
+            });
+            if (variantId) {
+              return (
+                get()
+                  .questions.find((q) => q.id === questionId)
+                  ?.variants?.find((v) => v.id === variantId)
+                  ?.randomizedChoices || false
+              );
+            }
+            return (
+              get().questions.find((q) => q.id === questionId)
+                ?.randomizedChoices || false
+            );
+          },
         addTrueFalseChoice: (questionId, isTrue, variantId) => {
           return set((state) => ({
             questions: state.questions.map((q) => {

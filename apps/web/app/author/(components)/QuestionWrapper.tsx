@@ -1,17 +1,17 @@
 "use client";
 
-import SparkleLottie from "@/app/animations/sparkleLottie";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import Tooltip from "@/components/Tooltip";
+import WarningAlert from "@/components/WarningAlert";
 import type {
   Choice,
   CreateQuestionRequest,
+  Criteria,
   QuestionAuthorStore,
   QuestionType,
   QuestionTypeDropdown,
-  UpdateQuestionStateParams,
   ResponseType,
-  Criteria,
+  UpdateQuestionStateParams,
 } from "@/config/types";
 import { generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
@@ -31,7 +31,6 @@ import React, {
 } from "react";
 import { toast } from "sonner";
 import MultipleAnswerSection from "./Questions/QuestionTypes/MultipleAnswerSection";
-import WarningAlert from "@/components/WarningAlert";
 
 // Props type definition for the QuestionWrapper component
 interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
@@ -125,7 +124,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   );
   const toggleLoading = useQuestionStore((state) => state.toggleLoading);
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
-  // Effect to handle clicks outside the title input to toggle it off
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
       if (
@@ -174,32 +172,9 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     const newCriteriaArray = [...questionCriteria.criteriaDesc];
     const newCriteriaIds = [...questionCriteria.criteriaIds];
 
-    let hasGap = false;
-    for (let i = 0; i < newPointArray.length - 1; i++) {
-      if (newPointArray[i] - newPointArray[i + 1] > 1) {
-        hasGap = true;
-        break;
-      }
-    }
-
-    if (hasGap) {
-      let insertIndex = 0;
-      for (let i = 0; i < newPointArray.length - 1; i++) {
-        if (newPointArray[i] - newPointArray[i + 1] > 1) {
-          insertIndex = i + 1;
-          break;
-        }
-      }
-
-      newPointArray.splice(insertIndex, 0, newPointArray[insertIndex - 1] - 1);
-      newCriteriaArray.splice(insertIndex, 0, "");
-      newCriteriaIds.splice(insertIndex, 0, newCriteriaIds.length + 1);
-    } else {
-      const newPoint = Math.max(...newPointArray) + 1;
-      newPointArray.unshift(newPoint);
-      newCriteriaArray.unshift("");
-      newCriteriaIds.unshift(newCriteriaIds.length + 1);
-    }
+    newPointArray.push(0);
+    newCriteriaArray.push("");
+    newCriteriaIds.push(newCriteriaIds.length + 1);
 
     setQuestionCriteria({
       points: newPointArray,
@@ -618,9 +593,9 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       ) : (
         <>
           {/* Criteria Table */}
-          <div className="mx-auto min-w-full border rounded border-solid border-gray-200 overflow-hidden">
+          <div className="mx-auto min-w-full border rounded border-solid border-gray-200">
             <table className="min-w-full bg-white">
-              <thead className="h-min">
+              <thead>
                 <tr className="border-b border-gray-200 w-full">
                   <th className="py-2 px-4 text-left bg-white w-1/6 h-min border-r border-gray-200">
                     <div className="flex flex-col">
@@ -699,12 +674,33 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                             />
                           </div>
                         </th>
-                        <th className="relative text-left typography-body size-4 w-full h-min py-2 pl-6 pr-10">
+                        <th
+                          className="relative text-left typography-body size-4 w-full py-2 pl-6 pr-10 align-top"
+                          style={{ verticalAlign: "top" }}
+                        >
                           {loading ? (
                             <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
                           ) : (
-                            <input
-                              className="border-none resize-none h-5 placeholder-gray-500 focus:outline-none focus:ring-0 px-0 pr-2 py-0 w-full text-left"
+                            <textarea
+                              className="border-none placeholder-gray-500 focus:outline-none focus:ring-0 px-0 pr-2 py-0 w-full text-left scrollbar-hide resize-none"
+                              style={{
+                                height: "auto",
+                                minHeight: `${
+                                  Math.max(
+                                    2,
+                                    (questionCriteria.criteriaDesc[index] || "")
+                                      .split(/\r?\n/)
+                                      .reduce(
+                                        (acc, line) =>
+                                          acc + Math.ceil(line.length / 120),
+                                        0,
+                                      ),
+                                  ) * 1.5
+                                }rem`,
+                                wordBreak: "break-word",
+                                whiteSpace: "pre-wrap",
+                                overflow: "hidden",
+                              }}
                               placeholder="Click here to add criteria"
                               disabled={preview}
                               value={questionCriteria.criteriaDesc[index] || ""}
@@ -774,7 +770,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                               onClick={handleAiClick}
                               disabled={loading}
                             >
-                              <SparkleLottie />
                               <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                               Generate a rubric with AI
                             </button>

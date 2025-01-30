@@ -113,14 +113,14 @@ export class AttemptService {
     private readonly llmService: LlmService,
     private readonly questionService: QuestionService,
     private readonly assignmentService: AssignmentService,
-    private readonly httpService: HttpService,
+    private readonly httpService: HttpService
   ) {}
 
   async submitFeedback(
     assignmentId: number,
     attemptId: number,
     feedbackDto: AssignmentFeedbackDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentFeedbackResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -128,19 +128,19 @@ export class AttemptService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `Assignment attempt with ID ${attemptId} not found.`,
+        `Assignment attempt with ID ${attemptId} not found.`
       );
     }
 
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
-        "Assignment ID does not match the attempt.",
+        "Assignment ID does not match the attempt."
       );
     }
 
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
-        "You do not have permission to submit feedback for this attempt.",
+        "You do not have permission to submit feedback for this attempt."
       );
     }
 
@@ -187,7 +187,7 @@ export class AttemptService {
   async getFeedback(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentFeedbackDto> {
     const feedback = await this.prisma.assignmentFeedback.findFirst({
       where: {
@@ -215,7 +215,7 @@ export class AttemptService {
     assignmentId: number,
     attemptId: number,
     regradingRequestDto: RegradingRequestDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<RequestRegradingResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -223,19 +223,19 @@ export class AttemptService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `Assignment attempt with ID ${attemptId} not found.`,
+        `Assignment attempt with ID ${attemptId} not found.`
       );
     }
 
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
-        "Assignment ID does not match the attempt.",
+        "Assignment ID does not match the attempt."
       );
     }
 
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
-        "You do not have permission to request regrading for this attempt.",
+        "You do not have permission to request regrading for this attempt."
       );
     }
 
@@ -257,7 +257,7 @@ export class AttemptService {
             regradingStatus: RegradingStatus.PENDING,
             updatedAt: new Date(),
           },
-        },
+        }
       );
 
       return {
@@ -283,7 +283,7 @@ export class AttemptService {
   async getRegradingStatus(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<RegradingStatusResponseDto> {
     const regradingRequest = await this.prisma.regradingRequest.findFirst({
       where: {
@@ -295,7 +295,7 @@ export class AttemptService {
 
     if (!regradingRequest) {
       throw new NotFoundException(
-        `Regrading request for assignment ${assignmentId} and attempt ${attemptId} not found.`,
+        `Regrading request for assignment ${assignmentId} and attempt ${attemptId} not found.`
       );
     }
 
@@ -312,7 +312,7 @@ export class AttemptService {
    */
   async listAssignmentAttempts(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentAttemptResponseDto[]> {
     const { userId, role } = userSession;
 
@@ -327,24 +327,41 @@ export class AttemptService {
   }
 
   /**
-   * Creates a new assignment attempt for the given assignment and user session.
-   * @param assignmentId The ID of the assignment.
-   * @param userSession The user session.
-   * @returns A base assignment attempt response DTO.
+   * - Database record creation for attempt tracking
+   *
+   * @param assignmentId - ID of assignment to attempt. Must be active and available to user.
+   * @param userSession - Authenticated user session containing user ID and permissions.
+   * @returns Promise resolving to object containing new attempt ID and success status.
+   *
+   * @remarks
+   * 1. Validates user can attempt assignment (checks limits, availability, etc.)
+   * 2. Creates base attempt record with expiration time
+   * 3. Determines question order:
+   *    - Random shuffle if assignment specifies random ordering
+   *    - Predefined order if assignment has questionOrder array
+   *    - Natural order otherwise
+   * 4. For each question:
+   *    - Randomly selects between original question or its variants
+   *    - Randomizes answer choices if enabled (per question/variant config)
+   * 5. Stores attempt metadata including:
+   *    - Final question order
+   *    - Selected variants
+   *    - Randomized choice sequences
+   *
+   * @throws NotFoundException if assignment doesn't exist
+   * @throws ForbiddenException if user can't attempt assignment
    */
   async createAssignmentAttempt(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<BaseAssignmentAttemptResponseDto> {
     const assignment = await this.assignmentService.findOne(
       assignmentId,
-      userSession,
+      userSession
     );
-
+    console.log("assignment HERE", assignment);
     await this.validateNewAttempt(assignment, userSession);
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
-
-    // Create the assignment attempt
     const assignmentAttempt = await this.prisma.assignmentAttempt.create({
       data: {
         expiresAt: attemptExpiresAt,
@@ -352,64 +369,82 @@ export class AttemptService {
         assignmentId,
         grade: undefined,
         userId: userSession.userId,
+        questionOrder: [],
       },
     });
 
-    // Fetch all questions and their variants
     const questions = await this.prisma.question.findMany({
       where: { assignmentId },
       include: { variants: true },
     });
-    const randomizedQuestions = questions.map((question) => {
-      if (
-        question.type === QuestionType.SINGLE_CORRECT ||
-        question.type === QuestionType.MULTIPLE_CORRECT
-      ) {
-        if (question.variants && question.variants.length > 0) {
-          for (const variant of question.variants) {
-            if (variant.choices) {
-              variant.choices = AttemptHelper.shuffleJsonArray<Choice>(
-                typeof variant.choices === "string"
-                  ? (JSON.parse(variant.choices) as Choice[])
-                  : (variant.choices as unknown as Choice[]),
-              ) as unknown as JsonValue;
-            }
-          }
-        } else if (question.choices) {
-          question.choices = AttemptHelper.shuffleJsonArray<Choice>(
+    const validQuestions = questions.filter((q) => !q.isDeleted);
+
+    const finalOrderedQuestions = [...validQuestions];
+    if (assignment.displayOrder === "RANDOM") {
+      finalOrderedQuestions.sort(() => Math.random() - 0.5);
+    } else if (
+      assignment.questionOrder &&
+      assignment.questionOrder.length > 0
+    ) {
+      finalOrderedQuestions.sort(
+        (a, b) =>
+          assignment.questionOrder.indexOf(a.id) -
+          assignment.questionOrder.indexOf(b.id),
+      );
+    }
+    console.log("finalOrderedQuestions", finalOrderedQuestions);
+    console.log("assignment.questionOrder", assignment.questionOrder);
+    await this.prisma.assignmentAttempt.update({
+      where: { id: assignmentAttempt.id },
+      data: {
+        questionOrder: finalOrderedQuestions.map((q) => q.id),
+      },
+    });
+
+    const attemptQuestionVariantsData = finalOrderedQuestions.map(
+      (question) => {
+        const questionAndVariants = [undefined, ...question.variants];
+        const randomIndex = Math.floor(
+          Math.random() * questionAndVariants.length,
+        );
+        const chosenVariant = questionAndVariants[randomIndex];
+
+        let variantId: number | null;
+        let randomizedChoices: string | null;
+
+        if (chosenVariant) {
+          variantId = chosenVariant.id;
+          const variantChoices =
+            typeof chosenVariant.choices === "string"
+              ? chosenVariant.choices
+              : JSON.stringify(chosenVariant.choices);
+          randomizedChoices = this.maybeShuffleChoices(
+            variantChoices,
+            chosenVariant.randomizedChoices === true,
+          );
+        } else {
+          const questionChoices =
             typeof question.choices === "string"
-              ? (JSON.parse(question.choices) as Choice[])
-              : (question.choices as unknown as Choice[]),
-          ) as unknown as JsonValue;
+              ? question.choices
+              : JSON.stringify(question.choices);
+          randomizedChoices = this.maybeShuffleChoices(
+            questionChoices,
+            question.randomizedChoices === true,
+          );
         }
-      }
-      return question;
-    });
 
-    const attemptQuestionVariants = randomizedQuestions.map((question) => {
-      const selectedVariant =
-        question.variants && question.variants.length > 0
-          ? question.variants[
-              Math.floor(Math.random() * question.variants.length)
-            ]
-          : undefined;
-
-      return {
-        assignmentAttemptId: assignmentAttempt.id,
-        questionId: question.id,
-        questionVariantId: selectedVariant ? selectedVariant.id : undefined,
-      };
-    });
-
-    const validAttemptQuestionVariants = attemptQuestionVariants.filter(
-      (aqv) => aqv.questionVariantId !== undefined,
+        return {
+          assignmentAttemptId: assignmentAttempt.id,
+          questionId: question.id,
+          questionVariantId: variantId,
+          randomizedChoices,
+        };
+      },
     );
 
-    if (validAttemptQuestionVariants.length > 0) {
-      await this.prisma.assignmentAttemptQuestionVariant.createMany({
-        data: validAttemptQuestionVariants,
-      });
-    }
+    await this.prisma.assignmentAttemptQuestionVariant.createMany({
+      data: attemptQuestionVariantsData,
+    });
 
     return {
       id: assignmentAttempt.id,
@@ -418,13 +453,48 @@ export class AttemptService {
   }
 
   /**
-   * Updates an assignment attempt with the provided responses and calculates the grade.
-   * @param assignmentAttemptId The ID of the assignment attempt.
-   * @param assignmentId The ID of the assignment.
-   * @param updateAssignmentAttemptDto The update request DTO.
-   * @param authCookie The authentication cookie for LTI gateway.
-   * @param gradingCallbackRequired Whether a grading callback is required.
-   * @returns An update assignment attempt response DTO.
+   * Processes assignment attempt submissions and calculates final grades.
+   *
+   * Handles:
+   * - Learner attempt expiration validation
+   * - Question response submission and scoring
+   * - Role-based grade calculation (learner vs author)
+   * - LTI grade callback integration
+   * - Feedback generation
+   *
+   * @param assignmentAttemptId - ID of existing attempt to update
+   * @param assignmentId - ID of parent assignment
+   * @param updateAssignmentAttemptDto - Contains user responses and author test data
+   * @param authCookie - LTI authentication token for grade callback
+   * @param gradingCallbackRequired - Flag for LTI grade sync requirement
+   * @param request - User session with role information
+   * @returns Detailed attempt results with scoring and feedback
+   *
+   * @remarks
+   * 1. Learner-specific validation:
+   *    - Checks attempt expiration
+   *    - Enforces submission deadlines
+   *
+   * 2. Response processing:
+   *    - Validates and scores individual question responses
+   *    - Maintains successful response tracking
+   *
+   * 3. Grade calculation:
+   *    - Learner mode: Uses actual assignment rubrics
+   *    - Author mode: Simulates scoring with test data
+   *
+   * 4. LTI integration:
+   *    - Conditionally sends grades to external LMS
+   *    - Only applies to learner submissions
+   *
+   * 5. Result handling:
+   *    - Learners: Persists results to database
+   *    - Authors: Returns simulated results without persistence
+   *    - Constructs contextual feedback based on assignment settings
+   *
+   * @throws ForbiddenException For expired attempts or unauthorized access
+   * @throws NotFoundException For invalid attempt/assignment IDs
+   * @throws BadRequestException For malformed response data
    */
   async updateAssignmentAttempt(
     assignmentAttemptId: number,
@@ -432,9 +502,9 @@ export class AttemptService {
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     gradingCallbackRequired: boolean,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<UpdateAssignmentAttemptResponseDto> {
-    const { role } = request.userSession;
+    const { role, userId } = request.userSession;
     if (role === UserRole.LEARNER) {
       const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
         where: { id: assignmentAttemptId },
@@ -455,23 +525,41 @@ export class AttemptService {
       role,
       assignmentId,
       updateAssignmentAttemptDto.authorQuestions,
-      updateAssignmentAttemptDto.authorAssignmentDetails,
+      updateAssignmentAttemptDto.authorAssignmentDetails
     );
     const { grade, totalPointsEarned, totalPossiblePoints } =
       role === UserRole.LEARNER
         ? this.calculateGradeForLearner(
             successfulQuestionResponses,
-            assignment as unknown as GetAssignmentAttemptResponseDto,
+            assignment as unknown as GetAssignmentAttemptResponseDto
           )
         : this.calculateGradeForAuthor(
             successfulQuestionResponses,
-            updateAssignmentAttemptDto.authorQuestions,
+            updateAssignmentAttemptDto.authorQuestions
           );
 
     if (gradingCallbackRequired && role === UserRole.LEARNER) {
-      await this.sendGradeToLtiGateway(grade, authCookie);
+      // find the highest grade for the user and send it to the LTI gateway.  This is to ensure that the grade sent to the LTI gateway is the highest grade achieved by the user so it doesnt get overwritten by a lower grade
+      const userAttempts = await this.prisma.assignmentAttempt.findMany({
+        where: {
+          userId,
+          assignmentId,
+        },
+        select: {
+          grade: true,
+        },
+      });
+      let highestOverall = 0;
+      for (const attempt of userAttempts) {
+        if (attempt.grade && attempt.grade > highestOverall) {
+          highestOverall = attempt.grade;
+        }
+      }
+      if (grade && grade > highestOverall) {
+        highestOverall = grade;
+      }
+      await this.sendGradeToLtiGateway(highestOverall, authCookie);
     }
-
     if (role === UserRole.AUTHOR) {
       // if the request is from the author, we don't need to reflect the grade in the database since it's just a test run
       return {
@@ -484,14 +572,14 @@ export class AttemptService {
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
-          assignment as unknown as LearnerGetAssignmentResponseDto,
+          assignment as unknown as LearnerGetAssignmentResponseDto
         ),
       };
     } else {
       const result = await this.updateAssignmentAttemptInDb(
         assignmentAttemptId,
         updateAssignmentAttemptDto,
-        grade,
+        grade
       );
       return {
         id: result.id,
@@ -503,13 +591,53 @@ export class AttemptService {
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
-          assignment as unknown as LearnerGetAssignmentResponseDto,
+          assignment as unknown as LearnerGetAssignmentResponseDto
         ),
       };
     }
   }
+  /**
+   * Retrieves and formats a learner's assignment attempt with contextual display rules.
+   *
+   * Handles:
+   * - Attempt metadata retrieval
+   * - Question/variant data merging
+   * - Response mapping
+   * - Display settings enforcement
+   * - Secure data exposure based on assignment configuration
+   *
+   * @param assignmentAttemptId - ID of existing attempt to retrieve
+   * @returns Structured attempt data with questions, responses, and display-configured scoring
+   *
+   * @remarks
+   * 1. Data Aggregation:
+   *    - Combines base question data with variant overrides
+   *    - Preserves original question order from attempt creation
+   *    - Merges stored responses with question definitions
+   *
+   * 2. Display Configuration:
+   *    - Respects assignment-level visibility settings for:
+   *      - Overall grades (showAssignmentScore)
+   *      - Per-question feedback (showSubmissionFeedback)
+   *      - Per-question scores (showQuestionScore)
+   *    - Maintains question order from attempt creation
+   *    - Formats choices as parsed JSON when needed
+   *
+   * 3. Security Considerations:
+   *    - Ensures sensitive data (answers, full scores) is only exposed per settings
+   *    - Filters deleted questions from results
+   *    - Validates existence of all related database entities
+   *
+   * 4. Data Transformation:
+   *    - Normalizes choice data from stringified JSON
+   *    - Applies variant content overrides where present
+   *    - Maps scoring rules from either variant or original question
+   *
+   * @throws NotFoundException If attempt, questions, or assignment cannot be found
+   * @throws BadRequestException If stored data formats are invalid
+   */
   async getLearnerAssignmentAttempt(
-    assignmentAttemptId: number,
+    assignmentAttemptId: number
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -519,7 +647,7 @@ export class AttemptService {
           include: {
             questionVariant: {
               include: {
-                variantOf: true, // Original question data
+                variantOf: true,
               },
             },
           },
@@ -529,18 +657,20 @@ export class AttemptService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
       );
     }
-    // Fetch all questions, including deleted ones
+
     const questions = await this.prisma.question.findMany({
       where: { assignmentId: assignmentAttempt.assignmentId },
     });
+
     if (!questions) {
       throw new NotFoundException(
-        `Questions for assignment with Id ${assignmentAttempt.assignmentId} not found.`,
+        `Questions for assignment with Id ${assignmentAttempt.assignmentId} not found.`
       );
     }
+
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
@@ -554,87 +684,132 @@ export class AttemptService {
       },
     });
 
-    this.sortAssignmentQuestions(assignment as LearnerGetAssignmentResponseDto);
-    // Filter questions by attemptQuestionIds
-    const filteredQuestions = questions.filter((q) =>
-      assignmentAttempt.questionResponses.some((qr) => qr.questionId === q.id),
+    const questionOrder = assignmentAttempt.questionOrder || [];
+    const questionById = new Map(questions.map((q) => [q.id, q]));
+
+    const questionsWithVariants = assignmentAttempt.questionVariants.map(
+      (qv) => {
+        const variant = qv.questionVariant;
+        const originalQ = questionById.get(qv.questionId);
+
+        const questionText = variant?.variantContent ?? originalQ?.question;
+        const scoring = variant?.scoring ?? originalQ?.scoring;
+        const maxWords = variant?.maxWords ?? originalQ?.maxWords;
+        const maxChars = variant?.maxCharacters ?? originalQ?.maxCharacters;
+        let finalChoices: Choice[] = qv.randomizedChoices
+          ? (JSON.parse(qv.randomizedChoices as string) as Choice[])
+          : ((variant?.choices ?? originalQ?.choices) as unknown as Choice[]);
+
+        if (typeof finalChoices === "string") {
+          finalChoices = JSON.parse(finalChoices) as Choice[];
+        }
+
+        return {
+          id: originalQ.id,
+          question: questionText,
+          choices: finalChoices,
+          maxWords,
+          maxCharacters: maxChars,
+          scoring,
+          totalPoints: originalQ.totalPoints,
+          answer: variant?.answer ?? originalQ?.answer,
+          type: originalQ.type,
+          assignmentId: originalQ.assignmentId,
+          gradingContextQuestionIds: originalQ?.gradingContextQuestionIds,
+          responseType: originalQ.responseType,
+          isDeleted: originalQ.isDeleted,
+          randomizedChoices: originalQ.randomizedChoices,
+        };
+      },
     );
 
-    const questionsWithVariants = filteredQuestions.map((question) => {
-      const variantMapping = assignmentAttempt.questionVariants.find(
-        (qv) => qv.questionId === question.id,
-      );
-      const variant = variantMapping?.questionVariant;
-      return {
-        id: question.id,
-        question: variant?.variantContent ?? question.question,
-        choices: variant?.choices ?? question.choices,
-        maxWords: variant?.maxWords ?? question.maxWords,
-        maxCharacters: variant?.maxCharacters ?? question.maxCharacters,
-        scoring: variant?.scoring ?? question.scoring,
-        totalPoints: question.totalPoints,
-        answer: variant?.answer ?? question.answer,
-        type: question.type,
-        assignmentId: question.assignmentId,
-        gradingContextQuestionIds: question?.gradingContextQuestionIds,
-        responseType: question.responseType,
-        isDeleted: question.isDeleted,
-      };
-    });
     const questionsWithResponses = this.constructQuestionsWithResponses(
-      questionsWithVariants,
-      assignmentAttempt.questionResponses as unknown as QuestionResponse[],
+      questionsWithVariants.map((question) => ({
+        ...question,
+        choices: JSON.stringify(question.choices) as unknown as JsonValue,
+      })),
+      assignmentAttempt.questionResponses as QuestionResponse[],
     );
-    // Ensure all chosen questions appear, even if no responses or variants
-    const allQuestions = questionsWithVariants.map((question) => {
-      const existing = questionsWithResponses.find((q) => q.id === question.id);
-      return existing || { ...question, questionResponses: [] };
-    });
-    delete assignmentAttempt.questionResponses;
-    // sort questions by display order
-    allQuestions.sort((a, b) => a.id - b.id);
+
+    const finalQuestions = questionOrder
+      .map((qId) => questionsWithResponses.find((q) => q.id === qId))
+      .filter(Boolean);
 
     if (assignment.showAssignmentScore === false) {
       delete assignmentAttempt.grade;
     }
     if (assignment.showSubmissionFeedback === false) {
-      for (const q of questionsWithResponses) {
+      for (const q of finalQuestions) {
         if (q.questionResponses[0]?.feedback) {
           delete q.questionResponses[0].feedback;
         }
       }
     }
     if (assignment.showQuestionScore === false) {
-      for (const q of questionsWithResponses) {
+      for (const q of finalQuestions) {
         if (q.questionResponses[0]?.points !== undefined) {
           q.questionResponses[0].points = -1;
         }
       }
     }
-    // get assignment showAssignmentScore, showSubmissionFeedback, showQuestionScore from assignment and return
+
     return {
       ...assignmentAttempt,
-      showAssignmentScore: assignment.showAssignmentScore,
-      showSubmissionFeedback: assignment.showSubmissionFeedback,
-      showQuestionScore: assignment.showQuestionScore,
-      questions: allQuestions.map((question) => ({
+      questions: finalQuestions.map((question) => ({
         ...question,
         choices:
           typeof question.choices === "string"
             ? (JSON.parse(question.choices) as Choice[])
-            : (question.choices as Choice[]),
+            : question.choices,
       })),
       passingGrade: assignment.passingGrade,
+      showAssignmentScore: assignment.showAssignmentScore,
+      showSubmissionFeedback: assignment.showSubmissionFeedback,
+      showQuestionScore: assignment.showQuestionScore,
     };
   }
 
   /**
-   * Retrieves an assignment attempt along with its questions and responses.
-   * @param assignmentAttemptId The ID of the assignment attempt.
-   * @returns A get assignment attempt response DTO.
+   * Retrieves and formats a completed assignment attempt with contextual display rules.
+   *
+   * Aggregates attempt data including questions, chosen variants, responses, and scoring while
+   * enforcing assignment-specific visibility settings.
+   *
+   * @param assignmentAttemptId - ID of the attempt to retrieve
+   * @returns Structured attempt data with:
+   * - Questions in their attempt-specific order
+   * - Merged question/variant data
+   * - Responses with score/feedback visibility rules applied
+   * - Assignment configuration metadata
+   *
+   * @remarks
+   * 1. Data Composition:
+   *    - Combines original question data with variant overrides used in the attempt
+   *    - Maintains exact question order from attempt creation
+   *    - Merges stored responses with corresponding questions
+   *
+   * 2. Display Enforcement:
+   *    - Controls visibility of sensitive data through:
+   *      - Grade suppression (showAssignmentScore)
+   *      - Feedback removal (showSubmissionFeedback)
+   *      - Score masking (showQuestionScore)
+   *
+   * 3. Data Handling:
+   *    - Filters out deleted questions from results
+   *    - Parses stored JSON choice data when needed
+   *    - Falls back to original question data when variants are unavailable
+   *    - Handles both stringified and object-based choice storage formats
+   *
+   * 4. Security:
+   *    - Ensures answers/scoring remain hidden per assignment settings
+   *    - Validates existence of all referenced database entities
+   *    - Maintains data integrity through strict typing
+   *
+   * @throws NotFoundException If the attempt or related assignment cannot be found
+   * @throws BadRequestException For malformed stored data (invalid JSON formats)
    */
   async getAssignmentAttempt(
-    assignmentAttemptId: number,
+    assignmentAttemptId: number
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -650,7 +825,7 @@ export class AttemptService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
       );
     }
 
@@ -671,81 +846,128 @@ export class AttemptService {
       },
     })) as LearnerGetAssignmentResponseDto;
 
-    this.sortAssignmentQuestions(assignment);
+    const questionOrder = assignmentAttempt.questionOrder || [];
 
-    const questionsWithVariants = assignment.questions.map((question) => {
-      const variantMapping = assignmentAttempt.questionVariants.find(
-        (qv) => qv.questionId === question.id,
-      );
-      const variant = variantMapping?.questionVariant;
-      return {
-        id: question.id,
-        question: variant?.variantContent ?? question.question,
-        choices: variant?.choices ?? question.choices,
-        maxWords: variant?.maxWords ?? question.maxWords,
-        maxCharacters: variant?.maxCharacters ?? question.maxCharacters,
-        scoring: variant?.scoring ?? question.scoring,
-        totalPoints: question.totalPoints,
-        answer: variant?.answer ?? question.answer,
-        type: question.type,
-        assignmentId: question.assignmentId,
-        gradingContextQuestionIds: question?.gradingContextQuestionIds,
-        responseType: question.responseType,
-        isDeleted: question.isDeleted,
-      };
-    });
-    const questionsWithResponses = this.constructQuestionsWithResponses(
-      questionsWithVariants,
-      assignmentAttempt.questionResponses as unknown as QuestionResponse[],
+    const questionById = new Map(assignment.questions.map((q) => [q.id, q]));
+
+    const questionsWithVariants = assignmentAttempt.questionVariants.map(
+      (qv) => {
+        const originalQ = questionById.get(qv.questionId);
+        if (!originalQ) return;
+
+        const variant = qv.questionVariant;
+
+        let finalChoices: Choice[] = [];
+        if (qv.randomizedChoices) {
+          finalChoices =
+            typeof qv.randomizedChoices === "string"
+              ? (JSON.parse(qv.randomizedChoices) as Choice[])
+              : [];
+        } else {
+          const raw = variant?.choices ?? originalQ.choices;
+          finalChoices =
+            typeof raw === "string"
+              ? (JSON.parse(raw) as Choice[])
+              : (raw as unknown as Choice[]);
+        }
+
+        return {
+          id: originalQ.id,
+          question: variant?.variantContent ?? originalQ.question,
+          choices: finalChoices,
+          maxWords: variant?.maxWords ?? originalQ.maxWords,
+          maxCharacters: variant?.maxCharacters ?? originalQ.maxCharacters,
+          scoring: variant?.scoring ?? originalQ.scoring,
+          totalPoints: originalQ.totalPoints,
+          answer: variant?.answer ?? originalQ.answer,
+          type: originalQ.type,
+          assignmentId: originalQ.assignmentId,
+          gradingContextQuestionIds: originalQ.gradingContextQuestionIds,
+          responseType: originalQ.responseType,
+          isDeleted: originalQ.isDeleted,
+          randomizedChoices: originalQ.randomizedChoices,
+        };
+      },
     );
-    delete assignmentAttempt.questionResponses;
+
+    const validQuestions = questionsWithVariants.filter(
+      Boolean,
+    ) as unknown as Question[];
+
+    const questionsWithResponses = this.constructQuestionsWithResponses(
+      validQuestions.map((q) => ({
+        ...q,
+        choices:
+          typeof q.choices === "string" ? q.choices : JSON.stringify(q.choices),
+      })),
+      assignmentAttempt.questionResponses as QuestionResponse[],
+    );
+
+    const finalQuestions = questionOrder
+      .map((qId) => questionsWithResponses.find((q) => q.id === qId))
+      .filter(Boolean);
 
     if (assignment.showAssignmentScore === false) {
       delete assignmentAttempt.grade;
     }
     if (assignment.showSubmissionFeedback === false) {
-      for (const q of questionsWithResponses) {
+      for (const q of finalQuestions) {
         if (q.questionResponses[0]?.feedback) {
           delete q.questionResponses[0].feedback;
         }
       }
     }
     if (assignment.showQuestionScore === false) {
-      for (const q of questionsWithResponses) {
-        if (q.questionResponses[0]?.points !== undefined) {
+      for (const q of finalQuestions) {
+        if (typeof q.questionResponses[0]?.points === "number") {
           q.questionResponses[0].points = -1;
         }
       }
     }
-    // // randomize the order of question choices for single and multiple correct questions
-    // const randomizedQuestions = questionsWithResponses.map((question) => {
-    //   if (
-    //     (question.type === QuestionType.SINGLE_CORRECT ||
-    //       question.type === QuestionType.MULTIPLE_CORRECT) &&
-    //     question.choices.length > 0
-    //   ) {
-    //     question.choices = AttemptHelper.shuffleJsonArray<Choice>(
-    //       question.choices
-    //     );
-    //   }
-    //   return question;
-    // });
+
     return {
       ...assignmentAttempt,
-      questions: questionsWithResponses,
+      questions: finalQuestions,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
     };
   }
-
   /**
-   * Creates a question response for a specific question in an assignment attempt.
-   * @param assignmentAttemptId The ID of the assignment attempt.
-   * @param questionId The ID of the question.
-   * @param createQuestionResponseAttemptRequestDto The create request DTO.
-   * @returns A create question response attempt response DTO.
+   * Handles the creation of a learner's or author's response to a question within an assignment attempt.
+   *
+   * @param {number} assignmentAttemptId - The unique identifier of the assignment attempt.
+   * @param {number} questionId - The unique identifier of the question being answered.
+   * @param {CreateQuestionResponseAttemptRequestDto} createQuestionResponseAttemptRequestDto - The data transfer object containing the user's response.
+   * @param {UserRole} role - The role of the user (LEARNER or AUTHOR).
+   * @param {number} assignmentId - The unique identifier of the assignment.
+   * @param {QuestionDto[]} [authorQuestions] - (Optional) The list of questions when the user is an AUTHOR.
+   * @param {authorAssignmentDetailsDTO} [assignmentDetails] - (Optional) Additional assignment details for an AUTHOR.
+   *
+   * @returns {Promise<CreateQuestionResponseAttemptResponseDto>} - A promise that resolves with the response DTO after processing the question response.
+   *
+   * @throws {NotFoundException} - If the assignment attempt does not exist (for learners).
+   *
+   * @description
+   * This function processes a user's response to a question within an assignment attempt.
+   * The behavior differs based on the user's role:
+   *
+   * - **For LEARNERS**:
+   *   - The function fetches the assignment attempt and includes question variants.
+   *   - If the question has a variant, it retrieves the corresponding variant details.
+   *   - Otherwise, it fetches the original question from the `questionService`.
+   *   - The function retrieves the assignment context based on the assignment and question.
+   *
+   * - **For AUTHORS**:
+   *   - The function finds the question within the `authorQuestions` list.
+   *   - It sets the assignment context using the `assignmentDetails`.
+   *
+   * After determining the question and assignment context, the function:
+   * 1. Calls `processQuestionResponse` to evaluate the response.
+   * 2. Stores the response in the database (`prisma.questionResponse.create`).
+   * 3. Populates the response DTO with relevant information (ID, question content, points, and feedback).
+   * 4. Returns the final response DTO.
    */
   async createQuestionResponse(
     assignmentAttemptId: number,
@@ -754,7 +976,7 @@ export class AttemptService {
     role: UserRole,
     assignmentId: number,
     authorQuestions?: QuestionDto[],
-    assignmentDetails?: authorAssignmentDetailsDTO,
+    assignmentDetails?: authorAssignmentDetailsDTO
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     let question: QuestionDto;
     let assignmentContext: {
@@ -781,11 +1003,11 @@ export class AttemptService {
       });
       if (!assignmentAttempt) {
         throw new NotFoundException(
-          `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+          `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
         );
       }
       const variantMapping = assignmentAttempt.questionVariants.find(
-        (qv) => qv.questionId === questionId,
+        (qv) => qv.questionId === questionId
       );
       if (variantMapping && variantMapping.questionVariant) {
         const variant = variantMapping.questionVariant;
@@ -800,17 +1022,17 @@ export class AttemptService {
           scoring:
             typeof variant.scoring === "string"
               ? (JSON.parse(variant.scoring) as Scoring)
-              : ((variant.scoring as unknown as Scoring) ??
+              : (variant.scoring as unknown as Scoring) ??
                 (typeof baseQuestion.scoring === "string"
                   ? (JSON.parse(baseQuestion.scoring) as Scoring)
-                  : (baseQuestion.scoring as unknown as Scoring))),
+                  : (baseQuestion.scoring as unknown as Scoring)),
           choices:
             typeof variant.choices === "string"
               ? (JSON.parse(variant.choices) as Choice[])
-              : ((variant.choices as unknown as Choice[]) ??
+              : (variant.choices as unknown as Choice[]) ??
                 (typeof baseQuestion.choices === "string"
                   ? (JSON.parse(baseQuestion.choices) as Choice[])
-                  : (baseQuestion.choices as unknown as Choice[]))),
+                  : (baseQuestion.choices as unknown as Choice[])),
 
           answer: variant.answer ?? baseQuestion.answer,
           alreadyInBackend: true,
@@ -824,7 +1046,7 @@ export class AttemptService {
         assignmentAttempt.assignmentId,
         questionId,
         assignmentAttemptId,
-        role,
+        role
       );
     } else if (role === UserRole.AUTHOR) {
       question = authorQuestions.find((q) => q.id === questionId);
@@ -837,7 +1059,7 @@ export class AttemptService {
       question,
       createQuestionResponseAttemptRequestDto,
       assignmentContext,
-      assignmentId,
+      assignmentId
     );
     const result = await this.prisma.questionResponse.create({
       data: {
@@ -855,7 +1077,91 @@ export class AttemptService {
     return responseDto;
   }
 
-  // Private helper methods
+  /**
+   * Creates a report for a given assignment attempt.
+   *
+   * @param {number} assignmentId - The unique identifier of the assignment being reported.
+   * @param {number} attemptId - The unique identifier of the specific attempt being reported.
+   * @param {ReportType} issueType - The type of issue being reported (e.g., plagiarism, system error).
+   * @param {string} description - A detailed description of the issue.
+   * @param {string} userId - The unique identifier of the user creating the report.
+   *
+   * @returns {Promise<void>} - A promise that resolves when the report is successfully created.
+   *
+   * @throws {NotFoundException} - If the specified assignment does not exist.
+   * @throws {NotFoundException} - If the specified assignment attempt does not exist.
+   * @throws {UnprocessableEntityException} - If the user has already submitted 5 or more reports in the last 24 hours.
+   *
+   * @description
+   * This function ensures that a report is created under the following conditions:
+   * - The assignment exists in the database.
+   * - The assignment attempt exists.
+   * - The user has not exceeded the limit of 5 reports in the past 24 hours.
+   *
+   * The function first checks whether the given `assignmentId` corresponds to an existing assignment in the database.
+   * If the assignment does not exist, it throws a `NotFoundException`.
+   *
+   * Next, it verifies that the given `attemptId` corresponds to an existing assignment attempt.
+   * If the attempt does not exist, it throws a `NotFoundException`.
+   *
+   * Then, it checks how many reports the user has submitted in the last 24 hours.
+   * If the user has already submitted 5 or more reports, it throws an `UnprocessableEntityException`.
+   *
+   * If all conditions are met, the function proceeds to create a new report in the database,
+   * associating it with the given `assignmentId`, `attemptId`, and the reporting `userId`.
+   * The report is stored with the provided `issueType` and `description`, and it sets the `author` field to `false`.
+   */
+  async createReport(
+    assignmentId: number,
+    attemptId: number,
+    issueType: ReportType,
+    description: string,
+    userId: string,
+  ): Promise<void> {
+    // Ensure the assignment exists
+    const assignmentExists = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+    });
+
+    if (!assignmentExists) {
+      throw new NotFoundException("Assignment not found");
+    }
+    // check if assignment attempt exists
+    const assignmentAttemptExists =
+      await this.prisma.assignmentAttempt.findUnique({
+        where: { id: attemptId },
+      });
+    if (!assignmentAttemptExists) {
+      throw new NotFoundException("Assignment attempt not found");
+    }
+    // if the user created more than 5 reports in the last 24 hours, throw an error
+    const reports = await this.prisma.report.findMany({
+      where: {
+        reporterId: userId,
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+    if (reports.length >= 5) {
+      throw new UnprocessableEntityException(
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
+      );
+    }
+
+    // Create a new report
+    await this.prisma.report.create({
+      data: {
+        assignmentId,
+        attemptId,
+        issueType,
+        description,
+        reporterId: userId,
+        author: false,
+      },
+    });
+  }
+  // ==================== PRIVATE METHODS ====================
 
   /**
    * Validates whether a new attempt can be created for the given assignment and user session.
@@ -864,7 +1170,7 @@ export class AttemptService {
    */
   private async validateNewAttempt(
     assignment: LearnerGetAssignmentResponseDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<void> {
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
@@ -892,18 +1198,16 @@ export class AttemptService {
         ],
       },
     });
-
     const ongoingAttempts = attempts.filter(
       (sub) =>
         !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null),
+        (sub.expiresAt >= new Date() || sub.expiresAt === null)
     );
 
     const attemptsInTimeRange = attempts.filter(
       (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
+        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
     );
-
     if (ongoingAttempts.length > 0) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
@@ -913,18 +1217,18 @@ export class AttemptService {
       attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
     ) {
       throw new UnprocessableEntityException(
-        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
       );
     }
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
-        assignment.id,
+        assignment.id
       );
 
       if (attemptCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
         );
       }
     }
@@ -936,7 +1240,7 @@ export class AttemptService {
    * @returns The expiration date or null.
    */
   private calculateAttemptExpiresAt(
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LearnerGetAssignmentResponseDto
   ): Date | null {
     if (
       assignment.allotedTimeMinutes !== undefined &&
@@ -952,16 +1256,31 @@ export class AttemptService {
    * @param expiresAt The expiration date of the assignment attempt.
    */
   private validateAssignmentAttemptExpiry(
-    expiresAt: Date | null | undefined,
+    expiresAt: Date | null | undefined
   ): void {
     const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
     if (expiresAt && tenSecondsBeforeNow > expiresAt) {
       throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );
     }
   }
 
+  private maybeShuffleChoices = (
+    choices: Choice[] | string | null | undefined,
+    shouldShuffle: boolean,
+  ): string | null => {
+    if (!choices) return;
+
+    let parsed: Choice[] =
+      typeof choices === "string" ? (JSON.parse(choices) as Choice[]) : choices;
+
+    if (shouldShuffle) {
+      parsed = [...parsed];
+      parsed.sort(() => Math.random() - 0.5);
+    }
+    return JSON.stringify(parsed);
+  };
   /**
    * Submits the questions for the assignment attempt.
    * @param responsesForQuestions The responses for questions.
@@ -974,7 +1293,7 @@ export class AttemptService {
     role: UserRole,
     assignmentId: number,
     authorQuestions?: QuestionDto[],
-    assignmentDetails?: authorAssignmentDetailsDTO,
+    assignmentDetails?: authorAssignmentDetailsDTO
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
@@ -986,13 +1305,13 @@ export class AttemptService {
           role,
           assignmentId,
           authorQuestions,
-          assignmentDetails,
+          assignmentDetails
         );
-      },
+      }
     );
 
     const questionResponses = await Promise.allSettled(
-      questionResponsesPromise,
+      questionResponsesPromise
     );
     const successfulResponses = questionResponses
       .filter((response) => response.status === "fulfilled")
@@ -1006,7 +1325,7 @@ export class AttemptService {
       throw new InternalServerErrorException(
         `Failed to submit questions: ${failedResponses
           .map((response) => response)
-          .join(", ")}`,
+          .join(", ")}`
       );
     }
 
@@ -1021,20 +1340,20 @@ export class AttemptService {
    */
   private calculateGradeForAuthor(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    authorQuestions: QuestionDto[],
+    authorQuestions: QuestionDto[]
   ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
     if (successfulQuestionResponses.length === 0) {
       return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
     }
     const totalPointsEarned = successfulQuestionResponses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
-      0,
+      0
     );
 
     const totalPossiblePoints = authorQuestions.reduce(
       (accumulator: number, question: QuestionDto) =>
         accumulator + question.totalPoints,
-      0,
+      0
     );
 
     const grade = totalPointsEarned / totalPossiblePoints;
@@ -1049,20 +1368,20 @@ export class AttemptService {
    */
   private calculateGradeForLearner(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: GetAssignmentAttemptResponseDto,
+    assignment: GetAssignmentAttemptResponseDto
   ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
     if (successfulQuestionResponses.length === 0) {
       return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
     }
     const totalPointsEarned = successfulQuestionResponses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
-      0,
+      0
     );
 
     const totalPossiblePoints = assignment.questions.reduce(
       (accumulator: number, question: { totalPoints: number }) =>
         accumulator + question.totalPoints,
-      0,
+      0
     );
 
     const grade = totalPointsEarned / totalPossiblePoints;
@@ -1076,7 +1395,7 @@ export class AttemptService {
    */
   private async sendGradeToLtiGateway(
     grade: number,
-    authCookie: string,
+    authCookie: string
   ): Promise<void> {
     const ltiGatewayResponse = await this.httpService
       .put(
@@ -1086,7 +1405,7 @@ export class AttemptService {
           headers: {
             Cookie: `authentication=${authCookie}`,
           },
-        },
+        }
       )
       .toPromise();
 
@@ -1105,7 +1424,7 @@ export class AttemptService {
   private async updateAssignmentAttemptInDb(
     assignmentAttemptId: number,
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
-    grade: number,
+    grade: number
   ) {
     // Omit fields that shouldn't be part of the update
     const {
@@ -1134,7 +1453,7 @@ export class AttemptService {
    */
   private constructFeedbacksForQuestions(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LearnerGetAssignmentResponseDto
   ) {
     return successfulQuestionResponses.map((feedbackForQuestion) => {
       const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
@@ -1154,7 +1473,7 @@ export class AttemptService {
     const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
     if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
       throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );
     }
   }
@@ -1173,14 +1492,14 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
-    assignmentId: number,
+    assignmentId: number
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string | { filename: string; content: string }[];
   }> {
     if (
       Array.isArray(
-        createQuestionResponseAttemptRequestDto.learnerFileResponse,
+        createQuestionResponseAttemptRequestDto.learnerFileResponse
       ) &&
       createQuestionResponseAttemptRequestDto.learnerFileResponse.length ===
         0 &&
@@ -1209,7 +1528,7 @@ export class AttemptService {
           question.type,
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
-          assignmentId,
+          assignmentId
         );
       }
       case QuestionType.LINK_FILE: {
@@ -1218,7 +1537,7 @@ export class AttemptService {
             question,
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
-            assignmentId,
+            assignmentId
           );
         } else if (
           createQuestionResponseAttemptRequestDto.learnerFileResponse
@@ -1227,11 +1546,11 @@ export class AttemptService {
             question,
             question.type,
             createQuestionResponseAttemptRequestDto,
-            assignmentContext,
+            assignmentContext
           );
         } else {
           throw new BadRequestException(
-            "Expected a file-based response (learnerFileResponse) or URL-based response (learnerUrlResponse), but did not receive one.",
+            "Expected a file-based response (learnerFileResponse) or URL-based response (learnerUrlResponse), but did not receive one."
           );
         }
       }
@@ -1240,7 +1559,7 @@ export class AttemptService {
           question,
           question.type,
           createQuestionResponseAttemptRequestDto,
-          assignmentContext,
+          assignmentContext
         );
       }
       case QuestionType.URL: {
@@ -1248,25 +1567,25 @@ export class AttemptService {
           question,
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
-          assignmentId,
+          assignmentId
         );
       }
       case QuestionType.TRUE_FALSE: {
         return this.handleTrueFalseQuestionResponse(
           question,
-          createQuestionResponseAttemptRequestDto,
+          createQuestionResponseAttemptRequestDto
         );
       }
       case QuestionType.SINGLE_CORRECT: {
         return this.handleSingleCorrectQuestionResponse(
           question,
-          createQuestionResponseAttemptRequestDto,
+          createQuestionResponseAttemptRequestDto
         );
       }
       case QuestionType.MULTIPLE_CORRECT: {
         return this.handleMultipleCorrectQuestionResponse(
           question,
-          createQuestionResponseAttemptRequestDto,
+          createQuestionResponseAttemptRequestDto
         );
       }
       default: {
@@ -1282,14 +1601,14 @@ export class AttemptService {
     assignmentContext: {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
-    },
+    }
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerFileUpload[];
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerFileResponse) {
       throw new BadRequestException(
-        "Expected a file-based response (learnerFileResponse), but did not receive one.",
+        "Expected a file-based response (learnerFileResponse), but did not receive one."
       );
     }
     const learnerResponse =
@@ -1303,11 +1622,11 @@ export class AttemptService {
       question.scoring?.type ?? "",
       question.scoring?.criteria ?? {},
       questionType,
-      question.responseType ?? "OTHER",
+      question.responseType ?? "OTHER"
     );
     const model = await this.llmService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,
-      question.assignmentId,
+      question.assignmentId
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1327,14 +1646,14 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
-    assignmentId: number,
+    assignmentId: number
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   }> {
     const learnerResponse = await AttemptHelper.validateAndGetTextResponse(
       questionType,
-      createQuestionResponseAttemptRequestDto,
+      createQuestionResponseAttemptRequestDto
     );
 
     const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
@@ -1345,12 +1664,12 @@ export class AttemptService {
       question.totalPoints,
       question.scoring?.type ?? "",
       question.scoring?.criteria ?? {},
-      question.responseType ?? "OTHER",
+      question.responseType ?? "OTHER"
     );
 
     const model = await this.llmService.gradeTextBasedQuestion(
       textBasedQuestionEvaluateModel,
-      assignmentId,
+      assignmentId
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1369,25 +1688,26 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
-    assignmentId: number,
+    assignmentId: number
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
       throw new BadRequestException(
-        "Expected a URL-based response (learnerUrlResponse), but did not receive one.",
+        "Expected a URL-based response (learnerUrlResponse), but did not receive one."
       );
     }
 
     const learnerResponse =
       createQuestionResponseAttemptRequestDto.learnerUrlResponse;
 
-    const urlFetchResponse =
-      await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+    const urlFetchResponse = await AttemptHelper.fetchPlainTextFromUrl(
+      learnerResponse
+    );
     if (!urlFetchResponse.isFunctional) {
       throw new BadRequestException(
-        `Unable to extract content from the provided URL: ${learnerResponse}`,
+        `Unable to extract content from the provided URL: ${learnerResponse}`
       );
     }
 
@@ -1401,12 +1721,12 @@ export class AttemptService {
       question.totalPoints,
       question.scoring?.type ?? "",
       question.scoring?.criteria ?? {},
-      question.responseType ?? "OTHER",
+      question.responseType ?? "OTHER"
     );
 
     const model = await this.llmService.gradeUrlBasedQuestion(
       urlBasedQuestionEvaluateModel,
-      assignmentId,
+      assignmentId
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1420,7 +1740,7 @@ export class AttemptService {
    */
   private handleTrueFalseQuestionResponse(
     question: QuestionDto,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -1430,7 +1750,7 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto.learnerAnswerChoice === undefined
     ) {
       throw new BadRequestException(
-        "Expected a true/false response (learnerAnswerChoice), but did not receive one.",
+        "Expected a true/false response (learnerAnswerChoice), but did not receive one."
       );
     }
     const correctAnswer =
@@ -1458,11 +1778,11 @@ export class AttemptService {
    */
   private formatFeedback(
     feedbackTemplate: string,
-    data: { [key: string]: unknown },
+    data: { [key: string]: unknown }
   ): string {
     return feedbackTemplate.replaceAll(
       /\${(.*?)}/g,
-      (_, g: string) => (data[g] as string) || "",
+      (_, g: string) => (data[g] as string) || ""
     );
   }
   /**
@@ -1470,7 +1790,7 @@ export class AttemptService {
    */
   private handleSingleCorrectQuestionResponse(
     question: QuestionDto,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -1484,7 +1804,7 @@ export class AttemptService {
     const correctChoice = choices.find((choice) => choice.isCorrect);
 
     const selectedChoice = choices.find(
-      (choice) => choice.choice === learnerChoice,
+      (choice) => choice.choice === learnerChoice
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1503,8 +1823,8 @@ export class AttemptService {
       } else {
         // Use default feedback if custom feedback is not provided
         choiceFeedback = selectedChoice.isCorrect
-          ? `**Correct selection:** ${learnerChoice} (+${selectedChoice.points} points)`
-          : `**Incorrect selection:** ${learnerChoice} (${selectedChoice.points} points)`;
+          ? `**Correct selection:** ${learnerChoice} (+ ${selectedChoice.points} points)`
+          : `**Incorrect selection:** ${learnerChoice} (- ${selectedChoice.points} points)`;
       }
 
       responseDto.totalPoints = selectedChoice.isCorrect
@@ -1536,7 +1856,7 @@ export class AttemptService {
    */
   private handleMultipleCorrectQuestionResponse(
     question: QuestionDto,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -1560,26 +1880,28 @@ export class AttemptService {
 
     const learnerChoices =
       createQuestionResponseAttemptRequestDto.learnerChoices;
+    console.log("learnerChoices", learnerChoices);
     const choices = this.parseChoices(question.choices);
+    console.log("Backend choices", choices);
     const correctChoices = choices.filter((choice) => choice.isCorrect) || [];
     const correctChoiceTexts = correctChoices.map((choice) => choice.choice);
     let totalPoints = 0;
     const maxPoints = correctChoices.reduce(
       (accumulator, choice) => accumulator + choice.points,
-      0,
+      0
     );
     const feedbackDetails: string[] = [];
 
     for (const learnerChoice of learnerChoices) {
       const selectedChoice = choices.find(
-        (choice) => choice.choice === learnerChoice,
+        (choice) => choice.choice === learnerChoice
       );
 
       const data = {
         learnerChoice,
         points: selectedChoice?.points || 0,
       };
-
+      console.log("selectedChoice", selectedChoice);
       if (selectedChoice) {
         totalPoints += selectedChoice.points;
 
@@ -1594,14 +1916,14 @@ export class AttemptService {
         feedbackDetails.push(choiceFeedback);
       } else {
         feedbackDetails.push(
-          `**Invalid selection:** ${learnerChoice} (0 points)`,
+          `**Invalid selection:** ${learnerChoice} (0 points)`
         );
       }
     }
 
     const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
     const allCorrectSelected = correctChoiceTexts.every((choice) =>
-      learnerChoices.includes(choice),
+      learnerChoices.includes(choice)
     );
 
     const feedbackMessage = `
@@ -1632,11 +1954,11 @@ ${
    * @returns The time range start date.
    */
   private calculateTimeRangeStartDate(
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LearnerGetAssignmentResponseDto
   ): Date {
     if (assignment.attemptsTimeRangeHours) {
       return new Date(
-        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000,
+        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000
       );
     }
     return new Date();
@@ -1650,7 +1972,7 @@ ${
    */
   private async countUserAttempts(
     userId: string,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<number> {
     return this.prisma.assignmentAttempt.count({
       where: {
@@ -1661,26 +1983,6 @@ ${
   }
 
   /**
-   * Sorts the assignment questions based on the display order.
-   * @param assignment The assignment object.
-   */
-  private sortAssignmentQuestions(
-    assignment: LearnerGetAssignmentResponseDto,
-  ): void {
-    if (assignment.questions) {
-      if (assignment.displayOrder === "RANDOM") {
-        assignment.questions.sort(() => Math.random() - 0.5);
-      } else if (assignment.questionOrder?.length > 0) {
-        assignment.questions.sort(
-          (a, b) =>
-            assignment.questionOrder.indexOf(a.id) -
-            assignment.questionOrder.indexOf(b.id),
-        );
-      }
-    }
-  }
-
-  /**
    * Constructs questions with their corresponding responses.
    * @param questions The list of questions.
    * @param questionResponses The list of question responses.
@@ -1688,7 +1990,7 @@ ${
    */
   private constructQuestionsWithResponses(
     questions: Question[],
-    questionResponses: QuestionResponse[],
+    questionResponses: QuestionResponse[]
   ): AssignmentAttemptQuestions[] {
     return questions.map((question) => {
       const correspondingResponses = questionResponses
@@ -1726,7 +2028,7 @@ ${
         : [];
 
       // Ensure the choices are in the expected format
-      const formattedChoices = choices.map(
+      const formattedChoices = choices?.map(
         (choice: {
           choice: string;
           points: number;
@@ -1737,7 +2039,7 @@ ${
           points: choice.points,
           feedback: choice.feedback,
           isCorrect: choice.isCorrect,
-        }),
+        })
       );
 
       return {
@@ -1778,7 +2080,7 @@ ${
     assignmentAttemptId: number,
     role: UserRole,
     authorQuestions?: QuestionDto[],
-    assignmentDetails?: Assignment,
+    assignmentDetails?: Assignment
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
@@ -1854,8 +2156,9 @@ ${
             groupedResponses[contextQuestion.id]?.learnerResponse || "";
 
           if (contextQuestion.type === "URL" && learnerResponse) {
-            const urlContent =
-              await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+            const urlContent = await AttemptHelper.fetchPlainTextFromUrl(
+              learnerResponse
+            );
             learnerResponse = JSON.stringify({
               url: learnerResponse,
               ...urlContent,
@@ -1866,7 +2169,7 @@ ${
             question: contextQuestion.question,
             answer: learnerResponse,
           };
-        }),
+        })
       );
     }
 
@@ -1874,56 +2177,5 @@ ${
       assignmentInstructions,
       questionAnswerContext: questionsAnswersContext,
     };
-  }
-
-  async createReport(
-    assignmentId: number,
-    attemptId: number,
-    issueType: ReportType,
-    description: string,
-    userId: string,
-  ): Promise<void> {
-    // Ensure the assignment exists
-    const assignmentExists = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-    });
-
-    if (!assignmentExists) {
-      throw new NotFoundException("Assignment not found");
-    }
-    // check if assignment attempt exists
-    const assignmentAttemptExists =
-      await this.prisma.assignmentAttempt.findUnique({
-        where: { id: attemptId },
-      });
-    if (!assignmentAttemptExists) {
-      throw new NotFoundException("Assignment attempt not found");
-    }
-    // if the user created more than 5 reports in the last 24 hours, throw an error
-    const reports = await this.prisma.report.findMany({
-      where: {
-        reporterId: userId,
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        },
-      },
-    });
-    if (reports.length >= 5) {
-      throw new UnprocessableEntityException(
-        "You have reached the maximum number of reports allowed in a 24-hour period.",
-      );
-    }
-
-    // Create a new report
-    await this.prisma.report.create({
-      data: {
-        assignmentId,
-        attemptId,
-        issueType,
-        description,
-        reporterId: userId,
-        author: false,
-      },
-    });
   }
 }

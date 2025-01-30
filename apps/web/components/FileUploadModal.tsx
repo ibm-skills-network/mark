@@ -1,3 +1,14 @@
+import MarkQuestionGenAnimation from "@/animations/MarkQuestionGenAnimation.json";
+import MarkQuestionGenCompleted from "@/animations/MarkQuestionGenCompleted.json";
+import MarkQuestionGenFailed from "@/animations/MarkQuestionGenFailed.json";
+import { readFile } from "@/app/Helpers/fileReader";
+import {
+  AssignmentTypeEnum,
+  Choice,
+  Criteria,
+  QuestionAuthorStore,
+  QuestionGenerationPayload,
+} from "@/config/types";
 import { getJobStatus, uploadFiles } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
@@ -8,24 +19,15 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion"; // For animations
+
+import Lottie from "lottie-react";
 import { useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import Modal from "./Modal";
-import {
-  AssignmentTypeEnum,
-  Choice,
-  Criteria,
-  QuestionAuthorStore,
-  QuestionGenerationPayload,
-} from "@/config/types";
-import Tooltip from "./Tooltip";
-const MAX_CHAR_LIMIT = 40000;
-import MarkQuestionGenAnimation from "@/animations/MarkQuestionGenAnimation.json";
-import MarkQuestionGenCompleted from "@/animations/MarkQuestionGenCompleted.json";
-import MarkQuestionGenFailed from "@/animations/MarkQuestionGenFailed.json";
-import Lottie from "lottie-react";
 import { toast } from "sonner";
-import { readFile } from "@/app/Helpers/fileReader";
+import Modal from "./Modal";
+import Tooltip from "./Tooltip";
+
+const MAX_CHAR_LIMIT = 40000;
 
 interface FileUploadModalProps {
   onClose: () => void;
@@ -214,6 +216,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 question.alreadyInBackend = false;
                 question.id = generateTempQuestionId();
                 question.assignmentId = activeAssignmentId;
+                question.randomizedChoices = true;
                 question.totalPoints =
                   question.scoring?.criteria &&
                   Array.isArray(question.scoring.criteria)

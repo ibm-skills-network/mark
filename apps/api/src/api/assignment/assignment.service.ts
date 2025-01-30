@@ -107,22 +107,19 @@ export class AssignmentService {
         }
       }
     }
-
-    if (isLearner) {
-      result.displayOrder = "DEFINED";
-      result.questionOrder = undefined;
-      return {
-        ...result,
-        success: true,
-      } as LearnerGetAssignmentResponseDto;
-    }
-
     if (result.questions && result.questionOrder) {
       result.questions.sort(
         (a, b) =>
           result.questionOrder.indexOf(a.id) -
           result.questionOrder.indexOf(b.id),
       );
+    }
+
+    if (isLearner) {
+      return {
+        ...result,
+        success: true,
+      } as LearnerGetAssignmentResponseDto;
     }
 
     return {
@@ -405,6 +402,7 @@ export class AssignmentService {
           maxWords: question.maxWords,
           maxCharacters: question.maxCharacters,
           responseType: question.responseType,
+          randomizedChoices: question.randomizedChoices,
           assignment: { connect: { id: assignmentId } },
         };
         // only if there is changes in the question content, apply guardrails
@@ -478,6 +476,7 @@ export class AssignmentService {
                   maxCharacters: variant.maxCharacters,
                   variantType: variant.variantType,
                   createdAt: new Date(),
+                  randomizedChoices: variant.randomizedChoices,
                   variantOf: { connect: { id: upsertedQuestion.id } },
                 };
 
@@ -520,6 +519,7 @@ export class AssignmentService {
                         maxWords: variant.maxWords,
                         maxCharacters: variant.maxCharacters,
                         variantType: variant.variantType,
+                        randomizedChoices: variant.randomizedChoices,
                         scoring: variant.scoring
                           ? (JSON.parse(
                               JSON.stringify(variant.scoring),
@@ -647,6 +647,8 @@ export class AssignmentService {
                 ),
                 choices: variant.choices,
                 scoring: variant.scoring,
+                variantType: variant.variantType,
+                randomizedChoices: true,
               })) as VariantDto[]),
             );
           } else {
@@ -657,6 +659,7 @@ export class AssignmentService {
               id: Number(`${question.id}${variantId++}`),
               questionId: question.id,
               variantType: variant.variantType,
+              randomizedChoices: true,
             })) as VariantDto[];
           }
         }

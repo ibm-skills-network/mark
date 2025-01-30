@@ -132,7 +132,7 @@ function Rubric(props: Rubric) {
                 className="absolute text-red-400 right-4"
                 onClick={() => handleRemoveChoiceWrittenQuestion(index)}
               >
-                <XMarkIcon className="w-6" />
+                <XMarkIcon className="w-6 hover:cursor-pointer" />
               </button>
             </li>
           ))}

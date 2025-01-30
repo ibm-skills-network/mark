@@ -90,6 +90,7 @@ export type AuthorFileUploads = {
 export type UpdateQuestionStateParams = {
   questionType?: QuestionType;
   responseType?: ResponseType;
+  randomizedChoices?: boolean;
   maxWordCount?: number;
   questionTitle?: string;
   questionCriteria?: {
@@ -252,8 +253,8 @@ export interface Question extends CreateQuestionRequest {
   id: number;
   assignmentId: number;
   questionOrder?: number[];
-  choices?: Choice[];
   variants?: QuestionVariants[];
+  randomizedChoices?: boolean;
 }
 
 export interface QuestionVariants {
@@ -268,6 +269,7 @@ export interface QuestionVariants {
   maxCharacters?: number;
   createdAt: string;
   difficultyLevel?: number;
+  randomizedChoices?: boolean;
   variantType: "REWORDED" | "REPHRASED";
 }
 

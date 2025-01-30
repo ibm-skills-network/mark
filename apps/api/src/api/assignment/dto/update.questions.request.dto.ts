@@ -115,6 +115,15 @@ export class VariantDto {
   @IsNotEmpty()
   @IsString()
   variantType: VariantType;
+
+  //randomizedChoices for the variant
+  @ApiPropertyOptional({
+    description: "Flag indicating if variant choices are randomized",
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  randomizedChoices?: boolean;
 }
 
 export class QuestionDto {
@@ -211,6 +220,14 @@ export class QuestionDto {
   @ValidateNested({ each: true })
   @Type(() => VariantDto)
   variants?: VariantDto[];
+
+  @ApiPropertyOptional({
+    description: "Flag indicating if the question choices are randomized",
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  randomizedChoices?: boolean;
 }
 export class GenerateQuestionVariantDto {
   @ApiProperty({

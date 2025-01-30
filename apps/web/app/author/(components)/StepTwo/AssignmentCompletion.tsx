@@ -1,11 +1,12 @@
 "use client";
-import type { ComponentPropsWithoutRef, FC } from "react";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { stepTwoSections } from "@/config/constants";
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
+
 import Dropdown from "@/components/Dropdown";
 import Tooltip from "@/components/Tooltip";
+import { stepTwoSections } from "@/config/constants";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { InformationCircleIcon } from "@heroicons/react/24/solid";
+import type { ComponentPropsWithoutRef, FC } from "react";
+import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
@@ -25,6 +26,11 @@ const Component: FC<Props> = () => {
     { value: 3, label: "3" },
     { value: 4, label: "4" },
     { value: 5, label: "5" },
+    { value: 6, label: "6" },
+    { value: 7, label: "7" },
+    { value: 8, label: "8" },
+    { value: 9, label: "9" },
+    { value: 10, label: "10" },
     { value: -1, label: "unlimited" },
   ];
 

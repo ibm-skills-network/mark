@@ -3,7 +3,7 @@
 import { cn } from "@/lib/strings";
 import { useAppConfig } from "@/stores/appConfig";
 import { TagIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { LanguageIcon } from "@heroicons/react/24/solid";
+import { ArrowRightIcon, LanguageIcon } from "@heroicons/react/24/solid";
 import { TagIcon as SolidTagIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useState } from "react";
 
@@ -14,26 +14,22 @@ function TipsView() {
     setPersistTips: state.setPersistTips,
   }));
 
-  // 1) Track whether we're on mobile (screen < 768px)
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     function handleResize() {
       setIsMobile(window.innerWidth < 768);
     }
-    // Run once on mount:
     handleResize();
 
-    // Listen for resize events:
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // 2) The “modal” UI if we’re on mobile:
   if (isMobile) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-        <div className="mx-auto w-full max-w-xs sm:max-w-sm bg-white border border-gray-300 rounded-lg shadow hover:shadow-md p-4 flex flex-col gap-y-3">
+        <div className="mx-auto w-full max-w-xs sm:max-w-sm bg-white border border-gray-300 rounded-lg shadow hover:shadow-mdflex flex-col gap-y-3">
           <div className="flex items-center justify-between">
             <h1 className="text-gray-800 text-lg">Tips</h1>
             <XMarkIcon
@@ -111,13 +107,12 @@ function TipsView() {
     );
   }
 
-  // 3) Otherwise, render the original (non-modal) version:
   return (
     <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 w-full md:w-[250px] bg-white shadow hover:shadow-md">
       <div className="flex items-center justify-between ">
         <h1 className="text-gray-800 text-lg">Tips</h1>
         <XMarkIcon
-          className="h-6 w-6 text-gray-600 cursor-pointer"
+          className="h-6 w-6 text-gray-600 cursor-pointer hover:cursor-pointer"
           onClick={() => setTips(false)}
         />
       </div>
@@ -169,11 +164,22 @@ function TipsView() {
         <div className="flex items-center gap-x-2 px-4">
           <div className="flex items-center gap-x-1">
             <TagIcon className="h-6 w-6 text-violet-600" />
-            <p className="text-gray-600 text-xs">UNTAGGED</p>
           </div>
+          <ArrowRightIcon className="h-4 w-4 text-gray-600" />
           <div className="flex items-center gap-x-1">
             <SolidTagIcon className="h-6 w-6 text-violet-600" />
-            <p className="text-gray-600 text-xs">TAGGED</p>
+          </div>
+          <ArrowRightIcon className="h-4 w-4 text-gray-600" />
+          <div className="w-10 h-11 border rounded-md text-center relative  justify-center focus:outline-none flex flex-col items-center bg-violet-100 border-violet-400 text-violet-700">
+            <div
+              className="absolute top-0 right-0 w-4 h-4 bg-violet-500"
+              style={{
+                clipPath: "polygon(100% 0, 0 0, 100% 100%)",
+                borderTopRightRadius: "0.25rem",
+              }}
+              aria-hidden="true"
+            ></div>
+            <div className="font-bold text-lg">1</div>
           </div>
         </div>
       </div>

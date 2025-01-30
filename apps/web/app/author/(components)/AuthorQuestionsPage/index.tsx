@@ -1,6 +1,12 @@
 "use client";
 
-import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import {
+  handleJumpToQuestion,
+  handleJumpToQuestionTitle,
+} from "@/app/Helpers/handleJumpToQuestion";
+import Dropdown from "@/components/Dropdown";
+import FileUploadModal from "@/components/FileUploadModal";
+import ReportModal from "@/components/ReportModal";
 import GripVertical from "@/components/svgs/GripVertical";
 import MultipleChoiceSVG from "@/components/svgs/MC";
 import type {
@@ -10,12 +16,10 @@ import type {
   QuestionAuthorStore,
   QuestionVariants,
 } from "@/config/types";
-import SparkleLottie from "@/app/animations/sparkleLottie";
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
-import { handleJumpToQuestionTitle } from "@/app/Helpers/handleJumpToQuestion";
 import {
   closestCenter,
   DndContext,
@@ -60,13 +64,10 @@ import React, {
   type FC,
 } from "react";
 import { toast } from "sonner";
+import { shallow } from "zustand/shallow";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
-import { shallow } from "zustand/shallow";
-import FileUploadModal from "@/components/FileUploadModal";
 
-import Dropdown from "@/components/Dropdown";
-import ReportModal from "@/components/ReportModal";
 interface Props {
   assignmentId: number;
   defaultQuestionRetries: number;
@@ -84,7 +85,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 }) => {
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes.",
+    "Are you sure you want to leave this page? You will lose any unsaved changes."
   ); // Prompt the user before leaving the page
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
     state.focusedQuestionId,
@@ -95,10 +96,10 @@ const AuthorQuestionsPage: FC<Props> = ({
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId,
+    (state) => state.activeAssignmentId
   );
   const setActiveAssignmentId = useAuthorStore(
-    (state) => state.setActiveAssignmentId,
+    (state) => state.setActiveAssignmentId
   );
   const [isMassVariationLoading, setIsMassVariationLoading] = useState(false);
   const [questionVariationNumber, setQuestionVariationNumber] =
@@ -149,7 +150,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    [],
+    []
   );
 
   useEffect(() => {
@@ -166,7 +167,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   (criteria: Criteria, criteriaIndex: number) => ({
                     ...criteria,
                     index: criteriaIndex + 1,
-                  }),
+                  })
                 );
                 const parsedVariants: QuestionVariants[] =
                   question.variants?.map((variant: QuestionVariants) => ({
@@ -187,13 +188,13 @@ const AuthorQuestionsPage: FC<Props> = ({
                   },
                   index: index + 1,
                 };
-              },
+              }
             );
             if (questions?.length > 0) {
               questions.forEach((question) => {
                 // parse choices in variants to make it choices object
                 question.scoring.criteria = question.scoring.criteria.sort(
-                  (a, b) => b.points - a.points,
+                  (a, b) => b.points - a.points
                 );
               });
               setQuestions(questions);
@@ -261,7 +262,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       | "URL"
       | "CODE"
       | "UPLOAD"
-      | "LINK_FILE",
+      | "LINK_FILE"
   ) => {
     const question: CreateQuestionRequest = {
       question: "",
@@ -301,6 +302,8 @@ const AuthorQuestionsPage: FC<Props> = ({
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? 1,
       index: questions.length + 1,
+      randomizedChoices:
+        type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT" ? true : null,
     });
     setFocusedQuestionId(questionId);
     handleJumpToQuestionTitle(`${String(focusedQuestionId)}`);
@@ -316,7 +319,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     const questionsWithVariants = await generateQuestionVariant(
       questions,
       questionVariationNumber,
-      assignmentId,
+      assignmentId
     );
     if (questionsWithVariants) {
       setQuestions(questionsWithVariants);
@@ -355,6 +358,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       alreadyInBackend: false,
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? -1,
+      randomizedChoices: true,
       index: questions.length + 1, // Set the index for the new question
     });
     setFocusedQuestionId(questionId);
@@ -386,6 +390,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         scoring: question.scoring,
         numRetries: question.numRetries,
         index: Number(question.index) + 1, // Set the index for the new question
+        randomizedChoices: question.randomizedChoices,
       };
 
       const questionIndex = Number(question.index);
@@ -500,7 +505,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         prevProps.question === nextProps.question &&
         prevProps.questionIndex === nextProps.questionIndex
       );
-    },
+    }
   );
 
   const SortableList = React.memo(
@@ -522,7 +527,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     },
     (prevProps, nextProps) => {
       return prevProps.questions === nextProps.questions;
-    },
+    }
   );
 
   /**
@@ -590,19 +595,26 @@ const AuthorQuestionsPage: FC<Props> = ({
       <div className="grid grid-cols-4 gap-x-4 mx-6 md:grid-cols-12 md:mx-8 md:gap-x-6 mt-8 min-h-[90vh] grid-rows-[auto,auto,auto]">
         {questions.length > 0 && (
           <>
-            {/* NavigationBox component */}
             <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-1 md:col-end-3 hidden lg:block text-nowrap">
-              <NavigationBox
-                setQuestions={setQuestions}
-                questions={questions}
-                focusedQuestionId={focusedQuestionId}
-                handleToggleTable={handleToggleTable}
-                setHandleToggleTable={setHandleToggleTable}
-                onSelectQuestion={(index) => {
-                  setFocusedQuestionId(questions[index].id);
-                  handleJumpToQuestionTitle(`${String(questions[index].id)}`);
-                }}
-              />
+              <div className="sticky top-4 space-y-4">
+                <NavigationBox
+                  setQuestions={setQuestions}
+                  questions={questions}
+                  focusedQuestionId={focusedQuestionId}
+                  handleToggleTable={handleToggleTable}
+                  setHandleToggleTable={setHandleToggleTable}
+                  onSelectQuestion={(index) => {
+                    setFocusedQuestionId(questions[index].id);
+                    handleJumpToQuestionTitle(`${String(questions[index].id)}`);
+                  }}
+                />
+                <button
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="block px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
+                >
+                  <span className="text-sm font-medium">Report Issue</span>
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -620,7 +632,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   <SortableItem
                     question={questions.find((q) => q.id === activeId)}
                     questionIndex={questions.findIndex(
-                      (q) => q.id === activeId,
+                      (q) => q.id === activeId
                     )}
                   />
                 ) : null}
@@ -674,7 +686,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                                     | "URL"
                                     | "LINK_FILE"
                                     | "UPLOAD"
-                                    | "CODE",
+                                    | "CODE"
                                 )
                               }
                               className={`${
@@ -707,15 +719,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         </div>
         {questions.length > 0 && (
           <div className="col-span-4 md:col-span-8 lg:col-span-12 md:col-start-3 md:col-end-11 lg:col-start-3 lg:col-end-11 row-start-3 flex flex-col justify-end mb-10">
-            <div className="flex items-center justify-between gap-2">
-              <button
-                onClick={() => setIsReportModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 border bg-violet-100 text-violet-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 ease-in-out"
-              >
-                <span className="text-sm font-medium">Report Issue</span>
-              </button>
-              <FooterNavigation nextStep="review" />
-            </div>
+            <FooterNavigation nextStep="review" />
           </div>
         )}
         <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
@@ -739,7 +743,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                     Mass Variations (Beta)
                   </span>
                   <Dropdown
-                    options={[1, 2, 3, 4, 5] as number[]}
+                    options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as number[]}
                     selectedItem={questionVariationNumber}
                     setSelectedItem={setQuestionVariationNumber}
                     items={[
@@ -748,6 +752,11 @@ const AuthorQuestionsPage: FC<Props> = ({
                       { value: 3, label: "3" },
                       { value: 4, label: "4" },
                       { value: 5, label: "5" },
+                      { value: 6, label: "6" },
+                      { value: 7, label: "7" },
+                      { value: 8, label: "8" },
+                      { value: 9, label: "9" },
+                      { value: 10, label: "10" },
                     ]}
                   />
                   <p className="text-gray-500 mt-2 text-wrap">
@@ -781,7 +790,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                 >
                   <span className="flex items-center gap-2 text-wrap">
                     <div className="flex items-center gap-1">
-                      <SparkleLottie className="w-5 h-5 text-violet-600" />
                       <SparklesIcon className="w-4 h-4 text-violet-600" />
                     </div>
                     <span className="text-sm font-medium">
@@ -981,7 +989,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     setSelectedQuestions((prevSelected: number[]) =>
       prevSelected.includes(questionId)
         ? prevSelected.filter((id: number) => id !== questionId)
-        : [...prevSelected, questionId],
+        : [...prevSelected, questionId]
     );
   };
 
@@ -999,7 +1007,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     }
 
     const updatedQuestions = questions.filter(
-      (q) => !deletedQuestionIds.includes(q.id),
+      (q) => !deletedQuestionIds.includes(q.id)
     );
     updatedQuestions.forEach((q, index) => {
       q.index = index + 1;
@@ -1063,7 +1071,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
                     setSelectedQuestions(
                       selectedQuestions.length === questions.length
                         ? []
-                        : questions.map((q) => q.id),
+                        : questions.map((q) => q.id)
                     );
                   }}
                   className="text-gray-500 hover:text-violet-600 transition-colors duration-300"

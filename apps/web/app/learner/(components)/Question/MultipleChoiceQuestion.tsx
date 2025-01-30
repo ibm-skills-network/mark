@@ -47,10 +47,10 @@ function MultipleChoiceQuestion({
             type="button"
             className={cn(
               "flex items-center w-full p-3 rounded-lg transition-colors duration-200",
-              "text-lg font-medium",
+              "text-lg font-normal",
               isSelected
                 ? "  text-violet-900"
-                : "bg-white  text-gray-800 hover:bg-gray-50",
+                : "bg-white text-gray-800 hover:bg-gray-50",
             )}
             onClick={() => handleChoiceClick(choiceText)}
           >
