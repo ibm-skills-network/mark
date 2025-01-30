@@ -970,9 +970,9 @@
     zod-to-json-schema "^3.22.5"
 
 "@langchain/core@^0.3.0":
-  version "0.3.33"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.33.tgz#7efcbdc06b1e9f24b774e5aa1c594203d28c9e18"
-  integrity sha512-gIszaRKWmP1HEgOhJLJaMiTMH8U3W9hG6raWihwpCTb0Ns7owjrmaqmgMa9h3W4/0xriaKfrfFBd6tepKsfxZA==
+  version "0.3.37"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.37.tgz#9ea7985c6cdaa075b02241ba3e6ba76c47454daf"
+  integrity sha512-LFk9GqHxcyCFx0oXvCBP7vDZIOUHYzzNU7JR+2ofIMnfkBLzcCKzBLySQDfPtd13PrpGHkaeOeLq8H1Tqi9lSw==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
