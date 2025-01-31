@@ -1779,10 +1779,15 @@
     "@tsparticles/updater-out-modes" "3.8.0"
     "@tsparticles/updater-size" "3.8.0"
 
-"@tsparticles/engine@3.8.0", "@tsparticles/engine@^3.5.0":
+"@tsparticles/engine@3.8.0":
   version "3.8.0"
   resolved "https://registry.yarnpkg.com/@tsparticles/engine/-/engine-3.8.0.tgz#035cfcea31a29c6639b0fd791d726b28e3562573"
   integrity sha512-mqdSG4gkLbOUck/Wqk8rR4duc6NCnmtJfSPkIvVOUpo/jk2kAGaxRVSU9n0sySxZRx+CGbpAFVVdjdtB1N+70A==
+
+"@tsparticles/engine@^3.5.0":
+  version "3.8.1"
+  resolved "https://registry.yarnpkg.com/@tsparticles/engine/-/engine-3.8.1.tgz#1dc538cdb043757c8b8a90bd03b1069c1801cc1e"
+  integrity sha512-S8h10nuZfElY7oih//NUHnT5qf4v3/dnsU8CMs7dz5lBEGr3amrYrXk0V+YKPTIQwfdmJHUaSBoAqFiv4aEGIA==
 
 "@tsparticles/interaction-external-attract@3.8.0":
   version "3.8.0"
