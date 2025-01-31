@@ -478,21 +478,22 @@ const Question: FC<QuestionProps> = ({
   );
   const randomizedChoices = (
     questionId: number,
+    questionIndex: number,
     variantId?: number,
-    variantIndex?: number,
+    Index?: number,
   ) => {
     if (variantId) {
       const randomizedMode = toggleRandomizedChoicesMode(questionId, variantId);
       toast.info(
-        `Randomized choice order for question ${question.index}  ${
-          variantIndex ? `: variant ${variantIndex}` : ""
+        `Randomized choice order for question ${questionIndex}  ${
+          variantId ? `: variant ${Index}` : ""
         } has been ${randomizedMode ? "ENABLED" : "DISABLED"}`,
       );
       return;
     }
     const randomizedMode = toggleRandomizedChoicesMode(questionId);
     toast.info(
-      `Randomized choice order for question number ${question.index} has been ${
+      `Randomized choice order for question number ${questionIndex} has been ${
         randomizedMode ? "ENABLED" : "DISABLED"
       }`,
     );
@@ -975,7 +976,7 @@ const Question: FC<QuestionProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      randomizedChoices(question.id);
+                      randomizedChoices(question.id, questionIndex);
                     }}
                     className={cn(
                       "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
@@ -1131,6 +1132,7 @@ const Question: FC<QuestionProps> = ({
                           onClick={() => {
                             randomizedChoices(
                               question.id,
+                              questionIndex,
                               variant.id,
                               index + 1,
                             );

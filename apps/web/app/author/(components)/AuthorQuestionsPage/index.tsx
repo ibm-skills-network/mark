@@ -85,7 +85,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 }) => {
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes."
+    "Are you sure you want to leave this page? You will lose any unsaved changes.",
   ); // Prompt the user before leaving the page
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
     state.focusedQuestionId,
@@ -96,10 +96,10 @@ const AuthorQuestionsPage: FC<Props> = ({
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId
+    (state) => state.activeAssignmentId,
   );
   const setActiveAssignmentId = useAuthorStore(
-    (state) => state.setActiveAssignmentId
+    (state) => state.setActiveAssignmentId,
   );
   const [isMassVariationLoading, setIsMassVariationLoading] = useState(false);
   const [questionVariationNumber, setQuestionVariationNumber] =
@@ -150,7 +150,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    []
+    [],
   );
 
   useEffect(() => {
@@ -167,7 +167,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   (criteria: Criteria, criteriaIndex: number) => ({
                     ...criteria,
                     index: criteriaIndex + 1,
-                  })
+                  }),
                 );
                 const parsedVariants: QuestionVariants[] =
                   question.variants?.map((variant: QuestionVariants) => ({
@@ -188,13 +188,13 @@ const AuthorQuestionsPage: FC<Props> = ({
                   },
                   index: index + 1,
                 };
-              }
+              },
             );
             if (questions?.length > 0) {
               questions.forEach((question) => {
                 // parse choices in variants to make it choices object
                 question.scoring.criteria = question.scoring.criteria.sort(
-                  (a, b) => b.points - a.points
+                  (a, b) => b.points - a.points,
                 );
               });
               setQuestions(questions);
@@ -262,7 +262,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       | "URL"
       | "CODE"
       | "UPLOAD"
-      | "LINK_FILE"
+      | "LINK_FILE",
   ) => {
     const question: CreateQuestionRequest = {
       question: "",
@@ -319,7 +319,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     const questionsWithVariants = await generateQuestionVariant(
       questions,
       questionVariationNumber,
-      assignmentId
+      assignmentId,
     );
     if (questionsWithVariants) {
       setQuestions(questionsWithVariants);
@@ -505,7 +505,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         prevProps.question === nextProps.question &&
         prevProps.questionIndex === nextProps.questionIndex
       );
-    }
+    },
   );
 
   const SortableList = React.memo(
@@ -527,7 +527,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     },
     (prevProps, nextProps) => {
       return prevProps.questions === nextProps.questions;
-    }
+    },
   );
 
   /**
@@ -632,7 +632,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   <SortableItem
                     question={questions.find((q) => q.id === activeId)}
                     questionIndex={questions.findIndex(
-                      (q) => q.id === activeId
+                      (q) => q.id === activeId,
                     )}
                   />
                 ) : null}
@@ -686,7 +686,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                                     | "URL"
                                     | "LINK_FILE"
                                     | "UPLOAD"
-                                    | "CODE"
+                                    | "CODE",
                                 )
                               }
                               className={`${
@@ -989,7 +989,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     setSelectedQuestions((prevSelected: number[]) =>
       prevSelected.includes(questionId)
         ? prevSelected.filter((id: number) => id !== questionId)
-        : [...prevSelected, questionId]
+        : [...prevSelected, questionId],
     );
   };
 
@@ -1007,7 +1007,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     }
 
     const updatedQuestions = questions.filter(
-      (q) => !deletedQuestionIds.includes(q.id)
+      (q) => !deletedQuestionIds.includes(q.id),
     );
     updatedQuestions.forEach((q, index) => {
       q.index = index + 1;
@@ -1071,7 +1071,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
                     setSelectedQuestions(
                       selectedQuestions.length === questions.length
                         ? []
-                        : questions.map((q) => q.id)
+                        : questions.map((q) => q.id),
                     );
                   }}
                   className="text-gray-500 hover:text-violet-600 transition-colors duration-300"

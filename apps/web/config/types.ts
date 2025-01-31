@@ -375,6 +375,7 @@ export type AssignmentAttempt = {
   // example: 2023-12-31T23:59:59Z
   expiresAt?: string;
   createdAt?: string;
+  message?: string;
 };
 
 export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
@@ -388,6 +389,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   showSubmissionFeedback?: boolean;
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
+  comments?: string;
 }
 
 export interface AssignmentDetails {
@@ -415,6 +417,7 @@ export type BaseBackendResponse = {
   id: number;
   success: boolean;
   error?: string;
+  message?: string;
 };
 export type UpdateAssignmentQuestionsResponse = BaseBackendResponse & {
   questions?: Question[];

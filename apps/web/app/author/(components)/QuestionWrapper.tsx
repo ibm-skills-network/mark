@@ -414,10 +414,14 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     setModalOpen(false); // Close the modal
 
     if (questionTitle?.trim() === "") {
-      toast.error("Please enter a question title first.");
+      toast.error("Please enter a Question `Title` first.");
       return;
     }
-
+    if (questionType === "EMPTY") {
+      toast.error("Please select a Question `Type` first.");
+      return;
+    }
+    console.log("questionType", questionType);
     setCriteriaMode(questionId, "AI_GEN");
 
     try {

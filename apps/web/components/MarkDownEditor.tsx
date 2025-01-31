@@ -134,7 +134,8 @@ const MarkdownEditor: React.FC<Props> = ({
     const style = document.createElement("style");
     style.innerHTML = `
       .ql-container.ql-snow {
-        min-height: auto !important;
+        min-height: 100px !important;
+        height: auto !important;
         overflow: visible !important;
       }
       .ql-container.ql-snow .ql-editor {
@@ -143,7 +144,8 @@ const MarkdownEditor: React.FC<Props> = ({
         font-weight: 600 !important;
         line-height: 1.3 !important;
         background-color: transparent !important;
-        min-height: auto !important;
+        min-height: 100px !important;
+        height: auto !important;
         overflow: visible !important;
        padding: 0 !important;
       }
@@ -183,7 +185,7 @@ const MarkdownEditor: React.FC<Props> = ({
     <div className={cn("flex flex-col", className)}>
       <div
         className={cn(
-          "quill-editor overflow-auto p-2 border border-gray-200 rounded",
+          "quill-editor overflow-auto p-2 border border-gray-200 rounded min-h-[100px]",
           textareaClassName,
         )}
         ref={quillRef}

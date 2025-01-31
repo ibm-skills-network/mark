@@ -122,12 +122,7 @@ function LearnerHeader() {
       role === "author" ? authorQuestions : undefined,
       role === "author" ? authorAssignmentDetails : undefined,
     );
-
     setSubmitting(false);
-    if (!res || !res.success) {
-      toast.error("Failed to submit assignment.");
-      return;
-    }
     const { grade, feedbacksForQuestions } = res;
     setTotalPointsEarned(res.totalPointsEarned);
     setTotalPointsPossible(res.totalPossiblePoints);

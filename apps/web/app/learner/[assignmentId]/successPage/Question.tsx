@@ -244,7 +244,9 @@ const Question: FC<Props> = ({ question, number }) => {
       ) {
         return (
           <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
-            <span className="w-full">No answer was provided by the learner.</span>
+            <span className="w-full">
+              No answer was provided by the learner.
+            </span>
             <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
           </p>
         );
@@ -369,7 +371,9 @@ const Question: FC<Props> = ({ question, number }) => {
       } else {
         return (
           <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
-            <span className="w-full">No answer was provided by the learner.</span>
+            <span className="w-full">
+              No answer was provided by the learner.
+            </span>
             <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
           </p>
         );
@@ -377,9 +381,9 @@ const Question: FC<Props> = ({ question, number }) => {
     } else {
       return (
         <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
-            <span className="w-full">No answer was provided by the learner.</span>
-            <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
-          </p>
+          <span className="w-full">No answer was provided by the learner.</span>
+          <XMarkIcon className="w-5 h-5 text-red-500 ml-2 hover:cursor-pointer" />
+        </p>
       );
     }
   };

@@ -78,6 +78,13 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     required: false,
   })
   showQuestionScore: boolean;
+  @ApiPropertyOptional({
+    description: "The comments for the question.",
+    type: String,
+    required: false,
+  })
+  @Optional()
+  comments?: string;
 }
 
 export class AssignmentAttemptQuestions {

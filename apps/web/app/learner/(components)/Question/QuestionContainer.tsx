@@ -34,14 +34,14 @@ function Component(props: Props) {
   } = props;
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
-    (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber]
+    (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber],
   );
   const setQuestionStatus = useLearnerStore((state) => state.setQuestionStatus);
   const getQuestionStatusById = useLearnerStore(
-    (state) => state.getQuestionStatusById
+    (state) => state.getQuestionStatusById,
   );
   const setSelectedLanguage = useLearnerStore(
-    (state) => state.setSelectedLanguage
+    (state) => state.setSelectedLanguage,
   );
   // Get the questionStatus directly from the store
   const questionStatus = getQuestionStatusById
@@ -68,13 +68,13 @@ function Component(props: Props) {
     }
   };
   const translationOn = useLearnerStore((state) =>
-    state.getTranslationOn(questionId)
+    state.getTranslationOn(questionId),
   );
   const setTranslatedQuestion = useLearnerStore(
-    (state) => state.setTranslatedQuestion
+    (state) => state.setTranslatedQuestion,
   );
   const setTranslatedChoices = useLearnerStore(
-    (state) => state.setTranslatedChoices
+    (state) => state.setTranslatedChoices,
   );
   const translatingWords = [
     "Translating",
@@ -123,7 +123,7 @@ function Component(props: Props) {
         question,
         question.selectedLanguage,
         languages.find((lang) => lang.name === question.selectedLanguage)
-          ?.code || "en"
+          ?.code || "en",
       );
 
       setTranslatedQuestion(questionId, translation.translatedQuestion);
@@ -180,7 +180,7 @@ function Component(props: Props) {
       className={cn(
         "flex bg-white rounded flex-col gap-y-4 p-6 relative shadow hover:shadow-md border ",
         className,
-        `${activeQuestionNumber === questionNumber ? "border-violet-600" : ""}`
+        `${activeQuestionNumber === questionNumber ? "border-violet-600" : ""}`,
       )}
     >
       {/* Question Header */}
@@ -223,7 +223,7 @@ function Component(props: Props) {
               onClick={toggleTranslation}
               className={cn(
                 "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                translationOn ? "bg-violet-600" : "bg-gray-200"
+                translationOn ? "bg-violet-600" : "bg-gray-200",
               )}
               role="switch"
               aria-checked={translationOn}
@@ -232,7 +232,7 @@ function Component(props: Props) {
                 aria-hidden="true"
                 className={cn(
                   "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                  translationOn ? "translate-x-5" : "translate-x-0"
+                  translationOn ? "translate-x-5" : "translate-x-0",
                 )}
               />
             </button>

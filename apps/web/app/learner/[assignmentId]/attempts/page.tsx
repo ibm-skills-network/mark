@@ -4,7 +4,6 @@ import {
   useAssignmentDetails,
   useLearnerOverviewStore,
 } from "@/stores/learner";
-import { ArrowRightIcon } from "@heroicons/react/24/solid";
 import React, { useMemo, useState } from "react";
 import DataTable, {
   createTheme,
@@ -50,7 +49,7 @@ interface AttemptTableRow {
 
 export default function AssignmentAttempts() {
   const listOfAttempts = useLearnerOverviewStore(
-    (state) => state.listOfAttempts
+    (state) => state.listOfAttempts,
   );
   const [assignmentDetails] = useAssignmentDetails((state) => [
     state.assignmentDetails,
@@ -59,7 +58,7 @@ export default function AssignmentAttempts() {
   const sortedAttempts = [...listOfAttempts].sort((a, b) =>
     a.createdAt && b.createdAt
       ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      : 0
+      : 0,
   );
 
   const attemptsData: AttemptTableRow[] = useMemo(
@@ -118,7 +117,7 @@ export default function AssignmentAttempts() {
           isLatest: index === 0,
         };
       }),
-    [sortedAttempts]
+    [sortedAttempts],
   );
 
   const columns = useMemo<TableColumn<AttemptTableRow>[]>(
@@ -178,7 +177,7 @@ export default function AssignmentAttempts() {
             onClick={() => {
               window.open(
                 `/learner/${row.assignmentId}/successPage/${row.id}`,
-                "_self"
+                "_self",
               );
             }}
             className="flex items-center gap-1 text-blue-600 hover:text-violet-600 underline"
@@ -193,7 +192,7 @@ export default function AssignmentAttempts() {
         width: "70px",
       },
     ],
-    []
+    [],
   );
 
   const [filterText, setFilterText] = useState("");
@@ -214,7 +213,7 @@ export default function AssignmentAttempts() {
 
   return (
     <div className="flex justify-center pt-10 bg-gray-50 flex-1">
-      <div className="w-full max-w-4xl p-6 bg-white rounded shadow-sm h-fit">
+      <div className="w-full max-w-7xl p-6 bg-white rounded shadow-sm h-fit">
         <h1 className="text-2xl font-bold mb-4">
           {assignmentDetails?.name || "Assignment"} Attempts
         </h1>

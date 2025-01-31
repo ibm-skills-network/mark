@@ -1,5 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsArray, IsOptional } from "class-validator";
+import { optional } from "zod";
 import type { CreateQuestionResponseAttemptResponseDto } from "../question-response/create.question.response.attempt.response.dto";
 import { BaseAssignmentAttemptResponseDto } from "./base.assignment.attempt.response.dto";
 
@@ -50,4 +51,14 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
     required: true,
   })
   totalPossiblePoints: number;
+
+  // message
+  @ApiProperty({
+    description: "The message to the learner.",
+    type: String,
+    example: "Good job!",
+    required: false,
+  })
+  @IsOptional()
+  message?: string;
 }

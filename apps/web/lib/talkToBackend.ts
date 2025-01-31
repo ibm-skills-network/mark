@@ -47,7 +47,8 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
     });
 
     if (!res.ok) {
-      throw new Error("Failed to fetch user data");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to fetch user");
     }
 
     return (await res.json()) as User;
@@ -76,7 +77,8 @@ export async function replaceAssignment(
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      throw new Error("Failed to replace assignment");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to replace assignment");
     }
     const { success, error } = (await res.json()) as BaseBackendResponse;
     if (!success) {
@@ -107,7 +109,8 @@ export async function updateAssignment(
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      throw new Error("Failed to update assignment");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to update assignment");
     }
     const { success, error } = (await res.json()) as BaseBackendResponse;
     if (!success) {
@@ -140,7 +143,8 @@ export async function getAssignment(
     });
 
     if (!res.ok) {
-      throw new Error("Failed to fetch assignment");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to fetch assignment");
     }
     const { success, error, ...remainingData } =
       (await res.json()) as GetAssignmentResponse;
@@ -170,7 +174,8 @@ export async function getAssignments(
       },
     });
     if (!res.ok) {
-      throw new Error("Failed to fetch assignments");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to fetch assignments");
     }
     const assignments = (await res.json()) as Assignment[];
     return assignments;
@@ -263,7 +268,8 @@ export async function publishAssignment(
     });
 
     if (!res.ok) {
-      throw new Error("Failed to update questions");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to publish assignment");
     }
     const {
       id,
@@ -343,7 +349,10 @@ export async function generateQuestionVariant(
     });
 
     if (!res.ok) {
-      throw new Error("Failed to generate question variant");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(
+        errorBody.message || "Failed to generate question variant",
+      );
     }
     const { success, error, questions } =
       (await res.json()) as BaseBackendResponse & {
@@ -385,7 +394,8 @@ export async function generateRubric(
     });
 
     if (!res.ok) {
-      throw new Error("Failed to generate rubric");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to generate rubric");
     }
     const rubric = (await res.json()) as Record<number, string>;
     return rubric;
@@ -449,9 +459,8 @@ export async function getAttempts(
       },
     });
     if (!res.ok) {
-      throw new Error(
-        `Failed to call ${endpointURL} with ${res.status}: ${res.toString()}`,
-      );
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to fetch attempts");
     }
     const attempts = (await res.json()) as AssignmentAttempt[];
     return attempts;
@@ -481,10 +490,11 @@ export async function createAttempt(
       },
     });
     if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
       if (res.status === 422) {
         return "no more attempts";
       }
-      throw new Error("Failed to create attempt");
+      throw new Error(errorBody.message || "Failed to create attempt");
     }
     const { success, error, id } = (await res.json()) as BaseBackendResponse;
     if (!success) {
@@ -519,7 +529,8 @@ export async function getAttempt(
       },
     });
     if (!res.ok) {
-      throw new Error("Failed to get attempt questions");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to get attempt questions");
     }
     const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
     return attempt;
@@ -550,7 +561,8 @@ export async function getCompletedAttempt(
       },
     });
     if (!res.ok) {
-      throw new Error("Failed to get attempt questions");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to get attempt questions");
     }
     const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
     return attempt;
@@ -589,7 +601,8 @@ export async function submitQuestion(
     });
 
     if (!res.ok) {
-      throw new Error("Failed to submit answer");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to submit question");
     }
     const data = (await res.json()) as QuestionAttemptResponse;
     return data;
@@ -626,9 +639,9 @@ export async function submitAssignment(
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
     if (!res.ok) {
-      throw new Error("Failed to submit assignment");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message);
     }
     const data = (await res.json()) as SubmitAssignmentResponse;
     return data;
@@ -665,7 +678,8 @@ export async function uploadFiles(
     ])) as Response;
 
     if (!res.ok) {
-      throw new Error("Failed to upload files");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to upload files");
     }
 
     // Parse the response
@@ -963,7 +977,8 @@ export async function translateQuestion(
     });
 
     if (!res.ok) {
-      throw new Error("Failed to translate question");
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to translate question");
     }
 
     return (await res.json()) as {

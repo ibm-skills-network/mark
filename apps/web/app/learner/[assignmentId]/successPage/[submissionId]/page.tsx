@@ -92,6 +92,7 @@ function SuccessPage() {
   const [regradingReason, setRegradingReason] = useState("");
   const [isRegradingModalOpen, setIsRegradingModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [BackendComments, setBackendComments] = useState("");
   const [regradingStatus, setRegradingStatus] = useState<
     "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED"
   >("PENDING");
@@ -110,6 +111,8 @@ function SuccessPage() {
           const submissionDetails: AssignmentAttemptWithQuestions =
             await getCompletedAttempt(assignmentId, attemptId);
           setQuestions(submissionDetails.questions);
+          console.log("comments", submissionDetails.comments);
+          setBackendComments(submissionDetails.comments || "");
           setShowSubmissionFeedback(
             submissionDetails.showSubmissionFeedback || false,
           );
@@ -138,6 +141,7 @@ function SuccessPage() {
             setAiGradingRating(response.aiGradingRating || 0);
             setAssignmentRating(response.assignmentRating || 0);
           }
+          console.log("Submission Details:", submissionDetails);
           setInit(true);
         } finally {
           setLoading(false);
@@ -316,11 +320,14 @@ function SuccessPage() {
   };
 
   const getGradeMessage = (grade: number): string => {
-    if (grade >= 80) return "Impressive Mastery! 🌟";
-    if (grade >= 70) return "Strong Progress! 🚀";
-    if (grade >= 60) return "Solid Effort! 💪";
-    if (grade >= 50) return "Steady Improvement! 🔧";
-    return "Keep Pushing Forward! 💡";
+    if (BackendComments !== "") {
+      return "Your submission was late";
+    }
+    if (grade >= 80) return "Impressive Mastery! ";
+    if (grade >= 70) return "Strong Progress! ";
+    if (grade >= 60) return "Solid Effort! ";
+    if (grade >= 50) return "Steady Improvement! ";
+    return "Keep Pushing Forward!";
   };
 
   const handleSubmitFeedback = async () => {
@@ -453,30 +460,36 @@ function SuccessPage() {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
-                    {grade >= passingGrade ? (
-                      <>
-                        <strong className="text-green-600">
-                          Congrats on successfully completing this assignment!
-                        </strong>{" "}
-                        Your grade has been recorded. Feel free to close this
-                        tab and return to the main course page.
-                      </>
+                    {BackendComments === "" ? (
+                      grade >= passingGrade ? (
+                        <>
+                          <strong className="text-green-600">
+                            Congrats on successfully completing this assignment!
+                          </strong>{" "}
+                          Your grade has been recorded. Feel free to close this
+                          tab and return to the main course page.
+                        </>
+                      ) : (
+                        <>
+                          <strong>
+                            Keep going! Mistakes are opportunities to learn and
+                            grow.
+                          </strong>{" "}
+                          Review your answers and{" "}
+                          <strong
+                            className="cursor-pointer underline"
+                            onClick={() =>
+                              (window.location.href = `/learner/${assignmentId}/`)
+                            }
+                          >
+                            try again
+                          </strong>{" "}
+                          to achieve your best result.
+                        </>
+                      )
                     ) : (
                       <>
-                        <strong>
-                          Keep going! Mistakes are opportunities to learn and
-                          grow.
-                        </strong>{" "}
-                        Review your answers and{" "}
-                        <strong
-                          className="cursor-pointer underline"
-                          onClick={() =>
-                            (window.location.href = `/learner/${assignmentId}/`)
-                          }
-                        >
-                          try again
-                        </strong>{" "}
-                        to achieve your best result.
+                        <p>{BackendComments}</p>
                       </>
                     )}
                   </motion.p>

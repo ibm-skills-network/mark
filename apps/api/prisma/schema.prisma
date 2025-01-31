@@ -188,6 +188,7 @@ model AssignmentAttempt {
   AssignmentFeedback AssignmentFeedback[]
   questionOrder    Int[]
   RegradingRequest RegradingRequest[]
+  comments         String?               /// Additional comments or notes for the assignment attempt from the system
 }
 
 model AssignmentAttemptQuestionVariant {

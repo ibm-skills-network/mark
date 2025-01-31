@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,7 +32,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className={`${inter.className}`} data-color-mode="light">
-        <Toaster richColors position="top-center" />
+        <Toaster
+          richColors
+          position="bottom-left"
+          expand={true}
+          closeButton={true}
+        />
         {children}
       </body>
     </html>
