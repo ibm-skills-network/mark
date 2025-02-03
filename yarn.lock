@@ -455,9 +455,9 @@
     tslib "^2.0.0"
 
 "@dqbd/tiktoken@^1.0.7":
-  version "1.0.18"
-  resolved "https://registry.yarnpkg.com/@dqbd/tiktoken/-/tiktoken-1.0.18.tgz#7019c01df7110c42dcddcc23296c2b0e3a29e043"
-  integrity sha512-18xwsIO9UStlCCrumyjmJ8r2bM0EeLS6KqlnyZA718qsQxWCH0WR7iK/njszFPhhY14dnqLMMmRPvJ1ZhVTN6A==
+  version "1.0.19"
+  resolved "https://registry.yarnpkg.com/@dqbd/tiktoken/-/tiktoken-1.0.19.tgz#635609893a683351eed634b26e993922784d704f"
+  integrity sha512-xJ4yGmMOnf3FRtGvvqifhvySMTFp0U36VauNkGR4j/lFlHbW2n+SKh8MEmlrIuAEAB1QqMy8sevSascYW6eKmw==
 
 "@emotion/babel-plugin@^11.13.5":
   version "11.13.5"
