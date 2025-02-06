@@ -1529,19 +1529,6 @@ export class AttemptService {
   }
 
   /**
-   * Checks whether the submission deadline has passed.
-   * @param expiresAt The expiration date of the assignment attempt.
-   */
-  private checkSubmissionDeadline(expiresAt: Date | null | undefined): void {
-    const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
-    if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
-      throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
-      );
-    }
-  }
-
-  /**
    * Processes the question response based on the question type.
    * @param question The question object.
    * @param createQuestionResponseAttemptRequestDto The create request DTO.

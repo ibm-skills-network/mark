@@ -31,7 +31,7 @@
     "@dqbd/tiktoken": "^1.0.7",
     "@langchain/community": "^0.3.26",
     "@langchain/core": "^0.3.0",
-    "@langchain/openai": "^0.3.0",
+    "@langchain/openai": "^0.4.2",
     "@nestjs/axios": "^3.0.0",
     "@nestjs/class-validator": "^0.13.4",
     "@nestjs/cli": "^10.0.0",
@@ -102,3 +102,4 @@
     "typescript": "^5.1.3"
   }
 }
+
