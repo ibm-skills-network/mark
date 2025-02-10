@@ -57,8 +57,7 @@ export const useAssignmentConfig = createWithEqualityFn<
           set({
             allotedTimeMinutes:
               allotedTimeMinutes === 0 ? 1 : allotedTimeMinutes,
-            timeEstimateMinutes:
-              allotedTimeMinutes === 0 ? 1 : allotedTimeMinutes,
+            timeEstimateMinutes: allotedTimeMinutes,
           }),
         setDisplayOrder: (displayOrder) => set({ displayOrder }),
         setStrictTimeLimit: (strictTimeLimit) => {
@@ -69,11 +68,12 @@ export const useAssignmentConfig = createWithEqualityFn<
         },
         toggleStrictTimeLimit: () => {
           set((state) => {
-            const newStrictTimeLimit = !state.strictTimeLimit;
+            const newStrictTimeLimit = !state.strictTimeLimit; // toggle strictTime limit, if newStrictTimeLimit is true, it means the time limit is strict
             return {
               ...state,
               strictTimeLimit: newStrictTimeLimit,
               allotedTimeMinutes: newStrictTimeLimit ? 1 : null,
+              timeEstimateMinutes: newStrictTimeLimit ? 1 : null,
             };
           });
         },

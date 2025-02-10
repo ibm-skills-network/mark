@@ -75,15 +75,10 @@ const FileUploadSection = ({
       : content;
   };
 
-  const showFileContent = async (file: learnerFileResponse) => {
-    try {
-      const convertedFile = new File([file.content], file.filename);
-      const result = await readFile(convertedFile, questionId);
-      setCurrentFileContent(result.content);
-      setShowContent(true);
-    } catch (error) {
-      setError("Failed to load file content.");
-    }
+  const showFileContent = (file: learnerFileResponse) => {
+    setCurrentFileContent(truncateContent(file.content));
+    setShowContent(true);
+   
   };
 
   const closePreview = () => {
@@ -284,7 +279,7 @@ const FileUploadSection = ({
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => {
-                          if (file.githubUrl) {
+                          if (file.githubUrl !== "") {
                             void openFileInNewTab(file.githubUrl, octokit);
                           } else {
                             void showFileContent(file);

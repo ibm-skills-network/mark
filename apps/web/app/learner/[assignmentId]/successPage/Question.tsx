@@ -222,7 +222,9 @@ const Question: FC<Props> = ({ question, number }) => {
       );
     } else if (
       (type === "URL" || type === "LINK_FILE") &&
-      typeof learnerResponse === "string"
+      typeof learnerResponse === "string" &&
+      learnerResponse !== "" &&
+      learnerResponse.startsWith("http")
     ) {
       return (
         <a
@@ -342,7 +344,12 @@ const Question: FC<Props> = ({ question, number }) => {
                 {file.filename}
                 <button
                   onClick={() => {
-                    void handleFileView(file?.githubUrl || "");
+                    if (file.githubUrl) {
+                      void handleFileView(file.githubUrl);
+                    } else {
+                      setSelectedFileContent(file.content);
+                      setSelectedFileName(file.filename);
+                    }
                   }}
                   className="ml-2 text-blue-600 underline"
                 >
@@ -352,7 +359,10 @@ const Question: FC<Props> = ({ question, number }) => {
             ))}
           </ul>
         );
-      } else if (typeof learnerResponse === "string") {
+      } else if (
+        typeof learnerResponse === "string" &&
+        learnerResponse !== ""
+      ) {
         return (
           <p
             className={`text-gray-800 w-full ${

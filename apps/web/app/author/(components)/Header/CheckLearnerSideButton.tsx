@@ -23,6 +23,7 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     numAttempts: assignmentConfigstate.numAttempts,
     passingGrade: assignmentConfigstate.passingGrade, // ensure passingGrade is never undefined
     allotedTimeMinutes: assignmentConfigstate.allotedTimeMinutes,
+    timeEstimateMinutes: assignmentConfigstate.timeEstimateMinutes,
     displayOrder: assignmentConfigstate.displayOrder,
     strictTimeLimit: assignmentConfigstate.strictTimeLimit,
     introduction: authorState.introduction ?? "",
