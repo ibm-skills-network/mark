@@ -255,6 +255,7 @@ export async function publishAssignment(
     showQuestionScore: updatedAssignment.showQuestionScore,
     showAssignmentScore: updatedAssignment.showAssignmentScore,
     questions: updatedAssignment.questions,
+    timeEstimateMinutes: updatedAssignment.timeEstimateMinutes,
   };
 
   try {

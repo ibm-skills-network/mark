@@ -322,6 +322,7 @@ export class AssignmentService {
       graded,
       questionDisplay,
       allotedTimeMinutes,
+      timeEstimateMinutes,
       updatedAt,
       published,
       questions,
@@ -348,6 +349,7 @@ export class AssignmentService {
         showAssignmentScore,
         showQuestionScore,
         showSubmissionFeedback,
+        timeEstimateMinutes,
       },
     });
     if (

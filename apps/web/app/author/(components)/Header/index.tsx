@@ -72,6 +72,7 @@ function AuthorHeader() {
     displayOrder,
     graded,
     questionDisplay,
+    timeEstimateMinutes,
     allotedTimeMinutes,
     updatedAt,
   ] = useAssignmentConfig((state) => [
@@ -80,6 +81,7 @@ function AuthorHeader() {
     state.displayOrder,
     state.graded,
     state.questionDisplay,
+    state.timeEstimateMinutes,
     state.allotedTimeMinutes,
     state.updatedAt,
   ]);
@@ -209,12 +211,14 @@ function AuthorHeader() {
       allotedTimeMinutes: allotedTimeMinutes || null,
       updatedAt,
       questionOrder,
+      timeEstimateMinutes: timeEstimateMinutes,
       published: true,
       showSubmissionFeedback,
       showQuestionScore,
       showAssignmentScore,
       questions: questionsAreDifferent ? processQuestions(questions) : null,
     };
+    console.log("assignmentData", assignmentData);
     try {
       const response = await publishAssignment(
         activeAssignmentId,
