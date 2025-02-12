@@ -995,9 +995,9 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/community@^0.3.26":
-  version "0.3.29"
-  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.29.tgz#e5ca89c0a4683345e8dcff2771546fc13a4b8b35"
-  integrity sha512-6XIPGctpH3KziFpdVDEvYBEQMMsNomffqy545shoxOLoMkZqgn1wfMs6R7ltzzS0p3LJUXW1RbwAUEuWp0rbuA==
+  version "0.3.30"
+  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.30.tgz#c77c384a0a25761d5e8590e96a26d4824b7e35a4"
+  integrity sha512-KJEZqFrsLfpa/3aWm96F2At2/l0YGTkdcwCguJtt30bSCN5nyHt0pCAftXjdsmb5/eSnGX24BEb7BGOl3rRw2w==
   dependencies:
     "@langchain/openai" ">=0.2.0 <0.5.0"
     binary-extensions "^2.2.0"
