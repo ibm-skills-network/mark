@@ -116,7 +116,7 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
           });
         },
       }),
-      { name: "github-store" }
+      { name: "github-store" },
     ),
     {
       name: "github-store",
@@ -124,9 +124,9 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
         questionGitHubState: state.questionGitHubState,
         activeQuestionId: state.activeQuestionId,
       }),
-    }
+    },
   ),
-  shallow
+  shallow,
 );
 
 export type LearnerState = {
@@ -148,6 +148,7 @@ export type learnerFileResponse = {
   path?: string;
   repo?: RepoType;
   owner?: string;
+  blob?: Blob;
 };
 export type LearnerActions = {
   setActiveAttemptId: (id: number) => void;
@@ -176,12 +177,12 @@ export type LearnerActions = {
   onModeChange: (
     mode: "file" | "link",
     data: learnerFileResponse[] | string,
-    questionId: number
+    questionId: number,
   ) => void;
   getFileUpload: (questionId: number) => learnerFileResponse[];
   setFileUpload: (
     learnerFileResponse: learnerFileResponse[],
-    questionId: number
+    questionId: number,
   ) => void;
   deleteFile: (fileToDelete: learnerFileResponse, questionId: number) => void;
   setTranslationOn: (questionId: number, translationOn: boolean) => void;
@@ -189,11 +190,11 @@ export type LearnerActions = {
   setSelectedLanguage: (questionId: number, language: string) => void;
   setTranslatedQuestion: (
     questionId: number,
-    translatedQuestion: string
+    translatedQuestion: string,
   ) => void;
   setTranslatedChoices: (
     questionId: number,
-    translatedChoices: Choice[]
+    translatedChoices: Choice[],
   ) => void;
   setGlobalLanguage: (language: string) => void;
 };
@@ -257,7 +258,7 @@ export const useLearnerOverviewStore = createWithEqualityFn<
           listOfAttempts: state.listOfAttempts,
           assignmentId: state.assignmentId,
         }),
-      }
+      },
     ),
     {
       name: "learner",
@@ -265,9 +266,9 @@ export const useLearnerOverviewStore = createWithEqualityFn<
       serialize: {
         options: true, // Enable serialization to avoid large data crashes
       },
-    }
+    },
   ),
-  shallow
+  shallow,
 );
 
 export const useLearnerStore = createWithEqualityFn<
@@ -282,7 +283,7 @@ export const useLearnerStore = createWithEqualityFn<
             return {
               ...state,
               questions: state.questions.map((q) =>
-                q.id === questionId ? { ...q, translatedQuestion } : q
+                q.id === questionId ? { ...q, translatedQuestion } : q,
               ),
             };
           }
@@ -301,7 +302,7 @@ export const useLearnerStore = createWithEqualityFn<
       setSelectedLanguage: (questionId, language) => {
         set((state) => ({
           questions: state.questions.map((q) =>
-            q.id === questionId ? { ...q, selectedLanguage: language } : q
+            q.id === questionId ? { ...q, selectedLanguage: language } : q,
           ),
         }));
       },
@@ -309,7 +310,7 @@ export const useLearnerStore = createWithEqualityFn<
       setTranslationOn: (questionId, translationOn) => {
         set((state) => ({
           questions: state.questions.map((q) =>
-            q.id === questionId ? { ...q, translationOn } : q
+            q.id === questionId ? { ...q, translationOn } : q,
           ),
         }));
       },
@@ -343,7 +344,7 @@ export const useLearnerStore = createWithEqualityFn<
               return {
                 ...q,
                 learnerFileResponse: q.learnerFileResponse?.filter(
-                  (f) => f.filename !== file.filename
+                  (f) => f.filename !== file.filename,
                 ),
               };
             }
@@ -415,7 +416,7 @@ export const useLearnerStore = createWithEqualityFn<
             if (q.id === questionId) {
               const existingFiles = q.learnerFileResponse || [];
               const updatedFiles = existingFiles.filter(
-                (file) => file.filename !== fileToDelete.filename
+                (file) => file.filename !== fileToDelete.filename,
               );
               return { ...q, learnerFileResponse: updatedFiles };
             }
@@ -455,14 +456,14 @@ export const useLearnerStore = createWithEqualityFn<
           questions: state.questions?.map((q) =>
             q.id === question.id
               ? { ...q, ...question, status: q.status ?? "unedited" }
-              : q
+              : q,
           ),
         })),
       setQuestions: (questions) =>
         set((state) => {
           const updatedQuestions = questions.map((q) => {
             const prevDataForQuestion = state.questions.find(
-              (q2) => q2.id === q.id
+              (q2) => q2.id === q.id,
             );
             return prevDataForQuestion ? { ...prevDataForQuestion, ...q } : q;
           });
@@ -483,13 +484,13 @@ export const useLearnerStore = createWithEqualityFn<
             const newStatus = isEdited ? "edited" : "unedited";
             set((state) => ({
               questions: state.questions?.map((q) =>
-                q.id === questionId ? { ...q, status: newStatus } : q
+                q.id === questionId ? { ...q, status: newStatus } : q,
               ),
             }));
           } else {
             set((state) => ({
               questions: state.questions?.map((q) =>
-                q.id === questionId ? { ...q, status } : q
+                q.id === questionId ? { ...q, status } : q,
               ),
             }));
           }
@@ -500,7 +501,7 @@ export const useLearnerStore = createWithEqualityFn<
       setTextResponse: (learnerTextResponse, questionId) => {
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === questionId ? { ...q, learnerTextResponse } : q
+            q.id === questionId ? { ...q, learnerTextResponse } : q,
           ),
         }));
         get().setQuestionStatus(questionId);
@@ -509,7 +510,7 @@ export const useLearnerStore = createWithEqualityFn<
       setURLResponse: (learnerUrlResponse, questionId) => {
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === questionId ? { ...q, learnerUrlResponse } : q
+            q.id === questionId ? { ...q, learnerUrlResponse } : q,
           ),
         }));
         get().setQuestionStatus(questionId);
@@ -518,7 +519,7 @@ export const useLearnerStore = createWithEqualityFn<
       setChoices: (learnerChoices, questionId) => {
         set((state) => ({
           questions: state.questions?.map((q) =>
-            q.id === questionId ? { ...q, learnerChoices } : q
+            q.id === questionId ? { ...q, learnerChoices } : q,
           ),
         }));
         get().setQuestionStatus(questionId);
@@ -532,7 +533,7 @@ export const useLearnerStore = createWithEqualityFn<
                   ...q,
                   learnerChoices: [...(q.learnerChoices ?? []), learnerChoice],
                 }
-              : q
+              : q,
           );
           return { questions: updatedQuestions };
         }),
@@ -545,10 +546,10 @@ export const useLearnerStore = createWithEqualityFn<
               ? {
                   ...q,
                   learnerChoices: q.learnerChoices?.filter(
-                    (c) => c !== learnerChoice
+                    (c) => c !== learnerChoice,
                   ),
                 }
-              : q
+              : q,
           );
           return { questions: updatedQuestions };
         }),
@@ -561,7 +562,7 @@ export const useLearnerStore = createWithEqualityFn<
           const updatedQuestions = state.questions.map((q) =>
             q.id === activeQuestionId
               ? { ...q, learnerAnswerChoice: Boolean(learnerAnswerChoice) }
-              : q
+              : q,
           );
           return { questions: updatedQuestions };
         });
@@ -579,9 +580,9 @@ export const useLearnerStore = createWithEqualityFn<
       serialize: {
         options: true, // Enable serialization to avoid large data crashes
       },
-    }
+    },
   ),
-  shallow
+  shallow,
 );
 
 /**
@@ -604,7 +605,7 @@ export const useAssignmentDetails = createWithEqualityFn<
       {
         name: "learner",
         enabled: process.env.NODE_ENV === "development",
-      }
+      },
     ),
     {
       name: "assignmentDetails",
@@ -612,7 +613,7 @@ export const useAssignmentDetails = createWithEqualityFn<
         assignmentDetails: state.assignmentDetails,
       }),
       // storage: createJSONStorage(() => localStorage),
-    }
+    },
   ),
-  shallow
+  shallow,
 );

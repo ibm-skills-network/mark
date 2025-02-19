@@ -1,0 +1,75 @@
+// FileViewer.jsx
+import React from "react";
+import { IconX } from "@tabler/icons-react";
+import FeedbackFormatter from "@/components/FeedbackFormatter";
+import { Prism, SyntaxHighlighterProps } from "react-syntax-highlighter";
+import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism";
+const SyntaxHighlighter =
+  Prism as unknown as typeof React.Component<SyntaxHighlighterProps>;
+
+interface FileViewerProps {
+  file: {
+    filename: string;
+    content: string;
+    blob: Blob;
+  };
+  onClose: () => void;
+}
+
+const FileViewer = ({ file, onClose }: FileViewerProps) => {
+  const extension: string = file.filename.split(".").pop()?.toLowerCase();
+
+  const renderContent = () => {
+    switch (extension) {
+      case "md":
+        return (
+          <FeedbackFormatter className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
+            {file.content}
+          </FeedbackFormatter>
+        );
+      case "py":
+      case "js":
+      case "ts":
+      case "tsx":
+      case "html":
+      case "css":
+      case "sql":
+      case "sh":
+        return (
+          <SyntaxHighlighter language={extension} style={tomorrow}>
+            {file.content}
+          </SyntaxHighlighter>
+        );
+      case "ipynb":
+        return (
+          <FeedbackFormatter className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
+            {file.content}
+          </FeedbackFormatter>
+        );
+      default:
+        return (
+          <FeedbackFormatter className="whitespace-pre-wrap p-4">
+            {file.content}
+          </FeedbackFormatter>
+        );
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+      <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold">
+            File Content Preview: {file.filename}
+          </h2>
+          <button onClick={onClose} aria-label="Close">
+            <IconX size={20} className="text-red-500" />
+          </button>
+        </div>
+        <div>{renderContent()}</div>
+      </div>
+    </div>
+  );
+};
+
+export default FileViewer;

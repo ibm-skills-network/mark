@@ -87,19 +87,19 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const modifyChoice = useAuthorStore((state) => state.modifyChoice);
   const [isModalOpen, setModalOpen] = useState(false);
   const handleUpdateAllVariantsCriteria = useAuthorStore(
-    (state) => state.handleUpdateAllVariantsCriteria
+    (state) => state.handleUpdateAllVariantsCriteria,
   );
   const addTrueFalseChoice = useAuthorStore(
-    (state) => state.addTrueFalseChoice
+    (state) => state.addTrueFalseChoice,
   );
   const updatePointsTrueFalse = useAuthorStore(
-    (state) => state.updatePointsTrueFalse
+    (state) => state.updatePointsTrueFalse,
   );
   const isItTrueOrFalse = useAuthorStore((state) =>
-    state.isItTrueOrFalse(questionId, variantId)
+    state.isItTrueOrFalse(questionId, variantId),
   );
   const TrueFalsePoints = useAuthorStore((state) =>
-    state.getTrueFalsePoints(questionId)
+    state.getTrueFalsePoints(questionId),
   );
   const [localPoints, setLocalPoints] = useState<number>(TrueFalsePoints || 1);
   useEffect(() => {
@@ -113,14 +113,14 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const getToggleTitle = useQuestionStore((state) => state.getToggleTitle);
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
   const showCriteriaHeader = useQuestionStore(
-    (state) => state.questionStates.showCriteriaHeader ?? true
+    (state) => state.questionStates.showCriteriaHeader ?? true,
   );
   const setShowCriteriaHeader = useQuestionStore(
-    (state) => state.setShowCriteriaHeader
+    (state) => state.setShowCriteriaHeader,
   );
   const toggleTitle = getToggleTitle(
     questionId,
-    variantMode ? variantId : undefined
+    variantMode ? variantId : undefined,
   );
   const toggleLoading = useQuestionStore((state) => state.toggleLoading);
   const maxPointsEver = 100000; // Maximum points allowed for a question in Mark
@@ -358,7 +358,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       const response = await generateRubric(
         questions,
         assignmentId,
-        variantMode
+        variantMode,
       );
       const newPoints: number[] = [];
       const newCriteriaDesc: string[] = [];
@@ -461,7 +461,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               setToggleTitle(
                 questionId,
                 false,
-                variantMode ? variantId : undefined
+                variantMode ? variantId : undefined,
               );
               setQuestionTitle(localQuestionTitle);
               handleUpdateQuestionState({ questionTitle: localQuestionTitle });
@@ -475,7 +475,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             setToggleTitle(
               questionId,
               true,
-              variantMode ? variantId : undefined
+              variantMode ? variantId : undefined,
             )
           }
         >
@@ -696,8 +696,8 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                                       .reduce(
                                         (acc, line) =>
                                           acc + Math.ceil(line.length / 120),
-                                        0
-                                      )
+                                        0,
+                                      ),
                                   ) * 1.5
                                 }rem`,
                                 wordBreak: "break-word",

@@ -235,14 +235,6 @@ const AuthorQuestionsPage: FC<Props> = ({
   }, [focusedQuestionId, questions]);
 
   /**
-   * Focuses on a specific question when the focusedQuestionId changes.
-   */
-  useEffect(() => {
-    focusRef.current = focusedQuestionId;
-    handleJumpToQuestionTitle(`${String(focusedQuestionId)}`);
-  }, [focusedQuestionId, handleJumpToQuestionTitle]);
-
-  /**
    * Adds a text box question to the author questions page.
    *
    * @param type - The type of the question. Can be one of:
@@ -425,7 +417,6 @@ const AuthorQuestionsPage: FC<Props> = ({
    */
   const handleFocus = (questionId: number) => {
     focusRef.current = questionId;
-
     setFocusedQuestionId(questionId);
   };
 
@@ -605,7 +596,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                   setHandleToggleTable={setHandleToggleTable}
                   onSelectQuestion={(index) => {
                     setFocusedQuestionId(questions[index].id);
-                    handleJumpToQuestionTitle(`${String(questions[index].id)}`);
                   }}
                 />
                 <button
@@ -954,7 +944,12 @@ const SortableNavList = ({
       {questions.map((question: QuestionAuthorStore, index: number) => (
         <div
           key={`nav-item-${question.id}`}
-          onClick={() => onSelectQuestion(index)}
+          onClick={() => {
+            onSelectQuestion(index);
+            setTimeout(() => {
+              handleJumpToQuestionTitle(`${question.id}`);
+            }, 0);
+          }}
         >
           <SortableNavItem
             index={index}

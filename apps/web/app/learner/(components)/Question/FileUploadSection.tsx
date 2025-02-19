@@ -22,6 +22,7 @@ import { useDropzone } from "react-dropzone";
 import GithubUploadModal from "./GithubUploadModal";
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import { DocumentTextIcon, TrashIcon } from "@heroicons/react/24/outline";
+import CustomFileViewer from "./FileViewer";
 
 const MAX_CHAR_LIMIT = 40000;
 
@@ -50,7 +51,7 @@ const FileUploadSection = ({
     state.getFileUpload(questionId),
   );
   const deleteFile = useLearnerStore((state) => state.deleteFile);
-
+  const [fileBlob, setFileBlob] = useState<Blob | null>(null);
   const onDrop = async (acceptedFiles: File[]) => {
     try {
       const fileContents: learnerFileResponse[] = await Promise.all(
@@ -69,23 +70,17 @@ const FileUploadSection = ({
     }
   };
 
-  const truncateContent = (content: string) => {
-    return content.length > MAX_CHAR_LIMIT
-      ? content.substring(0, MAX_CHAR_LIMIT) + "..."
-      : content;
-  };
-
   const showFileContent = (file: learnerFileResponse) => {
-    setCurrentFileContent(truncateContent(file.content));
+    setCurrentFileContent(file.content);
+    setFileBlob(file.blob);
     setShowContent(true);
-   
   };
 
   const closePreview = () => {
     setShowContent(false);
     setCurrentFileContent(null);
   };
-
+  const [filename, setFilename] = useState<string>("");
   const handleDeleteFile = (file: learnerFileResponse) => {
     deleteFile(file, questionId);
   };
@@ -138,21 +133,6 @@ const FileUploadSection = ({
         },
       };
     });
-  };
-
-  const handleRemoveFile = (fileName: string, fileUrl: string) => {
-    removeFileUpload(
-      {
-        filename: fileName,
-        content: "",
-        githubUrl: fileUrl,
-      },
-      questionId,
-    );
-    changeSelectedFiles(
-      questionId,
-      selectedFiles.filter((file) => file.githubUrl !== fileUrl),
-    );
   };
 
   useEffect(() => {
@@ -282,6 +262,7 @@ const FileUploadSection = ({
                           if (file.githubUrl !== "") {
                             void openFileInNewTab(file.githubUrl, octokit);
                           } else {
+                            setFilename(file.filename);
                             void showFileContent(file);
                           }
                         }}
@@ -383,20 +364,14 @@ const FileUploadSection = ({
 
       {/* Modal for file content preview */}
       {showContent && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4">File Content Preview</h2>
-            <MarkdownViewer className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
-              {currentFileContent}
-            </MarkdownViewer>
-            <button
-              onClick={closePreview}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+        <CustomFileViewer
+          file={{
+            filename,
+            content: currentFileContent,
+            blob: fileBlob,
+          }}
+          onClose={closePreview}
+        />
       )}
     </motion.div>
   );

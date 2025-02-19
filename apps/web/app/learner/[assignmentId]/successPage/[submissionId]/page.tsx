@@ -66,16 +66,16 @@ function SuccessPage() {
       state.totalPointsPossible,
     ]);
   const setShowSubmissionFeedback = useLearnerStore(
-    (state) => state.setShowSubmissionFeedback
+    (state) => state.setShowSubmissionFeedback,
   );
   const [zustandAssignmentDetails, zustandGrade] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.grade]
+    (state) => [state.assignmentDetails, state.grade],
   );
 
   const [pageHeight, setPageHeight] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<"learner" | "author" | "undefined">(
-    "undefined"
+    "undefined",
   );
   const [init, setInit] = useState(false);
   const [playAnimations, setPlayAnimations] = useState(true);
@@ -113,7 +113,7 @@ function SuccessPage() {
           setQuestions(submissionDetails.questions);
           setBackendComments(submissionDetails.comments || "");
           setShowSubmissionFeedback(
-            submissionDetails.showSubmissionFeedback || false
+            submissionDetails.showSubmissionFeedback || false,
           );
           setGrade(submissionDetails.grade * 100);
           if (submissionDetails.totalPointsEarned) {
@@ -121,11 +121,11 @@ function SuccessPage() {
           } else {
             const totalPoints = submissionDetails.questions.reduce(
               (acc, question) => acc + question.totalPoints,
-              0
+              0,
             );
             const totalPointsEarned = totalPoints * submissionDetails.grade;
             setTotalPoints(
-              totalPoints || submissionDetails.totalPossiblePoints
+              totalPoints || submissionDetails.totalPossiblePoints,
             );
             setTotalPointsEarned(totalPointsEarned);
           }
@@ -355,7 +355,7 @@ function SuccessPage() {
       const response = await submitFeedback(
         assignmentId,
         attemptId,
-        feedbackData
+        feedbackData,
       );
       if (response === true) {
         toast.success("Feedback submitted successfully!");
@@ -626,8 +626,8 @@ function SuccessPage() {
               role?.toLowerCase() === "learner"
                 ? (window.location.href = `/learner/${assignmentId}/`)
                 : role?.toLowerCase() === "author"
-                ? (window.location.href = `/learner/${assignmentId}/?authorMode=true`)
-                : (window.location.href = "/")
+                  ? (window.location.href = `/learner/${assignmentId}/?authorMode=true`)
+                  : (window.location.href = "/")
             }
             className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg mt-2"
           >

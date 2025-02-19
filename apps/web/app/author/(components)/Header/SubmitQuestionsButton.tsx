@@ -27,14 +27,14 @@ const SubmitQuestionsButton: FC<Props> = ({
     questionsAreReadyToBePublished();
   const questions = useAuthorStore((state) => state.questions);
   const originalAssignment = useAuthorStore(
-    (state) => state.originalAssignment
+    (state) => state.originalAssignment,
   );
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId
+    (state) => state.setFocusedQuestionId,
   );
   const isLoading = !questions;
   const hasEmptyQuestion = questions?.some(
-    (question) => question.type === "EMPTY"
+    (question) => question.type === "EMPTY",
   );
   const { name, introduction, instructions, gradingCriteriaOverview } =
     useAuthorStore((state) => ({
@@ -82,27 +82,27 @@ const SubmitQuestionsButton: FC<Props> = ({
     const addedQuestions = questions.filter(
       (question) =>
         !originalAssignment?.questions?.some(
-          (originalQuestion) => originalQuestion.id === question.id
-        )
+          (originalQuestion) => originalQuestion.id === question.id,
+        ),
     );
     if (addedQuestions?.length > 0)
       diffs.push(`${addedQuestions?.length} questions added.`);
     // check for deleted questions
     const deletedQuestions = originalAssignment?.questions?.filter(
       (originalQuestion) =>
-        !questions.some((question) => question.id === originalQuestion.id)
+        !questions.some((question) => question.id === originalQuestion.id),
     );
     if (deletedQuestions?.length > 0)
       diffs.push(`${deletedQuestions.length} questions deleted.`);
     // check for modified questions
     const modifiedQuestions = questions?.filter((question) =>
       originalAssignment?.questions?.some(
-        (originalQuestion) => originalQuestion.id === question.id
-      )
+        (originalQuestion) => originalQuestion.id === question.id,
+      ),
     );
     modifiedQuestions.forEach((question) => {
       const originalQuestion = originalAssignment?.questions?.find(
-        (originalQuestion) => originalQuestion.id === question.id
+        (originalQuestion) => originalQuestion.id === question.id,
       );
       if (question.type !== originalQuestion.type && question.type !== "EMPTY")
         diffs.push(`Changed question type for question ${question.id}.`);
@@ -119,13 +119,13 @@ const SubmitQuestionsButton: FC<Props> = ({
           question.scoring?.criteria?.map((criteria) => ({
             description: criteria.description,
             points: criteria.points,
-          })) || []
+          })) || [],
         ) !==
           JSON.stringify(
             originalQuestion.scoring?.criteria?.map((criteria) => ({
               description: criteria.description,
               points: criteria.points,
-            })) || []
+            })) || [],
           ) &&
         question.scoring
       )
@@ -148,8 +148,8 @@ const SubmitQuestionsButton: FC<Props> = ({
         question.variants.some(
           (variant) =>
             !originalQuestion.variants.find(
-              (originalVariant) => originalVariant.id === variant.id
-            )
+              (originalVariant) => originalVariant.id === variant.id,
+            ),
         )
       )
         diffs.push(`Added variants for question ${question.id}.`);
@@ -159,8 +159,8 @@ const SubmitQuestionsButton: FC<Props> = ({
         originalQuestion.variants.some(
           (originalVariant) =>
             !question.variants.find(
-              (variant) => variant.id === originalVariant.id
-            )
+              (variant) => variant.id === originalVariant.id,
+            ),
         )
       )
         diffs.push(`Deleted variants for question ${question.id}.`);
@@ -171,7 +171,7 @@ const SubmitQuestionsButton: FC<Props> = ({
         question.variants.some((variant) => {
           // check if variant.randomizedChoices is modified
           const originalVariant = originalQuestion.variants.find(
-            (originalVariant) => originalVariant.id === variant.id
+            (originalVariant) => originalVariant.id === variant.id,
           );
           return (
             variant.randomizedChoices !== originalVariant?.randomizedChoices
@@ -185,7 +185,7 @@ const SubmitQuestionsButton: FC<Props> = ({
         originalQuestion.variants?.length &&
         question.variants.some((variant) => {
           const originalVariant = originalQuestion.variants.find(
-            (originalVariant) => originalVariant.id === variant.id
+            (originalVariant) => originalVariant.id === variant.id,
           );
           return (
             variant.variantContent !== originalVariant?.variantContent ||
@@ -196,16 +196,16 @@ const SubmitQuestionsButton: FC<Props> = ({
                     Array.isArray(originalVariant.choices) &&
                     originalVariant.choices.find(
                       (originalChoice: Choice) =>
-                        originalChoice.choice === choice.choice
+                        originalChoice.choice === choice.choice,
                     )
                   ) ||
                   !(
                     Array.isArray(originalVariant.choices) &&
                     originalVariant.choices.find(
                       (originalChoice: Choice) =>
-                        originalChoice.points === choice.points
+                        originalChoice.points === choice.points,
                     )
-                  )
+                  ),
               ))
           );
         })
@@ -222,8 +222,8 @@ const SubmitQuestionsButton: FC<Props> = ({
         (question) =>
           question?.variants?.length <
           originalAssignment?.questions?.find(
-            (originalQuestion) => originalQuestion.id === question.id
-          )?.variants?.length
+            (originalQuestion) => originalQuestion.id === question.id,
+          )?.variants?.length,
       )
     ) {
       diffs.push("Deleted question variations.");
@@ -234,8 +234,8 @@ const SubmitQuestionsButton: FC<Props> = ({
         (question) =>
           question?.variants?.length >
           originalAssignment?.questions?.find(
-            (originalQuestion) => originalQuestion.id === question.id
-          )?.variants?.length
+            (originalQuestion) => originalQuestion.id === question.id,
+          )?.variants?.length,
       )
     ) {
       diffs.push("Added question variations.");
