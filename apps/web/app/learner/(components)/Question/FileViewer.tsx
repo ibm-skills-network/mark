@@ -1,5 +1,4 @@
-// FileViewer.jsx
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { IconX } from "@tabler/icons-react";
 import FeedbackFormatter from "@/components/FeedbackFormatter";
 import { Prism, SyntaxHighlighterProps } from "react-syntax-highlighter";
@@ -10,18 +9,33 @@ const SyntaxHighlighter =
 interface FileViewerProps {
   file: {
     filename: string;
-    content: string;
-    blob: Blob;
+    content: string; // Directly passed content
+    blob: Blob; // Unused for now
   };
   onClose: () => void;
 }
 
 const FileViewer = ({ file, onClose }: FileViewerProps) => {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading delay
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [file]);
   const extension: string = file.filename.split(".").pop()?.toLowerCase();
 
   const renderContent = () => {
     switch (extension) {
+      case "txt":
       case "md":
+      case "csv":
+      case "ipynb":
+      case "docx":
+      case "pptx":
         return (
           <FeedbackFormatter className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
             {file.content}
@@ -40,16 +54,11 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             {file.content}
           </SyntaxHighlighter>
         );
-      case "ipynb":
-        return (
-          <FeedbackFormatter className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
-            {file.content}
-          </FeedbackFormatter>
-        );
+
       default:
         return (
           <FeedbackFormatter className="whitespace-pre-wrap p-4">
-            {file.content}
+            Unsupported file type: {extension}
           </FeedbackFormatter>
         );
     }
@@ -66,7 +75,16 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             <IconX size={20} className="text-red-500" />
           </button>
         </div>
-        <div>{renderContent()}</div>
+        <>
+          {isLoading ? (
+            // Loading spinner
+            <div className="flex justify-center items-center h-40">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-violet-600"></div>
+            </div>
+          ) : (
+            renderContent()
+          )}
+        </>
       </div>
     </div>
   );

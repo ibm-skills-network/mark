@@ -15,6 +15,7 @@ import { CheckIcon, SparklesIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { Octokit } from "@octokit/rest";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import FileViewer from "../../(components)/Question/FileViewer";
 
 interface Props {
   question: QuestionStore;
@@ -438,20 +439,17 @@ const Question: FC<Props> = ({ question, number }) => {
         </div>
       )}
       {selectedFileContent && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4">{selectedFileName}</h2>
-            <MarkdownViewer className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
-              {selectedFileContent}
-            </MarkdownViewer>
-            <button
-              onClick={() => setSelectedFileContent(null)}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+        <FileViewer
+          file={{
+            filename: selectedFileName,
+            content: selectedFileContent,
+            blob: new Blob([selectedFileContent], { type: "text/plain" }),
+          }}
+          onClose={() => {
+            setSelectedFileContent(null);
+            setSelectedFileName(null);
+          }}
+        />
       )}
     </>
   );

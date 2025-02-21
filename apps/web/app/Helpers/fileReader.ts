@@ -161,20 +161,17 @@ export const readIpynb = (
     }
   });
 
-/**
- * Reads a PPTX file by reading the ArrayBuffer and returning a Blob.
- * (No text extraction is performed.)
- */
 export const readPptx = async (
   file: File,
   questionId: number,
-): Promise<ExtendedFileContent> => {
+): Promise<FileContent> => {
   try {
-    const buffer = await file.arrayBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    const result = await mammoth.extractRawText({
+      arrayBuffer: await file.arrayBuffer(),
     });
-    return { filename: file.name, content: "", questionId, blob };
+    const sanitized = sanitizeContent(result.value, "pptx");
+    console.log("PPTX content:", sanitized);
+    return { filename: file.name, content: sanitized, questionId };
   } catch (error) {
     throw new Error(`Error reading PowerPoint: ${String(error)}`);
   }
@@ -200,7 +197,9 @@ export const readFile = async (
   file: File,
   questionId: number,
 ): Promise<ExtendedFileContent> => {
+  // supported file types txt, pdf, md, docx, csv, pptx, ipynb, py, js, sh, html, css, sql, ts, tsx
   const extension = file.name.split(".").pop()?.toLowerCase();
+  console.log("Reading file with extension:", extension);
   switch (extension) {
     case "txt":
       return readAsText(file, questionId);
