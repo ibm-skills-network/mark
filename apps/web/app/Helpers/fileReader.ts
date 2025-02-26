@@ -133,7 +133,7 @@ export const readCsv = (file: File, questionId: number): Promise<FileContent> =>
   });
 
 /**
- * Reads a Jupyter Notebook (.ipynb) file.
+ * Reads a Jupyter Notebook (.ipynb) file, including cell outputs, with debug logging.
  */
 export const readIpynb = (
   file: File,
@@ -143,16 +143,58 @@ export const readIpynb = (
     try {
       const notebook = JSON.parse(text);
       const cellContents = (notebook.cells as Array<any>)
-        .map((cell) => {
+        .map((cell, index) => {
+          let content = "";
+
           if (cell.source) {
-            return Array.isArray(cell.source)
+            content += Array.isArray(cell.source)
               ? cell.source.join("")
               : cell.source;
           }
-          return "";
+
+          if (cell.outputs) {
+            console.log(
+              `Cell #${index} outputs:`,
+              JSON.stringify(cell.outputs, null, 2),
+            );
+          }
+
+          if (cell.outputs && Array.isArray(cell.outputs)) {
+            const outputText = cell.outputs
+              .map((output) => {
+                if (output.text) {
+                  return Array.isArray(output.text)
+                    ? output.text.join("")
+                    : output.text;
+                }
+                if (output.data && output.data["text/plain"]) {
+                  return Array.isArray(output.data["text/plain"])
+                    ? output.data["text/plain"].join("")
+                    : output.data["text/plain"];
+                }
+                if (output.output_type === "stream" && output.text) {
+                  return Array.isArray(output.text)
+                    ? output.text.join("")
+                    : output.text;
+                }
+                if (output.output_type === "error") {
+                  return output.ename + ": " + output.evalue;
+                }
+                return "";
+              })
+              .filter((out) => out.length > 0)
+              .join("\n");
+
+            if (outputText) {
+              content += `\n\n[Output]:\n${outputText}`;
+            }
+          }
+
+          return content;
         })
         .filter((content) => content.length > 0)
         .join("\n\n");
+
       const sanitized = sanitizeContent(cellContents, "ipynb");
       return { filename: file.name, content: sanitized, questionId };
     } catch (error) {

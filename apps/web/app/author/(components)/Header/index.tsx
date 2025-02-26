@@ -21,6 +21,8 @@ import { toast } from "sonner";
 import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
+import { encodeFields } from "@/app/Helpers/encoder";
+import { decodeFields } from "@/app/Helpers/decoder";
 
 function AuthorHeader() {
   const router = useRouter();
@@ -97,22 +99,37 @@ function AuthorHeader() {
     if (assignment) {
       useAuthorStore.getState().setOriginalAssignment(assignment);
 
-      // Author store
-      const mergedAuthorData = mergeData(useAuthorStore.getState(), assignment);
+      // Decode specific fields
+      const decodedFields = decodeFields({
+        introduction: assignment.introduction,
+        instructions: assignment.instructions,
+        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
+      });
 
+      // Merge decoded fields back into assignment
+      const decodedAssignment = {
+        ...assignment,
+        ...decodedFields,
+      };
+
+      // Author store
+      const mergedAuthorData = mergeData(
+        useAuthorStore.getState(),
+        decodedAssignment,
+      );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
         ...cleanedAuthorData,
-        // updatedAt: Date.now()
       });
+
       // Assignment Config store
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
-        assignment,
+        decodedAssignment,
       );
-      if (assignment.questionVariationNumber !== undefined) {
+      if (decodedAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
-          questionVariationNumber: assignment.questionVariationNumber,
+          questionVariationNumber: decodedAssignment.questionVariationNumber,
         });
       }
       const {
@@ -126,7 +143,7 @@ function AuthorHeader() {
       // Assignment Feedback Config store
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
-        assignment,
+        decodedAssignment,
       );
       const {
         updatedAt: assignmentFeedbackUpdatedAt,
@@ -134,14 +151,15 @@ function AuthorHeader() {
       } = mergedAssignmentFeedbackData;
       setAssignmentFeedbackConfigStore({
         ...cleanedAssignmentFeedbackData,
-        // updatedAt: Date.now(),
       });
-      useAuthorStore.getState().setName(assignment.name);
+
+      useAuthorStore.getState().setName(decodedAssignment.name);
       setPageState("success");
     } else {
       setPageState("error");
     }
   };
+
   const getUserRole = async () => {
     const user = await getUser();
     if (user) {
@@ -168,7 +186,8 @@ function AuthorHeader() {
 
   async function handlePublishButton() {
     setSubmitting(true);
-    // check the user role, if its learner, then throw an error asking to switch to author mode
+
+    // Check the user role
     const role = await getUserRole();
     if (role !== "author") {
       toast.error(
@@ -189,7 +208,7 @@ function AuthorHeader() {
       questionArray.forEach((q) => {
         delete q.alreadyInBackend;
         if (q.type !== "MULTIPLE_CORRECT" && q.type !== "SINGLE_CORRECT") {
-          delete q.randomizedChoices; // remove randomizedChoices for all question types except MULTIPLE_CORRECT and SINGLE_CORRECT
+          delete q.randomizedChoices;
         }
       });
     }
@@ -199,10 +218,19 @@ function AuthorHeader() {
     const questionsAreDifferent =
       JSON.stringify(clonedCurrentQuestions) !==
       JSON.stringify(clonedOriginalQuestions);
-    const assignmentData: ReplaceAssignmentRequest = {
+
+    const encodedFields = encodeFields({
       introduction,
       instructions,
       gradingCriteriaOverview,
+    }) as {
+      introduction: string;
+      instructions: string;
+      gradingCriteriaOverview: string;
+    } & { [key: string]: string | null };
+
+    const assignmentData: ReplaceAssignmentRequest = {
+      ...encodedFields,
       numAttempts,
       passingGrade,
       displayOrder,
@@ -218,7 +246,7 @@ function AuthorHeader() {
       showAssignmentScore,
       questions: questionsAreDifferent ? processQuestions(questions) : null,
     };
-    console.log("assignmentData", assignmentData);
+
     try {
       const response = await publishAssignment(
         activeAssignmentId,
@@ -252,6 +280,7 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
+
   return (
     <div className="fixed w-full z-50">
       <header className="border-b border-gray-300 px-6 py-4 bg-white flex items-center justify-between">

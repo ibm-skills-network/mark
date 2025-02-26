@@ -9,6 +9,7 @@ import ErrorPage from "@/components/ErrorPage";
 import LoadingPage from "@/app/loading";
 import { useLearnerOverviewStore } from "@/stores/learner";
 import animationData from "@/animations/LoadSN.json";
+import { decodeFields } from "@/app/Helpers/decoder";
 
 interface AuthFetchToAboutProps {
   assignmentId: number;
@@ -31,8 +32,9 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   );
 
   useEffect(() => {
-    let isMounted = true; // Prevent memory leak
+    let isMounted = true; // Prevent memory leaks
     setAssignmentId(assignmentId);
+
     const fetchData = async () => {
       setIsLoading(true);
       try {
@@ -41,8 +43,21 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
             getAssignment(assignmentId, cookie),
             getAttempts(assignmentId, cookie),
           ]);
+
           if (isMounted) {
-            setAssignment(assignmentData);
+            // Decode assignment fields before setting them
+            const decodedFields = decodeFields({
+              introduction: assignmentData?.introduction,
+              instructions: assignmentData?.instructions,
+              gradingCriteriaOverview: assignmentData?.gradingCriteriaOverview,
+            });
+
+            const decodedAssignment = {
+              ...assignmentData,
+              ...decodedFields,
+            };
+
+            setAssignment(decodedAssignment);
             setListOfAttempts(attemptsData);
           }
         } else if (role === "author") {
@@ -50,8 +65,22 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
             "assignmentConfig",
             {},
           ) as Assignment;
+
           if (isMounted) {
-            setAssignment(assignmentDetails);
+            // Decode assignment fields for the author
+            const decodedFields = decodeFields({
+              introduction: assignmentDetails?.introduction,
+              instructions: assignmentDetails?.instructions,
+              gradingCriteriaOverview:
+                assignmentDetails?.gradingCriteriaOverview,
+            });
+
+            const decodedAssignment = {
+              ...assignmentDetails,
+              ...decodedFields,
+            };
+
+            setAssignment(decodedAssignment);
           }
         }
       } catch (error) {

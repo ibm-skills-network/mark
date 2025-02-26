@@ -19,6 +19,7 @@ import {
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
+import { decodeFields } from "@/app/Helpers/decoder";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -47,20 +48,35 @@ function QuestionPage(props: Props) {
   useEffect(() => {
     const fetchAssignment = async () => {
       const assignment = await getAssignment(assignmentId);
+
       if (assignment) {
+        // Decode specific fields before using them
+        const decodedFields = decodeFields({
+          introduction: assignment.introduction,
+          instructions: assignment.instructions,
+          gradingCriteriaOverview: assignment.gradingCriteriaOverview,
+        });
+
+        // Merge decoded fields back into assignment
+        const decodedAssignment = {
+          ...assignment,
+          ...decodedFields,
+        };
+
         // Only set assignment details if they are different from the current state
         if (
           !assignmentDetails ||
-          assignmentDetails.id !== assignment.id ||
-          JSON.stringify(assignmentDetails) !== JSON.stringify(assignment)
+          assignmentDetails.id !== decodedAssignment.id ||
+          JSON.stringify(assignmentDetails) !==
+            JSON.stringify(decodedAssignment)
         ) {
           setAssignmentDetails({
-            id: assignment.id,
-            name: assignment.name,
-            numAttempts: assignment.numAttempts,
-            passingGrade: assignment.passingGrade,
-            allotedTimeMinutes: assignment.allotedTimeMinutes,
-            questionDisplay: assignment.questionDisplay,
+            id: decodedAssignment.id,
+            name: decodedAssignment.name,
+            numAttempts: decodedAssignment.numAttempts,
+            passingGrade: decodedAssignment.passingGrade,
+            allotedTimeMinutes: decodedAssignment.allotedTimeMinutes,
+            questionDisplay: decodedAssignment.questionDisplay,
           });
         }
       } else {
