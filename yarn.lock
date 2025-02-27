@@ -3619,9 +3619,9 @@ builtin-modules@^3.3.0:
   integrity sha512-zhaCDicdLuWN5UbN5IMnFqNMhNfo919sH85y2/ea+5Yg9TsTkeZxpL+JLbp6cgYFS4sRLp3YV4S6yDuqVWHYOw==
 
 bullmq@^5.21.1:
-  version "5.41.6"
-  resolved "https://registry.yarnpkg.com/bullmq/-/bullmq-5.41.6.tgz#777954a481f614a9d3062f30c3c4eeebaefd35fd"
-  integrity sha512-4QeYUv3da3+1K9krvvaN0xFKhokr/kFvvf/UbamxezIH923jC+gWj7zcSBYpU+ubo7tV3dHSd9bYoeoTq65e7w==
+  version "5.41.7"
+  resolved "https://registry.yarnpkg.com/bullmq/-/bullmq-5.41.7.tgz#51612b4fd84844b676a2f62aaa3237ad942ddda2"
+  integrity sha512-eZbKJSx15bflfzKRiR+dKeLTr/M/YKb4cIp73OdU79PEMHQ6aEFUtbG6R+f0KvLLznI/O01G581U2Eqli6S2ew==
   dependencies:
     cron-parser "^4.9.0"
     ioredis "^5.4.1"
