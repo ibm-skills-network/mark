@@ -1018,9 +1018,9 @@
     zod-to-json-schema "^3.22.5"
 
 "@langchain/core@^0.3.0":
-  version "0.3.40"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.40.tgz#e5f41f8b4288672d73aa98bcdaf6b32df0480db8"
-  integrity sha512-RGhJOTzJv6H+3veBAnDlH2KXuZ68CXMEg6B6DPTzL3IGDyd+vLxXG4FIttzUwjdeQKjrrFBwlXpJDl7bkoApzQ==
+  version "0.3.41"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.41.tgz#dcdb1ec9bc5d8fc8223c51ae9cf4760d010b0a92"
+  integrity sha512-e/vOyfBxH6Wf2iWvQTecfnkTLGyy6QMTjHgRdU89d3+cHHnNURRCjFbq0dOLWqxnW3eWbXkmNhf3MauRDM+zbQ==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
