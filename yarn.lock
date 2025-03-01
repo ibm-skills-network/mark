@@ -9534,9 +9534,9 @@ react-circular-progressbar@^2.1.0:
   integrity sha512-cgyqEHOzB0nWMZjKfWN3MfSa1LV3OatcDjPz68lchXQUEiBD5O1WsAtoVK4/DSL0B4USR//cTdok4zCBkq8X5g==
 
 react-confetti@^6.1.0:
-  version "6.2.3"
-  resolved "https://registry.yarnpkg.com/react-confetti/-/react-confetti-6.2.3.tgz#817b5e53458cccfaca22241d195b4a93f21fadf1"
-  integrity sha512-Jt6Fy3jE7FrpKxeDQ3oh36Bz6LoYt4o+vU578ghuF//NxADlcauDYvWr24S8hHKnQ90Uv01XXOngnKVBdZ73zQ==
+  version "6.3.0"
+  resolved "https://registry.yarnpkg.com/react-confetti/-/react-confetti-6.3.0.tgz#371d8ed9a7fffa64966af3e17efa4542ce94735e"
+  integrity sha512-/Ah3MktjQsxfxtYc8VVIS0ktZiRX9Wx8DJBNGvOiaXIwqt4zhJ2JNjJJRtPgRgqjZaLYxXSBLnh/wLyWs/I15Q==
   dependencies:
     tween-functions "^1.2.0"
 
