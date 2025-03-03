@@ -213,6 +213,9 @@ function LearnerHeader() {
     }
     clearGithubStore();
     useLearnerStore.getState().setActiveQuestionNumber(null);
+    setTimeout(() => {
+      useLearnerStore.getState().setUserPreferedLanguage(null);
+    }, 1000);
     router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
 

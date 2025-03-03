@@ -249,7 +249,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             <strong> English </strong>
             as it's the original language. However, if you would like to
             continue learning in your chosen language please be aware that our
-            translations are AI generated and may contain some mistakes.
+            translations are AI generated and may contain some inaccuracies.
           </p>
           <p className="text-gray-600 mb-8">
             You will be able to switch your language at any time during the
