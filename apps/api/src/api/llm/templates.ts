@@ -41,6 +41,8 @@ Ensure your feedback is constructive, aiding the learner in understanding their 
 
 Mark the question as {grading_type} based on the provided criteria and the content of the URL.
 
+Make sure your feedback is in language code: {language} 
+
 {responseSpecificInstruction}
 
 {format_instructions}
@@ -68,6 +70,7 @@ Feedback:
 - **Style**: Assess readability, naming conventions, and comments. Note if these could be improved.
 - **Practices**: Recommend best practices to enhance maintainability and readability.
 - **Strengths**: Identify standout aspects, such as innovative approaches or well-organized structure.
+Make sure your feedback is in language code: {language} 
 
 > Provide concise, constructive feedback. Avoid solutions, but offer guidance for improvement. Act as a mentor, not a peer.
 `;
@@ -94,7 +97,7 @@ Feedback:
 - **Clarity**: Evaluate the document’s clarity and tone. Suggest adjustments for more precise expression.
 - **Supporting Details**: Are there relevant examples, citations, or evidence supporting the content?
 - **Strengths**: Identify strengths, such as clear organization, effective arguments, or well-used visuals.
-
+Make sure your feedback is in language code: {language} 
 > Keep feedback concise and clear. Avoid solutions, and guide toward improvement as a mentor.
 `;
 export const gradeImageFileQuestionLlmTemplate = `
@@ -142,7 +145,7 @@ The question offers a maximum of {total_points} points and follows the scoring c
 - If the scoring type is "AI_GRADED", allocate points out of the possible {total_points} based on the overall assessment of the response quality.
 
 If the response is irrelevant (e.g., "I don't know"), state: "The answer you provided is not relevant to the question. Please try again."
-
+Make sure your feedback is in language code: {language} 
 **Additional Instructions for Response Type:** "{responseSpecificInstruction}"
 
 {format_instructions}
@@ -243,6 +246,7 @@ Feedback:
 - **Documentation**: Evaluate the quality and clarity of comments and documentation.
 - **Code Quality**: Assess the code's readability, efficiency, and adherence to best practices.
 - **Strengths**: Identify standout elements or areas of excellence.
+Make sure your feedback is in language code: {language} 
 
 > Provide constructive feedback to guide improvement. Avoid providing solutions.
 `;
@@ -447,6 +451,8 @@ export const generateDocumentFileUploadMarkingRubricTemplate = `
   - Supporting details: Are there relevant examples, statistics, or citations that strengthen the arguments?
   - Visuals and formatting: Are visuals used effectively, and is the document formatted for readability?
 
+  return a valid JSON object
+
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;
 export const generateLinkFileUploadMarkingRubricTemplate = `
@@ -464,7 +470,7 @@ export const generateLinkFileUploadMarkingRubricTemplate = `
   - Clarity: Is the content of the link clear and easy to understand?
   - Integration: How well is the linked content integrated with the learner's response?
   - Supporting details: Does the linked content provide relevant examples, statistics, or evidence?
-
+  return a valid JSON object
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;
 export const generateImageFileUploadMarkingRubricTemplate = `
@@ -482,6 +488,7 @@ export const generateImageFileUploadMarkingRubricTemplate = `
   - Quality: Is the image of high quality, with appropriate resolution and no distortion?
   - Composition: Are elements within the image well-organized to effectively convey information?
   - Annotation and labeling: Are relevant parts of the image clearly labeled or annotated where needed?
+  return a valid JSON object
 
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;
@@ -501,7 +508,7 @@ export const generateCodeFileUploadMarkingRubricTemplate = `
   - Efficiency: Is the code optimized for performance and resource usage?
   - Error handling: Does the code handle possible errors gracefully?
   - Documentation and readability: Is the code easy to understand, with clear comments and naming conventions?
-
+  return a valid JSON object
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;
 
@@ -528,6 +535,8 @@ Feedback:
 - **Writing Quality**: Evaluate grammar, vocabulary, and style.
 - **References**: Are sources cited properly, if required?
 - **Strengths**: Highlight the strongest aspects of the essay.
+Make sure your feedback is in language code: {language} 
+return a valid JSON object
 
 > Provide constructive feedback to guide improvement. Avoid providing solutions.
 `;
@@ -554,6 +563,7 @@ Feedback:
 - **Clarity**: Evaluate the clarity of text and visuals.
 - **Engagement**: Does the presentation engage the audience?
 - **Strengths**: Mention any particularly strong elements.
+Make sure your feedback is in language code: {language} 
 
 > Provide constructive feedback without revealing solutions.
 `;
@@ -580,6 +590,7 @@ Feedback:
 - **Creativity**: Consider originality and creative elements.
 - **Structure**: Is the video well-organized with a clear flow?
 - **Strengths**: Highlight standout aspects.
+Make sure your feedback is in language code: {language} 
 
 > Offer constructive feedback to aid improvement.
 `;
@@ -606,6 +617,7 @@ Feedback:
 - **Engagement**: Does the audio keep the listener engaged?
 - **Structure**: Is there a logical flow?
 - **Strengths**: Point out strong elements.
+Make sure your feedback is in language code: {language} 
 
 > Provide guidance for improvement without giving away answers.
 `;
@@ -632,6 +644,7 @@ Feedback:
 - **Data Visualization**: Evaluate any charts or graphs included.
 - **Efficiency**: Assess the use of advanced features (e.g., pivot tables).
 - **Strengths**: Highlight particularly well-executed aspects.
+Make sure your feedback is in language code: {language} 
 
 > Provide constructive feedback to help the learner improve.
 `;

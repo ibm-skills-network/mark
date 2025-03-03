@@ -2,13 +2,19 @@
 
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
+import ProgressBar, { JobStatus } from "@/components/ProgressBar";
 import {
   Question,
   QuestionAuthorStore,
   ReplaceAssignmentRequest,
 } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
-import { getAssignment, getUser, publishAssignment } from "@/lib/talkToBackend";
+import {
+  getAssignment,
+  getUser,
+  publishAssignment,
+  subscribeToJobStatus,
+} from "@/lib/talkToBackend";
 import { mergeData } from "@/lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -28,8 +34,8 @@ function AuthorHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const assignmentId = extractAssignmentId(pathname);
+
   const [currentStepId, setCurrentStepId] = useState<number>(0);
-  const [validate] = useAssignmentConfig((state) => [state.validate]);
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const [
     setActiveAssignmentId,
@@ -93,12 +99,59 @@ function AuthorHeader() {
       state.showQuestionScore,
       state.showAssignmentScore,
     ]);
+  const [role, setRole] = useAuthorStore((state) => [
+    state.role,
+    state.setRole,
+  ]);
+
+  // STATES FOR PROGRESS BAR & ROADMAP
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [jobProgress, setJobProgress] = useState<number>(0);
+  const [currentMessage, setCurrentMessage] = useState<string>(
+    "Initializing publishing...",
+  );
+  const [progressStatus, setProgressStatus] =
+    useState<JobStatus>("In Progress");
+
+  // Countdown state for learner redirection.
+  const [countdown, setCountdown] = useState<number>(10);
+
+  // // POLLING: Check user role every 5 seconds.
+  // useEffect(() => {
+  //   const pollInterval = setInterval(async () => {
+  //     const user = await getUser();
+  //     if (user && user.role !== role) {
+  //       setRole(user.role);
+  //     }
+  //   }, 5000);
+  //   return () => clearInterval(pollInterval);
+  // }, [role]);
+
+  // // Countdown effect: if role is not author, start/restart countdown.
+  // useEffect(() => {
+  //   let timerId: NodeJS.Timeout | null = null;
+  //   if (role !== "author") {
+  //     setCountdown(10);
+  //     timerId = setInterval(() => {
+  //       setCountdown((prev) => {
+  //         if (prev <= 1) {
+  //           if (timerId) clearInterval(timerId);
+  //           router.replace(`/learner/${assignmentId}`);
+  //           return 0;
+  //         }
+  //         return prev - 1;
+  //       });
+  //     }, 1000);
+  //   }
+  //   return () => {
+  //     if (timerId) clearInterval(timerId);
+  //   };
+  // }, [role, assignmentId, router]);
+
+  // Fetch assignment details on load.
   const fetchAssignment = async () => {
     const assignment = await getAssignment(~~assignmentId);
     if (assignment) {
-      useAuthorStore.getState().setOriginalAssignment(assignment);
-
       // Decode specific fields
       const decodedFields = decodeFields({
         introduction: assignment.introduction,
@@ -112,6 +165,8 @@ function AuthorHeader() {
         ...decodedFields,
       };
 
+      useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
+
       // Author store
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
@@ -121,8 +176,6 @@ function AuthorHeader() {
       setAuthorStore({
         ...cleanedAuthorData,
       });
-
-      // Assignment Config store
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
         decodedAssignment,
@@ -139,8 +192,7 @@ function AuthorHeader() {
       setAssignmentConfigStore({
         ...cleanedAssignmentConfigData,
       });
-
-      // Assignment Feedback Config store
+      // Merge assignment feedback config data.
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
         decodedAssignment,
@@ -182,12 +234,16 @@ function AuthorHeader() {
     };
 
     void fetchData();
-  }, [assignmentId]);
+  }, [assignmentId, router]);
 
+  // Handle Publish Button: prepare data and subscribe to SSE updates.
   async function handlePublishButton() {
     setSubmitting(true);
+    // Reset progress state.
+    setJobProgress(0);
+    setCurrentMessage("Initializing publishing...");
+    setProgressStatus("In Progress");
 
-    // Check the user role
     const role = await getUserRole();
     if (role !== "author") {
       toast.error(
@@ -197,10 +253,11 @@ function AuthorHeader() {
       return;
     }
 
-    const clonedCurrentQuestions: QuestionAuthorStore[] = JSON.parse(
+    // Deep clone current & original questions for comparison.
+    const clonedCurrentQuestions = JSON.parse(
       JSON.stringify(questions),
     ) as QuestionAuthorStore[];
-    const clonedOriginalQuestions: QuestionAuthorStore[] = JSON.parse(
+    const clonedOriginalQuestions = JSON.parse(
       JSON.stringify(originalAssignment.questions),
     ) as QuestionAuthorStore[];
 
@@ -246,29 +303,39 @@ function AuthorHeader() {
       showAssignmentScore,
       questions: questionsAreDifferent ? processQuestions(questions) : null,
     };
-
+    if (assignmentData.introduction === null) {
+      toast.error("Introduction is required to publish the assignment.");
+      setSubmitting(false);
+      return;
+    }
     try {
       const response = await publishAssignment(
         activeAssignmentId,
         assignmentData,
       );
-
-      if (response.success) {
-        if (response.questions && response.questions.length > 0) {
-          setQuestions(response.questions);
-        }
-        void fetchAssignment();
-        toast.success("Questions published successfully!");
-        const currentTime = Date.now();
-
-        questions.forEach((question) => {
-          question.alreadyInBackend = true;
-        });
-        router.push(
-          `/author/${activeAssignmentId}?submissionTime=${currentTime}`,
+      if (response?.jobId) {
+        // Subscribe to SSE updates.
+        await subscribeToJobStatus(
+          response.jobId,
+          (percentage, progress) => {
+            setJobProgress(percentage);
+            setCurrentMessage(progress);
+            setQuestions(questions);
+          },
+          setQuestions,
         );
+        toast.success("Questions published successfully!");
+        setProgressStatus("Completed");
+        setTimeout(() => {
+          router.push(
+            `/author/${activeAssignmentId}?submissionTime=${Date.now()}`,
+          );
+        }, 300);
       } else {
-        toast.error("Couldn't publish all questions. Please try again.");
+        toast.error(
+          "Failed to start the publishing process. Please try again.",
+        );
+        setProgressStatus("Failed");
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
@@ -276,6 +343,7 @@ function AuthorHeader() {
       } else {
         toast.error("An unknown error occurred during publishing.");
       }
+      setProgressStatus("Failed");
     } finally {
       setSubmitting(false);
     }
@@ -283,36 +351,57 @@ function AuthorHeader() {
 
   return (
     <div className="fixed w-full z-50">
-      <header className="border-b border-gray-300 px-6 py-4 bg-white flex items-center justify-between">
-        {/* Left Section */}
-        <div className="flex items-center space-x-4">
-          <SNIcon />
-          <div>
-            <Title level={5} className="leading-6">
-              Auto-Graded Assignment Creator
-            </Title>
-            <div className="text-gray-500 font-medium text-sm leading-5">
-              {name || "Untitled Assignment"}
+      {countdown > 0 && role !== "author" && (
+        <p className="text-sm text-gray-700">
+          Switching to learner mode in {countdown} second
+          {countdown !== 1 && "s"}
+        </p>
+      )}
+      <header className="border-b border-gray-300 px-6 py-4 bg-white flex flex-col">
+        {/* Top row with header information and navigation */}
+        <div className="flex items-center justify-between">
+          {/* Left Section */}
+          <div className="flex items-center space-x-4">
+            <SNIcon />
+            <div>
+              <Title level={5} className="leading-6">
+                Auto-Graded Assignment Creator
+              </Title>
+              <div className="text-gray-500 font-medium text-sm leading-5">
+                {name || "Untitled Assignment"}
+              </div>
             </div>
+          </div>
+
+          {/* Center Navigation */}
+          <Nav
+            currentStepId={currentStepId}
+            setCurrentStepId={setCurrentStepId}
+          />
+
+          {/* Right Section */}
+          <div className="flex items-center space-x-4">
+            <CheckLearnerSideButton
+              disabled={!questionsAreReadyToBePublished}
+            />
+            <SubmitQuestionsButton
+              handlePublishButton={handlePublishButton}
+              submitting={submitting}
+              questionsAreReadyToBePublished={questionsAreReadyToBePublished}
+            />
           </div>
         </div>
 
-        {/* Center Navigation */}
-        <Nav
-          currentStepId={currentStepId}
-          setCurrentStepId={setCurrentStepId}
-        />
-        {/* Right Section */}
-        <div className="flex items-center space-x-4">
-          <CheckLearnerSideButton
-            disabled={!questionsAreReadyToBePublished && validate()}
-          />
-          <SubmitQuestionsButton
-            handlePublishButton={handlePublishButton}
-            submitting={submitting}
-            questionsAreReadyToBePublished={questionsAreReadyToBePublished}
-          />
-        </div>
+        {/* Enhanced Progress Bar with Roadmap (only visible during publishing) */}
+        {submitting && (
+          <div className="mt-4">
+            <ProgressBar
+              progress={jobProgress}
+              currentMessage={currentMessage}
+              status={progressStatus}
+            />
+          </div>
+        )}
       </header>
     </div>
   );

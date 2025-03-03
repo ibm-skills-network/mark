@@ -22,7 +22,11 @@ COPY --from=builder $DIR/out/yarn.lock ./yarn.lock
 COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
 COPY --from=builder $DIR/apps/api/prisma ./prisma
-RUN yarn install --ignore-scripts --frozen-lockfile && yarn prisma generate
+# Install build dependencies (including pkgconf) and rebuild native modules
+RUN apk add --no-cache python3=3.12.9-r0 make=4.4.1-r2 g++=14.2.0-r4 pkgconf \
+  && yarn install --frozen-lockfile \
+  && yarn prisma generate \
+  && npm rebuild cld --build-from-source
 
 # Running build using turbo
 FROM ${BASE_IMAGE} AS sourcer

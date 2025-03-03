@@ -11,6 +11,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   Sse,
   UseGuards,
@@ -20,20 +21,41 @@ import {
   ApiExtraModels,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
   refs,
 } from "@nestjs/swagger";
 import { ReportType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { interval, Observable } from "rxjs";
-import { map, mergeMap } from "rxjs/operators";
+import {
+  concatWith,
+  EMPTY,
+  from,
+  interval,
+  Observable,
+  of,
+  Subject,
+  timer,
+} from "rxjs";
+import {
+  catchError,
+  expand,
+  finalize,
+  map,
+  mergeMap,
+  switchMap,
+  takeWhile,
+  tap,
+} from "rxjs/operators";
 import { Logger } from "winston";
 import {
   UserRole,
   UserSessionRequest,
 } from "../../auth/interfaces/user.session.interface";
 import { Roles } from "../../auth/role/roles.global.guard";
+import { JobStatusService } from "../Job/job-status.service";
+import { LlmService } from "../llm/llm.service";
 import { AssignmentService } from "./assignment.service";
 import { ReportRequestDTO } from "./attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "./constants";
@@ -70,6 +92,8 @@ export class AssignmentController {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly assignmentService: AssignmentService,
+    private readonly llmService: LlmService,
+    private readonly jobStatusService: JobStatusService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentController.name });
   }
@@ -88,27 +112,19 @@ export class AssignmentController {
     description:
       "The response structure varies based on the role of the user requesting the assignment i.e. learner/author/admin (see schema).",
   })
+  @ApiQuery({
+    name: "lang",
+    required: false,
+    type: "string",
+    description: "Language code to translate questions by",
+  })
   @ApiResponse({ status: 403 })
   async getAssignment(
     @Param("id") id: number,
     @Req() request: UserSessionRequest,
+    @Query("lang") lang?: string,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    const backendData = await this.assignmentService.findOne(
-      Number(id),
-      request.userSession,
-    );
-    // remove questions from the response for learners
-    if (request.userSession.role === UserRole.LEARNER) {
-      return {
-        ...backendData,
-        questions: undefined,
-      };
-    }
-
-    return {
-      ...backendData,
-      alreadyInBackend: true,
-    };
+    return this.assignmentService.get(Number(id), request.userSession, lang);
   }
 
   @Get()
@@ -147,6 +163,42 @@ export class AssignmentController {
       updateAssignmentRequestDto,
     );
   }
+  // Streaming real-time updates with proper completion handling
+  @Get("jobs/:jobId/status-stream")
+  @ApiOperation({ summary: "Stream publish job status" })
+  @ApiParam({ name: "jobId", required: true, description: "Job ID" })
+  @Sse("jobs/:jobId/status-stream")
+  sendPublishJobStatus(
+    @Param("jobId", ParseIntPipe) jobId: number,
+  ): Observable<MessageEvent> {
+    return this.jobStatusService.getJobStatusStream(jobId).pipe(
+      map((event) => ({
+        ...event,
+        type: (event.data as { done: boolean }).done ? "finalize" : "update",
+      })),
+      concatWith(
+        of({
+          type: "close",
+          data: { message: "Stream completed" },
+        } as MessageEvent),
+      ),
+      finalize(() => {
+        console.log(`Stream closed for job ${jobId}`);
+        this.jobStatusService.cleanupJobStream(jobId);
+      }),
+      // Error handling
+      catchError((error: Error) => {
+        console.error(`Stream error for job ${jobId}:`, error);
+        return of({
+          type: "error",
+          data: {
+            error: error.message,
+            done: true,
+          },
+        } as MessageEvent);
+      }),
+    );
+  }
   @Put(":id/publish")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
@@ -161,15 +213,23 @@ export class AssignmentController {
   async updateAssignmentQuestions(
     @Param("id") id: number,
     @Body() updatedAssignment: UpdateAssignmentQuestionsDto,
-  ): Promise<UpdateAssignmentQuestionsResponseDto> {
-    if (updatedAssignment === null || updatedAssignment === undefined) {
+    @Req() request: UserSessionRequest,
+  ): Promise<{ jobId: number; message: string }> {
+    if (
+      updatedAssignment === undefined ||
+      updatedAssignment.questions === undefined ||
+      updatedAssignment.questions?.length === 0
+    ) {
       throw new BadRequestException("No data was provided");
     }
-    return this.assignmentService.publishAssignment(
+
+    return await this.assignmentService.publishAssignment(
       Number(id),
       updatedAssignment,
+      request.userSession.userId,
     );
   }
+
   @Post(":id/question/generate-variant")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
@@ -193,6 +253,48 @@ export class AssignmentController {
       Number(id),
       generateQuestionVariantDto,
     );
+  }
+  // controller to get available languages
+  @Get(":id/languages")
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @ApiOperation({ summary: "Get available languages" })
+  @ApiParam({ name: "id", required: true })
+  @ApiResponse({ status: 200, type: [String] })
+  @ApiResponse({ status: 403 })
+  async getAvailableLanguages(
+    @Param("id") id: number,
+  ): Promise<{ languages: string[] }> {
+    const languages = await this.assignmentService.getAvailableLanguages(
+      Number(id),
+    );
+    return { languages };
+  }
+
+  // controller to test language detection
+  @Post("test-language-detection")
+  @ApiOperation({ summary: "Test language detection" })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          example: "This is a test string",
+          description: "The string to test language detection on",
+        },
+      },
+    },
+    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
+  })
+  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 403 })
+  async testLanguageDetection(
+    @Body() language: { text: string },
+  ): Promise<{ languageCode: string }> {
+    const languageCode: string = await this.llmService.getLanguageCode(
+      language.text,
+    );
+    return { languageCode };
   }
 
   @Put(":id")

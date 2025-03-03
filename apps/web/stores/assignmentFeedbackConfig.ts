@@ -1,7 +1,7 @@
 import { extractAssignmentId } from "@/lib/strings";
-import type { FeedbackData, VerbosityLevels } from "../config/types";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
+import type { FeedbackData, VerbosityLevels } from "../config/types";
 import { withUpdatedAt } from "./middlewares";
 
 type FeedbackDataActions = {
@@ -67,7 +67,9 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
 );
 function getAssignmentFeedbackConfigName() {
   if (typeof window !== "undefined") {
-    return `assignment-${extractAssignmentId(window.location.pathname)}-feedback-config`;
+    return `assignment-${extractAssignmentId(
+      window.location.pathname,
+    )}-feedback-config`;
   }
   return "assignment-feedback-config";
 }

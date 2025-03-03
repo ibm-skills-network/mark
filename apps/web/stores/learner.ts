@@ -139,6 +139,7 @@ export type LearnerState = {
   totalPointsPossible: number;
   translationOn: boolean;
   globalLanguage: string;
+  userPreferedLanguage: string;
 };
 
 export type learnerFileResponse = {
@@ -161,8 +162,8 @@ export type LearnerActions = {
   setTextResponse: (learnerTextResponse: string, questionId?: number) => void;
   setURLResponse: (learnerUrlResponse: string, questionId?: number) => void;
   setChoices: (learnerChoices: string[], questionId?: number) => void;
-  addChoice: (learnerChoice: string, questionId?: number) => void;
-  removeChoice: (learnerChoice: string, questionId?: number) => void;
+  addChoice: (learnerChoiceIndex: string, questionId?: number) => void;
+  removeChoice: (learnerChoiceIndex: string, questionId?: number) => void;
   setAnswerChoice: (learnerAnswerChoice: boolean, questionId?: number) => void;
   setLearnerStore: (learnerState: Partial<LearnerState>) => void;
   getQuestionStatusById: (questionId: number) => QuestionStatus;
@@ -197,6 +198,7 @@ export type LearnerActions = {
     translatedChoices: Choice[],
   ) => void;
   setGlobalLanguage: (language: string) => void;
+  setUserPreferedLanguage: (language: string) => void;
 };
 
 export type AssignmentDetailsState = {
@@ -274,312 +276,330 @@ export const useLearnerOverviewStore = createWithEqualityFn<
 export const useLearnerStore = createWithEqualityFn<
   LearnerState & LearnerActions
 >()(
-  devtools(
-    (set, get) => ({
-      setTranslatedQuestion: (questionId, translatedQuestion) =>
-        set((state) => {
-          const question = state.questions.find((q) => q.id === questionId);
-          if (question) {
-            return {
-              ...state,
-              questions: state.questions.map((q) =>
-                q.id === questionId ? { ...q, translatedQuestion } : q,
-              ),
-            };
-          }
-          return state;
-        }),
-
-      setTranslatedChoices: (questionId, translatedChoices) =>
-        set((state) => {
-          const question = state.questions.find((q) => q.id === questionId);
-          if (question) {
-            question.translatedChoices = translatedChoices;
-          }
-          return state;
-        }),
-
-      setSelectedLanguage: (questionId, language) => {
-        set((state) => ({
-          questions: state.questions.map((q) =>
-            q.id === questionId ? { ...q, selectedLanguage: language } : q,
-          ),
-        }));
-      },
-      translationOn: true,
-      setTranslationOn: (questionId, translationOn) => {
-        set((state) => ({
-          questions: state.questions.map((q) =>
-            q.id === questionId ? { ...q, translationOn } : q,
-          ),
-        }));
-      },
-      getTranslationOn: (questionId) => {
-        const question = get().questions.find((q) => q.id === questionId);
-        return question?.translationOn || false;
-      },
-      getFileUpload: (questionId) => {
-        const question = get().questions.find((q) => q.id === questionId);
-        return question?.learnerFileResponse || [];
-      },
-      addFileUpload: (file, questionId) => {
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) => {
-            if (q.id === questionId) {
+  persist(
+    devtools(
+      (set, get) => ({
+        setTranslatedQuestion: (questionId, translatedQuestion) =>
+          set((state) => {
+            const question = state.questions.find((q) => q.id === questionId);
+            if (question) {
               return {
-                ...q,
-                learnerFileResponse: [...(q.learnerFileResponse || []), file],
-              };
-            }
-            return q;
-          });
-          return { ...state, questions: updatedQuestions };
-        });
-        get().setQuestionStatus(questionId);
-      },
-      removeFileUpload: (file, questionId) => {
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) => {
-            if (q.id === questionId) {
-              return {
-                ...q,
-                learnerFileResponse: q.learnerFileResponse?.filter(
-                  (f) => f.filename !== file.filename,
+                ...state,
+                questions: state.questions.map((q) =>
+                  q.id === questionId ? { ...q, translatedQuestion } : q,
                 ),
               };
             }
-            return q;
-          });
-          return { questions: updatedQuestions };
-        });
-        get().setQuestionStatus(questionId);
-      },
-      onFileChange: (files, questionId) => {
-        const formattedFiles = files.map((file: learnerFileResponse) => ({
-          filename: file.filename,
-          content: file.content,
-          githubUrl: file.githubUrl,
-        }));
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) => {
-            if (q.id === questionId) {
-              return { ...q, learnerFileResponse: formattedFiles };
+            return state;
+          }),
+
+        setTranslatedChoices: (questionId, translatedChoices) =>
+          set((state) => {
+            const question = state.questions.find((q) => q.id === questionId);
+            if (question) {
+              question.translatedChoices = translatedChoices;
             }
-            return q;
+            return state;
+          }),
+
+        setSelectedLanguage: (questionId, language) => {
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId ? { ...q, selectedLanguage: language } : q,
+            ),
+          }));
+        },
+        translationOn: true,
+        setTranslationOn: (questionId, translationOn) => {
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId ? { ...q, translationOn } : q,
+            ),
+          }));
+        },
+        getTranslationOn: (questionId) => {
+          const question = get().questions.find((q) => q.id === questionId);
+          return question?.translationOn || false;
+        },
+        getFileUpload: (questionId) => {
+          const question = get().questions.find((q) => q.id === questionId);
+          return question?.learnerFileResponse || [];
+        },
+        addFileUpload: (file, questionId) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                return {
+                  ...q,
+                  learnerFileResponse: [...(q.learnerFileResponse || []), file],
+                };
+              }
+              return q;
+            });
+            return { ...state, questions: updatedQuestions };
           });
-          return { questions: updatedQuestions };
-        });
-        get().setQuestionStatus(questionId);
-      },
-      onUrlChange: (url, questionId) => {
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) => {
-            if (q.id === questionId) {
-              return { ...q, learnerUrlResponse: url };
-            }
-            return q;
+          get().setQuestionStatus(questionId);
+        },
+        removeFileUpload: (file, questionId) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                return {
+                  ...q,
+                  learnerFileResponse: q.learnerFileResponse?.filter(
+                    (f) => f.filename !== file.filename,
+                  ),
+                };
+              }
+              return q;
+            });
+            return { questions: updatedQuestions };
           });
-          return { questions: updatedQuestions };
-        });
-      },
-      onModeChange: (mode, data, questionId) => {
-        if (mode === "file") {
-          const formattedData = (data as learnerFileResponse[]).map((file) => ({
+          get().setQuestionStatus(questionId);
+        },
+        onFileChange: (files, questionId) => {
+          const formattedFiles = files.map((file: learnerFileResponse) => ({
             filename: file.filename,
             content: file.content,
+            githubUrl: file.githubUrl,
           }));
-          get().onFileChange(formattedData, questionId);
-        } else {
-          get().onUrlChange(data as string, questionId);
-        }
-      },
-      setGlobalLanguage: (language) => set({ globalLanguage: language }),
-      setFileUpload: (newFiles, questionId) => {
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) => {
-            if (q.id === questionId) {
-              const existingFiles = q.learnerFileResponse || [];
-              // Merge existing files with new files
-              const mergedFiles = [...existingFiles, ...newFiles];
-              return { ...q, learnerFileResponse: mergedFiles };
-            }
-            return q;
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                return { ...q, learnerFileResponse: formattedFiles };
+              }
+              return q;
+            });
+            return { questions: updatedQuestions };
           });
-          return { questions: updatedQuestions };
-        });
-        get().setQuestionStatus(questionId);
-      },
-
-      deleteFile: (fileToDelete, questionId) => {
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) => {
-            if (q.id === questionId) {
-              const existingFiles = q.learnerFileResponse || [];
-              const updatedFiles = existingFiles.filter(
-                (file) => file.filename !== fileToDelete.filename,
-              );
-              return { ...q, learnerFileResponse: updatedFiles };
-            }
-            return q;
+          get().setQuestionStatus(questionId);
+        },
+        onUrlChange: (url, questionId) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                return { ...q, learnerUrlResponse: url };
+              }
+              return q;
+            });
+            return { questions: updatedQuestions };
           });
-          return { questions: updatedQuestions };
-        });
-        get().setQuestionStatus(questionId);
-      },
-      globalLanguage: "English",
-      activeAttemptId: null,
-      totalPointsEarned: 0,
-      totalPointsPossible: 0,
-      setActiveAttemptId: (id) => {
-        set({ activeAttemptId: id });
-      },
-      activeQuestionNumber: 1,
-      setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
-      assignmentDetails: null,
-      expiresAt: undefined,
-      questions: [],
-      showSubmissionFeedback: false,
-      setShowSubmissionFeedback: (showSubmissionFeedback) =>
-        set({ showSubmissionFeedback }),
-      addQuestion: (question) =>
-        set((state) => ({
-          questions: [
-            ...(state.questions ?? []),
-            {
-              ...question,
-              status: "unedited",
-            },
-          ],
-        })),
-      setQuestion: (question) =>
-        set((state) => ({
-          questions: state.questions?.map((q) =>
-            q.id === question.id
-              ? { ...q, ...question, status: q.status ?? "unedited" }
-              : q,
-          ),
-        })),
-      setQuestions: (questions) =>
-        set((state) => {
-          const updatedQuestions = questions.map((q) => {
-            const prevDataForQuestion = state.questions.find(
-              (q2) => q2.id === q.id,
+        },
+        onModeChange: (mode, data, questionId) => {
+          if (mode === "file") {
+            const formattedData = (data as learnerFileResponse[]).map(
+              (file) => ({
+                filename: file.filename,
+                content: file.content,
+              }),
             );
-            return prevDataForQuestion ? { ...prevDataForQuestion, ...q } : q;
-          });
-          return { questions: updatedQuestions as QuestionStore[] };
-        }),
-      getQuestionStatusById: (questionId: number) => {
-        const question = get().questions.find((q) => q.id === questionId);
-        return question?.status ?? "unedited";
-      },
-      setQuestionStatus: (questionId: number, status?: QuestionStatus) => {
-        const question = get().questions.find((q) => q.id === questionId);
-        if (
-          question &&
-          (question.status !== "flagged" || status === "unflagged")
-        ) {
-          if (status === undefined) {
-            const isEdited = isQuestionEdited(question);
-            const newStatus = isEdited ? "edited" : "unedited";
-            set((state) => ({
-              questions: state.questions?.map((q) =>
-                q.id === questionId ? { ...q, status: newStatus } : q,
-              ),
-            }));
+            get().onFileChange(formattedData, questionId);
           } else {
-            set((state) => ({
-              questions: state.questions?.map((q) =>
-                q.id === questionId ? { ...q, status } : q,
-              ),
-            }));
+            get().onUrlChange(data as string, questionId);
           }
-        }
-      },
-
-      // Consolidate response updating logic
-      setTextResponse: (learnerTextResponse, questionId) => {
-        set((state) => ({
-          questions: state.questions?.map((q) =>
-            q.id === questionId ? { ...q, learnerTextResponse } : q,
-          ),
-        }));
-        get().setQuestionStatus(questionId);
-      },
-
-      setURLResponse: (learnerUrlResponse, questionId) => {
-        set((state) => ({
-          questions: state.questions?.map((q) =>
-            q.id === questionId ? { ...q, learnerUrlResponse } : q,
-          ),
-        }));
-        get().setQuestionStatus(questionId);
-      },
-
-      setChoices: (learnerChoices, questionId) => {
-        set((state) => ({
-          questions: state.questions?.map((q) =>
-            q.id === questionId ? { ...q, learnerChoices } : q,
-          ),
-        }));
-        get().setQuestionStatus(questionId);
-      },
-
-      addChoice: (learnerChoice, questionId) => {
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) =>
-            q.id === questionId
-              ? {
-                  ...q,
-                  learnerChoices: [...(q.learnerChoices ?? []), learnerChoice],
-                }
-              : q,
-          );
-          return { questions: updatedQuestions };
-        }),
+        },
+        setGlobalLanguage: (language) => set({ globalLanguage: language }),
+        setUserPreferedLanguage: (language) =>
+          set({ userPreferedLanguage: language }),
+        setFileUpload: (newFiles, questionId) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                const existingFiles = q.learnerFileResponse || [];
+                // Merge existing files with new files
+                const mergedFiles = [...existingFiles, ...newFiles];
+                return { ...q, learnerFileResponse: mergedFiles };
+              }
+              return q;
+            });
+            return { questions: updatedQuestions };
+          });
           get().setQuestionStatus(questionId);
-      },
-      removeChoice: (learnerChoice, questionId) => {
-        set((state) => {
-          const updatedQuestions = state.questions.map((q) =>
-            q.id === questionId
-              ? {
-                  ...q,
-                  learnerChoices: q.learnerChoices?.filter(
-                    (c) => c !== learnerChoice,
-                  ),
-                }
-              : q,
-          );
-          return { questions: updatedQuestions };
-        }),
+        },
+        deleteFile: (fileToDelete, questionId) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                const existingFiles = q.learnerFileResponse || [];
+                const updatedFiles = existingFiles.filter(
+                  (file) => file.filename !== fileToDelete.filename,
+                );
+                return { ...q, learnerFileResponse: updatedFiles };
+              }
+              return q;
+            });
+            return { questions: updatedQuestions };
+          });
           get().setQuestionStatus(questionId);
+        },
+        globalLanguage: "English",
+        userPreferedLanguage: null,
+        activeAttemptId: null,
+        totalPointsEarned: 0,
+        totalPointsPossible: 0,
+        setActiveAttemptId: (id) => {
+          set({ activeAttemptId: id });
+        },
+        activeQuestionNumber: 1,
+        setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
+        assignmentDetails: null,
+        expiresAt: undefined,
+        questions: [],
+        showSubmissionFeedback: false,
+        setShowSubmissionFeedback: (showSubmissionFeedback) =>
+          set({ showSubmissionFeedback }),
+        addQuestion: (question) =>
+          set((state) => ({
+            questions: [
+              ...(state.questions ?? []),
+              {
+                ...question,
+                status: "unedited",
+              },
+            ],
+          })),
+        setQuestion: (question) =>
+          set((state) => ({
+            questions: state.questions?.map((q) =>
+              q.id === question.id
+                ? { ...q, ...question, status: q.status ?? "unedited" }
+                : q,
+            ),
+          })),
+        setQuestions: (questions) =>
+          set((state) => {
+            const updatedQuestions = questions.map((q) => {
+              const prevDataForQuestion = state.questions.find(
+                (q2) => q2.id === q.id,
+              );
+              return prevDataForQuestion ? { ...prevDataForQuestion, ...q } : q;
+            });
+            return { questions: updatedQuestions as QuestionStore[] };
+          }),
+        getQuestionStatusById: (questionId: number) => {
+          const question = get().questions.find((q) => q.id === questionId);
+          return question?.status ?? "unedited";
+        },
+        setQuestionStatus: (questionId: number, status?: QuestionStatus) => {
+          const question = get().questions.find((q) => q.id === questionId);
+          if (
+            question &&
+            (question.status !== "flagged" || status === "unflagged")
+          ) {
+            if (status === undefined) {
+              const isEdited = isQuestionEdited(question);
+              const newStatus = isEdited ? "edited" : "unedited";
+              set((state) => ({
+                questions: state.questions?.map((q) =>
+                  q.id === questionId ? { ...q, status: newStatus } : q,
+                ),
+              }));
+            } else {
+              set((state) => ({
+                questions: state.questions?.map((q) =>
+                  q.id === questionId ? { ...q, status } : q,
+                ),
+              }));
+            }
+          }
+        },
+
+        // Consolidate response updating logic
+        setTextResponse: (learnerTextResponse, questionId) => {
+          set((state) => ({
+            questions: state.questions?.map((q) =>
+              q.id === questionId ? { ...q, learnerTextResponse } : q,
+            ),
+          }));
+          get().setQuestionStatus(questionId);
+        },
+
+        setURLResponse: (learnerUrlResponse, questionId) => {
+          set((state) => ({
+            questions: state.questions?.map((q) =>
+              q.id === questionId ? { ...q, learnerUrlResponse } : q,
+            ),
+          }));
+          get().setQuestionStatus(questionId);
+        },
+
+        setChoices: (learnerChoices, questionId) => {
+          set((state) => ({
+            questions: state.questions?.map((q) =>
+              q.id === questionId ? { ...q, learnerChoices } : q,
+            ),
+          }));
+          get().setQuestionStatus(questionId);
+        },
+
+        addChoice: (learnerChoiceIndex, questionId) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) =>
+              q.id === questionId
+                ? {
+                    ...q,
+                    learnerChoices: [
+                      ...(q.learnerChoices ?? []),
+                      learnerChoiceIndex,
+                    ],
+                  }
+                : q,
+            );
+            return { questions: updatedQuestions };
+          }),
+            get().setQuestionStatus(questionId);
+        },
+        removeChoice: (learnerChoiceIndex, questionId) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) =>
+              q.id === questionId
+                ? {
+                    ...q,
+                    learnerChoices: q.learnerChoices?.filter(
+                      (c) => c !== learnerChoiceIndex, // Remove by index
+                    ),
+                  }
+                : q,
+            );
+            return { questions: updatedQuestions };
+          }),
+            get().setQuestionStatus(questionId);
+        },
+
+        setAnswerChoice: (learnerAnswerChoice, questionId) => {
+          set((state) => {
+            const activeQuestionId =
+              questionId || state.questions[state.activeQuestionNumber - 1].id;
+            const updatedQuestions = state.questions.map((q) =>
+              q.id === activeQuestionId
+                ? { ...q, learnerAnswerChoice: Boolean(learnerAnswerChoice) }
+                : q,
+            );
+            return { questions: updatedQuestions };
+          });
+          get().setQuestionStatus(questionId);
+        },
+        setRole: (role) => set({ role }),
+        setLearnerStore: (learnerState) => set(learnerState),
+        setTotalPointsEarned: (totalPointsEarned) => set({ totalPointsEarned }),
+        setTotalPointsPossible: (totalPointsPossible) =>
+          set({ totalPointsPossible }),
+      }),
+      {
+        name: "learner",
+        enabled: process.env.NODE_ENV === "development",
+        serialize: {
+          options: true, // Enable serialization to avoid large data crashes
+        },
       },
-      setAnswerChoice: (learnerAnswerChoice, questionId) => {
-        set((state) => {
-          const activeQuestionId =
-            questionId || state.questions[state.activeQuestionNumber - 1].id;
-          const updatedQuestions = state.questions.map((q) =>
-            q.id === activeQuestionId
-              ? { ...q, learnerAnswerChoice: Boolean(learnerAnswerChoice) }
-              : q,
-          );
-          return { questions: updatedQuestions };
-        });
-        get().setQuestionStatus(questionId);
-      },
-      setRole: (role) => set({ role }),
-      setLearnerStore: (learnerState) => set(learnerState),
-      setTotalPointsEarned: (totalPointsEarned) => set({ totalPointsEarned }),
-      setTotalPointsPossible: (totalPointsPossible) =>
-        set({ totalPointsPossible }),
-    }),
+    ),
     {
       name: "learner",
-      enabled: process.env.NODE_ENV === "development",
-      serialize: {
-        options: true, // Enable serialization to avoid large data crashes
-      },
+      partialize: (state) => ({
+        questions: state.questions,
+        activeAttemptId: state.activeAttemptId,
+        userPreferedLanguage: state.userPreferedLanguage,
+      }),
     },
   ),
   shallow,

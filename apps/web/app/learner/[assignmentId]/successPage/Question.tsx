@@ -1,5 +1,6 @@
 "use client";
 
+import { trueFalseTranslations } from "@/app/Helpers/Languages/TrueFalseInAllLang";
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import FeedbackFormatter from "@/components/FeedbackFormatter";
 import MarkdownViewer from "@/components/MarkdownViewer";
@@ -20,6 +21,7 @@ import FileViewer from "../../(components)/Question/FileViewer";
 interface Props {
   question: QuestionStore;
   number: number;
+  language: string;
 }
 
 interface HighestScoreResponseType {
@@ -34,7 +36,7 @@ export type LearnerResponseType =
   | { filename: string; content: string }[]
   | undefined;
 
-const Question: FC<Props> = ({ question, number }) => {
+const Question: FC<Props> = ({ question, number, language = "en" }) => {
   const {
     question: questionText,
     totalPoints,
@@ -322,7 +324,11 @@ const Question: FC<Props> = ({ question, number }) => {
           
           `}
         >
-          {learnerResponse ? "True" : "False"}
+          {learnerResponse
+            ? (trueFalseTranslations[language]?.true ??
+              trueFalseTranslations.en.true)
+            : (trueFalseTranslations[language]?.false ??
+              trueFalseTranslations.en.false)}
         </p>
       );
     } else if (

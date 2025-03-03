@@ -20,7 +20,7 @@ export enum DownstreamService {
 }
 
 @ApiTags(
-  "Api (All the endpoints use a JWT Cookie named 'authentication' for authorization)",
+  "Api (All endpoints use a JWT Cookie named 'authentication' for authorization)",
 )
 @Injectable()
 @Controller({
@@ -42,6 +42,22 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
+    // If request is SSE, use native HTTP forwarding.
+    if (request.headers.accept?.includes("text/event-stream")) {
+      const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
+        DownstreamService.LTI_CREDENTIAL_MANAGER,
+        request,
+      );
+      await this.apiService.forwardRequestUsingHttp(
+        request,
+        response,
+        endpoint,
+        extraHeaders,
+      );
+      return;
+    }
+
+    // Otherwise, use the axios-based forwarding.
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.LTI_CREDENTIAL_MANAGER,
       request,
@@ -57,6 +73,19 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
+    if (request.headers.accept?.includes("text/event-stream")) {
+      const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
+        DownstreamService.MARK_API,
+        request,
+      );
+      await this.apiService.forwardRequestUsingHttp(
+        request,
+        response,
+        endpoint,
+        extraHeaders,
+      );
+      return;
+    }
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
       request,
@@ -72,6 +101,21 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
+    if (request.headers.accept?.includes("text/event-stream")) {
+      const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
+        DownstreamService.MARK_API,
+        request,
+      );
+      console.log("Forwarding request to", endpoint);
+      await this.apiService.forwardRequestUsingHttp(
+        request,
+        response,
+        endpoint,
+        extraHeaders,
+      );
+      return;
+    }
+    console.log("Forwarding request to Mark API");
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
       request,

@@ -1,10 +1,11 @@
 "use client";
+
+import { stepTwoSections } from "@/config/constants";
+import { QuestionDisplayType } from "@/config/types";
+import { cn } from "@/lib/strings";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import type { ComponentPropsWithoutRef, FC, MouseEvent } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { stepTwoSections } from "@/config/constants";
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { cn } from "@/lib/strings";
-import { QuestionDisplayType } from "@/config/types";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 

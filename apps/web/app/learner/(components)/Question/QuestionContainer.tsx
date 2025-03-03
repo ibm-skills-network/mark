@@ -1,3 +1,4 @@
+import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionDisplayType, QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
@@ -76,6 +77,20 @@ function Component(props: Props) {
   const setTranslatedChoices = useLearnerStore(
     (state) => state.setTranslatedChoices,
   );
+  const [userPreferedLanguage, setUserPreferredLanguage] = useLearnerStore(
+    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
+  );
+  const [userPreferedLanguageName, setUserPreferredLanguageName] = useState<
+    string | undefined
+  >(undefined);
+  useEffect(() => {
+    if (userPreferedLanguage) {
+      setUserPreferredLanguageName(
+        getLanguageName(userPreferedLanguage) || "English",
+      );
+    }
+  }),
+    [userPreferedLanguage];
   const translatingWords = [
     "Translating",
     "Traduciendo",
@@ -91,7 +106,10 @@ function Component(props: Props) {
   const toggleTranslation = () => {
     setTranslationOn(questionId, !translationOn);
     // if translation is toggled on, fetch the translation
-    if (!translationOn && question.selectedLanguage !== "English") {
+    if (
+      !translationOn &&
+      question.selectedLanguage !== userPreferedLanguageName
+    ) {
       void fetchTranslation();
     }
   };
@@ -137,10 +155,13 @@ function Component(props: Props) {
     }
   };
   useEffect(() => {
-    if (translationOn && question.selectedLanguage !== "English") {
+    if (
+      translationOn &&
+      question.selectedLanguage !== userPreferedLanguageName
+    ) {
       void fetchTranslation();
     }
-    if (question.selectedLanguage === "English") {
+    if (question.selectedLanguage === userPreferedLanguageName) {
       setTranslatedQuestion(questionId, question.question);
     }
   }, [question.selectedLanguage]);
@@ -149,7 +170,7 @@ function Component(props: Props) {
       const browserLanguage = navigator.language || navigator.languages[0];
       const detectedLanguage =
         languages.find((lang) => lang.code === browserLanguage)?.name ||
-        "English";
+        userPreferedLanguageName;
 
       setGlobalLanguage(detectedLanguage); // Set the global language to browser's language
     }
@@ -158,14 +179,17 @@ function Component(props: Props) {
   // Initialize question language to global language on mount
   useEffect(() => {
     if (!question.selectedLanguage) {
-      setSelectedLanguage(questionId, globalLanguage || "English");
+      setSelectedLanguage(
+        questionId,
+        globalLanguage || userPreferedLanguageName,
+      );
     }
   }, [questionId, globalLanguage, setSelectedLanguage]);
 
   const handleLanguageChange = (newLanguage: string) => {
     // Update global language and question language
     setSelectedLanguage(questionId, newLanguage);
-    if (newLanguage !== "English") {
+    if (newLanguage !== userPreferedLanguageName) {
       setGlobalLanguage(newLanguage);
     }
   };
@@ -209,8 +233,12 @@ function Component(props: Props) {
       {/* Question Card */}
       <div className="flex flex-col gap-y-4">
         <div className="flex justify-between items-center">
-          <MarkdownViewer className="text-gray-800 px-2 border-gray-300 flex-grow">
-            {question.question}
+          <MarkdownViewer
+            className="text-gray-800 px-2 border-gray-300 flex-grow"
+            id={`question-${question.id}-${userPreferedLanguage}`}
+          >
+            {question.translations?.[userPreferedLanguage]?.translatedText ??
+              question.question}
           </MarkdownViewer>
           <div className="flex items-center gap-x-2 ml-auto">
             <LanguageIcon
@@ -243,7 +271,9 @@ function Component(props: Props) {
           <div className="flex flex-col gap-y-4 bg-gray-100 rounded-md p-4">
             {/* translation conversion */}
             <div className="flex items-center gap-x-2">
-              <span className="text-gray-600 font-medium">English</span>
+              <span className="text-gray-600 font-medium">
+                {userPreferedLanguageName}
+              </span>
               <ArrowLongRightIcon className="w-5 h-5 text-gray-600" />
               <select
                 className="border border-gray-300 rounded-md p-2 w-[150px]"
@@ -312,7 +342,19 @@ function Component(props: Props) {
       </div>
 
       {/* Render the question based on the type */}
-      <RenderQuestion questionType={question.type} question={question} />
+      <RenderQuestion
+        questionType={question.type}
+        question={{
+          ...question,
+          choices: question?.choices?.map((choice, index) =>
+            question.translations?.[userPreferedLanguage]?.translatedChoices
+              ? question.translations[userPreferedLanguage].translatedChoices[
+                  index
+                ]
+              : choice,
+          ),
+        }}
+      />
 
       {questionDisplay === "ONE_PER_PAGE" && (
         <div className="flex justify-between">

@@ -1,8 +1,8 @@
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { useAuthorStore } from "@/stores/author";
 import { useCallback, useEffect } from "react";
 import { Question } from "../../config/types";
 import { useDebugLog } from "../../lib/utils";
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { useAuthorStore } from "@/stores/author";
 
 export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
   const debugLog = useDebugLog();
@@ -11,6 +11,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
   const questionsAreReadyToBePublished = useCallback(() => {
     let isValid = true;
     let message = "";
+    let step: number | null = null;
     const nonValidQuestionsIds: number[] = [];
 
     questions?.some((eachQuestion, index) => {
@@ -20,6 +21,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
       if (!question?.trim()) {
         debugLog(`Question ${index + 1} has empty text.`);
         message = `Question ${index + 1} has empty text.`;
+        step = 3;
         nonValidQuestionsIds.push(id);
         isValid = false;
         return true;
@@ -39,6 +41,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
         ) {
           nonValidQuestionsIds.push(id);
           debugLog(`Question ${index + 1} has missing or invalid variants.`);
+          step = 3;
           message = `Question ${index + 1} has missing or invalid variants.`;
           isValid = false;
           return true;
@@ -49,6 +52,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
         if (!scoring?.criteria?.length || !criteriaValid) {
           nonValidQuestionsIds.push(id);
           debugLog(`Question ${index + 1} has missing or invalid criteria.`);
+          step = 3;
           message = `Question ${index + 1} has missing or invalid criteria.`;
           isValid = false;
           return true;
@@ -69,6 +73,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
         ) {
           nonValidQuestionsIds.push(id);
           debugLog(`Question ${index + 1} has missing or invalid variants.`);
+          step = 3;
           message = `Question ${index + 1} has missing or invalid variants.`;
           isValid = false;
           return true;
@@ -81,6 +86,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
         ) {
           nonValidQuestionsIds.push(id);
           debugLog(`Question ${index + 1} has invalid True/False choices.`);
+          step = 3;
           message = `Question ${index + 1} has invalid True/False choices.`;
           isValid = false;
           return true;
@@ -101,6 +107,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
         ) {
           nonValidQuestionsIds.push(id);
           debugLog(`Question ${index + 1} has missing or invalid variants.`);
+          step = 3;
           message = `Question ${index + 1} has missing or invalid variants.`;
           isValid = false;
           return true;
@@ -117,6 +124,7 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
           message = `Question ${
             index + 1
           } is missing valid choices or correct answers.`;
+          step = 3;
           isValid = false;
           return true;
         }
@@ -128,16 +136,19 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
     if (introduction?.trim() === "" || introduction?.trim() === "<p><br></p>") {
       debugLog(`Introduction is empty.`);
       message = `Introduction is empty.`;
+      step = 1;
       isValid = false;
     }
     if (assignmentConfig.graded === null) {
       debugLog(`Assignment type is required.`);
       message = `Assignment type is required.`;
+      step = 2;
       isValid = false;
     }
     if (!assignmentConfig.numAttempts || assignmentConfig.numAttempts < -1) {
       debugLog(`Please enter a valid number of attempts.`);
       message = `Please enter a valid number of attempts.`;
+      step = 2;
       isValid = false;
     }
     if (
@@ -147,21 +158,25 @@ export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
     ) {
       debugLog(`Passing grade must be between 1 and 100.`);
       message = `Passing grade must be between 1 and 100.`;
+      step = 2;
       isValid = false;
     }
     if (!assignmentConfig.displayOrder) {
       debugLog(`Question order is required.`);
       message = `Question order is required.`;
+      step = 2;
       isValid = false;
     }
     if (!assignmentConfig.questionDisplay) {
       debugLog(`Question display type is required.`);
       message = `Question display type is required.`;
+      step = 2;
       isValid = false;
     }
     return {
       isValid,
       message,
+      step,
       invalidQuestionId: nonValidQuestionsIds.length
         ? nonValidQuestionsIds[0]
         : null,

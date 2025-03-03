@@ -5,6 +5,7 @@ import each from "jest-each";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { of } from "rxjs";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { JobStatusService } from "src/api/Job/job-status.service";
 import {
   UserRole,
   UserSessionRequest,
@@ -34,14 +35,66 @@ describe("AttemptService", () => {
   let service: AttemptService;
   let prisma: PrismaService;
 
+  const mockAssignment = {
+    id: 1,
+    showAssignmentScore: true,
+    showQuestionScore: true,
+    showSubmissionFeedback: true,
+    questions: [], // you'll override this as needed in individual tests
+  };
+
+  const mockAssignmentAttempt = {
+    id: 1,
+    submitted: false,
+    responsesForQuestions: [],
+    expiresAt: new Date(Date.now() + 1_000_000),
+    questionVariants: [],
+  };
+
+  const mockResponses = []; // define as needed
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttemptService,
-        PrismaService,
+        {
+          provide: PrismaService,
+          useValue: {
+            assignment: {
+              findUnique: jest.fn().mockResolvedValue(mockAssignment),
+            },
+            question: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: 1,
+                totalPoints: 100,
+                question: "What is your name",
+              }),
+            },
+            assignmentAttempt: {
+              findUnique: jest.fn().mockResolvedValue(mockAssignmentAttempt),
+              update: jest
+                .fn()
+                .mockImplementation(
+                  (parameters: {
+                    where: { id: number };
+                    data: { grade: number; submitted: boolean };
+                  }) => ({
+                    id: parameters.where.id,
+                    grade: parameters.data.grade,
+                    submitted: parameters.data.submitted,
+                    success: true,
+                  }),
+                ),
+            },
+            questionResponse: {
+              findMany: jest.fn().mockResolvedValue(mockResponses),
+            },
+          },
+        },
         LlmService,
         QuestionService,
         AssignmentService,
+        JobStatusService,
         {
           provide: HttpService,
           useValue: {
@@ -123,11 +176,13 @@ describe("AttemptService", () => {
       const mockAssignmentAttempt: LearnerUpdateAssignmentAttemptRequestDto & {
         id: number;
         expiresAt: Date;
+        questionVariants: any[]; // Ensure this property exists
       } = {
         id: assignmentAttemptId,
         submitted: false,
         responsesForQuestions: updateAssignmentAttemptDto.responsesForQuestions,
         expiresAt: new Date(Date.now() + 1_000_000), // future date
+        questionVariants: [], // Provide an empty array or appropriate mock data
       };
 
       const mockQuestionResponses: CreateQuestionResponseAttemptResponseDto[] =

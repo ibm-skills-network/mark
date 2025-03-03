@@ -2,6 +2,7 @@ import dynamic from "next/dynamic";
 import PageTitle from "../(components)/PageTitle";
 import { FooterNavigation } from "../(components)/StepOne/FooterNavigation";
 import MainContent from "../(components)/StepOne/MainContent";
+
 const DynamicSuccessPage = dynamic(
   () => import("../(components)/SuccessPage"),
   { ssr: false },

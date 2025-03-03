@@ -1,19 +1,19 @@
-import { useAuthorStore } from "@/stores/author";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, FC, useState } from "react";
-import { motion } from "framer-motion";
-import Tooltip from "@/components/Tooltip";
-import {
-  DocumentTextIcon,
-  Cog6ToothIcon,
-  QuestionMarkCircleIcon,
-  MagnifyingGlassIcon,
-} from "@heroicons/react/24/solid";
-import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
-import { ArrowRightIcon } from "@heroicons/react/24/solid";
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import Tooltip from "@/components/Tooltip";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { useAuthorStore } from "@/stores/author";
+import {
+  ArrowRightIcon,
+  Cog6ToothIcon,
+  DocumentTextIcon,
+  MagnifyingGlassIcon,
+  QuestionMarkCircleIcon,
+} from "@heroicons/react/24/solid";
+import { motion } from "framer-motion";
+import { usePathname, useRouter } from "next/navigation";
+import { FC, useEffect, useState } from "react";
+import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 
 interface Step {
   id: number;
@@ -84,12 +84,12 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
 
   const handleDisabled = (id: number) => {
     if (id === 3) {
-      const { isValid, message, invalidQuestionId } =
+      const { isValid, message, step, invalidQuestionId } =
         questionsAreReadyToBePublished();
       tooltipMessage = (
         <>
           <span>{message}</span>
-          {!isValid && (
+          {!isValid && invalidQuestionId && (
             <button
               onClick={() => {
                 setFocusedQuestionId(invalidQuestionId);
@@ -190,7 +190,9 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                     <Icon />
                   </motion.div>
                   <span
-                    className={`text-sm font-medium ${isActive ? "text-violet-600 font-bold" : "text-gray-500"}`}
+                    className={`text-sm font-medium ${
+                      isActive ? "text-violet-600 font-bold" : "text-gray-500"
+                    }`}
                   >
                     {step.name}
                   </span>
@@ -205,7 +207,9 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                     opacity: 1,
                   }}
                   transition={{ duration: 0.5 }}
-                  className={`mx-2 ${index < currentStepId ? "text-violet-600" : "text-gray-300"}`}
+                  className={`mx-2 ${
+                    index < currentStepId ? "text-violet-600" : "text-gray-300"
+                  }`}
                 >
                   <ArrowRightIcon className="w-5 h-5" />
                 </motion.div>

@@ -154,4 +154,13 @@ export class AssignmentAttemptQuestions {
   })
   @Optional()
   responseType?: ResponseType;
+  @ApiPropertyOptional({
+    description: "The variant id for the question.",
+    type: Number,
+    required: false,
+  })
+  @Optional()
+  variantId?: number;
+  @Optional()
+  _permutation?: boolean;
 }

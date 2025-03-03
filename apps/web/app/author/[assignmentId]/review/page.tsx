@@ -1,14 +1,15 @@
 "use client";
-import React from "react";
+
+import MarkdownViewer from "@/components/MarkdownViewer";
+import Title from "@/components/Title";
+import { extractAssignmentId } from "@/lib/strings";
 import { PencilSquareIcon } from "@heroicons/react/24/outline";
+import { usePathname, useRouter } from "next/navigation"; // Importing useRouter for navigation
+import React from "react";
 import { useAssignmentConfig } from "../../../../stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "../../../../stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "../../../../stores/author";
 import Question from "../../(components)/AuthorQuestionsPage/Question";
-import { usePathname, useRouter } from "next/navigation"; // Importing useRouter for navigation
-import { extractAssignmentId } from "@/lib/strings";
-import MarkdownViewer from "@/components/MarkdownViewer";
-import Title from "@/components/Title";
 
 // Reusable Component for sections with similar structure (title, content, edit button, and optional navigation link)
 const Section = ({

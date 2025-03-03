@@ -1,9 +1,10 @@
 "use client";
-import MarkdownEditor from "@/components/MarkDownEditor";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { useAuthorStore } from "@/stores/author";
-import LoadingPage from "@/app/loading";
+
 import animationData from "@/animations/LoadSN.json";
+import LoadingPage from "@/app/loading";
+import MarkdownEditor from "@/components/MarkDownEditor";
+import { useAuthorStore } from "@/stores/author";
+import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
 const stepOneSections = {
   introduction: {

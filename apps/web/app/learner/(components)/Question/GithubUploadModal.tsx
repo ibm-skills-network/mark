@@ -1,26 +1,27 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
-import { Octokit } from "@octokit/rest";
+
+import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import Modal from "@/components/Modal";
+import { RepoContentItem, RepoType } from "@/config/types";
 import {
   AuthorizeGithubBackend,
   exchangeGithubCodeForToken,
   getStoredGithubToken,
   getUser,
 } from "@/lib/talkToBackend";
-import { toast } from "sonner";
-import { useSearchParams } from "next/navigation";
 import { learnerFileResponse } from "@/stores/learner";
-import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeftIcon,
   ArrowTopRightOnSquareIcon,
   DocumentTextIcon,
   FolderIcon,
 } from "@heroicons/react/24/outline";
-import { RepoContentItem, RepoType } from "@/config/types";
+import { Octokit } from "@octokit/rest";
 import { IconSearch } from "@tabler/icons-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useSearchParams } from "next/navigation";
+import React, { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 const GithubModal: React.FC<{
   onClose: () => void;

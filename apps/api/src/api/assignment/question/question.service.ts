@@ -7,10 +7,9 @@ import {
 import { Prisma, QuestionType, ResponseType } from "@prisma/client";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
-import { QuestionDto } from "../dto/update.questions.request.dto";
+import { Choice, QuestionDto } from "../dto/update.questions.request.dto";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import {
-  Choice,
   CreateUpdateQuestionRequestDto,
   Scoring,
 } from "./dto/create.update.question.request.dto";
@@ -170,9 +169,10 @@ export class QuestionService {
   }
   /**
    * Generate translations for the relevant parts of a question (text and choices) if not already present in the database.
-   * @param questionId The ID of the question to translate.
-   * @param languageCode The target language code for translation.
-   * @param language The target language name (e.g., French, Spanish) for context.
+   * @param assignmentId The ID of the assignment (context for LLM).
+   * @param question The question DTO whose text is to be translated.
+   * @param languageCode The target language code (e.g., "fr", "es").
+   * @param language The target language name (e.g., "French", "Spanish").
    * @returns The translated question text and choices (if applicable).
    */
   async generateTranslationIfNotExists(
@@ -181,16 +181,20 @@ export class QuestionService {
     languageCode: string,
     language: string,
   ): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
-    // Check if the translation already exists
+    if (!question) {
+      throw new NotFoundException(`Question DTO not provided or is invalid.`);
+    }
+
     const questionId = question.id;
-    const existingTranslation = await this.prisma.translation.findUnique({
+    const existingTranslation = await this.prisma.translation.findFirst({
       where: {
-        questionId_languageCode: { questionId, languageCode },
+        questionId,
+        variantId: undefined,
+        languageCode,
       },
     });
 
     if (existingTranslation) {
-      // check if the saved question is the same as the current question
       if (
         existingTranslation.untranslatedText === question.question &&
         existingTranslation.translatedText
@@ -202,20 +206,18 @@ export class QuestionService {
             : undefined,
         };
       } else {
-        // delete the existing translation if the question has been updated
-        await this.prisma.translation.delete({
+        await this.prisma.translation.deleteMany({
           where: {
-            questionId_languageCode: { questionId, languageCode },
+            questionId,
+            variantId: undefined,
+            languageCode,
           },
         });
       }
     }
 
-    if (!question) {
-      throw new NotFoundException(`Question with ID ${questionId} not found.`);
-    }
-
-    // Generate translations for the question text and choices using the LLM service
+    // 3. If we reach here, we need to generate a new translation
+    //    (either it never existed or it was deleted due to text changes).
     const translatedQuestion =
       await this.llmService.generateQuestionTranslation(
         assignmentId,
@@ -223,6 +225,7 @@ export class QuestionService {
         language,
       );
 
+    // If needed, you can uncomment and handle choices as well:
     // let translatedChoices: Choice[] | undefined;
     // if (question.choices) {
     //   translatedChoices = await this.llmService.generateChoicesTranslation(
@@ -231,10 +234,11 @@ export class QuestionService {
     //   );
     // }
 
-    // Save the new translation to the database
+    // 4. Save the new translation
     await this.prisma.translation.create({
       data: {
         questionId,
+        variantId: undefined, // Because this translation is for the question itself
         languageCode,
         translatedText: translatedQuestion,
         untranslatedText: question.question,
@@ -246,7 +250,7 @@ export class QuestionService {
 
     return {
       translatedQuestion,
-      // , translatedChoices
+      // translatedChoices
     };
   }
 

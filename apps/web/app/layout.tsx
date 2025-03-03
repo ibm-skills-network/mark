@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
-import { Toaster, toast } from "sonner";
+import { toast, Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 

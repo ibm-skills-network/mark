@@ -3,7 +3,8 @@
   "compilerOptions": {
     "lib": ["es2021", "dom"],
     "outDir": "./dist",
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "resolveJsonModule": true
   },
   "exclude": ["./ensureDb.js"]
 }

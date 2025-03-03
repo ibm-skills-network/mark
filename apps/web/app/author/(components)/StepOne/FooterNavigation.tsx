@@ -1,5 +1,10 @@
 "use client";
+
+import { useQuestionsAreReadyToBePublished } from "@/app/Helpers/checkQuestionsReady";
+import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 import Button from "@/components/Button";
+import Tooltip from "@/components/Tooltip";
+import { Question } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
@@ -9,10 +14,7 @@ import {
   type ComponentPropsWithoutRef,
   type FC,
 } from "react";
-import { useQuestionsAreReadyToBePublished } from "@/app/Helpers/checkQuestionsReady";
-import { Question } from "@/config/types";
-import Tooltip from "@/components/Tooltip";
-import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
+
 interface Props extends ComponentPropsWithoutRef<"nav"> {
   assignmentId?: string;
   nextStep?: string;

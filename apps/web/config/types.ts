@@ -58,6 +58,7 @@ export type RepoContentItem = {
     login: string;
   };
 };
+
 export type AuthorAssignmentState = {
   assignmentId: number;
   assignmentType: AssignmentTypeEnum;
@@ -232,6 +233,12 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
   // for SINGLE_CORRECT or MULTIPLE_CORRECT only, otherwise null
   choices?: Choice[];
   status?: QuestionStatus;
+  translations?: {
+    [key: string]: {
+      translatedText: string;
+      translatedChoices: Choice[];
+    };
+  };
   // assignmentId: number;
 }
 
@@ -255,8 +262,20 @@ export interface Question extends CreateQuestionRequest {
   questionOrder?: number[];
   variants?: QuestionVariants[];
   randomizedChoices?: boolean;
+  alreadyInBackend?: boolean;
 }
-
+export interface PublishJobResponse {
+  jobId: string;
+  progress: string;
+  status: string;
+  result?: {
+    id: number;
+    success: boolean;
+    questions?: Question[];
+  };
+  percentage?: number;
+  done?: boolean;
+}
 export interface QuestionVariants {
   id: number;
   questionId: number;
@@ -292,6 +311,7 @@ export type QuestionStore = LearnerGetQuestionResponse &
     selectedLanguage: string;
     translatedQuestion: string;
     translatedChoices: Choice[];
+    answers?: string[];
     // feedback: string[];
   };
 
@@ -390,6 +410,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
   comments?: string;
+  preferredLanguage?: string;
 }
 
 export interface AssignmentDetails {

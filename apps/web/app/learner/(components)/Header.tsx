@@ -1,6 +1,8 @@
 "use client";
 
+import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
+import Dropdown from "@/components/Dropdown";
 import Spinner from "@/components/svgs/Spinner";
 import WarningAlert from "@/components/WarningAlert";
 import type {
@@ -8,20 +10,24 @@ import type {
   QuestionStore,
   ReplaceAssignmentRequest,
 } from "@/config/types";
-import { getUser, submitAssignment } from "@/lib/talkToBackend";
+import {
+  getSupportedLanguages,
+  getUser,
+  submitAssignment,
+} from "@/lib/talkToBackend";
 import { editedQuestionsOnly } from "@/lib/utils";
 import {
   useAssignmentDetails,
   useGitHubStore,
+  useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import Button from "../../../components/Button";
-import Link from "next/link";
 
 function LearnerHeader() {
   const pathname = usePathname();
@@ -48,6 +54,10 @@ function LearnerHeader() {
     state.assignmentDetails,
     state.setGrade,
   ]);
+  const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
+    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
+  );
+
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
     "assignmentConfig",
     {
@@ -60,13 +70,14 @@ function LearnerHeader() {
     },
   );
   const [returnUrl, setReturnUrl] = useState<string>("");
-  const assignmentId = assignmentDetails?.id;
+  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const isInQuestionPage = pathname.includes("questions");
   const isAttemptPage = pathname.includes("attempts");
-  const isSubmissionPage = pathname.includes("successPage");
+  const isSuccessPage = pathname.includes("successPage");
   const [toggleWarning, setToggleWarning] = useState<boolean>(false);
   const [toggleEmptyWarning, setToggleEmptyWarning] = useState<boolean>(false);
   const [role, setRole] = useState<string | undefined>(undefined);
+  const [languages, setLanguages] = useState<string[]>([]);
   useEffect(() => {
     // get user role
     const getUserRole = async () => {
@@ -77,7 +88,29 @@ function LearnerHeader() {
       }
     };
     void getUserRole();
-  });
+  }, [setRole, setReturnUrl]);
+
+  useEffect(() => {
+    async function fetchLanguages() {
+      if (!assignmentId) return;
+      try {
+        const supportedLanguages = await getSupportedLanguages(assignmentId);
+        setLanguages(supportedLanguages);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    void fetchLanguages();
+  }, [assignmentId]);
+  const handleChangeLanguage = (selectedLanguage: string) => {
+    if (selectedLanguage && selectedLanguage !== userPreferedLanguage) {
+      // Update the learner’s preferred language in the store.
+      setUserPreferedLanguage(selectedLanguage);
+      // Optionally update the URL query without a full reload (using shallow routing).
+      if (!isInQuestionPage && !isAttemptPage && !isSuccessPage)
+        router.replace(`${pathname}?lang=${selectedLanguage}`, undefined);
+    }
+  };
 
   const CheckNoFlaggedQuestions = () => {
     const flaggedQuestions = questions.filter((q) => q.status === "flagged");
@@ -108,17 +141,40 @@ function LearnerHeader() {
         id: q.id,
         learnerTextResponse: q.learnerTextResponse || "",
         learnerUrlResponse: q.learnerUrlResponse || "",
-        learnerChoices: q.learnerChoices || [],
+        learnerChoices:
+          role === "author"
+            ? q.choices
+                ?.map((choice, index) =>
+                  q.learnerChoices?.find((c) => String(c) === String(index))
+                    ? choice.choice
+                    : undefined,
+                )
+                .filter((choice) => choice !== undefined) || []
+            : q.translations?.[userPreferedLanguage]?.translatedChoices
+              ? q.translations?.[userPreferedLanguage]?.translatedChoices
+                  ?.map((choice, index) =>
+                    q.learnerChoices?.find((c) => String(c) === String(index))
+                      ? choice.choice
+                      : undefined,
+                  )
+                  .filter((choice) => choice !== undefined) || []
+              : q.choices
+                  ?.map((choice, index) =>
+                    q.learnerChoices?.find((c) => String(c) === String(index))
+                      ? choice.choice
+                      : undefined,
+                  )
+                  .filter((choice) => choice !== undefined) || [],
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
         learnerFileResponse: q.learnerFileResponse || [],
       }),
     );
-
     setSubmitting(true);
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
+      userPreferedLanguage,
       role === "author" ? authorQuestions : undefined,
       role === "author" ? authorAssignmentDetails : undefined,
     );
@@ -128,6 +184,15 @@ function LearnerHeader() {
     setTotalPointsPossible(res.totalPossiblePoints);
     setGrade(grade * 100);
     setShowSubmissionFeedback(res.showSubmissionFeedback);
+    for (const question of questions) {
+      const updatedQuestion = {
+        ...question,
+        learnerChoices: responsesForQuestions.find((q) => q.id === question.id)
+          ?.learnerChoices,
+      };
+      setQuestion(updatedQuestion);
+    }
+
     for (const feedback of feedbacksForQuestions || []) {
       setQuestion({
         id: feedback.questionId,
@@ -139,18 +204,23 @@ function LearnerHeader() {
             )?.learnerAnswerChoice,
             points: feedback.totalPoints,
             feedback: feedback.feedback,
-            learnerResponse: feedback.question,
             questionId: feedback.questionId,
             assignmentAttemptId: activeAttemptId,
+            learnerResponse: null,
           },
         ],
       });
     }
     clearGithubStore();
-    // clear focused question
     useLearnerStore.getState().setActiveQuestionNumber(null);
     router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
+
+  useEffect(() => {
+    if (userPreferedLanguage && !isInQuestionPage && !isSuccessPage) {
+      router.replace(`${pathname}?lang=${userPreferedLanguage}`, undefined);
+    }
+  }, [userPreferedLanguage]);
 
   return (
     <header className="border-b border-gray-300 w-full px-6 py-6 flex justify-between h-[100px]">
@@ -164,6 +234,17 @@ function LearnerHeader() {
       </div>
 
       <div className="flex items-center gap-x-4">
+        {!isSuccessPage && role === "learner" && (
+          <Dropdown
+            items={languages.map((lang) => ({
+              label: getLanguageName(lang),
+              value: lang,
+            }))}
+            selectedItem={userPreferedLanguage}
+            setSelectedItem={handleChangeLanguage}
+            placeholder="Select language"
+          />
+        )}
         {isAttemptPage || isInQuestionPage ? (
           <Button
             className="btn-tertiary"
@@ -182,6 +263,7 @@ function LearnerHeader() {
           </Button>
         ) : null}
       </div>
+
       {returnUrl && pathname.includes("successPage") ? (
         <Link
           href={returnUrl}

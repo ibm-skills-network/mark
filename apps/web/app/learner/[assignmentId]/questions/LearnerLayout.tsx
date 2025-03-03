@@ -1,4 +1,7 @@
 "use server";
+
+import animationData from "@/animations/LoadSN.json";
+import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
 import {
   createAttempt,
@@ -8,11 +11,12 @@ import {
 } from "@/lib/talkToBackend";
 import QuestionPage from "@learnerComponents/Question";
 import { headers } from "next/headers";
+import { Suspense } from "react";
 import ClientLearnerLayout from "./ClientComponent";
 
 interface Props {
   params: { assignmentId: string };
-  searchParams: { authorMode?: string };
+  searchParams: { authorMode?: string; lang?: string };
 }
 
 async function LearnerLayout(props: Props) {
@@ -23,6 +27,7 @@ async function LearnerLayout(props: Props) {
   const cookieHeader = headerList.get("cookie") || "";
   const user = await getUser(cookieHeader);
   const role = user?.role;
+
   if (role === "author" && authorMode === "true") {
     return <ClientLearnerLayout assignmentId={assignmentId} role={role} />;
   }
@@ -38,6 +43,7 @@ async function LearnerLayout(props: Props) {
   const attemptId = unsubmittedAssignment
     ? unsubmittedAssignment.id
     : await createAttempt(assignmentId, cookieHeader);
+
   if (!attemptId && role === "author" && authorMode === undefined) {
     return (
       <ErrorPage
@@ -63,10 +69,44 @@ async function LearnerLayout(props: Props) {
     );
   }
 
-  const attempt = await getAttempt(assignmentId, attemptId, cookieHeader);
+  return (
+    <Suspense fallback={<LoadingPage animationData={animationData} />}>
+      <AttemptLoader
+        assignmentId={assignmentId}
+        attemptId={attemptId}
+        cookieHeader={cookieHeader}
+        role={role}
+        lang={searchParams.lang}
+      />
+    </Suspense>
+  );
+}
+
+async function AttemptLoader({
+  assignmentId,
+  attemptId,
+  cookieHeader,
+  role,
+  lang,
+}: {
+  assignmentId: number;
+  attemptId: number;
+  cookieHeader: string;
+  role: string;
+  lang?: string;
+}) {
+  const attempt = await getAttempt(
+    Number(assignmentId),
+    Number(attemptId),
+    cookieHeader,
+    lang,
+  );
+  console.log("attempt", attempt);
+
   if (!attempt) {
-    return <ErrorPage error={"Attempt could not be fetched"} />;
+    throw new Error("Attempt could not be fetched.");
   }
+
   return (
     role === "learner" && (
       <main className="flex flex-col h-[calc(100vh-100px)]">

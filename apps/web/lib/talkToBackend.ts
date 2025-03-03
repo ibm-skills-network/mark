@@ -7,30 +7,32 @@ import type {
   AssignmentAttempt,
   AssignmentAttemptWithQuestions,
   AssignmentDetails,
+  AssignmentFeedback,
   BaseBackendResponse,
+  Choice,
   CreateQuestionRequest,
   GetAssignmentResponse,
+  PublishJobResponse,
   Question,
   QuestionAttemptRequest,
   QuestionAttemptRequestWithId,
   QuestionAttemptResponse,
   QuestionAuthorStore,
   QuestionGenerationPayload,
-  QuestionType,
   QuestionStore,
+  QuestionType,
   QuestionVariants,
-  ReplaceAssignmentRequest,
-  SubmitAssignmentResponse,
-  User,
-  ResponseType,
-  AssignmentFeedback,
   RegradingRequest,
-  UpdateAssignmentQuestionsResponse,
+  ReplaceAssignmentRequest,
   REPORT_TYPE,
-  Choice,
+  ResponseType,
+  SubmitAssignmentResponse,
+  UpdateAssignmentQuestionsResponse,
+  User,
 } from "@config/types";
 import { toast } from "sonner";
 import { absoluteUrl } from "./utils";
+
 const BASE_API_PATH = absoluteUrl("/api/v1");
 
 // TODO: change the error message to use the error message from the backend
@@ -133,11 +135,16 @@ export async function updateAssignment(
  */
 export async function getAssignment(
   id: number,
+  userPreferedLanguage?: string,
   cookies?: string,
 ): Promise<Assignment | undefined> {
   try {
-    const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
+    const url = userPreferedLanguage
+      ? `${BASE_API_ROUTES.assignments}/${id}?lang=${userPreferedLanguage}`
+      : `${BASE_API_ROUTES.assignments}/${id}`;
+    const res = await fetch(url, {
       headers: {
+        "Cache-Control": "no-cache",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
@@ -223,39 +230,146 @@ export async function createQuestion(
     return undefined;
   }
 }
+export function subscribeToJobStatus(
+  jobId: number,
+  onProgress?: (percentage: number, progressText?: string) => void,
+  setQuestions?: (questions: Question[]) => void,
+): Promise<[boolean, Question[]]> {
+  return new Promise<[boolean, Question[]]>((resolve, reject) => {
+    let eventSource: EventSource | null = null;
+    let timeoutId: NodeJS.Timeout;
+    let isResolved = false;
+    const controller = new AbortController();
+    let receivedQuestions: Question[] = [];
+
+    const cleanUp = () => {
+      controller.abort();
+      eventSource?.close();
+      clearTimeout(timeoutId);
+      eventSource = null;
+    };
+
+    const handleCompletion = (success: boolean) => {
+      if (!isResolved) {
+        isResolved = true;
+        cleanUp();
+        resolve([success, receivedQuestions]);
+      }
+    };
+
+    const handleError = (error: string) => {
+      if (!isResolved) {
+        isResolved = true;
+        cleanUp();
+        reject(new Error(error));
+      }
+    };
+
+    // Initial connection timeout (30 seconds)
+    timeoutId = setTimeout(() => handleError("Connection timeout"), 30000);
+
+    try {
+      eventSource = new EventSource(
+        `${BASE_API_ROUTES.assignments}/jobs/${jobId}/status-stream?_=${Date.now()}`,
+        { withCredentials: true },
+      );
+
+      // Abort the connection when the controller signal is aborted
+      controller.signal.addEventListener("abort", () => {
+        eventSource?.close();
+      });
+
+      eventSource.onopen = () => {
+        console.log("SSE connection established");
+        clearTimeout(timeoutId);
+        // Set job processing timeout (e.g. 5 minutes)
+        timeoutId = setTimeout(
+          () => handleError("Job processing timeout"),
+          300000,
+        );
+      };
+
+      // Listen for "update" events
+      eventSource.addEventListener("update", (event: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(event.data) as PublishJobResponse;
+          // Report progress updates if available
+          if (data.percentage !== undefined && onProgress) {
+            onProgress(data.percentage, data.progress);
+          }
+          // Update questions if present
+          if (data.result?.questions) {
+            receivedQuestions = data.result.questions;
+            if (setQuestions) {
+              setQuestions(receivedQuestions);
+            }
+          }
+          if (data.done) {
+            clearTimeout(timeoutId);
+            handleCompletion(data.status === "Completed");
+          } else if (data.status === "Failed") {
+            handleError(data.progress || "Job failed");
+          }
+        } catch (parseError) {
+          handleError("Invalid server response");
+        }
+      });
+
+      // Listen for "finalize" events
+      eventSource.addEventListener(
+        "finalize",
+        (event: MessageEvent<string>) => {
+          try {
+            const data = JSON.parse(event.data) as PublishJobResponse;
+            if (data.percentage !== undefined && onProgress) {
+              onProgress(data.percentage, data.progress);
+            }
+            if (data.result?.questions) {
+              receivedQuestions = data.result.questions;
+              if (setQuestions) {
+                setQuestions(receivedQuestions);
+              }
+            }
+            handleCompletion(data.status === "Completed");
+          } catch {
+            handleError("Invalid finalize event response");
+          }
+        },
+      );
+
+      // Optional: Listen for "close" events
+      eventSource.addEventListener("close", (event: MessageEvent<string>) => {
+        console.log("SSE close event:", event.data);
+      });
+
+      eventSource.onerror = (err) => {
+        console.error("SSE error:", err);
+        if (!isResolved) {
+          if (eventSource?.readyState === EventSource.CLOSED) {
+            handleError("Connection closed unexpectedly");
+          } else {
+            setTimeout(() => {
+              if (!isResolved) handleError("Connection error");
+            }, 2000);
+          }
+        }
+      };
+    } catch (error) {
+      handleError("Failed to establish SSE connection");
+    }
+  });
+}
 
 export async function publishAssignment(
   assignmentId: number,
   updatedAssignment: ReplaceAssignmentRequest,
   cookies?: string,
-): Promise<
-  | {
-      id: number;
-      success: boolean;
-      questions: Question[];
-    }
-  | undefined
-> {
+): Promise<{ jobId: number; message: string } | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/publish`;
+
   // Manually define the payload fields
   const payload = {
-    introduction: updatedAssignment.introduction,
-    instructions: updatedAssignment.instructions,
-    gradingCriteriaOverview: updatedAssignment.gradingCriteriaOverview,
-    numAttempts: updatedAssignment.numAttempts,
-    passingGrade: updatedAssignment.passingGrade,
-    displayOrder: updatedAssignment.displayOrder,
-    graded: updatedAssignment.graded,
-    questionDisplay: updatedAssignment.questionDisplay,
-    allotedTimeMinutes: updatedAssignment.allotedTimeMinutes,
-    updatedAt: updatedAssignment.updatedAt,
-    questionOrder: updatedAssignment.questionOrder,
-    published: updatedAssignment.published,
-    showSubmissionFeedback: updatedAssignment.showSubmissionFeedback,
-    showQuestionScore: updatedAssignment.showQuestionScore,
-    showAssignmentScore: updatedAssignment.showAssignmentScore,
-    questions: updatedAssignment.questions,
-    timeEstimateMinutes: updatedAssignment.timeEstimateMinutes,
+    ...updatedAssignment, // Spread the properties directly
   };
 
   try {
@@ -270,20 +384,17 @@ export async function publishAssignment(
 
     if (!res.ok) {
       const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to publish assignment");
+      throw new Error(errorBody.message || "Failed to start publishing job");
     }
-    const {
-      id,
-      success,
-      questions: updatedQuestions,
-      error,
-    } = (await res.json()) as UpdateAssignmentQuestionsResponse;
-    if (!success) {
-      throw new Error(error);
-    }
-    return { id, success, questions: updatedQuestions };
+
+    // Response should now contain jobId instead of questions
+    const { jobId, message } = (await res.json()) as {
+      jobId: number;
+      message: string;
+    };
+    return { jobId, message };
   } catch (err) {
-    console.error(err);
+    console.error("Error starting publishing job:", err);
   }
 }
 
@@ -520,8 +631,9 @@ export async function getAttempt(
   assignmentId: number,
   attemptId: number,
   cookies?: string,
+  language = "en",
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}?lang=${language}`;
 
   try {
     const res = await fetch(endpointURL, {
@@ -540,7 +652,35 @@ export async function getAttempt(
     return undefined;
   }
 }
+/**
+ * Fetches the supported languages for an assignment.
+ * @param assignmentId The ID of the assignment.
+ * @returns An array of supported language codes.
+ * @throws An error if the request fails.
+ */
+export async function getSupportedLanguages(
+  assignmentId: number,
+): Promise<string[]> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/languages`;
 
+  try {
+    const res = await fetch(endpointURL);
+
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to fetch languages");
+    }
+
+    const data = (await res.json()) as { languages: string[] };
+    if (!data.languages) {
+      throw new Error("Failed to fetch languages");
+    }
+    return data.languages || [];
+  } catch (err) {
+    console.error("Error fetching languages:", err);
+    return ["en"]; // Default fallback to English if API fails
+  }
+}
 /**
  * gets the questions for a given compelted attempt and assignment
  * @param assignmentId The id of the assignment to get the questions for.
@@ -620,6 +760,7 @@ export async function submitAssignment(
   assignmentId: number,
   attemptId: number,
   responsesForQuestions: QuestionAttemptRequestWithId[],
+  language?: string,
   authorQuestions?: QuestionStore[],
   authorAssignmentDetails?: ReplaceAssignmentRequest,
   cookies?: string,
@@ -632,6 +773,7 @@ export async function submitAssignment(
       body: JSON.stringify({
         submitted: true,
         responsesForQuestions,
+        language,
         authorQuestions: authorQuestions || undefined,
         authorAssignmentDetails: authorAssignmentDetails || undefined,
       }),

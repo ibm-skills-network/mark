@@ -1,17 +1,18 @@
 /* eslint-disable */
 "use client";
+
 import {
-  type ComponentPropsWithoutRef,
   useEffect,
   useRef,
   useState,
+  type ComponentPropsWithoutRef,
 } from "react";
 import "quill/dist/quill.snow.css"; // Ensure correct CSS import
 import "highlight.js/styles/vs2015.css"; // Import a Highlight.js theme
 
+import { cn } from "@/lib/strings";
 import { getWordCount } from "@/lib/utils";
 import hljs from "highlight.js";
-import { cn } from "@/lib/strings";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
@@ -127,9 +128,15 @@ const MarkdownEditor: React.FC<Props> = ({
   // Keep the value in sync with the editor
   useEffect(() => {
     if (quillInstance) {
-      quillInstance.root.innerHTML = value;
+      // Get the current content of the editor
+      const currentHTML = quillInstance.root.innerHTML;
+      // Only update if the external value is different and the editor is not focused.
+      if (currentHTML !== value && !quillInstance.hasFocus()) {
+        quillInstance.root.innerHTML = value;
+      }
     }
-  }, [quillInstance]);
+  }, [quillInstance, value]);
+
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
@@ -141,10 +148,8 @@ const MarkdownEditor: React.FC<Props> = ({
       .ql-container.ql-snow .ql-editor {
         font-family: "IBM Plex Sans", sans-serif !important;
         font-size: 16px !important;
-        font-weight: 600 !important;
         line-height: 1.3 !important;
         background-color: transparent !important;
-        min-height: 100px !important;
         height: auto !important;
         overflow: visible !important;
        padding: 0 !important;

@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/no-null */
 import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
@@ -11,8 +12,10 @@ import {
   Assignment,
   Question,
   QuestionType,
+  QuestionVariant,
   RegradingStatus,
   ReportType,
+  Translation,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
@@ -76,6 +79,7 @@ type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
   points: number;
   feedback: object;
 };
+type ExtendedQuestion = Question & { variantId?: number };
 
 interface AssignmentAttempt {
   id: number;
@@ -373,19 +377,24 @@ export class AttemptService {
     });
 
     const questions = await this.prisma.question.findMany({
-      where: { assignmentId },
-      include: { variants: true },
+      where: {
+        assignmentId,
+        isDeleted: false,
+      },
+      include: {
+        variants: {
+          where: { isDeleted: false },
+        },
+      },
     });
-    const validQuestions = questions.filter((q) => !q.isDeleted);
 
-    const finalOrderedQuestions = [...validQuestions];
     if (assignment.displayOrder === "RANDOM") {
-      finalOrderedQuestions.sort(() => Math.random() - 0.5);
+      questions.sort(() => Math.random() - 0.5);
     } else if (
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
     ) {
-      finalOrderedQuestions.sort(
+      questions.sort(
         (a, b) =>
           assignment.questionOrder.indexOf(a.id) -
           assignment.questionOrder.indexOf(b.id),
@@ -394,42 +403,40 @@ export class AttemptService {
     await this.prisma.assignmentAttempt.update({
       where: { id: assignmentAttempt.id },
       data: {
-        questionOrder: finalOrderedQuestions.map((q) => q.id),
+        questionOrder: questions.map((q) => q.id),
       },
     });
 
-    const attemptQuestionVariantsData = finalOrderedQuestions.map(
-      (question) => {
-        const questionAndVariants = [undefined, ...question.variants];
-        const randomIndex = Math.floor(
-          Math.random() * questionAndVariants.length,
+    const attemptQuestionVariantsData = questions.map((question) => {
+      const questionAndVariants = [undefined, ...question.variants];
+      const randomIndex = Math.floor(
+        Math.random() * questionAndVariants.length,
+      );
+      const chosenVariant = questionAndVariants[randomIndex];
+
+      let variantId: number | null;
+      let randomizedChoices: string | null;
+
+      if (chosenVariant) {
+        variantId = chosenVariant.id ?? undefined;
+        randomizedChoices = this.maybeShuffleChoices(
+          chosenVariant.choices as unknown as Choice[],
+          chosenVariant.randomizedChoices === true,
         );
-        const chosenVariant = questionAndVariants[randomIndex];
+      } else {
+        randomizedChoices = this.maybeShuffleChoices(
+          question.choices as unknown as Choice[],
+          question.randomizedChoices === true,
+        );
+      }
 
-        let variantId: number | null;
-        let randomizedChoices: string | null;
-
-        if (chosenVariant) {
-          variantId = chosenVariant.id ?? undefined;
-          randomizedChoices = this.maybeShuffleChoices(
-            this.getSafeChoices(chosenVariant.choices as unknown as Choice[]),
-            chosenVariant.randomizedChoices === true,
-          );
-        } else {
-          randomizedChoices = this.maybeShuffleChoices(
-            this.getSafeChoices(question.choices as unknown as Choice[]),
-            question.randomizedChoices === true,
-          );
-        }
-
-        return {
-          assignmentAttemptId: assignmentAttempt.id,
-          questionId: question.id,
-          questionVariantId: variantId,
-          randomizedChoices,
-        };
-      },
-    );
+      return {
+        assignmentAttemptId: assignmentAttempt.id,
+        questionId: question.id,
+        questionVariantId: variantId,
+        randomizedChoices,
+      };
+    });
 
     await this.prisma.assignmentAttemptQuestionVariant.createMany({
       data: attemptQuestionVariantsData,
@@ -497,7 +504,20 @@ export class AttemptService {
     if (role === UserRole.LEARNER) {
       const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
         where: { id: assignmentAttemptId },
+        include: {
+          questionVariants: {
+            select: {
+              questionId: true,
+              questionVariant: { include: { variantOf: true } },
+            },
+          },
+        },
       });
+      if (!assignmentAttempt) {
+        throw new NotFoundException(
+          `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+        );
+      }
       const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
       if (
         assignmentAttempt.expiresAt &&
@@ -525,6 +545,59 @@ export class AttemptService {
           message: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
         };
       }
+      const preTranslatedQuestions = new Map<number, QuestionDto>();
+
+      // Loop through each response (assume each has a questionId property)
+      for (const response of updateAssignmentAttemptDto.responsesForQuestions) {
+        const questionId: number = response.id;
+        const variantMapping = assignmentAttempt.questionVariants.find(
+          (qv) => qv.questionId === questionId,
+        );
+        let question: QuestionDto;
+        if (variantMapping && variantMapping.questionVariant !== null) {
+          // Build the question from variant details (logic from createQuestionResponse)
+          const variant = variantMapping.questionVariant;
+          const baseQuestion = variant.variantOf;
+          question = {
+            id: variantMapping.questionVariant.id,
+            question: variant.variantContent,
+            type: baseQuestion.type,
+            assignmentId: baseQuestion.assignmentId,
+            maxWords: variant.maxWords ?? baseQuestion.maxWords,
+            maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
+            scoring:
+              typeof variant.scoring === "string"
+                ? (JSON.parse(variant.scoring) as Scoring)
+                : ((variant.scoring as unknown as Scoring) ??
+                  (typeof baseQuestion.scoring === "string"
+                    ? (JSON.parse(baseQuestion.scoring) as Scoring)
+                    : (baseQuestion.scoring as unknown as Scoring))),
+            choices:
+              typeof variant.choices === "string"
+                ? (JSON.parse(variant.choices) as Choice[])
+                : ((variant.choices as unknown as Choice[]) ??
+                  (typeof baseQuestion.choices === "string"
+                    ? (JSON.parse(baseQuestion.choices) as Choice[])
+                    : (baseQuestion.choices as unknown as Choice[]))),
+            answer: baseQuestion.answer ?? variant.answer,
+            alreadyInBackend: true,
+            totalPoints: baseQuestion.totalPoints,
+          };
+        } else {
+          // Fallback to fetching the question by ID if no variant was selected
+          question = await this.questionService.findOne(questionId);
+        }
+        // Apply the translation before storing it
+        question = await this.applyTranslationToQuestion(
+          question,
+          updateAssignmentAttemptDto.language,
+          variantMapping,
+        );
+        preTranslatedQuestions.set(questionId, question);
+      }
+      // Attach the pre-translated questions to the DTO.
+      updateAssignmentAttemptDto.preTranslatedQuestions =
+        preTranslatedQuestions;
     }
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -539,8 +612,10 @@ export class AttemptService {
       assignmentAttemptId,
       role,
       assignmentId,
+      updateAssignmentAttemptDto.language,
       updateAssignmentAttemptDto.authorQuestions,
       updateAssignmentAttemptDto.authorAssignmentDetails,
+      updateAssignmentAttemptDto.preTranslatedQuestions,
     );
     const { grade, totalPointsEarned, totalPossiblePoints } =
       role === UserRole.LEARNER
@@ -659,17 +734,10 @@ export class AttemptService {
       include: {
         questionResponses: true,
         questionVariants: {
-          include: {
-            questionVariant: {
-              include: {
-                variantOf: true,
-              },
-            },
-          },
+          include: { questionVariant: { include: { variantOf: true } } },
         },
       },
     });
-
     if (!assignmentAttempt) {
       throw new NotFoundException(
         `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
@@ -679,7 +747,6 @@ export class AttemptService {
     const questions = await this.prisma.question.findMany({
       where: { assignmentId: assignmentAttempt.assignmentId },
     });
-
     if (!questions) {
       throw new NotFoundException(
         `Questions for assignment with Id ${assignmentAttempt.assignmentId} not found.`,
@@ -700,15 +767,9 @@ export class AttemptService {
     });
 
     let questionOrder: number[] = [];
-    if (
-      assignmentAttempt.questionOrder &&
-      assignmentAttempt.questionOrder.length > 0
-    ) {
+    if (assignmentAttempt.questionOrder?.length) {
       questionOrder = assignmentAttempt.questionOrder;
-    } else if (
-      assignment.questionOrder &&
-      assignment.questionOrder.length > 0
-    ) {
+    } else if (assignment.questionOrder?.length) {
       questionOrder = assignment.questionOrder;
     } else {
       questionOrder = questions.map((q) => q.id);
@@ -719,28 +780,26 @@ export class AttemptService {
     const questionsWithVariants = questionVariantsArray.map((qv) => {
       const variant = qv.questionVariant;
       const originalQ = questionById.get(qv.questionId);
-
       const questionText = variant?.variantContent ?? originalQ?.question;
       const scoring = variant?.scoring ?? originalQ?.scoring;
       const maxWords = variant?.maxWords ?? originalQ?.maxWords;
       const maxChars = variant?.maxCharacters ?? originalQ?.maxCharacters;
-
       let finalChoices: Choice[] = qv.randomizedChoices
         ? (JSON.parse(qv.randomizedChoices as string) as Choice[])
         : ((variant?.choices ?? originalQ?.choices) as unknown as Choice[]);
       if (typeof finalChoices === "string") {
         finalChoices = JSON.parse(finalChoices) as Choice[];
       }
-
       return {
         id: originalQ.id,
+        variantId: variant ? variant.id : undefined,
         question: questionText,
         choices: finalChoices,
         maxWords,
         maxCharacters: maxChars,
         scoring,
         totalPoints: originalQ.totalPoints,
-        answer: variant?.answer ?? originalQ?.answer,
+        answer: originalQ.answer,
         type: originalQ.type,
         assignmentId: originalQ.assignmentId,
         gradingContextQuestionIds: originalQ?.gradingContextQuestionIds,
@@ -758,22 +817,7 @@ export class AttemptService {
       if (variantQ) {
         return variantQ;
       }
-      return {
-        id: originalQ.id,
-        question: originalQ.question,
-        choices: originalQ.choices,
-        maxWords: originalQ.maxWords,
-        maxCharacters: originalQ.maxCharacters,
-        scoring: originalQ.scoring,
-        totalPoints: originalQ.totalPoints,
-        answer: originalQ.answer,
-        type: originalQ.type,
-        assignmentId: originalQ.assignmentId,
-        gradingContextQuestionIds: originalQ.gradingContextQuestionIds,
-        responseType: originalQ.responseType,
-        isDeleted: originalQ.isDeleted,
-        randomizedChoices: originalQ.randomizedChoices,
-      };
+      return { ...originalQ, variantId: undefined };
     });
 
     const questionsWithResponses = this.constructQuestionsWithResponses(
@@ -783,7 +827,6 @@ export class AttemptService {
       })),
       assignmentAttempt.questionResponses as QuestionResponse[],
     );
-
     const finalQuestions = questionOrder
       .map((qId) => questionsWithResponses.find((q) => q.id === qId))
       .filter(Boolean);
@@ -805,6 +848,42 @@ export class AttemptService {
         }
       }
     }
+
+    if (
+      assignmentAttempt.preferredLanguage &&
+      assignmentAttempt.preferredLanguage !== "en"
+    ) {
+      for (const question of finalQuestions) {
+        const translation = await (question.variantId
+          ? this.prisma.translation.findFirst({
+              where: {
+                questionId: question.id,
+                variantId: question.variantId,
+                languageCode: assignmentAttempt.preferredLanguage,
+              },
+            })
+          : this.prisma.translation.findFirst({
+              where: {
+                questionId: question.id,
+                variantId: null,
+                languageCode: assignmentAttempt.preferredLanguage,
+              },
+            }));
+        if (translation) {
+          question.question = translation.translatedText;
+          if (
+            translation.translatedChoices !== undefined &&
+            translation.translatedChoices !== null
+          ) {
+            question.choices =
+              typeof translation.translatedChoices === "string"
+                ? (JSON.parse(translation.translatedChoices) as Choice[])
+                : (translation.translatedChoices as unknown as Choice[]);
+          }
+        }
+      }
+    }
+
     return {
       ...assignmentAttempt,
       questions: finalQuestions.map((question) => ({
@@ -829,67 +908,56 @@ export class AttemptService {
    * enforcing assignment-specific visibility settings.
    *
    * @param assignmentAttemptId - ID of the attempt to retrieve
+   * @param language - The language code requested (if none provided, defaults to "en")
    * @returns Structured attempt data with:
    * - Questions in their attempt-specific order
-   * - Merged question/variant data
+   * - Merged question/variant data including translations for all available languages
    * - Responses with score/feedback visibility rules applied
    * - Assignment configuration metadata
    *
    * @remarks
-   * 1. Data Composition:
-   *    - Combines original question data with variant overrides used in the attempt
-   *    - Maintains exact question order from attempt creation
-   *    - Merges stored responses with corresponding questions
-   *
-   * 2. Display Enforcement:
-   *    - Controls visibility of sensitive data through:
-   *      - Grade suppression (showAssignmentScore)
-   *      - Feedback removal (showSubmissionFeedback)
-   *      - Score masking (showQuestionScore)
-   *
-   * 3. Data Handling:
-   *    - Filters out deleted questions from results
-   *    - Parses stored JSON choice data when needed
-   *    - Falls back to original question data when variants are unavailable
-   *    - Handles both stringified and object-based choice storage formats
-   *
-   * 4. Security:
-   *    - Ensures answers/scoring remain hidden per assignment settings
-   *    - Validates existence of all referenced database entities
-   *    - Maintains data integrity through strict typing
+   * See inline comments for details on how translations are fetched and merged.
    *
    * @throws NotFoundException If the attempt or related assignment cannot be found
    * @throws BadRequestException For malformed stored data (invalid JSON formats)
    */
   async getAssignmentAttempt(
     assignmentAttemptId: number,
+    language: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
+    // 1. Normalize language (e.g., "en-US" -> "en")
+    if (!language) {
+      language = "en";
+    }
+    const normalizedLanguage = language.toLowerCase().split("-")[0];
+
+    // 2. Fetch assignmentAttempt with questionResponses and questionVariants
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
       include: {
         questionResponses: true,
         questionVariants: {
           include: {
-            questionVariant: true,
+            questionVariant: {
+              include: {
+                variantOf: true,
+              },
+            },
           },
         },
       },
     });
-
     if (!assignmentAttempt) {
       throw new NotFoundException(
         `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
       );
     }
 
+    // 3. Fetch assignment (and relevant settings)
     const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
-        questions: {
-          where: {
-            isDeleted: false,
-          },
-        },
+        questions: true,
         questionOrder: true,
         displayOrder: true,
         passingGrade: true,
@@ -902,32 +970,139 @@ export class AttemptService {
     const questionOrder =
       assignmentAttempt.questionOrder || assignment.questionOrder || [];
 
+    // 4. Build a map of the assignment’s original questions
     const questionById = new Map(assignment.questions.map((q) => [q.id, q]));
+    console.log("questionById", questionById);
+    // 5. Collect the IDs for questions and variants
+    const questionIds = assignment.questions.map((q) => q.id);
+    const variantIds = assignmentAttempt.questionVariants
+      .map((qv) => qv.questionVariant?.id)
+      .filter((id) => id != undefined);
 
+    // 6. Fetch all translations that might apply (for questions or variants)
+    const translations = await this.prisma.translation.findMany({
+      where: {
+        OR: [
+          { questionId: { in: questionIds } },
+          ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+        ],
+      },
+    });
+
+    // 7. Build a lookup keyed by "question-{id}" or "variant-{id}"
+    const translationMap = new Map<
+      string,
+      Record<string, { translatedText: string; translatedChoices: any }>
+    >();
+    for (const t of translations) {
+      const key = t.variantId
+        ? `variant-${t.variantId}`
+        : `question-${t.questionId}`;
+      if (!translationMap.has(key)) {
+        translationMap.set(key, {});
+      }
+      translationMap.get(key)![t.languageCode] = {
+        translatedText: t.translatedText,
+        translatedChoices: t.translatedChoices,
+      };
+    }
+
+    // 8. Merge data for question variants used in this attempt
     const questionVariantsArray = assignmentAttempt.questionVariants ?? [];
-    const questionsWithVariants = questionVariantsArray.map((qv) => {
+
+    const questionsWithVariants = questionVariantsArray?.map((qv) => {
       const variant = qv.questionVariant;
       const originalQ = questionById.get(qv.questionId);
 
-      const questionText = variant?.variantContent ?? originalQ?.question;
-      const scoring = variant?.scoring ?? originalQ?.scoring;
-      const maxWords = variant?.maxWords ?? originalQ?.maxWords;
-      const maxChars = variant?.maxCharacters ?? originalQ?.maxCharacters;
+      // Determine which translation to use.
+      const variantTranslations = variant
+        ? translationMap.get(`variant-${variant.id}`) || {}
+        : {};
+      const questionTranslations = variant
+        ? {} // When a variant exists, ignore question translations.
+        : translationMap.get(`question-${qv.questionId}`) || {};
 
-      let finalChoices: Choice[] = qv.randomizedChoices
-        ? (JSON.parse(qv.randomizedChoices as string) as Choice[])
-        : ((variant?.choices ?? originalQ?.choices) as unknown as Choice[]);
-      if (typeof finalChoices === "string") {
-        finalChoices = JSON.parse(finalChoices) as Choice[];
+      // Create a fallback translation (using base question data) if none exists.
+      const translationFallback = {
+        translatedText: variant
+          ? variant.variantContent || originalQ?.question
+          : originalQ?.question,
+        translatedChoices: variant
+          ? (variant?.choices as unknown as Choice[]) ||
+            (originalQ?.choices as unknown as Choice[])
+          : (originalQ?.choices as unknown as Choice[]),
+      };
+
+      const primaryTranslation =
+        (variant
+          ? variantTranslations[normalizedLanguage]
+          : questionTranslations[normalizedLanguage]) || translationFallback;
+
+      const baseChoices: Choice[] = variant
+        ? (variant?.choices as unknown as Choice[]) ||
+          (originalQ?.choices as unknown as Choice[])
+        : (originalQ?.choices as unknown as Choice[]);
+      const normalizedChoices = baseChoices || [];
+      let finalChoices = normalizedChoices;
+
+      // --- REORDERING BASE CHOICES & COMPUTING PERMUTATION ---
+      if (qv.randomizedChoices) {
+        let randomizedChoicesArray: Choice[] = [];
+        if (typeof qv.randomizedChoices === "string") {
+          try {
+            randomizedChoicesArray = JSON.parse(
+              qv.randomizedChoices,
+            ) as Choice[];
+          } catch {
+            randomizedChoicesArray = [];
+          }
+        } else {
+          randomizedChoicesArray = qv.randomizedChoices as unknown as Choice[];
+        }
+        const permutation = randomizedChoicesArray?.map((rChoice) => {
+          if (rChoice.id !== undefined) {
+            return normalizedChoices.findIndex((bc) => bc.id === rChoice.id);
+          }
+          return normalizedChoices.findIndex(
+            (bc) => bc.choice === rChoice.choice,
+          );
+        });
+        const orderedBaseChoices = permutation?.map(
+          (index) => normalizedChoices[index],
+        );
+        if (orderedBaseChoices?.length === normalizedChoices?.length) {
+          finalChoices = orderedBaseChoices;
+        }
+
+        const translationsForThisQuestion = variant
+          ? variantTranslations
+          : questionTranslations;
+        for (const lang in translationsForThisQuestion) {
+          const translationObject = translationsForThisQuestion[lang];
+          if (
+            translationObject &&
+            Array.isArray(translationObject.translatedChoices) &&
+            translationObject.translatedChoices.length ===
+              normalizedChoices.length
+          ) {
+            const origTranslatedChoices =
+              translationObject.translatedChoices as Choice[];
+            const reorderedTranslatedChoices = permutation.map(
+              (index) => origTranslatedChoices[index],
+            );
+            translationObject.translatedChoices = reorderedTranslatedChoices;
+          }
+        }
       }
-
+      // Return the merged question/variant data.
       return {
         id: originalQ.id,
-        question: questionText,
+        question: primaryTranslation.translatedText || originalQ?.question,
         choices: finalChoices,
-        maxWords,
-        maxCharacters: maxChars,
-        scoring,
+        translations: variant ? variantTranslations : questionTranslations,
+        maxWords: variant?.maxWords ?? originalQ?.maxWords,
+        maxCharacters: variant?.maxCharacters ?? originalQ?.maxCharacters,
+        scoring: variant?.scoring ?? originalQ?.scoring,
         totalPoints: originalQ.totalPoints,
         answer: variant?.answer ?? originalQ?.answer,
         type: originalQ.type,
@@ -935,83 +1110,54 @@ export class AttemptService {
         gradingContextQuestionIds: originalQ?.gradingContextQuestionIds,
         responseType: originalQ.responseType,
         isDeleted: originalQ.isDeleted,
-        randomizedChoices: originalQ.randomizedChoices,
+        randomizedChoices: qv.randomizedChoices,
       };
     });
 
+    // 9. Create a map of "question ID -> merged question data"
     const questionVariantsMap = new Map(
       questionsWithVariants.map((question) => [question.id, question]),
     );
+
+    // 10. For any questions that didn't have a variant, use the original question
     const questions: Question[] = await this.prisma.question.findMany({
       where: { assignmentId: assignmentAttempt.assignmentId },
     });
-    const mergedQuestions = questions.map((originalQ: Question) => {
-      const variantQ = questionVariantsMap.get(originalQ.id);
-      if (variantQ) {
-        return variantQ;
-      }
-      return {
-        id: originalQ.id,
-        question: originalQ.question,
-        choices: originalQ.choices,
-        maxWords: originalQ.maxWords,
-        maxCharacters: originalQ.maxCharacters,
-        scoring: originalQ.scoring,
-        totalPoints: originalQ.totalPoints,
-        answer: originalQ.answer,
-        type: originalQ.type,
-        assignmentId: originalQ.assignmentId,
-        gradingContextQuestionIds: originalQ.gradingContextQuestionIds,
-        responseType: originalQ.responseType,
-        isDeleted: originalQ.isDeleted,
-        randomizedChoices: originalQ.randomizedChoices,
-      };
-    });
-    const validQuestions = mergedQuestions.filter(
-      Boolean,
-    ) as unknown as Question[];
-
-    const questionsWithResponses = this.constructQuestionsWithResponses(
-      validQuestions.map((q) => ({
-        ...q,
-        choices:
-          typeof q.choices === "string" ? q.choices : JSON.stringify(q.choices),
-      })),
-      assignmentAttempt.questionResponses as QuestionResponse[],
+    const nonVariantQuestions = questions.filter(
+      (originalQ) => !questionVariantsMap.has(originalQ.id),
     );
 
+    // 11. Combine them
+    const mergedQuestions = [
+      ...questionVariantsMap.values(),
+      ...nonVariantQuestions,
+    ];
+
+    // 12. Apply any questionOrder
     const finalQuestions =
       questionOrder.length > 0
         ? questionOrder
-            .map((qId) => questionsWithResponses.find((q) => q.id === qId))
+            .map((qId) => mergedQuestions.find((q) => q.id === qId))
             .filter(Boolean)
-        : questionsWithResponses;
-    if (assignment.showAssignmentScore === false) {
-      delete assignmentAttempt.grade;
-    }
-    if (assignment.showSubmissionFeedback === false) {
-      for (const q of finalQuestions) {
-        if (q.questionResponses[0]?.feedback) {
-          delete q.questionResponses[0].feedback;
-        }
-      }
-    }
-    if (assignment.showQuestionScore === false) {
-      for (const q of finalQuestions) {
-        if (typeof q.questionResponses[0]?.points === "number") {
-          q.questionResponses[0].points = -1;
-        }
-      }
-    }
+        : mergedQuestions;
+
+    // 13. Return your final data
     return {
       ...assignmentAttempt,
-      questions: finalQuestions,
+      questions: finalQuestions.map((question) => ({
+        ...question,
+        choices:
+          typeof question.choices === "string"
+            ? (JSON.parse(question.choices) as Choice[])
+            : question.choices,
+      })) as AssignmentAttemptQuestions[],
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
     };
   }
+
   /**
    * Handles the creation of a learner's or author's response to a question within an assignment attempt.
    *
@@ -1053,75 +1199,80 @@ export class AttemptService {
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
     role: UserRole,
     assignmentId: number,
+    language: string,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
+    preTranslatedQuestions?: Map<number, QuestionDto>, // new optional parameter
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     let question: QuestionDto;
     let assignmentContext: {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     };
-
     if (role === UserRole.LEARNER) {
-      // Fetch the assignment attempt, including the selected variants
-      const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-        where: { id: assignmentAttemptId },
-        include: {
-          questionVariants: {
-            select: {
-              questionId: true,
-              questionVariant: {
-                include: {
-                  variantOf: true,
+      if (preTranslatedQuestions && preTranslatedQuestions.has(questionId)) {
+        question = preTranslatedQuestions.get(questionId);
+      } else {
+        const assignmentAttempt =
+          await this.prisma.assignmentAttempt.findUnique({
+            where: { id: assignmentAttemptId },
+            include: {
+              questionVariants: {
+                select: {
+                  questionId: true,
+                  questionVariant: {
+                    include: { variantOf: true },
+                  },
                 },
               },
             },
-          },
-        },
-      });
-      if (!assignmentAttempt) {
-        throw new NotFoundException(
-          `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+          });
+        if (!assignmentAttempt) {
+          throw new NotFoundException(
+            `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+          );
+        }
+        const variantMapping = assignmentAttempt.questionVariants.find(
+          (qv) => qv.questionId === questionId,
         );
+        if (
+          variantMapping &&
+          variantMapping.questionVariant !== null &&
+          variantMapping.questionVariant
+        ) {
+          const variant = variantMapping.questionVariant;
+          const baseQuestion = variant.variantOf;
+          question = {
+            id: variantMapping.questionVariant.id,
+            question: variant.variantContent,
+            type: baseQuestion.type,
+            assignmentId: baseQuestion.assignmentId,
+            maxWords: variant.maxWords ?? baseQuestion.maxWords,
+            maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
+            scoring:
+              typeof variant.scoring === "string"
+                ? (JSON.parse(variant.scoring) as Scoring)
+                : ((variant.scoring as unknown as Scoring) ??
+                  (typeof baseQuestion.scoring === "string"
+                    ? (JSON.parse(baseQuestion.scoring) as Scoring)
+                    : (baseQuestion.scoring as unknown as Scoring))),
+            choices:
+              typeof variant.choices === "string"
+                ? (JSON.parse(variant.choices) as Choice[])
+                : ((variant.choices as unknown as Choice[]) ??
+                  (typeof baseQuestion.choices === "string"
+                    ? (JSON.parse(baseQuestion.choices) as Choice[])
+                    : (baseQuestion.choices as unknown as Choice[]))),
+            answer: baseQuestion.answer ?? variant.answer,
+            alreadyInBackend: true,
+            totalPoints: baseQuestion.totalPoints,
+          };
+        } else {
+          question = await this.questionService.findOne(questionId);
+        }
       }
-      const variantMapping = assignmentAttempt.questionVariants.find(
-        (qv) => qv.questionId === questionId,
-      );
-      if (variantMapping && variantMapping.questionVariant) {
-        const variant = variantMapping.questionVariant;
-        const baseQuestion = variant.variantOf;
-        question = {
-          id: variant.id,
-          question: variant.variantContent,
-          type: baseQuestion.type,
-          assignmentId: baseQuestion.assignmentId,
-          maxWords: variant.maxWords ?? baseQuestion.maxWords,
-          maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
-          scoring:
-            typeof variant.scoring === "string"
-              ? (JSON.parse(variant.scoring) as Scoring)
-              : ((variant.scoring as unknown as Scoring) ??
-                (typeof baseQuestion.scoring === "string"
-                  ? (JSON.parse(baseQuestion.scoring) as Scoring)
-                  : (baseQuestion.scoring as unknown as Scoring))),
-          choices:
-            typeof variant.choices === "string"
-              ? (JSON.parse(variant.choices) as Choice[])
-              : ((variant.choices as unknown as Choice[]) ??
-                (typeof baseQuestion.choices === "string"
-                  ? (JSON.parse(baseQuestion.choices) as Choice[])
-                  : (baseQuestion.choices as unknown as Choice[]))),
-
-          answer: variant.answer ?? baseQuestion.answer,
-          alreadyInBackend: true,
-          totalPoints: baseQuestion.totalPoints,
-        };
-      } else {
-        question = await this.questionService.findOne(questionId);
-      }
-
       assignmentContext = await this.getAssignmentContext(
-        assignmentAttempt.assignmentId,
+        assignmentId,
         questionId,
         assignmentAttemptId,
         role,
@@ -1138,24 +1289,19 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto,
       assignmentContext,
       assignmentId,
+      language,
     );
-    if (role === UserRole.LEARNER) {
-      const result = await this.prisma.questionResponse.create({
-        data: {
-          assignmentAttemptId:
-            role === UserRole.LEARNER ? assignmentAttemptId : 1,
-          questionId: questionId,
-          learnerResponse: JSON.stringify(learnerResponse),
-          points: responseDto.totalPoints,
-          feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
-        },
-      });
-      responseDto.id = result.id;
-      responseDto.questionId = questionId;
-      responseDto.question = question.question;
-      return responseDto;
-    }
-    responseDto.id = -1;
+    const result = await this.prisma.questionResponse.create({
+      data: {
+        assignmentAttemptId:
+          role === UserRole.LEARNER ? assignmentAttemptId : 1,
+        questionId: questionId,
+        learnerResponse: JSON.stringify(learnerResponse ?? ""),
+        points: responseDto.totalPoints,
+        feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
+      },
+    });
+    responseDto.id = result.id;
     responseDto.questionId = questionId;
     responseDto.question = question.question;
     return responseDto;
@@ -1335,21 +1481,35 @@ export class AttemptService {
     return undefined;
   }
 
-  private maybeShuffleChoices = (
+  private maybeShuffleChoices(
     choices: Choice[] | string | null | undefined,
     shouldShuffle: boolean,
-  ): string | null => {
+  ): string | null {
     if (!choices) return;
-
-    let parsed: Choice[] =
-      typeof choices === "string" ? (JSON.parse(choices) as Choice[]) : choices;
-
+    let parsed: Choice[];
+    if (typeof choices === "string") {
+      try {
+        const temporary = JSON.parse(choices) as Choice[];
+        if (!Array.isArray(temporary)) {
+          return;
+        }
+        parsed = temporary;
+      } catch {
+        return;
+      }
+    } else {
+      parsed = choices;
+    }
+    if (!Array.isArray(parsed)) {
+      return;
+    }
     if (shouldShuffle) {
       parsed = [...parsed];
       parsed.sort(() => Math.random() - 0.5);
     }
     return JSON.stringify(parsed);
-  };
+  }
+
   /**
    * Submits the questions for the assignment attempt.
    * @param responsesForQuestions The responses for questions.
@@ -1361,8 +1521,10 @@ export class AttemptService {
     assignmentAttemptId: number,
     role: UserRole,
     assignmentId: number,
+    language: string,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
+    preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
@@ -1373,8 +1535,10 @@ export class AttemptService {
           cleanedQuestionResponse,
           role,
           assignmentId,
+          language,
           authorQuestions,
           assignmentDetails,
+          preTranslatedQuestions,
         );
       },
     );
@@ -1392,9 +1556,7 @@ export class AttemptService {
 
     if (failedResponses.length > 0) {
       throw new InternalServerErrorException(
-        `Failed to submit questions: ${failedResponses
-          .map((response) => response)
-          .join(", ")}`,
+        `Failed to submit questions: ${failedResponses.join(", ")}`,
       );
     }
 
@@ -1501,12 +1663,15 @@ export class AttemptService {
       responsesForQuestions,
       authorQuestions, // removing author questions from the update request
       authorAssignmentDetails, // removing author assignment details from the update request
+      language, // removing language from the update requests
+      preTranslatedQuestions,
       ...cleanedUpdateAssignmentAttemptDto
     } = updateAssignmentAttemptDto;
 
     return this.prisma.assignmentAttempt.update({
       data: {
         ...cleanedUpdateAssignmentAttemptDto,
+        preferredLanguage: language ?? "en",
         expiresAt: new Date(),
         grade,
       },
@@ -1535,6 +1700,19 @@ export class AttemptService {
   }
 
   /**
+   * Checks whether the submission deadline has passed.
+   * @param expiresAt The expiration date of the assignment attempt.
+   */
+  private checkSubmissionDeadline(expiresAt: Date | null | undefined): void {
+    const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
+    if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
+      throw new UnprocessableEntityException(
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+      );
+    }
+  }
+
+  /**
    * Processes the question response based on the question type.
    * @param question The question object.
    * @param createQuestionResponseAttemptRequestDto The create request DTO.
@@ -1549,6 +1727,7 @@ export class AttemptService {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
+    language: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string | { filename: string; content: string }[];
@@ -1571,11 +1750,12 @@ export class AttemptService {
       responseDto.totalPoints = 0;
       responseDto.feedback = [
         {
-          feedback: "You did not provide a response to this question.",
+          feedback: this.getLocalizedString("noResponse", language),
         },
       ];
       return { responseDto, learnerResponse: "" };
     }
+    // convert language code to language name
 
     switch (question.type) {
       case QuestionType.TEXT: {
@@ -1585,6 +1765,7 @@ export class AttemptService {
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
           assignmentId,
+          language,
         );
       }
       case QuestionType.LINK_FILE: {
@@ -1594,6 +1775,7 @@ export class AttemptService {
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
             assignmentId,
+            language,
           );
         } else if (
           createQuestionResponseAttemptRequestDto.learnerFileResponse
@@ -1603,6 +1785,7 @@ export class AttemptService {
             question.type,
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
+            language,
           );
         } else {
           throw new BadRequestException(
@@ -1616,6 +1799,7 @@ export class AttemptService {
           question.type,
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
+          language,
         );
       }
       case QuestionType.URL: {
@@ -1624,24 +1808,28 @@ export class AttemptService {
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
           assignmentId,
+          language,
         );
       }
       case QuestionType.TRUE_FALSE: {
         return this.handleTrueFalseQuestionResponse(
           question,
           createQuestionResponseAttemptRequestDto,
+          language,
         );
       }
       case QuestionType.SINGLE_CORRECT: {
         return this.handleSingleCorrectQuestionResponse(
           question,
           createQuestionResponseAttemptRequestDto,
+          language,
         );
       }
       case QuestionType.MULTIPLE_CORRECT: {
         return this.handleMultipleCorrectQuestionResponse(
           question,
           createQuestionResponseAttemptRequestDto,
+          language,
         );
       }
       default: {
@@ -1658,6 +1846,7 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
+    language?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerFileUpload[];
@@ -1683,6 +1872,7 @@ export class AttemptService {
     const model = await this.llmService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,
       question.assignmentId,
+      language,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1703,6 +1893,7 @@ export class AttemptService {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
+    language?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -1726,6 +1917,7 @@ export class AttemptService {
     const model = await this.llmService.gradeTextBasedQuestion(
       textBasedQuestionEvaluateModel,
       assignmentId,
+      language,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1745,6 +1937,7 @@ export class AttemptService {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
+    language?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -1782,6 +1975,7 @@ export class AttemptService {
     const model = await this.llmService.gradeUrlBasedQuestion(
       urlBasedQuestionEvaluateModel,
       assignmentId,
+      language,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1801,6 +1995,7 @@ export class AttemptService {
   private handleTrueFalseQuestionResponse(
     question: QuestionDto,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    language: string,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -1810,27 +2005,100 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto.learnerAnswerChoice === undefined
     ) {
       throw new BadRequestException(
-        "Expected a true/false response (learnerAnswerChoice), but did not receive one.",
+        this.getLocalizedString("expectedTrueFalse", language),
       );
     }
-    const correctAnswer =
-      question.choices?.[0]?.choice.toLowerCase() === "true";
-    const correctPoints = question.choices?.[0]?.points || 0;
     const learnerChoice =
       createQuestionResponseAttemptRequestDto.learnerAnswerChoice;
+    if (learnerChoice === null) {
+      throw new BadRequestException(
+        this.getLocalizedString("invalidTrueFalse", language),
+      );
+    }
+    const correctAnswer = question.answer ?? question.choices[0].isCorrect;
     const isCorrect = learnerChoice === correctAnswer;
     const feedback = isCorrect
-      ? "Correct! Your answer is right."
-      : `Incorrect. The correct answer is ${correctAnswer ? "True" : "False"}.`;
-
+      ? this.getLocalizedString("correctTF", language)
+      : this.getLocalizedString("incorrectTF", language, {
+          correctAnswer: correctAnswer
+            ? this.getLocalizedString("true", language)
+            : this.getLocalizedString("false", language),
+        });
+    const correctPoints =
+      question.choices && question.choices[0]
+        ? question.choices[0].points || 0
+        : 0;
     const pointsAwarded = isCorrect ? correctPoints : 0;
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     responseDto.totalPoints = pointsAwarded;
-    responseDto.feedback = [{ feedback, choice: learnerChoice }];
+    responseDto.feedback = [
+      {
+        feedback,
+        choice: learnerChoice,
+      },
+    ];
+    return { responseDto, learnerResponse: String(learnerChoice) };
+  }
+  private async applyTranslationToQuestion(
+    question: QuestionDto,
+    language: string,
+    variantMapping?: { questionId: number; questionVariant: QuestionVariant },
+  ): Promise<QuestionDto> {
+    if (!language || language === "en") return question;
 
-    const learnerResponse = JSON.stringify(learnerChoice);
-    return { responseDto, learnerResponse };
+    let translation: Translation | null = null;
+
+    // If there's a variant, first attempt to fetch the translation for the variant.
+    if (
+      variantMapping &&
+      variantMapping.questionVariant !== null &&
+      variantMapping.questionVariant
+    ) {
+      translation = await this.prisma.translation.findFirst({
+        where: {
+          questionId: variantMapping.questionId,
+          variantId: variantMapping.questionVariant.id,
+          languageCode: language,
+        },
+      });
+      // Fallback to base question translation if no variant translation is found.
+      if (!translation) {
+        translation = await this.prisma.translation.findFirst({
+          where: {
+            questionId: question.id,
+            variantId: null,
+            languageCode: language,
+          },
+        });
+      }
+    } else {
+      translation = await this.prisma.translation.findFirst({
+        where: {
+          questionId: question.id,
+          variantId: null,
+          languageCode: language,
+        },
+      });
+    }
+    if (translation) {
+      question.question = translation.translatedText;
+      if (translation.translatedChoices) {
+        if (typeof translation.translatedChoices === "string") {
+          try {
+            question.choices = JSON.parse(
+              translation.translatedChoices,
+            ) as Choice[];
+          } catch {
+            question.choices = []; // Default to empty array on failure
+          }
+        } else if (Array.isArray(translation.translatedChoices)) {
+          question.choices =
+            translation.translatedChoices as unknown as Choice[];
+        }
+      }
+    }
+    return question;
   }
 
   /**
@@ -1851,42 +2119,39 @@ export class AttemptService {
   private handleSingleCorrectQuestionResponse(
     question: QuestionDto,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    language: string,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   } {
-    // Ensure choices is an array
     const choices = this.parseChoices(question.choices);
-
     const learnerChoice =
       createQuestionResponseAttemptRequestDto.learnerChoices[0];
 
+    const normalizedLearnerChoice = this.normalizeText(learnerChoice);
     const correctChoice = choices.find((choice) => choice.isCorrect);
 
+    // Use normalized comparison here.
     const selectedChoice = choices.find(
-      (choice) => choice.choice === learnerChoice,
+      (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice,
     );
-
-    const responseDto = new CreateQuestionResponseAttemptResponseDto();
 
     const data = {
       learnerChoice,
       correctChoice: correctChoice?.choice,
-      points: selectedChoice?.points || 0,
+      points: selectedChoice ? selectedChoice.points : 0,
     };
 
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
     if (selectedChoice) {
       let choiceFeedback = "";
       if (selectedChoice.feedback) {
-        // Use custom feedback from the selected choice
         choiceFeedback = this.formatFeedback(selectedChoice.feedback, data);
       } else {
-        // Use default feedback if custom feedback is not provided
         choiceFeedback = selectedChoice.isCorrect
-          ? `**Correct selection:** ${learnerChoice} (+ ${selectedChoice.points} points)`
-          : `**Incorrect selection:** ${learnerChoice} (- ${selectedChoice.points} points)`;
+          ? this.getLocalizedString("correctSelection", language, data)
+          : this.getLocalizedString("incorrectSelection", language, data);
       }
-
       responseDto.totalPoints = selectedChoice.isCorrect
         ? selectedChoice.points
         : 0;
@@ -1897,12 +2162,13 @@ export class AttemptService {
         },
       ] as ChoiceBasedFeedbackDto[];
     } else {
-      // The learner selected an invalid choice
       responseDto.totalPoints = 0;
       responseDto.feedback = [
         {
           choice: learnerChoice,
-          feedback: `**Invalid selection:** ${learnerChoice}`,
+          feedback: this.getLocalizedString("invalidSelection", language, {
+            learnerChoice,
+          }),
         },
       ] as ChoiceBasedFeedbackDto[];
     }
@@ -1917,6 +2183,7 @@ export class AttemptService {
   private handleMultipleCorrectQuestionResponse(
     question: QuestionDto,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    language: string,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -1931,7 +2198,7 @@ export class AttemptService {
       responseDto.feedback = [
         {
           choice: [],
-          feedback: "**You didn't select any option.**",
+          feedback: this.getLocalizedString("noOptionSelected", language),
         },
       ] as unknown as ChoiceBasedFeedbackDto[];
       const learnerResponse = JSON.stringify([]);
@@ -1940,71 +2207,105 @@ export class AttemptService {
 
     const learnerChoices =
       createQuestionResponseAttemptRequestDto.learnerChoices;
-    const choices = this.parseChoices(question.choices);
-    const correctChoices = choices.filter((choice) => choice.isCorrect) || [];
-    const correctChoiceTexts = correctChoices.map((choice) => choice.choice);
-    let totalPoints = 0;
-    const maxPoints = correctChoices.reduce(
-      (accumulator, choice) => accumulator + choice.points,
-      0,
+    // Normalize the learner's submitted choices
+    const normalizedLearnerChoices = new Set(
+      learnerChoices.map((choice) => this.normalizeText(choice)),
     );
+
+    // Parse the choices from the question and build normalized versions
+    const choices = this.parseChoices(question.choices);
+    const normalizedChoices = choices.map((choice) => ({
+      original: choice,
+      normalized: this.normalizeText(choice.choice),
+    }));
+
+    // Get normalized texts for all correct choices
+    const correctChoices = choices.filter((choice) => choice.isCorrect) || [];
+    const correctChoiceTexts = correctChoices.map((choice) =>
+      this.normalizeText(choice.choice),
+    );
+
+    let totalPoints = 0;
     const feedbackDetails: string[] = [];
 
+    // Evaluate each learner choice using normalized comparisons
     for (const learnerChoice of learnerChoices) {
-      const selectedChoice = choices.find(
-        (choice) => choice.choice === learnerChoice,
+      const normalizedLearnerChoice = this.normalizeText(learnerChoice);
+      const matchedChoice = normalizedChoices.find(
+        (item) => item.normalized === normalizedLearnerChoice,
       );
 
-      const data = {
-        learnerChoice,
-        points: selectedChoice?.points || 0,
-      };
-      if (selectedChoice) {
-        totalPoints += selectedChoice.points;
-
+      if (matchedChoice) {
+        totalPoints += matchedChoice.original.points;
+        const data = {
+          learnerChoice,
+          points: matchedChoice.original.points,
+        };
         let choiceFeedback = "";
-        if (selectedChoice.feedback) {
-          choiceFeedback = this.formatFeedback(selectedChoice.feedback, data);
+        if (matchedChoice.original.feedback) {
+          choiceFeedback = this.formatFeedback(
+            matchedChoice.original.feedback,
+            data,
+          );
         } else {
-          choiceFeedback = selectedChoice.isCorrect
-            ? `**Correct selection:** ${learnerChoice} (+${selectedChoice.points} points)`
-            : `**Incorrect selection:** ${learnerChoice} (${selectedChoice.points} points)`;
+          choiceFeedback = matchedChoice.original.isCorrect
+            ? this.getLocalizedString("correctSelection", language, data)
+            : this.getLocalizedString("incorrectSelection", language, data);
         }
         feedbackDetails.push(choiceFeedback);
       } else {
         feedbackDetails.push(
-          `**Invalid selection:** ${learnerChoice} (0 points)`,
+          this.getLocalizedString("invalidSelection", language, {
+            learnerChoice,
+          }),
         );
       }
     }
 
+    const maxPoints = correctChoices.reduce(
+      (accumulator, choice) => accumulator + choice.points,
+      0,
+    );
     const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
-    const allCorrectSelected = correctChoiceTexts.every((choice) =>
-      learnerChoices.includes(choice),
+
+    // Check if every correct choice (normalized) is among the learner's normalized choices
+    const allCorrectSelected = correctChoiceTexts.every((correctText) =>
+      normalizedLearnerChoices.has(correctText),
     );
 
     const feedbackMessage = `
-${feedbackDetails.join(".\n")}.
-${
-  totalPoints < maxPoints || !allCorrectSelected
-    ? `\nThe correct option(s) were: **${correctChoiceTexts.join(", ")}**.`
-    : "\n**You selected all correct options!**"
-}
-`;
+  ${feedbackDetails.join(".\n")}.
+  ${
+    totalPoints < maxPoints || !allCorrectSelected
+      ? `\n${this.getLocalizedString("correctOptions", language, {
+          correctOptions: correctChoices
+            .map((choice) => choice.choice)
+            .join(", "),
+        })}`
+      : this.getLocalizedString("allCorrectSelected", language)
+  }
+    `;
 
-    const feedback: ChoiceBasedFeedbackDto[] = [
+    responseDto.totalPoints = finalPoints;
+    responseDto.feedback = [
       {
         choice: learnerChoices.join(", "),
         feedback: feedbackMessage.trim(),
       },
     ];
-    responseDto.totalPoints = finalPoints;
-    responseDto.feedback = feedback;
-
     const learnerResponse = JSON.stringify(learnerChoices);
     return { responseDto, learnerResponse };
   }
 
+  private normalizeText(text: string): string {
+    return (
+      text
+        .trim()
+        .toLowerCase()
+        // Remove common punctuation that might differ in translations
+        .replaceAll(/[!,.،؛؟]/g, "")
+    );
+  }
   /**
    * Calculates the time range start date based on the assignment settings.
    * @param assignment The assignment object.
@@ -2039,6 +2340,347 @@ ${
     });
   }
 
+  // ─── ADD HELPER FUNCTIONS FOR LOCALIZATION ──────────────────────────────
+
+  private getLocalizedString(
+    key: string,
+    language: string,
+    placeholders?: { [key: string]: string | number },
+  ): string {
+    const translations: Record<string, any> = {
+      en: {
+        noResponse: "You did not provide a response to this question.",
+        expectedTrueFalse:
+          "Expected a true/false response, but did not receive one.",
+        invalidTrueFalse: "Invalid true/false response.",
+        correctTF: "Correct! Your answer is right.",
+        incorrectTF: "Incorrect. The correct answer is {correctAnswer}.",
+        true: "True",
+        false: "False",
+        correctSelection:
+          "**Correct selection:** {learnerChoice} (+{points} points)",
+        incorrectSelection:
+          "**Incorrect selection:** {learnerChoice} (-{points} points)",
+        invalidSelection: "**Invalid selection:** {learnerChoice}",
+        noOptionSelected: "**You didn't select any option.**",
+        correctOptions: "The correct option(s) were: **{correctOptions}**.",
+        allCorrectSelected: "**You selected all correct options!**",
+      },
+      ar: {
+        noResponse: "لم تقدم إجابة على هذا السؤال.",
+        expectedTrueFalse:
+          "كان من المتوقع الحصول على إجابة صحيحة/خاطئة، ولكن لم يتم الحصول عليها.",
+        invalidTrueFalse: "إجابة صحيحة/خاطئة غير صالحة.",
+        correctTF: "صحيح! إجابتك صحيحة.",
+        incorrectTF: "خطأ. الإجابة الصحيحة هي {correctAnswer}.",
+        true: "صحيح",
+        false: "خطأ",
+        correctSelection:
+          "**الاختيار الصحيح:** {learnerChoice} (+{points} نقطة)",
+        incorrectSelection:
+          "**الاختيار غير الصحيح:** {learnerChoice} (-{points} نقطة)",
+        invalidSelection: "**الاختيار غير صالح:** {learnerChoice}",
+        noOptionSelected: "**لم تختر أي خيار.**",
+        correctOptions: "الخيارات الصحيحة هي: **{correctOptions}**.",
+        allCorrectSelected: "**لقد اخترت جميع الخيارات الصحيحة!**",
+      },
+      id: {
+        noResponse: "Anda tidak memberikan jawaban untuk pertanyaan ini.",
+        expectedTrueFalse:
+          "Diharapkan jawaban benar/salah, tetapi tidak diterima.",
+        invalidTrueFalse: "Jawaban benar/salah tidak valid.",
+        correctTF: "Benar! Jawaban Anda benar.",
+        incorrectTF: "Salah. Jawaban yang benar adalah {correctAnswer}.",
+        true: "Benar",
+        false: "Salah",
+        correctSelection: "**Pilihan benar:** {learnerChoice} (+{points} poin)",
+        incorrectSelection:
+          "**Pilihan salah:** {learnerChoice} (-{points} poin)",
+        invalidSelection: "**Pilihan tidak valid:** {learnerChoice}",
+        noOptionSelected: "**Anda tidak memilih opsi apa pun.**",
+        correctOptions: "Opsi yang benar adalah: **{correctOptions}**.",
+        allCorrectSelected: "**Anda memilih semua opsi yang benar!**",
+      },
+      de: {
+        noResponse: "Sie haben keine Antwort auf diese Frage gegeben.",
+        expectedTrueFalse:
+          "Eine Ja/Nein-Antwort wurde erwartet, aber nicht erhalten.",
+        invalidTrueFalse: "Ungültige Ja/Nein-Antwort.",
+        correctTF: "Richtig! Ihre Antwort ist korrekt.",
+        incorrectTF: "Falsch. Die richtige Antwort ist {correctAnswer}.",
+        true: "Wahr",
+        false: "Falsch",
+        correctSelection:
+          "**Richtige Auswahl:** {learnerChoice} (+{points} Punkte)",
+        incorrectSelection:
+          "**Falsche Auswahl:** {learnerChoice} (-{points} Punkte)",
+        invalidSelection: "**Ungültige Auswahl:** {learnerChoice}",
+        noOptionSelected: "**Sie haben keine Option ausgewählt.**",
+        correctOptions:
+          "Die richtige(n) Option(en) waren: **{correctOptions}**.",
+        allCorrectSelected: "**Sie haben alle richtigen Optionen ausgewählt!**",
+      },
+      es: {
+        noResponse: "No proporcionaste una respuesta a esta pregunta.",
+        expectedTrueFalse:
+          "Se esperaba una respuesta verdadero/falso, pero no se recibió.",
+        invalidTrueFalse: "Respuesta verdadero/falso inválida.",
+        correctTF: "¡Correcto! Tu respuesta es correcta.",
+        incorrectTF: "Incorrecto. La respuesta correcta es {correctAnswer}.",
+        true: "Verdadero",
+        false: "Falso",
+        correctSelection:
+          "**Selección correcta:** {learnerChoice} (+{points} puntos)",
+        incorrectSelection:
+          "**Selección incorrecta:** {learnerChoice} (-{points} puntos)",
+        invalidSelection: "**Selección inválida:** {learnerChoice}",
+        noOptionSelected: "**No seleccionaste ninguna opción.**",
+        correctOptions:
+          "La(s) opción(es) correcta(s) eran: **{correctOptions}**.",
+        allCorrectSelected: "**¡Seleccionaste todas las opciones correctas!**",
+      },
+      fr: {
+        noResponse: "Vous n'avez pas répondu à cette question.",
+        expectedTrueFalse:
+          "Une réponse vrai/faux était attendue, mais non reçue.",
+        invalidTrueFalse: "Réponse vrai/faux invalide.",
+        correctTF: "Correct ! Votre réponse est juste.",
+        incorrectTF: "Incorrect. La bonne réponse est {correctAnswer}.",
+        true: "Vrai",
+        false: "Faux",
+        correctSelection:
+          "**Sélection correcte:** {learnerChoice} (+{points} points)",
+        incorrectSelection:
+          "**Sélection incorrecte:** {learnerChoice} (-{points} points)",
+        invalidSelection: "**Sélection invalide:** {learnerChoice}",
+        noOptionSelected: "**Vous n'avez sélectionné aucune option.**",
+        correctOptions: "Les options correctes étaient: **{correctOptions}**.",
+        allCorrectSelected:
+          "**Vous avez sélectionné toutes les options correctes !**",
+      },
+      it: {
+        noResponse: "Non hai fornito una risposta a questa domanda.",
+        expectedTrueFalse:
+          "Era prevista una risposta vero/falso, ma non è stata ricevuta.",
+        invalidTrueFalse: "Risposta vero/falso non valida.",
+        correctTF: "Corretto! La tua risposta è giusta.",
+        incorrectTF: "Sbagliato. La risposta corretta è {correctAnswer}.",
+        true: "Vero",
+        false: "Falso",
+        correctSelection:
+          "**Selezione corretta:** {learnerChoice} (+{points} punti)",
+        incorrectSelection:
+          "**Selezione errata:** {learnerChoice} (-{points} punti)",
+        invalidSelection: "**Selezione non valida:** {learnerChoice}",
+        noOptionSelected: "**Non hai selezionato nessuna opzione.**",
+        correctOptions: "Le opzioni corrette erano: **{correctOptions}**.",
+        allCorrectSelected: "**Hai selezionato tutte le opzioni corrette!**",
+      },
+      hu: {
+        noResponse: "Nem adtál választ erre a kérdésre.",
+        expectedTrueFalse: "Igaz/Hamis választ vártunk, de nem érkezett.",
+        invalidTrueFalse: "Érvénytelen igaz/hamis válasz.",
+        correctTF: "Helyes! A válaszod megfelelő.",
+        incorrectTF: "Helytelen. A helyes válasz: {correctAnswer}.",
+        true: "Igaz",
+        false: "Hamis",
+        correctSelection:
+          "**Helyes választás:** {learnerChoice} (+{points} pont)",
+        incorrectSelection:
+          "**Helytelen választás:** {learnerChoice} (-{points} pont)",
+        invalidSelection: "**Érvénytelen választás:** {learnerChoice}",
+        noOptionSelected: "**Nem választottál ki egy lehetőséget sem.**",
+        correctOptions: "A helyes lehetőségek: **{correctOptions}**.",
+        allCorrectSelected: "**Minden helyes lehetőséget kiválasztottál!**",
+      },
+      nl: {
+        noResponse: "Je hebt geen antwoord gegeven op deze vraag.",
+        expectedTrueFalse:
+          "Een waar/onwaar antwoord werd verwacht, maar niet ontvangen.",
+        invalidTrueFalse: "Ongeldig waar/onwaar antwoord.",
+        correctTF: "Correct! Je antwoord is juist.",
+        incorrectTF: "Onjuist. Het juiste antwoord is {correctAnswer}.",
+        true: "Waar",
+        false: "Onwaar",
+        correctSelection:
+          "**Juiste keuze:** {learnerChoice} (+{points} punten)",
+        incorrectSelection:
+          "**Onjuiste keuze:** {learnerChoice} (-{points} punten)",
+        invalidSelection: "**Ongeldige keuze:** {learnerChoice}",
+        noOptionSelected: "**Je hebt geen optie geselecteerd.**",
+        correctOptions: "De juiste opties waren: **{correctOptions}**.",
+        allCorrectSelected: "**Je hebt alle juiste opties geselecteerd!**",
+      },
+      pl: {
+        noResponse: "Nie udzieliłeś odpowiedzi na to pytanie.",
+        expectedTrueFalse:
+          "Oczekiwano odpowiedzi prawda/fałsz, ale jej nie otrzymano.",
+        invalidTrueFalse: "Nieprawidłowa odpowiedź prawda/fałsz.",
+        correctTF: "Poprawnie! Twoja odpowiedź jest właściwa.",
+        incorrectTF: "Niepoprawnie. Poprawna odpowiedź to {correctAnswer}.",
+        true: "Prawda",
+        false: "Fałsz",
+        correctSelection:
+          "**Poprawny wybór:** {learnerChoice} (+{points} punkty)",
+        incorrectSelection:
+          "**Niepoprawny wybór:** {learnerChoice} (-{points} punkty)",
+        invalidSelection: "**Nieprawidłowy wybór:** {learnerChoice}",
+        noOptionSelected: "**Nie wybrałeś żadnej opcji.**",
+        correctOptions: "Poprawne opcje to: **{correctOptions}**.",
+        allCorrectSelected: "**Wybrałeś wszystkie poprawne opcje!**",
+      },
+      pt: {
+        noResponse: "Você não forneceu uma resposta para esta pergunta.",
+        expectedTrueFalse:
+          "Era esperada uma resposta verdadeiro/falso, mas não foi recebida.",
+        invalidTrueFalse: "Resposta verdadeiro/falso inválida.",
+        correctTF: "Correto! Sua resposta está certa.",
+        incorrectTF: "Incorreto. A resposta correta é {correctAnswer}.",
+        true: "Verdadeiro",
+        false: "Falso",
+        correctSelection:
+          "**Seleção correta:** {learnerChoice} (+{points} pontos)",
+        incorrectSelection:
+          "**Seleção incorreta:** {learnerChoice} (-{points} pontos)",
+        invalidSelection: "**Seleção inválida:** {learnerChoice}",
+        noOptionSelected: "**Você não selecionou nenhuma opção.**",
+        correctOptions: "As opções corretas eram: **{correctOptions}**.",
+        allCorrectSelected: "**Você selecionou todas as opções corretas!**",
+      },
+      tr: {
+        noResponse: "Bu soruya bir yanıt vermediniz.",
+        expectedTrueFalse: "Doğru/Yanlış yanıt bekleniyordu, ancak alınmadı.",
+        invalidTrueFalse: "Geçersiz doğru/yanlış yanıt.",
+        correctTF: "Doğru! Cevabınız doğru.",
+        incorrectTF: "Yanlış. Doğru cevap {correctAnswer}.",
+        true: "Doğru",
+        false: "Yanlış",
+        correctSelection: "**Doğru seçim:** {learnerChoice} (+{points} puan)",
+        incorrectSelection:
+          "**Yanlış seçim:** {learnerChoice} (-{points} puan)",
+        invalidSelection: "**Geçersiz seçim:** {learnerChoice}",
+        noOptionSelected: "**Hiçbir seçenek seçmediniz.**",
+        correctOptions: "Doğru seçenekler: **{correctOptions}**.",
+        allCorrectSelected: "**Tüm doğru seçenekleri seçtiniz!**",
+      },
+      ru: {
+        noResponse: "Вы не дали ответа на этот вопрос.",
+        expectedTrueFalse: "Ожидался ответ правда/ложь, но он не был получен.",
+        invalidTrueFalse: "Недопустимый ответ правда/ложь.",
+        correctTF: "Верно! Ваш ответ правильный.",
+        incorrectTF: "Неверно. Правильный ответ: {correctAnswer}.",
+        true: "Правда",
+        false: "Ложь",
+        correctSelection:
+          "**Правильный выбор:** {learnerChoice} (+{points} очков)",
+        incorrectSelection:
+          "**Неправильный выбор:** {learnerChoice} (-{points} очков)",
+        invalidSelection: "**Недопустимый выбор:** {learnerChoice}",
+        noOptionSelected: "**Вы не выбрали ни одного варианта.**",
+        correctOptions: "Правильные варианты: **{correctOptions}**.",
+        allCorrectSelected: "**Вы выбрали все правильные варианты!**",
+      },
+      ja: {
+        noResponse: "この質問に対する回答を提供しませんでした。",
+        expectedTrueFalse:
+          "正誤の回答が期待されましたが、受け取られませんでした。",
+        invalidTrueFalse: "無効な正誤の回答。",
+        correctTF: "正解！あなたの答えは正しいです。",
+        incorrectTF: "不正解。正しい答えは {correctAnswer} です。",
+        true: "正しい",
+        false: "間違い",
+        correctSelection: "**正しい選択:** {learnerChoice} (+{points} 点)",
+        incorrectSelection: "**間違った選択:** {learnerChoice} (-{points} 点)",
+        invalidSelection: "**無効な選択:** {learnerChoice}",
+        noOptionSelected: "**オプションを選択しませんでした。**",
+        correctOptions: "正しいオプションは: **{correctOptions}** でした。",
+        allCorrectSelected: "**すべての正しいオプションを選択しました！**",
+      },
+      "zh-CN": {
+        noResponse: "你没有回答这个问题。",
+        expectedTrueFalse: "预期是一个真/假回答，但未收到。",
+        invalidTrueFalse: "无效的真/假回答。",
+        correctTF: "正确！你的回答是对的。",
+        incorrectTF: "错误。正确答案是 {correctAnswer}。",
+        true: "真",
+        false: "假",
+        correctSelection: "**正确选择:** {learnerChoice} (+{points} 分)",
+        incorrectSelection: "**错误选择:** {learnerChoice} (-{points} 分)",
+        invalidSelection: "**无效选择:** {learnerChoice}",
+        noOptionSelected: "**你没有选择任何选项。**",
+        correctOptions: "正确的选项是: **{correctOptions}**。",
+        allCorrectSelected: "**你选择了所有正确的选项！**",
+      },
+
+      "zh-TW": {
+        noResponse: "你沒有回答這個問題。",
+        expectedTrueFalse: "預期是一個真/假回答，但未收到。",
+        invalidTrueFalse: "無效的真/假回答。",
+        correctTF: "正確！你的回答是對的。",
+        incorrectTF: "錯誤。正確答案是 {correctAnswer}。",
+        true: "真",
+        false: "假",
+        correctSelection: "**正確選擇:** {learnerChoice} (+{points} 分)",
+        incorrectSelection: "**錯誤選擇:** {learnerChoice} (-{points} 分)",
+        invalidSelection: "**無效選擇:** {learnerChoice}",
+        noOptionSelected: "**你沒有選擇任何選項。**",
+        correctOptions: "正確的選項是: **{correctOptions}**。",
+        allCorrectSelected: "**你選擇了所有正確的選項！**",
+      },
+    };
+
+    const langDict = (translations[language] || translations["en"]) as Record<
+      string,
+      string
+    >;
+    let string_ = langDict[key] || key;
+
+    if (placeholders) {
+      for (const placeholder in placeholders) {
+        const regex = new RegExp(`{${placeholder}}`, "g");
+        string_ = string_.replace(regex, String(placeholders[placeholder]));
+      }
+    }
+    return string_;
+  }
+
+  private parseBooleanResponse(
+    learnerChoice: string,
+    language: string,
+  ): boolean | null {
+    const mapping: Record<string, Record<string, boolean>> = {
+      en: { true: true, false: false },
+      id: { benar: true, salah: false },
+      de: { wahr: true, falsch: false },
+      es: { verdadero: true, falso: false },
+      fr: { vrai: true, faux: false },
+      it: { vero: true, falso: false },
+      hu: { igaz: true, hamis: false },
+      nl: { waar: true, onwaar: false },
+      pl: { prawda: true, fałsz: false },
+      pt: { verdadeiro: true, falso: false },
+      sv: { sant: true, falskt: false },
+      tr: { doğru: true, yanlış: false },
+      el: { αληθές: true, ψευδές: false },
+      kk: { рас: true, жалған: false },
+      ru: { правда: true, ложь: false },
+      uk: { правда: true, брехня: false },
+      ar: { صحيح: true, خطأ: false },
+      hi: { सही: true, गलत: false },
+      th: { จริง: true, เท็จ: false },
+      ko: { 참: true, 거짓: false },
+      "zh-CN": { 真: true, 假: false },
+      "zh-TW": { 真: true, 假: false },
+      ja: { 正しい: true, 間違い: false },
+    };
+
+    const langMapping = mapping[language] || mapping["en"];
+    const normalized = learnerChoice.trim().toLowerCase();
+    return langMapping[normalized] === undefined
+      ? undefined
+      : langMapping[normalized];
+  }
+
   /**
    * Constructs questions with their corresponding responses.
    * @param questions The list of questions.
@@ -2050,10 +2692,12 @@ ${
     questionResponses: QuestionResponse[],
   ): AssignmentAttemptQuestions[] {
     return questions.map((question) => {
+      const extendedQuestion = question as ExtendedQuestion;
       const correspondingResponses = questionResponses
         .filter((response) => response.questionId === question.id)
         .map((response) => ({
           id: response.id,
+          variantId: extendedQuestion.variantId || null,
           assignmentAttemptId: response.assignmentAttemptId,
           questionId: response.questionId,
           learnerResponse: response.learnerResponse,
@@ -2101,6 +2745,7 @@ ${
 
       return {
         id: question.id,
+        variantId: extendedQuestion.variantId,
         totalPoints: question.totalPoints,
         maxWords: question.maxWords,
         maxCharacters: question.maxCharacters,

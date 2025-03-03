@@ -47,7 +47,9 @@ async function bootstrap() {
 
   // Starts listening for shutdown hooks
   app.enableShutdownHooks();
-
   await app.listen(process.env.API_PORT || 3000);
+  const server = app.getHttpServer() as import("http").Server;
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
 }
 void bootstrap();

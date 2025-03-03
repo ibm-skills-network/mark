@@ -1,8 +1,9 @@
 "use strict";
+
+import animationData from "@/animations/LoadSN.json";
+import LoadingPage from "@/app/loading";
 import { Suspense } from "react";
 import LearnerLayout from "./LearnerLayout";
-import LoadingPage from "@/app/loading";
-import animationData from "@/animations/LoadSN.json";
 
 interface Props {
   params: { assignmentId: string };
@@ -10,9 +11,5 @@ interface Props {
 }
 
 export default function Page(props: Props) {
-  return (
-    <Suspense fallback={<LoadingPage animationData={animationData} />}>
-      <LearnerLayout {...props} />
-    </Suspense>
-  );
+  return <LearnerLayout {...props} />;
 }

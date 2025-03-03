@@ -1,3 +1,4 @@
+import { trueFalseTranslations } from "@/app/Helpers/Languages/TrueFalseInAllLang";
 import { QuestionStore } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
 
@@ -10,24 +11,31 @@ function TrueFalseQuestion(props: Props) {
   const [setAnswerChoice] = useLearnerStore((state) => [state.setAnswerChoice]);
   const learnerAnswerChoice = question.learnerAnswerChoice;
 
+  // Determine the user's preferred language.
+  // If no language is provided, default to English.
+  const userPreferredLanguage =
+    useLearnerStore((state) => state.userPreferedLanguage) || "en";
+  const langTranslations =
+    trueFalseTranslations[userPreferredLanguage] || trueFalseTranslations["en"];
+
   const handleChoiceClick = (choice: boolean) => {
     setAnswerChoice(choice, question.id);
   };
 
   return (
     <div>
-      <label className={`flex items-center w-full p-2 mb-2  rounded`}>
+      <label className="flex items-center w-full p-2 mb-2 rounded">
         <input
           type="radio"
           name={`question-${question.id}`}
           value="true"
           checked={learnerAnswerChoice === true}
           onChange={() => handleChoiceClick(true)}
-          className="mr-2 accent-violet-600  text-violet-600"
+          className="mr-2 accent-violet-600 text-violet-600"
         />
-        True
+        {langTranslations.true}
       </label>
-      <label className={`flex items-center w-full p-2 mb-2  rounded`}>
+      <label className="flex items-center w-full p-2 mb-2 rounded">
         <input
           type="radio"
           name={`question-${question.id}`}
@@ -36,7 +44,7 @@ function TrueFalseQuestion(props: Props) {
           onChange={() => handleChoiceClick(false)}
           className="mr-2 accent-violet-600 text-violet-600"
         />
-        False
+        {langTranslations.false}
       </label>
     </div>
   );

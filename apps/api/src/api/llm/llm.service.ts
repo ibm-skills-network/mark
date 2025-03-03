@@ -1,17 +1,10 @@
 import { get_encoding, type Tiktoken } from "@dqbd/tiktoken";
-import type { BaseLanguageModel as BaseLLM } from "@langchain/core/language_models/base";
 import { HumanMessage } from "@langchain/core/messages";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { ChatOpenAI, OpenAI } from "@langchain/openai";
+import { ChatOpenAI } from "@langchain/openai";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
-import {
-  AIUsage,
-  AIUsageType,
-  Question,
-  QuestionType,
-  QuestionVariant,
-  ResponseType,
-} from "@prisma/client";
+import { AIUsageType, QuestionType, ResponseType } from "@prisma/client";
+import cld from "cld";
 import { sanitize } from "isomorphic-dompurify";
 import { OpenAIModerationChain } from "langchain/chains";
 import { StructuredOutputParser } from "langchain/output_parsers";
@@ -23,9 +16,7 @@ import { QuestionsToGenerate } from "../assignment/dto/post.assignment.request.d
 import { AssignmentTypeEnum } from "../assignment/dto/update.assignment.request.dto";
 import {
   Choice,
-  QuestionDto,
   VariantDto,
-  VariantType,
 } from "../assignment/dto/update.questions.request.dto";
 import type { FileUploadQuestionEvaluateModel } from "./model/file.based.question.evaluate.model";
 import { FileBasedQuestionResponseModel } from "./model/file.based.question.response.model";
@@ -37,10 +28,7 @@ import {
   generateAssignmentQuestionsFromFileAndObjectivesTemplate,
   generateAssignmentQuestionsFromFileTemplate,
   generateAssignmentQuestionsFromObjectivesTemplate,
-  generateCodeFileUploadMarkingRubricTemplate,
   generateDocumentFileUploadMarkingRubricTemplate,
-  generateImageFileUploadMarkingRubricTemplate,
-  generateLinkFileUploadMarkingRubricTemplate,
   generateMultipleBasedMarkingRubricTemplate,
   generateQuestionRewordingsTemplate,
   generateQuestionsGradingContext,
@@ -305,6 +293,7 @@ export class LlmService {
   async gradeFileBasedQuestion(
     fileBasedQuestionEvaluateModel: FileUploadQuestionEvaluateModel,
     assignmentId: number,
+    language?: string,
   ): Promise<FileBasedQuestionResponseModel> {
     const {
       question,
@@ -358,6 +347,7 @@ export class LlmService {
         scoring_type: scoringCriteriaType,
         scoring_criteria: JSON.stringify(scoringCriteria),
         grading_type: responseType,
+        language: language ?? "en",
       },
     });
 
@@ -393,6 +383,7 @@ export class LlmService {
   async gradeTextBasedQuestion(
     textBasedQuestionEvaluateModel: TextBasedQuestionEvaluateModel,
     assignmentId: number,
+    language?: string,
   ): Promise<TextBasedQuestionResponseModel> {
     const {
       question,
@@ -447,6 +438,7 @@ export class LlmService {
         scoring_criteria: JSON.stringify(scoringCriteria),
         format_instructions: formatInstructions,
         grading_type: responseType,
+        language: language ?? "en",
       },
     });
     const response = await this.processPrompt(
@@ -465,6 +457,7 @@ export class LlmService {
   async gradeUrlBasedQuestion(
     urlBasedQuestionEvaluateModel: UrlBasedQuestionEvaluateModel,
     assignmentId: number,
+    language?: string,
   ): Promise<UrlBasedQuestionResponseModel> {
     const {
       question,
@@ -525,6 +518,7 @@ export class LlmService {
         scoring_criteria: JSON.stringify(scoringCriteria),
         format_instructions: formatInstructions,
         grading_type: responseType,
+        language: language ?? "en",
       },
     });
 
@@ -933,6 +927,25 @@ export class LlmService {
     return markingRubricMap;
   }
 
+  async getLanguageCode(text: string): Promise<string> {
+    try {
+      const response: {
+        readonly reliable: boolean;
+        readonly textBytes: number;
+        readonly languages: cld.Language[];
+        readonly chunks: cld.Chunk[];
+      } = (await cld.detect(text)) as {
+        reliable: boolean;
+        textBytes: number;
+        languages: cld.Language[];
+        chunks: cld.Chunk[];
+      };
+      return response.languages[0].code;
+    } catch {
+      return "unknown";
+    }
+  }
+
   /**
    * Process the file content to generate assignment questions using an LLM (e.g., ChatGPT).
    * @param files Array of file data, each containing filename and content.
@@ -1182,7 +1195,18 @@ export class LlmService {
       AIUsageType.ASSIGNMENT_GENERATION,
     );
     const parsedResponse = await parser.parse(response);
-    let { questions } = parsedResponse;
+    // remove any markdown anotation from the questions
+    parsedResponse.questions = parsedResponse.questions.map((question) => {
+      question.question = question.question?.replaceAll("```", "");
+      if (question.choices) {
+        question.choices = question.choices.map((choice) => {
+          choice.feedback = choice.feedback?.replaceAll("```", "");
+          return choice;
+        });
+      }
+      return question;
+    });
+    let questions = parsedResponse.questions;
 
     // 7. Separate questions by their type
     const singleCorrectQs = questions.filter(
@@ -1441,6 +1465,60 @@ export class LlmService {
     }
   }
 
+  // a function that asks the llm to translate a text to a target language
+  async translateText(
+    text: string,
+    targetLanguage: string,
+    assignmentId: number,
+  ): Promise<string> {
+    if (!text) {
+      return;
+    }
+    // Define the Zod schema for validating LLM response
+    const translationSchema = z.object({
+      translatedText: z.string().nonempty("Translated text cannot be empty"),
+    });
+
+    const promptTemplate = `
+  Translate the following text into {target_language}.
+  Please provide only a valid JSON object that conforms exactly to the following format:
+  {format_instructions}
+  Text: {text}
+  Do not include any additional text, commentary, or formatting.
+  `;
+    const parser = StructuredOutputParser.fromZodSchema(translationSchema);
+    const formatInstructions = parser.getFormatInstructions();
+    const prompt = new PromptTemplate({
+      template: promptTemplate,
+      inputVariables: [],
+      partialVariables: {
+        text: text,
+        target_language: targetLanguage,
+        format_instructions: formatInstructions,
+      },
+    });
+
+    try {
+      // Send the formatted prompt to LLM and get the raw response
+      const rawResponse = await this.processPrompt(
+        prompt,
+        assignmentId,
+        AIUsageType.TRANSLATION,
+      );
+
+      // Validate the response using the Zod schema
+      const parsedResponse = translationSchema.parse(JSON.parse(rawResponse));
+
+      return parsedResponse.translatedText;
+    } catch (error) {
+      this.logger.error(`Error translating text: ${(error as Error).message}`);
+      throw new HttpException(
+        "Failed to translate text",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // private methods
   private async processPrompt(
     prompt: PromptTemplate,
@@ -1455,15 +1533,23 @@ export class LlmService {
 
     // Invoke the chat model properly
     const result = await this.llm.invoke([new HumanMessage(input)]);
-    const response = result.content.toString();
-    // clean remove any code block markers, single backticks, and leading/trailing whitespace
-    const cleanedResponse = response
-      .replaceAll(/```(?:json|)/g, "")
-      .replaceAll("`", "")
-      .trim();
+    let response = result.content.toString();
+
+    response = response
+      .replaceAll("```json", "") // Remove json code blocks
+      .replaceAll("```", "") // Remove any remaining code blocks
+      .replaceAll("`", "") // Remove single backticks
+      .trim(); // Trim whitespace
+
+    try {
+      JSON.parse(response); // Check if response is valid JSON
+    } catch {
+      // If not, return the response as is
+      return response;
+    }
 
     // Get response tokens
-    const responseTokens = this.tiktokenEncoding.encode(cleanedResponse).length;
+    const responseTokens = this.tiktokenEncoding.encode(response).length;
     this.logger.info(`Output token count: ${responseTokens}`);
 
     // Track usage

@@ -1,4 +1,5 @@
 "use client";
+
 import ErrorPage from "@/components/ErrorPage";
 import { useAuthorStore } from "@/stores/author";
 import type { ComponentPropsWithoutRef, FC } from "react";

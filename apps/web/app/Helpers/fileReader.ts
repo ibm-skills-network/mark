@@ -5,8 +5,17 @@ import Papa, { ParseResult } from "papaparse";
 import pdfToText from "react-pdftotext";
 import { remark } from "remark";
 
-// Base file content interface.
-export interface FileContent {
+const escapeCurlyBraces = (content: string): string =>
+  content.replace(/{/g, "\\{").replace(/}/g, "\\}");
+
+const sanitizeContent = (content: string, extension: string): string => {
+  // Escape curly braces for non-code files to avoid LLM prompt issues
+  const needsEscaping = ["txt", "docx", "md", "csv", "pptx", "pdf"].includes(
+    extension,
+  );
+  return needsEscaping ? escapeCurlyBraces(content) : content;
+};
+interface FileContent {
   filename: string;
   content: string;
   questionId: number;
@@ -16,18 +25,6 @@ export interface FileContent {
 export interface ExtendedFileContent extends FileContent {
   blob?: Blob;
 }
-
-// Utility to escape curly braces.
-const escapeCurlyBraces = (content: string): string =>
-  content.replace(/{/g, "\\{").replace(/}/g, "\\}");
-
-// Sanitize content based on file extension.
-const sanitizeContent = (content: string, extension: string): string => {
-  const needsEscaping = ["txt", "docx", "md", "csv", "pptx", "pdf"].includes(
-    extension,
-  );
-  return needsEscaping ? escapeCurlyBraces(content) : content;
-};
 
 // Helper function that reads a File as an ArrayBuffer and then decodes it to text.
 const readFileAsTextFromBuffer = (file: File): Promise<string> =>

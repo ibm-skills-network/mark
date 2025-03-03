@@ -1,9 +1,10 @@
 "use client";
+
+import { stepTwoSections } from "@/config/constants";
+import { cn } from "@/lib/strings";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useEffect, type ComponentPropsWithoutRef, type FC } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { stepTwoSections } from "@/config/constants";
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { cn } from "@/lib/strings";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 

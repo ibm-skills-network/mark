@@ -25,6 +25,14 @@ export enum AssignmentTypeEnum {
 
 export class UpdateAssignmentRequestDto {
   @ApiProperty({
+    description: "The name of the assignment.",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  name: string;
+  @ApiProperty({
     description: "The introduction of the assignment.",
     type: String,
     required: false,

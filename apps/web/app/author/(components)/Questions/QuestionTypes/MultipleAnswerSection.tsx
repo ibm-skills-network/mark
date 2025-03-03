@@ -1,25 +1,26 @@
+import SparkleLottie from "@/app/animations/sparkleLottie";
+import Tooltip from "@/components/Tooltip";
+import WarningAlert from "@/components/WarningAlert";
 import {
   Choice,
   Choice as ChoiceType,
   QuestionAuthorStore,
 } from "@/config/types";
+import { generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
-import React, { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
+  ChevronDownIcon,
+  ChevronUpIcon,
   PencilIcon,
   PlusIcon,
   SparklesIcon,
   XMarkIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
 } from "@heroicons/react/24/outline";
-import { shallow } from "zustand/shallow";
-import Tooltip from "@/components/Tooltip";
-import { toast } from "sonner";
-import { generateRubric } from "@/lib/talkToBackend";
-import SparkleLottie from "@/app/animations/sparkleLottie";
 import { IconArrowsShuffle } from "@tabler/icons-react";
-import WarningAlert from "@/components/WarningAlert";
+import React, { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { toast } from "sonner";
+import { shallow } from "zustand/shallow";
+
 interface SectionProps {
   questionId: number;
   variantId?: number; // Add variantId

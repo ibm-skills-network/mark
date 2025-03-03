@@ -33,7 +33,15 @@ const MarkdownViewer: FC<Props> = (props) => {
   const [quillInstance, setQuillInstance] = useState<Quill | null>(null);
 
   useEffect(() => {
-    if (!quillInstance && quillRef.current) {
+    if (quillInstance) {
+      quillInstance.root.innerHTML = "";
+      // destroy Quill instance to prevent memory leaks
+      quillInstance.disable();
+      quillInstance.deleteText(0, quillInstance.getLength());
+      setQuillInstance(null);
+    }
+
+    if (quillRef.current) {
       window.hljs = hljs;
 
       void import("quill").then((QuillModule) => {
@@ -50,11 +58,11 @@ const MarkdownViewer: FC<Props> = (props) => {
           },
         });
 
-        quill.root.innerHTML = (children as string) || "";
+        quill.root.innerHTML = String(children) || "";
         setQuillInstance(quill);
       });
     }
-  }, [quillInstance, children]);
+  }, [children]);
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -70,7 +78,6 @@ const MarkdownViewer: FC<Props> = (props) => {
       .ql-container.ql-snow .ql-editor {
         font-family: "IBM Plex Sans", sans-serif !important;
         font-size: 16px !important;
-        font-weight: 600 !important;
         line-height: 1.3 !important;
         background-color: transparent !important;
         min-height: auto !important;

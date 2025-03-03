@@ -1,10 +1,15 @@
-import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import TooltipMessage from "@/app/components/ToolTipMessage";
+import {
+  handleJumpToQuestion,
+  handleJumpToQuestionTitle,
+} from "@/app/Helpers/handleJumpToQuestion";
 import Spinner from "@/components/svgs/Spinner";
 import Tooltip from "@/components/Tooltip";
-import { Choice } from "@/config/types";
+import { Choice, QuestionVariants } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
+import { useRouter } from "next/navigation";
 import type { FC } from "react";
 import { useMemo } from "react";
 
@@ -13,6 +18,7 @@ interface Props {
   questionsAreReadyToBePublished: () => {
     isValid: boolean;
     message: string;
+    step: number | null;
     invalidQuestionId: number;
   };
   handlePublishButton: () => void;
@@ -23,7 +29,8 @@ const SubmitQuestionsButton: FC<Props> = ({
   questionsAreReadyToBePublished,
   handlePublishButton,
 }) => {
-  const { isValid, message, invalidQuestionId } =
+  const router = useRouter();
+  const { isValid, message, step, invalidQuestionId } =
     questionsAreReadyToBePublished();
   const questions = useAuthorStore((state) => state.questions);
   const originalAssignment = useAuthorStore(
@@ -36,13 +43,19 @@ const SubmitQuestionsButton: FC<Props> = ({
   const hasEmptyQuestion = questions?.some(
     (question) => question.type === "EMPTY",
   );
-  const { name, introduction, instructions, gradingCriteriaOverview } =
-    useAuthorStore((state) => ({
-      name: state.name,
-      introduction: state.introduction,
-      instructions: state.instructions,
-      gradingCriteriaOverview: state.gradingCriteriaOverview,
-    }));
+  const {
+    name,
+    introduction,
+    instructions,
+    gradingCriteriaOverview,
+    assignmentId,
+  } = useAuthorStore((state) => ({
+    name: state.name,
+    introduction: state.introduction,
+    instructions: state.instructions,
+    gradingCriteriaOverview: state.gradingCriteriaOverview,
+    assignmentId: state.activeAssignmentId,
+  }));
   const {
     questionDisplay,
     questionVariationNumber,
@@ -64,6 +77,7 @@ const SubmitQuestionsButton: FC<Props> = ({
     if (!originalAssignment) return "No changes detected.";
     const diffs: string[] = [];
 
+    // Assignment-level fields
     if (introduction !== originalAssignment.introduction)
       diffs.push("Modified introduction.");
     if (instructions !== originalAssignment.instructions)
@@ -77,63 +91,57 @@ const SubmitQuestionsButton: FC<Props> = ({
     if (showAssignmentScore !== originalAssignment.showAssignmentScore)
       diffs.push("Changed assignment score visibility.");
 
-    // Compare questions
-    // check for added questions
-    const addedQuestions = questions.filter(
+    // Questions added
+    const addedQuestions = questions?.filter(
       (question) =>
-        !originalAssignment?.questions?.some(
+        !originalAssignment.questions?.some(
           (originalQuestion) => originalQuestion.id === question.id,
         ),
     );
     if (addedQuestions?.length > 0)
-      diffs.push(`${addedQuestions?.length} questions added.`);
-    // check for deleted questions
-    const deletedQuestions = originalAssignment?.questions?.filter(
-      (originalQuestion) =>
-        !questions.some((question) => question.id === originalQuestion.id),
-    );
-    if (deletedQuestions?.length > 0)
+      diffs.push(`${addedQuestions.length} questions added.`);
+
+    // Questions deleted
+    const deletedQuestions =
+      originalAssignment.questions?.filter(
+        (originalQuestion) =>
+          !questions.some((question) => question.id === originalQuestion.id),
+      ) || [];
+    if (deletedQuestions.length > 0)
       diffs.push(`${deletedQuestions.length} questions deleted.`);
-    // check for modified questions
-    const modifiedQuestions = questions?.filter((question) =>
-      originalAssignment?.questions?.some(
-        (originalQuestion) => originalQuestion.id === question.id,
-      ),
-    );
-    modifiedQuestions.forEach((question) => {
-      const originalQuestion = originalAssignment?.questions?.find(
-        (originalQuestion) => originalQuestion.id === question.id,
+
+    // For each matching question, check for modifications.
+    questions.forEach((question) => {
+      const originalQuestion = originalAssignment.questions?.find(
+        (orig) => orig.id === question.id,
       );
+      if (!originalQuestion) return; // Already handled as added.
+
       if (question.type !== originalQuestion.type && question.type !== "EMPTY")
         diffs.push(`Changed question type for question ${question.id}.`);
-      if (question.question !== originalQuestion.question && question.id)
+      if (question.question !== originalQuestion.question)
         diffs.push(`Updated question text for question ${question.id}.`);
       if (
         JSON.stringify(question.choices) !==
-          JSON.stringify(originalQuestion.choices) &&
-        question.choices
+        JSON.stringify(originalQuestion.choices)
       )
         diffs.push(`Modified choices for question ${question.id}.`);
       if (
         JSON.stringify(
-          question.scoring?.criteria?.map((criteria) => ({
-            description: criteria.description,
-            points: criteria.points,
+          question.scoring?.criteria?.map((c) => ({
+            description: c.description,
+            points: c.points,
           })) || [],
         ) !==
-          JSON.stringify(
-            originalQuestion.scoring?.criteria?.map((criteria) => ({
-              description: criteria.description,
-              points: criteria.points,
-            })) || [],
-          ) &&
-        question.scoring
+        JSON.stringify(
+          originalQuestion.scoring?.criteria?.map((c) => ({
+            description: c.description,
+            points: c.points,
+          })) || [],
+        )
       )
         diffs.push(`Updated scoring for question ${question.id}.`);
-      if (
-        question.randomizedChoices !== originalQuestion.randomizedChoices &&
-        question.randomizedChoices !== null
-      )
+      if (question.randomizedChoices !== originalQuestion.randomizedChoices)
         diffs.push(`Updated randomized choices for question ${question.id}.`);
       if (question.responseType !== originalQuestion.responseType)
         diffs.push(`Changed response type for question ${question.id}.`);
@@ -141,105 +149,77 @@ const SubmitQuestionsButton: FC<Props> = ({
         diffs.push(`Updated max words for question ${question.id}.`);
       if (question.maxCharacters !== originalQuestion.maxCharacters)
         diffs.push(`Updated max characters for question ${question.id}.`);
-      // check modified variants
-      if (
-        question.variants?.length &&
-        originalQuestion.variants?.length &&
-        question.variants.some(
-          (variant) =>
-            !originalQuestion.variants.find(
-              (originalVariant) => originalVariant.id === variant.id,
-            ),
-        )
-      )
-        diffs.push(`Added variants for question ${question.id}.`);
-      if (
-        question.variants?.length &&
-        originalQuestion.variants?.length &&
-        originalQuestion.variants.some(
-          (originalVariant) =>
-            !question.variants.find(
-              (variant) => variant.id === originalVariant.id,
-            ),
-        )
-      )
-        diffs.push(`Deleted variants for question ${question.id}.`);
 
-      if (
-        question.variants?.length &&
-        originalQuestion.variants?.length &&
-        question.variants.some((variant) => {
-          // check if variant.randomizedChoices is modified
-          const originalVariant = originalQuestion.variants.find(
-            (originalVariant) => originalVariant.id === variant.id,
-          );
-          return (
-            variant.randomizedChoices !== originalVariant?.randomizedChoices
-          );
-        })
-      )
-        diffs.push(`Modified randomized choices for question ${question.id}.`);
+      // --- Variants comparison (using variantContent as key) ---
+      const newVariants = question.variants || [];
+      const origVariants = originalQuestion.variants || [];
 
-      if (
-        question.variants?.length &&
-        originalQuestion.variants?.length &&
-        question.variants.some((variant) => {
-          const originalVariant = originalQuestion.variants.find(
-            (originalVariant) => originalVariant.id === variant.id,
-          );
-          return (
-            variant.variantContent !== originalVariant?.variantContent ||
-            (Array.isArray(variant.choices) &&
-              variant.choices.some(
-                (choice: Choice) =>
-                  !(
-                    Array.isArray(originalVariant.choices) &&
-                    originalVariant.choices.find(
-                      (originalChoice: Choice) =>
-                        originalChoice.choice === choice.choice,
-                    )
-                  ) ||
-                  !(
-                    Array.isArray(originalVariant.choices) &&
-                    originalVariant.choices.find(
-                      (originalChoice: Choice) =>
-                        originalChoice.points === choice.points,
-                    )
-                  ),
-              ))
-          );
-        })
-      )
-        diffs.push(`Modified variants for question ${question.id}.`);
+      // Helper to get a simplified variant key
+      const getVariantKey = (variant: QuestionVariants) =>
+        variant.variantContent;
+
+      // Added variants: in newVariants but not in origVariants (by variantContent)
+      const addedVariants = newVariants.filter(
+        (variant) =>
+          !origVariants.some(
+            (orig) => getVariantKey(orig) === getVariantKey(variant),
+          ),
+      );
+      if (addedVariants.length > 0)
+        diffs.push(
+          `Added ${addedVariants.length} variant(s) for question ${question.id}.`,
+        );
+
+      // Deleted variants: in origVariants but not in newVariants
+      const deletedVariants = origVariants.filter(
+        (orig) =>
+          !newVariants.some(
+            (variant) => getVariantKey(variant) === getVariantKey(orig),
+          ),
+      );
+      if (deletedVariants.length > 0)
+        diffs.push(
+          `Deleted ${deletedVariants.length} variant(s) for question ${question.id}.`,
+        );
+
+      // For variants present in both, check if other properties differ.
+      newVariants.forEach((variant) => {
+        const matchingOrig = origVariants.find(
+          (orig) => getVariantKey(orig) === getVariantKey(variant),
+        );
+        if (matchingOrig) {
+          if (variant.randomizedChoices !== matchingOrig.randomizedChoices)
+            diffs.push(
+              `Modified randomized choices for variant "${variant.variantContent}" in question ${question.id}.`,
+            );
+          if (
+            JSON.stringify(variant.choices) !==
+            JSON.stringify(matchingOrig.choices)
+          )
+            diffs.push(
+              `Modified choices for variant "${variant.variantContent}" in question ${question.id}.`,
+            );
+        }
+      });
     });
 
-    // Compare config fields
+    // Compare configuration fields
     if (questionDisplay !== originalAssignment.questionDisplay)
       diffs.push("Changed question display type.");
-    // if variations inside questions are deleted, push it to diff
-    if (
-      questions.some(
-        (question) =>
-          question?.variants?.length <
-          originalAssignment?.questions?.find(
-            (originalQuestion) => originalQuestion.id === question.id,
-          )?.variants?.length,
-      )
-    ) {
-      diffs.push("Deleted question variations.");
-    }
-    // added variations
-    if (
-      questions.some(
-        (question) =>
-          question?.variants?.length >
-          originalAssignment?.questions?.find(
-            (originalQuestion) => originalQuestion.id === question.id,
-          )?.variants?.length,
-      )
-    ) {
-      diffs.push("Added question variations.");
-    }
+
+    // Check for overall variation changes (using the variants length as a rough check)
+    questions.forEach((question) => {
+      const originalQuestion = originalAssignment.questions?.find(
+        (orig) => orig.id === question.id,
+      );
+      const newVarCount = question.variants?.length || 0;
+      const origVarCount = originalQuestion?.variants?.length || 0;
+      if (newVarCount < origVarCount)
+        diffs.push(`Deleted question variations for question ${question.id}.`);
+      if (newVarCount > origVarCount)
+        diffs.push(`Added question variations for question ${question.id}.`);
+    });
+
     if (numAttempts !== originalAssignment.numAttempts)
       diffs.push("Updated number of attempts.");
     if (passingGrade !== originalAssignment.passingGrade)
@@ -253,9 +233,9 @@ const SubmitQuestionsButton: FC<Props> = ({
       diffs.push(`Set alloted time to ${allotedTimeMinutes} minutes.`);
     if (displayOrder !== originalAssignment.displayOrder)
       diffs.push("Modified question order.");
-    if (graded !== originalAssignment.graded) {
+    if (graded !== originalAssignment.graded)
       diffs.push(graded ? "Enabled grading." : "Disabled grading.");
-    }
+    console.log("diffs", diffs);
     return diffs.length > 0 ? diffs.join(" ") : "No changes detected.";
   }, [
     originalAssignment,
@@ -279,7 +259,18 @@ const SubmitQuestionsButton: FC<Props> = ({
   ]);
 
   const hasChanges = changesSummary !== "No changes detected.";
-
+  const handleNavigate = () => {
+    if (invalidQuestionId) {
+      setFocusedQuestionId(invalidQuestionId);
+      setTimeout(() => {
+        handleJumpToQuestionTitle(invalidQuestionId.toString());
+      }, 0);
+    } else if (step) {
+      if (step === 1) router.push(`/author/${assignmentId}`);
+      if (step === 2) router.push(`/author/${assignmentId}/config`);
+      if (step === 3) router.push(`/author/${assignmentId}/questions`);
+    }
+  };
   const disableButton =
     submitting ||
     isLoading ||
@@ -288,54 +279,23 @@ const SubmitQuestionsButton: FC<Props> = ({
     !isValid ||
     !hasChanges;
 
-  const tooltipMessage = useMemo(() => {
-    if (isLoading) return "Loading questions...";
-    if (questions?.length === 0) return "You need to add at least one question";
-    if (hasEmptyQuestion) return "Some questions have incomplete fields";
-    if (!isValid)
-      return (
-        <>
-          <span>{message}</span>
-          <button
-            onClick={() => {
-              setFocusedQuestionId(invalidQuestionId);
-              handleJumpToQuestion(`indexQuestion-${invalidQuestionId}`);
-            }}
-            className="ml-2 text-blue-500 hover:underline"
-          >
-            Take me there
-          </button>
-        </>
-      );
-    if (submitting) return "Mark is analyzing your questions...";
-    if (!hasChanges) return "No changes detected.";
-
-    // Render changes summary if there are changes
-    return (
-      <>
-        <span>Click to save and publish your changes.</span>
-        <span className="block mt-2 text-sm font-normal text-gray-500">
-          {changesSummary}
-        </span>
-      </>
-    );
-  }, [
-    isLoading,
-    questions?.length,
-    hasEmptyQuestion,
-    isValid,
-    message,
-    submitting,
-    changesSummary,
-    hasChanges,
-    invalidQuestionId,
-    setFocusedQuestionId,
-  ]);
-
   return (
     <Tooltip
       disabled={!disableButton}
-      content={tooltipMessage}
+      content={
+        <TooltipMessage
+          isLoading={isLoading}
+          questionsLength={questions?.length}
+          hasEmptyQuestion={hasEmptyQuestion}
+          isValid={isValid}
+          message={message}
+          submitting={submitting}
+          hasChanges={hasChanges}
+          changesSummary={changesSummary}
+          invalidQuestionId={invalidQuestionId}
+          onNavigate={handleNavigate}
+        />
+      }
       distance={-15}
       up={0.3}
       direction="x"

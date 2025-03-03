@@ -1,12 +1,12 @@
+import { ExclamationTriangleIcon } from "@heroicons/react/24/solid"; // You can use another warning icon if desired
 import { type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ExclamationTriangleIcon } from "@heroicons/react/24/solid"; // You can use another warning icon if desired
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  description: string;
+  description: string | ReactNode;
   confirmText?: string;
   cancelText?: string;
   children?: ReactNode;

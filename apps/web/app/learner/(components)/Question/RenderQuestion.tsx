@@ -1,13 +1,13 @@
 import { QuestionStore, QuestionType } from "@/config/types";
+import { useLearnerStore } from "@/stores/learner";
 import { type FC } from "react";
+import FileCodeUploadSection from "./FileCodeUploadSection";
+import FileLinkUploadSection from "./FileLinkUploadSection";
 import FileUploadSection from "./FileUploadSection";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
 import TextQuestion from "./TextQuestion";
 import TrueFalseQuestion from "./TrueFalseQuestion";
 import UrlQuestion from "./UrlQuestion";
-import FileLinkUploadSection from "./FileLinkUploadSection";
-import { useLearnerStore } from "@/stores/learner";
-import FileCodeUploadSection from "./FileCodeUploadSection";
 
 interface Props {
   questionType: QuestionType;

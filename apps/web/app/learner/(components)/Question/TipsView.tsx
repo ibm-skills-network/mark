@@ -3,8 +3,11 @@
 import { cn } from "@/lib/strings";
 import { useAppConfig } from "@/stores/appConfig";
 import { TagIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { ArrowRightIcon, LanguageIcon } from "@heroicons/react/24/solid";
-import { TagIcon as SolidTagIcon } from "@heroicons/react/24/solid";
+import {
+  ArrowRightIcon,
+  LanguageIcon,
+  TagIcon as SolidTagIcon,
+} from "@heroicons/react/24/solid";
 import React, { useEffect, useState } from "react";
 
 function TipsView() {
@@ -29,7 +32,7 @@ function TipsView() {
   if (isMobile) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-        <div className="mx-auto w-full max-w-xs sm:max-w-sm bg-white border border-gray-300 rounded-lg shadow hover:shadow-mdflex flex-col gap-y-3">
+        <div className="mx-auto w-full max-w-xs sm:max-w-sm bg-white border border-gray-300 rounded-lg shadow hover:shadow-mdflex flex-col gap-y-3 p-4">
           <div className="flex items-center justify-between">
             <h1 className="text-gray-800 text-lg">Tips</h1>
             <XMarkIcon

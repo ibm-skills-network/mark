@@ -1,5 +1,6 @@
 import { cn } from "@/lib/strings";
 import type { ComponentPropsWithoutRef } from "react";
+
 interface Props extends ComponentPropsWithoutRef<"h1"> {
   level?: 1 | 2 | 3 | 4 | 5;
 }

@@ -1,15 +1,16 @@
 "use client";
+
+import { stepTwoSections } from "@/config/constants";
+import type { VerbosityLevels } from "@/config/types";
+import { cn } from "@/lib/strings";
+import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import {
+  useEffect,
+  type ButtonHTMLAttributes,
   type ComponentPropsWithoutRef,
   type FC,
-  type ButtonHTMLAttributes,
-  useEffect,
 } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
-import { stepTwoSections } from "@/config/constants";
-import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
-import { cn } from "@/lib/strings";
-import type { VerbosityLevels } from "@/config/types";
 import SettingsContainer from "./FeedbackSettings";
 
 interface FeedbackOptionProps extends ButtonHTMLAttributes<HTMLButtonElement> {

@@ -1,21 +1,21 @@
 "use client";
 
-import FileUploadSection from "./FileUploadSection";
-import { QuestionType, ResponseType, QuestionStore } from "@/config/types";
+import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
+import { QuestionStore, QuestionType, ResponseType } from "@/config/types";
+import { getStoredGithubToken } from "@/lib/talkToBackend";
 import {
   learnerFileResponse,
   useGitHubStore,
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
-import GithubUploadModal from "./GithubUploadModal";
-import { motion, AnimatePresence } from "framer-motion";
 import { DocumentTextIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { IconBrandGithub } from "@tabler/icons-react";
-import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import { Octokit } from "@octokit/rest";
-import { getStoredGithubToken } from "@/lib/talkToBackend";
+import { IconBrandGithub } from "@tabler/icons-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import FileUploadSection from "./FileUploadSection";
+import GithubUploadModal from "./GithubUploadModal";
 
 interface FileCodeUploadSectionProps {
   questionId: number;

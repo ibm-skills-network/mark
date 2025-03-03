@@ -76,6 +76,9 @@ export class Choice {
   @IsString()
   @IsOptional()
   feedback: string;
+  @IsOptional()
+  @IsInt()
+  id?: number;
 }
 
 export class CreateUpdateQuestionRequestDto {

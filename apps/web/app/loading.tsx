@@ -1,6 +1,7 @@
 "use client";
-import React, { FC } from "react";
+
 import dynamic from "next/dynamic";
+import React, { FC } from "react";
 
 const DynamicLoading = dynamic<{ animationData: any }>(
   () => import("@/components/Loading"),

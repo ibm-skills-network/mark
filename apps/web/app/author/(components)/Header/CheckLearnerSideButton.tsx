@@ -4,8 +4,8 @@ import { QuestionAuthorStore, QuestionStore } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
-import type { ComponentPropsWithoutRef, FC } from "react";
 import { EyeIcon } from "@heroicons/react/24/solid";
+import type { ComponentPropsWithoutRef, FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   disabled?: boolean;
@@ -45,7 +45,11 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
 
   return (
     <Tooltip
-      content={`${disabled ? "Please complete the assignment setup and question setup before checking the learner side" : "Check the learner side"}`}
+      content={`${
+        disabled
+          ? "Please complete the assignment setup and question setup before checking the learner side"
+          : "Check the learner side"
+      }`}
       distance={-2.5}
     >
       <button

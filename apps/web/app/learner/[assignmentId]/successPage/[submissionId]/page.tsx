@@ -80,7 +80,6 @@ function SuccessPage() {
   const [init, setInit] = useState(false);
   const [playAnimations, setPlayAnimations] = useState(true);
 
-  // New state variables for feedback form
   // New state variables for feedback modal
   const [comments, setComments] = useState("");
   const [aiGradingRating, setAiGradingRating] = useState(0);
@@ -99,7 +98,7 @@ function SuccessPage() {
   const [userId, setUserId] = useState<string>(null);
 
   const [isOpen, setIsOpen] = useState(false);
-
+  const [userPreferredLanguage, setUserPreferredLanguage] = useState("en");
   useEffect(() => {
     const fetchData = async () => {
       const user = await getUser();
@@ -115,6 +114,7 @@ function SuccessPage() {
           setShowSubmissionFeedback(
             submissionDetails.showSubmissionFeedback || false,
           );
+          setUserPreferredLanguage(submissionDetails.preferredLanguage);
           setGrade(submissionDetails.grade * 100);
           if (submissionDetails.totalPointsEarned) {
             setTotalPoints(submissionDetails.totalPointsEarned);
@@ -598,7 +598,11 @@ function SuccessPage() {
               animate={{ opacity: 1, y: 0 }}
               key={question.id}
             >
-              <Question number={index + 1} question={question} />
+              <Question
+                number={index + 1}
+                question={question}
+                language={userPreferredLanguage}
+              />
             </motion.div>
           ))}
         </div>

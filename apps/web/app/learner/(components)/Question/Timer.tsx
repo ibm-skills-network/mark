@@ -1,21 +1,21 @@
-import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
-import {
-  useAssignmentDetails,
-  useGitHubStore,
-  useLearnerStore,
-} from "@/stores/learner";
-import { cn } from "@/lib/strings";
-import { editedQuestionsOnly } from "@/lib/utils";
-import { getUser, submitAssignment } from "@/lib/talkToBackend";
-import useCountdown from "@/hooks/use-countdown";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import type {
   QuestionAttemptRequestWithId,
   QuestionStore,
   ReplaceAssignmentRequest,
 } from "@/config/types";
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
+import useCountdown from "@/hooks/use-countdown";
+import { cn } from "@/lib/strings";
+import { getUser, submitAssignment } from "@/lib/talkToBackend";
+import { editedQuestionsOnly } from "@/lib/utils";
+import {
+  useAssignmentDetails,
+  useGitHubStore,
+  useLearnerStore,
+} from "@/stores/learner";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import { toast } from "sonner";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {}
 
@@ -93,6 +93,7 @@ function Timer(props: Props) {
       assignmentId,
       activeAttemptId,
       responsesForQuestions,
+      "en",
       role === "author" ? authorQuestions : undefined,
       role === "author" ? authorAssignmentDetails : undefined,
     );

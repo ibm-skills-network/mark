@@ -1,4 +1,5 @@
 "use client";
+
 import { REPORT_TYPE } from "@/config/types";
 import { submitReportAuthor, submitReportLearner } from "@/lib/talkToBackend";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";

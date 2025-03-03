@@ -1,6 +1,7 @@
 import { HttpModule } from "@nestjs/axios";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { JobStatusService } from "src/api/Job/job-status.service";
 import { Logger } from "winston";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
@@ -17,6 +18,7 @@ describe("AttemptService", () => {
         AttemptService,
         PrismaService,
         LlmService,
+        JobStatusService,
         QuestionService,
         AssignmentService,
         {

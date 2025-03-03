@@ -17,17 +17,17 @@ function MultipleChoiceQuestion({
   ]);
   const { choices, learnerChoices } = question;
 
-  const handleChoiceClick = (choice: string) => {
+  const handleChoiceClick = (choiceIndex: number) => {
     if (isSingleCorrect) {
-      choices.forEach((c) => {
-        removeChoice(c.choice, question.id);
+      choices.forEach((_, index) => {
+        removeChoice(String(index), question.id); // Remove by index
       });
-      addChoice(choice, question.id);
+      addChoice(String(choiceIndex), question.id); // Add index
     } else {
-      if (learnerChoices?.includes(choice)) {
-        removeChoice(choice, question.id);
+      if (learnerChoices?.includes(String(choiceIndex))) {
+        removeChoice(String(choiceIndex), question.id);
       } else {
-        addChoice(choice, question.id);
+        addChoice(String(choiceIndex), question.id);
       }
     }
   };
@@ -38,8 +38,7 @@ function MultipleChoiceQuestion({
   return (
     <div className="flex flex-col gap-y-3 mt-4">
       {choices.map((choice, index) => {
-        const { choice: choiceText } = choice;
-        const isSelected = learnerChoices?.includes(choiceText);
+        const isSelected = learnerChoices?.includes(String(index)); // Check selection by index
 
         return (
           <button
@@ -52,7 +51,7 @@ function MultipleChoiceQuestion({
                 ? "  text-violet-900"
                 : "bg-white text-gray-800 hover:bg-gray-50",
             )}
-            onClick={() => handleChoiceClick(choiceText)}
+            onClick={() => handleChoiceClick(index)} // Store index instead of text
           >
             <span
               className={cn(
@@ -74,7 +73,7 @@ function MultipleChoiceQuestion({
                 )
               ) : null}
             </span>
-            {choiceText}
+            {choice.choice} {/* Display text normally */}
           </button>
         );
       })}

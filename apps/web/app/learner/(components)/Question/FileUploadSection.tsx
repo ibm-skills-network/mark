@@ -1,6 +1,5 @@
 // FileUploadSection.js
 import { readFile } from "@/app/Helpers/fileReader";
-import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionType, ResponseType } from "@/config/types";
 import { getStoredGithubToken } from "@/lib/talkToBackend";
 import {
@@ -16,12 +15,11 @@ import {
   IconEye,
   IconX,
 } from "@tabler/icons-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import GithubUploadModal from "./GithubUploadModal";
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
-import { DocumentTextIcon, TrashIcon } from "@heroicons/react/24/outline";
 import CustomFileViewer from "./FileViewer";
 
 const MAX_CHAR_LIMIT = 40000;

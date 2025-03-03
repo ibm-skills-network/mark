@@ -67,6 +67,17 @@ model Job {
   updatedAt   DateTime  @updatedAt
   result       Json?    // Add this field to store generated questions
 }
+model publishJob {
+  id          Int       @id @default(autoincrement())
+  userId       String
+  assignmentId Int
+  status      String
+  progress    String?
+  percentage  Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  result       Json?    // Add this field to store generated questions
+}
 /// This model tracks the AI usage for each assignment and usage type
 model AIUsage {
   id                Int         @id @default(autoincrement()) /// Unique identifier for the AI usage log
@@ -139,14 +150,12 @@ model Assignment {
   showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
-
+  languageCode            String?                         /// The language code for the assignment
   AIUsage AIUsage[]
-
   AssignmentFeedback AssignmentFeedback[]
-
   RegradingRequest RegradingRequest[]
-
   Report Report[]
+  AssignmentTranslation AssignmentTranslation[]
 }
 enum VariantType {
   REWORDED /// The variant is reworded
@@ -174,6 +183,7 @@ model Question {
   AssignmentAttemptQuestionVariant AssignmentAttemptQuestionVariant[]
   isDeleted      Boolean  @default(false) // New flag for archiving
   translations              Translation[]    /// List of translations for the question
+  FeedbackTranslation FeedbackTranslation[]
 }
 model AssignmentAttempt {
   id                Int                   @id @default(autoincrement())
@@ -189,6 +199,7 @@ model AssignmentAttempt {
   questionOrder    Int[]
   RegradingRequest RegradingRequest[]
   comments         String?               /// Additional comments or notes for the assignment attempt from the system
+  preferredLanguage String?
 }
 
 model AssignmentAttemptQuestionVariant {
@@ -220,6 +231,7 @@ model QuestionVariant {
   isDeleted      Boolean  @default(false) // New flag for archiving
 
   @@unique([questionId, variantContent])
+  Translation Translation[]
 }
 
 
@@ -301,13 +313,46 @@ enum ReportStatus {
   CLOSED       /// Report is closed without resolution
 }
 model Translation {
-  id             Int      @id @default(autoincrement()) /// Unique identifier for the translation
-  questionId     Int      /// The ID of the question being translated
-  question       Question  @relation(fields: [questionId], references: [id], onDelete: Cascade) /// Relation to the Question model
-  languageCode   String    /// The code of the language for the translation (e.g., "en", "fr", "es")
-  translatedText String    /// The machine-generated translation of the question
-  untranslatedText String /// The original text of the question (optional)
-  translatedChoices Json?  /// The machine-generated translation of the choices (optional)
-  createdAt      DateTime  @default(now()) /// Timestamp for when the translation was created
-  @@unique([questionId, languageCode]) /// Ensure each question has a unique translation per language
+  id                Int    @id @default(autoincrement())
+  questionId        Int?
+  question          Question?       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  variantId         Int?  
+  variant           QuestionVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  languageCode      String
+  translatedText    String
+  untranslatedText  String?
+  translatedChoices Json?
+  createdAt         DateTime @default(now())
+
+  // Use an index instead of unique constraint to allow nullable variantId
+  @@index([questionId, variantId, languageCode])
+}
+
+model AssignmentTranslation {
+  id                      Int         @id @default(autoincrement())
+  assignmentId            Int
+  languageCode            String
+  name                    String  /// Translated assignment name
+  introduction            String /// Translated introduction/overview
+  instructions            String? /// Translated instructions
+  gradingCriteriaOverview String? /// Translated grading criteria overview
+  translatedName                    String?  /// Translated assignment name
+  translatedIntroduction            String? /// Translated introduction/overview
+  translatedInstructions            String? /// Translated instructions
+  translatedGradingCriteriaOverview String? /// Translated grading criteria overview
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  assignment              Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  @@unique([assignmentId, languageCode])
+}
+model FeedbackTranslation {
+  id                 Int      @id @default(autoincrement())
+  questionId         Int
+  languageCode       String
+  untranslatedFeedback Json /// A JSON object mapping each choice (or option identifier) to its untranslated feedback.
+  translatedFeedback Json /// A JSON object mapping each choice (or option identifier) to its translated feedback.
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  question           Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  @@unique([questionId, languageCode])
 }

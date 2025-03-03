@@ -1,11 +1,12 @@
 "use client";
+
+import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 import Button from "@/components/Button";
-import { useAuthorStore } from "@/stores/author";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { useAuthorStore } from "@/stores/author";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 
 export const FooterNavigation = () => {
   const router = useRouter();

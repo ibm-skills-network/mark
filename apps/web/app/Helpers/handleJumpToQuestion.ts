@@ -20,7 +20,6 @@ export function handleJumpToQuestion(elementString: string) {
 export function handleJumpToQuestionTitle(elementString: string) {
   console.log(elementString);
   const element = document.getElementById(`question-title-${elementString}`);
-  console.log(element);
   if (!element) return;
   requestAnimationFrame(() => {
     element.scrollIntoView({

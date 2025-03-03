@@ -6,14 +6,12 @@ import {
   Inject,
   Injectable,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
-  UseInterceptors,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiBody,
   ApiOperation,
@@ -21,7 +19,6 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
-import { ReportType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -32,7 +29,6 @@ import { Roles } from "../../../auth/role/roles.global.guard";
 import {
   GRADE_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-  MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
 } from "./api-exceptions/exceptions";
 import { AttemptService } from "./attempt.service";
@@ -51,8 +47,6 @@ import {
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { ReportRequestDTO } from "./dto/assignment-attempt/post.assignment.report.dto";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
-import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
-import { CreateQuestionResponseAttemptResponseDto } from "./dto/question-response/create.question.response.attempt.response.dto";
 import { AssignmentAttemptAccessControlGuard } from "./guards/assignment.attempt.access.control.guard";
 
 @ApiTags("Attempts")
@@ -117,9 +111,11 @@ export class AttemptController {
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
+    @Query("lang") lang?: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
       Number(assignmentAttemptId),
+      lang,
     );
   }
   @Get(":attemptId/completed")
@@ -179,41 +175,6 @@ export class AttemptController {
     );
   }
 
-  @Post(":attemptId/questions/:questionId/responses")
-  @Roles(UserRole.LEARNER)
-  @UseGuards(AssignmentAttemptAccessControlGuard)
-  @UseInterceptors(FileInterceptor("learnerFileResponse"))
-  @ApiOperation({
-    summary: "Create a question response for a question in an assignment.",
-  })
-  @ApiBody({ type: CreateQuestionResponseAttemptRequestDto })
-  @ApiResponse({
-    status: 200,
-    type: CreateQuestionResponseAttemptResponseDto,
-  })
-  @ApiResponse({
-    status: 422,
-    type: String,
-    description: MAX_RETRIES_QUESTION_EXCEPTION_MESSAGE,
-  })
-  @ApiResponse({ status: 403 })
-  createQuestionResponse(
-    @Param("attemptId") assignmentAttemptId: number,
-    @Param("questionId") questionId: number,
-    @Body()
-    @Req()
-    request: UserSessionRequest,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
-  ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    return this.attemptService.createQuestionResponse(
-      Number(assignmentAttemptId),
-      Number(questionId),
-      createQuestionResponseAttemptRequestDto,
-      request.userSession.role,
-      Number(request.userSession.userId),
-    );
-  }
   @Post(":attemptId/feedback")
   @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentAttemptAccessControlGuard)

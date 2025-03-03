@@ -65,6 +65,14 @@ export class LearnerUpdateAssignmentAttemptRequestDto {
     description: "questions from author",
     required: false,
   })
+  // language as a string
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: "The language the user prefers",
+    required: false,
+  })
+  language?: string;
   @IsArray()
   @IsOptional()
   authorQuestions?: QuestionDto[];
@@ -76,4 +84,13 @@ export class LearnerUpdateAssignmentAttemptRequestDto {
   @Type(() => authorAssignmentDetailsDTO)
   @IsOptional()
   authorAssignmentDetails?: authorAssignmentDetailsDTO;
+
+  // pre translated questions
+  @ApiProperty({
+    description: "Pre-translated questions",
+    required: false,
+  })
+  @IsArray()
+  @IsOptional()
+  preTranslatedQuestions?: Map<number, QuestionDto>;
 }

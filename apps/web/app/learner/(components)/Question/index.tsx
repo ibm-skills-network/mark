@@ -1,21 +1,18 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
-import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import Loading from "@/components/Loading";
-import type { AssignmentAttemptWithQuestions } from "@/config/types";
+import {
+  AssignmentAttemptWithQuestions,
+  QuestionDisplayType,
+} from "@/config/types";
 import { cn } from "@/lib/strings";
 import { getAssignment } from "@/lib/talkToBackend";
 import { useDebugLog } from "@/lib/utils";
 import { useAppConfig } from "@/stores/appConfig";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
@@ -44,7 +41,6 @@ function QuestionPage(props: Props) {
   useEffect(() => {
     setTipsVersion("v1.0"); // change this version to update the tips
   });
-
   useEffect(() => {
     const fetchAssignment = async () => {
       const assignment = await getAssignment(assignmentId);
@@ -109,11 +105,9 @@ function QuestionPage(props: Props) {
       JSON.stringify(questionsWithStatus) !== JSON.stringify(questions) ||
       id !== currentStore.activeAttemptId ||
       new Date(expiresAt).getTime() !== currentStore.expiresAt;
-
     if (hasChanges) {
       setLearnerStore(currentStore);
     }
-
     if (questions.length) {
       setPageState("success");
     } else {
@@ -157,7 +151,11 @@ function QuestionPage(props: Props) {
         <Overview questions={questionsStore} />
       </div>
       {/* Questions section that takes the remaining space */}
-      <div className="flex flex-col gap-y-5 py-6 overflow-y-auto px-4 h-full">
+      <div
+        className={`flex flex-col gap-y-5 py-6 overflow-y-auto pl-4 h-full ${
+          tips ? "pr-4" : "pr-14"
+        }`}
+      >
         {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
           ? // Display all questions
             questionsStore.map((question, index) => (
@@ -166,7 +164,10 @@ function QuestionPage(props: Props) {
                 questionNumber={index + 1}
                 questionId={question.id}
                 question={question}
-                questionDisplay={assignmentDetails.questionDisplay}
+                questionDisplay={
+                  assignmentDetails?.questionDisplay ??
+                  QuestionDisplayType.ALL_PER_PAGE
+                }
                 lastQuestionNumber={questionsStore.length}
               />
             ))
@@ -178,7 +179,10 @@ function QuestionPage(props: Props) {
                   questionNumber={index + 1}
                   questionId={question.id}
                   question={question}
-                  questionDisplay={assignmentDetails.questionDisplay}
+                  questionDisplay={
+                    assignmentDetails?.questionDisplay ??
+                    QuestionDisplayType.ONE_PER_PAGE
+                  }
                   lastQuestionNumber={questionsStore.length}
                 />
               ) : null,
