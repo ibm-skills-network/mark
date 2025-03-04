@@ -3800,9 +3800,9 @@ class-validator@^0.14.0:
     validator "^13.9.0"
 
 cld@^2.10.0:
-  version "2.10.0"
-  resolved "https://registry.yarnpkg.com/cld/-/cld-2.10.0.tgz#b65aa393e96a19e5db2be0994c54f54b992eb455"
-  integrity sha512-+v52zGGeySFSeOySBZ4s3QAjAHah9X9s8MZdZrGiITz3EdYGwiKlFPtkzg2AQei5g0fUjW6YBLS88nO7Yk/eAA==
+  version "2.10.1"
+  resolved "https://registry.yarnpkg.com/cld/-/cld-2.10.1.tgz#581a3503ff5b954e7f2a7780306b6a7c77919942"
+  integrity sha512-dvORTZwSFsaN9xC2seihcmo1gqQtfh2wSuhJ7vgDpzIHVOTMKM/cErSK8mCFZnxYRw+hzaZUCNH6VWh1OxGNkQ==
   dependencies:
     glob "7"
     node-addon-api "*"
