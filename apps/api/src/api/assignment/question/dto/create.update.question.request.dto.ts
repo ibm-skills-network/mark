@@ -14,6 +14,7 @@ import {
   Validate,
   ValidateNested,
 } from "class-validator";
+import { ScoringDto } from "../../dto/update.questions.request.dto";
 import { CustomScoringValidator } from "../custom-validator/scoring.criteria.validator";
 
 export enum ScoringType {
@@ -32,35 +33,13 @@ export interface LLMResponseQuestion {
   question: string;
   totalPoints: number;
   type: QuestionType;
-  scoring: {
-    type: string;
-    criteria?: { id: number; description: string; points: number }[];
-  };
+  scoring: ScoringDto;
   choices?: {
     choice: string;
     isCorrect: boolean;
     points: number;
     feedback: string;
   }[];
-}
-export class Scoring {
-  @ApiProperty({
-    description: "The type of scoring.",
-    type: String,
-    enum: ScoringType,
-    required: true,
-  })
-  @IsNotEmpty()
-  @IsEnum(ScoringType)
-  type: ScoringType;
-
-  @ApiProperty({
-    description:
-      'The scoring criteria. (Not required only if type is "AI_GRADED").',
-    type: [Criteria],
-  })
-  @IsOptional()
-  criteria: Criteria[] | null;
 }
 
 export class Choice {
@@ -121,12 +100,15 @@ export class CreateUpdateQuestionRequestDto {
   @IsInt()
   maxCharacters?: number;
 
-  @ApiPropertyOptional({ description: "The scoring criteria.", type: Scoring })
+  @ApiPropertyOptional({
+    description: "The scoring criteria.",
+    type: () => ScoringDto,
+  })
   @IsOptional()
-  @Type(() => Scoring)
+  @Type(() => ScoringDto)
   @ValidateNested()
   @Validate(CustomScoringValidator, [{ alwaysValidate: true }])
-  scoring?: Scoring;
+  scoring?: ScoringDto;
 
   @ApiPropertyOptional({
     description:

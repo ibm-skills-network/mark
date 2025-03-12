@@ -78,30 +78,36 @@ function LearnerHeader() {
   const [toggleEmptyWarning, setToggleEmptyWarning] = useState<boolean>(false);
   const [role, setRole] = useState<string | undefined>(undefined);
   const [languages, setLanguages] = useState<string[]>([]);
+  const getUserPreferedLanguageFromLTI = useLearnerStore(
+    (state) => state.getUserPreferedLanguageFromLTI,
+  );
   useEffect(() => {
-    // get user role
-    const getUserRole = async () => {
-      const user = await getUser();
-      if (user) {
-        setRole(user.role);
-        setReturnUrl(user.returnUrl || "");
-      }
-    };
-    void getUserRole();
-  }, [setRole, setReturnUrl]);
-
-  useEffect(() => {
-    async function fetchLanguages() {
+    async function fetchData() {
       if (!assignmentId) return;
+
       try {
         const supportedLanguages = await getSupportedLanguages(assignmentId);
         setLanguages(supportedLanguages);
+
+        const user = await getUser();
+        if (user) {
+          setRole(user.role);
+          setReturnUrl(user.returnUrl || "");
+        }
+
+        const userPreferedLanguageFromLTI =
+          await getUserPreferedLanguageFromLTI();
+        if (userPreferedLanguageFromLTI && supportedLanguages.length > 0) {
+          setUserPreferedLanguage(userPreferedLanguageFromLTI);
+        }
       } catch (error) {
         console.error(error);
       }
     }
-    void fetchLanguages();
+
+    void fetchData();
   }, [assignmentId]);
+
   const handleChangeLanguage = (selectedLanguage: string) => {
     if (selectedLanguage && selectedLanguage !== userPreferedLanguage) {
       // Update the learner’s preferred language in the store.

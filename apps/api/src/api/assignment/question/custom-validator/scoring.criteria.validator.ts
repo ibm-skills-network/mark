@@ -4,15 +4,15 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from "class-validator";
+import { ScoringDto } from "../../dto/update.questions.request.dto";
 import {
   CreateUpdateQuestionRequestDto,
-  Scoring,
   ScoringType,
 } from "../dto/create.update.question.request.dto";
 
 @ValidatorConstraint({ async: false })
 export class CustomScoringValidator implements ValidatorConstraintInterface {
-  validate(scoring: Scoring | null, arguments_: ValidationArguments) {
+  validate(scoring: ScoringDto | null, arguments_: ValidationArguments) {
     const dto: CreateUpdateQuestionRequestDto =
       arguments_.object as CreateUpdateQuestionRequestDto;
     const totalPoints = dto.totalPoints;
@@ -29,54 +29,72 @@ export class CustomScoringValidator implements ValidatorConstraintInterface {
     }
 
     const scoringType: ScoringType = scoring.type;
-    const criteria = scoring.criteria;
+    const rubrics = scoring.rubrics;
 
-    // Criteria can't be null except for AI_GRADED and shouldn't be empty
+    // Rubrics can't be null except for AI_GRADED and shouldn't be empty
     if (
-      (criteria === null && scoringType !== ScoringType.AI_GRADED) ||
-      (criteria !== null && Object.keys(criteria).length === 0)
+      (rubrics === null && scoringType !== ScoringType.AI_GRADED) ||
+      (rubrics !== null && rubrics.length === 0)
     ) {
       arguments_.constraints[0] =
-        "criteria cannot be null (except for AI_GRADED scoring type) or empty.";
+        "Rubrics cannot be null (except for AI_GRADED scoring type) or empty.";
       return false;
     }
 
     switch (scoringType) {
       case ScoringType.CRITERIA_BASED: {
-        if (!Array.isArray(criteria) || criteria.length === 0) {
+        if (!Array.isArray(rubrics) || rubrics.length === 0) {
           arguments_.constraints[0] =
-            "criteria for CRITERIA_BASED scoring type should be a non-empty array.";
+            "Rubrics for CRITERIA_BASED scoring type should be a non-empty array.";
           return false;
         }
 
-        const maxPointsCriterion = Math.max(
-          ...criteria.map((criterion) => criterion.points),
-        );
+        let totalRubricPoints = 0;
+        for (const rubric of rubrics) {
+          if (
+            !rubric.criteria ||
+            !Array.isArray(rubric.criteria) ||
+            rubric.criteria.length === 0
+          ) {
+            arguments_.constraints[0] =
+              "Each rubric must contain a non-empty array of criteria.";
+            return false;
+          }
 
-        if (maxPointsCriterion !== totalPoints) {
-          arguments_.constraints[0] = `The max points criterion specified should have a point value that should be exactly be equal to totalPoints of the question i.e. ${totalPoints}.`;
+          let rubricTotal = 0;
+          for (const criterion of rubric.criteria) {
+            if (typeof criterion.points !== "number" || criterion.points < 0) {
+              arguments_.constraints[0] =
+                "Each criterion must have a valid positive number of points.";
+              return false;
+            }
+            rubricTotal += criterion.points;
+          }
+
+          totalRubricPoints += rubricTotal;
+        }
+
+        if (totalRubricPoints !== totalPoints) {
+          arguments_.constraints[0] = `The total points across all rubrics (${totalRubricPoints}) must be exactly equal to the totalPoints of the question (${totalPoints}).`;
           return false;
         }
 
         break;
       }
+
       case ScoringType.LOSS_PER_MISTAKE: {
-        if (
-          typeof criteria !== "object" ||
-          criteria === null ||
-          Object.keys(criteria).length !== 1 ||
-          typeof criteria["loss_per_mistake"] !== "number"
-        ) {
+        if (scoring.rubrics !== null) {
           arguments_.constraints[0] =
-            "criteria for LOSS_PER_MISTAKE scoring type should be an object with a single key 'loss_per_mistake' and the value should be a number.";
+            "Rubrics for LOSS_PER_MISTAKE scoring type should be null.";
           return false;
         }
         break;
       }
+
       case ScoringType.AI_GRADED: {
-        if (criteria !== null) {
+        if (scoring.rubrics !== null) {
           arguments_.constraints[0] =
-            "criteria for AI_GRADED scoring type should be null.";
+            "Rubrics for AI_GRADED scoring type should be null.";
           return false;
         }
         break;
@@ -86,8 +104,7 @@ export class CustomScoringValidator implements ValidatorConstraintInterface {
     return true;
   }
 
-  defaultMessage(arguments_: ValidationArguments) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return arguments_.constraints[0];
+  defaultMessage(arguments_: ValidationArguments): string {
+    return (arguments_.constraints as string[])[0];
   }
 }

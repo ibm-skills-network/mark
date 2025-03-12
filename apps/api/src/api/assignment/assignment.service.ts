@@ -486,6 +486,8 @@ export class AssignmentService {
     // Ensure questions is an array even if it's null.
     const safeQuestions = questions ?? [];
 
+    // const OnlyEnglish = process.env.NODE_ENV === "development" ? true : false;
+    const OnlyEnglish = false;
     if (!introduction) {
       this.logger.error(
         `Introduction not provided for assignment: ${assignmentId}`,
@@ -502,8 +504,7 @@ export class AssignmentService {
       throw new Error("Job not found");
     }
 
-    const supportedLanguages = getAllLanguageCodes();
-    console.log("Supported languages:", supportedLanguages);
+    const supportedLanguages = OnlyEnglish ? ["en"] : getAllLanguageCodes();
 
     // Map to track backend IDs for questions.
     const frontendToBackendIdMap = new Map<number, number>();
@@ -520,8 +521,8 @@ export class AssignmentService {
     }
     const totalTranslationTasks =
       totalQuestionTranslations + totalVariantTranslations;
-    const translationBasePercentage = 20; // translations start at 20%
-    const translationRange = 40; // translations account for 20%..60%
+    const translationBasePercentage = 20;
+    const translationRange = 40;
     let completedTranslations = 0;
     let currentTranslationProgress = translationBasePercentage;
 

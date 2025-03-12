@@ -1,8 +1,8 @@
-import TipsView from "@/app/learner/(components)/Question/TipsView";
 import MultipleChoiceSVG from "@/components/svgs/MC";
 import Tooltip from "@/components/Tooltip";
 import type {
   CreateQuestionRequest,
+  Criteria,
   QuestionAuthorStore,
   QuestionType,
   QuestionVariants,
@@ -19,18 +19,14 @@ import {
   ArrowPathRoundedSquareIcon,
   ArrowUpTrayIcon,
   Bars3BottomLeftIcon,
-  CameraIcon,
   CodeBracketIcon,
   DocumentArrowUpIcon,
   DocumentChartBarIcon,
   DocumentDuplicateIcon,
   DocumentTextIcon,
   LinkIcon,
-  MicrophoneIcon,
   PencilSquareIcon,
   PlusIcon,
-  PresentationChartBarIcon,
-  TableCellsIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import {
@@ -39,22 +35,14 @@ import {
 } from "@heroicons/react/24/solid";
 import {
   IconArrowsShuffle,
-  IconBrandGithub,
   IconCheckbox,
   IconCircleCheck,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation"; // Importing useRouter for navigation
-import {
-  FC,
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { FC, Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import QuestionWrapper from "../QuestionWrapper";
+import QuestionWrapper from "../(questionComponents)/QuestionWrapper";
+import MarkdownEditor from "@/components/MarkDownEditor";
 
 // Props type definition for the Question component
 interface QuestionProps {
@@ -86,9 +74,6 @@ const Question: FC<QuestionProps> = ({
     question.maxCharacters || null,
   );
   const setQuestionTitle = useAuthorStore((state) => state.setQuestionTitle);
-  const setQuestionVariantTitle = useAuthorStore(
-    (state) => state.setQuestionVariantTitle,
-  );
   const addVariant = useAuthorStore((state) => state.addVariant);
   const replaceQuestion = useAuthorStore((state) => state.replaceQuestion);
   const deleteVariant = useAuthorStore((state) => state.deleteVariant);
@@ -105,7 +90,6 @@ const Question: FC<QuestionProps> = ({
   const showWordCountInput =
     questionStates[question.id]?.showWordCountInput || false;
   const countMode = questionStates[question.id]?.countMode || "CHARACTER";
-
   const [toggleQuestion, setToggleQuestion] = useState<boolean>(
     !collapse || isFocusedQuestion,
   );
@@ -134,12 +118,10 @@ const Question: FC<QuestionProps> = ({
       (c, index) => c.id || index + 1,
     ) || [1, 2],
   });
-  const [questionMaxPoints, setQuestionMaxPoints] = useState<number>(
-    question.totalPoints || 1,
-  );
   const [inputValue, setInputValue] = useState<string>(
     questionIndex.toString(),
   );
+
   // Function to handle deleting a variant
   const handleDeleteVariant = (variantId: number) => {
     try {
@@ -149,21 +131,6 @@ const Question: FC<QuestionProps> = ({
       toast.error("Failed to delete variant");
     }
   };
-  const modifyQuestion = useAuthorStore((state) => state.modifyQuestion);
-  // Set initial question max points based on criteria if applicable
-  useEffect(() => {
-    if (
-      (question.type === "TEXT" || question.type === "URL") &&
-      question.scoring?.type === "CRITERIA_BASED" &&
-      question.scoring?.criteria &&
-      question.scoring.criteria?.length > 0
-    ) {
-      setQuestionMaxPoints(question.scoring.criteria.at(0).points);
-    } else {
-      setQuestionMaxPoints(question.totalPoints);
-    }
-  }, [question.type, question.scoring]);
-
   // Apply the checkQuestionToggle effect whenever the questionType changes
   useEffect(() => {
     // checkQuestionToggle;
@@ -186,14 +153,10 @@ const Question: FC<QuestionProps> = ({
       if (params.questionType !== undefined) {
         updatedData.type = params.questionType;
       }
-      if (params.questionCriteria !== undefined) {
+      if (params.rubrics !== undefined) {
         updatedData.scoring = {
           type: "CRITERIA_BASED",
-          criteria: params.questionCriteria.criteriaDesc?.map((desc, idx) => ({
-            id: params.questionCriteria.criteriaIds[idx],
-            description: desc,
-            points: params.questionCriteria.points[idx],
-          })),
+          rubrics: params.rubrics,
         };
       }
       if (params.randomizedChoices !== undefined) {
@@ -217,8 +180,7 @@ const Question: FC<QuestionProps> = ({
       const updatedQuestion: Partial<QuestionAuthorStore> = {
         id: questionId,
         responseType: params.responseType ?? responseType,
-        totalPoints:
-          params.questionCriteria?.points?.[0] ?? question.totalPoints,
+        totalPoints: params.totalPoints ?? question.totalPoints,
         question: params.questionTitle ?? questionTitle,
         type: params.questionType ?? questionType,
         maxWords: params.maxWordCount,
@@ -227,17 +189,9 @@ const Question: FC<QuestionProps> = ({
           params.randomizedChoices ?? question.randomizedChoices,
         scoring: {
           type: "CRITERIA_BASED",
-          criteria: params.questionCriteria
-            ? params.questionCriteria.criteriaDesc?.map((desc, index) => ({
-                id: params.questionCriteria.criteriaIds[index],
-                description: desc,
-                points: params.questionCriteria.points[index],
-              }))
-            : questionCriteria.criteriaDesc?.map((desc, index) => ({
-                id: questionCriteria.criteriaIds[index],
-                description: desc,
-                points: questionCriteria.points[index],
-              })),
+          rubrics: params.rubrics
+            ? params.rubrics
+            : (question.scoring?.rubrics ?? []),
         },
       };
       useAuthorStore.getState().modifyQuestion(questionId, updatedQuestion);
@@ -476,6 +430,7 @@ const Question: FC<QuestionProps> = ({
   const toggleRandomizedChoicesMode = useAuthorStore(
     (state) => state.toggleRandomizedChoicesMode,
   );
+
   const randomizedChoices = (
     questionId: number,
     questionIndex: number,
@@ -1003,38 +958,8 @@ const Question: FC<QuestionProps> = ({
               <button
                 className="text-gray-500"
                 onClick={() => {
-                  const questionData: QuestionAuthorStore = {
-                    question: questionTitle,
-                    totalPoints: Math.max(...questionCriteria.points),
-                    type: questionType as
-                      | "TEXT"
-                      | "URL"
-                      | "MULTIPLE_CORRECT"
-                      | "TRUE_FALSE"
-                      | "SINGLE_CORRECT"
-                      | "UPLOAD",
-                    maxWords: maxWordCount,
-                    choices: question.choices,
-                    answer: question.answer,
-                    maxCharacters: maxCharacters,
-                    index: questionIndex,
-                    scoring: {
-                      type: "CRITERIA_BASED",
-                      criteria: questionCriteria.criteriaDesc?.map(
-                        (criteria, index) => {
-                          return {
-                            id: questionCriteria.criteriaIds[index],
-                            description: criteria,
-                            points: questionCriteria.points[index],
-                          };
-                        },
-                      ),
-                    },
-                    id: 0,
-                    assignmentId: 0,
-                  };
                   try {
-                    duplicateThisQuestion(questionData);
+                    duplicateThisQuestion(question);
                   } catch (error) {
                     toast.error("Failed to duplicate question");
                   }
@@ -1216,7 +1141,7 @@ const Question: FC<QuestionProps> = ({
 
           {questionTitle?.length > 0 &&
           !preview &&
-          (question.scoring?.criteria.length > 0 ||
+          (question.scoring?.rubrics?.length > 0 ||
             question.choices?.length > 0) ? (
             variantLoading ? (
               <div className="flex items-center justify-center w-full gap-4">
@@ -1224,8 +1149,6 @@ const Question: FC<QuestionProps> = ({
               </div>
             ) : (
               <>
-                <div className="border-t-2 border-gray-200 w-full"></div>
-
                 <div className="flex items-center justify-center w-full gap-4">
                   {/* Add New Variant Button */}
                   <button
@@ -1237,6 +1160,7 @@ const Question: FC<QuestionProps> = ({
                       Create Blank Variant
                     </span>
                   </button>
+
                   {/* add variant using ai */}
                   <button
                     onClick={handleAddVariantUsingAi}

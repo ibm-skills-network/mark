@@ -19,6 +19,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from "class-validator";
+import { ScoringType } from "../question/dto/create.update.question.request.dto";
 
 export enum VariantType {
   REWORDED = "REWORDED",
@@ -55,19 +56,38 @@ class CriteriaDto {
   @IsInt()
   points: number;
 }
-class ScoringDto {
-  @ApiProperty({ description: "Type of scoring", type: String })
+export class RubricDto {
+  @ApiProperty({ description: "Rubric Question", type: String })
   @IsString()
-  type: string;
+  rubricQuestion: string;
 
   @ApiProperty({
-    description: "Criteria for scoring",
+    description: "Criteria for the rubric",
     type: [CriteriaDto],
   })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CriteriaDto)
   criteria: CriteriaDto[];
+}
+export class ScoringDto {
+  @ApiProperty({
+    description: "The type of scoring.",
+    type: String,
+    enum: ScoringType,
+    required: true,
+  })
+  @IsNotEmpty()
+  type: ScoringType;
+
+  @ApiProperty({
+    description: "Criteria for scoring",
+    type: [RubricDto],
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RubricDto)
+  rubrics: RubricDto[];
 }
 export class VariantDto {
   @ApiProperty({ description: "Variant content of the question", type: String })

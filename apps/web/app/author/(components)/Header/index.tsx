@@ -4,8 +4,11 @@ import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearne
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import ProgressBar, { JobStatus } from "@/components/ProgressBar";
 import {
+  Choice,
+  Criteria,
   Question,
   QuestionAuthorStore,
+  QuestionVariants,
   ReplaceAssignmentRequest,
 } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
@@ -29,6 +32,7 @@ import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import { encodeFields } from "@/app/Helpers/encoder";
 import { decodeFields } from "@/app/Helpers/decoder";
+import { stripHtml } from "@/app/Helpers/strippers";
 
 function AuthorHeader() {
   const router = useRouter();
@@ -164,7 +168,41 @@ function AuthorHeader() {
         ...assignment,
         ...decodedFields,
       };
+      const questions: QuestionAuthorStore[] = assignment.questions?.map(
+        (question: QuestionAuthorStore, index: number) => {
+          const criteriaWithId = question.scoring?.criteria?.map(
+            (criteria: Criteria, criteriaIndex: number) => ({
+              ...criteria,
+              index: criteriaIndex + 1,
+            }),
+          );
+          const parsedVariants: QuestionVariants[] =
+            question.variants?.map((variant: QuestionVariants) => ({
+              ...variant,
+              choices:
+                typeof variant.choices === "string"
+                  ? (JSON.parse(variant.choices) as Choice[])
+                  : variant.choices,
+            })) || [];
 
+          return {
+            ...question,
+            alreadyInBackend: true,
+            variants: parsedVariants,
+            scoring: {
+              type: "CRITERIA_BASED",
+              rubrics: [
+                {
+                  rubricQuestion: stripHtml(question.question),
+                  criteria: criteriaWithId || [],
+                },
+              ],
+            },
+            index: index + 1,
+          };
+        },
+      );
+      decodedAssignment.questions = questions;
       useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
 
       // Author store
@@ -176,34 +214,34 @@ function AuthorHeader() {
       setAuthorStore({
         ...cleanedAuthorData,
       });
-      const mergedAssignmentConfigData = mergeData(
-        useAssignmentConfig.getState(),
-        decodedAssignment,
-      );
+      // const mergedAssignmentConfigData = mergeData(
+      //   useAssignmentConfig.getState(),
+      //   decodedAssignment,
+      // );
       if (decodedAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: decodedAssignment.questionVariationNumber,
         });
       }
-      const {
-        updatedAt: authorStoreUpdatedAt,
-        ...cleanedAssignmentConfigData
-      } = mergedAssignmentConfigData;
-      setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
-      });
-      // Merge assignment feedback config data.
-      const mergedAssignmentFeedbackData = mergeData(
-        useAssignmentFeedbackConfig.getState(),
-        decodedAssignment,
-      );
-      const {
-        updatedAt: assignmentFeedbackUpdatedAt,
-        ...cleanedAssignmentFeedbackData
-      } = mergedAssignmentFeedbackData;
-      setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
-      });
+      // const {
+      //   updatedAt: authorStoreUpdatedAt,
+      //   ...cleanedAssignmentConfigData
+      // } = mergedAssignmentConfigData;
+      // setAssignmentConfigStore({
+      //   ...cleanedAssignmentConfigData,
+      // });
+      // // Merge assignment feedback config data.
+      // const mergedAssignmentFeedbackData = mergeData(
+      //   useAssignmentFeedbackConfig.getState(),
+      //   decodedAssignment,
+      // );
+      // const {
+      //   updatedAt: assignmentFeedbackUpdatedAt,
+      //   ...cleanedAssignmentFeedbackData
+      // } = mergedAssignmentFeedbackData;
+      // setAssignmentFeedbackConfigStore({
+      //   ...cleanedAssignmentFeedbackData,
+      // });
 
       useAuthorStore.getState().setName(decodedAssignment.name);
       setPageState("success");
@@ -235,11 +273,26 @@ function AuthorHeader() {
 
     void fetchData();
   }, [assignmentId, router]);
+  function calculateTotalPoints(questions: QuestionAuthorStore[]) {
+    return questions.map((question: QuestionAuthorStore) => {
+      const totalPoints = question.scoring?.rubrics
+        ? question.scoring.rubrics.reduce(
+            (sum, rubric) =>
+              sum +
+              Math.max(...rubric.criteria.map((crit) => crit.points || 0)),
+            0,
+          )
+        : 0;
 
+      return {
+        ...question,
+        totalPoints,
+      };
+    });
+  }
   // Handle Publish Button: prepare data and subscribe to SSE updates.
   async function handlePublishButton() {
     setSubmitting(true);
-    // Reset progress state.
     setJobProgress(0);
     setCurrentMessage("Initializing publishing...");
     setProgressStatus("In Progress");
@@ -254,7 +307,7 @@ function AuthorHeader() {
     }
 
     // Deep clone current & original questions for comparison.
-    const clonedCurrentQuestions = JSON.parse(
+    let clonedCurrentQuestions = JSON.parse(
       JSON.stringify(questions),
     ) as QuestionAuthorStore[];
     const clonedOriginalQuestions = JSON.parse(
@@ -271,6 +324,8 @@ function AuthorHeader() {
     }
     removeEphemeralFields(clonedCurrentQuestions);
     removeEphemeralFields(clonedOriginalQuestions);
+
+    clonedCurrentQuestions = calculateTotalPoints(clonedCurrentQuestions);
 
     const questionsAreDifferent =
       JSON.stringify(clonedCurrentQuestions) !==
@@ -301,13 +356,17 @@ function AuthorHeader() {
       showSubmissionFeedback,
       showQuestionScore,
       showAssignmentScore,
-      questions: questionsAreDifferent ? processQuestions(questions) : null,
+      questions: questionsAreDifferent
+        ? processQuestions(clonedCurrentQuestions)
+        : null,
     };
+
     if (assignmentData.introduction === null) {
       toast.error("Introduction is required to publish the assignment.");
       setSubmitting(false);
       return;
     }
+
     try {
       const response = await publishAssignment(
         activeAssignmentId,
@@ -320,7 +379,7 @@ function AuthorHeader() {
           (percentage, progress) => {
             setJobProgress(percentage);
             setCurrentMessage(progress);
-            setQuestions(questions);
+            setQuestions(clonedCurrentQuestions);
           },
           setQuestions,
         );

@@ -1,10 +1,12 @@
-import type {
+import {
   AuthorAssignmentState,
   AuthorFileUploads,
   Choice,
   Criteria,
   QuestionAuthorStore,
   QuestionVariants,
+  RubricType,
+  Scoring,
 } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
@@ -51,9 +53,45 @@ export type AuthorActions = {
     newQuestion: QuestionAuthorStore,
   ) => void;
   modifyQuestion: (questionId: number, modifiedData: OptionalQuestion) => void;
-  setCriterias: (questionId: number, criterias: Criteria[]) => Criteria[];
-  addCriteria: (questionId: number, criteria: Criteria) => void;
-  removeCriteria: (questionId: number, criteriaIndex: number) => void;
+  addOneRubric: (questionId: number, variantId?: number) => void;
+  removeRubric: (
+    questionId: number,
+    rubricIndex: number,
+    variantId?: number,
+  ) => void;
+  setRubricCriteriaDescription: (
+    questionId: number,
+    variantId: number,
+    rubricIndex: number,
+    criteriaIndex: number,
+    value: string,
+  ) => void;
+  setQuestionScoring: (
+    questionId: number,
+    scoring: Scoring,
+    variantId?: number,
+  ) => void;
+  setRubricQuestionText: (
+    questionId: number,
+    variantId: number,
+    rubricIndex: number,
+    value: string,
+  ) => void;
+  setCriterias: (
+    questionId: number,
+    rubricIndex: number,
+    criterias: Criteria[],
+  ) => Criteria[];
+  addCriteria: (
+    questionId: number,
+    rubricIndex: number,
+    criteria: Criteria,
+  ) => void;
+  removeCriteria: (
+    questionId: number,
+    rubricIndex: number,
+    criteriaIndex: number,
+  ) => void;
   addTrueFalseChoice: (
     questionId: number,
     isTrueOrFalse: boolean,
@@ -109,6 +147,11 @@ export type AuthorActions = {
     variantId: number,
     updatedData: Partial<QuestionVariants>,
   ) => void;
+  updateQuestionTitle: (
+    questionId: number,
+    title: string,
+    variantId?: number,
+  ) => void;
   deleteVariant: (questionId: number, variantId: number) => void;
   setQuestionOrder: (order: number[]) => void;
   setAuthorStore: (state: Partial<AuthorState>) => void;
@@ -129,10 +172,12 @@ interface QuestionState {
       countMode?: "CHARACTER" | "WORD";
       toggleTitle?: boolean;
       criteriaMode?: "AI_GEN" | "CUSTOM";
+      selectedRubric?: RubricType;
       variants?: {
         [variantId: number]: {
           toggleTitle?: boolean;
           isloading?: boolean;
+          selectedRubric?: RubricType;
         };
       };
     };
@@ -147,6 +192,15 @@ interface QuestionState {
     value: boolean,
     variantId?: number,
   ) => void;
+  setSelectedRubric: (
+    questionId: number,
+    value: RubricType,
+    variantId?: number,
+  ) => void;
+  getSelectedRubric: (
+    questionId: number,
+    variantId?: number,
+  ) => RubricType | undefined;
   setShowCriteriaHeader: (value: boolean) => void;
   setCriteriaMode: (questionId: number, mode: "AI_GEN" | "CUSTOM") => void;
   toggleLoading: (
@@ -173,6 +227,46 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
           },
         })),
 
+      setSelectedRubric: (questionId, value, variantId) => {
+        if (variantId !== undefined) {
+          set((state) => ({
+            questionStates: {
+              ...state.questionStates,
+              [questionId]: {
+                ...state.questionStates[questionId],
+                variants: {
+                  ...state.questionStates[questionId]?.variants,
+                  [variantId]: {
+                    ...state.questionStates[questionId]?.variants?.[variantId],
+                    selectedRubric: value,
+                  },
+                },
+              },
+            },
+          }));
+        } else {
+          set((state) => ({
+            questionStates: {
+              ...state.questionStates,
+              [questionId]: {
+                ...state.questionStates[questionId],
+                selectedRubric: value,
+              },
+            },
+          }));
+        }
+      },
+      getSelectedRubric: (questionId, variantId) => {
+        const state = get();
+        if (variantId) {
+          return state.questionStates[questionId]?.variants?.[variantId]
+            ?.selectedRubric;
+        }
+        return (
+          state.questionStates[questionId]?.selectedRubric ??
+          RubricType.COMPREHENSIVE
+        );
+      },
       setCountMode: (questionId, mode) =>
         set((state) => ({
           questionStates: {
@@ -319,6 +413,215 @@ export const useAuthorStore = createWithEqualityFn<
         setRole: (role) => set({ role }),
         learningObjectives: "",
         originalAssignment: null,
+        removeRubric(questionId, rubricIndex, variantId) {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId) {
+                if (variantId) {
+                  const updatedVariants = q.variants.map((variant) => {
+                    if (variant.id === variantId) {
+                      const rubrics = variant.scoring.rubrics || [];
+                      rubrics.splice(rubricIndex, 1);
+                      return {
+                        ...variant,
+                        scoring: { ...variant.scoring, rubrics },
+                      };
+                    }
+                    return variant;
+                  });
+                  return { ...q, variants: updatedVariants };
+                }
+                const rubrics = q.scoring.rubrics || [];
+                rubrics.splice(rubricIndex, 1);
+                return { ...q, scoring: { ...q.scoring, rubrics } };
+              }
+              return q;
+            }),
+          }));
+        },
+        updateQuestionTitle: (questionId, title, variantId) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId) {
+                if (variantId) {
+                  const updatedVariants = q.variants.map((variant) =>
+                    variant.id === variantId
+                      ? { ...variant, variantContent: title }
+                      : variant,
+                  );
+                  return { ...q, variants: updatedVariants };
+                }
+                return { ...q, question: title };
+              }
+              return q;
+            }),
+          }));
+        },
+        addOneRubric: (questionId, variantId) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId) {
+                const newRubric = {
+                  rubricQuestion: "",
+                  criteria: [
+                    { id: 1, description: "", points: 1 },
+                    { id: 2, description: "", points: 0 },
+                  ],
+                };
+
+                if (variantId) {
+                  const updatedVariants = q.variants.map((variant) =>
+                    variant.id === variantId
+                      ? {
+                          ...variant,
+                          scoring: {
+                            ...variant.scoring,
+                            rubrics:
+                              variant.scoring && variant.scoring.rubrics
+                                ? [...variant.scoring.rubrics, newRubric]
+                                : [newRubric],
+                          },
+                        }
+                      : variant,
+                  );
+                  return { ...q, variants: updatedVariants };
+                } else {
+                  const rubrics =
+                    q.scoring && q.scoring.rubrics
+                      ? [...q.scoring.rubrics]
+                      : [];
+                  rubrics.push(newRubric);
+                  return { ...q, scoring: { ...q.scoring, rubrics } };
+                }
+              }
+              return q;
+            }),
+          }));
+        },
+
+        setRubricCriteriaDescription: (
+          questionId,
+          variantId,
+          rubricIndex,
+          criteriaIndex,
+          value,
+        ) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId) {
+                if (variantId) {
+                  const updatedVariants = q.variants.map((variant) => {
+                    if (variant.id === variantId) {
+                      const rubrics =
+                        variant.scoring && variant.scoring.rubrics
+                          ? variant.scoring.rubrics.map((r) => ({
+                              ...r,
+                              criteria: r.criteria ? [...r.criteria] : [],
+                            }))
+                          : [];
+
+                      if (!rubrics[rubricIndex]) {
+                        rubrics[rubricIndex] = {
+                          rubricQuestion: "",
+                          criteria: [],
+                        };
+                      }
+                      if (!rubrics[rubricIndex].criteria[criteriaIndex]) {
+                        rubrics[rubricIndex].criteria[criteriaIndex] = {
+                          id: criteriaIndex + 1,
+                          description: "",
+                          points: 0,
+                        };
+                      }
+                      rubrics[rubricIndex].criteria[criteriaIndex].description =
+                        value;
+
+                      return {
+                        ...variant,
+                        scoring: { ...variant.scoring, rubrics },
+                      };
+                    }
+                    return variant;
+                  });
+                  return { ...q, variants: updatedVariants };
+                } else {
+                  const rubrics = q.scoring.rubrics
+                    ? q.scoring.rubrics.map((rubric) => ({
+                        ...rubric,
+                        criteria: rubric.criteria ? [...rubric.criteria] : [],
+                      }))
+                    : [];
+                  if (!rubrics[rubricIndex]) {
+                    rubrics[rubricIndex] = {
+                      rubricQuestion: "",
+                      criteria: [],
+                    };
+                  }
+                  if (!rubrics[rubricIndex].criteria[criteriaIndex]) {
+                    rubrics[rubricIndex].criteria[criteriaIndex] = {
+                      id: criteriaIndex + 1,
+                      description: "",
+                      points: 0,
+                    };
+                  }
+                  rubrics[rubricIndex].criteria[criteriaIndex].description =
+                    value;
+                  return { ...q, scoring: { ...q.scoring, rubrics } };
+                }
+              }
+              return q;
+            }),
+          }));
+        },
+
+        setRubricQuestionText: (questionId, variantId, rubricIndex, value) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId) {
+                if (variantId) {
+                  const updatedVariants = q.variants?.map((variant) => {
+                    if (variant.id === variantId) {
+                      const oldRubrics = variant.scoring?.rubrics
+                        ? [...variant.scoring.rubrics]
+                        : [];
+                      const rubric = oldRubrics[rubricIndex]
+                        ? { ...oldRubrics[rubricIndex] }
+                        : { rubricQuestion: "", criteria: [] };
+                      rubric.rubricQuestion = value;
+                      oldRubrics[rubricIndex] = rubric;
+                      return {
+                        ...variant,
+                        scoring: {
+                          ...variant.scoring,
+                          rubrics: oldRubrics,
+                        },
+                      };
+                    }
+                    return variant;
+                  });
+                  return { ...q, variants: updatedVariants };
+                } else {
+                  const oldRubrics = q.scoring?.rubrics
+                    ? [...q.scoring.rubrics]
+                    : [];
+                  const rubric = oldRubrics[rubricIndex]
+                    ? { ...oldRubrics[rubricIndex] }
+                    : { rubricQuestion: "", criteria: [] };
+                  rubric.rubricQuestion = value;
+                  oldRubrics[rubricIndex] = rubric;
+                  return {
+                    ...q,
+                    scoring: {
+                      ...q.scoring,
+                      rubrics: oldRubrics,
+                    },
+                  };
+                }
+              }
+              return q;
+            }),
+          }));
+        },
         setOriginalAssignment: (assignment: AuthorAssignmentState) =>
           set({ originalAssignment: assignment }),
         fileUploaded: [],
@@ -401,16 +704,18 @@ export const useAuthorStore = createWithEqualityFn<
 
             return { questions: updatedQuestions };
           }),
-        setCriterias: (questionId, criterias) => {
+        setCriterias: (questionId, rubricIndex, criterias) => {
           set((state) => ({
             questions: state.questions.map((q) => {
               if (q.id === questionId) {
+                const rubrics = q.scoring.rubrics ? [...q.scoring.rubrics] : [];
+                if (!rubrics[rubricIndex]) {
+                  rubrics[rubricIndex] = { rubricQuestion: "", criteria: [] };
+                }
+                rubrics[rubricIndex].criteria = criterias;
                 return {
                   ...q,
-                  scoring: {
-                    ...q.scoring,
-                    criteria: criterias,
-                  },
+                  rubrics,
                 };
               }
               return q;
@@ -418,40 +723,79 @@ export const useAuthorStore = createWithEqualityFn<
           }));
           return criterias;
         },
-        addCriteria: (questionId, criteria) => {
+
+        addCriteria: (questionId, rubricIndex, criteria) => {
           set((state) => ({
             questions: state.questions.map((q) => {
               if (q.id === questionId) {
+                const rubrics = q.scoring.rubrics ? [...q.scoring.rubrics] : [];
+                if (!rubrics[rubricIndex]) {
+                  rubrics[rubricIndex] = { rubricQuestion: "", criteria: [] };
+                }
+                rubrics[rubricIndex].criteria = [
+                  ...rubrics[rubricIndex].criteria,
+                  criteria,
+                ];
                 return {
                   ...q,
-                  scoring: {
-                    ...q.scoring,
-                    criteria: [...q.scoring.criteria, criteria],
-                  },
+                  rubrics,
                 };
               }
               return q;
             }),
           }));
         },
-        removeCriteria: (questionId, criteriaIndex) => {
+        removeCriteria: (questionId, rubricIndex, criteriaIndex) => {
           set((state) => ({
             questions: state.questions.map((q) => {
-              if (q.id === questionId) {
+              if (q.id === questionId && q.scoring.rubrics) {
+                const updatedRubrics = q.scoring.rubrics.map(
+                  (rubric, index) => {
+                    if (index === rubricIndex) {
+                      return {
+                        ...rubric,
+                        criteria: rubric.criteria.filter(
+                          (_, idx) => idx !== criteriaIndex,
+                        ),
+                      };
+                    }
+                    return rubric;
+                  },
+                );
                 return {
                   ...q,
-                  scoring: {
-                    ...q.scoring,
-                    criteria: q.scoring.criteria.filter(
-                      (_, index) => index !== criteriaIndex,
-                    ),
-                  },
+                  rubrics: updatedRubrics,
                 };
               }
               return q;
             }),
           }));
         },
+        setQuestionScoring: (
+          questionId: number,
+          scoring: Scoring,
+          variantId?: number,
+        ) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              console.log("scoring", scoring);
+              if (q.id === questionId) {
+                if (variantId) {
+                  const updatedVariants = q.variants.map((variant) => {
+                    if (variant.id === variantId) {
+                      return { ...variant, scoring };
+                    }
+                    return variant;
+                  });
+                  return { ...q, variants: updatedVariants };
+                }
+                return { ...q, scoring };
+              }
+              return q;
+            }),
+          }));
+        },
+
         setChoices: (questionId, choices, variantId) =>
           set((state) => {
             if (variantId) {
@@ -999,7 +1343,6 @@ export const useAuthorStore = createWithEqualityFn<
             gradingCriteriaOverview: "",
             questions: [],
             questionOrder: [],
-            pageState: "loading",
             updatedAt: undefined,
             focusedQuestionId: undefined,
             errors: {},
@@ -1020,6 +1363,8 @@ export const useAuthorStore = createWithEqualityFn<
       {
         name: "author",
         enabled: process.env.NODE_ENV === "development",
+        trace: true,
+        traceLimit: 25,
       },
     ),
     {

@@ -12,6 +12,7 @@ export interface UserSession {
   groupId: string;
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
+  launch_presentation_locale?: string;
 }
 
 export interface UserSessionPayload {
@@ -21,6 +22,7 @@ export interface UserSessionPayload {
   groupID: string;
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
+  launch_presentation_locale?: string;
 }
 
 export interface UserSessionRequest extends Request {

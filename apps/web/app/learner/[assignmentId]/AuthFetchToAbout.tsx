@@ -34,29 +34,49 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   const userPreferedLanguage = useSearchParams().get("lang") || "en";
   const isQuestionPage = useSearchParams().get("question") === "true";
   const isMounted = true; // Prevent memory leak
-
+  const [error, setError] = useState<{
+    code: number;
+    message: string;
+  } | null>(null);
   const fetchData = async () => {
     setIsLoading(true);
     try {
       if (role === "learner") {
-        const [assignmentData, attemptsData] = await Promise.all([
-          getAssignment(assignmentId, userPreferedLanguage, cookie),
-          getAttempts(assignmentId, cookie),
-        ]);
-        if (isMounted) {
-          const decodedFields = decodeFields({
-            introduction: assignmentData?.introduction,
-            instructions: assignmentData?.instructions,
-            gradingCriteriaOverview: assignmentData?.gradingCriteriaOverview,
+        try {
+          // Fetch assignment first to handle errors early
+          const assignmentData = await getAssignment(
+            assignmentId,
+            userPreferedLanguage,
+            cookie,
+          );
+
+          // Fetch attempts separately, so it's not blocked if assignment fetching fails
+          const attemptsData = await getAttempts(assignmentId, cookie);
+
+          if (isMounted && assignmentData) {
+            const decodedFields = decodeFields({
+              introduction: assignmentData?.introduction,
+              instructions: assignmentData?.instructions,
+              gradingCriteriaOverview: assignmentData?.gradingCriteriaOverview,
+            });
+
+            const decodedAssignment = {
+              ...assignmentData,
+              ...decodedFields,
+            };
+
+            setAssignment(decodedAssignment);
+            setListOfAttempts(attemptsData);
+          }
+        } catch (error) {
+          console.error("Error loading assignment or attempts:", error);
+          setError({
+            code: 403,
+            message: "You are not authorized to view this page",
           });
-
-          const decodedAssignment = {
-            ...assignmentData,
-            ...decodedFields,
-          };
-
-          setAssignment(decodedAssignment);
-          setListOfAttempts(attemptsData);
+          if (isMounted) {
+            setAssignment(null);
+          }
         }
       } else if (role === "author") {
         const assignmentDetails = getStoredData(
@@ -105,7 +125,9 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   if (isLoading) {
     return <LoadingPage animationData={animationData} />;
   }
-
+  if (error) {
+    return <ErrorPage error={error.message} statusCode={error.code} />;
+  }
   if (!assignment) {
     const errorMessage =
       role === "learner"

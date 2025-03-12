@@ -67,6 +67,7 @@ import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
+import { stripHtml } from "@/app/Helpers/strippers";
 
 interface Props {
   assignmentId: number;
@@ -184,7 +185,12 @@ const AuthorQuestionsPage: FC<Props> = ({
                   variants: parsedVariants,
                   scoring: {
                     type: "CRITERIA_BASED",
-                    criteria: criteriaWithId || [],
+                    rubrics: [
+                      {
+                        rubricQuestion: stripHtml(question.question),
+                        criteria: criteriaWithId || [],
+                      },
+                    ],
                   },
                   index: index + 1,
                 };
@@ -193,9 +199,12 @@ const AuthorQuestionsPage: FC<Props> = ({
             if (questions?.length > 0) {
               questions.forEach((question) => {
                 // parse choices in variants to make it choices object
-                question.scoring.criteria = question.scoring.criteria.sort(
-                  (a, b) => b.points - a.points,
-                );
+                // loop through rubrics and sort the criteria by points
+                question.scoring.rubrics.forEach((rubric) => {
+                  rubric.criteria = rubric.criteria.sort(
+                    (a, b) => a.points - b.points,
+                  );
+                });
               });
               setQuestions(questions);
               setFocusedQuestionId(questions[0].id);
@@ -335,7 +344,6 @@ const AuthorQuestionsPage: FC<Props> = ({
       type: "EMPTY",
       scoring: {
         type: "CRITERIA_BASED",
-        criteria: [],
       },
     };
     const questionId = generateTempQuestionId();
@@ -371,7 +379,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         toast.error("Failed to add question");
         return;
       }
-
+      console.log("question", question);
       const newQuestion = {
         ...question,
         id: questionId,

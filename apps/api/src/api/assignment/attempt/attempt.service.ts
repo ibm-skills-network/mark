@@ -31,11 +31,8 @@ import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.ques
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
 import type { LearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
-import { QuestionDto } from "../dto/update.questions.request.dto";
-import {
-  Choice,
-  Scoring,
-} from "../question/dto/create.update.question.request.dto";
+import { QuestionDto, ScoringDto } from "../dto/update.questions.request.dto";
+import { Choice } from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
@@ -567,11 +564,11 @@ export class AttemptService {
             maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
             scoring:
               typeof variant.scoring === "string"
-                ? (JSON.parse(variant.scoring) as Scoring)
-                : ((variant.scoring as unknown as Scoring) ??
+                ? (JSON.parse(variant.scoring) as ScoringDto)
+                : ((variant.scoring as unknown as ScoringDto) ??
                   (typeof baseQuestion.scoring === "string"
-                    ? (JSON.parse(baseQuestion.scoring) as Scoring)
-                    : (baseQuestion.scoring as unknown as Scoring))),
+                    ? (JSON.parse(baseQuestion.scoring) as ScoringDto)
+                    : (baseQuestion.scoring as unknown as ScoringDto))),
             choices:
               typeof variant.choices === "string"
                 ? (JSON.parse(variant.choices) as Choice[])
@@ -1251,11 +1248,11 @@ export class AttemptService {
             maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
             scoring:
               typeof variant.scoring === "string"
-                ? (JSON.parse(variant.scoring) as Scoring)
-                : ((variant.scoring as unknown as Scoring) ??
+                ? (JSON.parse(variant.scoring) as ScoringDto)
+                : ((variant.scoring as unknown as ScoringDto) ??
                   (typeof baseQuestion.scoring === "string"
-                    ? (JSON.parse(baseQuestion.scoring) as Scoring)
-                    : (baseQuestion.scoring as unknown as Scoring))),
+                    ? (JSON.parse(baseQuestion.scoring) as ScoringDto)
+                    : (baseQuestion.scoring as unknown as ScoringDto))),
             choices:
               typeof variant.choices === "string"
                 ? (JSON.parse(variant.choices) as Choice[])
@@ -1865,7 +1862,7 @@ export class AttemptService {
       learnerResponse,
       question.totalPoints,
       question.scoring?.type ?? "",
-      question.scoring?.criteria ?? {},
+      question.scoring,
       questionType,
       question.responseType ?? "OTHER",
     );
@@ -1910,7 +1907,7 @@ export class AttemptService {
       learnerResponse,
       question.totalPoints,
       question.scoring?.type ?? "",
-      question.scoring?.criteria ?? {},
+      question.scoring,
       question.responseType ?? "OTHER",
     );
 
@@ -1968,7 +1965,7 @@ export class AttemptService {
       JSON.stringify(urlFetchResponse.body),
       question.totalPoints,
       question.scoring?.type ?? "",
-      question.scoring?.criteria ?? {},
+      question.scoring,
       question.responseType ?? "OTHER",
     );
 

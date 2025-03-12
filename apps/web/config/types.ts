@@ -5,6 +5,7 @@ export type User = {
   role: "author" | "learner";
   assignmentId: number;
   returnUrl: string;
+  launch_presentation_locale?: string;
 };
 export type Cookies = { [key: string]: string };
 
@@ -91,9 +92,11 @@ export type AuthorFileUploads = {
 export type UpdateQuestionStateParams = {
   questionType?: QuestionType;
   responseType?: ResponseType;
+  totalPoints?: number;
   randomizedChoices?: boolean;
   maxWordCount?: number;
   questionTitle?: string;
+  rubrics?: Rubric[];
   questionCriteria?: {
     points: number[];
     criteriaDesc: string[];
@@ -158,6 +161,12 @@ export type Criteria = {
   points: number;
   description: string;
 };
+
+export interface Rubric {
+  rubricQuestion: string;
+  criteria: Criteria[];
+}
+
 export type AssignmentFeedback = {
   assignmentId: number;
   userId: string;
@@ -185,6 +194,7 @@ export type Scoring = {
   type: // | "SINGLE_CRITERIA"
   // | "MULTIPLE_CRITERIA"
   "CRITERIA_BASED" | "LOSS_PER_MISTAKE" | "AI_GRADED";
+  rubrics?: Rubric[];
   criteria?: Criteria[];
 };
 
@@ -290,6 +300,10 @@ export interface QuestionVariants {
   difficultyLevel?: number;
   randomizedChoices?: boolean;
   variantType: "REWORDED" | "REPHRASED";
+}
+export enum RubricType {
+  COMPREHENSIVE = "COMPREHENSIVE",
+  MULTI = "MULTI",
 }
 
 export interface QuestionAuthorStore extends Question {

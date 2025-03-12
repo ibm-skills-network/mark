@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/no-null */
 import { get_encoding, type Tiktoken } from "@dqbd/tiktoken";
 import { HumanMessage } from "@langchain/core/messages";
 import { PromptTemplate } from "@langchain/core/prompts";
@@ -16,8 +17,15 @@ import { QuestionsToGenerate } from "../assignment/dto/post.assignment.request.d
 import { AssignmentTypeEnum } from "../assignment/dto/update.assignment.request.dto";
 import {
   Choice,
+  QuestionDto,
+  RubricDto,
+  ScoringDto,
   VariantDto,
 } from "../assignment/dto/update.questions.request.dto";
+import {
+  Criteria,
+  ScoringType,
+} from "../assignment/question/dto/create.update.question.request.dto";
 import type { FileUploadQuestionEvaluateModel } from "./model/file.based.question.evaluate.model";
 import { FileBasedQuestionResponseModel } from "./model/file.based.question.response.model";
 import type { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
@@ -751,199 +759,441 @@ export class LlmService {
       ),
     }));
   }
-
-  async createMarkingRubric(
-    questions: {
-      id: number;
-      questionText: string;
-      questionType: string;
-      responseType?: ResponseType;
-    }[],
-    variantMode: boolean,
+  /**
+   * Creates or refines a rubric (ScoringDto) for a question.
+   * - If the question already has rubrics, the LLM will refine or expand them.
+   * - If the question has no rubrics, the LLM will create them from scratch.
+   */
+  public async createMarkingRubric(
+    question: QuestionDto,
     assignmentId: number,
-  ): Promise<
-    Record<
-      number,
-      | string
-      | {
-          choices: Choice[];
-          variants?: {
-            id: number;
-            variantContent: string;
-            choices: Choice[];
-          }[];
-        }
-      | { id: number; description: string; points: number }[]
-    >
-  > {
-    const templates = {
+    rubricIndex?: number,
+  ): Promise<ScoringDto> {
+    // 1) Map question.type to the correct rubric template
+    const rubricTemplates = {
       TEXT: generateTextBasedMarkingRubricTemplate,
       URL: generateUrlBasedMarkingRubricTemplate,
-      MULTIPLE_CORRECT: generateMultipleBasedMarkingRubricTemplate,
-      SINGLE_CORRECT: generateSingleBasedMarkingRubricTemplate,
+      UPLOAD: generateDocumentFileUploadMarkingRubricTemplate,
+      LINK_FILE: generateDocumentFileUploadMarkingRubricTemplate,
+    };
+    const selectedTemplate =
+      rubricTemplates[question.type as keyof typeof rubricTemplates];
+
+    // If no matching rubric template, just return an empty scoring object
+    if (!selectedTemplate) {
+      return {
+        type: ScoringType.CRITERIA_BASED,
+        rubrics: [],
+      };
+    }
+
+    // 2) Prepare any existing rubrics JSON
+    const existingRubricsJson = question.scoring?.rubrics?.length
+      ? JSON.stringify(question.scoring.rubrics)
+      : "[]";
+
+    // 3) Build a Zod schema for the LLM to return *only* scoring
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.object({
+        scoring: z
+          .object({
+            type: z
+              .enum(["CRITERIA_BASED"])
+              .optional()
+              .describe("Manual grading rubric scoring"),
+            rubrics: z
+              .array(
+                z.object({
+                  rubricQuestion: z
+                    .string()
+                    .describe(
+                      "A question evaluating a key aspect of the response. Each rubric question focuses on a specific evaluation criterion.",
+                    ),
+                  criteria: z
+                    .array(
+                      z.object({
+                        // We'll treat `id` as optional from the LLM
+                        id: z.number().optional(),
+                        description: z.string().describe("Criterion detail"),
+                        points: z.number().describe("Points if met").int(),
+                      }),
+                    )
+                    .min(2, "At least 2 criteria needed")
+                    .describe("List of grading criteria"),
+                }),
+              )
+              .optional(),
+          })
+          .nullable()
+          .optional(),
+      }),
+    );
+    const formatInstructions = parser.getFormatInstructions();
+
+    // 4) Construct a "wrapper prompt"
+    //    We'll build instructions based on whether or not a rubricIndex was given
+    let wrapperTemplate = `
+      You are an AI assistant that creates or modifies scoring rubrics.
+      The question is:
+      {question_json}
+
+      Existing rubrics (if any):
+      {existing_rubrics_json}
+
+      Return valid JSON according to the schema. 
+      Do not include any text or explanations outside of the JSON. 
+      Do not include code fences. 
+      Do not include the schema itself in your output.
+    `;
+    const existingRubricOfIndex = question.scoring.rubrics[rubricIndex];
+    const existingRubricOfIndexJson = JSON.stringify(existingRubricOfIndex);
+
+    // 5) Build specialized instructions if rubricIndex is provided
+    if (rubricIndex !== undefined && question.scoring?.rubrics) {
+      // Try to fetch the existing rubric at the given index
+      if (existingRubricOfIndex) {
+        // Check if it's "complete"
+        console.log(
+          "this.isRubricComplete(existingRubricOfIndex)",
+          this.isRubricComplete(existingRubricOfIndex),
+        );
+        wrapperTemplate += this.isRubricComplete(existingRubricOfIndex)
+          ? `
+            The rubric {existingRubricOfIndexJson} is complete.
+            Create a *distinct* or *alternative* criteria and rubric question that addresses the question
+            from a different angle or with different criteria.
+            Do NOT just refine the existing rubric: it should be an entirely new approach.
+          `
+          : `
+            The rubric at index {existingRubricOfIndexJson} is incomplete.
+            Improve or finalize this rubric so it has enough well-defined criteria
+            to thoroughly assess the question.
+            Keep the existing rubricQuestion, but fill in missing criteria points and description.
+            Only return the new or updated criteria for this rubric.
+          `;
+      } else {
+        // If there's no rubric at that index, just create from scratch
+        wrapperTemplate += `
+          Create a new rubric from scratch with multiple well-defined criteria.
+        `;
+      }
+    } else {
+      // If no rubricIndex, we create a new rubric from scratch
+      wrapperTemplate += `
+        Create a new rubric from scratch with multiple well-defined criteria.
+      `;
+    }
+
+    // Add the base template instructions
+    wrapperTemplate += `
+      Use the following rubric instructions as a guide:
+      ${selectedTemplate}
+    `;
+
+    // 6) Prepare the LLM prompt
+    const prompt = new PromptTemplate({
+      template: wrapperTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question_json: JSON.stringify(question),
+        existing_rubrics_json: existingRubricsJson,
+        format_instructions: formatInstructions,
+        response_type: question.responseType ?? "no type set",
+        existingRubricOfIndexJson: existingRubricOfIndexJson || "null",
+      },
+    });
+
+    // 7) Send prompt to LLM
+    let response: string;
+    try {
+      response = await this.processPrompt(
+        prompt,
+        assignmentId,
+        AIUsageType.QUESTION_GENERATION,
+      );
+    } catch (error) {
+      this.logger.error(`Error generating rubric: ${(error as Error).message}`);
+      throw new HttpException(
+        "Failed to generate rubric",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 8) Parse the LLM response into { scoring }
+    let parsed: { scoring?: ScoringDto } = {};
+    try {
+      parsed = (await parser.parse(response)) as { scoring?: ScoringDto };
+    } catch (error) {
+      this.logger.error(`Error parsing rubric: ${(error as Error).message}`);
+      throw new HttpException(
+        "Invalid rubric format returned by LLM",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 9) Build a final ScoringDto from the LLM response
+    const scoringData = parsed.scoring;
+    if (!scoringData?.rubrics) {
+      return {
+        type: ScoringType.CRITERIA_BASED,
+        rubrics: [],
+      };
+    }
+
+    const finalScoring: ScoringDto = {
+      type: scoringData.type || ScoringType.CRITERIA_BASED,
+      rubrics: scoringData.rubrics.map((r: RubricDto) => {
+        return {
+          rubricQuestion: r.rubricQuestion,
+          criteria: r.criteria.map((c: Criteria) => ({
+            description: c.description,
+            points: c.points,
+          })),
+        };
+      }),
+    };
+
+    return finalScoring;
+  }
+  public async expandMarkingRubric(
+    question: QuestionDto,
+    assignmentId: number,
+  ): Promise<ScoringDto> {
+    // 1) Choose the correct template for the question type.
+    const rubricTemplates = {
+      TEXT: generateTextBasedMarkingRubricTemplate,
+      URL: generateUrlBasedMarkingRubricTemplate,
       UPLOAD: generateDocumentFileUploadMarkingRubricTemplate,
       LINK_FILE: generateDocumentFileUploadMarkingRubricTemplate,
     };
 
-    const markingRubricMap: Record<
-      number,
-      | string
-      | {
-          choices: Choice[];
-          variants?: {
-            id: number;
-            variantContent: string;
-            choices: Choice[];
-          }[];
+    const selectedTemplate =
+      rubricTemplates[question.type as keyof typeof rubricTemplates];
+
+    if (!selectedTemplate) {
+      // If no specialized template, just return existing rubrics or an empty set
+      return (
+        question.scoring || {
+          type: ScoringType.CRITERIA_BASED,
+          rubrics: [],
         }
-      | { id: number; description: string; points: number }[]
-    > = {};
-
-    for (const question of questions) {
-      const selectedTemplate =
-        templates[question.questionType as keyof typeof templates];
-
-      const parser = StructuredOutputParser.fromZodSchema(
-        z.array(
-          z.object({
-            questionId: z.number().describe("The id of the question"),
-            rubric: z
-              .array(
-                z.object({
-                  id: z
-                    .number()
-                    .describe("Unique identifier for each criterion"),
-                  description: z.string().describe("Criterion description"),
-                  points: z
-                    .number()
-                    .describe("Points awarded for this criterion"),
-                }),
-              )
-              .optional()
-              .describe(
-                "The marking rubric for text, URL and Upload based questions, structured as an array of criterion objects",
-              ),
-            choices: z
-              .array(
-                z.object({
-                  choice: z.string().describe("A possible answer choice"),
-                  isCorrect: z.boolean().describe("Correct answer or not"),
-                  points: z.number().describe("Points assigned"),
-                  feedback: z.string().describe("Feedback for learner"),
-                }),
-              )
-              .optional()
-              .describe("Array of choices for choice-based questions"),
-          }),
-        ),
       );
-      const responseType = question.responseType;
-      const formatInstructions = parser.getFormatInstructions();
-      const prompt = new PromptTemplate({
-        template: selectedTemplate,
-        inputVariables: [],
-        partialVariables: {
-          questions_json_array: JSON.stringify([question]),
-          format_instructions: formatInstructions,
-          grading_style:
-            responseType !== "OTHER" && responseType !== undefined
-              ? `The rubric should ensure that the learner responds in ${responseType} format. Focus on evaluating the structure, content organization, and adherence to the expected conventions of a ${responseType}, including clarity, relevance, and formatting requirements.`
-              : "",
-        },
-      });
-      try {
-        const response = await this.processPrompt(
-          prompt,
-          assignmentId,
-          AIUsageType.QUESTION_GENERATION,
-        );
-        const parsedResponse = await parser.parse(response);
-        if (
-          question.questionType === "TEXT" ||
-          question.questionType === "URL" ||
-          question.questionType === "UPLOAD" ||
-          question.questionType === "CODE" ||
-          question.questionType === "IMAGES" ||
-          question.questionType === "LINK_FILE"
-        ) {
-          markingRubricMap[question.id] = parsedResponse[0].rubric.map(
-            (item: unknown) => ({
-              id: (item as { id: number }).id ?? 0,
-              description: (item as { description: string }).description ?? "",
-              points: (item as { points: number }).points ?? 0,
-            }),
-          );
-        }
+    }
 
-        if (
-          question.questionType === "MULTIPLE_CORRECT" ||
-          question.questionType === "SINGLE_CORRECT"
-        ) {
-          for (const item of parsedResponse) {
-            markingRubricMap[item.questionId] = item.choices
-              ? {
-                  choices: item.choices.map((choice) => ({
-                    choice: choice.choice,
-                    isCorrect: choice.isCorrect,
-                    points: choice.points,
-                    feedback: choice.feedback,
-                  })),
-                }
-              : item.rubric.map((rubricItem) => ({
-                  id: rubricItem.id ?? 0,
-                  description: rubricItem.description ?? "",
-                  points: rubricItem.points ?? 0,
-                }));
-          }
-        }
-        if (variantMode) {
-          const variants = await this.generateQuestionRewordings(
-            question.questionText,
-            2, // Number of variants to generate, adjust as needed
-            question.questionType as QuestionType,
-            assignmentId,
-            (markingRubricMap[question.id] as { choices: Choice[] })?.choices,
-          );
+    // 2) Read existing rubrics from the question. If none, start with []
+    const existingRubrics = question.scoring?.rubrics ?? [];
+    // 3) Build a Zod parser for the LLM output (expects { scoring?: { rubrics?: [...] } })
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.object({
+        scoring: z
+          .object({
+            type: z
+              .enum(["CRITERIA_BASED"])
+              .optional()
+              .describe("Rubric scoring method"),
+            rubrics: z
+              .array(
+                z.object({
+                  rubricQuestion: z
+                    .string()
+                    .describe("Rubric question/heading"),
+                  criteria: z
+                    .array(
+                      z.object({
+                        id: z.number().optional().describe("Criterion ID"),
+                        description: z.string().describe("Criterion detail"),
+                        points: z
+                          .number()
+                          .describe("Points if criterion is met"),
+                      }),
+                    )
+                    .min(2, "At least two criteria required"),
+                }),
+              )
+              .optional(),
+          })
+          .nullable()
+          .optional(),
+      }),
+    );
 
-          markingRubricMap[question.id] = {
-            ...(markingRubricMap[question.id] as { choices: Choice[] }),
-            variants: variants.map((variant) => ({
-              id: variant.id,
-              variantContent: variant.variantContent,
-              choices: variant.choices,
-            })),
-          };
-        }
-      } catch (error) {
-        this.logger.error(
-          `Error processing prompt: ${(error as Error).message}`,
-        );
-        throw new HttpException(
-          "Failed to create marking rubric",
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
+    const formatInstructions = parser.getFormatInstructions();
+
+    // 4) Build the prompt. We specifically ask for new rubrics:
+    const wrapperTemplate = `
+      You are an AI that extends a question's existing rubrics by adding new rubrics or criteria.
+      Do NOT modify or remove existing rubrics; only add new, distinct rubric(s) focusing on aspects not already covered.
+
+      The question is:
+      {question_json}
+
+      Existing rubrics:
+      {existing_rubrics_json}
+
+      If there are no rubrics, create them from scratch. 
+      If there are some rubrics, only add new rubrics for missing or uncovered facets.
+
+      Use the following guidelines to structure each rubric:
+      ${selectedTemplate}
+    `;
+    const prompt = new PromptTemplate({
+      template: wrapperTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question_json: JSON.stringify(question),
+        existing_rubrics_json: JSON.stringify(existingRubrics) || "[]",
+        format_instructions: formatInstructions,
+        response_type: question?.responseType ?? "no type set",
+      },
+    });
+
+    // 5) Call the LLM
+    let response: string;
+    try {
+      response = await this.processPrompt(
+        prompt,
+        assignmentId,
+        AIUsageType.QUESTION_GENERATION,
+      );
+    } catch (error) {
+      this.logger.error(`Error expanding rubric: ${(error as Error).message}`);
+      throw new HttpException(
+        "Failed to expand marking rubric",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 6) Parse the LLM response into { scoring }
+    let parsed: { scoring?: ScoringDto } = {};
+    try {
+      parsed = (await parser.parse(response)) as { scoring?: ScoringDto };
+    } catch (error) {
+      this.logger.error(`LLM parse error: ${(error as Error).message}`);
+      throw new HttpException(
+        "LLM returned invalid data while expanding rubric",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 7) If no new rubrics returned, we just keep what we had
+    const newRubrics = parsed.scoring?.rubrics ?? [];
+    if (newRubrics.length === 0) {
+      return {
+        type: question.scoring?.type || ScoringType.CRITERIA_BASED,
+        rubrics: existingRubrics,
+      };
+    }
+
+    // 8) Merge the new rubrics on top of the existing rubrics
+    const combinedRubrics = [...existingRubrics];
+
+    // For each newly generated rubric, check if we want to add or skip duplicates
+    for (const r of newRubrics) {
+      const newRubric: RubricDto = {
+        rubricQuestion: r.rubricQuestion,
+        criteria: r.criteria.map((c: Criteria) => ({
+          description: c.description,
+          points: c.points,
+        })),
+      };
+
+      // Check if there's already a rubricQuestion with the same text and only push if it's truly new:
+      const existingFound = combinedRubrics.find(
+        (ex) => ex.rubricQuestion === newRubric.rubricQuestion,
+      );
+      if (!existingFound) {
+        combinedRubrics.push(newRubric);
       }
     }
-    return markingRubricMap;
-  }
 
-  async getLanguageCode(text: string): Promise<string> {
-    try {
-      const response: {
-        readonly reliable: boolean;
-        readonly textBytes: number;
-        readonly languages: cld.Language[];
-        readonly chunks: cld.Chunk[];
-      } = (await cld.detect(text)) as {
-        reliable: boolean;
-        textBytes: number;
-        languages: cld.Language[];
-        chunks: cld.Chunk[];
-      };
-      return response.languages[0].code;
-    } catch {
-      return "unknown";
+    // 9) Return the combined set
+    const finalScoring: ScoringDto = {
+      type: ScoringType.CRITERIA_BASED,
+      rubrics: combinedRubrics,
+    };
+
+    return finalScoring;
+  }
+  /**
+   * Creates or refines the choices for a choice-based question
+   * (SINGLE_CORRECT or MULTIPLE_CORRECT).
+   */
+  public async createChoices(
+    question: QuestionDto,
+    assignmentId: number,
+  ): Promise<Choice[]> {
+    if (
+      question.type !== "SINGLE_CORRECT" &&
+      question.type !== "MULTIPLE_CORRECT"
+    ) {
+      return [];
     }
+    // Map to the correct template
+    const choiceTemplates = {
+      SINGLE_CORRECT: generateSingleBasedMarkingRubricTemplate,
+      MULTIPLE_CORRECT: generateMultipleBasedMarkingRubricTemplate,
+    };
+    const selectedTemplate = choiceTemplates[question.type];
+
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.object({
+        choices: z
+          .array(
+            z.object({
+              choice: z.string().describe("Answer text"),
+              id: z.number().describe("Unique identifier"),
+              isCorrect: z.boolean().describe("Correct or not"),
+              points: z.number().describe("Points for this choice"),
+              feedback: z.string().optional().describe("Feedback text"),
+            }),
+          )
+          .describe("Choice-based question answers"),
+      }),
+    );
+    const formatInstructions = parser.getFormatInstructions();
+    const prompt = new PromptTemplate({
+      template: selectedTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question_json_array: JSON.stringify(question),
+        format_instructions: formatInstructions,
+      },
+    });
+
+    // Send prompt to LLM
+    let response: string;
+    try {
+      response = await this.processPrompt(
+        prompt,
+        assignmentId,
+        AIUsageType.QUESTION_GENERATION,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error generating choices: ${(error as Error).message}`,
+      );
+      // Return empty or throw, as you prefer
+      return [];
+    }
+
+    // Parse the response
+    let parsed: { choices: Choice[] } = { choices: [] };
+    try {
+      parsed = (await parser.parse(response)) as { choices: Choice[] };
+    } catch (error) {
+      this.logger.error(`Error parsing choices:  ${(error as Error).message}`);
+      return [];
+    }
+
+    // Convert raw data to your Choice[] type
+    const finalChoices: Choice[] = parsed.choices.map((ch) => ({
+      choice: ch.choice,
+      isCorrect: ch.isCorrect,
+      points: ch.points,
+      feedback: ch.feedback,
+    }));
+
+    return finalChoices;
   }
 
   /**
@@ -969,11 +1219,7 @@ export class LlmService {
       type: QuestionType;
       scoring: {
         type: string;
-        criteria?: {
-          id: number;
-          description: string;
-          points: number;
-        }[];
+        rubrics?: RubricDto[];
       };
       choices?: {
         choice: string;
@@ -997,14 +1243,7 @@ export class LlmService {
       totalPoints: number;
       type: QuestionType;
       assignmentId: number;
-      scoring: {
-        type: string;
-        criteria?: {
-          id: number;
-          description: string;
-          points: number;
-        }[];
-      };
+      scoring: ScoringDto;
       choices?: {
         choice: string;
         isCorrect: boolean;
@@ -1024,14 +1263,7 @@ export class LlmService {
       return array.slice(0, needed) as {
         question: string;
         type: QuestionType;
-        scoring?: {
-          type: string;
-          criteria?: {
-            id: number;
-            description: string;
-            points: number;
-          }[];
-        };
+        scoring?: ScoringDto;
         choices?: {
           choice: string;
           id: number;
@@ -1052,14 +1284,7 @@ export class LlmService {
     return array as {
       question: string;
       type: QuestionType;
-      scoring?: {
-        type: string;
-        criteria?: {
-          id: number;
-          description: string;
-          points: number;
-        }[];
-      };
+      scoring?: ScoringDto;
       choices?: {
         choice: string;
         id: number;
@@ -1088,7 +1313,6 @@ export class LlmService {
       questionsToGenerate.textResponse +
       questionsToGenerate.trueFalse;
 
-    // 2. Define a Zod schema (without a .refine that throws)
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         questions: z.array(
@@ -1104,24 +1328,38 @@ export class LlmService {
               .describe("The question type"),
             scoring: z
               .object({
-                type: z.enum(["CRITERIA_BASED", "AI_GRADED"]).optional(),
-                criteria: z
+                type: z
+                  .enum(["CRITERIA_BASED"])
+                  .optional()
+                  .describe("Manual grading rubric scoring"),
+                rubrics: z
                   .array(
                     z.object({
-                      points: z
-                        .number()
-                        .int()
-                        .describe("Points for the criterion"),
-                      description: z
+                      rubricQuestion: z
                         .string()
-                        .describe("Description for this criterion"),
+                        .describe(
+                          "A question evaluating a key aspect of the response. Each rubric question focuses on a specific evaluation criterion.",
+                        ),
+                      criteria: z
+                        .array(
+                          z.object({
+                            id: z.number().optional(),
+                            description: z
+                              .string()
+                              .describe("Criterion detail"),
+                            points: z.number().describe("Points if met").int(),
+                          }),
+                        )
+                        .min(2, "At least 2 criteria needed")
+                        .describe("List of grading criteria"),
                     }),
                   )
+                  .min(2)
+                  .describe("Scoring rubrics for the question")
                   .optional(),
               })
               .nullable()
-              .optional()
-              .describe("Scoring criteria for text-based questions"),
+              .optional(),
             choices: z
               .array(
                 z.object({
@@ -1177,6 +1415,7 @@ export class LlmService {
       partialVariables: {
         format_instructions: formatInstructions,
         content: content ?? "",
+        totalQuestionsToGenerate: totalQuestionsToGenerate.toString(),
         learning_objectives: learningObjectives ?? "",
         questionsToGenerate: JSON.stringify(questionsToGenerate),
         multipleChoice: questionsToGenerate.multipleChoice.toString(),
@@ -1280,63 +1519,42 @@ export class LlmService {
 
     // 9. Combine the final arrays into one array
     questions = [
-      ...(finalSingleCorrect as {
-        type: "SINGLE_CORRECT";
-        question: string;
-        choices: {
-          points: number;
-          feedback: string;
-          id: number;
-          choice: string;
-          isCorrect: boolean;
-        }[];
-        scoring: {
-          type: "CRITERIA_BASED" | "AI_GRADED";
-          criteria?: { id: number; description: string; points: number }[];
-        };
-      }[]),
-      ...(finalMultipleCorrect as {
-        type: "MULTIPLE_CORRECT";
-        question: string;
-        choices: {
-          points: number;
-          feedback: string;
-          id: number;
-          choice: string;
-          isCorrect: boolean;
-        }[];
-        scoring: {
-          type: "CRITERIA_BASED" | "AI_GRADED";
-          criteria?: { id: number; description: string; points: number }[];
-        };
-      }[]),
-      ...(finalText as {
-        type: "TEXT";
-        question: string;
-        scoring: {
-          type: "CRITERIA_BASED" | "AI_GRADED";
-          criteria?: { id: number; description: string; points: number }[];
-        };
-      }[]),
-      ...(finalTrueFalse as {
-        type: "TRUE_FALSE";
-        question: string;
-        choices: {
-          points: number;
-          feedback: string;
-          id: number;
-          choice: string;
-          isCorrect: boolean;
-        }[];
-        scoring: {
-          type: "CRITERIA_BASED" | "AI_GRADED";
-          criteria?: { id: number; description: string; points: number }[];
-        };
-      }[]),
-    ];
+      ...finalSingleCorrect,
+      ...finalMultipleCorrect,
+      ...finalText,
+      ...finalTrueFalse,
+    ].map((question) => ({
+      ...question,
+      type: question.type as
+        | "TEXT"
+        | "SINGLE_CORRECT"
+        | "MULTIPLE_CORRECT"
+        | "TRUE_FALSE",
+      scoring: question.scoring
+        ? { ...question.scoring, type: "CRITERIA_BASED" }
+        : undefined,
+    }));
 
     // 10. Return final distribution
     return { questions };
+  }
+  async getLanguageCode(text: string): Promise<string> {
+    try {
+      const response: {
+        readonly reliable: boolean;
+        readonly textBytes: number;
+        readonly languages: cld.Language[];
+        readonly chunks: cld.Chunk[];
+      } = (await cld.detect(text)) as {
+        reliable: boolean;
+        textBytes: number;
+        languages: cld.Language[];
+        chunks: cld.Chunk[];
+      };
+      return response.languages[0].code;
+    } catch {
+      return "unknown";
+    }
   }
   /**
    * Translates the choices of a question into the specified target language.
@@ -1561,6 +1779,29 @@ export class LlmService {
     );
 
     return response;
+  }
+  private isRubricComplete(rubric: RubricDto): boolean {
+    // Must have at least 2 criteria
+    if (!rubric.criteria || rubric.criteria.length < 2) {
+      return false;
+    }
+
+    for (const c of rubric.criteria) {
+      console.log("c.description", c.description);
+      if (!c.description || !c.description.trim()) {
+        false;
+        continue;
+      }
+    }
+
+    // Each criterion must have a non-empty description
+    for (const c of rubric.criteria) {
+      if (!c.description || !c.description.trim()) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private async trackAIUsage(

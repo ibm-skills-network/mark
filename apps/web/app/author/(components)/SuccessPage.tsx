@@ -117,7 +117,7 @@ function SuccessPage(props: Props) {
   return (
     <section className="flex flex-col items-center justify-center w-full h-full gap-y-6">
       <h1 className="text-2xl font-bold">
-        Congrats! Your assignment was updated
+        Congratulations! Your assignment was updated
       </h1>
       {/* <div className="flex items-center justify-center w-6 h-6 mr-2 bg-yellow-500 rounded-full">
         <ExclamationCircleIcon className="w-4 h-6 text-white" />

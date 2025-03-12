@@ -7,12 +7,13 @@ import {
 import { Prisma, QuestionType, ResponseType } from "@prisma/client";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
-import { Choice, QuestionDto } from "../dto/update.questions.request.dto";
-import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import {
-  CreateUpdateQuestionRequestDto,
-  Scoring,
-} from "./dto/create.update.question.request.dto";
+  Choice,
+  QuestionDto,
+  ScoringDto,
+} from "../dto/update.questions.request.dto";
+import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
+import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 
 @Injectable()
 export class QuestionService {
@@ -61,7 +62,7 @@ export class QuestionService {
     return {
       ...result,
       scoring: result.scoring
-        ? (result.scoring as unknown as Scoring)
+        ? (result.scoring as unknown as ScoringDto)
         : undefined,
       choices: result.choices
         ? (result.choices as unknown as Choice[])
@@ -143,29 +144,56 @@ export class QuestionService {
     };
   }
   async createMarkingRubric(
-    questions: {
-      id: number;
-      questionText: string;
-      questionType: string;
-      responseType?: ResponseType;
-    }[],
-    variantMode: boolean,
+    question: QuestionDto,
     assignmentId: number,
-  ): Promise<Record<number, string>> {
-    // apply guard rails
-    const markingRubric = await this.llmService.createMarkingRubric(
-      questions,
-      variantMode,
-      assignmentId,
-    );
-    const formattedMarkingRubric: Record<number, string> = {};
-    for (const key in markingRubric) {
-      formattedMarkingRubric[key] =
-        typeof markingRubric[key] === "string"
-          ? markingRubric[key]
-          : JSON.stringify(markingRubric[key]);
+    rubricIndex?: number,
+  ): Promise<ScoringDto | Choice[]> {
+    if (!question) {
+      throw new NotFoundException(`Question DTO not provided or is invalid.`);
     }
-    return formattedMarkingRubric;
+    const textTypes = new Set(["TEXT", "URL", "UPLOAD", "LINK_FILE"]);
+    const choiceTypes = new Set(["SINGLE_CORRECT", "MULTIPLE_CORRECT"]);
+    if (textTypes.has(question.type)) {
+      return await this.llmService.createMarkingRubric(
+        question,
+        assignmentId,
+        rubricIndex ?? undefined,
+      );
+    } else if (choiceTypes.has(question.type)) {
+      return await this.llmService.createChoices(question, assignmentId);
+    } else {
+      throw new HttpException(
+        "Invalid question type for creating marking rubric",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+  async expandMarkingRubric(
+    question: QuestionDto,
+    assignmentId: number,
+  ): Promise<QuestionDto> {
+    if (!question) {
+      throw new NotFoundException(`Question DTO not provided or is invalid.`);
+    }
+    const textTypes = new Set(["TEXT", "URL", "UPLOAD", "LINK_FILE"]);
+    if (textTypes.has(question.type)) {
+      const expandedRubric = await this.llmService.expandMarkingRubric(
+        question,
+        assignmentId,
+      );
+      return {
+        ...question,
+        scoring: {
+          ...question.scoring,
+          rubrics: expandedRubric.rubrics,
+        },
+      };
+    } else {
+      throw new HttpException(
+        "Invalid question type for creating marking rubric",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
   /**
    * Generate translations for the relevant parts of a question (text and choices) if not already present in the database.

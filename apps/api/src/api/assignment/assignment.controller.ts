@@ -395,7 +395,7 @@ export class AssignmentController {
 
     return { message: "Report submitted successfully" };
   }
-  @Post(":assignmentId/upload-files")
+  @Post(":assignmentId/generate-questions")
   @ApiOperation({ summary: "Upload contents of files for the assignment" })
   @ApiBody({
     description: "Upload file contents for an assignment",

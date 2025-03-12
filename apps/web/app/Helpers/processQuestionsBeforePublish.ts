@@ -1,5 +1,4 @@
 import { QuestionAuthorStore } from "@/config/types";
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
 
 export const processQuestions = (questions: QuestionAuthorStore[]) => {
   return questions.map((question) => {
@@ -7,9 +6,6 @@ export const processQuestions = (questions: QuestionAuthorStore[]) => {
       question;
 
     if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
-      dataToSend.scoring.criteria.forEach((criteria) => {
-        delete criteria.id;
-      });
       dataToSend.choices = null;
     } else if (
       dataToSend.type === "MULTIPLE_CORRECT" ||

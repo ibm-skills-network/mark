@@ -1,3 +1,4 @@
+import { AVAILABLE_LANGUAGES } from "@/app/Helpers/getLanguageName";
 import type {
   AssignmentAttempt,
   AssignmentDetails,
@@ -7,11 +8,10 @@ import type {
   RepoContentItem,
   RepoType,
 } from "@/config/types";
-import { createRef, type RefObject } from "react";
+import { getUser } from "@/lib/talkToBackend";
 import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
-
 type GitHubQuestionState = {
   repos: RepoType[];
   owner: string | null;
@@ -21,6 +21,18 @@ type GitHubQuestionState = {
   selectedFiles: learnerFileResponse[];
   isGithubModalOpen: boolean;
 };
+
+const getAssignmentIdFromURL = () => {
+  const pathSegments = window?.location.pathname.split("/");
+  const learnerIndex = pathSegments.indexOf("learner");
+
+  if (learnerIndex !== -1 && pathSegments.length > learnerIndex + 1) {
+    return pathSegments[learnerIndex + 1]; // The assignment ID
+  }
+
+  return null; // Return null if not found
+};
+const ASSIGNMENT_ID = getAssignmentIdFromURL();
 
 type GitHubState = {
   questionGitHubState: Record<number, GitHubQuestionState>;
@@ -199,6 +211,7 @@ export type LearnerActions = {
   ) => void;
   setGlobalLanguage: (language: string) => void;
   setUserPreferedLanguage: (language: string) => void;
+  getUserPreferedLanguageFromLTI: () => Promise<string>;
 };
 
 export type AssignmentDetailsState = {
@@ -234,11 +247,13 @@ export type LearnerOverviewState = {
   listOfAttempts: AssignmentAttempt[];
   assignmentId: number | null;
   assignmentName: string;
+  languageModalTriggered: boolean;
 };
 export type LearnerOverviewActions = {
   setListOfAttempts: (listOfAttempts: AssignmentAttempt[]) => void;
   setAssignmentId: (assignmentId: number) => void;
   setAssignmentName: (assignmentName: string) => void;
+  setLanguageModalTriggered: (triggered: boolean) => void;
 };
 
 export const useLearnerOverviewStore = createWithEqualityFn<
@@ -253,17 +268,21 @@ export const useLearnerOverviewStore = createWithEqualityFn<
         setAssignmentId: (assignmentId) => set({ assignmentId }),
         assignmentName: "",
         setAssignmentName: (assignmentName) => set({ assignmentName }),
+        languageModalTriggered: true,
+        setLanguageModalTriggered: (triggered) =>
+          set({ languageModalTriggered: triggered }),
       }),
       {
-        name: "learner-store", // storage name
+        name: `learner-overview-${ASSIGNMENT_ID}`, // storage name
         partialize: (state) => ({
           listOfAttempts: state.listOfAttempts,
           assignmentId: state.assignmentId,
+          languageModalTriggered: state.languageModalTriggered,
         }),
       },
     ),
     {
-      name: "learner",
+      name: `learner-overview-${ASSIGNMENT_ID}`,
       enabled: process.env.NODE_ENV === "development",
       serialize: {
         options: true, // Enable serialization to avoid large data crashes
@@ -398,9 +417,49 @@ export const useLearnerStore = createWithEqualityFn<
             get().onUrlChange(data as string, questionId);
           }
         },
+        getUserPreferedLanguageFromLTI: async () => {
+          try {
+            const user = await getUser();
+            const language = user.launch_presentation_locale;
+            return language;
+          } catch (e) {
+            console.log(e);
+            return navigator.language;
+          }
+        },
         setGlobalLanguage: (language) => set({ globalLanguage: language }),
-        setUserPreferedLanguage: (language) =>
-          set({ userPreferedLanguage: language }),
+        setUserPreferedLanguage: (languageCode) => {
+          try {
+            const parsedLocale = new Intl.Locale(languageCode);
+            const baseLang = parsedLocale.language;
+            const region = parsedLocale.region;
+
+            let finalCode: string | undefined;
+
+            if (baseLang === "zh") {
+              if (region === "TW") {
+                finalCode = "zh-TW";
+              } else if (region === "CN") {
+                finalCode = "zh-CN";
+              } else {
+                finalCode = "zh-CN";
+              }
+            } else {
+              const foundLanguageCode = AVAILABLE_LANGUAGES.find(
+                (langCode) => langCode === baseLang,
+              );
+              finalCode = foundLanguageCode ? foundLanguageCode : undefined;
+            }
+            if (!finalCode) {
+              finalCode = "en";
+            }
+            set({ userPreferedLanguage: finalCode });
+            console.log("Language set to:", finalCode);
+          } catch (e) {
+            console.warn("Failed to parse language");
+          }
+        },
+
         setFileUpload: (newFiles, questionId) => {
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
@@ -586,7 +645,7 @@ export const useLearnerStore = createWithEqualityFn<
           set({ totalPointsPossible }),
       }),
       {
-        name: "learner",
+        name: `learner-${ASSIGNMENT_ID}`,
         enabled: process.env.NODE_ENV === "development",
         serialize: {
           options: true, // Enable serialization to avoid large data crashes
@@ -594,7 +653,7 @@ export const useLearnerStore = createWithEqualityFn<
       },
     ),
     {
-      name: "learner",
+      name: `learner-${ASSIGNMENT_ID}`,
       partialize: (state) => ({
         questions: state.questions,
         activeAttemptId: state.activeAttemptId,

@@ -23,7 +23,11 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
 import { ASSIGNMENT_SCHEMA_URL } from "../constants";
-import { Choice, QuestionDto } from "../dto/update.questions.request.dto";
+import {
+  Choice,
+  QuestionDto,
+  ScoringDto,
+} from "../dto/update.questions.request.dto";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
@@ -128,6 +132,7 @@ export class QuestionController {
   deleteQuestion(@Param("id") id: number): Promise<BaseQuestionResponseDto> {
     return this.questionService.remove(Number(id));
   }
+
   @Post("create-marking-rubric")
   @Roles(UserRole.AUTHOR)
   @ApiOperation({ summary: "Create marking rubric" })
@@ -139,20 +144,37 @@ export class QuestionController {
   async createMarkingRubric(
     @Body()
     body: {
-      questions: {
-        id: number;
-        questionText: string;
-        questionType: string;
-        responseType?: ResponseType;
-      }[];
-      variantMode: boolean;
+      question: QuestionDto;
+      rubricIndex: number;
     },
     @Req() request: UserSessionRequest,
-  ): Promise<Record<number, string>> {
-    const { questions, variantMode } = body;
+  ): Promise<ScoringDto | Choice[]> {
+    const { question, rubricIndex } = body;
     return await this.questionService.createMarkingRubric(
-      questions,
-      variantMode,
+      question,
+      request.userSession.assignmentId,
+      rubricIndex,
+    );
+  }
+
+  @Post("expand-marking-rubric")
+  @Roles(UserRole.AUTHOR)
+  @ApiOperation({ summary: "Create marking rubric" })
+  @ApiBody({
+    type: Object,
+    description: "Questions for creating marking rubric",
+  })
+  @ApiResponse({ status: 200, type: Object })
+  async expandMarkingRubric(
+    @Body()
+    body: {
+      question: QuestionDto;
+    },
+    @Req() request: UserSessionRequest,
+  ): Promise<QuestionDto> {
+    const { question } = body;
+    return await this.questionService.expandMarkingRubric(
+      question,
       request.userSession.assignmentId,
     );
   }

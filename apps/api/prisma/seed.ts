@@ -1,6 +1,6 @@
 import { exec } from "node:child_process";
 import path from "node:path";
-import { PrismaClient, Question } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import dotenv from "dotenv";
 import {
   ScoringType,
@@ -20,16 +20,13 @@ const questions: CreateUpdateQuestionRequestDto[] = [
     totalPoints: 2,
     scoring: {
       type: ScoringType.CRITERIA_BASED,
-      criteria: [
+      rubrics: [
         {
-          description:
-            "No, a valid URL for a job listing for a Cybersecurity role was not provided.",
-          points: 0,
-        },
-        {
-          description:
-            "Yes, a valid URL for a job listing for a Cybersecurity role was provided.",
-          points: 1,
+          rubricQuestion: "Did the learner provide a valid job listing URL?",
+          criteria: [
+            { description: "No, a valid URL was not provided.", points: 0 },
+            { description: "Yes, a valid URL was provided.", points: 1 },
+          ],
         },
       ],
     },
@@ -42,16 +39,19 @@ const questions: CreateUpdateQuestionRequestDto[] = [
     totalPoints: 2,
     scoring: {
       type: ScoringType.CRITERIA_BASED,
-      criteria: [
+      rubrics: [
         {
-          description:
-            "No, the Company Name, Job Title, and Job Location were not provided.",
-          points: 0,
-        },
-        {
-          description:
-            "Yes, the Company Name, Job Title, and Job Location were provided.",
-          points: 1,
+          rubricQuestion: "Did the learner provide all required details?",
+          criteria: [
+            {
+              description: "No, some or all required details were missing.",
+              points: 0,
+            },
+            {
+              description: "Yes, all required details were provided.",
+              points: 1,
+            },
+          ],
         },
       ],
     },
@@ -64,16 +64,22 @@ const questions: CreateUpdateQuestionRequestDto[] = [
     totalPoints: 2,
     scoring: {
       type: ScoringType.CRITERIA_BASED,
-      criteria: [
+      rubrics: [
         {
-          description:
-            "No, at least 3 IT or cybersecurity skills required for the selected Cybersecurity job listing were not provided.",
-          points: 0,
-        },
-        {
-          description:
-            "Yes, at least 3 IT or cybersecurity skills required for the selected Cybersecurity job listing were provided.",
-          points: 1,
+          rubricQuestion:
+            "Did the learner list at least 3 relevant IT or cybersecurity skills?",
+          criteria: [
+            {
+              description:
+                "No, fewer than 3 required skills were provided or they were not relevant.",
+              points: 0,
+            },
+            {
+              description:
+                "Yes, at least 3 relevant IT or cybersecurity skills were provided.",
+              points: 1,
+            },
+          ],
         },
       ],
     },
@@ -86,21 +92,25 @@ const questions: CreateUpdateQuestionRequestDto[] = [
     totalPoints: 2,
     scoring: {
       type: ScoringType.CRITERIA_BASED,
-      criteria: [
+      rubrics: [
         {
-          description:
-            "No, the Education, Preferred Certifications, and Experience/background were not provided.",
-          points: 0,
-        },
-        {
-          description:
-            "Yes, the Education, Preferred Certifications, and Experience/background were provided.",
-          points: 1,
+          rubricQuestion: "Did the learner provide all required details?",
+          criteria: [
+            {
+              description: "No, some or all required details were missing.",
+              points: 0,
+            },
+            {
+              description: "Yes, all required details were provided.",
+              points: 1,
+            },
+          ],
         },
       ],
     },
   },
 ];
+
 async function runPgRestore(sqlFilePath: string) {
   const database = process.env.POSTGRES_DB;
   const user = process.env.POSTGRES_USER;
@@ -120,6 +130,7 @@ async function runPgRestore(sqlFilePath: string) {
     });
   });
 }
+
 async function main() {
   console.log("Start seeding...");
   // eslint-disable-next-line unicorn/prefer-module
@@ -136,35 +147,30 @@ async function main() {
         instructions: `Before submitting your responses, please ensure you have completed the following tasks:
 
   **Task 1: Identify Cybersecurity Role and Find Job Listing**
-  [A] - First, identify a Cybersecurity job role (for example, Cybersecurity Specialist / Cybersecurity Analyst / Cybersecurity Engineer / etc.) that you want to pursue as a career. It may be a role you want to start your Cybersecurity career with, or a role you aspire to pursue at some future point in your career journey.
-
-  [B] - Next, search for job postings related to the identified Cybersecurity role that you find appealing by going to a job board of your choice (for example, LinkedIn, Indeed, Zip Recruiter, Glassdoor, Monster, Naukri, USAjobs.gov, jobbank.gc.ca, and so on.). You could filter or narrow down the job listings based on criteria like the location(s) you are interested in working, employment type (for example, full-time, part-time, freelance, consulting, and so on), industry (for example, Banking, Healthcare, IT, retail, and so on) or other factors. Identify one job listing that interests you, and you can see yourself applying when you have the right skills and qualifications.
+  [A] - Identify a Cybersecurity job role that interests you.
+  [B] - Find a related job listing on a job board of your choice.
 
   **Task 2: Understand Job Details and Requirements**
-  Understand the job details (title, company, location, responsibilities, employment type, salary range, benefits, and so on) and requirements (skills, educational qualifications, experience, certifications, and so on).
+  Research job details like responsibilities, location, salary, etc.
 
   **Task 3: Determine Job Attractiveness**
-  Identify aspects of the job that you find suitable and unsuitable. Are you still interested in applying for a job like this in the future? If not, repeat 1-3 above until you find a Cybersecurity job that you would like to take up in the future.
+  Decide if the job fits your interests and career goals.
 
   **Task 4: Identify Gaps in your Portfolio**
-  Perform a self-assessment and create an inventory of your current portfolio (skills, education, experience, certifications, and so on). Compare the portfolio with the job requirements and identify the gaps that you need to bridge to be eligible for the selected Cybersecurity job. For example, what skills and experience do you need to develop, and what educational qualifications and industry certifications do you need to achieve to become job-ready?
+  Compare your current qualifications with job requirements.
 
   **Task 5: Create a Plan**
-  Based on the gaps in your portfolio versus the requirements listed in the job, create a roadmap of actions you need to take to become eligible for the chosen Cybersecurity job.  For example, how will you develop the required skills and prepare for any required certifications?
+  Develop a roadmap to become eligible for this job.
   `,
         gradingCriteriaOverview: `The assignment is worth 10 points and requires 60% to pass.
 
-  [1] (1 point) Provide the URL for your selected Job listing for a Cybersecurity role that you can see yourself applying for in the future.
+  [1] (1 point) Provide the URL for your selected job listing.
+  [2] (2 points) Provide company name, job title, and job location.
+  [3] (2 points) List at least 3 IT or cybersecurity skills required.
+  [4] (2 points) Provide education, certifications, and experience details.
+  [5] (3 points) Outline a plan to qualify for the job.
 
-  [2] (2 points) Provide the following details from the selected Cybersecurity job posting: Company Name, Job Title, Job Location.
-
-  [3] (2 points) Provide at least 3 IT or cybersecurity skills required for the selected Cybersecurity job listing.
-
-  [4] (2 points) Provide the following details from the selected Cybersecurity job listing: Education, Preferred Certifications, Experience/background.
-
-  [5] (3 points) Based on your current education, experience, skills, and certifications, provide a list of steps you will need to take to be eligible to apply for the chosen Cybersecurity job listing. List the steps required using the following categories: Education/Experience, Skills, and Certifications.
-
-  Click on "Begin Assignment" (top right) to provide your responses to the above questions.`,
+  Click "Begin Assignment" to submit your responses.`,
         graded: true,
         allotedTimeMinutes: 1,
         displayOrder: "RANDOM",
@@ -200,6 +206,7 @@ async function main() {
   }
   console.log("Seeding completed.");
 }
+
 main()
   .catch((error) => {
     console.error(error);

@@ -462,7 +462,8 @@ function SuccessPage() {
                       grade >= passingGrade ? (
                         <>
                           <strong className="text-green-600">
-                            Congrats on successfully completing this assignment!
+                            Congratulations on successfully completing this
+                            assignment!
                           </strong>{" "}
                           Your grade has been recorded. Feel free to close this
                           tab and return to the main course page.

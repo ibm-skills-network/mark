@@ -1,6 +1,7 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
 import { useAppConfig } from "@/stores/appConfig";
+import { useCallback } from "react";
 
 export function absoluteUrl(path: string) {
   const base = getBaseUrl();
@@ -38,30 +39,49 @@ export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
   backendData: Partial<T>,
 ): T | Partial<T> {
-  const localDataExists = localData?.updatedAt;
-  const localDataIsNewer =
-    new Date(localData.updatedAt) > new Date(backendData.updatedAt);
-  const oneWeekAgo = new Date(); // this is configurable based on requirements. I went with a week because its not too long and not too short.
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const localDataIsOlderThanAWeek = new Date(localData.updatedAt) < oneWeekAgo;
-
-  if (localDataExists && localDataIsNewer && !localDataIsOlderThanAWeek) {
-    return localData; // ensure that the cached data doesnt become outdated and use the backend data instead to avoid issues when mark gets an update
+  // If either updatedAt is missing, fallback to backend data.
+  if (!localData?.updatedAt || !backendData.updatedAt) {
+    return backendData;
   }
+
+  const localDate = new Date(localData.updatedAt);
+  const backendDate = new Date(backendData.updatedAt);
+
+  console.log("Comparing dates:", {
+    local: localData.updatedAt,
+    backend: backendData.updatedAt,
+    localDate,
+    backendDate,
+  });
+
+  // Define a threshold for stale data (e.g. one week ago).
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+  // If local data is newer than backend and not older than a week, use local.
+  if (localDate > backendDate && localDate > oneWeekAgo) {
+    console.log("Using local data.");
+    return localData;
+  }
+  console.log("Using backend data.");
   return backendData;
 }
 
 type DebugArgs = string | number | boolean | object;
 
 export const useDebugLog = () => {
-  const debugMode = useAppConfig((state) => state.DEBUG_MODE);
-  const useDebugLog = (...args: DebugArgs[]) => {
-    if (debugMode) {
-      console.log("DEBUG LOG:", ...args);
-    }
-  };
+  const debugMode = process.env.NODE_ENV === "development";
 
-  return useDebugLog;
+  const debugLog = useCallback(
+    (...args: DebugArgs[]) => {
+      if (debugMode) {
+        console.debug("[DEBUG LOG]:", ...args);
+      }
+    },
+    [debugMode],
+  );
+
+  return debugLog;
 };
 
 /**

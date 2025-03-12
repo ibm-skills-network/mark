@@ -10,6 +10,7 @@ export interface ClientUserSession {
   role: UserRole;
   assignmentId: number;
   returnUrl?: string;
+  launch_presentation_locale?: string;
 }
 
 export interface UserSession extends ClientUserSession {

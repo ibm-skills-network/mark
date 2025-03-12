@@ -43,6 +43,8 @@ Mark the question as {grading_type} based on the provided criteria and the conte
 
 Make sure your feedback is in language code: {language} 
 
+Provide reason why you provided the points you did and how the content of the URL influenced your decision.
+
 {responseSpecificInstruction}
 
 {format_instructions}
@@ -71,7 +73,7 @@ Feedback:
 - **Practices**: Recommend best practices to enhance maintainability and readability.
 - **Strengths**: Identify standout aspects, such as innovative approaches or well-organized structure.
 Make sure your feedback is in language code: {language} 
-
+Include reasons why you awarded the points you did and how the code quality influenced your decision.
 > Provide concise, constructive feedback. Avoid solutions, but offer guidance for improvement. Act as a mentor, not a peer.
 `;
 export const gradeDocumentFileQuestionLlmTemplate = `
@@ -98,6 +100,7 @@ Feedback:
 - **Supporting Details**: Are there relevant examples, citations, or evidence supporting the content?
 - **Strengths**: Identify strengths, such as clear organization, effective arguments, or well-used visuals.
 Make sure your feedback is in language code: {language} 
+Include reasons why you awarded the points you did and how the document quality influenced your decision.
 > Keep feedback concise and clear. Avoid solutions, and guide toward improvement as a mentor.
 `;
 export const gradeImageFileQuestionLlmTemplate = `
@@ -123,7 +126,7 @@ Feedback:
 - **Labeling/Annotation**: If applicable, are elements clearly labeled or annotated? Suggest improvements if needed.
 - **Composition**: Is the image well-organized and visually balanced?
 - **Strengths**: Highlight strong points, such as effective use of visuals, clear labeling, or relevance to the topic.
-
+Include reasons why you awarded the points you did and how the image quality influenced your decision.
 > Provide constructive, professional feedback that encourages improvement. Avoid solutions, and guide as a mentor.
 `;
 
@@ -147,7 +150,7 @@ The question offers a maximum of {total_points} points and follows the scoring c
 If the response is irrelevant (e.g., "I don't know"), state: "The answer you provided is not relevant to the question. Please try again."
 Make sure your feedback is in language code: {language} 
 **Additional Instructions for Response Type:** "{responseSpecificInstruction}"
-
+Include reasons why you awarded the points you did and how the response quality influenced your decision.
 {format_instructions}
 `;
 
@@ -203,7 +206,7 @@ You are an expert teacher tasked with creating a set of questions based on the p
 Content: {content}
 
 Guidelines:
-- Generate exactly this number of questions based on the distribution specified below. No more, no less:
+ Generate exactly {totalQuestionsToGenerate} of questions based on the distribution specified below. No more, no less:
   - MULTIPLE_CHOICE: {multipleChoice} questions.
   - MULTIPLE_SELECT: {multipleSelect} questions.
   - TEXT_RESPONSE: {textResponse} questions.
@@ -218,6 +221,7 @@ Guidelines:
   - Provide a scoring rubric with clear criteria.
   - Criteria should have unique points and a concise description.
   - Points must be in descending order, with clear distinctions between levels.
+  - Generate enough rubric criteria to cover the entire scope of the learning objectives.
 - Avoid unnecessary tokens; keep descriptions short and concise.
 Output format:
 {format_instructions}
@@ -256,7 +260,7 @@ You are an expert teacher tasked with creating a set of questions based on the p
 Learning Objectives: {learning_objectives}
 
 Guidelines:
-- Generate exactly this number of questions based on the distribution specified below. No more, no less:
+ Generate exactly {totalQuestionsToGenerate} of questions based on the distribution specified below. No more, no less:
   - MULTIPLE_CHOICE: {multipleChoice} questions.
   - MULTIPLE_SELECT: {multipleSelect} questions.
   - TEXT_RESPONSE: {textResponse} questions.
@@ -271,6 +275,7 @@ Guidelines:
   - Provide a scoring rubric with clear criteria.
   - Criteria should have unique points and a concise description.
   - Points must be in descending order, with clear distinctions between levels.
+  - Generate enough rubric criteria to cover the entire scope of the learning objectives.
 - Avoid unnecessary tokens; keep descriptions short and concise.
 Output format:
 {format_instructions}
@@ -282,7 +287,7 @@ Content: {content}
 Learning Objectives: {learning_objectives}
 
 Guidelines:
-- Generate exactly this number of questions based on the distribution specified below. No more, no less:
+- Generate exactly {totalQuestionsToGenerate} of questions based on the distribution specified below. No more, no less:
   - MULTIPLE_CHOICE: {multipleChoice} questions.
   - MULTIPLE_SELECT: {multipleSelect} questions.
   - TEXT_RESPONSE: {textResponse} questions.
@@ -297,6 +302,7 @@ Guidelines:
   - Provide a scoring rubric with clear criteria.
   - Criteria should have unique points and a concise description.
   - Points must be in descending order, with clear distinctions between levels.
+  - Generate enough rubric criteria to cover the entire scope of the learning objectives.
 - Avoid unnecessary tokens; keep descriptions short and concise.
 Output format:
 {format_instructions}
@@ -382,22 +388,24 @@ export const generateMarkingRubricTemplate = `
     - SINGLE_CORRECT: Only one correct answer; for the rest assign negative points for incorrect choices as needed`;
 
 export const generateSingleBasedMarkingRubricTemplate = `
-    You are an AI assistant helping the author create a scoring rubric for choice-based questions.
-    Questions: {questions_json_array}
+    You are an AI assistant helping the author create a set of choices for choice-based questions.
+    Question: {question_json_array}
     {format_instructions}
-    {grading_style}
+    - If the question already has choices, then you need to make new different choices.
     - Each option has "choice" (answer), "isCorrect" (true/false), "points", and "feedback".
     - Provide clear and concise feedback for each choice.
     - Only one correct answer,and make the rest incorrect choices with zero points.
+    - points should be in whole numbers.
+
   `;
 export const generateMultipleBasedMarkingRubricTemplate = `
     You are an AI assistant helping the author create a scoring rubric for choice-based questions.
-    Questions: {questions_json_array}
+    Questions: {question_json_array}
     {format_instructions}
-    {grading_style}
     - Each option has "choice" (answer), "isCorrect" (true/false), "points", and "feedback".
     - Provide clear and concise feedback for each choice.
-    - At least two correct answers; assign negative points for incorrect choices as needed.
+    - At least two correct answers; assign negative points for incorrect choices as needed. 
+    - points should be in whole numbers.
   `;
 export const generateUrlBasedMarkingRubricTemplate = `
   Generate a scoring rubric for URL-based questions.
@@ -407,8 +415,6 @@ export const generateUrlBasedMarkingRubricTemplate = `
    Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-  
-  {grading_style}
 
   Focus areas:
   - URL relevance
@@ -418,7 +424,6 @@ export const generateUrlBasedMarkingRubricTemplate = `
 
 export const generateTextBasedMarkingRubricTemplate = `
   Generate a scoring rubric for text-based questions.
-  Questions: {questions_json_array}
   {format_instructions}
 
   Format each rubric item as an object with:
@@ -430,40 +435,37 @@ export const generateTextBasedMarkingRubricTemplate = `
   - Clarity of explanation: Is the explanation easy to understand?
   - Quality of integration: How well is the content integrated with supporting information or analysis?
 
-  {grading_style}
+  the response type is {response_type}, tailor so it matches the response type.
 
   Focus on clear distinctions between correct, partially correct, and incorrect answers.
 `;
 
 export const generateDocumentFileUploadMarkingRubricTemplate = `
   Generate a scoring rubric for document file upload questions.
-  Question: {questions_json_array}
   {format_instructions}
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-  {grading_style}
+  the response type is {response_type}, tailor so it matches the response type.
   Focus areas:
   - Content relevance: Does the document directly address the question or topic?
   - Organization: Is the document structured logically, with clear headings and flow?
   - Clarity and style: Is the document written clearly, free of grammatical errors, and in an appropriate tone?
   - Supporting details: Are there relevant examples, statistics, or citations that strengthen the arguments?
-  - Visuals and formatting: Are visuals used effectively, and is the document formatted for readability?
-
+ 
   return a valid JSON object
 
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;
 export const generateLinkFileUploadMarkingRubricTemplate = `
   Generate a scoring rubric for link/file upload questions.
-  Question: {questions_json_array}
   {format_instructions}
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-  {grading_style}
+  the response type is {response_type}, tailor so it matches the response type.
   Focus areas:
   - Relevance: Does the linked content directly address the question or topic?
   - Credibility: Is the source of the linked content reliable and trustworthy?
@@ -475,13 +477,12 @@ export const generateLinkFileUploadMarkingRubricTemplate = `
 `;
 export const generateImageFileUploadMarkingRubricTemplate = `
   Generate a scoring rubric for image file upload questions.
-  Question: {questions_json_array}
   {format_instructions}
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-  {grading_style}
+  the response type is {response_type}, tailor so it matches the response type.
   Focus areas:
   - Relevance: Does the image directly support and enhance the answer to the question?
   - Clarity: Is the image clear, focused, and free of unnecessary elements?
@@ -495,13 +496,12 @@ export const generateImageFileUploadMarkingRubricTemplate = `
 
 export const generateCodeFileUploadMarkingRubricTemplate = `
   Generate a scoring rubric for code file upload questions.
-  Question: {questions_json_array}
   {format_instructions}
 
   Format each rubric item as an object with:
   - "points" (listed in descending order, unique per item)
   - "description" (detailed evaluation criteria describing the quality level needed to achieve this score, in a descending waterfall style. Each score should represent a standalone quality level rather than cumulative features.)
-  {grading_style}
+  the response type is {response_type}, tailor so it matches the response type.
   Focus areas:
   - Functionality: Does the code work as intended and meet all requirements?
   - Code quality: Is the code well-structured, maintainable, and follows best practices?

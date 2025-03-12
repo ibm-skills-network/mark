@@ -10,7 +10,7 @@ import {
   LearnerAssignmentState,
 } from "@/config/types";
 import { getSupportedLanguages } from "@/lib/talkToBackend";
-import { useLearnerStore } from "@/stores/learner";
+import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { FC, useEffect, useState } from "react";
@@ -81,6 +81,11 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
     (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
+  const [languageModalTriggered, setLanguageModalTriggered] =
+    useLearnerOverviewStore((state) => [
+      state.languageModalTriggered,
+      state.setLanguageModalTriggered,
+    ]);
   const router = useRouter();
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(
@@ -115,7 +120,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       : Math.max(0, numAttempts - attempts.length);
 
   // find the latest attempt date
-  const latestAttempt = attempts.reduce((latest, attempt) => {
+  const latestAttempt = attempts?.reduce((latest, attempt) => {
     if (!latest) return attempt;
     if (
       new Date(attempt.createdAt).getTime() >
@@ -137,6 +142,10 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     } else {
       toast.error("Please select a language to continue.");
     }
+  };
+  const handleCloseModal = () => {
+    setToggleLanguageSelectionModal(false);
+    setLanguageModalTriggered(false);
   };
   return (
     <>
@@ -239,71 +248,54 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
         </div>
         <div className="hidden md:block"> </div>
       </main>
-      {toggleLanguageSelectionModal && role === "learner" && (
-        <Modal
-          onClose={() => setToggleLanguageSelectionModal(false)}
-          Title="Please pick one of the available languages"
-        >
-          <p className="text-gray-600">
-            We recommend you to experience our assignment in
-            <strong> English </strong>
-            as it's the original language. However, if you would like to
-            continue learning in your chosen language please be aware that our
-            translations are AI generated and may contain some inaccuracies.
-          </p>
-          <p className="text-gray-600 mb-8">
-            You will be able to switch your language at any time during the
-            assignment.
-          </p>
-          {/* <div className="flex flex-col gap-4 mt-10">
+      {toggleLanguageSelectionModal &&
+        role === "learner" &&
+        languageModalTriggered && (
+          <Modal
+            onClose={handleCloseModal}
+            Title="Please pick one of the available languages"
+          >
+            <p className="text-gray-600">
+              We recommend you experience our assignment in
+              <strong> English </strong>
+              as it's the original language. However, if you would like to
+              continue learning in your chosen language please be aware that our
+              translations are AI generated and may contain some inaccuracies.
+            </p>
+            <p className="text-gray-600 mb-8">
+              You will be able to switch your language at any time during the
+              assignment.
+            </p>
             {isLoading ? (
               <p className="text-center text-gray-500">Loading languages...</p>
             ) : (
-              languages.map((langCode) => (
-                <button
-                  key={langCode}
-                  className={`p-3 rounded-md text-lg font-medium ${
-                    selectedLanguage === langCode
-                      ? "bg-violet-500 text-white"
-                      : "bg-gray-200"
-                  }`}
-                  onClick={() => setSelectedLanguage(langCode)}
-                >
-                  {getLanguageName(langCode)}
-                </button>
-              ))
+              <Dropdown
+                items={languages.map((lang) => ({
+                  label: getLanguageName(lang),
+                  value: lang,
+                }))}
+                selectedItem={selectedLanguage}
+                setSelectedItem={setSelectedLanguage}
+                placeholder="Select language"
+              />
             )}
-          </div> */}
-          {isLoading ? (
-            <p className="text-center text-gray-500">Loading languages...</p>
-          ) : (
-            <Dropdown
-              items={languages.map((lang) => ({
-                label: getLanguageName(lang),
-                value: lang,
-              }))}
-              selectedItem={selectedLanguage}
-              setSelectedItem={setSelectedLanguage}
-              placeholder="Select language"
-            />
-          )}
-          <div className="flex justify-end gap-3 mt-6">
-            <button
-              className="px-4 py-2 text-gray-500 hover:text-gray-700"
-              onClick={() => setToggleLanguageSelectionModal(false)}
-            >
-              Cancel
-            </button>
-            <button
-              className="px-4 py-2 bg-violet-500 text-white rounded-md disabled:opacity-50"
-              onClick={handleConfirm}
-              disabled={!selectedLanguage}
-            >
-              Confirm
-            </button>
-          </div>
-        </Modal>
-      )}
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                className="px-4 py-2 text-gray-500 hover:text-gray-700"
+                onClick={() => setToggleLanguageSelectionModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-violet-500 text-white rounded-md disabled:opacity-50"
+                onClick={handleConfirm}
+                disabled={!selectedLanguage}
+              >
+                Confirm
+              </button>
+            </div>
+          </Modal>
+        )}
     </>
   );
 };

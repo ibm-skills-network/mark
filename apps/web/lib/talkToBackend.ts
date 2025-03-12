@@ -26,6 +26,7 @@ import type {
   ReplaceAssignmentRequest,
   REPORT_TYPE,
   ResponseType,
+  Scoring,
   SubmitAssignmentResponse,
   UpdateAssignmentQuestionsResponse,
   User,
@@ -137,11 +138,12 @@ export async function getAssignment(
   id: number,
   userPreferedLanguage?: string,
   cookies?: string,
-): Promise<Assignment | undefined> {
+): Promise<Assignment> {
   try {
     const url = userPreferedLanguage
       ? `${BASE_API_ROUTES.assignments}/${id}?lang=${userPreferedLanguage}`
       : `${BASE_API_ROUTES.assignments}/${id}`;
+
     const res = await fetch(url, {
       headers: {
         "Cache-Control": "no-cache",
@@ -149,21 +151,21 @@ export async function getAssignment(
       },
     });
 
+    const responseBody = (await res.json()) as GetAssignmentResponse &
+      BaseBackendResponse;
+
     if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to fetch assignment");
+      throw new Error(
+        responseBody.message || `Request failed with status ${res.status}`,
+      );
     }
-    const { success, error, ...remainingData } =
-      (await res.json()) as GetAssignmentResponse;
-    if (!success) {
-      throw new Error(error);
-    }
-    const assignmentData: Assignment = remainingData;
-    return assignmentData;
+
+    const { success, ...remainingData } = responseBody;
+
+    return remainingData as Assignment;
   } catch (err) {
-    console.error(err);
-    // TODO: handle error in a better way with the help of the response code
-    return undefined;
+    console.error("Error fetching assignment:", err);
+    throw err;
   }
 }
 
@@ -483,17 +485,41 @@ export async function generateQuestionVariant(
 }
 
 export async function generateRubric(
-  questions: {
-    id: number;
-    questionText: string;
-    questionType: string;
-    responseType: ResponseType;
-  }[],
+  question: QuestionAuthorStore,
   assignmentId: number,
-  variantMode: boolean,
+  rubricIndex?: number,
   cookies?: string,
-): Promise<Record<number, string> | undefined> {
+): Promise<Scoring | Choice[]> {
   const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/create-marking-rubric`;
+  console.log("rubricIndex", rubricIndex);
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify({ question, rubricIndex }),
+    });
+
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to generate rubric");
+    }
+    const rubric = (await res.json()) as Scoring | Choice[];
+    return rubric;
+  } catch (err) {
+    console.error(err);
+    return undefined;
+  }
+}
+
+export async function expandMarkingRubric(
+  question: QuestionAuthorStore,
+  assignmentId: number,
+  cookies?: string,
+): Promise<QuestionAuthorStore> {
+  const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/expand-marking-rubric`;
 
   try {
     const res = await fetch(endpointURL, {
@@ -502,14 +528,14 @@ export async function generateRubric(
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify({ questions, variantMode }),
+      body: JSON.stringify({ question }),
     });
 
     if (!res.ok) {
       const errorBody = (await res.json()) as { message: string };
       throw new Error(errorBody.message || "Failed to generate rubric");
     }
-    const rubric = (await res.json()) as Record<number, string>;
+    const rubric = (await res.json()) as QuestionAuthorStore;
     return rubric;
   } catch (err) {
     console.error(err);
@@ -800,7 +826,7 @@ export async function uploadFiles(
   payload: QuestionGenerationPayload,
   cookies?: string,
 ): Promise<{ success: boolean; jobId?: number }> {
-  const endpointURL = `${BASE_API_ROUTES.assignments}/${payload.assignmentId}/upload-files`;
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${payload.assignmentId}/generate-questions`;
   const TIMEOUT = 1000000;
 
   try {

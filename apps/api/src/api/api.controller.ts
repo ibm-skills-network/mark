@@ -52,6 +52,7 @@ export class ApiController {
       role: userSession.role,
       assignmentId: userSession.assignmentId,
       returnUrl: userSession.returnUrl,
+      launch_presentation_locale: userSession.launch_presentation_locale,
     };
   }
 }

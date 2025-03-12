@@ -1,11 +1,6 @@
-import SparkleLottie from "@/app/animations/sparkleLottie";
 import Tooltip from "@/components/Tooltip";
 import WarningAlert from "@/components/WarningAlert";
-import {
-  Choice,
-  Choice as ChoiceType,
-  QuestionAuthorStore,
-} from "@/config/types";
+import { Choice, QuestionAuthorStore } from "@/config/types";
 import { generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import {
@@ -16,10 +11,8 @@ import {
   SparklesIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { IconArrowsShuffle } from "@tabler/icons-react";
-import React, { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { shallow } from "zustand/shallow";
 
 interface SectionProps {
   questionId: number;
@@ -101,13 +94,13 @@ function Section({
   // When modifying a choice
   const handleChoiceChange = (
     choiceIndex: number,
-    updatedChoice: Partial<ChoiceType>,
+    updatedChoice: Partial<Choice>,
   ) => {
     modifyChoice(questionId, choiceIndex, updatedChoice, variantId);
   };
 
   // When setting choices
-  const handleSetChoices = (choices: ChoiceType[]) => {
+  const handleSetChoices = (choices: Choice[]) => {
     setChoices(questionId, choices, variantId);
   };
 
@@ -200,35 +193,18 @@ function Section({
     }
   };
 
-  const fetchAiGenChoices = async () => {
+  const fetchAiGenChoices = async (question: QuestionAuthorStore) => {
     setLoading(true);
-    const questions = [
-      {
-        id: questionId,
-        questionText: questionTitle,
-        questionType: type,
-        responseType: question.responseType,
-      },
-    ];
     const assignmentId = useAuthorStore.getState().activeAssignmentId;
-
     try {
-      const response = await generateRubric(
-        questions,
-        assignmentId,
-        variantMode,
-      );
-      if (response?.[questionId]) {
-        const parsedData = JSON.parse(response[questionId]) as {
-          choices: ChoiceType[];
-        };
-        const parsedChoices = parsedData.choices?.map((choice: ChoiceType) => ({
+      const response = await generateRubric(question, assignmentId);
+      if (response && Array.isArray(response)) {
+        const parsedChoices = response.map((choice: Choice) => ({
           choice: choice.choice,
           isCorrect: choice.isCorrect,
           points: choice.points,
           feedback: choice.feedback,
         }));
-
         setChoices(questionId, parsedChoices, variantId); // Pass variantId
         toast.success("Choices generated successfully!");
       } else {
@@ -251,7 +227,7 @@ function Section({
     if (question.scoring?.criteria?.length > 0) {
       setModalOpen(true);
     } else {
-      void fetchAiGenChoices();
+      void fetchAiGenChoices(question);
     }
   };
 
@@ -265,7 +241,7 @@ function Section({
     setCriteriaMode(questionId, "AI_GEN");
 
     try {
-      await fetchAiGenChoices();
+      await fetchAiGenChoices(question);
     } catch (error) {
       console.error("Failed to generate rubric:", error);
       toast.error("Failed to generate rubric. Please try again.");

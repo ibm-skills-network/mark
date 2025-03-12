@@ -1,187 +1,330 @@
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
-import { useCallback, useEffect } from "react";
-import { Question } from "../../config/types";
+import { useCallback } from "react";
+import type {
+  Question,
+  Choice,
+  Scoring,
+  QuestionVariants,
+  QuestionType,
+} from "../../config/types";
 import { useDebugLog } from "../../lib/utils";
 
-export const useQuestionsAreReadyToBePublished = (questions: Question[]) => {
+// Define types for validation errors and results.
+interface ValidationError {
+  message: string;
+  step: number;
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  message: string;
+  step: number | null;
+  invalidQuestionId: number | null;
+}
+const textTypes = new Set(["TEXT", "URL", "UPLOAD", "LINK_FILE"]);
+const choiceTypes = new Set(["SINGLE_CORRECT", "MULTIPLE_CORRECT"]);
+/**
+ * Hook that validates whether the provided questions are ready to be published.
+ * It returns a function that returns a ValidationResult.
+ */
+export const useQuestionsAreReadyToBePublished = (
+  questions: Question[],
+): (() => ValidationResult) => {
   const debugLog = useDebugLog();
   const assignmentConfig = useAssignmentConfig((state) => state);
   const introduction = useAuthorStore((state) => state.introduction);
-  const questionsAreReadyToBePublished = useCallback(() => {
+
+  // Helper: Validate basic question fields.
+  const validateBasicFields = (
+    q: Question,
+    index: number,
+  ): ValidationError | null => {
+    if (!q.question?.trim()) {
+      return { message: `Question ${index + 1} text is empty.`, step: 3 };
+    }
+    if (!q.type?.trim()) {
+      return { message: `Question ${index + 1} type is missing.`, step: 3 };
+    }
+    if (q.totalPoints == null) {
+      return {
+        message: `Question ${index + 1} total points are missing.`,
+        step: 3,
+      };
+    }
+    if (q.assignmentId == null) {
+      return {
+        message: `Question ${index + 1} assignment ID is missing.`,
+        step: 3,
+      };
+    }
+    return null;
+  };
+
+  // Helper: Validate choices array.
+  const validateChoices = (
+    choices: Choice[] | undefined,
+    index: number,
+    type: QuestionType,
+  ): ValidationError | null => {
+    if (!choices || !Array.isArray(choices) || choices.length === 0) {
+      return { message: `Question ${index + 1} has no choices.`, step: 3 };
+    }
+    if (choiceTypes.has(type) && choices.length < 2) {
+      return {
+        message: `Question ${index + 1} must have at least 2 choices.`,
+        step: 3,
+      };
+    }
+    for (let i = 0; i < choices.length; i++) {
+      const { choice: choiceText, points } = choices[i];
+      if (!choiceText?.trim()) {
+        return {
+          message: `Question ${index + 1} has an empty choice text.`,
+          step: 3,
+        };
+      }
+      if (
+        points === undefined ||
+        points === null ||
+        typeof points !== "number"
+      ) {
+        return {
+          message: `Question ${index + 1} has a choice with invalid points.`,
+          step: 3,
+        };
+      }
+    }
+    if (choiceTypes.has(type)) {
+      if (!choices.some((choice) => choice.isCorrect)) {
+        return {
+          message: `Question ${index + 1} must have at least one correct choice.`,
+          step: 3,
+        };
+      }
+    }
+    return null;
+  };
+
+  // Helper: Validate scoring configuration (rubrics and criteria).
+  const validateScoring = (
+    scoring: Scoring | undefined,
+    index: number,
+  ): ValidationError | null => {
+    if (!scoring) {
+      return {
+        message: `Question ${index + 1} requires scoring configuration.`,
+        step: 3,
+      };
+    }
+    if (
+      !scoring.rubrics ||
+      !Array.isArray(scoring.rubrics) ||
+      scoring.rubrics.length === 0
+    ) {
+      return {
+        message: `Question ${index + 1} scoring rubrics are missing.`,
+        step: 3,
+      };
+    }
+    for (let r = 0; r < scoring.rubrics.length; r++) {
+      const rubric = scoring.rubrics[r];
+      if (!rubric?.rubricQuestion?.trim()) {
+        return {
+          message: `Question ${index + 1} rubric ${r + 1} question is empty.`,
+          step: 3,
+        };
+      }
+      if (
+        !rubric.criteria ||
+        !Array.isArray(rubric.criteria) ||
+        rubric.criteria.length === 0
+      ) {
+        return {
+          message: `Question ${index + 1} rubric ${r + 1} criteria are missing.`,
+          step: 3,
+        };
+      }
+      for (let c = 0; c < rubric.criteria.length; c++) {
+        const crit = rubric.criteria[c];
+        if (!crit.description?.trim()) {
+          return {
+            message: `Question ${index + 1} rubric ${r + 1} criteria ${c + 1} description is empty.`,
+            step: 3,
+          };
+        }
+        if (
+          crit.points === undefined ||
+          crit.points === null ||
+          typeof crit.points !== "number"
+        ) {
+          return {
+            message: `Question ${index + 1} rubric ${r + 1} criteria ${c + 1} points are invalid.`,
+            step: 3,
+          };
+        }
+      }
+    }
+    return null;
+  };
+
+  // Helper: Validate variants if present.
+  const validateVariants = (
+    variants: QuestionVariants[],
+    qType: QuestionType,
+    index: number,
+  ): ValidationError | null => {
+    for (let v = 0; v < variants.length; v++) {
+      const variant = variants[v];
+      if (!variant.variantContent?.trim()) {
+        return {
+          message: `Question ${index + 1} variant ${v + 1} content is empty.`,
+          step: 3,
+        };
+      }
+      if (variant.scoring && textTypes.has(qType)) {
+        const scoringError = validateScoring(variant.scoring, index);
+        if (scoringError) {
+          return scoringError;
+        }
+      }
+      // Ensure that variant.choices is an array if it exists.
+      if (
+        (variant.choices && choiceTypes.has(qType)) ||
+        qType === "TRUE_FALSE"
+      ) {
+        if (!Array.isArray(variant.choices)) {
+          return {
+            message: `Question ${index + 1} variant ${v + 1} choices are not in the correct format.`,
+            step: 3,
+          };
+        }
+        if (qType === "TRUE_FALSE" && variant.choices.length !== 1) {
+          return {
+            message: `Question ${index + 1} variant ${v + 1} must have exactly 1 choices.`,
+            step: 3,
+          };
+        }
+        const choiceError = validateChoices(variant.choices, index, qType);
+        if (choiceError) {
+          return choiceError;
+        }
+      }
+    }
+    return null;
+  };
+
+  const questionsAreReadyToBePublished = useCallback((): ValidationResult => {
     let isValid = true;
     let message = "";
     let step: number | null = null;
-    const nonValidQuestionsIds: number[] = [];
+    let invalidQuestionId: number | null = null;
+    const textTypes = new Set(["TEXT", "URL", "UPLOAD", "LINK_FILE"]);
+    const choiceTypes = new Set(["SINGLE_CORRECT", "MULTIPLE_CORRECT"]);
+    // Loop through each question and validate.
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      debugLog(`Checking question ${i + 1}:`, q);
 
-    questions?.some((eachQuestion, index) => {
-      const { type, question, choices, scoring, id } = eachQuestion;
-      debugLog(`Checking question ${index + 1}:`, eachQuestion);
-
-      if (!question?.trim()) {
-        debugLog(`Question ${index + 1} has empty text.`);
-        message = `Question ${index + 1} has empty text.`;
-        step = 3;
-        nonValidQuestionsIds.push(id);
+      const basicError = validateBasicFields(q, i);
+      if (basicError) {
+        message = basicError.message;
+        step = basicError.step;
+        invalidQuestionId = q.id;
         isValid = false;
-        return true;
+        break;
       }
-      if (["URL", "TEXT", "UPLOAD", "LINK_FILE"].includes(type)) {
-        if (
-          (eachQuestion.variants?.length &&
-            eachQuestion.variants?.some(
-              (variant) =>
-                !variant.scoring?.criteria?.some((criteria) =>
-                  criteria.description?.trim(),
-                ),
-            )) ||
-          eachQuestion.variants?.some(
-            (variant) => !variant.variantContent?.trim(),
-          )
-        ) {
-          nonValidQuestionsIds.push(id);
-          debugLog(`Question ${index + 1} has missing or invalid variants.`);
-          step = 3;
-          message = `Question ${index + 1} has missing or invalid variants.`;
+
+      if (choiceTypes.has(q.type) || q.type === "TRUE_FALSE") {
+        const choiceError = validateChoices(q.choices, i, q.type);
+        if (choiceError) {
+          message = choiceError.message;
+          step = choiceError.step;
+          invalidQuestionId = q.id;
           isValid = false;
-          return true;
-        }
-        const criteriaValid = scoring?.criteria?.every(
-          (criteria) => criteria.description?.trim().length > 0,
-        );
-        if (!scoring?.criteria?.length || !criteriaValid) {
-          nonValidQuestionsIds.push(id);
-          debugLog(`Question ${index + 1} has missing or invalid criteria.`);
-          step = 3;
-          message = `Question ${index + 1} has missing or invalid criteria.`;
-          isValid = false;
-          return true;
+          break;
         }
       }
 
-      if (type === "TRUE_FALSE") {
-        if (
-          eachQuestion.variants?.length &&
-          eachQuestion.variants?.some((variant) => {
-            !variant.variantContent?.trim() ||
-              variant.choices?.length !== 2 ||
-              (Array.isArray(variant.choices) &&
-                variant.choices.some(
-                  (choice) => !choice.choice.trim() || choice.points <= 0,
-                ));
-          })
-        ) {
-          nonValidQuestionsIds.push(id);
-          debugLog(`Question ${index + 1} has missing or invalid variants.`);
-          step = 3;
-          message = `Question ${index + 1} has missing or invalid variants.`;
+      if (textTypes.has(q.type) && q.scoring) {
+        const scoringError = validateScoring(q.scoring, i);
+        if (scoringError) {
+          message = scoringError.message;
+          step = scoringError.step;
+          invalidQuestionId = q.id;
           isValid = false;
-          return true;
-        }
-        if (
-          !choices ||
-          choices?.some(
-            (choice) => !choice.choice?.trim() || choice?.points <= 0,
-          )
-        ) {
-          nonValidQuestionsIds.push(id);
-          debugLog(`Question ${index + 1} has invalid True/False choices.`);
-          step = 3;
-          message = `Question ${index + 1} has invalid True/False choices.`;
-          isValid = false;
-          return true;
+          break;
         }
       }
 
-      if (["MULTIPLE_CORRECT", "SINGLE_CORRECT"].includes(type)) {
-        // check their variants and choices
-        if (
-          eachQuestion.variants?.length &&
-          eachQuestion.variants?.some(
-            (variant) =>
-              !variant.variantContent.trim() ||
-              variant.choices?.length < 2 ||
-              (Array.isArray(variant.choices) &&
-                variant.choices.some((choice) => !choice.choice?.trim())),
-          )
-        ) {
-          nonValidQuestionsIds.push(id);
-          debugLog(`Question ${index + 1} has missing or invalid variants.`);
-          step = 3;
-          message = `Question ${index + 1} has missing or invalid variants.`;
+      if (q.variants && Array.isArray(q.variants) && q.variants.length > 0) {
+        const variantError = validateVariants(q.variants, q.type, i);
+        if (variantError) {
+          message = variantError.message;
+          step = variantError.step;
+          invalidQuestionId = q.id;
           isValid = false;
-          return true;
-        }
-        if (
-          choices?.length < 2 ||
-          choices?.some((choice) => !choice.choice?.trim()) ||
-          !choices?.some((choice) => choice.isCorrect)
-        ) {
-          nonValidQuestionsIds.push(id);
-          debugLog(
-            `Question ${index + 1} is missing valid choices or correct answers.`,
-          );
-          message = `Question ${
-            index + 1
-          } is missing valid choices or correct answers.`;
-          step = 3;
-          isValid = false;
-          return true;
+          break;
         }
       }
 
-      debugLog(`Question ${index + 1} passed all checks.`);
-      return false; // Keep checking other questions
-    });
-    if (introduction?.trim() === "" || introduction?.trim() === "<p><br></p>") {
-      debugLog(`Introduction is empty.`);
-      message = `Introduction is empty.`;
-      step = 1;
-      isValid = false;
+      debugLog(`Question ${i + 1} passed all checks.`);
     }
-    if (assignmentConfig.graded === null) {
-      debugLog(`Assignment type is required.`);
-      message = `Assignment type is required.`;
-      step = 2;
-      isValid = false;
+
+    // Global assignment checks.
+    if (isValid) {
+      if (!introduction?.trim() || introduction.trim() === "<p><br></p>") {
+        message = `Introduction is empty.`;
+        debugLog(message);
+        step = 1;
+        isValid = false;
+      }
+      if (assignmentConfig.graded === null) {
+        message = `Assignment type is required.`;
+        debugLog(message);
+        step = 2;
+        isValid = false;
+      }
+      if (
+        assignmentConfig.numAttempts == null ||
+        assignmentConfig.numAttempts < -1
+      ) {
+        message = `Please enter a valid number of attempts.`;
+        debugLog(message);
+        step = 2;
+        isValid = false;
+      }
+      if (
+        assignmentConfig.passingGrade == null ||
+        assignmentConfig.passingGrade <= 0 ||
+        assignmentConfig.passingGrade > 100
+      ) {
+        message = `Passing grade must be between 1 and 100.`;
+        debugLog(message);
+        step = 2;
+        isValid = false;
+      }
+      if (!assignmentConfig.displayOrder) {
+        message = `Question order is required.`;
+        debugLog(message);
+        step = 2;
+        isValid = false;
+      }
+      if (!assignmentConfig.questionDisplay) {
+        message = `Question display type is required.`;
+        debugLog(message);
+        step = 2;
+        isValid = false;
+      }
     }
-    if (!assignmentConfig.numAttempts || assignmentConfig.numAttempts < -1) {
-      debugLog(`Please enter a valid number of attempts.`);
-      message = `Please enter a valid number of attempts.`;
-      step = 2;
-      isValid = false;
-    }
-    if (
-      assignmentConfig.passingGrade === undefined ||
-      assignmentConfig.passingGrade <= 0 ||
-      assignmentConfig.passingGrade > 100
-    ) {
-      debugLog(`Passing grade must be between 1 and 100.`);
-      message = `Passing grade must be between 1 and 100.`;
-      step = 2;
-      isValid = false;
-    }
-    if (!assignmentConfig.displayOrder) {
-      debugLog(`Question order is required.`);
-      message = `Question order is required.`;
-      step = 2;
-      isValid = false;
-    }
-    if (!assignmentConfig.questionDisplay) {
-      debugLog(`Question display type is required.`);
-      message = `Question display type is required.`;
-      step = 2;
-      isValid = false;
-    }
+
     return {
       isValid,
       message,
       step,
-      invalidQuestionId: nonValidQuestionsIds.length
-        ? nonValidQuestionsIds[0]
-        : null,
+      invalidQuestionId,
     };
-  }, [questions, debugLog]);
+  }, [questions, debugLog, assignmentConfig, introduction]);
 
   return questionsAreReadyToBePublished;
 };
