@@ -220,8 +220,43 @@ export class AdminService {
   }
 
   async removeAssignment(id: number): Promise<BaseAssignmentResponseDto> {
-    // Delete all related records in AssignmentGroup table
+    await this.prisma.questionResponse.deleteMany({
+      where: { assignmentAttempt: { assignmentId: id } },
+    });
+
+    await this.prisma.assignmentAttemptQuestionVariant.deleteMany({
+      where: { assignmentAttempt: { assignmentId: id } },
+    });
+
+    await this.prisma.assignmentAttempt.deleteMany({
+      where: { assignmentId: id },
+    });
+
     await this.prisma.assignmentGroup.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    await this.prisma.assignmentFeedback.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    await this.prisma.regradingRequest.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    await this.prisma.report.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    await this.prisma.assignmentTranslation.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    await this.prisma.aIUsage.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    await this.prisma.question.deleteMany({
       where: { assignmentId: id },
     });
 
