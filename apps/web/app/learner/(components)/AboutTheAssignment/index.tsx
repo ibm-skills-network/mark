@@ -96,10 +96,10 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const [toggleLanguageSelectionModal, setToggleLanguageSelectionModal] =
     useState(false);
   useEffect(() => {
-    if (!userPreferedLanguage) {
+    if (!userPreferedLanguage || languageModalTriggered) {
       setToggleLanguageSelectionModal(true);
     }
-  }, [userPreferedLanguage]);
+  }, [userPreferedLanguage, languageModalTriggered]);
   useEffect(() => {
     async function fetchLanguages() {
       setIsLoading(true);
@@ -137,6 +137,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     if (selectedLanguage) {
       router.replace(`${pathname}?lang=${selectedLanguage}`, undefined);
       setUserPreferedLanguage(selectedLanguage);
+      setLanguageModalTriggered(false);
       setToggleLanguageSelectionModal(false);
       void fetchData();
     } else {
@@ -144,8 +145,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     }
   };
   const handleCloseModal = () => {
-    setToggleLanguageSelectionModal(false);
     setLanguageModalTriggered(false);
+    setToggleLanguageSelectionModal(false);
   };
   return (
     <>

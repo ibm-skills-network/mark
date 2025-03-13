@@ -486,8 +486,7 @@ export class AssignmentService {
     // Ensure questions is an array even if it's null.
     const safeQuestions = questions ?? [];
 
-    // const OnlyEnglish = process.env.NODE_ENV === "development" ? true : false;
-    const OnlyEnglish = false;
+    const OnlyEnglish = process.env.NODE_ENV === "development" ? true : false;
     if (!introduction) {
       this.logger.error(
         `Introduction not provided for assignment: ${assignmentId}`,
@@ -980,6 +979,19 @@ export class AssignmentService {
                   ),
               );
             }
+            if (
+              assignment.introduction !== existingTranslation.introduction &&
+              assignment.introduction
+            ) {
+              translationTasks.push(
+                this.llmService
+                  .translateText(assignment.introduction, lang, assignmentId)
+                  .then(
+                    (translated) =>
+                      (updatedData.translatedIntroduction = translated),
+                  ),
+              );
+            }
 
             await Promise.all(translationTasks);
 
@@ -1065,6 +1077,7 @@ export class AssignmentService {
     updateTranslationProgress: () => number,
   ): Promise<void> {
     const normalizedText = question.question.trim();
+    const normalizedChoices = question.choices ?? null;
     const questionLang =
       (await this.llmService.getLanguageCode(normalizedText)) || "unknown";
 
@@ -1073,10 +1086,9 @@ export class AssignmentService {
     await Promise.all(
       languages.map((lang) =>
         limiter.schedule(async () => {
-          // Update progress.
           await this.updateJobStatus(
             job,
-            `Translating Question with Id: ${questionId} to ${getLanguageNameFromCode(
+            `Translating Question #${questionId} to ${getLanguageNameFromCode(
               lang,
             )}`,
             "In Progress",
@@ -1085,128 +1097,93 @@ export class AssignmentService {
           );
 
           if (questionLang === "unknown") {
-            console.log(
-              `Skipping translation for ${lang} as source language is unknown (${questionLang})`,
+            this.logger.warn(
+              `Skipping translation for Q#${questionId} to ${lang}; unknown source.`,
             );
             return;
           }
 
-          // When source language equals target language:
-          if (questionLang.toLowerCase() === lang.toLowerCase()) {
-            // First check if a translation already exists for THIS question.
-            const existingForCurrent = await this.prisma.translation.findFirst({
-              where: {
-                questionId,
-                variantId: null,
-                languageCode: questionLang,
-                untranslatedText: normalizedText,
-              },
-            });
-            if (existingForCurrent) return;
+          const existingReusable = await this.prisma.translation.findFirst({
+            where: {
+              languageCode: lang,
+              untranslatedText: normalizedText,
+              untranslatedChoices: {
+                equals: normalizedChoices,
+              } as unknown as Prisma.JsonNullableFilter,
+            },
+          });
 
-            // Check if a translation exists for the same text (from another question).
-            const existingReuse = await this.prisma.translation.findFirst({
-              where: {
-                languageCode: questionLang,
-                variantId: null,
-                untranslatedText: normalizedText,
-              },
-            });
-            // If found, reuse it; otherwise use the original text.
-            await this.prisma.translation.create({
-              data: {
-                questionId,
-                variantId: null,
-                languageCode: questionLang,
-                translatedText: existingReuse
-                  ? existingReuse.translatedText
-                  : normalizedText,
-                untranslatedText: normalizedText,
-                translatedChoices: question.choices
-                  ? (JSON.parse(
-                      JSON.stringify(question.choices),
-                    ) as Prisma.InputJsonValue)
-                  : Prisma.JsonNull,
-              },
-            });
+          if (existingReusable) {
+            const existingForThisQuestion =
+              await this.prisma.translation.findFirst({
+                where: {
+                  questionId: questionId,
+                  variantId: null,
+                  languageCode: lang,
+                  untranslatedText: normalizedText,
+                  untranslatedChoices: {
+                    equals: normalizedChoices,
+                  } as unknown as Prisma.JsonNullableFilter,
+                },
+              });
+            if (!existingForThisQuestion) {
+              await this.prisma.translation.create({
+                data: {
+                  questionId: questionId,
+                  variantId: null,
+                  languageCode: lang,
+
+                  untranslatedText: normalizedText,
+                  untranslatedChoices: JSON.parse(
+                    JSON.stringify(normalizedChoices),
+                  ) as Prisma.JsonValue,
+
+                  translatedText: existingReusable.translatedText,
+                  translatedChoices:
+                    existingReusable.translatedChoices ?? Prisma.JsonNull,
+                },
+              });
+            }
             return;
           }
 
-          // For a translation where the target language differs from the source.
-          // First, check if a translation for this question already exists.
-          const existingForCurrent = await this.prisma.translation.findFirst({
-            where: {
-              questionId,
-              variantId: null,
-              languageCode: lang,
-              untranslatedText: normalizedText,
-            },
-          });
-          if (existingForCurrent) return;
-
-          // Now check if we have a translation for the same text (from another question)
-          // that we can reuse.
-          const existingReuse = await this.prisma.translation.findFirst({
-            where: {
-              languageCode: lang,
-              variantId: null,
-              untranslatedText: normalizedText,
-            },
-          });
-          let translatedText: string | null;
+          let translatedText = normalizedText;
           let translatedChoices: Prisma.JsonValue | null = null;
 
-          if (existingReuse) {
-            // Reuse the translation.
-            translatedText = existingReuse.translatedText;
-            translatedChoices = existingReuse.translatedChoices ?? undefined;
+          if (questionLang.toLowerCase() === lang.toLowerCase()) {
+            translatedChoices = JSON.parse(
+              JSON.stringify(normalizedChoices),
+            ) as Prisma.JsonValue;
           } else {
-            // Optionally, check if any question with the same text already has a translation.
-            const existingQuestionWithSameText =
-              await this.prisma.question.findFirst({
-                where: { question: normalizedText },
-                include: { translations: { where: { languageCode: lang } } },
-              });
+            translatedText = await this.llmService.generateQuestionTranslation(
+              assignmentId,
+              normalizedText,
+              lang,
+            );
 
-            if (existingQuestionWithSameText?.translations?.length) {
-              const reuse = existingQuestionWithSameText.translations[0];
-              translatedText = reuse.translatedText;
-              translatedChoices = reuse.translatedChoices ?? undefined;
-            } else {
-              // Otherwise, call the LLM to generate a new translation.
-              translatedText =
-                (await this.llmService
-                  .generateQuestionTranslation(
-                    assignmentId,
-                    normalizedText,
-                    lang,
-                  )
-                  .catch((error) => {
-                    console.error(
-                      `Failed to generate translation for ${lang}`,
-                      error,
-                    );
-                    return normalizedText;
-                  })) || normalizedText;
-              if (question.choices) {
-                translatedChoices =
-                  (await this.llmService.generateChoicesTranslation(
-                    question.choices,
-                    assignmentId,
-                    lang,
-                  )) as unknown as Prisma.JsonValue;
-              }
+            if (normalizedChoices) {
+              translatedChoices =
+                (await this.llmService.generateChoicesTranslation(
+                  normalizedChoices,
+                  assignmentId,
+                  lang,
+                )) as unknown as Prisma.JsonValue;
             }
           }
 
           await this.prisma.translation.create({
             data: {
-              questionId,
+              questionId: questionId,
               variantId: null,
               languageCode: lang,
-              translatedText: translatedText || normalizedText,
+
               untranslatedText: normalizedText,
-              translatedChoices: translatedChoices || Prisma.JsonNull,
+              untranslatedChoices: JSON.parse(
+                JSON.stringify(normalizedChoices),
+              ) as Prisma.JsonValue,
+
+              translatedText: translatedText,
+              translatedChoices: translatedChoices ?? Prisma.JsonNull,
             },
           });
         }),
@@ -1228,9 +1205,13 @@ export class AssignmentService {
     languages: string[],
     updateTranslationProgress: () => number,
   ): Promise<void> {
+    const normalizedText = variant.variantContent.trim();
+
+    const normalizedChoices = variant.choices ?? null;
+
     const variantLang =
-      (await this.llmService.getLanguageCode(variant.variantContent)) ||
-      "unknown";
+      (await this.llmService.getLanguageCode(normalizedText)) || "unknown";
+
     const limiter = new Bottleneck({ maxConcurrent: 5 });
 
     await Promise.all(
@@ -1238,105 +1219,83 @@ export class AssignmentService {
         limiter.schedule(async () => {
           await this.updateJobStatus(
             job,
-            `Translating a variant for Question with ID: ${questionId} in ${getLanguageNameFromCode(
-              lang,
-            )}`,
+            `Translating variant #${variant.id} of Q#${questionId} to ${lang}`,
             "In Progress",
             null,
             updateTranslationProgress(),
           );
 
           if (variantLang === "unknown") {
-            console.log(
-              `Skipping translation for ${lang} as variant source language is unknown (${variantLang})`,
+            this.logger.warn(
+              `Variant #${variant.id} has unknown language; skipping translation to ${lang}.`,
             );
             return;
           }
-
-          // When source language equals target language for variant.
-          if (variantLang.toLowerCase() === lang.toLowerCase()) {
-            // First check if a translation exists for THIS variant.
-            const existingForCurrent = await this.prisma.translation.findFirst({
+          const existingReusableTranslation =
+            await this.prisma.translation.findFirst({
               where: {
-                questionId: variant.questionId,
-                variantId: variant.id,
-                languageCode: variantLang,
-                untranslatedText: variant.variantContent,
+                languageCode: lang,
+                untranslatedText: normalizedText,
+                untranslatedChoices: {
+                  equals: normalizedChoices,
+                } as Prisma.JsonNullableFilter,
               },
             });
-            if (existingForCurrent) return;
 
-            // Check for a translation with same content (reusable from another variant).
-            const existingReuse = await this.prisma.translation.findFirst({
-              where: {
-                languageCode: variantLang,
-                variantId: variant.id,
-                untranslatedText: variant.variantContent,
-              },
-            });
-            await this.prisma.translation.create({
-              data: {
-                questionId: variant.questionId,
-                variantId: variant.id,
-                languageCode: variantLang,
-                translatedText: existingReuse
-                  ? existingReuse.translatedText
-                  : variant.variantContent,
-                untranslatedText: variant.variantContent,
-                translatedChoices: variant.choices ?? Prisma.JsonNull,
-              },
-            });
+          if (existingReusableTranslation) {
+            const existingForThisVariant =
+              await this.prisma.translation.findFirst({
+                where: {
+                  questionId: variant.questionId,
+                  variantId: variant.id,
+                  languageCode: lang,
+                  untranslatedText: normalizedText,
+                  untranslatedChoices: {
+                    equals: normalizedChoices,
+                  } as Prisma.JsonNullableFilter,
+                },
+              });
+
+            if (!existingForThisVariant) {
+              await this.prisma.translation.create({
+                data: {
+                  questionId: variant.questionId,
+                  variantId: variant.id,
+                  languageCode: lang,
+
+                  untranslatedText: normalizedText,
+                  untranslatedChoices: normalizedChoices,
+
+                  translatedText: existingReusableTranslation.translatedText,
+                  translatedChoices:
+                    existingReusableTranslation.translatedChoices ??
+                    Prisma.JsonNull,
+                },
+              });
+            }
+
             return;
           }
 
-          // For target language different from the source.
-          const existingForCurrent = await this.prisma.translation.findFirst({
-            where: {
-              questionId: variant.questionId,
-              variantId: variant.id,
-              languageCode: lang,
-              untranslatedText: variant.variantContent,
-            },
-          });
-          if (existingForCurrent) return;
-
-          // Check if a translation exists for the same variant content (from another record).
-          const existingReuse = await this.prisma.translation.findFirst({
-            where: {
-              languageCode: lang,
-              variantId: variant.id,
-              untranslatedText: variant.variantContent,
-            },
-          });
-
-          let translatedText: string | null;
+          let translatedText = normalizedText;
           let translatedChoices: Prisma.JsonValue | null = null;
 
-          if (existingReuse) {
-            translatedText = existingReuse.translatedText;
-            translatedChoices = existingReuse.translatedChoices ?? undefined;
+          if (variantLang.toLowerCase() === lang.toLowerCase()) {
+            translatedChoices = normalizedChoices;
           } else {
-            // If no reusable translation, generate a new translation.
-            if (variantLang.toLowerCase() === lang.toLowerCase()) {
-              translatedText = variant.variantContent;
-            } else {
-              translatedText =
-                await this.llmService.generateQuestionTranslation(
+            translatedText = await this.llmService.generateQuestionTranslation(
+              assignmentId,
+              normalizedText,
+              lang,
+            );
+
+            if (normalizedChoices) {
+              translatedChoices =
+                (await this.llmService.generateChoicesTranslation(
+                  normalizedChoices as unknown as Choice[],
                   assignmentId,
-                  variant.variantContent,
                   lang,
-                );
-              if (variant.choices) {
-                const parsedVariantChoices: Choice[] = JSON.parse(
-                  JSON.stringify(variant.choices),
-                ) as Choice[];
-                translatedChoices =
-                  (await this.llmService.generateChoicesTranslation(
-                    parsedVariantChoices,
-                    assignmentId,
-                    lang,
-                  )) as unknown as Prisma.JsonValue;
-              }
+                )) as unknown as Prisma.JsonValue;
             }
           }
 
@@ -1345,9 +1304,10 @@ export class AssignmentService {
               questionId: variant.questionId,
               variantId: variant.id,
               languageCode: lang,
-              untranslatedText: variant.variantContent,
-              translatedText: translatedText ?? variant.variantContent,
-              translatedChoices: translatedChoices ?? undefined,
+              untranslatedText: normalizedText,
+              untranslatedChoices: normalizedChoices,
+              translatedText: translatedText,
+              translatedChoices: translatedChoices ?? Prisma.JsonNull,
             },
           });
         }),

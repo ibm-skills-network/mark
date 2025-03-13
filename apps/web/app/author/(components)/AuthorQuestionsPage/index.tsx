@@ -591,7 +591,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       onDragEnd={onSortEnd}
       onDragStart={handleDragStart}
     >
-      <div className="grid grid-cols-4 gap-x-4 mx-6 md:grid-cols-12 md:mx-8 md:gap-x-6 mt-8 min-h-[90vh] grid-rows-[auto,auto,auto]">
+      <div className="grid grid-cols-4 gap-x-4 mx-6 md:grid-cols-12 md:mx-8 md:gap-x-6 mt-8 min-h-[90vh] pb-56 grid-rows-[auto,auto,auto]">
         {questions.length > 0 && (
           <>
             <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-1 md:col-end-3 hidden lg:block text-nowrap">

@@ -97,7 +97,11 @@ function LearnerHeader() {
 
         const userPreferedLanguageFromLTI =
           await getUserPreferedLanguageFromLTI();
-        if (userPreferedLanguageFromLTI && supportedLanguages.length > 0) {
+        if (
+          userPreferedLanguageFromLTI &&
+          supportedLanguages.length > 0 &&
+          !userPreferedLanguage
+        ) {
           setUserPreferedLanguage(userPreferedLanguageFromLTI);
         }
       } catch (error) {

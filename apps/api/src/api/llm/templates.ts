@@ -63,17 +63,11 @@ Criteria:
 
 ### Output:
 Return results in this format:
+{format_instructions}
 
-Points: <number>
-Feedback:
-- **Accuracy**: Is the code aligned with the question requirements? Mention any discrepancies.
-- **Functionality**: Does the code execute correctly? Highlight any errors or unexpected behavior.
-- **Efficiency**: Evaluate performance. Are there potential optimizations?
-- **Style**: Assess readability, naming conventions, and comments. Note if these could be improved.
-- **Practices**: Recommend best practices to enhance maintainability and readability.
-- **Strengths**: Identify standout aspects, such as innovative approaches or well-organized structure.
 Make sure your feedback is in language code: {language} 
 Include reasons why you awarded the points you did and how the code quality influenced your decision.
+Your feedback should explain exactly why you awarded the points 
 > Provide concise, constructive feedback. Avoid solutions, but offer guidance for improvement. Act as a mentor, not a peer.
 `;
 export const gradeDocumentFileQuestionLlmTemplate = `
@@ -90,18 +84,9 @@ Criteria:
 
 ### Output:
 Return results in this format:
-
-Points: <number>
-Feedback:
-- **Accuracy**: Does the document directly address the question requirements?
-- **Organization**: Is the document structured clearly, with a logical flow? Suggest ways to improve if needed.
-- **Completeness**: Are all aspects of the question fully addressed? Mention any gaps in content.
-- **Clarity**: Evaluate the document’s clarity and tone. Suggest adjustments for more precise expression.
-- **Supporting Details**: Are there relevant examples, citations, or evidence supporting the content?
-- **Strengths**: Identify strengths, such as clear organization, effective arguments, or well-used visuals.
-Make sure your feedback is in language code: {language} 
+{format_instructions}
+You need to provide feedback in language code: {language}
 Include reasons why you awarded the points you did and how the document quality influenced your decision.
-> Keep feedback concise and clear. Avoid solutions, and guide toward improvement as a mentor.
 `;
 export const gradeImageFileQuestionLlmTemplate = `
 As an expert grader, review the uploaded image file for the question:
@@ -241,15 +226,8 @@ Criteria:
 
 ### Output:
 Return results in this format:
+{format_instructions}
 
-Points: <number>
-Feedback:
-- **Content**: Does the repository address the question requirements?
-- **Completeness**: Are all necessary components present and functional?
-- **Organization**: Is the repository well-structured and easy to navigate?
-- **Documentation**: Evaluate the quality and clarity of comments and documentation.
-- **Code Quality**: Assess the code's readability, efficiency, and adherence to best practices.
-- **Strengths**: Identify standout elements or areas of excellence.
 Make sure your feedback is in language code: {language} 
 
 > Provide constructive feedback to guide improvement. Avoid providing solutions.
@@ -512,6 +490,28 @@ export const generateCodeFileUploadMarkingRubricTemplate = `
   Ensure that each score level represents a clear distinction in quality, without requiring lower criteria to be met before higher scores.
 `;
 
+export const gradeReportFileQuestionLlmTemplate = `
+As an expert grader, review the uploaded report for the question:
+{question}
+
+Files:
+{files}
+
+Points Possible: {total_points}
+Scoring Type: {scoring_type}
+Criteria:
+{scoring_criteria}
+
+### Output:
+Return results in this format:
+{format_instructions}
+
+Make sure your feedback is in language code: {language}  
+Include reasons why you awarded the points you did and how the report quality influenced your decision.
+
+> Provide concise, constructive feedback. Avoid providing solutions, but guide the learner on how to enhance their report effectively.
+`;
+
 export const gradeEssayFileQuestionLlmTemplate = `
 As an expert grader, review the uploaded essay for the question:
 {question}
@@ -526,18 +526,10 @@ Criteria:
 
 ### Output:
 Return results in this format:
+{format_instructions}
 
-Points: <number>
-Feedback:
-- **Content**: Does the essay address the question thoroughly and insightfully?
-- **Organization**: Is the essay structured logically with clear introductions, body, and conclusions?
-- **Analysis**: Does the essay demonstrate critical thinking and analysis?
-- **Writing Quality**: Evaluate grammar, vocabulary, and style.
-- **References**: Are sources cited properly, if required?
-- **Strengths**: Highlight the strongest aspects of the essay.
 Make sure your feedback is in language code: {language} 
-return a valid JSON object
-
+Include reasons why you awarded the points you did and how the essay quality influenced your decision.
 > Provide constructive feedback to guide improvement. Avoid providing solutions.
 `;
 export const gradePresentationFileQuestionLlmTemplate = `
@@ -554,18 +546,10 @@ Criteria:
 
 ### Output:
 Return results in this format:
+{format_instructions}
 
-Points: <number>
-Feedback:
-- **Content Quality**: Does the presentation cover all required topics effectively?
-- **Design and Visual Appeal**: Assess the aesthetics and readability of slides.
-- **Organization**: Is the information presented in a logical sequence?
-- **Clarity**: Evaluate the clarity of text and visuals.
-- **Engagement**: Does the presentation engage the audience?
-- **Strengths**: Mention any particularly strong elements.
-Make sure your feedback is in language code: {language} 
-
-> Provide constructive feedback without revealing solutions.
+Make sure your feedback is in language code: {language}
+Include reasons why you awarded the points you did and how the presentation quality influenced your decision.
 `;
 export const gradeVideoFileQuestionLlmTemplate = `
 As an expert grader, review the uploaded video for the question:
@@ -581,18 +565,10 @@ Criteria:
 
 ### Output:
 Return results in this format:
+{format_instructions}
 
-Points: <number>
-Feedback:
-- **Content Accuracy**: Does the video accurately address the question?
-- **Presentation Skills**: Assess clarity of speech and engagement.
-- **Production Quality**: Evaluate video and audio quality.
-- **Creativity**: Consider originality and creative elements.
-- **Structure**: Is the video well-organized with a clear flow?
-- **Strengths**: Highlight standout aspects.
-Make sure your feedback is in language code: {language} 
-
-> Offer constructive feedback to aid improvement.
+Make sure your feedback is in language code: {language}
+Include reasons why you awarded the points you did and how the video quality influenced your decision.
 `;
 export const gradeAudioFileQuestionLlmTemplate = `
 As an expert grader, review the uploaded audio file for the question:
@@ -608,18 +584,10 @@ Criteria:
 
 ### Output:
 Return results in this format:
+{format_instructions}
 
-Points: <number>
-Feedback:
-- **Content Relevance**: Does the audio address the question effectively?
-- **Clarity**: Is the speech clear and understandable?
-- **Audio Quality**: Assess background noise and sound quality.
-- **Engagement**: Does the audio keep the listener engaged?
-- **Structure**: Is there a logical flow?
-- **Strengths**: Point out strong elements.
-Make sure your feedback is in language code: {language} 
-
-> Provide guidance for improvement without giving away answers.
+You need to provide feedback in language code: {language}
+You need to provide your reasons why you awarded the points you did and how the audio quality influenced your decision.
 `;
 export const gradeSpreadsheetFileQuestionLlmTemplate = `
 As an expert grader, review the uploaded spreadsheet for the question:
@@ -635,16 +603,8 @@ Criteria:
 
 ### Output:
 Return results in this format:
+{format_instructions}
 
-Points: <number>
-Feedback:
-- **Data Accuracy**: Are the data entries correct?
-- **Formulas and Functions**: Are formulas used appropriately and correctly?
-- **Formatting**: Is the spreadsheet well-formatted for readability?
-- **Data Visualization**: Evaluate any charts or graphs included.
-- **Efficiency**: Assess the use of advanced features (e.g., pivot tables).
-- **Strengths**: Highlight particularly well-executed aspects.
-Make sure your feedback is in language code: {language} 
-
-> Provide constructive feedback to help the learner improve.
+You need to provide feedback in language code: {language}
+Include reasons why you awarded the points you did and how the spreadsheet quality influenced your decision.
 `;

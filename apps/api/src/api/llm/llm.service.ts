@@ -51,6 +51,7 @@ import {
   gradeEssayFileQuestionLlmTemplate,
   gradePresentationFileQuestionLlmTemplate,
   gradeRepoQuestionLlmTemplate,
+  gradeReportFileQuestionLlmTemplate,
   gradeSpreadsheetFileQuestionLlmTemplate,
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
@@ -323,7 +324,7 @@ export class LlmService {
       [ResponseType.CODE]: gradeCodeFileQuestionLlmTemplate,
       [ResponseType.REPO]: gradeRepoQuestionLlmTemplate,
       [ResponseType.ESSAY]: gradeEssayFileQuestionLlmTemplate,
-      [ResponseType.REPORT]: gradeEssayFileQuestionLlmTemplate,
+      [ResponseType.REPORT]: gradeReportFileQuestionLlmTemplate,
       [ResponseType.PRESENTATION]: gradePresentationFileQuestionLlmTemplate,
       [ResponseType.VIDEO]: gradeVideoFileQuestionLlmTemplate,
       [ResponseType.AUDIO]: gradeAudioFileQuestionLlmTemplate,
@@ -339,6 +340,19 @@ export class LlmService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const parser = StructuredOutputParser.fromZodSchema(
+      z
+        .object({
+          points: z.number().describe("Points awarded based on the criteria"),
+          feedback: z
+            .string()
+            .describe(
+              "Feedback for the learner based on their response to the criteria, including any suggestions for improvement and detailed explaination why you chose to provide the points you did",
+            ),
+        })
+        .describe("Object representing points and feedback"),
+    );
+    const formatInstructions = parser.getFormatInstructions();
 
     const prompt = new PromptTemplate({
       template: selectedTemplate,
@@ -356,6 +370,7 @@ export class LlmService {
         scoring_criteria: JSON.stringify(scoringCriteria),
         grading_type: responseType,
         language: language ?? "en",
+        format_instructions: formatInstructions,
       },
     });
 
@@ -365,26 +380,10 @@ export class LlmService {
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
     );
-    const pointsMatch = response.match(/Points:\s*(\d+)/);
-    const feedbackMatch = response.match(/Feedback:\s*([\S\s]+)/);
 
-    if (!pointsMatch || !feedbackMatch) {
-      throw new HttpException(
-        "Invalid response format from LLM",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    // Parse points and feedback
-    const points = Number.parseInt(pointsMatch[1], 10);
-    const feedback = feedbackMatch[1].trim();
-
-    // Construct the response model
-    const fileBasedQuestionResponseModel: FileBasedQuestionResponseModel = {
-      points,
-      feedback,
-    };
-
+    const fileBasedQuestionResponseModel = (await parser.parse(
+      response,
+    )) as FileBasedQuestionResponseModel;
     return fileBasedQuestionResponseModel;
   }
 

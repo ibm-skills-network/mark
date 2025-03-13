@@ -322,6 +322,7 @@ model Translation {
   translatedText    String
   untranslatedText  String?
   translatedChoices Json?
+  untranslatedChoices Json? 
   createdAt         DateTime @default(now())
 
   // Use an index instead of unique constraint to allow nullable variantId
