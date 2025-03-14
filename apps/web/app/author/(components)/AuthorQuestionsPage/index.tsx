@@ -162,50 +162,73 @@ const AuthorQuestionsPage: FC<Props> = ({
           if (assignment) {
             setActiveAssignmentId(assignmentId);
             setName(assignment.name || "Untitled Assignment");
-            const questions: QuestionAuthorStore[] = assignment.questions?.map(
-              (question: QuestionAuthorStore, index: number) => {
-                const criteriaWithId = question.scoring?.criteria?.map(
-                  (criteria: Criteria, criteriaIndex: number) => ({
-                    ...criteria,
-                    index: criteriaIndex + 1,
-                  }),
-                );
-                const parsedVariants: QuestionVariants[] =
-                  question.variants?.map((variant: QuestionVariants) => ({
-                    ...variant,
-                    choices:
-                      typeof variant.choices === "string"
-                        ? (JSON.parse(variant.choices) as Choice[])
-                        : variant.choices,
-                  })) || [];
 
-                return {
-                  ...question,
-                  alreadyInBackend: true,
-                  variants: parsedVariants,
-                  scoring: {
-                    type: "CRITERIA_BASED",
-                    rubrics: [
+            const questions: QuestionAuthorStore[] =
+              assignment.questions?.map(
+                (question: QuestionAuthorStore, index: number) => {
+                  let rubrics: {
+                    rubricQuestion: string;
+                    criteria: Criteria[];
+                  }[] = [];
+
+                  if (question.scoring?.rubrics?.length) {
+                    rubrics = question.scoring.rubrics.map((rubric) => {
+                      const rubricCriteria =
+                        rubric.criteria?.map((c, i) => ({
+                          ...c,
+                          id: i,
+                        })) ?? [];
+
+                      return {
+                        ...rubric,
+                        rubricQuestion: stripHtml(
+                          rubric.rubricQuestion ?? question.question,
+                        ),
+                        criteria: rubricCriteria,
+                      };
+                    });
+                  } else {
+                    const criteriaWithId =
+                      question.scoring?.criteria?.map((c, i) => ({
+                        ...c,
+                        id: i,
+                      })) ?? [];
+                    rubrics = [
                       {
                         rubricQuestion: stripHtml(question.question),
-                        criteria: criteriaWithId || [],
+                        criteria: criteriaWithId,
                       },
-                    ],
-                  },
-                  index: index + 1,
-                };
-              },
-            );
-            if (questions?.length > 0) {
-              questions.forEach((question) => {
-                // parse choices in variants to make it choices object
-                // loop through rubrics and sort the criteria by points
-                question.scoring.rubrics.forEach((rubric) => {
-                  rubric.criteria = rubric.criteria.sort(
-                    (a, b) => a.points - b.points,
-                  );
-                });
-              });
+                    ];
+                  }
+
+                  rubrics.forEach((rubric) => {
+                    rubric.criteria.sort((a, b) => a.points - b.points);
+                  });
+
+                  // Parse variants
+                  const parsedVariants: QuestionVariants[] =
+                    question.variants?.map((variant: QuestionVariants) => ({
+                      ...variant,
+                      choices:
+                        typeof variant.choices === "string"
+                          ? (JSON.parse(variant.choices) as Choice[])
+                          : variant.choices,
+                    })) || [];
+
+                  return {
+                    ...question,
+                    alreadyInBackend: true,
+                    variants: parsedVariants,
+                    scoring: {
+                      type: "CRITERIA_BASED",
+                      rubrics,
+                    },
+                    index: index + 1,
+                  };
+                },
+              ) ?? [];
+
+            if (questions.length > 0) {
               setQuestions(questions);
               setFocusedQuestionId(questions[0].id);
             }
@@ -216,6 +239,7 @@ const AuthorQuestionsPage: FC<Props> = ({
           toast.error("Failed to get assignment details");
         }
       };
+
       void fetchAssignment();
     }
   }, [
@@ -226,6 +250,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     setQuestions,
     setFocusedQuestionId,
   ]);
+
   useEffect(() => {
     const currentQuestionOrder = useAuthorStore.getState().questionOrder;
     const newQuestionOrder = questions.map((q) => q.id);

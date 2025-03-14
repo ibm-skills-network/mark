@@ -18,6 +18,7 @@ type FeedbackDataActions = {
   // setShowStatus: (showStatus: boolean) => void;
   setUpdatedAt: (updatedAt: number) => void;
   setAssignmentFeedbackConfigStore: (state: Partial<FeedbackData>) => void;
+  deleteStore: () => void;
 };
 
 export const useAssignmentFeedbackConfig = createWithEqualityFn<
@@ -49,6 +50,14 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         setAssignmentFeedbackConfigStore: (state) =>
           set((prevState) => ({ ...prevState, ...state })),
+        deleteStore: () =>
+          set(() => ({
+            verbosityLevel: "Full",
+            showSubmissionFeedback: true,
+            showQuestionScore: true,
+            showAssignmentScore: true,
+            updatedAt: Date.now(),
+          })),
       })),
     ),
     {

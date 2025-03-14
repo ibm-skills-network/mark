@@ -33,6 +33,9 @@ import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import { encodeFields } from "@/app/Helpers/encoder";
 import { decodeFields } from "@/app/Helpers/decoder";
 import { stripHtml } from "@/app/Helpers/strippers";
+import { IconRefresh } from "@tabler/icons-react";
+import { useChangesSummary } from "@/app/Helpers/checkDiff";
+import Modal from "@/components/Modal";
 
 function AuthorHeader() {
   const router = useRouter();
@@ -108,6 +111,18 @@ function AuthorHeader() {
     state.setRole,
   ]);
 
+  const [showAreYouSureModal, setShowAreYouSureModal] =
+    useState<boolean>(false);
+
+  const deleteAuthorStore = useAuthorStore((state) => state.deleteStore);
+  const deleteAssignmentConfigStore = useAssignmentConfig(
+    (state) => state.deleteStore,
+  );
+  const deleteAssignmentFeedbackConfigStore = useAssignmentFeedbackConfig(
+    (state) => state.deleteStore,
+  );
+  const changesSummary = useChangesSummary();
+
   // STATES FOR PROGRESS BAR & ROADMAP
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
@@ -152,18 +167,110 @@ function AuthorHeader() {
   //   };
   // }, [role, assignmentId, router]);
 
-  // Fetch assignment details on load.
-  const fetchAssignment = async () => {
-    const assignment = await getAssignment(~~assignmentId);
-    if (assignment) {
-      // Decode specific fields
+  const SyncAssignment = async () => {
+    try {
+      // 1) Fetch the assignment
+      const assignment = await getAssignment(~~assignmentId);
+      if (!assignment) {
+        setPageState("error");
+        return;
+      }
+
+      // 2) Decode specific fields
       const decodedFields = decodeFields({
         introduction: assignment.introduction,
         instructions: assignment.instructions,
         gradingCriteriaOverview: assignment.gradingCriteriaOverview,
       });
 
-      // Merge decoded fields back into assignment
+      const decodedAssignment = {
+        ...assignment,
+        ...decodedFields,
+      };
+
+      const questions: QuestionAuthorStore[] =
+        assignment.questions?.map(
+          (question: QuestionAuthorStore, index: number) => {
+            const criteriaWithId = question.scoring?.criteria?.map(
+              (criteria: Criteria, criteriaIndex: number) => ({
+                ...criteria,
+                index: criteriaIndex + 1,
+              }),
+            );
+
+            const parsedVariants: QuestionVariants[] =
+              question.variants?.map((variant: QuestionVariants) => ({
+                ...variant,
+                choices:
+                  typeof variant.choices === "string"
+                    ? (JSON.parse(variant.choices) as Choice[])
+                    : variant.choices,
+              })) || [];
+
+            return {
+              ...question,
+              alreadyInBackend: true,
+              variants: parsedVariants,
+              scoring: {
+                type: "CRITERIA_BASED",
+                rubrics: [
+                  {
+                    rubricQuestion: stripHtml(question.question),
+                    criteria: criteriaWithId || [],
+                  },
+                ],
+              },
+              index: index + 1,
+            };
+          },
+        ) || [];
+
+      decodedAssignment.questions = questions;
+
+      useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
+
+      useAuthorStore.getState().setAuthorStore(decodedAssignment);
+      useAssignmentConfig.getState().setAssignmentConfigStore({
+        numAttempts: decodedAssignment.numAttempts,
+        passingGrade: decodedAssignment.passingGrade,
+        displayOrder: decodedAssignment.displayOrder,
+        graded: decodedAssignment.graded,
+        questionDisplay: decodedAssignment.questionDisplay,
+        timeEstimateMinutes: decodedAssignment.timeEstimateMinutes,
+        allotedTimeMinutes: decodedAssignment.allotedTimeMinutes,
+        updatedAt: decodedAssignment.updatedAt,
+      });
+
+      if (decodedAssignment.questionVariationNumber !== undefined) {
+        setAssignmentConfigStore({
+          questionVariationNumber: decodedAssignment.questionVariationNumber,
+        });
+      }
+
+      useAssignmentFeedbackConfig.getState().setAssignmentFeedbackConfigStore({
+        showSubmissionFeedback: decodedAssignment.showSubmissionFeedback,
+        showQuestionScore: decodedAssignment.showQuestionScore,
+        showAssignmentScore: decodedAssignment.showAssignmentScore,
+      });
+
+      useAuthorStore.getState().setName(decodedAssignment.name);
+      useAuthorStore.getState().setActiveAssignmentId(decodedAssignment.id);
+
+      setPageState("success");
+    } catch (error) {
+      setPageState("error");
+    }
+  };
+
+  const fetchAssignment = async () => {
+    const assignment = await getAssignment(~~assignmentId);
+    if (assignment) {
+      const decodedFields = decodeFields({
+        introduction: assignment.introduction,
+        instructions: assignment.instructions,
+        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
+      });
+
       const decodedAssignment = {
         ...assignment,
         ...decodedFields,
@@ -205,7 +312,6 @@ function AuthorHeader() {
       decodedAssignment.questions = questions;
       useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
 
-      // Author store
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
         decodedAssignment,
@@ -214,36 +320,14 @@ function AuthorHeader() {
       setAuthorStore({
         ...cleanedAuthorData,
       });
-      // const mergedAssignmentConfigData = mergeData(
-      //   useAssignmentConfig.getState(),
-      //   decodedAssignment,
-      // );
+
       if (decodedAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: decodedAssignment.questionVariationNumber,
         });
       }
-      // const {
-      //   updatedAt: authorStoreUpdatedAt,
-      //   ...cleanedAssignmentConfigData
-      // } = mergedAssignmentConfigData;
-      // setAssignmentConfigStore({
-      //   ...cleanedAssignmentConfigData,
-      // });
-      // // Merge assignment feedback config data.
-      // const mergedAssignmentFeedbackData = mergeData(
-      //   useAssignmentFeedbackConfig.getState(),
-      //   decodedAssignment,
-      // );
-      // const {
-      //   updatedAt: assignmentFeedbackUpdatedAt,
-      //   ...cleanedAssignmentFeedbackData
-      // } = mergedAssignmentFeedbackData;
-      // setAssignmentFeedbackConfigStore({
-      //   ...cleanedAssignmentFeedbackData,
-      // });
-
       useAuthorStore.getState().setName(decodedAssignment.name);
+      useAuthorStore.getState().setActiveAssignmentId(decodedAssignment.id);
       setPageState("success");
     } else {
       setPageState("error");
@@ -407,62 +491,119 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
+  const handleSyncWithLatestPublishedVersion = async () => {
+    // check if the user has made any changes to the assignment
+    console.log(changesSummary);
+    if (changesSummary !== "No changes detected.") {
+      setShowAreYouSureModal(true);
+      return;
+    } else {
+      await SyncAssignment();
+      toast.success("Synced with latest published version.");
+    }
+  };
+
+  const handleConfirmSync = async () => {
+    // delete the current store
+    deleteAuthorStore();
+    deleteAssignmentConfigStore();
+    deleteAssignmentFeedbackConfigStore();
+    await SyncAssignment();
+    setShowAreYouSureModal(false);
+    toast.success("Synced with latest published version.");
+  };
 
   return (
-    <div className="fixed w-full z-50">
-      {countdown > 0 && role !== "author" && (
-        <p className="text-sm text-gray-700">
-          Switching to learner mode in {countdown} second
-          {countdown !== 1 && "s"}
-        </p>
-      )}
-      <header className="border-b border-gray-300 px-6 py-4 bg-white flex flex-col">
-        {/* Top row with header information and navigation */}
-        <div className="flex items-center justify-between">
-          {/* Left Section */}
-          <div className="flex items-center space-x-4">
-            <SNIcon />
-            <div>
-              <Title level={5} className="leading-6">
-                Auto-Graded Assignment Creator
-              </Title>
-              <div className="text-gray-500 font-medium text-sm leading-5">
-                {name || "Untitled Assignment"}
+    <>
+      <div className="fixed w-full z-50">
+        {countdown > 0 && role !== "author" && (
+          <p className="text-sm text-gray-700">
+            Switching to learner mode in {countdown} second
+            {countdown !== 1 && "s"}
+          </p>
+        )}
+        <header className="border-b border-gray-300 px-6 py-4 bg-white flex flex-col">
+          {/* Top row with header information and navigation */}
+          <div className="flex items-center justify-between">
+            {/* Left Section */}
+            <div className="flex items-center space-x-4">
+              <SNIcon />
+              <div>
+                <Title level={5} className="leading-6">
+                  Auto-Graded Assignment Creator
+                </Title>
+                <div className="text-gray-500 font-medium text-sm leading-5">
+                  {name || "Untitled Assignment"}
+                </div>
               </div>
+            </div>
+
+            {/* Center Navigation */}
+            <Nav
+              currentStepId={currentStepId}
+              setCurrentStepId={setCurrentStepId}
+            />
+
+            {/* Right Section */}
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={handleSyncWithLatestPublishedVersion}
+                className="text-sm flex font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950"
+              >
+                <IconRefresh />
+                <span className="ml-2">Sync with latest published version</span>
+              </button>
+              <CheckLearnerSideButton
+                disabled={!questionsAreReadyToBePublished}
+              />
+              <SubmitQuestionsButton
+                handlePublishButton={handlePublishButton}
+                submitting={submitting}
+                questionsAreReadyToBePublished={questionsAreReadyToBePublished}
+              />
             </div>
           </div>
 
-          {/* Center Navigation */}
-          <Nav
-            currentStepId={currentStepId}
-            setCurrentStepId={setCurrentStepId}
-          />
-
-          {/* Right Section */}
-          <div className="flex items-center space-x-4">
-            <CheckLearnerSideButton
-              disabled={!questionsAreReadyToBePublished}
-            />
-            <SubmitQuestionsButton
-              handlePublishButton={handlePublishButton}
-              submitting={submitting}
-              questionsAreReadyToBePublished={questionsAreReadyToBePublished}
-            />
+          {/* Enhanced Progress Bar with Roadmap (only visible during publishing) */}
+          {submitting && (
+            <div className="mt-4">
+              <ProgressBar
+                progress={jobProgress}
+                currentMessage={currentMessage}
+                status={progressStatus}
+              />
+            </div>
+          )}
+        </header>
+      </div>
+      {showAreYouSureModal && (
+        <Modal
+          onClose={() => setShowAreYouSureModal(false)}
+          Title="Are you sure you want to sync with the latest published version?"
+        >
+          <div className="p-4">
+            <p className="typography-body">
+              Syncing with the latest published version will discard any changes
+              you have made to the assignment. Are you sure you want to proceed?
+            </p>
+            <div className="flex justify-end mt-10">
+              <button
+                onClick={() => setShowAreYouSureModal(false)}
+                className="text-sm font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSync}
+                className="text-sm font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800 ml-2"
+              >
+                Sync
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Enhanced Progress Bar with Roadmap (only visible during publishing) */}
-        {submitting && (
-          <div className="mt-4">
-            <ProgressBar
-              progress={jobProgress}
-              currentMessage={currentMessage}
-              status={progressStatus}
-            />
-          </div>
-        )}
-      </header>
-    </div>
+        </Modal>
+      )}
+    </>
   );
 }
 

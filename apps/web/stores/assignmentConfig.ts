@@ -1,4 +1,4 @@
-import type { GradingData, QuestionDisplayType } from "@/config/types";
+import { GradingData, QuestionDisplayType } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
@@ -20,6 +20,7 @@ type GradingDataActions = {
   setAssignmentConfigStore: (state: Partial<GradingData>) => void;
   setStrictTimeLimit: (strictTimeLimit: boolean) => void;
   validate: () => boolean;
+  deleteStore: () => void;
   errors: Record<string, string>;
 };
 
@@ -39,7 +40,7 @@ export const useAssignmentConfig = createWithEqualityFn<
         questionVariationNumber: 0,
         setQuestionVariationNumber: (questionVariationNumber) =>
           set({ questionVariationNumber }),
-        questionDisplay: "ONE_PER_PAGE" as QuestionDisplayType,
+        questionDisplay: QuestionDisplayType.ONE_PER_PAGE,
         setQuestionDisplay: (questionDisplay: QuestionDisplayType) => {
           set({ questionDisplay });
         },
@@ -103,6 +104,21 @@ export const useAssignmentConfig = createWithEqualityFn<
           set({ errors });
           return Object.keys(errors).length === 0;
         },
+        deleteStore: () =>
+          set(() => ({
+            errors: {},
+            numAttempts: -1,
+            passingGrade: 50,
+            displayOrder: "DEFINED",
+            strictTimeLimit: false,
+            updatedAt: undefined,
+            graded: false,
+            questionVariationNumber: 0,
+            questionDisplay: QuestionDisplayType.ONE_PER_PAGE,
+            timeEstimateMinutes: undefined,
+            allotedTimeMinutes: undefined,
+          })),
+
         setAssignmentConfigStore: (state) =>
           set((prevState) => ({ ...prevState, ...state })),
       })),

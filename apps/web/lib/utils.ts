@@ -47,23 +47,14 @@ export function mergeData<T extends DataWithUpdatedAt>(
   const localDate = new Date(localData.updatedAt);
   const backendDate = new Date(backendData.updatedAt);
 
-  console.log("Comparing dates:", {
-    local: localData.updatedAt,
-    backend: backendData.updatedAt,
-    localDate,
-    backendDate,
-  });
-
   // Define a threshold for stale data (e.g. one week ago).
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
   // If local data is newer than backend and not older than a week, use local.
   if (localDate > backendDate && localDate > oneWeekAgo) {
-    console.log("Using local data.");
     return localData;
   }
-  console.log("Using backend data.");
   return backendData;
 }
 
