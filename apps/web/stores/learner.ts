@@ -22,8 +22,13 @@ type GitHubQuestionState = {
   isGithubModalOpen: boolean;
 };
 
-const getAssignmentIdFromURL = () => {
-  const pathSegments = window?.location.pathname.split("/");
+const getAssignmentIdFromURL = (): string | null => {
+  // Make sure we're in a browser (client-side)
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const pathSegments = window.location.pathname.split("/");
   const learnerIndex = pathSegments.indexOf("learner");
 
   if (learnerIndex !== -1 && pathSegments.length > learnerIndex + 1) {
@@ -32,6 +37,7 @@ const getAssignmentIdFromURL = () => {
 
   return null; // Return null if not found
 };
+
 const ASSIGNMENT_ID = getAssignmentIdFromURL();
 
 type GitHubState = {

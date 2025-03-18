@@ -6,7 +6,11 @@ import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
 import type { Assignment } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
-import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
+import {
+  useAssignmentDetails,
+  useLearnerOverviewStore,
+  useLearnerStore,
+} from "@/stores/learner";
 import { useSearchParams } from "next/navigation";
 import React, { FC, useEffect, useState } from "react";
 import AboutTheAssignment from "../(components)/AboutTheAssignment";
@@ -30,6 +34,9 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   );
   const setAssignmentId = useLearnerOverviewStore(
     (state) => state.setAssignmentId,
+  );
+  const setAssignmentDetails = useAssignmentDetails(
+    (state) => state.setAssignmentDetails,
   );
   const userPreferedLanguage = useSearchParams().get("lang") || "en";
   const isQuestionPage = useSearchParams().get("question") === "true";
@@ -64,8 +71,11 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
               ...assignmentData,
               ...decodedFields,
             };
-
             setAssignment(decodedAssignment);
+            setAssignmentDetails({
+              ...decodedAssignment,
+              name: decodedAssignment.name || "Untitled Assignment", // Provide a default name if undefined
+            });
             setListOfAttempts(attemptsData);
           }
         } catch (error) {
