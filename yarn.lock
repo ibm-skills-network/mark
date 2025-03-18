@@ -1310,10 +1310,10 @@
   resolved "https://registry.yarnpkg.com/@next/env/-/env-14.2.25.tgz#936d10b967e103e49a4bcea1e97292d5605278dd"
   integrity sha512-JnzQ2cExDeG7FxJwqAksZ3aqVJrHjFwZQAEJ9gQZSoEhIow7SNoKZzju/AwQ+PLIR4NY8V0rhcVozx/2izDO0w==
 
-"@next/eslint-plugin-next@14.2.24":
-  version "14.2.24"
-  resolved "https://registry.yarnpkg.com/@next/eslint-plugin-next/-/eslint-plugin-next-14.2.24.tgz#2bd0857c31d510610386ecb7a4cc9c2ca452a4ee"
-  integrity sha512-FDL3qs+5DML0AJz56DCVr+KnFYivxeAX73En8QbPw9GjJZ6zbfvqDy+HrarHFzbsIASn7y8y5ySJ/lllSruNVQ==
+"@next/eslint-plugin-next@14.2.25":
+  version "14.2.25"
+  resolved "https://registry.yarnpkg.com/@next/eslint-plugin-next/-/eslint-plugin-next-14.2.25.tgz#9181ac3b242beb718b8e38838f89a036cc6dadb6"
+  integrity sha512-L2jcdEEa0bTv1DhE67Cdx1kLLkL0iLL9ILdBYx0j7noi2AUJM7bwcqmcN8awGg+8uyKGAGof/OkFom50x+ZyZg==
   dependencies:
     glob "10.3.10"
 
@@ -4957,11 +4957,11 @@ escodegen@^2.1.0:
     source-map "~0.6.1"
 
 eslint-config-next@^14:
-  version "14.2.24"
-  resolved "https://registry.yarnpkg.com/eslint-config-next/-/eslint-config-next-14.2.24.tgz#da232b0c7f768c0d5c11e1cab9df20351cf3f602"
-  integrity sha512-9r1ujK++Pgpfixr5+DQ6rXDIQmSzuDbBlAQYMkJRMz9KWqovX7ESUTC0EAyBfOCl3ubkoeplw+aoXDuih3A8fw==
+  version "14.2.25"
+  resolved "https://registry.yarnpkg.com/eslint-config-next/-/eslint-config-next-14.2.25.tgz#51ff592afad67614e0acdcb639a43d8a3ef55c1b"
+  integrity sha512-BwuRQJeqw4xP/fkul/WWjivwbaLs8AjvuMzQCC+nJI65ZVhnVolWs6tk5VSD92xPHu96gSTahfaSkQjIRtJ3ag==
   dependencies:
-    "@next/eslint-plugin-next" "14.2.24"
+    "@next/eslint-plugin-next" "14.2.25"
     "@rushstack/eslint-patch" "^1.3.3"
     "@typescript-eslint/eslint-plugin" "^5.4.2 || ^6.0.0 || ^7.0.0 || ^8.0.0"
     "@typescript-eslint/parser" "^5.4.2 || ^6.0.0 || ^7.0.0 || ^8.0.0"
