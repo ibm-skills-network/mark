@@ -61,6 +61,8 @@ interface PublishingStep {
 @Injectable()
 export class AssignmentService {
   private logger: Logger;
+  private languageTranslation: boolean;
+  private supportedLanguages: string[] = [];
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
@@ -68,6 +70,11 @@ export class AssignmentService {
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = new Logger("AssignmentService");
+    this.languageTranslation =
+      process.env.NODE_ENV === "development" ? true : false;
+    this.supportedLanguages = this.languageTranslation
+      ? getAllLanguageCodes()
+      : ["en"];
   }
 
   async createJob(assignmentId: number, userId: string): Promise<Job> {
@@ -372,17 +379,66 @@ export class AssignmentService {
     id: number,
     updateAssignmentDto: UpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
-    if (updateAssignmentDto.published && updateAssignmentDto.questionOrder) {
-      await this.handleQuestionGradingContext(
-        id,
-        updateAssignmentDto.questionOrder,
-      );
+    const existingAssignment = await this.prisma.assignment.findUnique({
+      where: { id },
+    });
+
+    const assignmentTranslation =
+      await this.prisma.assignmentTranslation.findFirst({
+        where: { assignmentId: id, languageCode: "en" }, // English here because all the authors are expected to write the assignment in english, this might need to change if the authors are allowed to write in other languages
+      });
+    if (!existingAssignment) {
+      throw new NotFoundException("Assignment not found.");
     }
 
+    let shouldTranslate = false;
+    const {
+      name,
+      instructions,
+      introduction,
+      gradingCriteriaOverview,
+      published,
+    } = updateAssignmentDto;
+    if (
+      name &&
+      (name !== existingAssignment.name || name !== assignmentTranslation.name)
+    ) {
+      shouldTranslate = true;
+    }
+    if (
+      instructions &&
+      (instructions !== existingAssignment.instructions ||
+        instructions !== assignmentTranslation.instructions)
+    ) {
+      shouldTranslate = true;
+    }
+    if (
+      introduction &&
+      (introduction !== existingAssignment.introduction ||
+        introduction !== assignmentTranslation.introduction)
+    ) {
+      shouldTranslate = true;
+    }
+    if (
+      gradingCriteriaOverview &&
+      (gradingCriteriaOverview !== existingAssignment.gradingCriteriaOverview ||
+        gradingCriteriaOverview !==
+          assignmentTranslation.gradingCriteriaOverview)
+    ) {
+      shouldTranslate = true;
+    }
+
+    if (published) {
+      await this.handleQuestionGradingContext(id);
+    }
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,
     });
+
+    if (shouldTranslate) {
+      await this.handleAssignmentTranslations(id, this.supportedLanguages);
+    }
 
     return {
       id: result.id,
@@ -486,7 +542,6 @@ export class AssignmentService {
     // Ensure questions is an array even if it's null.
     const safeQuestions = questions ?? [];
 
-    const OnlyEnglish = process.env.NODE_ENV === "development" ? true : false;
     if (!introduction) {
       this.logger.error(
         `Introduction not provided for assignment: ${assignmentId}`,
@@ -503,20 +558,18 @@ export class AssignmentService {
       throw new Error("Job not found");
     }
 
-    const supportedLanguages = OnlyEnglish ? ["en"] : getAllLanguageCodes();
-
     // Map to track backend IDs for questions.
     const frontendToBackendIdMap = new Map<number, number>();
 
     // --- Translation Progress Tracking ---
     const totalQuestionTranslations = safeQuestions.reduce(
-      (accumulator, question) => accumulator + supportedLanguages.length,
+      (accumulator, question) => accumulator + this.supportedLanguages.length,
       0,
     );
     let totalVariantTranslations = 0;
     for (const question of safeQuestions) {
       const variantCount = question.variants ? question.variants.length : 0;
-      totalVariantTranslations += variantCount * supportedLanguages.length;
+      totalVariantTranslations += variantCount * this.supportedLanguages.length;
     }
     const totalTranslationTasks =
       totalQuestionTranslations + totalVariantTranslations;
@@ -673,7 +726,7 @@ export class AssignmentService {
                 assignmentId,
                 upsertedQuestion.id,
                 questionDto,
-                supportedLanguages,
+                this.supportedLanguages,
                 updateTranslationProgress,
               );
 
@@ -737,7 +790,7 @@ export class AssignmentService {
                         assignmentId,
                         upsertedQuestion.id,
                         updatedVariant,
-                        supportedLanguages,
+                        this.supportedLanguages,
                         updateTranslationProgress,
                       );
                     } else {
@@ -750,7 +803,7 @@ export class AssignmentService {
                         assignmentId,
                         upsertedQuestion.id,
                         newVariant,
-                        supportedLanguages,
+                        this.supportedLanguages,
                         updateTranslationProgress,
                       );
                     }
@@ -774,9 +827,9 @@ export class AssignmentService {
             40,
           );
           await this.handleAssignmentTranslations(
-            job,
             assignmentId,
-            supportedLanguages,
+            this.supportedLanguages,
+            job,
           );
         },
       },
@@ -796,7 +849,7 @@ export class AssignmentService {
             const backendId = frontendToBackendIdMap.get(q.id);
             return backendId || q.id;
           });
-          await this.handleQuestionGradingContext(assignmentId, questionOrder);
+          await this.handleQuestionGradingContext(assignmentId);
           await this.prisma.assignment.update({
             where: { id: assignmentId },
             data: {
@@ -904,9 +957,9 @@ export class AssignmentService {
   }
 
   private async handleAssignmentTranslations(
-    job: Job,
     assignmentId: number,
     languages: string[],
+    job?: Job,
   ): Promise<void> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -926,15 +979,17 @@ export class AssignmentService {
           if (existingTranslation) {
             const updatedData: Prisma.AssignmentTranslationUpdateInput = {};
             const translationTasks = [];
-            await this.updateJobStatus(
-              job,
-              `Updating assignment translation that is in ${getLanguageNameFromCode(
-                lang,
-              )}`,
-              "In Progress",
-              null,
-              60,
-            );
+            if (job) {
+              await this.updateJobStatus(
+                job,
+                `Updating assignment translation that is in ${getLanguageNameFromCode(
+                  lang,
+                )}`,
+                "In Progress",
+                null,
+                60,
+              );
+            }
             if (
               assignment.name !== existingTranslation.name &&
               assignment.name
@@ -994,7 +1049,10 @@ export class AssignmentService {
             }
 
             await Promise.all(translationTasks);
-
+            // if assignmentTranslation.name doesn't match with assignment.name, then update the translation
+            if (assignment.name !== existingTranslation.name) {
+              updatedData.name = assignment.name;
+            }
             if (Object.keys(updatedData).length > 0) {
               await this.prisma.assignmentTranslation.update({
                 where: { id: existingTranslation.id },
@@ -1002,13 +1060,15 @@ export class AssignmentService {
               });
             }
           } else {
-            await this.updateJobStatus(
-              job,
-              `Translating assignment to ${getLanguageNameFromCode(lang)}`,
-              "In Progress",
-              null,
-              80,
-            );
+            if (job) {
+              await this.updateJobStatus(
+                job,
+                `Translating assignment to ${getLanguageNameFromCode(lang)}`,
+                "In Progress",
+                null,
+                80,
+              );
+            }
             const [
               translatedName,
               translatedInstructions,
@@ -1564,10 +1624,7 @@ export class AssignmentService {
     }
   }
 
-  private async handleQuestionGradingContext(
-    assignmentId: number,
-    questionOrder: number[],
-  ) {
+  private async handleQuestionGradingContext(assignmentId: number) {
     const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
@@ -1575,8 +1632,15 @@ export class AssignmentService {
           where: { isDeleted: false },
         },
       },
-    })) as { questions: { id: number; question: string }[] };
+    })) as { questions: { id: number; question: string }[] } & {
+      questionOrder: number[];
+    };
 
+    const assignmentData = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: { questionOrder: true },
+    });
+    const questionOrder = assignmentData?.questionOrder || [];
     const questionsForGradingContext = assignment.questions
       .sort((a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id))
       .map((q) => ({
