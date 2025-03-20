@@ -969,7 +969,6 @@ export class AttemptService {
 
     // 4. Build a map of the assignment’s original questions
     const questionById = new Map(assignment.questions.map((q) => [q.id, q]));
-    console.log("questionById", questionById);
     // 5. Collect the IDs for questions and variants
     const questionIds = assignment.questions.map((q) => q.id);
     const variantIds = assignmentAttempt.questionVariants

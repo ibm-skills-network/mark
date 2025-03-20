@@ -91,21 +91,39 @@ export function useChangesSummary(): string {
         JSON.stringify(originalQuestion.choices)
       )
         diffs.push(`Modified choices for question ${question.id}.`);
+
       if (
         JSON.stringify(
-          question.scoring?.criteria?.map((c) => ({
-            description: c.description,
-            points: c.points,
-          })) || [],
+          question.scoring?.rubrics.map((r) => {
+            return {
+              rubricQuestion: r.rubricQuestion,
+              criteria: r.criteria.map((c) => {
+                return {
+                  description: c.description,
+                  points: c.points,
+                };
+              }),
+            };
+          }),
         ) !==
-        JSON.stringify(
-          originalQuestion.scoring?.criteria?.map((c) => ({
-            description: c.description,
-            points: c.points,
-          })) || [],
-        )
-      )
-        diffs.push(`Updated scoring for question ${question.id}.`);
+          JSON.stringify(
+            originalQuestion.scoring?.rubrics.map((r) => {
+              return {
+                rubricQuestion: r.rubricQuestion,
+                criteria: r.criteria.map((c) => {
+                  return {
+                    description: c.description,
+                    points: c.points,
+                  };
+                }),
+              };
+            }),
+          ) &&
+        question.scoring?.rubrics.length > 0 &&
+        originalQuestion.scoring?.rubrics.length > 0
+      ) {
+        diffs.push(`Updated scoring criteria for question ${question.id}.`);
+      }
       if (question.randomizedChoices !== originalQuestion.randomizedChoices)
         diffs.push(`Updated randomized choices for question ${question.id}.`);
       if (question.responseType !== originalQuestion.responseType)
@@ -162,6 +180,21 @@ export function useChangesSummary(): string {
             diffs.push(
               `Modified choices for variant "${variant.variantContent}" in question ${question.id}.`,
             );
+          if (
+            JSON.stringify(variant.scoring) !==
+            JSON.stringify(matchingOrig.scoring)
+          )
+            diffs.push(
+              `Modified scoring for variant "${variant.variantContent}" in question ${question.id}.`,
+            );
+          if (variant.maxWords !== matchingOrig.maxWords)
+            diffs.push(
+              `Updated max words for variant "${variant.variantContent}" in question ${question.id}.`,
+            );
+          if (variant.maxCharacters !== matchingOrig.maxCharacters)
+            diffs.push(
+              `Updated max characters for variant "${variant.variantContent}" in question ${question.id}.`,
+            );
         }
       });
     });
@@ -192,13 +225,15 @@ export function useChangesSummary(): string {
       (originalAssignment.timeEstimateMinutes ?? null)
     )
       diffs.push("Updated time estimate.");
-    if (allotedTimeMinutes !== originalAssignment.allotedTimeMinutes)
+    if (
+      allotedTimeMinutes !== originalAssignment.allotedTimeMinutes &&
+      allotedTimeMinutes
+    )
       diffs.push(`Set alloted time to ${allotedTimeMinutes} minutes.`);
     if (displayOrder !== originalAssignment.displayOrder)
       diffs.push("Modified question order.");
     if (graded !== originalAssignment.graded)
       diffs.push(graded ? "Enabled grading." : "Disabled grading.");
-
     return diffs.length > 0 ? diffs.join(" ") : "No changes detected.";
   }, [
     originalAssignment,

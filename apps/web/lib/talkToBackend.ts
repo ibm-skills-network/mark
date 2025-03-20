@@ -491,7 +491,6 @@ export async function generateRubric(
   cookies?: string,
 ): Promise<Scoring | Choice[]> {
   const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/create-marking-rubric`;
-  console.log("rubricIndex", rubricIndex);
   try {
     const res = await fetch(endpointURL, {
       method: "POST",

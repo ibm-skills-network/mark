@@ -404,7 +404,6 @@ const AuthorQuestionsPage: FC<Props> = ({
         toast.error("Failed to add question");
         return;
       }
-      console.log("question", question);
       const newQuestion = {
         ...question,
         id: questionId,

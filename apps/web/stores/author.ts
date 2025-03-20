@@ -778,7 +778,6 @@ export const useAuthorStore = createWithEqualityFn<
         ) => {
           set((state) => ({
             questions: state.questions.map((q) => {
-              console.log("scoring", scoring);
               if (q.id === questionId) {
                 if (variantId) {
                   const updatedVariants = q.variants.map((variant) => {

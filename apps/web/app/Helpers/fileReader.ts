@@ -149,13 +149,6 @@ export const readIpynb = (
               : cell.source;
           }
 
-          if (cell.outputs) {
-            console.log(
-              `Cell #${index} outputs:`,
-              JSON.stringify(cell.outputs, null, 2),
-            );
-          }
-
           if (cell.outputs && Array.isArray(cell.outputs)) {
             const outputText = cell.outputs
               .map((output) => {
@@ -209,7 +202,6 @@ export const readPptx = async (
       arrayBuffer: await file.arrayBuffer(),
     });
     const sanitized = sanitizeContent(result.value, "pptx");
-    console.log("PPTX content:", sanitized);
     return { filename: file.name, content: sanitized, questionId };
   } catch (error) {
     throw new Error(`Error reading PowerPoint: ${String(error)}`);
@@ -238,7 +230,6 @@ export const readFile = async (
 ): Promise<ExtendedFileContent> => {
   // supported file types txt, pdf, md, docx, csv, pptx, ipynb, py, js, sh, html, css, sql, ts, tsx
   const extension = file.name.split(".").pop()?.toLowerCase();
-  console.log("Reading file with extension:", extension);
   switch (extension) {
     case "txt":
       return readAsText(file, questionId);

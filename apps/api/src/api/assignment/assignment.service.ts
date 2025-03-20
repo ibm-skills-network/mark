@@ -62,7 +62,6 @@ interface PublishingStep {
 export class AssignmentService {
   private logger: Logger;
   private languageTranslation: boolean;
-  private supportedLanguages: string[] = [];
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
@@ -71,10 +70,7 @@ export class AssignmentService {
   ) {
     this.logger = new Logger("AssignmentService");
     this.languageTranslation =
-      process.env.NODE_ENV === "development" ? true : false;
-    this.supportedLanguages = this.languageTranslation
-      ? getAllLanguageCodes()
-      : ["en"];
+      process.env.NODE_ENV === "development" ? false : true;
   }
 
   async createJob(assignmentId: number, userId: string): Promise<Job> {
@@ -379,6 +375,8 @@ export class AssignmentService {
     id: number,
     updateAssignmentDto: UpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
+    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
+
     const existingAssignment = await this.prisma.assignment.findUnique({
       where: { id },
     });
@@ -437,7 +435,7 @@ export class AssignmentService {
     });
 
     if (shouldTranslate) {
-      await this.handleAssignmentTranslations(id, this.supportedLanguages);
+      await this.handleAssignmentTranslations(id, supportedLanguages);
     }
 
     return {
@@ -539,6 +537,8 @@ export class AssignmentService {
       showSubmissionFeedback,
     } = updateAssignmentQuestionsDto;
 
+    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
+
     // Ensure questions is an array even if it's null.
     const safeQuestions = questions ?? [];
 
@@ -563,13 +563,13 @@ export class AssignmentService {
 
     // --- Translation Progress Tracking ---
     const totalQuestionTranslations = safeQuestions.reduce(
-      (accumulator, question) => accumulator + this.supportedLanguages.length,
+      (accumulator, question) => accumulator + supportedLanguages.length,
       0,
     );
     let totalVariantTranslations = 0;
     for (const question of safeQuestions) {
       const variantCount = question.variants ? question.variants.length : 0;
-      totalVariantTranslations += variantCount * this.supportedLanguages.length;
+      totalVariantTranslations += variantCount * supportedLanguages.length;
     }
     const totalTranslationTasks =
       totalQuestionTranslations + totalVariantTranslations;
@@ -726,7 +726,7 @@ export class AssignmentService {
                 assignmentId,
                 upsertedQuestion.id,
                 questionDto,
-                this.supportedLanguages,
+                supportedLanguages,
                 updateTranslationProgress,
               );
 
@@ -790,7 +790,7 @@ export class AssignmentService {
                         assignmentId,
                         upsertedQuestion.id,
                         updatedVariant,
-                        this.supportedLanguages,
+                        supportedLanguages,
                         updateTranslationProgress,
                       );
                     } else {
@@ -803,7 +803,7 @@ export class AssignmentService {
                         assignmentId,
                         upsertedQuestion.id,
                         newVariant,
-                        this.supportedLanguages,
+                        supportedLanguages,
                         updateTranslationProgress,
                       );
                     }
@@ -828,7 +828,7 @@ export class AssignmentService {
           );
           await this.handleAssignmentTranslations(
             assignmentId,
-            this.supportedLanguages,
+            supportedLanguages,
             job,
           );
         },

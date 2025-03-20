@@ -191,13 +191,6 @@ function AuthorHeader() {
       const questions: QuestionAuthorStore[] =
         assignment.questions?.map(
           (question: QuestionAuthorStore, index: number) => {
-            const criteriaWithId = question.scoring?.criteria?.map(
-              (criteria: Criteria, criteriaIndex: number) => ({
-                ...criteria,
-                index: criteriaIndex + 1,
-              }),
-            );
-
             const parsedVariants: QuestionVariants[] =
               question.variants?.map((variant: QuestionVariants) => ({
                 ...variant,
@@ -206,19 +199,25 @@ function AuthorHeader() {
                     ? (JSON.parse(variant.choices) as Choice[])
                     : variant.choices,
               })) || [];
-
+            const rubricArray = question.scoring?.rubrics.map((rubric) => {
+              return {
+                rubricQuestion: stripHtml(rubric.rubricQuestion),
+                criteria: rubric.criteria.map((criteria, index) => {
+                  return {
+                    description: criteria.description,
+                    points: criteria.points,
+                    id: index + 1,
+                  };
+                }),
+              };
+            });
             return {
               ...question,
               alreadyInBackend: true,
               variants: parsedVariants,
               scoring: {
                 type: "CRITERIA_BASED",
-                rubrics: [
-                  {
-                    rubricQuestion: stripHtml(question.question),
-                    criteria: criteriaWithId || [],
-                  },
-                ],
+                rubrics: rubricArray || [],
               },
               index: index + 1,
             };
@@ -493,7 +492,6 @@ function AuthorHeader() {
   }
   const handleSyncWithLatestPublishedVersion = async () => {
     // check if the user has made any changes to the assignment
-    console.log(changesSummary);
     if (changesSummary !== "No changes detected.") {
       setShowAreYouSureModal(true);
       return;

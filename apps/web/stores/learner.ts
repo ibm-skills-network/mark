@@ -460,7 +460,6 @@ export const useLearnerStore = createWithEqualityFn<
               finalCode = "en";
             }
             set({ userPreferedLanguage: finalCode });
-            console.log("Language set to:", finalCode);
           } catch (e) {
             console.warn("Failed to parse language");
           }

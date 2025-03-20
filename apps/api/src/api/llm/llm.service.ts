@@ -852,10 +852,6 @@ export class LlmService {
       // Try to fetch the existing rubric at the given index
       if (existingRubricOfIndex) {
         // Check if it's "complete"
-        console.log(
-          "this.isRubricComplete(existingRubricOfIndex)",
-          this.isRubricComplete(existingRubricOfIndex),
-        );
         wrapperTemplate += this.isRubricComplete(existingRubricOfIndex)
           ? `
             The rubric {existingRubricOfIndexJson} is complete.
@@ -1786,7 +1782,6 @@ export class LlmService {
     }
 
     for (const c of rubric.criteria) {
-      console.log("c.description", c.description);
       if (!c.description || !c.description.trim()) {
         false;
         continue;

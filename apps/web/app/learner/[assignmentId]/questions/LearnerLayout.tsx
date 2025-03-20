@@ -101,8 +101,6 @@ async function AttemptLoader({
     cookieHeader,
     lang,
   );
-  console.log("attempt", attempt);
-
   if (!attempt) {
     throw new Error("Attempt could not be fetched.");
   }

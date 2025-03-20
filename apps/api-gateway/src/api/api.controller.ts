@@ -106,7 +106,6 @@ export class ApiController {
         DownstreamService.MARK_API,
         request,
       );
-      console.log("Forwarding request to", endpoint);
       await this.apiService.forwardRequestUsingHttp(
         request,
         response,
@@ -115,7 +114,6 @@ export class ApiController {
       );
       return;
     }
-    console.log("Forwarding request to Mark API");
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
       request,
