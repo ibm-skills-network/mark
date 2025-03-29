@@ -1028,9 +1028,9 @@
     zod-to-json-schema "^3.22.3"
 
 "@langchain/openai@^0.5.0":
-  version "0.5.0"
-  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.5.0.tgz#80eb46e31abab779976bfe2c88c0e521fed060d6"
-  integrity sha512-nuMVwgu1dILhN0swU50KCXwX93m+l9feuRig8pVIyKec+UvQ5i/g6eK8M1wHXXd0PHIrNqtR5hxyrSI0koLoYA==
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.5.1.tgz#c9a692a3959c7fabc82b34521136ab422c07b28f"
+  integrity sha512-Xa20xW2bpkyAPyKCCVkqMyTT3GRQgoKd0E1Dz0NECYPMqyqlwQyP38LrERq8cX+6QIWAFUt6ttKZFcg6Oy7m0g==
   dependencies:
     js-tiktoken "^1.0.12"
     openai "^4.87.3"
