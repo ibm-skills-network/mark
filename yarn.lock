@@ -1027,20 +1027,10 @@
     zod "^3.22.4"
     zod-to-json-schema "^3.22.3"
 
-"@langchain/openai@>=0.2.0 <0.6.0":
+"@langchain/openai@>=0.2.0 <0.6.0", "@langchain/openai@^0.5.0":
   version "0.5.2"
   resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.5.2.tgz#c7d4acb2ebc1bc8478730e58868936f29d4ac11f"
   integrity sha512-XYsWKdy2V5/KwRk9MRDIMqmFDJdIaaP+aRLJftM0NFMg3fS+3dHy9lpTZLod5KNU+RB2odZua6Z981crM2siZA==
-  dependencies:
-    js-tiktoken "^1.0.12"
-    openai "^4.87.3"
-    zod "^3.22.4"
-    zod-to-json-schema "^3.22.3"
-
-"@langchain/openai@^0.5.0":
-  version "0.5.1"
-  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.5.1.tgz#c9a692a3959c7fabc82b34521136ab422c07b28f"
-  integrity sha512-Xa20xW2bpkyAPyKCCVkqMyTT3GRQgoKd0E1Dz0NECYPMqyqlwQyP38LrERq8cX+6QIWAFUt6ttKZFcg6Oy7m0g==
   dependencies:
     js-tiktoken "^1.0.12"
     openai "^4.87.3"
