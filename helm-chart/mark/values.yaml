@@ -15,7 +15,7 @@ apiGateway:
   enabled: true
   autoscaling:
     enabled: false
-  replicaCount: 1
+  replicaCount: 3
   image:
     repository: icr.io/skills-network/mark-api-gateway
     pullPolicy: IfNotPresent
@@ -38,7 +38,7 @@ apiGateway:
 
 # LTI Gateway configurations
 lti-gateway:
-  replicaCount: 1
+  replicaCount: 3
   resources: {}
   secretEnv: {}
   ltiCredentials: {}
@@ -51,7 +51,7 @@ api:
   enabled: true
   autoscaling:
     enabled: false
-  replicaCount: 1
+  replicaCount: 3
   image:
     repository: icr.io/skills-network/mark-api
     pullPolicy: IfNotPresent
@@ -79,7 +79,7 @@ ui:
   enabled: true
   autoscaling:
     enabled: false
-  replicaCount: 1
+  replicaCount: 3
   image:
     repository: icr.io/skills-network/mark-ui
     pullPolicy: IfNotPresent
@@ -101,7 +101,7 @@ ltiCredentialsManager:
   service:
     type: ClusterIP
     port: 80
-  replicaCount: 1
+  replicaCount: 3
   podAnnotations: {}
   podSecurityContext: {}
   securityContext: {}
