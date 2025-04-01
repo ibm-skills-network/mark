@@ -127,7 +127,10 @@ ltiCredentialsManager:
 ingress:
   enabled: true
   className: public-iks-k8s-nginx
-  annotations: {}
+  annotations: 
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
   tls:
     secretName: ""
 
