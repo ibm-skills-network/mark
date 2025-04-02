@@ -222,7 +222,6 @@ export class AssignmentController {
     ) {
       throw new BadRequestException("No data was provided");
     }
-
     return await this.assignmentService.publishAssignment(
       Number(id),
       updatedAssignment,

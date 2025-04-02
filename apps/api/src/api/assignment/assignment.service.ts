@@ -72,7 +72,6 @@ export class AssignmentService {
     this.languageTranslation =
       process.env.NODE_ENV === "development" ? false : true;
   }
-
   async createJob(assignmentId: number, userId: string): Promise<Job> {
     return await this.prisma.job.create({
       data: {
@@ -537,7 +536,9 @@ export class AssignmentService {
       showSubmissionFeedback,
     } = updateAssignmentQuestionsDto;
 
-    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const supportedLanguages = this.languageTranslation
+      ? getAllLanguageCodes()
+      : ["en"];
 
     // Ensure questions is an array even if it's null.
     const safeQuestions = questions ?? [];
@@ -633,6 +634,7 @@ export class AssignmentService {
               showQuestionScore,
               showSubmissionFeedback,
               languageCode,
+              timeEstimateMinutes,
             },
           });
         },
@@ -1049,7 +1051,6 @@ export class AssignmentService {
             }
 
             await Promise.all(translationTasks);
-            // if assignmentTranslation.name doesn't match with assignment.name, then update the translation
             if (assignment.name !== existingTranslation.name) {
               updatedData.name = assignment.name;
             }

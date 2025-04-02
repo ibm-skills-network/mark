@@ -165,6 +165,9 @@ const Question: FC<QuestionProps> = ({
       if (params.maxCharacters !== undefined) {
         updatedData.maxCharacters = params.maxCharacters;
       }
+      if (params.showRubricsToLearner !== undefined) {
+        updatedData.scoring.showRubricsToLearner = params.showRubricsToLearner;
+      }
       if (params.maxWordCount !== undefined) {
         updatedData.maxWords = params.maxWordCount;
       }
@@ -189,6 +192,9 @@ const Question: FC<QuestionProps> = ({
           params.randomizedChoices ?? question.randomizedChoices,
         scoring: {
           type: "CRITERIA_BASED",
+          showRubricsToLearner:
+            params.showRubricsToLearner ??
+            question.scoring?.showRubricsToLearner,
           rubrics: params.rubrics
             ? params.rubrics
             : (question.scoring?.rubrics ?? []),
@@ -679,6 +685,53 @@ const Question: FC<QuestionProps> = ({
             </Menu>
           ) : null}
         </div>
+        {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) ? (
+          <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap ">
+            {/* toggleButton */}
+            <span className="text-gray-600 typography-body">
+              Show Rubrics to Learner
+            </span>
+            <Tooltip
+              content="Show rubrics to learners"
+              className="flex items-center"
+            >
+              <button
+                type="button"
+                onClick={
+                  question.scoring?.showRubricsToLearner
+                    ? () => {
+                        handleUpdateQuestionState({
+                          showRubricsToLearner: false,
+                        });
+                      }
+                    : () => {
+                        handleUpdateQuestionState({
+                          showRubricsToLearner: true,
+                        });
+                      }
+                }
+                className={cn(
+                  "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                  question.scoring?.showRubricsToLearner
+                    ? "bg-violet-600"
+                    : "bg-gray-200",
+                )}
+                role="switch"
+                aria-checked={question.scoring?.showRubricsToLearner}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                    question.scoring?.showRubricsToLearner
+                      ? "translate-x-5"
+                      : "translate-x-0",
+                  )}
+                />
+              </button>
+            </Tooltip>
+          </div>
+        ) : null}
 
         {/* Word count and other controls */}
         <div className="flex items-center gap-4 flex-wrap">

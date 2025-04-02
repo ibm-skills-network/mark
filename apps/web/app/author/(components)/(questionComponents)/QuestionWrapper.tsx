@@ -721,6 +721,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           {/* Use RubricSwitcher to render the appropriate rubric */}
           <RubricSwitcher
             questionType={questionType}
+            questionIndex={questionIndex}
             preview={preview}
             loading={loading}
             criteriaMode={criteriaMode}

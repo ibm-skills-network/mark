@@ -1693,24 +1693,23 @@ export class LlmService {
     });
 
     const promptTemplate = `
-  Translate the following text into {target_language}.
-  Please provide only a valid JSON object that conforms exactly to the following format:
-  {format_instructions}
-  Text: {text}
-  Do not include any additional text, commentary, or formatting.
+    You are translating a classroom assignment for students and teachers, ensuring clarity and educational tone.
+    Translate this following text: {text}
+    into this language code: {target_language}.
+    {format_instructions}
   `;
+
     const parser = StructuredOutputParser.fromZodSchema(translationSchema);
     const formatInstructions = parser.getFormatInstructions();
     const prompt = new PromptTemplate({
       template: promptTemplate,
       inputVariables: [],
       partialVariables: {
-        text: text,
+        text,
         target_language: targetLanguage,
         format_instructions: formatInstructions,
       },
     });
-
     try {
       // Send the formatted prompt to LLM and get the raw response
       const rawResponse = await this.processPrompt(

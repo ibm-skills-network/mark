@@ -11,8 +11,6 @@ import { PrismaService } from "src/prisma.service";
 export class GithubService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private readonly GITHUB_API_URL = "https://api.github.com";
-
   getOAuthUrl(assignmentId: number, redirectUrl: string): Promise<string> {
     const clientId =
       process.env.NODE_ENV === "development"
@@ -128,83 +126,5 @@ export class GithubService {
     }
 
     return userCredential.githubToken;
-  }
-
-  async listRepositories(token: string): Promise<any[]> {
-    const response = await fetch(`${this.GITHUB_API_URL}/user/repos`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
-
-    if (!response.ok) {
-      interface GitHubErrorResponse {
-        message: string;
-      }
-      const error: GitHubErrorResponse =
-        (await response.json()) as GitHubErrorResponse;
-      throw new BadRequestException(
-        error.message || "Failed to fetch repositories",
-      );
-    }
-
-    interface Repository {
-      id: number;
-      name: string;
-      full_name: string;
-      private: boolean;
-    }
-
-    const data: Repository[] = (await response.json()) as Repository[];
-    if (!Array.isArray(data)) {
-      throw new BadRequestException("Expected an array of repositories");
-    }
-    return data;
-  }
-
-  async getRepositoryContents(
-    token: string,
-    owner: string,
-    repo: string,
-    path = "",
-  ): Promise<any[]> {
-    const url = `${this.GITHUB_API_URL}/repos/${owner}/${repo}/contents/${path}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
-
-    if (!response.ok) {
-      interface GitHubErrorResponse {
-        message: string;
-      }
-      const error: GitHubErrorResponse =
-        (await response.json()) as GitHubErrorResponse;
-      throw new BadRequestException(
-        error.message || "Failed to fetch repository contents",
-      );
-    }
-
-    interface RepositoryContent {
-      name: string;
-      path: string;
-      sha: string;
-      size: number;
-      url: string;
-      html_url: string;
-      git_url: string;
-      download_url: string;
-      type: string;
-    }
-
-    const data: RepositoryContent[] =
-      (await response.json()) as RepositoryContent[];
-    if (!Array.isArray(data)) {
-      throw new BadRequestException("Expected an array of repository contents");
-    }
-    return data;
   }
 }

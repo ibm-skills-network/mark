@@ -80,43 +80,4 @@ export class GithubController {
     }
     return this.githubService.getAccessToken(userId);
   }
-
-  @Get("repos")
-  @ApiOperation({ summary: "List GitHub repositories" })
-  @ApiResponse({ status: 200, description: "Returns list of repositories" })
-  async listRepositories(@Query("token") token: string): Promise<any[]> {
-    if (!token) {
-      throw new HttpException(
-        "GitHub token is required",
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    return this.githubService.listRepositories(token);
-  }
-
-  @Get("repos/:owner/:repo/contents")
-  @ApiOperation({ summary: "Get repository contents" })
-  @ApiResponse({ status: 200, description: "Returns repository contents" })
-  async getRepositoryContents(
-    @Query("token") token: string,
-    @Query("path") path: string,
-    @Param("owner") owner: string,
-    @Param("repo") repo: string,
-  ): Promise<any[]> {
-    if (!token) {
-      throw new HttpException(
-        "GitHub token is required",
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (!owner) {
-      throw new HttpException("Owner is required", HttpStatus.BAD_REQUEST);
-    }
-    if (!repo) {
-      throw new HttpException("Repository is required", HttpStatus.BAD_REQUEST);
-    }
-
-    return this.githubService.getRepositoryContents(token, owner, repo, path);
-  }
 }

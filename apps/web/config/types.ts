@@ -96,6 +96,7 @@ export type UpdateQuestionStateParams = {
   randomizedChoices?: boolean;
   maxWordCount?: number;
   questionTitle?: string;
+  showRubricsToLearner?: boolean;
   rubrics?: Rubric[];
   questionCriteria?: {
     points: number[];
@@ -196,6 +197,7 @@ export type Scoring = {
   "CRITERIA_BASED" | "LOSS_PER_MISTAKE" | "AI_GRADED";
   rubrics?: Rubric[];
   criteria?: Criteria[];
+  showRubricsToLearner?: boolean;
 };
 
 type Feedback = {
@@ -227,6 +229,7 @@ type QuestionResponse = {
 };
 export interface BaseQuestion {
   type: QuestionType;
+  scoring?: Scoring;
   totalPoints: number;
   numRetries?: number;
   question: string;

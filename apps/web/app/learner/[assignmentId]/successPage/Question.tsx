@@ -351,6 +351,7 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
                 {file.filename}
                 <button
                   onClick={() => {
+                    console.log("file", file);
                     if (file.githubUrl) {
                       void handleFileView(file.githubUrl);
                     } else {

@@ -8,14 +8,71 @@ import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   LanguageIcon,
   TagIcon as OutlineTagIcon,
 } from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
+import LearnerRubricTable from "./LearnerRubricTable";
 
+interface SingleRubric {
+  rubricQuestion: string;
+  criteria: {
+    description: string;
+    points: number;
+  }[];
+}
+
+interface ShowHideRubricProps {
+  rubrics: SingleRubric[];
+}
+
+function ShowHideRubric({ rubrics }: ShowHideRubricProps) {
+  const [showRubric, setShowRubric] = useState(false);
+
+  const toggleRubric = () => {
+    setShowRubric((prev) => !prev);
+  };
+
+  return (
+    <div className="flex flex-col gap-y-4">
+      <button
+        type="button"
+        onClick={toggleRubric}
+        className="inline-flex items-center gap-x-1 
+                   px-3 py-2 text-sm font-medium 
+                   typography-text rounded-md 
+                   transition"
+      >
+        <span>{showRubric ? "Hide Rubric" : "Show Rubric"}</span>
+        {showRubric ? (
+          <ChevronUpIcon className="w-4 h-4" />
+        ) : (
+          <ChevronDownIcon className="w-4 h-4" />
+        )}
+      </button>
+
+      <AnimatePresence>
+        {showRubric && (
+          <motion.div
+            key="rubric"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <LearnerRubricTable rubrics={rubrics} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 interface Props extends ComponentPropsWithoutRef<"section"> {
   question: QuestionStore;
   questionNumber: number;
@@ -44,6 +101,17 @@ function Component(props: Props) {
   const setSelectedLanguage = useLearnerStore(
     (state) => state.setSelectedLanguage,
   );
+
+  // Keep your existing checkToShowRubric function
+  const checkToShowRubric = () => {
+    if (
+      ["TEXT", "UPLOAD", "LINk_FILE", "URL"].includes(question.type) &&
+      question.scoring.showRubricsToLearner &&
+      question.scoring?.rubrics
+    )
+      return true;
+    else return false;
+  };
   // Get the questionStatus directly from the store
   const questionStatus = getQuestionStatusById
     ? getQuestionStatusById(questionId)
@@ -340,6 +408,13 @@ function Component(props: Props) {
           </div>
         )}
       </div>
+
+      {/* =================================
+          Rubric if available (TOGGLABLE)
+         ================================= */}
+      {checkToShowRubric() && (
+        <ShowHideRubric rubrics={question.scoring.rubrics} />
+      )}
 
       {/* Render the question based on the type */}
       <RenderQuestion

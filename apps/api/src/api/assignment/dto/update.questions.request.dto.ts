@@ -88,6 +88,13 @@ export class ScoringDto {
   @ValidateNested({ each: true })
   @Type(() => RubricDto)
   rubrics: RubricDto[];
+  @ApiProperty({
+    description: "Show rubric to the learner",
+    type: Boolean,
+  })
+  @IsBoolean()
+  @IsOptional()
+  showRubricsToLearner?: boolean;
 }
 export class VariantDto {
   @ApiProperty({ description: "Variant content of the question", type: String })
@@ -151,6 +158,18 @@ export class QuestionDto {
   @IsString()
   question: string;
 
+  @ApiProperty({
+    description: "translations dictionary",
+    type: Object,
+  })
+  @IsOptional()
+  translations?: Record<
+    string,
+    {
+      translatedText: string;
+      translatedChoices: Choice[];
+    }
+  >;
   @ApiProperty({
     description: "Flag indicating if question has an answer",
     type: Boolean,
@@ -445,4 +464,219 @@ export class UpdateAssignmentQuestionsDto {
   })
   @IsOptional()
   updatedAt: Date;
+}
+/**
+ * If a questionVariant is present (not null), you can expand this class
+ * to match how your code structures variant data.
+ */
+export class QuestionVariantDataDto {
+  @ApiPropertyOptional({ description: "Variant ID", type: Number })
+  @IsOptional()
+  @IsInt()
+  id?: number;
+
+  @ApiPropertyOptional({ description: "Variant content", type: String })
+  @IsOptional()
+  @IsString()
+  variantContent?: string;
+}
+/**
+ * DTO for each question variant row in the assignment attempt, including
+ * randomized choices JSON and an optional questionVariant object.
+ */
+export class AttemptQuestionVariantDto {
+  @ApiProperty({ description: "AssignmentAttempt ID", type: Number })
+  @IsInt()
+  assignmentAttemptId: number;
+
+  @ApiProperty({ description: "Question ID", type: Number })
+  @IsInt()
+  questionId: number;
+
+  @ApiPropertyOptional({
+    description: "QuestionVariant ID (if applicable)",
+    type: Number,
+  })
+  @IsOptional()
+  @IsInt()
+  questionVariantId?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Randomized choices (JSON string); e.g. \'[{"choice":"...","isCorrect":true},...]\'',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  randomizedChoices?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Full variant object, if it exists",
+    type: QuestionVariantDataDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => QuestionVariantDataDto)
+  questionVariant?: QuestionVariantDataDto | null;
+}
+/**
+ * Represents a translated version of the question text and choices (if any).
+ */
+export class AttemptTranslationDto {
+  @ApiProperty({ description: "Translated question text", type: String })
+  @IsString()
+  translatedText: string;
+
+  @ApiPropertyOptional({
+    description: "Translated choices (if multiple-choice question)",
+    type: [Choice],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => Choice)
+  translatedChoices?: Choice[];
+}
+/**
+ * Minimal DTO for each response object (if you store learner answers, etc.).
+ * Adjust fields as needed based on your data.
+ */
+export class AttemptQuestionResponseDto {
+  @ApiProperty({ description: "ID of the question answered", type: Number })
+  @IsInt()
+  questionId: number;
+
+  // Example: storing the answer, correctness, partialScore, etc.
+  @ApiPropertyOptional({
+    description: "Learner's answer (if textual)",
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  answer?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Points awarded for this response",
+    type: Number,
+  })
+  @IsOptional()
+  @IsNumber()
+  pointsEarned?: number | null;
+}
+
+/**
+ * Minimal scoring DTO for the final attempt payload.
+ * You can expand or reuse your existing ScoringDto.
+ */
+export class AttemptScoringDto {
+  @ApiProperty({
+    description: "Scoring type",
+    type: String,
+    example: "CRITERIA_BASED",
+  })
+  @IsString()
+  type: string;
+
+  @ApiPropertyOptional({
+    description: "Whether rubrics are shown to the learner",
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showRubricsToLearner?: boolean;
+
+  @ApiPropertyOptional({ description: "Rubrics object", type: Object })
+  @IsOptional()
+  rubrics?: RubricDto[];
+}
+/**
+ * Question DTO in the final payload, including possible translations, choices, etc.
+ */
+export class AttemptQuestionDto {
+  @ApiProperty({ description: "Question ID", type: Number })
+  @IsInt()
+  id: number;
+
+  @ApiProperty({ description: "Main question text", type: String })
+  @IsString()
+  question: string;
+
+  @ApiPropertyOptional({
+    description: "Array of choices (if MULTIPLE_CHOICE or similar)",
+    type: [Choice],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => Choice)
+  choices?: Choice[];
+
+  @ApiPropertyOptional({
+    description: "Dictionary of translations keyed by language code",
+    // You may want `additionalProperties: { type: AttemptTranslationDto }` in Swagger if you prefer
+    type: Object,
+  })
+  @IsOptional()
+  translations?: Record<string, AttemptTranslationDto>;
+
+  @ApiPropertyOptional({ description: "Max words allowed", type: Number })
+  @IsOptional()
+  @IsInt()
+  maxWords?: number | null;
+
+  @ApiPropertyOptional({ description: "Max characters allowed", type: Number })
+  @IsOptional()
+  @IsInt()
+  maxCharacters?: number | null;
+
+  @ApiPropertyOptional({ description: "Scoring info", type: AttemptScoringDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AttemptScoringDto)
+  scoring?: AttemptScoringDto | null;
+
+  @ApiProperty({ description: "Total points", type: Number })
+  @IsInt()
+  totalPoints: number;
+
+  @ApiProperty({ description: "Question type", type: String })
+  @IsString()
+  type: string;
+
+  @ApiProperty({ description: "Assignment ID", type: Number })
+  @IsInt()
+  assignmentId: number;
+
+  @ApiProperty({
+    description: "Grading context question IDs (array of question IDs)",
+    type: [Number],
+  })
+  @IsArray()
+  @IsInt({ each: true })
+  gradingContextQuestionIds: number[];
+
+  @ApiPropertyOptional({ description: "Response type", type: String })
+  @IsOptional()
+  @IsString()
+  responseType?: string | null;
+
+  @ApiProperty({ description: "Is question marked as deleted?", type: Boolean })
+  @IsBoolean()
+  isDeleted: boolean;
+
+  @ApiPropertyOptional({
+    description: "Randomized choices (JSON string) if any",
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  randomizedChoices?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Answer to question if its true or false",
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  answer?: string | null;
 }

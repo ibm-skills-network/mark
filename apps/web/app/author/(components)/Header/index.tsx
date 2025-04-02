@@ -4,6 +4,8 @@ import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearne
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import ProgressBar, { JobStatus } from "@/components/ProgressBar";
 import {
+  Assignment,
+  AuthorAssignmentState,
   Choice,
   Criteria,
   Question,
@@ -36,12 +38,56 @@ import { stripHtml } from "@/app/Helpers/strippers";
 import { IconRefresh } from "@tabler/icons-react";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import Modal from "@/components/Modal";
+import Tooltip from "@/components/Tooltip";
+
+function maybeDecodeString(str: string | null | undefined): string | null {
+  if (!str) return str;
+  try {
+    return atob(str);
+  } catch {
+    return str;
+  }
+}
+
+function fixScoringAndDecode(assignment: Assignment): Assignment {
+  if (!assignment || !assignment.questions) return assignment;
+
+  assignment.questions.forEach((q: Question) => {
+    if (q.scoring && q.scoring.criteria) {
+      q.scoring.rubrics = [
+        {
+          rubricQuestion: q.question,
+          criteria: q.scoring.criteria,
+        },
+      ];
+      delete q.scoring.criteria;
+    }
+
+    q.question = maybeDecodeString(q.question);
+    q.variants.forEach((variant: QuestionVariants) => {
+      if (variant.scoring && variant.scoring.criteria) {
+        variant.variantContent = maybeDecodeString(variant.variantContent);
+        variant.scoring.rubrics = [
+          {
+            rubricQuestion: variant.variantContent,
+            criteria: variant.scoring.criteria.map((crit: Criteria, idx) => ({
+              description: crit.description,
+              points: crit.points,
+              id: idx + 1,
+            })),
+          },
+        ];
+        delete variant.scoring.criteria;
+      }
+    });
+  });
+  return assignment;
+}
 
 function AuthorHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const assignmentId = extractAssignmentId(pathname);
-
   const [currentStepId, setCurrentStepId] = useState<number>(0);
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const [
@@ -132,51 +178,13 @@ function AuthorHeader() {
   const [progressStatus, setProgressStatus] =
     useState<JobStatus>("In Progress");
 
-  // Countdown state for learner redirection.
-  const [countdown, setCountdown] = useState<number>(10);
-
-  // // POLLING: Check user role every 5 seconds.
-  // useEffect(() => {
-  //   const pollInterval = setInterval(async () => {
-  //     const user = await getUser();
-  //     if (user && user.role !== role) {
-  //       setRole(user.role);
-  //     }
-  //   }, 5000);
-  //   return () => clearInterval(pollInterval);
-  // }, [role]);
-
-  // // Countdown effect: if role is not author, start/restart countdown.
-  // useEffect(() => {
-  //   let timerId: NodeJS.Timeout | null = null;
-  //   if (role !== "author") {
-  //     setCountdown(10);
-  //     timerId = setInterval(() => {
-  //       setCountdown((prev) => {
-  //         if (prev <= 1) {
-  //           if (timerId) clearInterval(timerId);
-  //           router.replace(`/learner/${assignmentId}`);
-  //           return 0;
-  //         }
-  //         return prev - 1;
-  //       });
-  //     }, 1000);
-  //   }
-  //   return () => {
-  //     if (timerId) clearInterval(timerId);
-  //   };
-  // }, [role, assignmentId, router]);
-
   const SyncAssignment = async () => {
     try {
-      // 1) Fetch the assignment
-      const assignment = await getAssignment(~~assignmentId);
+      const assignment = await getAssignment(parseInt(assignmentId, 10));
       if (!assignment) {
-        setPageState("error");
+        toast.error("Failed to fetch the assignment.");
         return;
       }
-
-      // 2) Decode specific fields
       const decodedFields = decodeFields({
         introduction: assignment.introduction,
         instructions: assignment.instructions,
@@ -188,8 +196,9 @@ function AuthorHeader() {
         ...decodedFields,
       };
 
+      const newAssignment = fixScoringAndDecode(decodedAssignment);
       const questions: QuestionAuthorStore[] =
-        assignment.questions?.map(
+        newAssignment.questions?.map(
           (question: QuestionAuthorStore, index: number) => {
             const parsedVariants: QuestionVariants[] =
               question.variants?.map((variant: QuestionVariants) => ({
@@ -199,18 +208,20 @@ function AuthorHeader() {
                     ? (JSON.parse(variant.choices) as Choice[])
                     : variant.choices,
               })) || [];
-            const rubricArray = question.scoring?.rubrics.map((rubric) => {
+
+            const rubricArray = question.scoring?.rubrics?.map((rubric) => {
               return {
                 rubricQuestion: stripHtml(rubric.rubricQuestion),
-                criteria: rubric.criteria.map((criteria, index) => {
+                criteria: rubric.criteria.map((crit, idx) => {
                   return {
-                    description: criteria.description,
-                    points: criteria.points,
-                    id: index + 1,
+                    description: crit.description,
+                    points: crit.points,
+                    id: idx + 1,
                   };
                 }),
               };
             });
+
             return {
               ...question,
               alreadyInBackend: true,
@@ -224,45 +235,46 @@ function AuthorHeader() {
           },
         ) || [];
 
-      decodedAssignment.questions = questions;
+      newAssignment.questions = questions;
 
-      useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
+      useAuthorStore.getState().setOriginalAssignment(newAssignment);
+      useAuthorStore.getState().setAuthorStore(newAssignment);
 
-      useAuthorStore.getState().setAuthorStore(decodedAssignment);
       useAssignmentConfig.getState().setAssignmentConfigStore({
-        numAttempts: decodedAssignment.numAttempts,
-        passingGrade: decodedAssignment.passingGrade,
-        displayOrder: decodedAssignment.displayOrder,
-        graded: decodedAssignment.graded,
-        questionDisplay: decodedAssignment.questionDisplay,
-        timeEstimateMinutes: decodedAssignment.timeEstimateMinutes,
-        allotedTimeMinutes: decodedAssignment.allotedTimeMinutes,
-        updatedAt: decodedAssignment.updatedAt,
+        numAttempts: newAssignment.numAttempts,
+        passingGrade: newAssignment.passingGrade,
+        displayOrder: newAssignment.displayOrder,
+        graded: newAssignment.graded,
+        questionDisplay: newAssignment.questionDisplay,
+        timeEstimateMinutes: newAssignment.timeEstimateMinutes,
+        allotedTimeMinutes: newAssignment.allotedTimeMinutes,
+        updatedAt: newAssignment.updatedAt,
       });
 
-      if (decodedAssignment.questionVariationNumber !== undefined) {
+      if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
-          questionVariationNumber: decodedAssignment.questionVariationNumber,
+          questionVariationNumber: newAssignment.questionVariationNumber,
         });
       }
 
       useAssignmentFeedbackConfig.getState().setAssignmentFeedbackConfigStore({
-        showSubmissionFeedback: decodedAssignment.showSubmissionFeedback,
-        showQuestionScore: decodedAssignment.showQuestionScore,
-        showAssignmentScore: decodedAssignment.showAssignmentScore,
+        showSubmissionFeedback: newAssignment.showSubmissionFeedback,
+        showQuestionScore: newAssignment.showQuestionScore,
+        showAssignmentScore: newAssignment.showAssignmentScore,
       });
 
-      useAuthorStore.getState().setName(decodedAssignment.name);
-      useAuthorStore.getState().setActiveAssignmentId(decodedAssignment.id);
+      useAuthorStore.getState().setName(newAssignment.name);
+      useAuthorStore.getState().setActiveAssignmentId(newAssignment.id);
 
       setPageState("success");
     } catch (error) {
+      console.error(error);
       setPageState("error");
     }
   };
 
   const fetchAssignment = async () => {
-    const assignment = await getAssignment(~~assignmentId);
+    const assignment = await getAssignment(parseInt(assignmentId, 10));
     if (assignment) {
       const decodedFields = decodeFields({
         introduction: assignment.introduction,
@@ -274,59 +286,50 @@ function AuthorHeader() {
         ...assignment,
         ...decodedFields,
       };
-      const questions: QuestionAuthorStore[] = assignment.questions?.map(
-        (question: QuestionAuthorStore, index: number) => {
-          const criteriaWithId = question.scoring?.criteria?.map(
-            (criteria: Criteria, criteriaIndex: number) => ({
-              ...criteria,
-              index: criteriaIndex + 1,
-            }),
-          );
-          const parsedVariants: QuestionVariants[] =
-            question.variants?.map((variant: QuestionVariants) => ({
-              ...variant,
-              choices:
-                typeof variant.choices === "string"
-                  ? (JSON.parse(variant.choices) as Choice[])
-                  : variant.choices,
-            })) || [];
 
-          return {
-            ...question,
-            alreadyInBackend: true,
-            variants: parsedVariants,
-            scoring: {
-              type: "CRITERIA_BASED",
-              rubrics: [
-                {
-                  rubricQuestion: stripHtml(question.question),
-                  criteria: criteriaWithId || [],
-                },
-              ],
-            },
-            index: index + 1,
-          };
-        },
-      );
-      decodedAssignment.questions = questions;
-      useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
+      const newAssignment = fixScoringAndDecode(decodedAssignment);
+
+      useAuthorStore.getState().setOriginalAssignment(newAssignment);
 
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
-        decodedAssignment,
+        newAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
         ...cleanedAuthorData,
       });
 
-      if (decodedAssignment.questionVariationNumber !== undefined) {
+      const mergedAssignmentConfigData = mergeData(
+        useAssignmentConfig.getState(),
+        newAssignment,
+      );
+      if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
-          questionVariationNumber: decodedAssignment.questionVariationNumber,
+          questionVariationNumber: newAssignment.questionVariationNumber,
         });
       }
-      useAuthorStore.getState().setName(decodedAssignment.name);
-      useAuthorStore.getState().setActiveAssignmentId(decodedAssignment.id);
+      const {
+        updatedAt: authorStoreUpdatedAt,
+        ...cleanedAssignmentConfigData
+      } = mergedAssignmentConfigData;
+      setAssignmentConfigStore({
+        ...cleanedAssignmentConfigData,
+      });
+
+      const mergedAssignmentFeedbackData = mergeData(
+        useAssignmentFeedbackConfig.getState(),
+        newAssignment,
+      );
+      const {
+        updatedAt: assignmentFeedbackUpdatedAt,
+        ...cleanedAssignmentFeedbackData
+      } = mergedAssignmentFeedbackData;
+      setAssignmentFeedbackConfigStore({
+        ...cleanedAssignmentFeedbackData,
+      });
+
+      useAuthorStore.getState().setName(newAssignment.name);
       setPageState("success");
     } else {
       setPageState("error");
@@ -338,7 +341,7 @@ function AuthorHeader() {
     if (user) {
       useAuthorStore.getState().setRole(user.role);
     }
-    return user.role;
+    return user?.role;
   };
 
   useEffect(() => {
@@ -356,6 +359,7 @@ function AuthorHeader() {
 
     void fetchData();
   }, [assignmentId, router]);
+
   function calculateTotalPoints(questions: QuestionAuthorStore[]) {
     return questions.map((question: QuestionAuthorStore) => {
       const totalPoints = question.scoring?.rubrics
@@ -366,14 +370,13 @@ function AuthorHeader() {
             0,
           )
         : 0;
-
       return {
         ...question,
         totalPoints,
       };
     });
   }
-  // Handle Publish Button: prepare data and subscribe to SSE updates.
+
   async function handlePublishButton() {
     setSubmitting(true);
     setJobProgress(0);
@@ -389,7 +392,6 @@ function AuthorHeader() {
       return;
     }
 
-    // Deep clone current & original questions for comparison.
     let clonedCurrentQuestions = JSON.parse(
       JSON.stringify(questions),
     ) as QuestionAuthorStore[];
@@ -449,14 +451,12 @@ function AuthorHeader() {
       setSubmitting(false);
       return;
     }
-
     try {
       const response = await publishAssignment(
         activeAssignmentId,
         assignmentData,
       );
       if (response?.jobId) {
-        // Subscribe to SSE updates.
         await subscribeToJobStatus(
           response.jobId,
           (percentage, progress) => {
@@ -490,8 +490,8 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
+
   const handleSyncWithLatestPublishedVersion = async () => {
-    // check if the user has made any changes to the assignment
     if (changesSummary !== "No changes detected.") {
       setShowAreYouSureModal(true);
       return;
@@ -502,7 +502,6 @@ function AuthorHeader() {
   };
 
   const handleConfirmSync = async () => {
-    // delete the current store
     deleteAuthorStore();
     deleteAssignmentConfigStore();
     deleteAssignmentFeedbackConfigStore();
@@ -511,49 +510,57 @@ function AuthorHeader() {
     toast.success("Synced with latest published version.");
   };
 
+  // -- RESPONSIVE LAYOUT TWEAKS BELOW --
   return (
     <>
+      {/* 
+        Use container / max-w-screen-xl for typical responsive layout
+        Then space-y for vertical gaps on smaller screens 
+      */}
       <div className="fixed w-full z-50">
-        {countdown > 0 && role !== "author" && (
-          <p className="text-sm text-gray-700">
-            Switching to learner mode in {countdown} second
-            {countdown !== 1 && "s"}
-          </p>
-        )}
-        <header className="border-b border-gray-300 px-6 py-4 bg-white flex flex-col">
-          {/* Top row with header information and navigation */}
-          <div className="flex items-center justify-between">
-            {/* Left Section */}
-            <div className="flex items-center space-x-4">
+        <header className="border-b border-gray-300 bg-white px-2 sm:px-4 md:px-6 py-2 md:py-4 flex flex-col">
+          {/* 
+            Make this wrapper flex-col on small screens, then row on medium.
+            Also add "flex-wrap" so that if there's no space, items move to the next line.
+          */}
+          <div className="flex flex-col flex-wrap lg:flex-nowrap md:flex-row md:items-center justify-between gap-2 md:gap-4">
+            {/* Left side: SNIcon + Title */}
+            <div className="flex flex-row items-center space-x-4">
               <SNIcon />
               <div>
                 <Title level={5} className="leading-6">
                   Auto-Graded Assignment Creator
                 </Title>
-                <div className="text-gray-500 font-medium text-sm leading-5">
+                <div className="text-gray-500 font-medium text-sm leading-5 truncate max-w-[200px] sm:max-w-none">
                   {name || "Untitled Assignment"}
                 </div>
               </div>
             </div>
 
-            {/* Center Navigation */}
+            {/* Middle: Navigation */}
             <Nav
               currentStepId={currentStepId}
               setCurrentStepId={setCurrentStepId}
             />
 
-            {/* Right Section */}
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handleSyncWithLatestPublishedVersion}
-                className="text-sm flex font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950"
+            <div className="flex flex-wrap items-center md:ml-auto gap-2 sm:gap-4 mt-2 md:mt-0 ml-auto">
+              <Tooltip
+                content="Sync with the latest published version, discarding any changes you have made."
+                distance={-3}
               >
-                <IconRefresh />
-                <span className="ml-2">Sync with latest published version</span>
-              </button>
+                <button
+                  onClick={handleSyncWithLatestPublishedVersion}
+                  className="text-sm flex font-medium items-center justify-center px-2 sm:px-3 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950"
+                >
+                  <IconRefresh className="h-5 w-5" />
+                  <span className="ml-2">Sync with latest</span>
+                </button>
+              </Tooltip>
+
               <CheckLearnerSideButton
                 disabled={!questionsAreReadyToBePublished}
               />
+
               <SubmitQuestionsButton
                 handlePublishButton={handlePublishButton}
                 submitting={submitting}
@@ -562,7 +569,7 @@ function AuthorHeader() {
             </div>
           </div>
 
-          {/* Enhanced Progress Bar with Roadmap (only visible during publishing) */}
+          {/* Progress bar, displayed below the top row if submitting */}
           {submitting && (
             <div className="mt-4">
               <ProgressBar
@@ -574,26 +581,31 @@ function AuthorHeader() {
           )}
         </header>
       </div>
+
+      {/* 
+        Modal wrapper is usually responsive by default since it covers the screen.
+        Just ensure any internal content has some padding and wraps well. 
+      */}
       {showAreYouSureModal && (
         <Modal
           onClose={() => setShowAreYouSureModal(false)}
           Title="Are you sure you want to sync with the latest published version?"
         >
-          <div className="p-4">
+          <div className="p-4 space-y-4">
             <p className="typography-body">
               Syncing with the latest published version will discard any changes
-              you have made to the assignment. Are you sure you want to proceed?
+              you have made. Are you sure you want to proceed?
             </p>
-            <div className="flex justify-end mt-10">
+            <div className="flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => setShowAreYouSureModal(false)}
-                className="text-sm font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmSync}
-                className="text-sm font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800 ml-2"
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
               >
                 Sync
               </button>

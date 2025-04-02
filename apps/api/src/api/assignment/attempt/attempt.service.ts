@@ -31,7 +31,11 @@ import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.ques
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { AssignmentService } from "../assignment.service";
 import type { LearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
-import { QuestionDto, ScoringDto } from "../dto/update.questions.request.dto";
+import {
+  AttemptQuestionDto,
+  QuestionDto,
+  ScoringDto,
+} from "../dto/update.questions.request.dto";
 import { Choice } from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
 import {
@@ -684,7 +688,7 @@ export class AttemptService {
     }
   }
   /**
-   * Retrieves and formats a learner's assignment attempt with contextual display rules.
+   * Retrieves and formats a learner's assignment attempt that is completed
    *
    * Handles:
    * - Attempt metadata retrieval
@@ -1090,7 +1094,7 @@ export class AttemptService {
           }
         }
       }
-      // Return the merged question/variant data.
+
       return {
         id: originalQ.id,
         question: primaryTranslation.translatedText || originalQ?.question,
@@ -1137,7 +1141,50 @@ export class AttemptService {
             .filter(Boolean)
         : mergedQuestions;
 
-    // 13. Return your final data
+    for (const question of finalQuestions as unknown as AttemptQuestionDto[]) {
+      if (!question.scoring?.showRubricsToLearner) {
+        delete question.scoring?.rubrics;
+      }
+
+      if (question.choices) {
+        for (const choice of question.choices) {
+          delete choice.points;
+          delete choice.isCorrect;
+          delete choice.feedback;
+        }
+      }
+
+      if (question.translations) {
+        for (const lang in question.translations) {
+          const translationObject = question.translations[lang];
+          if (translationObject?.translatedChoices) {
+            for (const choice of translationObject.translatedChoices) {
+              delete choice.points;
+              delete choice.isCorrect;
+              delete choice.feedback;
+            }
+          }
+        }
+      }
+
+      if (
+        question.randomizedChoices &&
+        typeof question.randomizedChoices === "string"
+      ) {
+        const randomizedArray = JSON.parse(
+          question.randomizedChoices,
+        ) as Choice[];
+        for (const choice of randomizedArray) {
+          delete choice.points;
+          delete choice.isCorrect;
+          delete choice.feedback;
+        }
+        question.randomizedChoices = JSON.stringify(randomizedArray);
+      }
+
+      delete question.answer;
+    }
+
     return {
       ...assignmentAttempt,
       questions: finalQuestions.map((question) => ({
@@ -2011,7 +2058,7 @@ export class AttemptService {
         this.getLocalizedString("invalidTrueFalse", language),
       );
     }
-    const correctAnswer = question.answer ?? question.choices[0].isCorrect;
+    const correctAnswer = question.choices[0].isCorrect;
     const isCorrect = learnerChoice === correctAnswer;
     const feedback = isCorrect
       ? this.getLocalizedString("correctTF", language)

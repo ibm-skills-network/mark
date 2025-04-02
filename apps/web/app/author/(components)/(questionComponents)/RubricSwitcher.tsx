@@ -15,6 +15,7 @@ import { TrashIcon } from "@heroicons/react/24/outline";
 
 interface RubricSwitcherProps {
   questionType: string;
+  questionIndex: number;
   preview: boolean;
   loading: boolean;
   criteriaMode: string;
@@ -56,6 +57,7 @@ interface QuestionCriteria {
 interface RubricItemProps {
   rubricItem: Rubric;
   index: number;
+  questionIndex?: number;
   questionId: number;
   variantId?: number;
   preview: boolean;
@@ -89,6 +91,7 @@ interface RubricItemProps {
 const RubricItem: React.FC<RubricItemProps> = ({
   rubricItem,
   index,
+  questionIndex,
   questionId,
   variantId,
   preview,
@@ -136,7 +139,9 @@ const RubricItem: React.FC<RubricItemProps> = ({
       className="bg-neutral-50 flex p-4 items-start gap-4 rounded-md border border-gray-200"
     >
       <div className="flex items-center gap-2">
-        <span className="text-gray-600 typography-body">{index + 1}.</span>
+        <span className="text-gray-600 typography-body">
+          {questionIndex}.{index + 1}
+        </span>
       </div>
       <div className="flex-1 flex flex-col ">
         {loading && inProgressRubricIndex === index ? (
@@ -199,6 +204,7 @@ const RubricItem: React.FC<RubricItemProps> = ({
 
 const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
   questionType,
+  questionIndex,
   preview,
   loading,
   criteriaMode,
@@ -262,6 +268,7 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
               rowsRef={rowsRef}
               swappingIndices={swappingIndices}
               inProgressRubricIndex={inProgressRubricIndex}
+              questionIndex={questionIndex}
             />
           ))}
           {generatingRubric ? (

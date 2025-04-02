@@ -94,7 +94,7 @@ export function useChangesSummary(): string {
 
       if (
         JSON.stringify(
-          question.scoring?.rubrics.map((r) => {
+          question.scoring?.rubrics?.map((r) => {
             return {
               rubricQuestion: r.rubricQuestion,
               criteria: r.criteria.map((c) => {
@@ -107,7 +107,7 @@ export function useChangesSummary(): string {
           }),
         ) !==
           JSON.stringify(
-            originalQuestion.scoring?.rubrics.map((r) => {
+            originalQuestion.scoring?.rubrics?.map((r) => {
               return {
                 rubricQuestion: r.rubricQuestion,
                 criteria: r.criteria.map((c) => {
@@ -119,8 +119,8 @@ export function useChangesSummary(): string {
               };
             }),
           ) &&
-        question.scoring?.rubrics.length > 0 &&
-        originalQuestion.scoring?.rubrics.length > 0
+        question.scoring?.rubrics?.length > 0 &&
+        originalQuestion.scoring?.rubrics?.length > 0
       ) {
         diffs.push(`Updated scoring criteria for question ${question.id}.`);
       }
@@ -234,6 +234,7 @@ export function useChangesSummary(): string {
       diffs.push("Modified question order.");
     if (graded !== originalAssignment.graded)
       diffs.push(graded ? "Enabled grading." : "Disabled grading.");
+    if (diffs) console.log("diffs", diffs);
     return diffs.length > 0 ? diffs.join(" ") : "No changes detected.";
   }, [
     originalAssignment,

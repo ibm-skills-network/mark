@@ -2,6 +2,7 @@ import { Optional } from "@nestjs/common";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionResponse, QuestionType, ResponseType } from "@prisma/client";
 import { Type } from "class-transformer";
+import { AttemptQuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "../../../../../api/assignment/question/dto/create.update.question.request.dto";
 
 export class AssignmentAttemptResponseDto {
@@ -53,7 +54,7 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
       "The list of questions for the assignment that this attempt corresponds to with learner's responses",
     isArray: true,
   })
-  questions: AssignmentAttemptQuestions[];
+  questions: AttemptQuestionDto[] | AssignmentAttemptQuestions[];
   @ApiProperty({
     description: "Passing grade for the assignment",
     type: Number,

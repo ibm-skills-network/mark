@@ -26,8 +26,8 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
 
     return () => clearTimeout(timer);
   }, [file]);
-  const extension: string = file.filename.split(".").pop()?.toLowerCase();
-
+  const extension: string =
+    file.filename.split(".").pop()?.toLowerCase().toString() || "";
   const renderContent = () => {
     switch (extension) {
       case "txt":
@@ -49,6 +49,10 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
       case "css":
       case "sql":
       case "sh":
+      case "yaml":
+      case "json":
+      case "xml":
+      case "yml":
         return (
           <SyntaxHighlighter language={extension} style={tomorrow}>
             {file.content}

@@ -369,11 +369,9 @@ export async function publishAssignment(
 ): Promise<{ jobId: number; message: string } | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/publish`;
 
-  // Manually define the payload fields
   const payload = {
-    ...updatedAssignment, // Spread the properties directly
+    ...updatedAssignment,
   };
-
   try {
     const res = await fetch(endpointURL, {
       method: "PUT",

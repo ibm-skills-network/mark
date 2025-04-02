@@ -9,7 +9,6 @@ export class JobStatusService {
     const stream = this.jobStatusSubjects.get(jobId);
     if (stream) {
       stream.complete();
-      this.jobStatusSubjects.get(jobId).complete();
       this.jobStatusSubjects.delete(jobId);
     }
   }

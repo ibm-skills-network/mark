@@ -15,10 +15,8 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   currentMessage,
   status,
 }) => {
-  // Maintain a list of messages.
   const [messages, setMessages] = useState<string[]>([]);
 
-  // Add a new message only if it's different from the last.
   useEffect(() => {
     if (
       currentMessage &&
@@ -29,10 +27,8 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     }
   }, [currentMessage, messages]);
 
-  // Only display the latest message.
   const latestMessage = messages[messages.length - 1];
 
-  // Determine bar colors based on status.
   const getBarColor = () => {
     if (status === "Completed")
       return "bg-gradient-to-r from-green-400 to-green-600";
@@ -40,7 +36,6 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     return "bg-gradient-to-r from-violet-400 to-violet-600";
   };
 
-  // Return appropriate icon based on status.
   const getStatusIcon = () => {
     if (status === "Completed") {
       return <CheckCircleIcon className="w-4 h-4 text-green-600 ml-1" />;
@@ -50,17 +45,16 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     return null;
   };
 
-  // Variants for progress bar fill.
   const progressVariants = {
     hidden: { width: 0 },
     visible: { width: `${progress}%` },
   };
 
   return (
-    <div className="w-full p-4 bg-white rounded-lg shadow-md">
-      {/* Animated Progress Bar */}
-      <div className="relative mb-4">
-        <div className="h-3 rounded-full bg-gray-200 overflow-hidden">
+    <div className="w-full p-2 sm:p-4 bg-white rounded-lg shadow-md">
+      {/* Progress bar container */}
+      <div className="relative mb-3 sm:mb-4">
+        <div className="h-2 sm:h-3 rounded-full bg-gray-200 overflow-hidden">
           <motion.div
             className={`${getBarColor()} h-full rounded-full shadow-md`}
             initial="hidden"
@@ -81,8 +75,8 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         </div>
       </div>
 
-      {/* Message Container with Slide Effect for the Latest Message */}
-      <div className="relative h-6 overflow-hidden">
+      {/* Latest message */}
+      <div className="relative h-5 sm:h-6 overflow-hidden">
         <AnimatePresence mode="wait">
           {latestMessage && (
             <motion.div

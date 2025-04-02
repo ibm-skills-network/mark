@@ -1,5 +1,8 @@
 import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
-import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import {
+  handleJumpToQuestion,
+  handleJumpToQuestionTitle,
+} from "@/app/Helpers/handleJumpToQuestion";
 import Tooltip from "@/components/Tooltip";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
@@ -86,15 +89,26 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
     if (id === 3) {
       const { isValid, message, step, invalidQuestionId } =
         questionsAreReadyToBePublished();
+      const handleNavigate = () => {
+        if (invalidQuestionId) {
+          setFocusedQuestionId(invalidQuestionId);
+          setTimeout(() => {
+            handleJumpToQuestionTitle(invalidQuestionId.toString());
+          }, 0);
+        }
+        if (step) {
+          if (step === 1) router.push(`/author/${activeAssignmentId}`);
+          if (step === 2) router.push(`/author/${activeAssignmentId}/config`);
+          if (step === 3)
+            router.push(`/author/${activeAssignmentId}/questions`);
+        }
+      };
       tooltipMessage = (
         <>
           <span>{message}</span>
           {!isValid && invalidQuestionId && (
             <button
-              onClick={() => {
-                setFocusedQuestionId(invalidQuestionId);
-                handleJumpToQuestion(`indexQuestion-${invalidQuestionId}`);
-              }}
+              onClick={handleNavigate}
               className="ml-2 text-blue-500 hover:underline"
             >
               Take me there
@@ -162,8 +176,8 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
   let tooltipMessage: React.ReactNode = "";
 
   return (
-    <nav aria-label="Progress" className="flex-1 mx-8">
-      <ol className="flex items-center justify-center space-x-5">
+    <nav aria-label="Progress" className="flex-1 ">
+      <ol className="flex items-center justify-center ">
         {steps.map((step, index) => {
           const isCompleted = index < currentStepId;
           const isActive = index === currentStepId;

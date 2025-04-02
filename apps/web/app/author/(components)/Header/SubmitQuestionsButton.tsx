@@ -1,3 +1,5 @@
+"use client";
+
 import TooltipMessage from "@/app/components/ToolTipMessage";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import {
@@ -12,10 +14,11 @@ import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import { useRouter } from "next/navigation";
 import type { FC } from "react";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
 interface Props {
   submitting: boolean;
+  // This function returns an object with isValid, message, step, etc.
   questionsAreReadyToBePublished: () => {
     isValid: boolean;
     message: string;
@@ -41,9 +44,7 @@ const SubmitQuestionsButton: FC<Props> = ({
     (state) => state.setFocusedQuestionId,
   );
   const isLoading = !questions;
-  const hasEmptyQuestion = questions?.some(
-    (question) => question.type === "EMPTY",
-  );
+  const hasEmptyQuestion = questions?.some((q) => q.type === "EMPTY");
   const {
     name,
     introduction,
@@ -75,20 +76,22 @@ const SubmitQuestionsButton: FC<Props> = ({
     showAssignmentScore,
   } = useAssignmentFeedbackConfig();
   const changesSummary = useChangesSummary();
-
   const hasChanges = changesSummary !== "No changes detected.";
-  const handleNavigate = () => {
+
+  function handleNavigate() {
     if (invalidQuestionId) {
       setFocusedQuestionId(invalidQuestionId);
       setTimeout(() => {
         handleJumpToQuestionTitle(invalidQuestionId.toString());
       }, 0);
-    } else if (step) {
+    }
+    if (step) {
       if (step === 1) router.push(`/author/${assignmentId}`);
       if (step === 2) router.push(`/author/${assignmentId}/config`);
       if (step === 3) router.push(`/author/${assignmentId}/questions`);
     }
-  };
+  }
+
   const disableButton =
     submitting ||
     isLoading ||
@@ -114,15 +117,13 @@ const SubmitQuestionsButton: FC<Props> = ({
           onNavigate={handleNavigate}
         />
       }
-      distance={-15}
-      up={0.3}
-      direction="x"
+      distance={-2}
     >
       <button
         type="button"
         disabled={disableButton}
         onClick={handlePublishButton}
-        className="text-sm font-medium items-center justify-center px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
+        className="text-sm font-medium flex items-center justify-center px-3 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none disabled:opacity-50 transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
       >
         {submitting ? <Spinner className="w-5 h-5" /> : "Save & Publish"}
       </button>

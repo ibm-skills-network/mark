@@ -15,6 +15,8 @@ import type {
   Criteria,
   QuestionAuthorStore,
   QuestionVariants,
+  Rubric,
+  Scoring,
 } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
@@ -163,67 +165,119 @@ const AuthorQuestionsPage: FC<Props> = ({
             setActiveAssignmentId(assignmentId);
             setName(assignment.name || "Untitled Assignment");
 
+            const unifyScoringRubrics = (
+              scoring: Scoring,
+              defaultQuestionText: string,
+            ): Scoring => {
+              if (!scoring || scoring.type !== "CRITERIA_BASED") {
+                return {
+                  type: "CRITERIA_BASED" as const,
+                  rubrics: [
+                    {
+                      rubricQuestion: stripHtml(defaultQuestionText),
+                      criteria: [],
+                    },
+                  ],
+                };
+              }
+
+              // If we already have rubrics, just refine them
+              if (scoring.rubrics?.length) {
+                const refinedRubrics = scoring.rubrics.map((rubric: Rubric) => {
+                  const rubricCriteria =
+                    rubric.criteria?.map((c: Criteria, i: number) => ({
+                      ...c,
+                      id: i,
+                    })) ?? [];
+                  return {
+                    ...rubric,
+                    rubricQuestion: stripHtml(
+                      rubric.rubricQuestion || defaultQuestionText,
+                    ),
+                    criteria: rubricCriteria,
+                  };
+                });
+                return {
+                  ...scoring,
+                  rubrics: refinedRubrics,
+                };
+              }
+
+              // Otherwise, if there's an old .criteria array, convert it to a single rubric
+              if (scoring.criteria?.length) {
+                const criteriaWithId = scoring.criteria.map(
+                  (c: Criteria, i: number) => ({
+                    ...c,
+                    id: i,
+                  }),
+                );
+                return {
+                  type: "CRITERIA_BASED",
+                  rubrics: [
+                    {
+                      rubricQuestion: stripHtml(defaultQuestionText),
+                      criteria: criteriaWithId,
+                    },
+                  ],
+                };
+              }
+
+              // Fallback if no rubrics or criteria
+              return {
+                type: "CRITERIA_BASED",
+                rubrics: [
+                  {
+                    rubricQuestion: stripHtml(defaultQuestionText),
+                    criteria: [],
+                  },
+                ],
+              };
+            };
+
             const questions: QuestionAuthorStore[] =
               assignment.questions?.map(
                 (question: QuestionAuthorStore, index: number) => {
-                  let rubrics: {
-                    rubricQuestion: string;
-                    criteria: Criteria[];
-                  }[] = [];
+                  const unifiedQuestionScoring = unifyScoringRubrics(
+                    question.scoring,
+                    question.question,
+                  );
 
-                  if (question.scoring?.rubrics?.length) {
-                    rubrics = question.scoring.rubrics.map((rubric) => {
-                      const rubricCriteria =
-                        rubric.criteria?.map((c, i) => ({
-                          ...c,
-                          id: i,
-                        })) ?? [];
-
-                      return {
-                        ...rubric,
-                        rubricQuestion: stripHtml(
-                          rubric.rubricQuestion ?? question.question,
-                        ),
-                        criteria: rubricCriteria,
-                      };
-                    });
-                  } else {
-                    const criteriaWithId =
-                      question.scoring?.criteria?.map((c, i) => ({
-                        ...c,
-                        id: i,
-                      })) ?? [];
-                    rubrics = [
-                      {
-                        rubricQuestion: stripHtml(question.question),
-                        criteria: criteriaWithId,
-                      },
-                    ];
-                  }
-
-                  rubrics.forEach((rubric) => {
-                    rubric.criteria.sort((a, b) => a.points - b.points);
+                  unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
+                    rubric.criteria.sort(
+                      (a: Criteria, b: Criteria) => a.points - b.points,
+                    );
                   });
 
-                  // Parse variants
                   const parsedVariants: QuestionVariants[] =
-                    question.variants?.map((variant: QuestionVariants) => ({
-                      ...variant,
-                      choices:
-                        typeof variant.choices === "string"
-                          ? (JSON.parse(variant.choices) as Choice[])
-                          : variant.choices,
-                    })) || [];
+                    question.variants?.map((variant: QuestionVariants) => {
+                      const unifiedVariantScoring = unifyScoringRubrics(
+                        variant.scoring,
+                        variant.variantContent ?? question.question,
+                      );
+                      unifiedVariantScoring.rubrics?.forEach(
+                        (rubric: Rubric) => {
+                          rubric.criteria.sort(
+                            (a: Criteria, b: Criteria) => a.points - b.points,
+                          );
+                        },
+                      );
+
+                      return {
+                        ...variant,
+                        choices:
+                          typeof variant.choices === "string"
+                            ? (JSON.parse(variant.choices) as Choice[])
+                            : variant.choices,
+                        scoring: unifiedVariantScoring,
+                      };
+                    }) ?? [];
 
                   return {
                     ...question,
                     alreadyInBackend: true,
-                    variants: parsedVariants,
-                    scoring: {
-                      type: "CRITERIA_BASED",
-                      rubrics,
-                    },
                     index: index + 1,
+                    variants: parsedVariants,
+                    scoring: unifiedQuestionScoring,
                   };
                 },
               ) ?? [];
