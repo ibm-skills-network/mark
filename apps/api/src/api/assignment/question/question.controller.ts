@@ -6,6 +6,7 @@ import {
   Get,
   Inject,
   Injectable,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -22,6 +23,10 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
+import {
+  LearnerLiveRecordingFeedback,
+  LearnerPresentationResponse,
+} from "../attempt/dto/assignment-attempt/types";
 import { ASSIGNMENT_SCHEMA_URL } from "../constants";
 import {
   Choice,
@@ -179,6 +184,33 @@ export class QuestionController {
     );
   }
 
+  @Post("/live-recording-feedback")
+  @Roles(UserRole.AUTHOR, UserRole.LEARNER)
+  @UseGuards(AssignmentQuestionAccessControlGuard)
+  @ApiOperation({ summary: "Request feedback for a live recording" })
+  @ApiBody({
+    type: Object,
+    description: "Provide the live recording data",
+  })
+  @ApiResponse({ status: 200, type: Object })
+  @ApiResponse({ status: 404, description: "Question not found" })
+  getLiveRecordingFeedback(
+    @Param("assignmentId") assignmentId: number,
+    @Body()
+    body: {
+      liveRecordingData: LearnerLiveRecordingFeedback;
+    },
+  ): Promise<{ feedback: string }> {
+    const { liveRecordingData } = body;
+
+    if (!liveRecordingData.question) {
+      throw new NotFoundException(`Question not found or not provided.`);
+    }
+    return this.questionService.getLiveRecordingFeedback(
+      liveRecordingData,
+      Number(assignmentId),
+    );
+  }
   @Post(":id/translations")
   @Roles(UserRole.AUTHOR, UserRole.LEARNER)
   @UseGuards(AssignmentQuestionAccessControlGuard)

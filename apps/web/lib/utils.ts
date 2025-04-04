@@ -121,9 +121,10 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
     (q) =>
       q.learnerTextResponse ||
       q.learnerUrlResponse ||
-      q.learnerChoices?.length > 0 ||
+      (q.learnerChoices?.length ?? 0) > 0 ||
       q.learnerAnswerChoice !== undefined ||
-      q.learnerFileResponse !== undefined,
+      q.learnerFileResponse !== undefined ||
+      q.presentationResponse !== undefined,
   );
 
 export const generateTempQuestionId = (): number => {

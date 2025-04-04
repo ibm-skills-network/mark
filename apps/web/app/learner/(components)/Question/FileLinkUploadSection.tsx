@@ -76,8 +76,7 @@ const FileLinkUploadSection = ({
       {/* Conditionally Render Components */}
       {isFileUpload ? (
         <FileUploadSection
-          questionId={questionId}
-          questionType={questionType}
+          question={question}
           responseType={responseType}
           onFileChange={handleFileChange}
           removeFileUpload={removeFileUpload}

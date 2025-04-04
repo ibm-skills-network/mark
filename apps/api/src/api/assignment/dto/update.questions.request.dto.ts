@@ -152,7 +152,11 @@ export class VariantDto {
   @IsBoolean()
   randomizedChoices?: boolean;
 }
-
+export interface VideoPresentationConfig {
+  evaluateSlidesQuality: boolean;
+  evaluateTimeManagement: boolean;
+  targetTime: number;
+}
 export class QuestionDto {
   @ApiProperty({ description: "Question text", type: String })
   @IsString()
@@ -267,6 +271,20 @@ export class QuestionDto {
   @IsOptional()
   @IsBoolean()
   randomizedChoices?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Video presentation configuration",
+    type: Object,
+  })
+  @IsOptional()
+  videoPresentationConfig?: VideoPresentationConfig;
+
+  @ApiPropertyOptional({
+    description: "Live recording configuration",
+    type: Object,
+  })
+  @IsOptional()
+  liveRecordingConfig?: object;
 }
 export class GenerateQuestionVariantDto {
   @ApiProperty({

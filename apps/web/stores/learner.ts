@@ -1,17 +1,22 @@
 import { AVAILABLE_LANGUAGES } from "@/app/Helpers/getLanguageName";
 import type {
+  Assignment,
   AssignmentAttempt,
   AssignmentDetails,
   Choice,
+  PresentationQuestionResponse,
   QuestionStatus,
   QuestionStore,
   RepoContentItem,
   RepoType,
+  slideMetaData,
 } from "@/config/types";
 import { getUser } from "@/lib/talkToBackend";
+import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
+
 type GitHubQuestionState = {
   repos: RepoType[];
   owner: string | null;
@@ -21,6 +26,198 @@ type GitHubQuestionState = {
   selectedFiles: learnerFileResponse[];
   isGithubModalOpen: boolean;
 };
+
+interface VideoRecorderState {
+  recording: boolean;
+  videoBlob: Blob | null;
+  videoURL: string;
+  countdown: number | null;
+  cameraError: string | null;
+  recordingStartTime: number | null;
+  mediaRecorderRef: MediaRecorder | null;
+  chunksRef: Blob[];
+  videoRef: HTMLVideoElement | null;
+  streamRef: MediaStream | null;
+  // Setter actions
+  setRecording: (recording: boolean) => void;
+  setVideoBlob: (blob: Blob | null) => void;
+  setVideoURL: (url: string) => void;
+  setCountdown: (count: number | null) => void;
+  setCameraError: (error: string | null) => void;
+  setRecordingStartTime: (time: number | null) => void;
+  setMediaRecorderRef: (ref: MediaRecorder | null) => void;
+  setChunksRef: (chunks: Blob[]) => void;
+  setVideoRef: (ref: HTMLVideoElement | null) => void;
+  setStreamRef: (ref: MediaStream | null) => void;
+  // Methods
+  reconnectCamera: () => Promise<void>;
+  getSupportedMimeType: () => string;
+  startRecordingImpl: (onRecordingComplete: (blob: Blob) => void) => void;
+  startRecording: () => Promise<void>;
+  stopRecording: () => void;
+}
+
+export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
+  persist(
+    devtools(
+      (set, get) => ({
+        // Initial state
+        recording: false,
+        videoBlob: null,
+        videoURL: "",
+        countdown: null,
+        cameraError: null,
+        recordingStartTime: null,
+        mediaRecorderRef: null,
+        chunksRef: [],
+        videoRef: null,
+        streamRef: null,
+
+        // Setters
+        setRecording: (recording) => set({ recording }),
+        setVideoBlob: (blob) => set({ videoBlob: blob }),
+        setVideoURL: (url) => set({ videoURL: url }),
+        setCountdown: (count) => set({ countdown: count }),
+        setCameraError: (error) => set({ cameraError: error }),
+        setRecordingStartTime: (time) => set({ recordingStartTime: time }),
+        setMediaRecorderRef: (ref) => set({ mediaRecorderRef: ref }),
+        setChunksRef: (chunks) => set({ chunksRef: chunks }),
+        setVideoRef: (ref) => set({ videoRef: ref }),
+        setStreamRef: (ref) => set({ streamRef: ref }),
+
+        // Reconnect camera action
+        reconnectCamera: async () => {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true,
+            });
+            get().setStreamRef(stream);
+            if (get().videoRef) {
+              get().videoRef.srcObject = stream;
+              await get().videoRef.play();
+            }
+            get().setCameraError(null);
+          } catch (err: any) {
+            console.error("Error reconnecting camera:", err);
+            get().setCameraError(
+              "Error accessing camera. Please check your camera settings.",
+            );
+          }
+        },
+
+        // Determine a supported MIME type for recording
+        getSupportedMimeType: () => {
+          const possibleTypes = [
+            "video/webm; codecs=vp9",
+            "video/webm; codecs=vp8",
+            "video/webm",
+          ];
+          return (
+            possibleTypes.find((type) => MediaRecorder.isTypeSupported(type)) ||
+            ""
+          );
+        },
+
+        // Start recording implementation after countdown
+        startRecordingImpl: (onRecordingComplete) => {
+          if (!get().streamRef) {
+            console.error("No camera stream available to record.");
+            return;
+          }
+          // Reset chunks and record the start time
+          get().setChunksRef([]);
+          get().setRecordingStartTime(Date.now());
+
+          const mimeType = get().getSupportedMimeType();
+          const recorder = new MediaRecorder(get().streamRef, { mimeType });
+          get().setMediaRecorderRef(recorder);
+
+          recorder.ondataavailable = (evt) => {
+            if (evt.data.size > 0) {
+              // Append data safely by copying the existing array
+              get().setChunksRef([...get().chunksRef, evt.data]);
+            }
+          };
+
+          recorder.onstop = () => {
+            // Create final Blob from recorded chunks
+            const blob = new Blob(get().chunksRef, { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            get().setVideoBlob(blob);
+            get().setVideoURL(url);
+
+            // Update the preview video element if available
+            if (get().videoRef) {
+              get().videoRef.srcObject = null;
+              get().videoRef.src = url;
+              get().videoRef.controls = true;
+              get().videoRef.muted = true;
+              get().videoRef.load();
+            }
+            // Notify parent via callback
+            onRecordingComplete(blob);
+          };
+
+          recorder.start();
+          get().setRecording(true);
+        },
+
+        // Start recording: initialize the stream and start countdown
+        startRecording: async () => {
+          if (get().cameraError) return;
+
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true,
+            });
+            get().setStreamRef(stream);
+            if (get().videoRef) {
+              get().videoRef.srcObject = stream;
+              get().videoRef.muted = true;
+              await get().videoRef.play();
+            }
+          } catch (error) {
+            console.error("Error re-initializing camera:", error);
+            get().setCameraError(
+              "Error accessing camera. Please check your camera settings.",
+            );
+            return;
+          }
+          get().setCountdown(3);
+        },
+
+        // Stop recording and clean up
+        stopRecording: () => {
+          if (get().mediaRecorderRef?.state === "recording") {
+            get().mediaRecorderRef.stop();
+          }
+          if (get().streamRef) {
+            get()
+              .streamRef.getTracks()
+              .forEach((track) => track.stop());
+            get().setStreamRef(null);
+          }
+          get().setRecording(false);
+        },
+      }),
+
+      { name: "video-recorder-store" },
+    ),
+    {
+      name: "video-recorder-store",
+      partialize: (state) => ({
+        recording: state.recording,
+        videoURL: state.videoURL,
+        countdown: state.countdown,
+        cameraError: state.cameraError,
+        recordingStartTime: state.recordingStartTime,
+      }),
+    },
+  ),
+  shallow,
+);
 
 const getAssignmentIdFromURL = (): string | null => {
   // Make sure we're in a browser (client-side)
@@ -149,7 +346,7 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
 
 export type LearnerState = {
   activeAttemptId: number | null;
-  activeQuestionNumber: number | null;
+  activeQuestionNumber: number | null | undefined;
   expiresAt: number | undefined;
   questions: QuestionStore[];
   role?: "learner" | "author";
@@ -170,8 +367,21 @@ export type learnerFileResponse = {
   blob?: Blob;
 };
 export type LearnerActions = {
+  setTranscript: (questionId: number, transcript: string) => void;
+  setBodyLanguage: (
+    questionId: number,
+    score: number,
+    explanation: string,
+  ) => void;
+  setSpeech: (questionId: number, speechAnalysis: string) => void;
+  setContent: (questionId: number, contentAnalysis: string) => void;
+  setPresentationResponse: (
+    questionId: number,
+    presentationResponse: PresentationQuestionResponse,
+  ) => void;
+  setSlidesData: (questionId: number, slidesData: slideMetaData[]) => void;
   setActiveAttemptId: (id: number) => void;
-  setActiveQuestionNumber: (id: number) => void;
+  setActiveQuestionNumber: (id: number | null) => void;
   addQuestion: (question: QuestionStore) => void;
   setQuestion: (question: Partial<QuestionStore>) => void;
   showSubmissionFeedback: boolean;
@@ -221,12 +431,12 @@ export type LearnerActions = {
 };
 
 export type AssignmentDetailsState = {
-  assignmentDetails: AssignmentDetails | null;
+  assignmentDetails: Assignment | null;
   grade: number | null;
 };
 
 export type AssignmentDetailsActions = {
-  setAssignmentDetails: (assignmentDetails: AssignmentDetails) => void;
+  setAssignmentDetails: (assignmentDetails: Assignment) => void;
   setGrade: (grade: number) => void;
 };
 
@@ -237,6 +447,7 @@ const isQuestionEdited = (question: QuestionStore) => {
     learnerChoices,
     learnerAnswerChoice,
     learnerFileResponse,
+    learnePresentationResponse,
   } = question;
   return (
     (learnerTextResponse &&
@@ -246,6 +457,7 @@ const isQuestionEdited = (question: QuestionStore) => {
     (learnerChoices && learnerChoices.length > 0) ||
     learnerAnswerChoice !== undefined ||
     learnerFileResponse?.map((file) => file?.content).join("") !== "" ||
+    learnePresentationResponse !== undefined ||
     false
   );
 };
@@ -269,7 +481,7 @@ export const useLearnerOverviewStore = createWithEqualityFn<
     persist(
       (set) => ({
         listOfAttempts: [],
-        assignmentId: undefined,
+        assignmentId: null,
         setListOfAttempts: (listOfAttempts) => set({ listOfAttempts }),
         setAssignmentId: (assignmentId) => set({ assignmentId }),
         assignmentName: "",
@@ -304,6 +516,86 @@ export const useLearnerStore = createWithEqualityFn<
   persist(
     devtools(
       (set, get) => ({
+        setTranscript: (questionId: number, transcript: string) =>
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (q.id === questionId) {
+                return {
+                  ...q,
+                  presentationResponse: {
+                    ...q.presentationResponse,
+                    transcript,
+                  },
+                };
+              }
+              return q;
+            }),
+          })),
+        setSlidesData: (questionId, slidesData) =>
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId
+                ? {
+                    ...q,
+                    presentationResponse: {
+                      ...q.presentationResponse,
+                      slidesData,
+                    },
+                  }
+                : q,
+            ),
+          })),
+        setBodyLanguage: (questionId, score, explanation) =>
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId
+                ? {
+                    ...q,
+                    presentationResponse: {
+                      ...q.presentationResponse,
+                      bodyLanguage: score,
+                      bodyLanguageExplanation: explanation,
+                    },
+                  }
+                : q,
+            ),
+          })),
+        setSpeech: (questionId, speechAnalysis) =>
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId
+                ? {
+                    ...q,
+                    presentationResponse: {
+                      ...q.presentationResponse,
+                      speech: speechAnalysis,
+                    },
+                  }
+                : q,
+            ),
+          })),
+        setContent: (questionId, contentAnalysis) =>
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId
+                ? {
+                    ...q,
+                    presentationResponse: {
+                      ...q.presentationResponse,
+                      content: contentAnalysis,
+                    },
+                  }
+                : q,
+            ),
+          })),
+        setPresentationResponse: (questionId, presentationResponse) =>
+          set((state) => ({
+            questions: state.questions.map((q) =>
+              q.id === questionId
+                ? { ...q, presentationResponse: presentationResponse }
+                : q,
+            ),
+          })),
         setTranslatedQuestion: (questionId, translatedQuestion) =>
           set((state) => {
             const question = state.questions.find((q) => q.id === questionId);
@@ -633,7 +925,8 @@ export const useLearnerStore = createWithEqualityFn<
         setAnswerChoice: (learnerAnswerChoice, questionId) => {
           set((state) => {
             const activeQuestionId =
-              questionId || state.questions[state.activeQuestionNumber - 1].id;
+              questionId ||
+              state.questions[(state.activeQuestionNumber ?? 1) - 1].id;
             const updatedQuestions = state.questions.map((q) =>
               q.id === activeQuestionId
                 ? { ...q, learnerAnswerChoice: Boolean(learnerAnswerChoice) }

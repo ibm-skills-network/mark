@@ -1,8 +1,15 @@
 "use client";
 
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
+import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
+import { useChangesSummary } from "@/app/Helpers/checkDiff";
+import { decodeFields } from "@/app/Helpers/decoder";
+import { encodeFields } from "@/app/Helpers/encoder";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
+import { stripHtml } from "@/app/Helpers/strippers";
+import Modal from "@/components/Modal";
 import ProgressBar, { JobStatus } from "@/components/ProgressBar";
+import Tooltip from "@/components/Tooltip";
 import {
   Assignment,
   AuthorAssignmentState,
@@ -26,19 +33,13 @@ import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
+import { IconRefresh } from "@tabler/icons-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
-import { encodeFields } from "@/app/Helpers/encoder";
-import { decodeFields } from "@/app/Helpers/decoder";
-import { stripHtml } from "@/app/Helpers/strippers";
-import { IconRefresh } from "@tabler/icons-react";
-import { useChangesSummary } from "@/app/Helpers/checkDiff";
-import Modal from "@/components/Modal";
-import Tooltip from "@/components/Tooltip";
 
 function maybeDecodeString(str: string | null | undefined): string | null {
   if (!str) return str;
@@ -90,6 +91,10 @@ function AuthorHeader() {
   const assignmentId = extractAssignmentId(pathname);
   const [currentStepId, setCurrentStepId] = useState<number>(0);
   const setQuestions = useAuthorStore((state) => state.setQuestions);
+  const setUserRole = useMarkChatStore((s) => s.setUserRole);
+  useEffect(() => {
+    setUserRole("author");
+  }, [setUserRole]);
   const [
     setActiveAssignmentId,
     questions,
@@ -404,6 +409,12 @@ function AuthorHeader() {
         delete q.alreadyInBackend;
         if (q.type !== "MULTIPLE_CORRECT" && q.type !== "SINGLE_CORRECT") {
           delete q.randomizedChoices;
+        }
+        if (q.responseType !== "PRESENTATION") {
+          delete q.videoPresentationConfig;
+        }
+        if (q.responseType !== "LIVE_RECORDING") {
+          delete q.liveRecordingConfig;
         }
       });
     }

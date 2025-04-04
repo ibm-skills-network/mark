@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
-import CriteriaTable from "./CriteriaTable";
-import { useAuthorStore } from "@/stores/author";
-import { QuestionAuthorStore, Rubric } from "@/config/types";
 import MarkdownEditor from "@/components/MarkDownEditor";
+import { QuestionAuthorStore, Rubric } from "@/config/types";
+import { useAuthorStore } from "@/stores/author";
+import { TrashIcon } from "@heroicons/react/24/outline";
 import {
   MinusIcon,
   PencilIcon,
   PlusIcon,
   SparklesIcon,
 } from "@heroicons/react/24/solid";
-import { TrashIcon } from "@heroicons/react/24/outline";
+import React, { useState } from "react";
+import CriteriaTable from "./CriteriaTable";
 
 interface RubricSwitcherProps {
   questionType: string;

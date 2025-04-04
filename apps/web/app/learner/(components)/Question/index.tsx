@@ -1,6 +1,7 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
+import { decodeFields } from "@/app/Helpers/decoder";
 import Loading from "@/components/Loading";
 import {
   AssignmentAttemptWithQuestions,
@@ -16,7 +17,6 @@ import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
-import { decodeFields } from "@/app/Helpers/decoder";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -73,6 +73,14 @@ function QuestionPage(props: Props) {
             passingGrade: decodedAssignment.passingGrade,
             allotedTimeMinutes: decodedAssignment.allotedTimeMinutes,
             questionDisplay: decodedAssignment.questionDisplay,
+            introduction: decodedAssignment.introduction,
+            instructions: decodedAssignment.instructions,
+            gradingCriteriaOverview: decodedAssignment.gradingCriteriaOverview,
+            questions: decodedAssignment.questions,
+            graded: decodedAssignment.graded,
+            published: decodedAssignment.published,
+            questionOrder: decodedAssignment.questionOrder,
+            updatedAt: decodedAssignment.updatedAt,
           });
         }
       } else {

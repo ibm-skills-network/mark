@@ -1,12 +1,12 @@
 "use client";
 
+import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import Tooltip from "@/components/Tooltip";
 import { Choice, QuestionAuthorStore } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
 import { EyeIcon } from "@heroicons/react/24/solid";
 import type { ComponentPropsWithoutRef, FC } from "react";
-import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   disabled?: boolean;

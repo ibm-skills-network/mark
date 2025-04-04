@@ -131,12 +131,14 @@ ingress:
     nginx.ingress.kubernetes.io/affinity: "cookie"
     nginx.ingress.kubernetes.io/session-cookie-name: "route"
     nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
   tls:
     secretName: ""
 
 privateIngress:
   enabled: true
   className: private-iks-k8s-nginx
+  nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 
 postgres:
   username: ""

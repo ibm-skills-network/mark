@@ -39,8 +39,7 @@ const RenderQuestion: FC<Props> = (props) => {
     case "UPLOAD":
       return (
         <FileUploadSection
-          questionId={question.id}
-          questionType={questionType}
+          question={question}
           responseType={question.responseType}
           onFileChange={onFileChange}
           removeFileUpload={removeFileUpload}

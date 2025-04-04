@@ -1,5 +1,6 @@
 "use client";
 
+import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import Dropdown from "@/components/Dropdown";
@@ -27,6 +28,7 @@ import Title from "@components/Title";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import Button from "../../../components/Button";
 
 function LearnerHeader() {
@@ -48,6 +50,10 @@ function LearnerHeader() {
     state.setTotalPointsEarned,
     state.setTotalPointsPossible,
   ]);
+  const setUserRole = useMarkChatStore((s) => s.setUserRole);
+  useEffect(() => {
+    setUserRole("learner");
+  }, [setUserRole]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
@@ -177,9 +183,21 @@ function LearnerHeader() {
                   .filter((choice) => choice !== undefined) || [],
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
         learnerFileResponse: q.learnerFileResponse || [],
+        learnerPresentationResponse: q.presentationResponse || [],
       }),
     );
     setSubmitting(true);
+    if (!assignmentId) {
+      toast.error("Assignment ID is missing.");
+      return;
+    }
+
+    if (activeAttemptId === null) {
+      toast.error("Active attempt ID is missing.");
+      setSubmitting(false);
+      return;
+    }
+
     const res = await submitAssignment(
       assignmentId,
       activeAttemptId,
@@ -189,10 +207,17 @@ function LearnerHeader() {
       role === "author" ? authorAssignmentDetails : undefined,
     );
     setSubmitting(false);
+    if (!res) {
+      toast.error("Failed to submit assignment.");
+      setSubmitting(false);
+      return;
+    }
     const { grade, feedbacksForQuestions } = res;
     setTotalPointsEarned(res.totalPointsEarned);
     setTotalPointsPossible(res.totalPossiblePoints);
-    setGrade(grade * 100);
+    if (grade !== undefined) {
+      setGrade(grade * 100);
+    }
     setShowSubmissionFeedback(res.showSubmissionFeedback);
     for (const question of questions) {
       const updatedQuestion = {
@@ -212,11 +237,11 @@ function LearnerHeader() {
             learnerAnswerChoice: responsesForQuestions.find(
               (q) => q.id === feedback.questionId,
             )?.learnerAnswerChoice,
-            points: feedback.totalPoints,
-            feedback: feedback.feedback,
+            points: feedback.totalPoints ?? 0,
+            feedback: feedback.feedback || [],
+            learnerResponse: feedback.question,
             questionId: feedback.questionId,
             assignmentAttemptId: activeAttemptId,
-            learnerResponse: null,
           },
         ],
       });

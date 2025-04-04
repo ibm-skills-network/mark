@@ -34,6 +34,7 @@ module.exports = {
     "no-empty-pattern": ["warn"],
   },
   ignorePatterns: [
+    "app/learner/\\(components\\)/**/*.js",
     "dist/",
     "node_modules/",
     ".turbo",

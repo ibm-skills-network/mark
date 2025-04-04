@@ -1,6 +1,7 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
+import { decodeFields } from "@/app/Helpers/decoder";
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
@@ -14,7 +15,6 @@ import {
 import { useSearchParams } from "next/navigation";
 import React, { FC, useEffect, useState } from "react";
 import AboutTheAssignment from "../(components)/AboutTheAssignment";
-import { decodeFields } from "@/app/Helpers/decoder";
 
 interface AuthFetchToAboutProps {
   assignmentId: number;
@@ -149,13 +149,15 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   }
 
   return (
-    <AboutTheAssignment
-      assignment={assignment}
-      attempts={listOfAttempts}
-      role={role}
-      assignmentId={assignmentId}
-      fetchData={fetchData}
-    />
+    <>
+      <AboutTheAssignment
+        assignment={assignment}
+        attempts={listOfAttempts}
+        role={role}
+        assignmentId={assignmentId}
+        fetchData={fetchData}
+      />
+    </>
   );
 };
 

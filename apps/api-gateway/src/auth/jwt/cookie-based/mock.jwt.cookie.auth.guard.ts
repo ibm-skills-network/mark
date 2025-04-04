@@ -25,7 +25,7 @@ export class MockJwtCookieAuthGuard extends AuthGuard("cookie-strategy") {
     request.user = {
       userId: "dev-user",
       role: UserRole.AUTHOR,
-      groupId: "test-group-id",
+      groupId: "autogen-faculty-v1-course-v1-IND-AI0103EN-v1",
       assignmentId: 1,
       gradingCallbackRequired: false,
       returnUrl: "https://skills.network",

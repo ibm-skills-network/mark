@@ -135,11 +135,10 @@ const FileCodeUploadSection = ({
       {/* File upload section */}
       <div className="bg-white p-4 rounded-lg ">
         <FileUploadSection
-          questionId={questionId}
-          questionType={questionType}
-          responseType={responseType}
+          question={question}
           onFileChange={onFileChange}
           removeFileUpload={removeFileUpload}
+          responseType={responseType}
         />
       </div>
 

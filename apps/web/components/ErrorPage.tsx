@@ -15,6 +15,8 @@ export default function ErrorPage({
   useEffect(() => {
     // Log the error to an error reporting service
     console.error(error);
+    // erase local storage so the user doesnt get stuck
+    localStorage.clear();
   }, [error]);
 
   return (
@@ -35,6 +37,10 @@ export default function ErrorPage({
           500: "Internal Server Error",
         }[statusCode] || "Error"}
       </h2>
+      <h4 className="font-bold">
+        An error occurred, please refresh the page to try again. If the problem
+        persists, please contact support.
+      </h4>
       <p className="text-gray-500">
         {typeof error === "string" ? error : error.message}
       </p>

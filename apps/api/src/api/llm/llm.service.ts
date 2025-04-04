@@ -13,6 +13,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import type { Logger } from "winston";
 import { z } from "zod";
 import { PrismaService } from "../../prisma.service";
+import { LearnerLiveRecordingFeedback } from "../assignment/attempt/dto/assignment-attempt/types";
 import { QuestionsToGenerate } from "../assignment/dto/post.assignment.request.dto";
 import { AssignmentTypeEnum } from "../assignment/dto/update.assignment.request.dto";
 import {
@@ -28,10 +29,14 @@ import {
 } from "../assignment/question/dto/create.update.question.request.dto";
 import type { FileUploadQuestionEvaluateModel } from "./model/file.based.question.evaluate.model";
 import { FileBasedQuestionResponseModel } from "./model/file.based.question.response.model";
+import { PresentationQuestionEvaluateModel } from "./model/presentation.question.evaluate.model";
+import { PresentationQuestionResponseModel } from "./model/presentation.question.response.model";
 import type { TextBasedQuestionEvaluateModel } from "./model/text.based.question.evaluate.model";
 import type { TextBasedQuestionResponseModel } from "./model/text.based.question.response.model";
 import type { UrlBasedQuestionEvaluateModel } from "./model/url.based.question.evaluate.model";
 import type { UrlBasedQuestionResponseModel } from "./model/url.based.question.response.model";
+import { VideoPresentationQuestionEvaluateModel } from "./model/video-presentation.question.evaluate.model";
+import { VideoPresentationQuestionResponseModel } from "./model/video-presentation.question.response.model";
 import {
   generateAssignmentQuestionsFromFileAndObjectivesTemplate,
   generateAssignmentQuestionsFromFileTemplate,
@@ -56,6 +61,8 @@ import {
   gradeTextBasedQuestionLlmTemplate,
   gradeUrlBasedQuestionLlmTemplate,
   gradeVideoFileQuestionLlmTemplate,
+  gradeVideoPresenatationQuestionTemplate,
+  liveRecordingFeedbackTemplate,
   translateQuestionTemplate,
 } from "./templates";
 
@@ -132,6 +139,15 @@ export const responseTypeSpecificInstructions: {
     - **Visualization**: Assess the relevance and clarity of charts, graphs, or pivot tables included.
     - **Integration and Analysis**: Critique how well the spreadsheet integrates data and provides actionable insights.
     - **Complexity**: Recognize any advanced features (e.g., macros, advanced formulas) effectively implemented.
+  `,
+  [ResponseType.LIVE_RECORDING]: `
+    Critique the live recording based on:
+    - **Content Relevance**: Ensure the recording addresses the question or topic effectively.
+    - **Presentation Skills**: Evaluate speech clarity, tone, pacing, and overall communication effectiveness.
+    - **Engagement**: Assess how well the recording captures and maintains audience attention.
+    - **Visual and Audio Quality**: Comment on lighting, background, sound, and video quality.
+    - **Structure and Organization**: Evaluate the logical flow and coherence of ideas presented.
+    - **Professionalism**: Recognize adherence to professional standards in tone, language, and presentation.
   `,
   [ResponseType.OTHER]: `
     Critique the submission based on:
@@ -298,7 +314,179 @@ export class LlmService {
     }
     return gradingContextQuestionMap;
   }
+  async gradePresentationQuestion(
+    presentationQuestionEvaluateModel: PresentationQuestionEvaluateModel,
+    assignmentId: number,
+  ): Promise<PresentationQuestionResponseModel> {
+    const {
+      question,
+      learnerResponse,
+      totalPoints,
+      scoringCriteriaType,
+      scoringCriteria,
+      previousQuestionsAnswersContext,
+      assignmentInstrctions,
+      responseType, // if you need to pass a 'grading_type' or similar
+    } = presentationQuestionEvaluateModel;
 
+    // Basic guard: ensure question text is present
+    if (!question) {
+      throw new HttpException("Missing question data", HttpStatus.BAD_REQUEST);
+    }
+
+    // If your guard rails only apply to the transcript, ensure it's at least a string
+    const hasTranscript =
+      learnerResponse?.transcript &&
+      typeof learnerResponse.transcript === "string";
+    const validateLearnerResponse = hasTranscript
+      ? await this.applyGuardRails(learnerResponse.transcript)
+      : true; // If no transcript is given, you can skip or apply different rules
+
+    if (!validateLearnerResponse) {
+      throw new HttpException(
+        "Learner response validation failed",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Optional fields: Provide fallbacks if missing
+    const safeSpeechReport =
+      learnerResponse?.speechReport ?? "No speech analysis provided.";
+    const safeContentReport =
+      learnerResponse?.contentReport ?? "No content analysis provided.";
+    const safeBodyLangScore =
+      learnerResponse?.bodyLanguageScore == null
+        ? "N/A"
+        : learnerResponse.bodyLanguageScore.toString();
+    const safeBodyLangExplanation =
+      learnerResponse?.bodyLanguageExplanation ?? "Not provided.";
+
+    const parser = StructuredOutputParser.fromZodSchema(
+      z
+        .object({
+          points: z.number().describe("Points awarded based on the criteria"),
+          feedback: z
+            .string()
+            .describe(
+              "Feedback for the learner based on their response to the criteria",
+            ),
+        })
+        .describe("Object representing points and feedback"),
+    );
+
+    const formatInstructions = parser.getFormatInstructions();
+
+    // Build the prompt with partial variables, safely handling missing fields
+    const prompt = new PromptTemplate({
+      template: gradePresentationFileQuestionLlmTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question: question, // The main question text
+        assignment_instructions:
+          assignmentInstrctions ?? "No assignment instructions provided.",
+        previous_questions_and_answers: JSON.stringify(
+          previousQuestionsAnswersContext ?? [],
+        ),
+        transcript: learnerResponse?.transcript ?? "No transcript provided.",
+        contentReport: safeContentReport,
+        speechReport: safeSpeechReport,
+        bodyLanguageScore: safeBodyLangScore,
+        bodyLanguageExplanation: safeBodyLangExplanation,
+        total_points: totalPoints == null ? "0" : totalPoints.toString(),
+        scoring_type: scoringCriteriaType ?? "N/A",
+        scoring_criteria: JSON.stringify(scoringCriteria ?? {}),
+        format_instructions: formatInstructions,
+        grading_type: responseType ?? "N/A",
+      },
+    });
+
+    // Call your LLM
+    const response = await this.processPrompt(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+    );
+
+    // Parse the LLM output to get points & feedback
+    const presentationQuestionResponseModel = (await parser.parse(
+      response,
+    )) as PresentationQuestionResponseModel;
+
+    return presentationQuestionResponseModel;
+  }
+  async gradeVideoPresentationQuestion(
+    videoPresentationQuestionEvaluateModel: VideoPresentationQuestionEvaluateModel,
+    assignmentId: number,
+  ): Promise<VideoPresentationQuestionResponseModel> {
+    const {
+      question,
+      learnerResponse,
+      totalPoints,
+      scoringCriteriaType,
+      scoringCriteria,
+      previousQuestionsAnswersContext,
+      assignmentInstrctions,
+      questionType,
+      responseType,
+      videoPresentationConfig,
+    } = videoPresentationQuestionEvaluateModel;
+    const validateLearnerResponse = await this.applyGuardRails(
+      learnerResponse.transcript,
+    );
+    if (!validateLearnerResponse) {
+      throw new HttpException(
+        "Learner response validation failed",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const parser = StructuredOutputParser.fromZodSchema(
+      z
+        .object({
+          points: z.number().describe("Points awarded based on the criteria"),
+          feedback: z
+            .string()
+            .describe(
+              "Feedback for the learner based on their response to the criteria, the feedback should include detailed explaination why you chose to provide the points you did",
+            ),
+        })
+        .describe("Object representing points and feedback"),
+    );
+    const formatInstructions = parser.getFormatInstructions();
+    const prompt = new PromptTemplate({
+      template: gradeVideoPresenatationQuestionTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question: question,
+        assignment_instructions: assignmentInstrctions,
+        previous_questions_and_answers: JSON.stringify(
+          previousQuestionsAnswersContext,
+        ),
+        transcript: learnerResponse.transcript,
+        slidesData: videoPresentationConfig.evaluateSlidesQuality
+          ? JSON.stringify(learnerResponse?.slidesData) ||
+            "The learner did not provide any slides when it was required"
+          : "Slides were not required, please ignore this field.",
+        total_points: totalPoints.toString(),
+        scoring_type: scoringCriteriaType,
+        scoring_criteria: JSON.stringify(scoringCriteria),
+        format_instructions: formatInstructions,
+        grading_type: responseType,
+      },
+    });
+
+    const response = await this.processPrompt(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+    );
+
+    const videoPresentationQuestionResponseModel = (await parser.parse(
+      response,
+    )) as VideoPresentationQuestionResponseModel;
+
+    return videoPresentationQuestionResponseModel;
+  }
   async gradeFileBasedQuestion(
     fileBasedQuestionEvaluateModel: FileUploadQuestionEvaluateModel,
     assignmentId: number,
@@ -329,6 +517,7 @@ export class LlmService {
       [ResponseType.VIDEO]: gradeVideoFileQuestionLlmTemplate,
       [ResponseType.AUDIO]: gradeAudioFileQuestionLlmTemplate,
       [ResponseType.SPREADSHEET]: gradeSpreadsheetFileQuestionLlmTemplate,
+      [ResponseType.LIVE_RECORDING]: gradeVideoFileQuestionLlmTemplate,
       [ResponseType.OTHER]: gradeDocumentFileQuestionLlmTemplate,
     };
 
@@ -834,7 +1023,7 @@ export class LlmService {
     let wrapperTemplate = `
       You are an AI assistant that creates or modifies scoring rubrics.
       The question is:
-      {question_json}
+      {questions_json_array}
 
       Existing rubrics (if any):
       {existing_rubrics_json}
@@ -890,7 +1079,7 @@ export class LlmService {
       template: wrapperTemplate,
       inputVariables: [],
       partialVariables: {
-        question_json: JSON.stringify(question),
+        questions_json_array: JSON.stringify(question),
         existing_rubrics_json: existingRubricsJson,
         format_instructions: formatInstructions,
         response_type: question.responseType ?? "no type set",
@@ -1731,6 +1920,75 @@ export class LlmService {
     }
   }
 
+  async getLiveRecordingFeedback(
+    liveRecordingData: LearnerLiveRecordingFeedback,
+    assignmentId: number,
+  ): Promise<string> {
+    // Import the zod schema, structured parser, etc.
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.object({
+        feedback: z.string().nonempty("Feedback cannot be empty"),
+      }),
+    );
+
+    const formatInstructions = parser.getFormatInstructions();
+
+    // Safely handle optional fields using defaults when missing:
+    const safeSpeechReport =
+      liveRecordingData.speechReport ?? "No speech analysis available.";
+    const safeContentReport =
+      liveRecordingData.contentReport ?? "No content analysis available.";
+    const safeBodyLangScore =
+      liveRecordingData.bodyLanguageScore == null
+        ? "N/A"
+        : String(liveRecordingData.bodyLanguageScore);
+    const safeBodyLangExplanation =
+      liveRecordingData.bodyLanguageExplanation ?? "Not provided.";
+
+    const prompt = new PromptTemplate({
+      template: liveRecordingFeedbackTemplate,
+      inputVariables: [],
+      partialVariables: {
+        question_text: liveRecordingData.question.question,
+        live_recording_transcript: JSON.stringify(
+          liveRecordingData.transcript ?? "No transcript provided.",
+          undefined,
+          2,
+        ),
+        live_recording_speechReport: JSON.stringify(
+          safeSpeechReport,
+          undefined,
+          2,
+        ),
+        live_recording_contentReport: JSON.stringify(
+          safeContentReport,
+          undefined,
+          2,
+        ),
+        live_recording_bodyLanguageScore: safeBodyLangScore,
+        live_recording_bodyLanguageExplanation: safeBodyLangExplanation,
+        format_instructions: formatInstructions,
+      },
+    });
+
+    try {
+      const response = await this.processPrompt(
+        prompt,
+        assignmentId,
+        AIUsageType.LIVE_RECORDING_FEEDBACK,
+      );
+      const parsedResponse = await parser.parse(response);
+      return parsedResponse.feedback;
+    } catch (error) {
+      this.logger.error(
+        `Error generating live recording feedback: ${(error as Error).message}`,
+      );
+      throw new HttpException(
+        "Failed to generate live recording feedback",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
   // private methods
   private async processPrompt(
     prompt: PromptTemplate,

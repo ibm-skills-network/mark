@@ -12,8 +12,14 @@
       "@config/*": ["config/*"],
       "@components/*": ["components/*"],
       "@lib/*": ["lib/*"],
-      "@learnerComponents/*": ["app/learner/(components)/*"],
-      "@authorComponents/*": ["app/author/(components)/*"]
+      "@learnerComponents/*": [
+        "app/learner/(components)/*",
+        "pages/api/transcriber.js"
+      ],
+      "@authorComponents/*": [
+        "app/author/(components)/*",
+        "pages/api/transcriber.js"
+      ]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

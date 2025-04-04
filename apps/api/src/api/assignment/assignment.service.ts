@@ -44,6 +44,7 @@ import {
   UpdateAssignmentQuestionsDto,
   VariantDto,
   VariantType,
+  VideoPresentationConfig,
 } from "./dto/update.questions.request.dto";
 import {
   CreateUpdateQuestionRequestDto,
@@ -535,7 +536,6 @@ export class AssignmentService {
       showQuestionScore,
       showSubmissionFeedback,
     } = updateAssignmentQuestionsDto;
-
     const supportedLanguages = this.languageTranslation
       ? getAllLanguageCodes()
       : ["en"];
@@ -699,6 +699,12 @@ export class AssignmentService {
                 maxCharacters: questionDto.maxCharacters,
                 responseType: questionDto.responseType,
                 randomizedChoices: questionDto.randomizedChoices,
+                liveRecordingConfig: questionDto?.liveRecordingConfig,
+                videoPresentationConfig: questionDto?.videoPresentationConfig
+                  ? (JSON.parse(
+                      JSON.stringify(questionDto.videoPresentationConfig),
+                    ) as Prisma.JsonValue)
+                  : Prisma.JsonNull,
                 assignment: { connect: { id: assignmentId } },
               };
 

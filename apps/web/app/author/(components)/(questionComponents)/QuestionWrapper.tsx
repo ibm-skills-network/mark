@@ -12,9 +12,10 @@ import type {
   RubricType,
   UpdateQuestionStateParams,
 } from "@/config/types";
-import { generateRubric } from "@/lib/talkToBackend";
+import { expandMarkingRubric, generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { ArrowDownIcon, PlusIcon } from "@heroicons/react/24/solid";
 import React, {
   FC,
@@ -26,8 +27,240 @@ import React, {
 import { toast } from "sonner";
 import MultipleAnswerSection from "../Questions/QuestionTypes/MultipleAnswerSection";
 import RubricSwitcher from "./RubricSwitcher";
-import { InformationCircleIcon } from "@heroicons/react/24/outline";
-import { expandMarkingRubric } from "@/lib/talkToBackend";
+
+// Extend the props to accept an onChange callback.
+interface CheckboxWithTooltipProps {
+  id: string;
+  name: string;
+  label: string;
+  tooltipText: string;
+  defaultChecked?: boolean;
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+}
+
+const CheckboxWithTooltip: FC<CheckboxWithTooltipProps> = ({
+  id,
+  name,
+  label,
+  tooltipText,
+  defaultChecked = false,
+  checked,
+  onChange,
+}) => (
+  <div className="flex items-center gap-x-2">
+    <input
+      type="checkbox"
+      id={id}
+      name={name}
+      // If a controlled value is provided, use it. Otherwise, fall back to defaultChecked.
+      checked={typeof checked !== "undefined" ? checked : defaultChecked}
+      onChange={(e) => onChange && onChange(e.target.checked)}
+      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+    />
+    <label htmlFor={id} className="font-medium">
+      {label}
+    </label>
+    <div className="tooltip">
+      <span className="tooltiptext">{tooltipText}</span>
+      <InformationCircleIcon className="h-5 w-5 text-gray-500 hover:text-gray-700 cursor-pointer" />
+    </div>
+  </div>
+);
+interface TimeLimitInputWithTooltipProps {
+  id: string;
+  name: string;
+  label: string;
+  tooltipText: string;
+  defaultValue?: number;
+  /** Controlled value */
+  value?: number;
+  min?: number;
+  max?: number;
+  onChange?: (value: number) => void;
+}
+
+const TimeLimitInputWithTooltip: FC<TimeLimitInputWithTooltipProps> = ({
+  id,
+  name,
+  label,
+  tooltipText,
+  defaultValue = 120,
+  value,
+  min = 1,
+  max = 600,
+  onChange,
+}) => {
+  // Use local state to allow the user to finish typing
+  const [internalValue, setInternalValue] = useState<string>(
+    value !== undefined ? String(value) : String(defaultValue),
+  );
+
+  // Update local state if the parent value changes
+  useEffect(() => {
+    setInternalValue(
+      value !== undefined ? String(value) : String(defaultValue),
+    );
+  }, [value, defaultValue]);
+
+  return (
+    <div className="flex items-center gap-x-2">
+      <label htmlFor={id} className="font-medium">
+        {label}
+      </label>
+      <input
+        type="number"
+        id={id}
+        name={name}
+        value={internalValue}
+        min={min}
+        max={max}
+        onChange={(e) => {
+          setInternalValue(e.target.value);
+        }}
+        // Only update the global state when the input loses focus
+        onBlur={() => {
+          const newValue = Number(internalValue);
+          if (newValue > max) {
+            setInternalValue(String(max));
+            onChange && onChange(max);
+          } else if (newValue < min) {
+            setInternalValue(String(min));
+            onChange && onChange(min);
+          } else if (!isNaN(newValue)) {
+            onChange && onChange(newValue);
+          }
+        }}
+        className="h-8 w-18 text-violet-600 border-gray-300 rounded"
+      />
+      <div className="tooltip">
+        <span className="tooltiptext">{tooltipText}</span>
+        <InformationCircleIcon className="h-5 w-5 text-gray-500 hover:text-gray-700 cursor-pointer" />
+      </div>
+    </div>
+  );
+};
+
+interface PresentationOptionsProps {
+  questionType: string;
+  responseType: "PRESENTATION" | "LIVE_RECORDING" | string;
+  question: QuestionAuthorStore;
+  setEvaluateBodyLanguage: (questionId: number, checked: boolean) => void;
+  setRealTimeAiCoach: (questionId: number, checked: boolean) => void;
+  setEvaluateTimeManagement: (
+    questionId: number,
+    checked: boolean,
+    responseType: string,
+  ) => void;
+  setTargetTime: (
+    questionId: number,
+    time: number,
+    responseType: ResponseType,
+  ) => void;
+  setEvaluateSlidesQuality: (questionId: number, checked: boolean) => void;
+}
+
+const PresentationOptions: FC<PresentationOptionsProps> = ({
+  questionType,
+  responseType,
+  question,
+  setEvaluateBodyLanguage,
+  setRealTimeAiCoach,
+  setEvaluateTimeManagement,
+  setTargetTime,
+  setEvaluateSlidesQuality,
+}) => {
+  if (
+    questionType !== "UPLOAD" ||
+    (responseType !== "PRESENTATION" && responseType !== "LIVE_RECORDING")
+  ) {
+    return null;
+  }
+  const questionId = question.id;
+  useEffect(() => {
+    if (
+      question?.liveRecordingConfig?.targetTime === undefined &&
+      responseType === "LIVE_RECORDING"
+    ) {
+      setTargetTime(questionId, 120, "LIVE_RECORDING");
+    }
+    if (
+      question?.videoPresentationConfig?.targetTime === undefined &&
+      responseType === "PRESENTATION"
+    ) {
+      setTargetTime(questionId, 120, "PRESENTATION");
+    }
+  }, [responseType]);
+  return (
+    <>
+      <hr className="mt-2 border-gray-200 w-full" />
+      <h2 className="text-lg font-semibold px-2">Presentation Options</h2>
+      <div className="flex flex-wrap items-center gap-x-8 px-2 mt-2">
+        {responseType === "LIVE_RECORDING" && (
+          <>
+            <CheckboxWithTooltip
+              id="bodyLanguage"
+              name="bodyLanguage"
+              label="Evaluate Body Language"
+              tooltipText="Evaluate the presenter’s body language, including posture, gestures, and eye contact."
+              onChange={(checked) =>
+                setEvaluateBodyLanguage(questionId, checked)
+              }
+              checked={question?.liveRecordingConfig?.evaluateBodyLanguage}
+            />
+            <CheckboxWithTooltip
+              id="aiAssistance"
+              name="aiAssistance"
+              label="Real-Time AI Coaching"
+              tooltipText="Provide real-time feedback and suggestions to the presenter based on AI analysis of their presentation delivery."
+              onChange={(checked) => setRealTimeAiCoach(questionId, checked)}
+              checked={question?.liveRecordingConfig?.realTimeAiCoach}
+            />
+          </>
+        )}
+        {responseType === "PRESENTATION" && (
+          <CheckboxWithTooltip
+            id="slideQuality"
+            name="slideQuality"
+            label="Evaluate Slide Quality & Visual Appeal"
+            tooltipText="Assess the quality of the presentation slides, including visual appeal, clarity, and overall design."
+            onChange={(checked) =>
+              setEvaluateSlidesQuality(questionId, checked)
+            }
+            checked={question?.videoPresentationConfig?.evaluateSlidesQuality}
+          />
+        )}
+        <CheckboxWithTooltip
+          id="timeManagement"
+          name="timeManagement"
+          label="Evaluate Time Management"
+          tooltipText="Evaluate the presenter’s ability to manage time effectively and stay within the allotted time frame."
+          onChange={(checked) =>
+            setEvaluateTimeManagement(questionId, checked, responseType)
+          }
+          checked={
+            responseType === "PRESENTATION"
+              ? question?.videoPresentationConfig?.evaluateTimeManagement
+              : question?.liveRecordingConfig?.evaluateTimeManagement
+          }
+        />
+        <TimeLimitInputWithTooltip
+          id="timeLimit"
+          name="timeLimit"
+          label="Time Limit (sec):"
+          tooltipText="Set a time limit for the presentation."
+          onChange={(value) => setTargetTime(questionId, value, responseType)}
+          value={
+            responseType === "PRESENTATION"
+              ? question?.videoPresentationConfig?.targetTime
+              : question?.liveRecordingConfig?.targetTime
+          }
+        />
+      </div>
+      <hr className="my-2 border-gray-200 w-full" />
+    </>
+  );
+};
 
 interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
   questionId: number;
@@ -155,6 +388,19 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       handleUpdateQuestionState({ questionTitle: value }, variantMode);
     }
   };
+  const setEvaluateBodyLanguage = useAuthorStore(
+    (state) => state.setEvaluateBodyLanguage,
+  );
+  const setRealTimeAiCoach = useAuthorStore(
+    (state) => state.setRealTimeAiCoach,
+  );
+  const setEvaluateTimeManagement = useAuthorStore(
+    (state) => state.setEvaluateTimeManagement,
+  );
+  const setTargetTime = useAuthorStore((state) => state.setTargetTime);
+  const setEvaluateSlidesQuality = useAuthorStore(
+    (state) => state.setEvaluateSlidesQuality,
+  );
   // Updates the criterion description at a given index.
   const handleCriteriaChange = (
     rubricIndex: number,
@@ -718,6 +964,16 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         </div>
       ) : (
         <>
+          <PresentationOptions
+            questionType={questionType}
+            responseType={responseType}
+            question={questionFromParent}
+            setEvaluateBodyLanguage={setEvaluateBodyLanguage}
+            setRealTimeAiCoach={setRealTimeAiCoach}
+            setEvaluateTimeManagement={setEvaluateTimeManagement}
+            setTargetTime={setTargetTime}
+            setEvaluateSlidesQuality={setEvaluateSlidesQuality}
+          />
           {/* Use RubricSwitcher to render the appropriate rubric */}
           <RubricSwitcher
             questionType={questionType}

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { IconX } from "@tabler/icons-react";
 import FeedbackFormatter from "@/components/FeedbackFormatter";
+import { IconX } from "@tabler/icons-react";
+import React, { useEffect, useState } from "react";
 import { Prism, SyntaxHighlighterProps } from "react-syntax-highlighter";
 import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism";
+
 const SyntaxHighlighter =
   Prism as unknown as typeof React.Component<SyntaxHighlighterProps>;
 

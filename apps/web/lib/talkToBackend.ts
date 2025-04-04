@@ -12,6 +12,8 @@ import type {
   Choice,
   CreateQuestionRequest,
   GetAssignmentResponse,
+  LiveRecordingData,
+  PresentationQuestionResponse,
   PublishJobResponse,
   Question,
   QuestionAttemptRequest,
@@ -272,7 +274,9 @@ export function subscribeToJobStatus(
 
     try {
       eventSource = new EventSource(
-        `${BASE_API_ROUTES.assignments}/jobs/${jobId}/status-stream?_=${Date.now()}`,
+        `${
+          BASE_API_ROUTES.assignments
+        }/jobs/${jobId}/status-stream?_=${Date.now()}`,
         { withCredentials: true },
       );
 
@@ -769,6 +773,40 @@ export async function submitQuestion(
       throw new Error(errorBody.message || "Failed to submit question");
     }
     const data = (await res.json()) as QuestionAttemptResponse;
+    return data;
+  } catch (err) {
+    console.error(err);
+    return undefined;
+  }
+}
+
+export async function getLiveRecordingFeedback(
+  assignmentId: number,
+  liveRecordingData: LiveRecordingData,
+  cookies?: string,
+): Promise<{ feedback: string }> {
+  const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/live-recording-feedback`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      body: JSON.stringify({ liveRecordingData }), // wrap the data
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(
+        errorBody.message || "Failed to fetch live recording feedback",
+      );
+    }
+
+    const data = (await res.json()) as {
+      feedback: string;
+    };
     return data;
   } catch (err) {
     console.error(err);

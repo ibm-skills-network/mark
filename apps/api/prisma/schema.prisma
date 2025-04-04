@@ -43,9 +43,9 @@ enum ResponseType{
   VIDEO
   AUDIO
   SPREADSHEET
+  LIVE_RECORDING
   OTHER
 }
-
 enum QuestionDisplay {
   ONE_PER_PAGE /// Display one question per page
   ALL_PER_PAGE /// Display all questions on one page
@@ -100,6 +100,7 @@ enum AIUsageType {
   ASSIGNMENT_GENERATION /// AI was used to generate an entire assignment
   ASSIGNMENT_GRADING /// AI was used for grading the assignment
   TRANSLATION /// AI was used for translation
+  LIVE_RECORDING_FEEDBACK /// AI was used for live recording feedback
 }
 
 model UserCredential {
@@ -184,6 +185,8 @@ model Question {
   isDeleted      Boolean  @default(false) // New flag for archiving
   translations              Translation[]    /// List of translations for the question
   FeedbackTranslation FeedbackTranslation[]
+  videoPresentationConfig   Json? /// Configuration for video presentation questions
+  liveRecordingConfig       Json? /// Configuration for live recording questions
 }
 model AssignmentAttempt {
   id                Int                   @id @default(autoincrement())

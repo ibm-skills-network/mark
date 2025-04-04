@@ -1,5 +1,4 @@
 #!/bin/sh
-
 # Extract API_GATEWAY_HOST from environment variable
 API_GATEWAY_HOST_VALUE=${API_GATEWAY_HOST}
 

@@ -533,24 +533,41 @@ Include reasons why you awarded the points you did and how the essay quality inf
 > Provide constructive feedback to guide improvement. Avoid providing solutions.
 `;
 export const gradePresentationFileQuestionLlmTemplate = `
-As an expert grader, review the uploaded presentation for the question:
+You are an expert grader evaluating a presentation. 
+
+**Question / Task**:
 {question}
 
-Files:
-{files}
+**Learner's Presentation Report**:
+- **Transcript**: {transcript}
+- **Speech Analysis Report**: {speechReport}
+- **Content Analysis Report**: {contentReport}
+- **Body Language Analysis**:
+  - Score: {bodyLanguageScore}%
+  - Explanation: {bodyLanguageExplanation}
 
-Points Possible: {total_points}
-Scoring Type: {scoring_type}
-Criteria:
-{scoring_criteria}
+**Additional Context**:
+- Total Points Possible: {total_points}
+- Scoring Type: {scoring_type}
+- Grading Type: {grading_type}
+- Criteria: {scoring_criteria}
+- Assignment Instructions: {assignment_instructions}
+- Previous Q&As: {previous_questions_and_answers}
+
+Please do the following:
+1. **Assess** how well the presentation met the requirements (content coverage, speech clarity, organization, body language effectiveness).
+2. **Award Points** out of {total_points}, based on {scoring_type} and {scoring_criteria}.
+3. **Provide Constructive Feedback**: 
+   - If the presentation is strong overall, do not fabricate major flaws—highlight positives and offer minimal improvements.
+   - If the presentation needs work, provide clear, actionable suggestions.
 
 ### Output:
-Return results in this format:
+Return results in **this exact format**:
 {format_instructions}
 
-Make sure your feedback is in language code: {language}
-Include reasons why you awarded the points you did and how the presentation quality influenced your decision.
+Make sure your explanation justifies why you awarded those points and how the presentation quality influenced your decision. Be clear, concise, and constructive.
 `;
+
 export const gradeVideoFileQuestionLlmTemplate = `
 As an expert grader, review the uploaded video for the question:
 {question}
@@ -607,4 +624,73 @@ Return results in this format:
 
 You need to provide feedback in language code: {language}
 Include reasons why you awarded the points you did and how the spreadsheet quality influenced your decision.
+`;
+
+export const liveRecordingFeedbackTemplate = `
+You are a professional presentation coach. Analyze the following presentation details and provide **constructive, actionable feedback** to help the learner improve their presentation skills. 
+If the learner is already doing very well, do not fabricate negative points; instead, briefly highlight strengths and offer minimal suggestions. If the learner did not perform well, be blunt and honest about the issues, but also provide constructive feedback on how to improve.
+
+**Presentation Question:**
+{question_text}
+
+**Presentation Data (may be partial or missing certain fields)**:
+"transcript": {live_recording_transcript},
+"speechReport": {live_recording_speechReport},
+"contentReport": {live_recording_contentReport},
+"bodyLanguageScore": {live_recording_bodyLanguageScore},
+"bodyLanguageExplanation": {live_recording_bodyLanguageExplanation}
+
+Where provided:
+- **Transcript**: AI-based speech transcription (possibly with typos).
+- **Speech Report**: Clarity, pacing, filler words, etc.
+- **Content Report**: Structure, depth, vocabulary complexity, etc.
+- **Body Language**: Score and explanation of gestures, posture, eye contact, etc.
+
+Your feedback should be free from ambiguity and jargon.
+Stay constructive and try to be helpful. 
+
+Your response must follow these format instructions exactly:
+{format_instructions}
+`;
+export const gradeVideoPresenatationQuestionTemplate = `
+You are an expert grader evaluating a video-based presentation.
+
+**Question / Task**:
+{question}
+
+**Assignment Instructions**:
+{assignment_instructions}
+
+**Previous Q&A Context**:
+{previous_questions_and_answers}
+
+**Presentation Data**:
+- **Transcript**: {transcript}
+- **Slides Data:(these are all the information you need about the slides)**: {slidesData}
+
+**Evaluation Criteria**:
+- Total Points Available: {total_points}
+- Scoring Type: {scoring_type}
+- Scoring Criteria: {scoring_criteria}
+
+**Grading Type**:
+{grading_type}
+
+Please do the following:
+1. **Assess** how well the presentation met the requirements in terms of:
+   - **Content Coverage & Clarity** (based on the transcript)
+   - **Slide Usage** (if slidesData is provided)
+   - **Organization and Overall Quality**
+2. **Award Points** out of {total_points}, using {scoring_type} and {scoring_criteria} as guidance.
+3. **Provide Constructive Feedback**:
+   - If the presentation is strong, highlight positives and offer minimal improvements.
+   - If it needs more work, give clear, actionable suggestions for transcript clarity and effective slide usage.
+   - Keep your feedback positive, encouraging, and concise.
+
+Remember:
+- The transcript may contain AI-generated typos.
+- The slidesData may contain text and/or images (potentially in base64). Dont evaluate visual aspects of the slides.
+- Your feedback should be free from ambiguity and jargon.
+- Your response must follow these format instructions exactly:
+{format_instructions}
 `;

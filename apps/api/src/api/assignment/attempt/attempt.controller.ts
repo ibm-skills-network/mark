@@ -19,6 +19,7 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { ReportType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -281,7 +282,7 @@ export class AttemptController {
       throw new BadRequestException("Issue type and description are required");
     }
 
-    const validIssueTypes = ["BUG", "FEEDBACK", "SUGGESTION", "PERFORMANCE"];
+    const validIssueTypes = Object.values(ReportType);
     if (!validIssueTypes.includes(issueType)) {
       throw new BadRequestException("Invalid issue type");
     }

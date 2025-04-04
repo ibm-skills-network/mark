@@ -18,6 +18,8 @@ import {
   Translation,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
+import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
+import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
 import { QuestionAnswerContext } from "../../../api/llm/model/base.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../../api/llm/model/url.based.question.evaluate.model";
 import {
@@ -62,7 +64,10 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import type { AssignmentAttemptQuestions } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
-import { LearnerFileUpload } from "./dto/assignment-attempt/types";
+import {
+  LearnerFileUpload,
+  LearnerPresentationResponse,
+} from "./dto/assignment-attempt/types";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
 import {
@@ -81,35 +86,6 @@ type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
   feedback: object;
 };
 type ExtendedQuestion = Question & { variantId?: number };
-
-interface AssignmentAttempt {
-  id: number;
-  assignmentId: number;
-  userId: string;
-  expiresAt: Date | null;
-  submitted: boolean;
-  grade: number | null;
-  attemptQuestionIds: number[];
-  questionResponses: {
-    id: number;
-    questionId: number;
-    assignmentAttemptId: number;
-    feedback: JsonValue;
-    learnerResponse: string;
-    points: number;
-  }[];
-  questionVariants: {
-    questionVariant: {
-      id: number;
-      variantContent: string;
-      choices: JsonValue;
-      maxWords: number;
-      maxCharacters: number;
-      scoring: JsonValue;
-      answer: string;
-    };
-  }[];
-}
 
 @Injectable()
 export class AttemptService {
@@ -807,6 +783,9 @@ export class AttemptService {
         responseType: originalQ.responseType,
         isDeleted: originalQ.isDeleted,
         randomizedChoices: originalQ.randomizedChoices,
+        videoPresentationConfig:
+          originalQ.videoPresentationConfig as unknown as JSON,
+        liveRecordingConfig: originalQ.liveRecordingConfig as unknown as JSON,
       };
     });
 
@@ -825,6 +804,12 @@ export class AttemptService {
       mergedQuestions.map((question) => ({
         ...question,
         choices: JSON.stringify(question.choices) as unknown as JsonValue,
+        scoring: JSON.stringify(question.scoring) as unknown as JsonValue,
+        videoPresentationConfig:
+          (question.videoPresentationConfig as unknown as JsonValue) ??
+          undefined,
+        liveRecordingConfig:
+          (question.liveRecordingConfig as unknown as JsonValue) ?? undefined,
       })),
       assignmentAttempt.questionResponses as QuestionResponse[],
     );
@@ -1111,6 +1096,9 @@ export class AttemptService {
         responseType: originalQ.responseType,
         isDeleted: originalQ.isDeleted,
         randomizedChoices: qv.randomizedChoices,
+        videoPresentationConfig:
+          originalQ.videoPresentationConfig as unknown as JSON,
+        liveRecordingConfig: originalQ.liveRecordingConfig as unknown as JSON,
       };
     });
 
@@ -1773,7 +1761,10 @@ export class AttemptService {
     language: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
-    learnerResponse: string | { filename: string; content: string }[];
+    learnerResponse:
+      | string
+      | { filename: string; content: string }[]
+      | LearnerPresentationResponse;
   }> {
     if (
       Array.isArray(
@@ -1787,7 +1778,14 @@ export class AttemptService {
         "" &&
       Array.isArray(createQuestionResponseAttemptRequestDto.learnerChoices) &&
       createQuestionResponseAttemptRequestDto.learnerChoices.length === 0 &&
-      createQuestionResponseAttemptRequestDto.learnerAnswerChoice === null
+      createQuestionResponseAttemptRequestDto.learnerAnswerChoice === null &&
+      (createQuestionResponseAttemptRequestDto.learnerPresentationResponse ===
+        undefined ||
+        (Array.isArray(
+          createQuestionResponseAttemptRequestDto.learnerPresentationResponse,
+        ) &&
+          createQuestionResponseAttemptRequestDto.learnerPresentationResponse
+            .length === 0))
     ) {
       const responseDto = new CreateQuestionResponseAttemptResponseDto();
       responseDto.totalPoints = 0;
@@ -1837,13 +1835,28 @@ export class AttemptService {
         }
       }
       case QuestionType.UPLOAD: {
-        return this.handleFileUploadQuestionResponse(
-          question,
-          question.type,
-          createQuestionResponseAttemptRequestDto,
-          assignmentContext,
-          language,
-        );
+        if (question.responseType === "LIVE_RECORDING") {
+          return this.handlePresentationQuestionResponse(
+            question,
+            createQuestionResponseAttemptRequestDto,
+            assignmentContext,
+            assignmentId,
+          );
+        } else if (question.responseType === "PRESENTATION") {
+          return this.handleVideoPresentationQuestionResponse(
+            question,
+            createQuestionResponseAttemptRequestDto,
+            assignmentContext,
+            assignmentId,
+          );
+        } else {
+          return this.handleFileUploadQuestionResponse(
+            question,
+            question.type,
+            createQuestionResponseAttemptRequestDto,
+            assignmentContext,
+          );
+        }
       }
       case QuestionType.URL: {
         return this.handleUrlQuestionResponse(
@@ -1879,6 +1892,94 @@ export class AttemptService {
         throw new Error("Invalid question type provided.");
       }
     }
+  }
+
+  private async handlePresentationQuestionResponse(
+    question: QuestionDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    },
+    assignmentId: number,
+  ): Promise<{
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: LearnerPresentationResponse;
+  }> {
+    if (!createQuestionResponseAttemptRequestDto.learnerPresentationResponse) {
+      throw new BadRequestException(
+        "Expected a presentation-based response (learnerPresentationResponse), but did not receive one.",
+      );
+    }
+
+    const learnerResponse =
+      createQuestionResponseAttemptRequestDto.learnerPresentationResponse;
+    const presentationQuestionEvaluateModel =
+      new PresentationQuestionEvaluateModel(
+        question.question,
+        assignmentContext.questionAnswerContext,
+        assignmentContext?.assignmentInstructions,
+        learnerResponse,
+        question.totalPoints,
+        question.scoring?.type ?? "",
+        question.scoring,
+        question.type,
+        question.responseType ?? "OTHER",
+      );
+
+    const model = await this.llmService.gradePresentationQuestion(
+      presentationQuestionEvaluateModel,
+      assignmentId,
+    );
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    AttemptHelper.assignFeedbackToResponse(model, responseDto);
+
+    return { responseDto, learnerResponse };
+  }
+  private async handleVideoPresentationQuestionResponse(
+    question: QuestionDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    },
+    assignmentId: number,
+  ): Promise<{
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+    learnerResponse: LearnerPresentationResponse;
+  }> {
+    if (!createQuestionResponseAttemptRequestDto.learnerPresentationResponse) {
+      throw new BadRequestException(
+        "Expected a presentation-based response (learnerPresentationResponse), but did not receive one.",
+      );
+    }
+
+    const learnerResponse =
+      createQuestionResponseAttemptRequestDto.learnerPresentationResponse;
+    const videoPresentationQuestionEvaluateModel =
+      new VideoPresentationQuestionEvaluateModel(
+        question.question,
+        assignmentContext.questionAnswerContext,
+        assignmentContext?.assignmentInstructions,
+        learnerResponse,
+        question.totalPoints,
+        question.scoring?.type ?? "",
+        question.scoring,
+        question.type,
+        question.responseType ?? "OTHER",
+        question.videoPresentationConfig,
+      );
+
+    const model = await this.llmService.gradeVideoPresentationQuestion(
+      videoPresentationQuestionEvaluateModel,
+      assignmentId,
+    );
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    AttemptHelper.assignFeedbackToResponse(model, responseDto);
+
+    return { responseDto, learnerResponse };
   }
 
   private async handleFileUploadQuestionResponse(
@@ -2799,6 +2900,12 @@ export class AttemptService {
         alreadyInBackend: true,
         questionResponses: correspondingResponses,
         responseType: question.responseType,
+        scoring:
+          typeof question.scoring === "string" &&
+          (JSON.parse(question.scoring) as { showRubricsToLearner?: boolean })
+            ?.showRubricsToLearner
+            ? question.scoring
+            : undefined,
       };
     });
   }

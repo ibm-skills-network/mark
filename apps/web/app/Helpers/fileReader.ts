@@ -1,5 +1,6 @@
 /* eslint-disable */
 
+import JSZip from "jszip";
 import mammoth from "mammoth";
 import Papa, { ParseResult } from "papaparse";
 import pdfToText from "react-pdftotext";
@@ -193,21 +194,6 @@ export const readIpynb = (
     }
   });
 
-export const readPptx = async (
-  file: File,
-  questionId: number,
-): Promise<FileContent> => {
-  try {
-    const result = await mammoth.extractRawText({
-      arrayBuffer: await file.arrayBuffer(),
-    });
-    const sanitized = sanitizeContent(result.value, "pptx");
-    return { filename: file.name, content: sanitized, questionId };
-  } catch (error) {
-    throw new Error(`Error reading PowerPoint: ${String(error)}`);
-  }
-};
-
 /**
  * Reads plain text files (e.g. code files) using the ArrayBuffer approach.
  */
@@ -220,6 +206,77 @@ export const readPlainText = (
     const sanitized = sanitizeContent(text, extension);
     return { filename: file.name, content: sanitized, questionId };
   });
+
+/**
+ * Reads a PPTX file (PowerPoint) by extracting only the text from each slide.
+ *
+ * @param file - The PPTX file to be processed.
+ * @param questionId - An associated question ID.
+ * @returns A Promise that resolves to a FileContent object containing the extracted text.
+ */
+export const readPptx = async (
+  file: File,
+  questionId: number,
+): Promise<FileContent> => {
+  try {
+    // Load the PPTX file as a zip archive.
+    const zip = await JSZip.loadAsync(file);
+
+    // Find all slide XML files (e.g. ppt/slides/slide1.xml, slide2.xml, etc.)
+    const slideFilenames = Object.keys(zip.files).filter((filename) =>
+      /^ppt\/slides\/slide\d+\.xml$/.test(filename),
+    );
+
+    // Sort slide filenames by their numeric order.
+    slideFilenames.sort((a, b) => {
+      const matchA = a.match(/slide(\d+)\.xml/);
+      const matchB = b.match(/slide(\d+)\.xml/);
+      const numA = matchA ? parseInt(matchA[1], 10) : 0;
+      const numB = matchB ? parseInt(matchB[1], 10) : 0;
+      return numA - numB;
+    });
+
+    // Initialize a string to hold all extracted slide text.
+    let presentationText = "";
+
+    // Process each slide file.
+    for (const slideFilename of slideFilenames) {
+      try {
+        // Get the XML content of the slide.
+        const slideXml = await zip.file(slideFilename)?.async("string");
+        if (slideXml) {
+          // Parse the XML.
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(slideXml, "application/xml");
+
+          // Extract text from <a:t> elements.
+          const textElements = xmlDoc.getElementsByTagName("a:t");
+          let slideText = "";
+          for (let i = 0; i < textElements.length; i++) {
+            if (textElements[i].textContent) {
+              slideText += textElements[i].textContent + " ";
+            }
+          }
+          slideText = slideText.trim();
+
+          // Append the slide text (if any) and separate slides with newlines.
+          if (slideText) {
+            presentationText += slideText + "\n\n";
+          }
+        }
+      } catch (err) {
+        console.error(`Error processing ${slideFilename}:`, err);
+      }
+    }
+
+    // Sanitize the extracted text to escape curly braces if needed.
+    const sanitized = sanitizeContent(presentationText, "pptx");
+
+    return { filename: file.name, content: sanitized, questionId };
+  } catch (error) {
+    throw new Error(`Error reading PowerPoint: ${error}`);
+  }
+};
 
 /**
  * Main readFile function that routes to the appropriate helper based on file extension.

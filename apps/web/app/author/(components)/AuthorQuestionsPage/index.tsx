@@ -4,6 +4,7 @@ import {
   handleJumpToQuestion,
   handleJumpToQuestionTitle,
 } from "@/app/Helpers/handleJumpToQuestion";
+import { stripHtml } from "@/app/Helpers/strippers";
 import Dropdown from "@/components/Dropdown";
 import FileUploadModal from "@/components/FileUploadModal";
 import ReportModal from "@/components/ReportModal";
@@ -69,7 +70,6 @@ import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
-import { stripHtml } from "@/app/Helpers/strippers";
 
 interface Props {
   assignmentId: number;
@@ -395,14 +395,33 @@ const AuthorQuestionsPage: FC<Props> = ({
       toast.error("Please select the number of variations to generate");
       return;
     }
+
+    const nonEditableQuestions = questions.filter(
+      (question) =>
+        question.responseType === "PRESENTATION" ||
+        question.responseType === "LIVE_RECORDING",
+    );
+
+    const editableQuestions = questions.filter(
+      (question) =>
+        question.responseType !== "PRESENTATION" &&
+        question.responseType !== "LIVE_RECORDING",
+    );
+
     setIsMassVariationLoading(true);
+
     const questionsWithVariants = await generateQuestionVariant(
-      questions,
+      editableQuestions,
       questionVariationNumber,
       assignmentId,
     );
+
     if (questionsWithVariants) {
-      setQuestions(questionsWithVariants);
+      const combinedQuestions = [
+        ...questionsWithVariants,
+        ...nonEditableQuestions,
+      ];
+      setQuestions(combinedQuestions);
       toast.success("Variants generated successfully!");
     } else {
       toast.error("Failed to generate variants");

@@ -4,7 +4,7 @@ import { trueFalseTranslations } from "@/app/Helpers/Languages/TrueFalseInAllLan
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import FeedbackFormatter from "@/components/FeedbackFormatter";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import type { QuestionStore } from "@/config/types";
+import type { QuestionStore, Scoring } from "@/config/types";
 import {
   AuthorizeGithubBackend,
   exchangeGithubCodeForToken,
@@ -17,6 +17,7 @@ import { Octokit } from "@octokit/rest";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import FileViewer from "../../(components)/Question/FileViewer";
+import ShowHideRubric from "../../(components)/Question/ShowHideRubric";
 
 interface Props {
   question: QuestionStore;
@@ -34,7 +35,8 @@ export type LearnerResponseType =
   | string[]
   | boolean
   | { filename: string; content: string }[]
-  | undefined;
+  | undefined
+  | { transcript: string };
 
 const Question: FC<Props> = ({ question, number, language = "en" }) => {
   const {
@@ -59,13 +61,19 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
   const [octokit, setOctokit] = useState<Octokit | null>(null);
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [token, setToken] = useState<string | null>(null);
-  const showErrorOnce = (message: string) => {
-    if (!errorShownRef.current) {
-      toast.error(message);
-      errorShownRef.current = true;
-    }
+  const scoring: Scoring | undefined =
+    typeof question.scoring === "string"
+      ? (JSON.parse(question.scoring) as Scoring)
+      : question.scoring;
+  const checkToShowRubric = () => {
+    if (
+      ["TEXT", "UPLOAD", "LINk_FILE", "URL"].includes(question.type) &&
+      scoring?.showRubricsToLearner &&
+      scoring?.rubrics
+    )
+      return true;
+    else return false;
   };
-  const errorShownRef = useRef<boolean>(false);
   const urlParams = new URLSearchParams(window.location.search);
   useEffect(() => {
     const initialize = async () => {
@@ -337,6 +345,29 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
       type === "UPLOAD" ||
       type === "LINK_FILE"
     ) {
+      if (
+        ["PRESENTATION", "LIVE_RECORDING"].includes(question.responseType) &&
+        typeof learnerResponse === "object"
+      ) {
+        const transcript =
+          "transcript" in learnerResponse
+            ? learnerResponse.transcript
+            : undefined;
+        return (
+          <p
+            className={`text-gray-800 w-full ${
+              highestScoreResponse?.points === totalPoints
+                ? "bg-green-50 border border-green-500 rounded p-2"
+                : highestScoreResponse?.points > 0
+                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                  : "bg-red-50 border border-red-700 rounded p-2"
+            }
+          `}
+          >
+            Transcript: {transcript}
+          </p>
+        );
+      }
       if (Array.isArray(learnerResponse) && learnerResponse.length > 0) {
         return (
           <ul className="list-disc ml-5 text-gray-800">
@@ -351,7 +382,6 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
                 {file.filename}
                 <button
                   onClick={() => {
-                    console.log("file", file);
                     if (file.githubUrl) {
                       void handleFileView(file.githubUrl);
                     } else {
@@ -428,6 +458,10 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
       <MarkdownViewer className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700">
         {questionText}
       </MarkdownViewer>
+      {/* show/hide rubric */}
+      {checkToShowRubric() && (
+        <ShowHideRubric rubrics={scoring?.rubrics} className="mb-4" />
+      )}
 
       {/* Learner's Answer */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 mb-4">

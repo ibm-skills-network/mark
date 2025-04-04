@@ -1,3 +1,4 @@
+import MarkdownEditor from "@/components/MarkDownEditor";
 import MultipleChoiceSVG from "@/components/svgs/MC";
 import Tooltip from "@/components/Tooltip";
 import type {
@@ -27,6 +28,7 @@ import {
   LinkIcon,
   PencilSquareIcon,
   PlusIcon,
+  PresentationChartBarIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import {
@@ -37,12 +39,12 @@ import {
   IconArrowsShuffle,
   IconCheckbox,
   IconCircleCheck,
+  IconDeviceComputerCamera,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation"; // Importing useRouter for navigation
 import { FC, Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import QuestionWrapper from "../(questionComponents)/QuestionWrapper";
-import MarkdownEditor from "@/components/MarkDownEditor";
 
 // Props type definition for the Question component
 interface QuestionProps {
@@ -406,11 +408,16 @@ const Question: FC<QuestionProps> = ({
         label: "Report",
         icon: <DocumentChartBarIcon className="w-5 h-5 stroke-gray-500" />,
       },
-      // {
-      //   value: "PRESENTATION",
-      //   label: "Presentation",
-      //   icon: <PresentationChartBarIcon className="w-5 h-5 stroke-gray-500" />,
-      // },
+      {
+        value: "PRESENTATION",
+        label: "Video Presentation (Beta)",
+        icon: <PresentationChartBarIcon className="w-5 h-5 stroke-gray-500" />,
+      },
+      {
+        value: "LIVE_RECORDING",
+        label: "Live Recording (Beta)",
+        icon: <IconDeviceComputerCamera className="w-5 h-5 stroke-gray-500" />,
+      },
       // {
       //   value: "SPREADSHEET",
       //   label: "Spreadsheet",
@@ -641,6 +648,7 @@ const Question: FC<QuestionProps> = ({
                             "VIDEO",
                             "AUDIO",
                             "PRESENTATION",
+                            "LIVE_RECORDING",
                           ].includes(qt.value);
                         }
                         return true; // Include all for other question types
@@ -1194,8 +1202,7 @@ const Question: FC<QuestionProps> = ({
 
           {questionTitle?.length > 0 &&
           !preview &&
-          (question.scoring?.rubrics?.length > 0 ||
-            question.choices?.length > 0) ? (
+          question.scoring?.rubrics?.length > 0 ? (
             variantLoading ? (
               <div className="flex items-center justify-center w-full gap-4">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>

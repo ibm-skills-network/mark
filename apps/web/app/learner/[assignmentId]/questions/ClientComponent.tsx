@@ -1,8 +1,11 @@
 "use client";
 
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
-import ErrorPage from "@/components/ErrorPage";
-import type { AssignmentDetails, QuestionStore } from "@/config/types";
+import type {
+  Assignment,
+  AssignmentDetails,
+  QuestionStore,
+} from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
@@ -30,7 +33,18 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   ) as AssignmentDetails;
   const questions = getStoredData("questions", []) as QuestionStore[];
   useEffect(() => {
-    setAssignmentDetails(assignmentDetails);
+    setAssignmentDetails({
+      ...assignmentDetails,
+      introduction: assignmentDetails.introduction || "",
+      graded: assignmentDetails.graded || false,
+      published: assignmentDetails.published || false,
+      questionOrder: assignmentDetails.questionOrder || [],
+      updatedAt:
+        typeof assignmentDetails.updatedAt === "string"
+          ? Date.parse(assignmentDetails.updatedAt)
+          : assignmentDetails.updatedAt || Date.now(),
+      passingGrade: assignmentDetails.passingGrade || 0,
+    });
   }, [assignmentDetails, setAssignmentDetails]);
   // Render the questions page
   return (

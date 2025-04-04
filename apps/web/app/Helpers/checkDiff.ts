@@ -1,8 +1,8 @@
-import { useMemo } from "react";
-import { useAuthorStore } from "@/stores/author";
+import { Choice, QuestionVariants } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
-import { Choice, QuestionVariants } from "@/config/types";
+import { useAuthorStore } from "@/stores/author";
+import { useMemo } from "react";
 
 export function useChangesSummary(): string {
   // Pull in everything you need from your stores
@@ -60,12 +60,11 @@ export function useChangesSummary(): string {
     const addedQuestions = questions?.filter(
       (question) =>
         !originalAssignment.questions?.some(
-          (originalQuestion) => originalQuestion.id === question.id,
+          (originalQuestion) => originalQuestion.id === question?.id,
         ),
     );
     if (addedQuestions?.length)
       diffs.push(`${addedQuestions.length} questions added.`);
-
     // -- Questions deleted --
     const deletedQuestions =
       originalAssignment.questions?.filter(
@@ -132,7 +131,22 @@ export function useChangesSummary(): string {
         diffs.push(`Updated max words for question ${question.id}.`);
       if (question.maxCharacters !== originalQuestion.maxCharacters)
         diffs.push(`Updated max characters for question ${question.id}.`);
-
+      if (
+        JSON.stringify(question?.videoPresentationConfig) !==
+          JSON.stringify(originalQuestion?.videoPresentationConfig) &&
+        question?.videoPresentationConfig
+      )
+        diffs.push(
+          `Updated video presentation config for question ${question.id}.`,
+        );
+      if (
+        JSON.stringify(question?.liveRecordingConfig) !==
+          JSON.stringify(originalQuestion?.liveRecordingConfig) &&
+        question?.liveRecordingConfig
+      )
+        diffs.push(
+          `Updated live recording config for question ${question.id}.`,
+        );
       // -- Variant comparison --
       const newVariants = question.variants || [];
       const origVariants = originalQuestion.variants || [];

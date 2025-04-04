@@ -2,11 +2,11 @@ import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
 import { useCallback } from "react";
 import type {
-  Question,
   Choice,
-  Scoring,
-  QuestionVariants,
+  Question,
   QuestionType,
+  QuestionVariants,
+  Scoring,
 } from "../../config/types";
 import { useDebugLog } from "../../lib/utils";
 
@@ -98,7 +98,9 @@ export const useQuestionsAreReadyToBePublished = (
     if (choiceTypes.has(type)) {
       if (!choices.some((choice) => choice.isCorrect)) {
         return {
-          message: `Question ${index + 1} must have at least one correct choice.`,
+          message: `Question ${
+            index + 1
+          } must have at least one correct choice.`,
           step: 3,
         };
       }
@@ -141,7 +143,9 @@ export const useQuestionsAreReadyToBePublished = (
         rubric.criteria.length === 0
       ) {
         return {
-          message: `Question ${index + 1} rubric ${r + 1} criteria are missing.`,
+          message: `Question ${index + 1} rubric ${
+            r + 1
+          } criteria are missing.`,
           step: 3,
         };
       }
@@ -149,7 +153,9 @@ export const useQuestionsAreReadyToBePublished = (
         const crit = rubric.criteria[c];
         if (!crit.description?.trim()) {
           return {
-            message: `Question ${index + 1} rubric ${r + 1} criteria ${c + 1} description is empty.`,
+            message: `Question ${index + 1} rubric ${r + 1} criteria ${
+              c + 1
+            } description is empty.`,
             step: 3,
           };
         }
@@ -159,7 +165,9 @@ export const useQuestionsAreReadyToBePublished = (
           typeof crit.points !== "number"
         ) {
           return {
-            message: `Question ${index + 1} rubric ${r + 1} criteria ${c + 1} points are invalid.`,
+            message: `Question ${index + 1} rubric ${r + 1} criteria ${
+              c + 1
+            } points are invalid.`,
             step: 3,
           };
         }
@@ -195,13 +203,17 @@ export const useQuestionsAreReadyToBePublished = (
       ) {
         if (!Array.isArray(variant.choices)) {
           return {
-            message: `Question ${index + 1} variant ${v + 1} choices are not in the correct format.`,
+            message: `Question ${index + 1} variant ${
+              v + 1
+            } choices are not in the correct format.`,
             step: 3,
           };
         }
         if (qType === "TRUE_FALSE" && variant.choices.length !== 1) {
           return {
-            message: `Question ${index + 1} variant ${v + 1} must have exactly 1 choices.`,
+            message: `Question ${index + 1} variant ${
+              v + 1
+            } must have exactly 1 choices.`,
             step: 3,
           };
         }

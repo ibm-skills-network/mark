@@ -49,6 +49,7 @@ function SuccessPage() {
   const pathname: string = usePathname();
   const attemptId = parseInt(pathname.split("/")?.[4], 10);
   const assignmentId = parseInt(pathname.split("/")?.[2], 10);
+  // if the camera is on, we need to stop it
 
   // Local state variables
   const [questions, setQuestions] = useState([]);
@@ -85,7 +86,9 @@ function SuccessPage() {
   const [aiGradingRating, setAiGradingRating] = useState(0);
   const [assignmentRating, setAssignmentRating] = useState(0);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
-
+  useEffect(() => {
+    window.dispatchEvent(new Event("resize"));
+  }, [isFeedbackModalOpen]);
   // State variables for regrading request modal
   const [regradingRequest, setRegradingRequest] = useState(false);
   const [regradingReason, setRegradingReason] = useState("");
@@ -697,7 +700,9 @@ function SuccessPage() {
                         Rate the Assignment
                       </label>
                       <Rating
-                        key={`assignment-rating-${assignmentRating}`}
+                        key={`assignment-rating-${assignmentRating}-${String(
+                          isFeedbackModalOpen,
+                        )}`}
                         value={assignmentRating}
                         onChange={(value: number) => setAssignmentRating(value)}
                         style={{ maxWidth: 200 }}
@@ -714,7 +719,9 @@ function SuccessPage() {
                         Rate the AI Grading
                       </label>
                       <Rating
-                        key={`ai-grading-rating-${aiGradingRating}`}
+                        key={`assignment-rating-${assignmentRating}-${String(
+                          isFeedbackModalOpen,
+                        )}`}
                         value={aiGradingRating}
                         onChange={(value: number) => setAiGradingRating(value)}
                         style={{ maxWidth: 200 }}

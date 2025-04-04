@@ -29,6 +29,7 @@ export type QuestionAttemptRequest = {
   learnerAnswerChoice?: boolean | undefined;
   // 4. Upload
   learnerFileResponse?: learnerFileResponse[] | undefined;
+  learnePresentationResponse?: PresentationQuestionResponse;
 };
 export type RepoType = {
   id: number;
@@ -149,6 +150,7 @@ export type ResponseType =
   | "AUDIO"
   | "REPO"
   | "SPREADSHEET"
+  | "LIVE_RECORDING"
   | "OTHER";
 
 export type QuestionTypeDropdown = {
@@ -190,7 +192,23 @@ export enum REPORT_TYPE {
   FALSE_MARKING = "FALSE_MARKING",
   OTHER = "OTHER",
 }
-
+export type TranscriptSegment = {
+  start: number | string;
+  end: number | string;
+  text: string;
+  avg_logprob: number;
+  no_speech_prob: number;
+};
+export type TranscriptionResult = {
+  text: string;
+  segments: Array<{
+    start: number;
+    end: number;
+    text: string;
+    avg_logprob: number;
+    no_speech_prob: number;
+  }>;
+};
 export type Scoring = {
   type: // | "SINGLE_CRITERIA"
   // | "MULTIPLE_CRITERIA"
@@ -264,7 +282,17 @@ export interface CreateQuestionRequest extends BaseQuestion {
   // used if question type is SINGLE_CORRECT or MULTIPLE_CORRECT
   choices?: Choice[];
 }
-
+export interface videoPresentationConfig {
+  evaluateSlidesQuality: boolean;
+  evaluateTimeManagement: boolean;
+  targetTime: number;
+}
+export interface LiveRecordingConfig {
+  evaluateBodyLanguage: boolean;
+  realTimeAiCoach: boolean;
+  evaluateTimeManagement: boolean;
+  targetTime: number;
+}
 // TODO: merge this and the one below
 export interface Question extends CreateQuestionRequest {
   // id only exists in questions that came from the backend
@@ -276,6 +304,8 @@ export interface Question extends CreateQuestionRequest {
   variants?: QuestionVariants[];
   randomizedChoices?: boolean;
   alreadyInBackend?: boolean;
+  videoPresentationConfig?: videoPresentationConfig;
+  liveRecordingConfig?: LiveRecordingConfig;
 }
 export interface PublishJobResponse {
   jobId: string;
@@ -329,9 +359,35 @@ export type QuestionStore = LearnerGetQuestionResponse &
     translatedQuestion: string;
     translatedChoices: Choice[];
     answers?: string[];
+    presentationResponse?: PresentationQuestionResponse;
+    videoPresentationConfig?: videoPresentationConfig;
+    liveRecordingConfig?: LiveRecordingConfig;
     // feedback: string[];
   };
 
+export type slideMetaData = {
+  slideNumber: number;
+  slideText: string;
+  slideImage: string;
+};
+
+export type PresentationQuestionResponse = {
+  transcript?: string;
+  slidesData?: slideMetaData[];
+  speechReport?: string;
+  contentReport?: string;
+  bodyLanguageScore?: number;
+  bodyLanguageExplanation?: string;
+};
+
+export type LiveRecordingData = {
+  transcript?: string;
+  speechReport?: string;
+  contentReport?: string;
+  bodyLanguageScore?: number;
+  bodyLanguageExplanation?: string;
+  question: QuestionStore;
+};
 export interface GetQuestionResponse extends Question {
   success: boolean;
   error?: string;
@@ -393,7 +449,7 @@ export type ReplaceAssignmentRequest = {
 
 export interface Assignment extends ReplaceAssignmentRequest {
   id: number;
-  name?: string;
+  name: string;
   type?: "AI_GRADED" | "MANUAL";
 }
 
@@ -438,6 +494,11 @@ export interface AssignmentDetails {
   questionDisplay?: QuestionDisplayType;
   id: number;
   strictTimeLimit?: boolean;
+  introduction?: string;
+  graded?: boolean;
+  published?: boolean;
+  questionOrder?: number[];
+  updatedAt?: number;
 }
 
 export interface AssignmentDetailsLocal extends AssignmentDetails {

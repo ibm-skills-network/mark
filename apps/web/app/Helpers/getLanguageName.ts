@@ -1,4 +1,5 @@
 import languages from "../../public/languages.json";
+
 /**
  * Maps language codes to full language names
  */

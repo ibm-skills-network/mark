@@ -162,6 +162,28 @@ export type AuthorActions = {
     questionId: number,
     variantId?: number,
   ) => boolean;
+  setEvaluateBodyLanguage: (
+    questionId: number,
+    bodyLanguageBool: boolean,
+  ) => void;
+  setRealTimeAiCoach: (
+    questionId: number,
+    realTimeAiCoachBool: boolean,
+  ) => void;
+  setEvaluateTimeManagement: (
+    questionId: number,
+    timeManagementBool: boolean,
+    responseType: string,
+  ) => void;
+  setTargetTime: (
+    questionId: number,
+    time: number,
+    responseType: string,
+  ) => void;
+  setEvaluateSlidesQuality: (
+    questionId: number,
+    slidesQualityBool: boolean,
+  ) => void;
   errors: Record<string, string>;
 };
 interface QuestionState {
@@ -664,8 +686,127 @@ export const useAuthorStore = createWithEqualityFn<
           set({ gradingCriteriaOverview }),
         questions: [],
         setQuestions: (questions) => set({ questions }),
+        setEvaluateBodyLanguage: (questionId, bodyLanguageBool) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                return {
+                  ...q,
+                  liveRecordingConfig: {
+                    ...q.liveRecordingConfig,
+                    evaluateBodyLanguage: bodyLanguageBool,
+                  },
+                };
+              } else {
+                return q;
+              }
+            });
+            return { questions: updatedQuestions };
+          });
+        },
+        setRealTimeAiCoach: (questionId, realTimeAiCoachBool) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                return {
+                  ...q,
+                  liveRecordingConfig: {
+                    ...q.liveRecordingConfig,
+                    realTimeAiCoach: realTimeAiCoachBool,
+                  },
+                };
+              } else {
+                return q;
+              }
+            });
+            return { questions: updatedQuestions };
+          });
+        },
+        setEvaluateTimeManagement: (
+          questionId,
+          timeManagementBool,
+          responseType,
+        ) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                if (responseType === "PRESENTATION") {
+                  return {
+                    ...q,
+                    videoPresentationConfig: {
+                      ...q.videoPresentationConfig,
+                      evaluateTimeManagement: timeManagementBool,
+                    },
+                  };
+                } else if (responseType === "LIVE_RECORDING") {
+                  return {
+                    ...q,
+                    liveRecordingConfig: {
+                      ...q.liveRecordingConfig,
+                      evaluateTimeManagement: timeManagementBool,
+                    },
+                  };
+                }
+              } else {
+                return q;
+              }
+            });
+            return { questions: updatedQuestions };
+          });
+        },
+        setTargetTime: (questionId, time, responseType) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                if (responseType === "PRESENTATION") {
+                  return {
+                    ...q,
+                    videoPresentationConfig: {
+                      ...q.videoPresentationConfig,
+                      targetTime: time,
+                    },
+                  };
+                } else if (responseType === "LIVE_RECORDING") {
+                  return {
+                    ...q,
+                    liveRecordingConfig: {
+                      ...q.liveRecordingConfig,
+                      targetTime: time,
+                    },
+                  };
+                }
+              } else {
+                return q;
+              }
+            });
+            return { questions: updatedQuestions };
+          });
+        },
+        setEvaluateSlidesQuality: (questionId, slidesQualityBool) => {
+          set((state) => {
+            const updatedQuestions = state.questions.map((q) => {
+              if (q.id === questionId) {
+                return {
+                  ...q,
+                  videoPresentationConfig: {
+                    ...q.videoPresentationConfig,
+                    evaluateSlidesQuality: slidesQualityBool,
+                  },
+                };
+              } else {
+                return q;
+              }
+            });
+            return { questions: updatedQuestions };
+          });
+        },
         addQuestion: (question) =>
-          set((state) => ({ questions: [...state.questions, question] })),
+          set(
+            (state) => (
+              console.log("Adding question", question),
+              { questions: [...state.questions, question] }
+            ),
+          ),
         removeQuestion: (questionId) =>
           set((state) => {
             const index = state.questions.findIndex((q) => q.id === questionId);

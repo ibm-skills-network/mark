@@ -98,6 +98,8 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
       "application/vnd.ms-excel": [".xls", ".xlsx"],
       "text/csv": [".csv"],
       "text/markdown": [".md"],
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+        [".pptx"],
       "application/x-ipynb+json": [".ipynb"],
     },
     multiple: true,

@@ -7,10 +7,12 @@ import {
 import { Prisma, QuestionType, ResponseType } from "@prisma/client";
 import { PrismaService } from "../../../prisma.service";
 import { LlmService } from "../../llm/llm.service";
+import { LearnerLiveRecordingFeedback } from "../attempt/dto/assignment-attempt/types";
 import {
   Choice,
   QuestionDto,
   ScoringDto,
+  VideoPresentationConfig,
 } from "../dto/update.questions.request.dto";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
@@ -68,6 +70,12 @@ export class QuestionService {
         ? (result.choices as unknown as Choice[])
         : undefined,
       assignmentId: result.assignmentId,
+      videoPresentationConfig: result.videoPresentationConfig
+        ? (result.videoPresentationConfig as unknown as VideoPresentationConfig)
+        : undefined,
+      liveRecordingConfig: result.liveRecordingConfig
+        ? (result.liveRecordingConfig as unknown as object)
+        : undefined,
       alreadyInBackend: true,
       success: true,
     };
@@ -194,6 +202,23 @@ export class QuestionService {
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  async getLiveRecordingFeedback(
+    liveRecordingData: LearnerLiveRecordingFeedback,
+    assignmentId: number,
+  ): Promise<{ feedback: string }> {
+    if (!liveRecordingData.question) {
+      throw new NotFoundException(`Question is not found.`);
+    }
+
+    const feedback = await this.llmService.getLiveRecordingFeedback(
+      liveRecordingData,
+      assignmentId,
+    );
+
+    // Return structured object
+    return { feedback };
   }
   /**
    * Generate translations for the relevant parts of a question (text and choices) if not already present in the database.
