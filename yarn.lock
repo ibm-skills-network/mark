@@ -9604,9 +9604,9 @@ prettier-plugin-pkg@^0.18.0:
   integrity sha512-FuUxvsYZR/8rsLH8s/jbPQmgYvv0yxW8LoIHCy6+Q7p4FBjjdP3DNKx8fMTOsc0SlEB1skB4o1LcahRceIh87A==
 
 prettier-plugin-sh@^0.16.0:
-  version "0.16.0"
-  resolved "https://registry.yarnpkg.com/prettier-plugin-sh/-/prettier-plugin-sh-0.16.0.tgz#67ae32f1b8b35aafd43f52cec53dbc94e6cff7d6"
-  integrity sha512-QaVH0X56IUy9niNczUQ0TxqVezcGzACz9XObbyxyAZ6NU/VCKnR9RUAcETyzCiPgcHKq/tjerCsqxn5nL3yo/w==
+  version "0.16.1"
+  resolved "https://registry.yarnpkg.com/prettier-plugin-sh/-/prettier-plugin-sh-0.16.1.tgz#fba1dab0a45923d1bc013d8f58a222b7892ffc4a"
+  integrity sha512-6V7VKG5nyQ/nuXGyhr0+rKJ/1BejRk3fccYKWabatl0MEMqxA/0GGZrOHoqPUIfjzwegmAbOLeVGG0K+oBAJSg==
   dependencies:
     mvdan-sh "^0.10.1"
     sh-syntax "^0.4.2"
