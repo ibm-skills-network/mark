@@ -1702,6 +1702,11 @@
   resolved "https://registry.yarnpkg.com/@redis/time-series/-/time-series-1.1.0.tgz#cba454c05ec201bd5547aaf55286d44682ac8eb5"
   integrity sha512-c1Q99M5ljsIuc4YdaCwfUEXsofakb9c8+Zse2qxTadu8TalLXuAESzLvFAvNVbkmSlvlzIQOLpBCmWI9wTOt+g==
 
+"@reteps/dockerfmt@^0.2.5":
+  version "0.2.6"
+  resolved "https://registry.yarnpkg.com/@reteps/dockerfmt/-/dockerfmt-0.2.6.tgz#cc1d2cc4845471a9576bf565b7b46e120c214ba6"
+  integrity sha512-a3OYxLpIc6jbW1prbruEhRq9eYre9fKhcBD+boVwhri9L9ebdnKNy4LzaDa/tiu81P9phxA6Xi8r6jtV8I7Xsw==
+
 "@rtsao/scc@^1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@rtsao/scc/-/scc-1.1.0.tgz#927dd2fae9bc3361403ac2c7a00c32ddce9ad7e8"
@@ -8747,11 +8752,6 @@ mute-stream@1.0.0:
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-1.0.0.tgz#e31bd9fe62f0aed23520aa4324ea6671531e013e"
   integrity sha512-avsJQhyd+680gKXyG/sQc0nXaC6rBkPOfyHYcFb9+hdkqQkR9bdnkJ0AMZhke0oesPqIO+mFFJ+IdBc7mst4IA==
 
-mvdan-sh@^0.10.1:
-  version "0.10.1"
-  resolved "https://registry.yarnpkg.com/mvdan-sh/-/mvdan-sh-0.10.1.tgz#5b3a4462a89cf20739b12d851589342c875f4d1f"
-  integrity sha512-kMbrH0EObaKmK3nVRKUIIya1dpASHIEusM13S4V1ViHFuxuNxCo+arxoa6j/dbV22YBGjl7UKJm9QQKJ2Crzhg==
-
 mz@^2.7.0:
   version "2.7.0"
   resolved "https://registry.yarnpkg.com/mz/-/mz-2.7.0.tgz#95008057a56cafadc2bc63dde7f9ff6955948e32"
@@ -9608,13 +9608,13 @@ prettier-plugin-pkg@^0.19.0:
   resolved "https://registry.yarnpkg.com/prettier-plugin-pkg/-/prettier-plugin-pkg-0.19.0.tgz#eb158a43eea5ba665f23d6d063cfad7a5687aae6"
   integrity sha512-wlBvVhAZQ+iOH8/4gWc1SxJbf5++xwKmnFkqHYUsmoQIg6hgdyL1055Z9FOWa6cumqL/QwqdOzY9aH4McdjKyw==
 
-prettier-plugin-sh@^0.16.0:
-  version "0.16.1"
-  resolved "https://registry.yarnpkg.com/prettier-plugin-sh/-/prettier-plugin-sh-0.16.1.tgz#fba1dab0a45923d1bc013d8f58a222b7892ffc4a"
-  integrity sha512-6V7VKG5nyQ/nuXGyhr0+rKJ/1BejRk3fccYKWabatl0MEMqxA/0GGZrOHoqPUIfjzwegmAbOLeVGG0K+oBAJSg==
+prettier-plugin-sh@^0.17.0:
+  version "0.17.1"
+  resolved "https://registry.yarnpkg.com/prettier-plugin-sh/-/prettier-plugin-sh-0.17.1.tgz#cb357d56d5f37a6ea93f858b89eafa471d822bf8"
+  integrity sha512-jbrB7MRlmgtSRx2+I3McQGdFb98VUtJTkQ5DiK6oSJSfCy6vSBxSsuyDZ1xIx13TqREUHTsMzlNrZBZScuJJXQ==
   dependencies:
-    mvdan-sh "^0.10.1"
-    sh-syntax "^0.4.2"
+    "@reteps/dockerfmt" "^0.2.5"
+    sh-syntax "^0.5.6"
 
 prettier@^2.8.8:
   version "2.8.8"
@@ -10669,12 +10669,12 @@ setprototypeof@1.2.0:
   resolved "https://registry.yarnpkg.com/setprototypeof/-/setprototypeof-1.2.0.tgz#66c9a24a73f9fc28cbe66b09fed3d33dcaf1b424"
   integrity sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==
 
-sh-syntax@^0.4.2:
-  version "0.4.2"
-  resolved "https://registry.yarnpkg.com/sh-syntax/-/sh-syntax-0.4.2.tgz#3bad5c6134b510e7b4c53b16f409ce4fd2a65245"
-  integrity sha512-/l2UZ5fhGZLVZa16XQM9/Vq/hezGGbdHeVEA01uWjOL1+7Ek/gt6FquW0iKKws4a9AYPYvlz6RyVvjh3JxOteg==
+sh-syntax@^0.5.6:
+  version "0.5.6"
+  resolved "https://registry.yarnpkg.com/sh-syntax/-/sh-syntax-0.5.6.tgz#dc4668335429d4003880641ac7296384a047668b"
+  integrity sha512-hUprXSSgi3HLdIxufSsr0lceThj6vKsgOHcVVGujDGLWg9RD5Mt6j2m642qkTAU/7GFX65ed/g9h2jeURGuTlQ==
   dependencies:
-    tslib "^2.6.2"
+    tslib "^2.8.1"
 
 shallowequal@1.1.0:
   version "1.1.0"
@@ -11692,7 +11692,7 @@ tslib@2.6.2:
   resolved "https://registry.yarnpkg.com/tslib/-/tslib-2.6.2.tgz#703ac29425e7b37cd6fd456e92404d46d1f3e4ae"
   integrity sha512-AEYxH93jGFPn/a2iVAwW87VuUIkR1FVUKB77NwMF7nBTDkDrrT/Hpt/IrCJ0QXhW27jTBDcf5ZY7w6RiqTMw2Q==
 
-tslib@2.8.1, tslib@^2.0.0, tslib@^2.0.1, tslib@^2.1.0, tslib@^2.4.0, tslib@^2.6.2, tslib@^2.7.0, tslib@^2.8.0:
+tslib@2.8.1, tslib@^2.0.0, tslib@^2.0.1, tslib@^2.1.0, tslib@^2.4.0, tslib@^2.7.0, tslib@^2.8.0, tslib@^2.8.1:
   version "2.8.1"
   resolved "https://registry.yarnpkg.com/tslib/-/tslib-2.8.1.tgz#612efe4ed235d567e8aba5f2a5fab70280ade83f"
   integrity sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==
