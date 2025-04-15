@@ -7,14 +7,14 @@ import { useMemo } from "react";
 export function useChangesSummary(): string {
   // Pull in everything you need from your stores
   const originalAssignment = useAuthorStore(
-    (state) => state.originalAssignment,
+    (state) => state.originalAssignment
   );
   const questions = useAuthorStore((state) => state.questions);
 
   const introduction = useAuthorStore((state) => state.introduction);
   const instructions = useAuthorStore((state) => state.instructions);
   const gradingCriteriaOverview = useAuthorStore(
-    (state) => state.gradingCriteriaOverview,
+    (state) => state.gradingCriteriaOverview
   );
 
   // Config
@@ -60,8 +60,8 @@ export function useChangesSummary(): string {
     const addedQuestions = questions?.filter(
       (question) =>
         !originalAssignment.questions?.some(
-          (originalQuestion) => originalQuestion.id === question?.id,
-        ),
+          (originalQuestion) => originalQuestion.id === question?.id
+        )
     );
     if (addedQuestions?.length)
       diffs.push(`${addedQuestions.length} questions added.`);
@@ -69,7 +69,7 @@ export function useChangesSummary(): string {
     const deletedQuestions =
       originalAssignment.questions?.filter(
         (originalQuestion) =>
-          !questions.some((question) => question.id === originalQuestion.id),
+          !questions.some((question) => question.id === originalQuestion.id)
       ) || [];
     if (deletedQuestions.length)
       diffs.push(`${deletedQuestions.length} questions deleted.`);
@@ -77,7 +77,7 @@ export function useChangesSummary(): string {
     // -- Matching questions, check modifications --
     questions.forEach((question) => {
       const originalQuestion = originalAssignment.questions?.find(
-        (orig) => orig.id === question.id,
+        (orig) => orig.id === question.id
       );
       if (!originalQuestion) return; // This question was added
 
@@ -103,7 +103,7 @@ export function useChangesSummary(): string {
                 };
               }),
             };
-          }),
+          })
         ) !==
           JSON.stringify(
             originalQuestion.scoring?.rubrics?.map((r) => {
@@ -116,7 +116,7 @@ export function useChangesSummary(): string {
                   };
                 }),
               };
-            }),
+            })
           ) &&
         question.scoring?.rubrics?.length > 0 &&
         originalQuestion.scoring?.rubrics?.length > 0
@@ -137,7 +137,7 @@ export function useChangesSummary(): string {
         question?.videoPresentationConfig
       )
         diffs.push(
-          `Updated video presentation config for question ${question.id}.`,
+          `Updated video presentation config for question ${question.id}.`
         );
       if (
         JSON.stringify(question?.liveRecordingConfig) !==
@@ -145,7 +145,7 @@ export function useChangesSummary(): string {
         question?.liveRecordingConfig
       )
         diffs.push(
-          `Updated live recording config for question ${question.id}.`,
+          `Updated live recording config for question ${question.id}.`
         );
       // -- Variant comparison --
       const newVariants = question.variants || [];
@@ -157,57 +157,57 @@ export function useChangesSummary(): string {
       const addedVariants = newVariants.filter(
         (variant) =>
           !origVariants.some(
-            (orig) => getVariantKey(orig) === getVariantKey(variant),
-          ),
+            (orig) => getVariantKey(orig) === getVariantKey(variant)
+          )
       );
       if (addedVariants.length)
         diffs.push(
-          `Added ${addedVariants.length} variant(s) for question ${question.id}.`,
+          `Added ${addedVariants.length} variant(s) for question ${question.id}.`
         );
 
       // Deleted variants
       const deletedVariants = origVariants.filter(
         (orig) =>
           !newVariants.some(
-            (variant) => getVariantKey(variant) === getVariantKey(orig),
-          ),
+            (variant) => getVariantKey(variant) === getVariantKey(orig)
+          )
       );
       if (deletedVariants.length)
         diffs.push(
-          `Deleted ${deletedVariants.length} variant(s) for question ${question.id}.`,
+          `Deleted ${deletedVariants.length} variant(s) for question ${question.id}.`
         );
 
       // For variants present in both
       newVariants.forEach((variant) => {
         const matchingOrig = origVariants.find(
-          (orig) => getVariantKey(orig) === getVariantKey(variant),
+          (orig) => getVariantKey(orig) === getVariantKey(variant)
         );
         if (matchingOrig) {
           if (variant.randomizedChoices !== matchingOrig.randomizedChoices)
             diffs.push(
-              `Modified randomized choices for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Modified randomized choices for variant "${variant.variantContent}" in question ${question.id}.`
             );
           if (
             JSON.stringify(variant.choices) !==
             JSON.stringify(matchingOrig.choices)
           )
             diffs.push(
-              `Modified choices for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Modified choices for variant "${variant.variantContent}" in question ${question.id}.`
             );
           if (
             JSON.stringify(variant.scoring) !==
             JSON.stringify(matchingOrig.scoring)
           )
             diffs.push(
-              `Modified scoring for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Modified scoring for variant "${variant.variantContent}" in question ${question.id}.`
             );
           if (variant.maxWords !== matchingOrig.maxWords)
             diffs.push(
-              `Updated max words for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Updated max words for variant "${variant.variantContent}" in question ${question.id}.`
             );
           if (variant.maxCharacters !== matchingOrig.maxCharacters)
             diffs.push(
-              `Updated max characters for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Updated max characters for variant "${variant.variantContent}" in question ${question.id}.`
             );
         }
       });
@@ -220,7 +220,7 @@ export function useChangesSummary(): string {
     // Variation changes (using the variants length as a rough check)
     questions.forEach((question) => {
       const originalQuestion = originalAssignment.questions?.find(
-        (orig) => orig.id === question.id,
+        (orig) => orig.id === question.id
       );
       const newVarCount = question.variants?.length || 0;
       const origVarCount = originalQuestion?.variants?.length || 0;

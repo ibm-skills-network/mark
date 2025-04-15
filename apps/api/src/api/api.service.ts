@@ -8,7 +8,7 @@ export class ApiService {
   private logger;
   constructor(
     private readonly messagingService: MessagingService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
   ) {
     this.logger = parentLogger.child({ context: ApiService.name });
   }

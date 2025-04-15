@@ -43,7 +43,7 @@ const SubmitAnswerComponent: FC<Props> = ({
           assignmentId,
           attemptId,
           questionId,
-          answer,
+          answer
         );
         setSuccess(isSuccess);
       } else {
@@ -51,7 +51,7 @@ const SubmitAnswerComponent: FC<Props> = ({
           assignmentId,
           attemptId,
           questionId,
-          responseBody,
+          responseBody
         );
         setSuccess(isSuccess);
       }

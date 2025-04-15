@@ -35,7 +35,7 @@ const MarkdownEditor: React.FC<Props> = ({
   const quillRef = useRef<HTMLDivElement>(null);
   const [quillInstance, setQuillInstance] = useState<any>(null);
   const [wordCount, setWordCount] = useState<number>(
-    value?.split(/\s+/).filter(Boolean).length ?? 0,
+    value?.split(/\s+/).filter(Boolean).length ?? 0
   );
   const [charCount, setCharCount] = useState<number>(value?.length ?? 0);
 
@@ -191,7 +191,7 @@ const MarkdownEditor: React.FC<Props> = ({
       <div
         className={cn(
           "quill-editor overflow-auto p-2 border border-gray-200 rounded min-h-[100px]",
-          textareaClassName,
+          textareaClassName
         )}
         ref={quillRef}
       />

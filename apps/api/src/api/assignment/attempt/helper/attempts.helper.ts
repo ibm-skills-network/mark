@@ -25,7 +25,7 @@ export const AttemptHelper = {
       | TextBasedQuestionResponseModel
       | ChoiceBasedQuestionResponseModel
       | TrueFalseBasedQuestionResponseModel,
-    responseDto: CreateQuestionResponseAttemptResponseDto,
+    responseDto: CreateQuestionResponseAttemptResponseDto
   ) {
     responseDto.totalPoints = model.points;
     if (model instanceof ChoiceBasedQuestionResponseModel) {
@@ -46,16 +46,16 @@ export const AttemptHelper = {
 
   validateAndGetTextResponse(
     questionType: QuestionType,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
   ): Promise<string> {
     if (questionType === QuestionType.TEXT) {
       if (!createQuestionResponseAttemptRequestDto.learnerTextResponse) {
         throw new BadRequestException(
-          "Expected a text-based response (learnerResponse), but did not receive one.",
+          "Expected a text-based response (learnerResponse), but did not receive one."
         );
       }
       return Promise.resolve(
-        createQuestionResponseAttemptRequestDto.learnerTextResponse,
+        createQuestionResponseAttemptRequestDto.learnerTextResponse
       );
     }
     throw new BadRequestException("Unexpected question type received.");
@@ -68,7 +68,7 @@ export const AttemptHelper = {
     return array;
   },
   async fetchPlainTextFromUrl(
-    url: string,
+    url: string
   ): Promise<{ body: string; isFunctional: boolean }> {
     const MAX_CONTENT_SIZE = 100_000;
     try {
@@ -111,7 +111,7 @@ export const AttemptHelper = {
 };
 function convertGitHubUrlToRaw(url: string): string | null {
   const match = url.match(
-    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/
   );
   if (!match) {
     return;

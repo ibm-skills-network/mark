@@ -97,7 +97,7 @@ export const useMarkChatStore = create<MarkChatState>()(
         try {
           // Get only conversation messages that are not system context messages
           const conversationMessages = messages.filter(
-            (msg) => msg.role !== "system" || !msg.id.includes("context"),
+            (msg) => msg.role !== "system" || !msg.id.includes("context")
           );
 
           if (useStreaming) {
@@ -252,6 +252,6 @@ export const useMarkChatStore = create<MarkChatState>()(
         messages: state.messages.filter((msg) => msg.role !== "system"), // Don't persist system messages
         usage: state.usage,
       }),
-    },
-  ),
+    }
+  )
 );

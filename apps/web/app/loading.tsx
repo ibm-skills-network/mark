@@ -7,7 +7,7 @@ const DynamicLoading = dynamic<{ animationData: any }>(
   () => import("@/components/Loading"),
   {
     ssr: false,
-  },
+  }
 );
 interface LoadingPageProps {
   animationData: object;

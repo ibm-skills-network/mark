@@ -33,7 +33,7 @@ const Button = forwardRef<HTMLButtonElement, Props>(
             "btn-tertiary": version === "tertiary",
           },
           "group",
-          className,
+          className
         )}
       >
         {LeftIcon && (
@@ -45,7 +45,7 @@ const Button = forwardRef<HTMLButtonElement, Props>(
         )}
       </button>
     );
-  },
+  }
 );
 
 Button.displayName = "Button";

@@ -71,7 +71,7 @@ function Component() {
     ]);
 
   const verbosityLevel = useAssignmentFeedbackConfig(
-    (state) => state.verbosityLevel,
+    (state) => state.verbosityLevel
   );
 
   // Function to render assignment configurations
@@ -121,37 +121,37 @@ function Component() {
           "Assignment time",
           allotedTimeMinutes !== 0
             ? `${allotedTimeMinutes} minutes`
-            : "No time limit set",
+            : "No time limit set"
         )}
         {renderConfigItem(
           "Estimated time to complete assignment",
           timeEstimateMinutes !== 0
             ? `${timeEstimateMinutes} minutes`
-            : "No estimated time set",
+            : "No estimated time set"
         )}
         {renderConfigItem(
           "Assignment attempts",
           numAttempts !== null
             ? `${numAttempts === -1 ? "Unlimited" : numAttempts}`
-            : "No attempts limit set",
+            : "No attempts limit set"
         )}
         {renderConfigItem(
           "Passing threshold",
-          passingGrade !== null ? `${passingGrade}` : "No passing threshold",
+          passingGrade !== null ? `${passingGrade}` : "No passing threshold"
         )}
         {renderConfigItem(
           "Feedback verbosity (not shown to learners)",
-          verbosityLevel.toString(),
+          verbosityLevel.toString()
         )}
         {renderConfigItem(
           "Question order",
           displayOrder?.charAt(0).toUpperCase() +
-            displayOrder?.slice(1).toLowerCase(),
+            displayOrder?.slice(1).toLowerCase()
         )}
         {renderConfigItem(
           "Question display",
           questionDisplay?.charAt(0).toUpperCase() +
-            questionDisplay?.slice(1).toLowerCase().replace(/_/g, " "),
+            questionDisplay?.slice(1).toLowerCase().replace(/_/g, " ")
         )}
       </div>
 

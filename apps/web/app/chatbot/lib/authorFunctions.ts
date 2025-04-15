@@ -13,7 +13,7 @@ async function createQuestion(
   questionType: string,
   questionText: string,
   totalPoints: number,
-  options?: any[],
+  options?: any[]
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
   const activeAssignmentId = authorStore.activeAssignmentId;
@@ -91,14 +91,14 @@ async function modifyQuestion(
   questionId: number,
   questionText?: string,
   totalPoints?: number,
-  questionType?: string,
+  questionType?: string
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
 
   try {
     // Check if question exists
     const questionExists = authorStore.questions.some(
-      (q) => q.id === questionId,
+      (q) => q.id === questionId
     );
     if (!questionExists) {
       return `Question with ID ${questionId} not found.`;
@@ -124,7 +124,7 @@ async function modifyQuestion(
 async function setQuestionChoices(
   questionId: number,
   choices: { text: string; isCorrect: boolean; points?: number }[],
-  variantId?: number,
+  variantId?: number
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
 
@@ -150,10 +150,10 @@ async function setQuestionChoices(
         choice.points !== undefined
           ? choice.points
           : question.type === "MULTIPLE_CORRECT"
-            ? choice.isCorrect
-              ? 1
-              : -1
-            : 0,
+          ? choice.isCorrect
+            ? 1
+            : -1
+          : 0,
     }));
 
     // Update question choices
@@ -172,7 +172,7 @@ async function setQuestionChoices(
 async function addRubric(
   questionId: number,
   rubricQuestion: string,
-  criteria: { description: string; points: number }[],
+  criteria: { description: string; points: number }[]
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
 
@@ -196,7 +196,7 @@ async function addRubric(
         questionId,
         0,
         rubricIndex,
-        rubricQuestion,
+        rubricQuestion
       );
     }
 
@@ -221,7 +221,7 @@ async function addRubric(
 // Generate question variant
 async function generateQuestionVariant(
   questionId: number,
-  variantType: string,
+  variantType: string
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
 
@@ -266,7 +266,7 @@ async function deleteQuestion(questionId: number): Promise<string> {
   try {
     // Verify question exists
     const questionExists = authorStore.questions.some(
-      (q) => q.id === questionId,
+      (q) => q.id === questionId
     );
     if (!questionExists) {
       return `Question with ID ${questionId} not found.`;
@@ -277,7 +277,7 @@ async function deleteQuestion(questionId: number): Promise<string> {
 
     // Update question order
     const updatedOrder = authorStore.questionOrder.filter(
-      (id) => id !== questionId,
+      (id) => id !== questionId
     );
     authorStore.setQuestionOrder(updatedOrder);
 
@@ -292,7 +292,7 @@ async function deleteQuestion(questionId: number): Promise<string> {
 async function generateQuestionsFromObjectives(
   learningObjectives: string,
   questionTypes: string[],
-  count: number,
+  count: number
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
 
@@ -390,7 +390,7 @@ async function generateQuestionsFromObjectives(
 
 // Update learning objectives
 async function updateLearningObjectives(
-  learningObjectives: string,
+  learningObjectives: string
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
 
@@ -406,7 +406,7 @@ async function updateLearningObjectives(
 // Set question title (shortcut for modifyQuestion for title only)
 async function setQuestionTitle(
   questionId: number,
-  title: string,
+  title: string
 ): Promise<string> {
   const authorStore = useAuthorStore.getState();
 

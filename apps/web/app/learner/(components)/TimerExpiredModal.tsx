@@ -10,7 +10,7 @@ const TimerExpiredModal: FC<Props> = (props) => {
   const {} = props;
 
   const activeAssignmentId = useAssignmentDetails(
-    (state) => state.assignmentDetails?.id,
+    (state) => state.assignmentDetails?.id
   );
 
   // useEffect(() => {

@@ -41,7 +41,7 @@ function withErrorHandling(fn) {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
           },
-        },
+        }
       );
     }
   };
@@ -69,7 +69,7 @@ export const commonTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -85,7 +85,7 @@ export const commonTools = {
         .number()
         .optional()
         .describe(
-          "The ID of the assignment where the issue was encountered (if applicable)",
+          "The ID of the assignment where the issue was encountered (if applicable)"
         ),
     }),
     execute: async ({ issueType, description, assignmentId }) => {
@@ -100,7 +100,7 @@ export const commonTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -134,7 +134,7 @@ export const authorTools = {
             text: z.string().describe("The text of the option"),
             isCorrect: z.boolean().describe("Whether this option is correct"),
             points: z.number().optional().describe("Points for this option"),
-          }),
+          })
         )
         .optional()
         .describe("For multiple choice questions, the answer options"),
@@ -145,7 +145,7 @@ export const authorTools = {
           questionType,
           questionText,
           totalPoints || 10,
-          options,
+          options
         );
       } catch (error) {
         console.error("Error creating question:", error);
@@ -156,7 +156,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -189,7 +189,7 @@ export const authorTools = {
           questionId,
           questionText,
           totalPoints,
-          questionType,
+          questionType
         );
       } catch (error) {
         console.error("Error modifying question:", error);
@@ -200,7 +200,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -215,7 +215,7 @@ export const authorTools = {
             text: z.string().describe("The text of the choice"),
             isCorrect: z.boolean().describe("Whether this choice is correct"),
             points: z.number().optional().describe("Points for this choice"),
-          }),
+          })
         )
         .describe("The choices for the question"),
       variantId: z
@@ -235,7 +235,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -250,7 +250,7 @@ export const authorTools = {
           z.object({
             description: z.string().describe("Description of the criterion"),
             points: z.number().describe("Points for this criterion"),
-          }),
+          })
         )
         .describe("The criteria for the rubric"),
     }),
@@ -266,7 +266,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -293,7 +293,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -315,7 +315,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -336,7 +336,7 @@ export const authorTools = {
         return await generateQuestionsFromObjectives(
           learningObjectives,
           questionTypes,
-          count,
+          count
         );
       } catch (error) {
         console.error("Error generating questions from objectives:", error);
@@ -347,7 +347,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -371,7 +371,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -394,7 +394,7 @@ export const authorTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -423,7 +423,7 @@ const learnerTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -445,7 +445,7 @@ const learnerTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -473,7 +473,7 @@ const learnerTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -503,7 +503,7 @@ const learnerTools = {
             headers: {
               "Content-Type": "text/plain; charset=utf-8",
             },
-          },
+          }
         );
       }
     },
@@ -521,18 +521,18 @@ export async function POST(req: NextRequest) {
         {
           status: 400,
           headers: { "Content-Type": "application/json" },
-        },
+        }
       );
     }
 
     // Extract system context messages
     const systemContextMessages = conversation.filter(
-      (msg: any) => msg.role === "system" && msg.id?.includes("context"),
+      (msg: any) => msg.role === "system" && msg.id?.includes("context")
     );
 
     // Regular conversation messages
     const regularMessages = conversation.filter(
-      (msg: any) => msg.role !== "system" || !msg.id?.includes("context"),
+      (msg: any) => msg.role !== "system" || !msg.id?.includes("context")
     );
 
     // Format messages for the AI API
@@ -605,8 +605,8 @@ IMPORTANT CAPABILITIES:
             result.toolCalls.forEach((call) => {
               console.log(
                 `Tool called: ${call.toolName}, Args: ${JSON.stringify(
-                  call.args,
-                )}`,
+                  call.args
+                )}`
               );
             });
           }

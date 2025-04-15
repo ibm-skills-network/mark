@@ -22,24 +22,24 @@ import { GithubService } from "./github.service";
 export class GithubController {
   constructor(
     private readonly githubService: GithubService,
-    private readonly llmService: LlmService,
+    private readonly llmService: LlmService
   ) {}
 
   @Post("oauth-url")
   @ApiOperation({ summary: "Get GitHub OAuth URL" })
   @ApiResponse({ status: 200, description: "Returns GitHub OAuth URL" })
   async getOAuthUrl(
-    @Body() body: { assignmentId: number; redirectUrl: string },
+    @Body() body: { assignmentId: number; redirectUrl: string }
   ): Promise<{ url: string }> {
     if (!body.assignmentId) {
       throw new HttpException(
         "Assignment ID is required",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
     const url = await this.githubService.getOAuthUrl(
       body.assignmentId,
-      body.redirectUrl,
+      body.redirectUrl
     );
     return { url };
   }
@@ -49,7 +49,7 @@ export class GithubController {
   @ApiResponse({ status: 200, description: "GitHub authentication successful" })
   async handleOAuthCallback(
     @Body("code") code: string,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<{ token: string; message: string }> {
     const userId = request.userSession.userId;
     if (userId === undefined) {
@@ -58,7 +58,7 @@ export class GithubController {
     if (!code) {
       throw new HttpException(
         "Authorization code is required",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 

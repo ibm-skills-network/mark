@@ -22,7 +22,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
   } = props;
 
   const [points, setPoints] = useState(
-    Array(choicesSingleCorrect.length).fill(0),
+    Array(choicesSingleCorrect.length).fill(0)
   );
 
   // Add a new function to handle changes to the points input
@@ -39,7 +39,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
     }
   };
   const [showPointsInput, setShowPointsInput] = useState(
-    Array(choicesSingleCorrect.length).fill(false),
+    Array(choicesSingleCorrect.length).fill(false)
   );
 
   const handleShowPointsInputChange = (index, value) => {

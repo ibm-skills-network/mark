@@ -93,13 +93,13 @@ const TimeLimitInputWithTooltip: FC<TimeLimitInputWithTooltipProps> = ({
 }) => {
   // Use local state to allow the user to finish typing
   const [internalValue, setInternalValue] = useState<string>(
-    value !== undefined ? String(value) : String(defaultValue),
+    value !== undefined ? String(value) : String(defaultValue)
   );
 
   // Update local state if the parent value changes
   useEffect(() => {
     setInternalValue(
-      value !== undefined ? String(value) : String(defaultValue),
+      value !== undefined ? String(value) : String(defaultValue)
     );
   }, [value, defaultValue]);
 
@@ -150,12 +150,12 @@ interface PresentationOptionsProps {
   setEvaluateTimeManagement: (
     questionId: number,
     checked: boolean,
-    responseType: string,
+    responseType: string
   ) => void;
   setTargetTime: (
     questionId: number,
     time: number,
-    responseType: ResponseType,
+    responseType: ResponseType
   ) => void;
   setEvaluateSlidesQuality: (questionId: number, checked: boolean) => void;
 }
@@ -280,7 +280,7 @@ interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
   }) => void;
   handleUpdateQuestionState: (
     params: UpdateQuestionStateParams,
-    variantMode?: boolean,
+    variantMode?: boolean
   ) => void;
   questionIndex: number;
   preview: boolean;
@@ -320,25 +320,25 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const [inProgressRubricIndex, setInProgressRubricIndex] = useState<number>(0);
   const addOneRubric = useAuthorStore((state) => state.addOneRubric);
   const setQuestionScoring = useAuthorStore(
-    (state) => state.setQuestionScoring,
+    (state) => state.setQuestionScoring
   );
   const modifyQuestion = useAuthorStore((state) => state.modifyQuestion);
   const [swappingIndices, setSwappingIndices] = useState<number[]>([]);
   const rowsRef = useRef<(HTMLTableRowElement | null)[]>([]);
   const handleUpdateAllVariantsCriteria = useAuthorStore(
-    (state) => state.handleUpdateAllVariantsCriteria,
+    (state) => state.handleUpdateAllVariantsCriteria
   );
   const addTrueFalseChoice = useAuthorStore(
-    (state) => state.addTrueFalseChoice,
+    (state) => state.addTrueFalseChoice
   );
   const updatePointsTrueFalse = useAuthorStore(
-    (state) => state.updatePointsTrueFalse,
+    (state) => state.updatePointsTrueFalse
   );
   const isItTrueOrFalse = useAuthorStore((state) =>
-    state.isItTrueOrFalse(questionId, variantId),
+    state.isItTrueOrFalse(questionId, variantId)
   );
   const TrueFalsePoints = useAuthorStore((state) =>
-    state.getTrueFalsePoints(questionId),
+    state.getTrueFalsePoints(questionId)
   );
   const [localPoints, setLocalPoints] = useState<number>(TrueFalsePoints || 1);
   useEffect(() => {
@@ -352,15 +352,15 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const getToggleTitle = useQuestionStore((state) => state.getToggleTitle);
   const setToggleTitle = useQuestionStore((state) => state.setToggleTitle);
   const showCriteriaHeader = useQuestionStore(
-    (state) => state.questionStates.showCriteriaHeader ?? true,
+    (state) => state.questionStates.showCriteriaHeader ?? true
   );
   const editVariant = useAuthorStore((state) => state.editVariant);
   const setShowCriteriaHeader = useQuestionStore(
-    (state) => state.setShowCriteriaHeader,
+    (state) => state.setShowCriteriaHeader
   );
   const toggleTitle = getToggleTitle(
     questionId,
-    variantMode ? variantId : undefined,
+    variantMode ? variantId : undefined
   );
   const toggleLoading = useQuestionStore((state) => state.toggleLoading);
   const maxPointsEver = 100000; // Maximum points allowed
@@ -389,23 +389,23 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   };
   const setEvaluateBodyLanguage = useAuthorStore(
-    (state) => state.setEvaluateBodyLanguage,
+    (state) => state.setEvaluateBodyLanguage
   );
   const setRealTimeAiCoach = useAuthorStore(
-    (state) => state.setRealTimeAiCoach,
+    (state) => state.setRealTimeAiCoach
   );
   const setEvaluateTimeManagement = useAuthorStore(
-    (state) => state.setEvaluateTimeManagement,
+    (state) => state.setEvaluateTimeManagement
   );
   const setTargetTime = useAuthorStore((state) => state.setTargetTime);
   const setEvaluateSlidesQuality = useAuthorStore(
-    (state) => state.setEvaluateSlidesQuality,
+    (state) => state.setEvaluateSlidesQuality
   );
   // Updates the criterion description at a given index.
   const handleCriteriaChange = (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string,
+    value: string
   ) => {
     // Get the current rubrics from question.scoring.
     const rubrics = questionFromParent.scoring?.rubrics
@@ -429,7 +429,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         rubrics,
         type: "CRITERIA_BASED",
       },
-      variantId,
+      variantId
     );
     handleUpdateQuestionState({ rubrics }, variantMode);
   };
@@ -444,7 +444,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         (crit) => ({
           ...crit,
           description: crit.description.trim(),
-        }),
+        })
       );
       setQuestionScoring(
         questionId,
@@ -452,7 +452,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           rubrics,
           type: "CRITERIA_BASED",
         },
-        variantId,
+        variantId
       );
       handleUpdateQuestionState({ rubrics }, variantMode);
     }
@@ -495,7 +495,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         rubrics,
         type: "CRITERIA_BASED",
       },
-      variantId,
+      variantId
     );
     handleUpdateQuestionState({ rubrics }, variantMode);
   };
@@ -507,14 +507,14 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       : [];
     if (rubrics[rubricIndex]) {
       rubrics[rubricIndex].criteria = rubrics[rubricIndex].criteria.filter(
-        (_, idx) => idx !== criteriaIndex,
+        (_, idx) => idx !== criteriaIndex
       );
       // Optionally, reassign IDs to the remaining criteria.
       rubrics[rubricIndex].criteria = rubrics[rubricIndex].criteria.map(
         (crit, idx) => ({
           ...crit,
           id: idx + 1,
-        }),
+        })
       );
       setQuestionScoring(
         questionId,
@@ -522,17 +522,17 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           rubrics,
           type: "CRITERIA_BASED",
         },
-        variantId,
+        variantId
       );
       const totalPoints = rubrics.reduce(
         (total, rubric) =>
           total +
           Math.max(...rubric.criteria.map((crit) => crit.points || 0), 0),
-        0,
+        0
       );
       handleUpdateQuestionState(
         { rubrics, totalPoints: totalPoints },
-        variantMode,
+        variantMode
       );
     }
   };
@@ -555,7 +555,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const handlePointsChange = (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string,
+    value: string
   ) => {
     let parsedValue = parseInt(value, 10);
     if (isNaN(parsedValue) || parsedValue < 0 || parsedValue > maxPointsEver) {
@@ -620,20 +620,20 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
 
         setTimeout(() => {
           rubrics[rubricIndex].criteria = sortedIndices.map(
-            (idx) => newCriteriaArray[idx],
+            (idx) => newCriteriaArray[idx]
           );
 
           const totalPoints = rubrics.reduce(
             (total, rubric) =>
               total +
               Math.max(...rubric.criteria.map((crit) => crit.points || 0), 0),
-            0,
+            0
           );
 
           setQuestionScoring(
             questionId,
             { rubrics, type: "CRITERIA_BASED" },
-            variantId,
+            variantId
           );
 
           handleUpdateQuestionState({ rubrics, totalPoints }, variantMode);
@@ -646,19 +646,19 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       }
     } else {
       rubrics[rubricIndex].criteria = sortedIndices.map(
-        (idx) => newCriteriaArray[idx],
+        (idx) => newCriteriaArray[idx]
       );
       const totalPoints = rubrics.reduce(
         (total, rubric) =>
           total +
           Math.max(...rubric.criteria.map((crit) => crit.points || 0), 0),
-        0,
+        0
       );
 
       setQuestionScoring(
         questionId,
         { rubrics, type: "CRITERIA_BASED" },
-        variantId,
+        variantId
       );
 
       handleUpdateQuestionState({ rubrics, totalPoints }, variantMode);
@@ -669,7 +669,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const handlePointsInputChange = (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string,
+    value: string
   ) => {
     const parsedValue = parseInt(value, 10);
     if (!isNaN(parsedValue)) {
@@ -691,7 +691,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           rubrics,
           type: "CRITERIA_BASED",
         },
-        variantId,
+        variantId
       );
       handleUpdateQuestionState({ rubrics }, variantMode);
     }
@@ -701,14 +701,14 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const fetchRubric = async (
     question: QuestionAuthorStore,
     rubricIndex?: number,
-    variantId?: number,
+    variantId?: number
   ) => {
     const assignmentId = useAuthorStore.getState().activeAssignmentId;
     try {
       const response = await generateRubric(
         question,
         assignmentId,
-        rubricIndex,
+        rubricIndex
       );
       if (response && Array.isArray(response)) {
         const parsedChoices = response.map((choice: Choice) => ({
@@ -729,7 +729,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           setQuestionScoring(
             questionId,
             { rubrics: question.scoring.rubrics, type: "CRITERIA_BASED" },
-            variantId,
+            variantId
           );
         }
       }
@@ -796,7 +796,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       // remove variant from question if exist before expanding rubric
       const expandedQuestion = await expandMarkingRubric(
         questionFromParent,
-        useAuthorStore.getState().activeAssignmentId,
+        useAuthorStore.getState().activeAssignmentId
       );
       if (variantId) {
         editVariant(questionId, variantId, expandedQuestion);
@@ -828,12 +828,12 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               setToggleTitle(
                 questionId,
                 false,
-                variantMode ? variantId : undefined,
+                variantMode ? variantId : undefined
               );
               setQuestionTitle(localQuestionTitle);
               handleUpdateQuestionState(
                 { questionTitle: localQuestionTitle },
-                variantMode,
+                variantMode
               );
             }}
           />
@@ -845,7 +845,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             setToggleTitle(
               questionId,
               true,
-              variantMode ? variantId : undefined,
+              variantMode ? variantId : undefined
             )
           }
         >

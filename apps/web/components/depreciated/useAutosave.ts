@@ -10,7 +10,7 @@ import {
 const DEBOUNCE_SAVE_DELAY_MS = 1000;
 
 export default function useAutosave<T>(
-  dataToSave: T,
+  dataToSave: T
 ): [T, Dispatch<SetStateAction<T>>] {
   // This UI state mirrors what's in the database.
   const [data, setData] = useState<T>(dataToSave);
@@ -27,7 +27,7 @@ export default function useAutosave<T>(
     debounce((newData: T) => {
       saveData(newData);
     }, DEBOUNCE_SAVE_DELAY_MS),
-    [],
+    []
   );
 
   // This effect runs only when `data` changes.

@@ -30,13 +30,13 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [listOfAttempts, setListOfAttempts] = useLearnerOverviewStore(
-    (state) => [state.listOfAttempts, state.setListOfAttempts],
+    (state) => [state.listOfAttempts, state.setListOfAttempts]
   );
   const setAssignmentId = useLearnerOverviewStore(
-    (state) => state.setAssignmentId,
+    (state) => state.setAssignmentId
   );
   const setAssignmentDetails = useAssignmentDetails(
-    (state) => state.setAssignmentDetails,
+    (state) => state.setAssignmentDetails
   );
   const userPreferedLanguage = useSearchParams().get("lang") || "en";
   const isQuestionPage = useSearchParams().get("question") === "true";
@@ -54,7 +54,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           const assignmentData = await getAssignment(
             assignmentId,
             userPreferedLanguage,
-            cookie,
+            cookie
           );
 
           // Fetch attempts separately, so it's not blocked if assignment fetching fails
@@ -91,7 +91,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
       } else if (role === "author") {
         const assignmentDetails = getStoredData(
           "assignmentConfig",
-          {},
+          {}
         ) as Assignment;
         if (isMounted) {
           const decodedFields = decodeFields({
@@ -143,8 +143,8 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
       role === "learner"
         ? "Assignment could not be fetched from server"
         : role === "author"
-          ? "Assignment could not be fetched from local storage"
-          : "You are not authorized to view this page";
+        ? "Assignment could not be fetched from local storage"
+        : "You are not authorized to view this page";
     return <ErrorPage error={errorMessage} />;
   }
 

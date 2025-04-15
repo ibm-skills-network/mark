@@ -180,7 +180,7 @@ export const MarkChat: React.FC = () => {
       } else {
         // Otherwise, add it at the beginning after system message
         const systemIndex = messagesWithContext.findIndex(
-          (msg) => msg.role === "system",
+          (msg) => msg.role === "system"
         );
         const insertPosition = systemIndex !== -1 ? systemIndex + 1 : 0;
         messagesWithContext.splice(insertPosition, 0, contextMessage);
@@ -202,7 +202,7 @@ export const MarkChat: React.FC = () => {
         const purified = useMarkChatStore
           .getState()
           .messages.filter(
-            (msg) => msg.role !== "system" || !msg.id.includes("context"),
+            (msg) => msg.role !== "system" || !msg.id.includes("context")
           );
         useMarkChatStore.setState({ messages: purified });
       }, 100);
@@ -518,15 +518,15 @@ export const MarkChat: React.FC = () => {
               learnerContext.isFeedbackMode
                 ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
                 : learnerContext.isGradedAssignment
-                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                  : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
             }`}
           >
             {learnerContext.isFeedbackMode
               ? "Feedback Review"
               : learnerContext.isGradedAssignment
-                ? "Graded Assignment"
-                : "Practice Mode"}
+              ? "Graded Assignment"
+              : "Practice Mode"}
           </span>
 
           {assignmentMeta?.name && (
@@ -796,10 +796,10 @@ export const MarkChat: React.FC = () => {
                       {userRole === "author"
                         ? "Ask me about creating assignments, generating questions, or managing your content."
                         : learnerContext.isFeedbackMode
-                          ? "I can explain your feedback, clarify marking, and help you understand your assessment results."
-                          : learnerContext.isGradedAssignment
-                            ? "I can clarify assignment requirements and guide you without providing direct answers."
-                            : "I can provide hints, explanations, and help you practice effectively."}
+                        ? "I can explain your feedback, clarify marking, and help you understand your assessment results."
+                        : learnerContext.isGradedAssignment
+                        ? "I can clarify assignment requirements and guide you without providing direct answers."
+                        : "I can provide hints, explanations, and help you practice effectively."}
                     </p>
                     {learnerContext.isFeedbackMode &&
                       userRole === "learner" && (

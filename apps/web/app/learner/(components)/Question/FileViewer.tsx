@@ -10,8 +10,8 @@ const SyntaxHighlighter =
 interface FileViewerProps {
   file: {
     filename: string;
-    content: string; // Directly passed content
-    blob: Blob; // Unused for now
+    content: string; // Directly passed content (for images, expected to be a Data URL)
+    blob: Blob; // Unused for now (but could be used if needed)
   };
   onClose: () => void;
 }
@@ -27,8 +27,10 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
 
     return () => clearTimeout(timer);
   }, [file]);
+
   const extension: string =
     file.filename.split(".").pop()?.toLowerCase().toString() || "";
+
   const renderContent = () => {
     switch (extension) {
       case "txt":
@@ -59,7 +61,20 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             {file.content}
           </SyntaxHighlighter>
         );
-
+      case "jpg":
+      case "jpeg":
+      case "png":
+      case "gif":
+      case "svg":
+        return (
+          <div className="flex justify-center">
+            <img
+              src={file.content}
+              alt={file.filename}
+              className="max-w-full max-h-[80vh] object-contain rounded-md"
+            />
+          </div>
+        );
       default:
         return (
           <FeedbackFormatter className="whitespace-pre-wrap p-4">
@@ -80,16 +95,14 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             <IconX size={20} className="text-red-500" />
           </button>
         </div>
-        <>
-          {isLoading ? (
-            // Loading spinner
-            <div className="flex justify-center items-center h-40">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-violet-600"></div>
-            </div>
-          ) : (
-            renderContent()
-          )}
-        </>
+        {isLoading ? (
+          // Loading spinner
+          <div className="flex justify-center items-center h-40">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-violet-600"></div>
+          </div>
+        ) : (
+          renderContent()
+        )}
       </div>
     </div>
   );

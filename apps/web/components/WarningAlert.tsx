@@ -62,7 +62,7 @@ const WarningAlert: React.FC<ModalProps> = ({
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 };
 

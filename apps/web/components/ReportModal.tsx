@@ -22,7 +22,7 @@ const ReportModal: FC<{
   attemptId,
 }) => {
   const [issueType, setReportIssueType] = useState<REPORT_TYPE>(
-    REPORT_TYPE.BUG,
+    REPORT_TYPE.BUG
   );
   const [description, setDescription] = useState("");
 
@@ -39,7 +39,7 @@ const ReportModal: FC<{
             assignmentId,
             attemptId,
             issueType,
-            description,
+            description
           );
       if (response) {
         toast.success("Report submitted successfully!");

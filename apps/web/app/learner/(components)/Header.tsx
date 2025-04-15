@@ -61,7 +61,7 @@ function LearnerHeader() {
     state.setGrade,
   ]);
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
-    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
+    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage]
   );
 
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
@@ -73,7 +73,7 @@ function LearnerHeader() {
       published: false,
       questionOrder: [],
       updatedAt: 0,
-    },
+    }
   );
   const [returnUrl, setReturnUrl] = useState<string>("");
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
@@ -85,7 +85,7 @@ function LearnerHeader() {
   const [role, setRole] = useState<string | undefined>(undefined);
   const [languages, setLanguages] = useState<string[]>([]);
   const getUserPreferedLanguageFromLTI = useLearnerStore(
-    (state) => state.getUserPreferedLanguageFromLTI,
+    (state) => state.getUserPreferedLanguageFromLTI
   );
   useEffect(() => {
     async function fetchData() {
@@ -163,29 +163,40 @@ function LearnerHeader() {
                 ?.map((choice, index) =>
                   q.learnerChoices?.find((c) => String(c) === String(index))
                     ? choice.choice
-                    : undefined,
+                    : undefined
                 )
                 .filter((choice) => choice !== undefined) || []
             : q.translations?.[userPreferedLanguage]?.translatedChoices
-              ? q.translations?.[userPreferedLanguage]?.translatedChoices
-                  ?.map((choice, index) =>
-                    q.learnerChoices?.find((c) => String(c) === String(index))
-                      ? choice.choice
-                      : undefined,
-                  )
-                  .filter((choice) => choice !== undefined) || []
-              : q.choices
-                  ?.map((choice, index) =>
-                    q.learnerChoices?.find((c) => String(c) === String(index))
-                      ? choice.choice
-                      : undefined,
-                  )
-                  .filter((choice) => choice !== undefined) || [],
+            ? q.translations?.[userPreferedLanguage]?.translatedChoices
+                ?.map((choice, index) =>
+                  q.learnerChoices?.find((c) => String(c) === String(index))
+                    ? choice.choice
+                    : undefined
+                )
+                .filter((choice) => choice !== undefined) || []
+            : q.choices
+                ?.map((choice, index) =>
+                  q.learnerChoices?.find((c) => String(c) === String(index))
+                    ? choice.choice
+                    : undefined
+                )
+                .filter((choice) => choice !== undefined) || [],
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
-        learnerFileResponse: q.learnerFileResponse || [],
+        learnerFileResponse: (q.learnerFileResponse || []).map((file) => {
+          const extension = file.filename.split(".").pop()?.toLowerCase() || "";
+          if (["jpg", "jpeg", "png", "gif", "svg"].includes(extension)) {
+            // change the content to Picture was uploaded
+            return {
+              ...file,
+              content: "Picture was uploaded, please ignore",
+            };
+          }
+          return file;
+        }),
         learnerPresentationResponse: q.presentationResponse || [],
-      }),
+      })
     );
+
     setSubmitting(true);
     if (!assignmentId) {
       toast.error("Assignment ID is missing.");
@@ -204,7 +215,7 @@ function LearnerHeader() {
       responsesForQuestions,
       userPreferedLanguage,
       role === "author" ? authorQuestions : undefined,
-      role === "author" ? authorAssignmentDetails : undefined,
+      role === "author" ? authorAssignmentDetails : undefined
     );
     setSubmitting(false);
     if (!res) {
@@ -235,7 +246,7 @@ function LearnerHeader() {
           {
             id: feedback.id,
             learnerAnswerChoice: responsesForQuestions.find(
-              (q) => q.id === feedback.questionId,
+              (q) => q.id === feedback.questionId
             )?.learnerAnswerChoice,
             points: feedback.totalPoints ?? 0,
             feedback: feedback.feedback || [],

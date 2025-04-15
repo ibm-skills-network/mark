@@ -50,7 +50,7 @@ function Overview({ questions }: Props) {
 
       return baseClasses;
     },
-    [activeQuestionNumber],
+    [activeQuestionNumber]
   );
 
   return (
@@ -77,7 +77,7 @@ function Overview({ questions }: Props) {
             }}
             className={`${getQuestionButtonClasses(
               question,
-              index,
+              index
             )} relative flex items-center justify-center`}
           >
             {/* Add Notch for flagged questions */}

@@ -21,7 +21,7 @@ export class ApiService {
   private logger;
   constructor(
     private readonly messagingService: MessagingService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
   ) {
     this.logger = parentLogger.child({ context: ApiService.name });
   }
@@ -37,7 +37,7 @@ export class ApiService {
    */
   public getForwardingDetails(
     forwardingService: DownstreamService,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): { endpoint: string; extraHeaders: Record<string, any> } {
     let endpoint: string;
     let extraHeaders: Record<string, any> = {};
@@ -60,7 +60,7 @@ export class ApiService {
         const username = process.env.LTI_CREDENTIAL_MANAGER_USERNAME ?? "";
         const password = process.env.LTI_CREDENTIAL_MANAGER_PASSWORD ?? "";
         const base64Credentials = Buffer.from(
-          `${username}:${password}`,
+          `${username}:${password}`
         ).toString("base64");
         extraHeaders = {
           Authorization: `Basic ${base64Credentials}`,
@@ -76,7 +76,7 @@ export class ApiService {
 
   async forwardRequestToDownstreamService(
     forwardingService: DownstreamService,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<{ data: string; status: number }> {
     try {
       if (!request.originalUrl) {
@@ -84,7 +84,7 @@ export class ApiService {
       }
       const { endpoint, extraHeaders } = this.getForwardingDetails(
         forwardingService,
-        request,
+        request
       );
       this.logger.info(`Making request to ${endpoint}`);
 
@@ -113,7 +113,7 @@ export class ApiService {
         this.logger.error(axiosError.response.data);
         throw new HttpException(
           axiosError.response?.data ?? "",
-          axiosError.response.status,
+          axiosError.response.status
         );
       }
       this.logger.error(error);
@@ -134,7 +134,7 @@ export class ApiService {
     clientRequest: Request,
     clientResponse: Response,
     url: string,
-    headers: Record<string, any> = {},
+    headers: Record<string, any> = {}
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const isHTTPS = url.startsWith("https");
@@ -155,9 +155,9 @@ export class ApiService {
           ? httpsAgentNoKeepAlive
           : httpsAgent
         : // eslint-disable-next-line unicorn/no-nested-ternary
-          isSSE
-          ? httpAgentNoKeepAlive
-          : httpAgent;
+        isSSE
+        ? httpAgentNoKeepAlive
+        : httpAgent;
 
       const outgoingHeaders = {
         ...clientRequest.headers,
@@ -178,7 +178,7 @@ export class ApiService {
         (proxyResponse) => {
           const isStreaming =
             proxyResponse.headers["content-type"]?.includes(
-              "text/event-stream",
+              "text/event-stream"
             );
 
           clientResponse.writeHead(proxyResponse.statusCode || 500, {
@@ -202,7 +202,7 @@ export class ApiService {
               }
             });
           }
-        },
+        }
       );
 
       clientResponse.on("close", () => {

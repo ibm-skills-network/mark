@@ -58,7 +58,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
             showAssignmentScore: true,
             updatedAt: Date.now(),
           })),
-      })),
+      }))
     ),
     {
       name: getAssignmentFeedbackConfigName(),
@@ -67,17 +67,17 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
         // store everything that is not a function
         return Object.fromEntries(
           Object.entries(state).filter(
-            ([_, value]) => typeof value !== "function",
-          ),
+            ([_, value]) => typeof value !== "function"
+          )
         );
       },
-    },
-  ),
+    }
+  )
 );
 function getAssignmentFeedbackConfigName() {
   if (typeof window !== "undefined") {
     return `assignment-${extractAssignmentId(
-      window.location.pathname,
+      window.location.pathname
     )}-feedback-config`;
   }
   return "assignment-feedback-config";

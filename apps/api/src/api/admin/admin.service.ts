@@ -19,7 +19,7 @@ export class AdminService {
 
   async cloneAssignment(
     id: number,
-    groupId: string,
+    groupId: string
   ): Promise<BaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: id },
@@ -79,7 +79,7 @@ export class AdminService {
 
   async addAssignmentToGroup(
     assignmentId: number,
-    groupId: string,
+    groupId: string
   ): Promise<AdminAddAssignmentToGroupResponseDto> {
     // check if the assignment exists
     const assignment = await this.prisma.assignment.findUnique({
@@ -88,7 +88,7 @@ export class AdminService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with Id ${assignmentId} not found.`,
+        `Assignment with Id ${assignmentId} not found.`
       );
     }
 
@@ -139,7 +139,7 @@ export class AdminService {
   }
 
   async createAssignment(
-    createAssignmentRequestDto: AdminCreateAssignmentRequestDto,
+    createAssignmentRequestDto: AdminCreateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupId
     // or by creating a new Group with that groupId
@@ -191,7 +191,7 @@ export class AdminService {
 
   async updateAssignment(
     id: number,
-    updateAssignmentDto: AdminUpdateAssignmentRequestDto,
+    updateAssignmentDto: AdminUpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -206,7 +206,7 @@ export class AdminService {
 
   async replaceAssignment(
     id: number,
-    updateAssignmentDto: AdminReplaceAssignmentRequestDto,
+    updateAssignmentDto: AdminReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },

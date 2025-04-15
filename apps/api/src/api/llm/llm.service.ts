@@ -179,7 +179,7 @@ export class LlmService {
 
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
-    private readonly prisma: PrismaService,
+    private readonly prisma: PrismaService
   ) {
     this.logger = parentLogger.child({ context: LlmService.name });
     this.llm = new ChatOpenAI({
@@ -242,7 +242,7 @@ export class LlmService {
    * @returns An object containing moderation status.
    */
   async moderateContent(
-    content: string,
+    content: string
   ): Promise<{ flagged: boolean; details: string }> {
     try {
       this.logger.info("Moderating content...");
@@ -261,18 +261,18 @@ export class LlmService {
       return { flagged, details };
     } catch (error) {
       this.logger.error(
-        `Content moderation failed: ${(error as Error).message}`,
+        `Content moderation failed: ${(error as Error).message}`
       );
       throw new HttpException(
         "Content moderation failed",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   async generateQuestionGradingContext(
     questions: { id: number; questionText: string }[],
-    assignmentId: number,
+    assignmentId: number
   ): Promise<Record<number, number[]>> {
     const parser = StructuredOutputParser.fromZodSchema(
       z.array(
@@ -282,13 +282,13 @@ export class LlmService {
             contextQuestions: z
               .array(z.number())
               .describe(
-                "The ids of all the questions that this question depends upon contextually",
+                "The ids of all the questions that this question depends upon contextually"
               ),
           })
           .describe(
-            "Array of objects, where each object represents a question and its contextual dependencies.",
-          ),
-      ),
+            "Array of objects, where each object represents a question and its contextual dependencies."
+          )
+      )
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -305,7 +305,7 @@ export class LlmService {
     const response = await this.processPrompt(
       prompt,
       assignmentId,
-      AIUsageType.ASSIGNMENT_GENERATION,
+      AIUsageType.ASSIGNMENT_GENERATION
     );
     const parsedResponse = await parser.parse(response);
     const gradingContextQuestionMap: Record<number, number[]> = {};
@@ -316,7 +316,7 @@ export class LlmService {
   }
   async gradePresentationQuestion(
     presentationQuestionEvaluateModel: PresentationQuestionEvaluateModel,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<PresentationQuestionResponseModel> {
     const {
       question,
@@ -345,7 +345,7 @@ export class LlmService {
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 
@@ -368,10 +368,10 @@ export class LlmService {
           feedback: z
             .string()
             .describe(
-              "Feedback for the learner based on their response to the criteria",
+              "Feedback for the learner based on their response to the criteria"
             ),
         })
-        .describe("Object representing points and feedback"),
+        .describe("Object representing points and feedback")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -385,7 +385,7 @@ export class LlmService {
         assignment_instructions:
           assignmentInstrctions ?? "No assignment instructions provided.",
         previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext ?? [],
+          previousQuestionsAnswersContext ?? []
         ),
         transcript: learnerResponse?.transcript ?? "No transcript provided.",
         contentReport: safeContentReport,
@@ -404,19 +404,19 @@ export class LlmService {
     const response = await this.processPrompt(
       prompt,
       assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
+      AIUsageType.ASSIGNMENT_GRADING
     );
 
     // Parse the LLM output to get points & feedback
     const presentationQuestionResponseModel = (await parser.parse(
-      response,
+      response
     )) as PresentationQuestionResponseModel;
 
     return presentationQuestionResponseModel;
   }
   async gradeVideoPresentationQuestion(
     videoPresentationQuestionEvaluateModel: VideoPresentationQuestionEvaluateModel,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<VideoPresentationQuestionResponseModel> {
     const {
       question,
@@ -431,12 +431,12 @@ export class LlmService {
       videoPresentationConfig,
     } = videoPresentationQuestionEvaluateModel;
     const validateLearnerResponse = await this.applyGuardRails(
-      learnerResponse.transcript,
+      learnerResponse.transcript
     );
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 
@@ -447,10 +447,10 @@ export class LlmService {
           feedback: z
             .string()
             .describe(
-              "Feedback for the learner based on their response to the criteria, the feedback should include detailed explaination why you chose to provide the points you did",
+              "Feedback for the learner based on their response to the criteria, the feedback should include detailed explaination why you chose to provide the points you did"
             ),
         })
-        .describe("Object representing points and feedback"),
+        .describe("Object representing points and feedback")
     );
     const formatInstructions = parser.getFormatInstructions();
     const prompt = new PromptTemplate({
@@ -460,7 +460,7 @@ export class LlmService {
         question: question,
         assignment_instructions: assignmentInstrctions,
         previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext,
+          previousQuestionsAnswersContext
         ),
         transcript: learnerResponse.transcript,
         slidesData: videoPresentationConfig.evaluateSlidesQuality
@@ -478,11 +478,11 @@ export class LlmService {
     const response = await this.processPrompt(
       prompt,
       assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
+      AIUsageType.ASSIGNMENT_GRADING
     );
 
     const videoPresentationQuestionResponseModel = (await parser.parse(
-      response,
+      response
     )) as VideoPresentationQuestionResponseModel;
 
     return videoPresentationQuestionResponseModel;
@@ -490,7 +490,7 @@ export class LlmService {
   async gradeFileBasedQuestion(
     fileBasedQuestionEvaluateModel: FileUploadQuestionEvaluateModel,
     assignmentId: number,
-    language?: string,
+    language?: string
   ): Promise<FileBasedQuestionResponseModel> {
     const {
       question,
@@ -504,7 +504,7 @@ export class LlmService {
       responseType,
     } = fileBasedQuestionEvaluateModel;
     const validateLearnerResponse = await this.applyGuardRails(
-      learnerResponse.map((item) => item.content).join(" "),
+      learnerResponse.map((item) => item.content).join(" ")
     );
 
     // Define a mapping from responseType to templates
@@ -526,7 +526,7 @@ export class LlmService {
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
     const parser = StructuredOutputParser.fromZodSchema(
@@ -536,10 +536,10 @@ export class LlmService {
           feedback: z
             .string()
             .describe(
-              "Feedback for the learner based on their response to the criteria, including any suggestions for improvement and detailed explaination why you chose to provide the points you did",
+              "Feedback for the learner based on their response to the criteria, including any suggestions for improvement and detailed explaination why you chose to provide the points you did"
             ),
         })
-        .describe("Object representing points and feedback"),
+        .describe("Object representing points and feedback")
     );
     const formatInstructions = parser.getFormatInstructions();
 
@@ -552,7 +552,7 @@ export class LlmService {
           learnerResponse.map((item) => ({
             filename: item.filename,
             content: item.content,
-          })),
+          }))
         ),
         total_points: totalPoints.toString(),
         scoring_type: scoringCriteriaType,
@@ -567,11 +567,11 @@ export class LlmService {
     const response = await this.processPrompt(
       prompt,
       assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
+      AIUsageType.ASSIGNMENT_GRADING
     );
 
     const fileBasedQuestionResponseModel = (await parser.parse(
-      response,
+      response
     )) as FileBasedQuestionResponseModel;
     return fileBasedQuestionResponseModel;
   }
@@ -579,7 +579,7 @@ export class LlmService {
   async gradeTextBasedQuestion(
     textBasedQuestionEvaluateModel: TextBasedQuestionEvaluateModel,
     assignmentId: number,
-    language?: string,
+    language?: string
   ): Promise<TextBasedQuestionResponseModel> {
     const {
       question,
@@ -597,7 +597,7 @@ export class LlmService {
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 
@@ -608,10 +608,10 @@ export class LlmService {
           feedback: z
             .string()
             .describe(
-              "Feedback for the learner based on their response to the criteria",
+              "Feedback for the learner based on their response to the criteria"
             ),
         })
-        .describe("Object representing points and feedback"),
+        .describe("Object representing points and feedback")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -626,7 +626,7 @@ export class LlmService {
         assignment_instructions: assignmentInstrctions,
         responseSpecificInstruction: responseSpecificInstruction,
         previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext,
+          previousQuestionsAnswersContext
         ),
         learner_response: learnerResponse,
         total_points: totalPoints.toString(),
@@ -640,11 +640,11 @@ export class LlmService {
     const response = await this.processPrompt(
       prompt,
       assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
+      AIUsageType.ASSIGNMENT_GRADING
     );
 
     const textBasedQuestionResponseModel = (await parser.parse(
-      response,
+      response
     )) as TextBasedQuestionResponseModel;
 
     return textBasedQuestionResponseModel;
@@ -653,7 +653,7 @@ export class LlmService {
   async gradeUrlBasedQuestion(
     urlBasedQuestionEvaluateModel: UrlBasedQuestionEvaluateModel,
     assignmentId: number,
-    language?: string,
+    language?: string
   ): Promise<UrlBasedQuestionResponseModel> {
     const {
       question,
@@ -673,7 +673,7 @@ export class LlmService {
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 
@@ -684,10 +684,10 @@ export class LlmService {
           feedback: z
             .string()
             .describe(
-              "Feedback for the learner based on their response to the criteria",
+              "Feedback for the learner based on their response to the criteria"
             ),
         })
-        .describe("Object representing points and feedback"),
+        .describe("Object representing points and feedback")
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -704,7 +704,7 @@ export class LlmService {
         assignment_instructions: assignmentInstrctions,
         responseSpecificInstruction: responseSpecificInstruction,
         previous_questions_and_answers: JSON.stringify(
-          previousQuestionsAnswersContext,
+          previousQuestionsAnswersContext
         ),
         url_provided: urlProvided,
         url_body: urlBody,
@@ -721,11 +721,11 @@ export class LlmService {
     const response = await this.processPrompt(
       prompt,
       assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
+      AIUsageType.ASSIGNMENT_GRADING
     );
 
     const urlBasedQuestionResponseModel = (await parser.parse(
-      response,
+      response
     )) as UrlBasedQuestionResponseModel;
 
     return urlBasedQuestionResponseModel;
@@ -741,7 +741,7 @@ export class LlmService {
       feedback: string;
       isCorrect: boolean;
     }[],
-    variants?: VariantDto[],
+    variants?: VariantDto[]
   ): Promise<
     {
       id: number;
@@ -776,9 +776,9 @@ export class LlmService {
               .boolean()
               .refine(
                 (value) => value === true,
-                "Only true can be correct for a true/false question",
+                "Only true can be correct for a true/false question"
               ),
-          }),
+          })
         )
         .length(1),
     });
@@ -793,7 +793,7 @@ export class LlmService {
             points: z.number(),
             feedback: z.string().optional(),
             isCorrect: z.boolean(),
-          }),
+          })
         )
         .min(2), // Ensures at least two choices
     });
@@ -808,12 +808,12 @@ export class LlmService {
             points: z.number().min(0),
             feedback: z.string().optional(),
             isCorrect: z.boolean(),
-          }),
+          })
         )
         .refine(
           (choices) =>
             choices.filter((choice) => choice.isCorrect).length === 1,
-          { message: "Exactly one choice must be marked as correct" },
+          { message: "Exactly one choice must be marked as correct" }
         ),
     });
     const singleCorrectQuestionSchema = z
@@ -850,12 +850,12 @@ export class LlmService {
         }
         case QuestionType.MULTIPLE_CORRECT: {
           return StructuredOutputParser.fromZodSchema(
-            multipleCorrectQuestionSchema,
+            multipleCorrectQuestionSchema
           );
         }
         case QuestionType.SINGLE_CORRECT: {
           return StructuredOutputParser.fromZodSchema(
-            singleCorrectQuestionSchema,
+            singleCorrectQuestionSchema
           );
         }
         case QuestionType.TEXT: {
@@ -904,7 +904,7 @@ export class LlmService {
     const response = await this.processPrompt(
       prompt,
       assignmentId,
-      AIUsageType.QUESTION_GENERATION,
+      AIUsageType.QUESTION_GENERATION
     );
 
     const parsedResponse = await parser.parse(response);
@@ -936,14 +936,14 @@ export class LlmService {
             isCorrect: boolean;
             points: number;
           },
-          choiceIndex: number,
+          choiceIndex: number
         ) => ({
           choice: rewordedChoice.choice ?? choices?.[choiceIndex]?.choice ?? "",
           points: rewordedChoice.points ?? choices?.[choiceIndex]?.points ?? 1,
           feedback:
             rewordedChoice.feedback ?? choices?.[choiceIndex]?.feedback ?? "",
           isCorrect: rewordedChoice.isCorrect === true,
-        }),
+        })
       ),
     }));
   }
@@ -955,7 +955,7 @@ export class LlmService {
   public async createMarkingRubric(
     question: QuestionDto,
     assignmentId: number,
-    rubricIndex?: number,
+    rubricIndex?: number
   ): Promise<ScoringDto> {
     // 1) Map question.type to the correct rubric template
     const rubricTemplates = {
@@ -995,7 +995,7 @@ export class LlmService {
                   rubricQuestion: z
                     .string()
                     .describe(
-                      "A question evaluating a key aspect of the response. Each rubric question focuses on a specific evaluation criterion.",
+                      "A question evaluating a key aspect of the response. Each rubric question focuses on a specific evaluation criterion."
                     ),
                   criteria: z
                     .array(
@@ -1004,17 +1004,17 @@ export class LlmService {
                         id: z.number().optional(),
                         description: z.string().describe("Criterion detail"),
                         points: z.number().describe("Points if met").int(),
-                      }),
+                      })
                     )
                     .min(2, "At least 2 criteria needed")
                     .describe("List of grading criteria"),
-                }),
+                })
               )
               .optional(),
           })
           .nullable()
           .optional(),
-      }),
+      })
     );
     const formatInstructions = parser.getFormatInstructions();
 
@@ -1093,13 +1093,13 @@ export class LlmService {
       response = await this.processPrompt(
         prompt,
         assignmentId,
-        AIUsageType.QUESTION_GENERATION,
+        AIUsageType.QUESTION_GENERATION
       );
     } catch (error) {
       this.logger.error(`Error generating rubric: ${(error as Error).message}`);
       throw new HttpException(
         "Failed to generate rubric",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
 
@@ -1111,7 +1111,7 @@ export class LlmService {
       this.logger.error(`Error parsing rubric: ${(error as Error).message}`);
       throw new HttpException(
         "Invalid rubric format returned by LLM",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
 
@@ -1141,7 +1141,7 @@ export class LlmService {
   }
   public async expandMarkingRubric(
     question: QuestionDto,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<ScoringDto> {
     // 1) Choose the correct template for the question type.
     const rubricTemplates = {
@@ -1189,16 +1189,16 @@ export class LlmService {
                         points: z
                           .number()
                           .describe("Points if criterion is met"),
-                      }),
+                      })
                     )
                     .min(2, "At least two criteria required"),
-                }),
+                })
               )
               .optional(),
           })
           .nullable()
           .optional(),
-      }),
+      })
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -1237,13 +1237,13 @@ export class LlmService {
       response = await this.processPrompt(
         prompt,
         assignmentId,
-        AIUsageType.QUESTION_GENERATION,
+        AIUsageType.QUESTION_GENERATION
       );
     } catch (error) {
       this.logger.error(`Error expanding rubric: ${(error as Error).message}`);
       throw new HttpException(
         "Failed to expand marking rubric",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
 
@@ -1255,7 +1255,7 @@ export class LlmService {
       this.logger.error(`LLM parse error: ${(error as Error).message}`);
       throw new HttpException(
         "LLM returned invalid data while expanding rubric",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
 
@@ -1283,7 +1283,7 @@ export class LlmService {
 
       // Check if there's already a rubricQuestion with the same text and only push if it's truly new:
       const existingFound = combinedRubrics.find(
-        (ex) => ex.rubricQuestion === newRubric.rubricQuestion,
+        (ex) => ex.rubricQuestion === newRubric.rubricQuestion
       );
       if (!existingFound) {
         combinedRubrics.push(newRubric);
@@ -1304,7 +1304,7 @@ export class LlmService {
    */
   public async createChoices(
     question: QuestionDto,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<Choice[]> {
     if (
       question.type !== "SINGLE_CORRECT" &&
@@ -1329,10 +1329,10 @@ export class LlmService {
               isCorrect: z.boolean().describe("Correct or not"),
               points: z.number().describe("Points for this choice"),
               feedback: z.string().optional().describe("Feedback text"),
-            }),
+            })
           )
           .describe("Choice-based question answers"),
-      }),
+      })
     );
     const formatInstructions = parser.getFormatInstructions();
     const prompt = new PromptTemplate({
@@ -1350,11 +1350,11 @@ export class LlmService {
       response = await this.processPrompt(
         prompt,
         assignmentId,
-        AIUsageType.QUESTION_GENERATION,
+        AIUsageType.QUESTION_GENERATION
       );
     } catch (error) {
       this.logger.error(
-        `Error generating choices: ${(error as Error).message}`,
+        `Error generating choices: ${(error as Error).message}`
       );
       // Return empty or throw, as you prefer
       return [];
@@ -1395,7 +1395,7 @@ export class LlmService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     content?: string,
-    learningObjectives?: string,
+    learningObjectives?: string
   ): Promise<
     {
       question: string;
@@ -1418,7 +1418,7 @@ export class LlmService {
       assignmentType,
       questionsToGenerate,
       content,
-      learningObjectives,
+      learningObjectives
     );
 
     // Return the array of generated questions
@@ -1440,7 +1440,7 @@ export class LlmService {
   ensureCount = (
     array: any[],
     needed: number,
-    defaultQuestion: Partial<(typeof array)[number]>,
+    defaultQuestion: Partial<(typeof array)[number]>
   ) => {
     // If the LLM provided too many, slice
     if (array.length > needed) {
@@ -1488,7 +1488,7 @@ export class LlmService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     content?: string,
-    learningObjectives?: string,
+    learningObjectives?: string
   ): Promise<{ questions: any[] }> {
     // 1. Figure out how many total questions the user wants
     const totalQuestionsToGenerate =
@@ -1522,7 +1522,7 @@ export class LlmService {
                       rubricQuestion: z
                         .string()
                         .describe(
-                          "A question evaluating a key aspect of the response. Each rubric question focuses on a specific evaluation criterion.",
+                          "A question evaluating a key aspect of the response. Each rubric question focuses on a specific evaluation criterion."
                         ),
                       criteria: z
                         .array(
@@ -1532,11 +1532,11 @@ export class LlmService {
                               .string()
                               .describe("Criterion detail"),
                             points: z.number().describe("Points if met").int(),
-                          }),
+                          })
                         )
                         .min(2, "At least 2 criteria needed")
                         .describe("List of grading criteria"),
-                    }),
+                    })
                   )
                   .min(2)
                   .describe("Scoring rubrics for the question")
@@ -1560,16 +1560,16 @@ export class LlmService {
                     .string()
                     .optional()
                     .describe("Feedback for this choice"),
-                }),
+                })
               )
               .nullable()
               .optional()
               .describe(
-                "Answer choices for MULTIPLE_CHOICE/SINGLE_CHOICE or TRUE_FALSE questions",
+                "Answer choices for MULTIPLE_CHOICE/SINGLE_CHOICE or TRUE_FALSE questions"
               ),
-          }),
+          })
         ),
-      }),
+      })
     );
 
     // 3. Select the appropriate template for the LLM based on parameters
@@ -1586,7 +1586,7 @@ export class LlmService {
     } else {
       throw new HttpException(
         "Provide either content, learning objectives, or both",
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
     // 4. Get the parser format instructions
@@ -1615,7 +1615,7 @@ export class LlmService {
     const response = await this.processPrompt(
       promptTemplate,
       assignmentId,
-      AIUsageType.ASSIGNMENT_GENERATION,
+      AIUsageType.ASSIGNMENT_GENERATION
     );
     const parsedResponse = await parser.parse(response);
     // remove any markdown anotation from the questions
@@ -1633,10 +1633,10 @@ export class LlmService {
 
     // 7. Separate questions by their type
     const singleCorrectQs = questions.filter(
-      (q) => q.type === "SINGLE_CORRECT",
+      (q) => q.type === "SINGLE_CORRECT"
     );
     const multipleCorrectQs = questions.filter(
-      (q) => q.type === "MULTIPLE_CORRECT",
+      (q) => q.type === "MULTIPLE_CORRECT"
     );
     const textQs = questions.filter((q) => q.type === "TEXT");
     const trueFalseQs = questions.filter((q) => q.type === "TRUE_FALSE");
@@ -1650,7 +1650,7 @@ export class LlmService {
         type: "SINGLE_CORRECT",
         scoring: undefined,
         choices: [],
-      },
+      }
     );
 
     const finalMultipleCorrect = this.ensureCount(
@@ -1661,7 +1661,7 @@ export class LlmService {
         type: "MULTIPLE_CORRECT",
         scoring: undefined,
         choices: [],
-      },
+      }
     );
 
     const finalText = this.ensureCount(
@@ -1672,7 +1672,7 @@ export class LlmService {
         type: "TEXT",
         scoring: undefined,
         choices: undefined,
-      },
+      }
     );
 
     const finalTrueFalse = this.ensureCount(
@@ -1698,7 +1698,7 @@ export class LlmService {
             feedback: "Placeholder feedback for False",
           },
         ],
-      },
+      }
     );
 
     // 9. Combine the final arrays into one array
@@ -1749,7 +1749,7 @@ export class LlmService {
   async generateChoicesTranslation(
     choices: Choice[],
     assignmentId: number,
-    targetLanguage: string,
+    targetLanguage: string
   ): Promise<Choice[]> {
     // Define the Zod schema for validating LLM response
     const choicesTranslationSchema = z.object({
@@ -1759,7 +1759,7 @@ export class LlmService {
           isCorrect: z.boolean(),
           points: z.number(),
           feedback: z.string().optional(),
-        }),
+        })
       ),
     });
 
@@ -1769,7 +1769,7 @@ export class LlmService {
   {format_instructions}
   `;
     const parser = StructuredOutputParser.fromZodSchema(
-      choicesTranslationSchema,
+      choicesTranslationSchema
     );
     const formatInstructions = parser.getFormatInstructions();
     const prompt = new PromptTemplate({
@@ -1787,7 +1787,7 @@ export class LlmService {
       const rawResponse = await this.processPrompt(
         prompt,
         assignmentId,
-        AIUsageType.TRANSLATION,
+        AIUsageType.TRANSLATION
       );
 
       // Clean the raw response to remove Markdown-style code block markers
@@ -1797,7 +1797,7 @@ export class LlmService {
 
       // Validate the response using the Zod schema
       const parsedResponse = choicesTranslationSchema.parse(
-        JSON.parse(cleanedResponse),
+        JSON.parse(cleanedResponse)
       );
 
       // Map the parsed response to the expected structure
@@ -1809,11 +1809,11 @@ export class LlmService {
       }));
     } catch (error) {
       this.logger.error(
-        `Error translating choices: ${(error as Error).message}`,
+        `Error translating choices: ${(error as Error).message}`
       );
       throw new HttpException(
         "Failed to translate choices",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -1827,14 +1827,14 @@ export class LlmService {
   async generateQuestionTranslation(
     assignmentId: number,
     questionText: string,
-    targetLanguage: string,
+    targetLanguage: string
   ): Promise<string> {
     // remove any html tags from the question text
     questionText = questionText.replaceAll(/<[^>]*>?/gm, "");
     const questionTranslationSchema = StructuredOutputParser.fromZodSchema(
       z.object({
         translatedText: z.string().nonempty("Translated text cannot be empty"),
-      }),
+      })
     );
     const format_instructions =
       questionTranslationSchema.getFormatInstructions();
@@ -1852,17 +1852,17 @@ export class LlmService {
       const response = await this.processPrompt(
         prompt,
         assignmentId,
-        AIUsageType.TRANSLATION,
+        AIUsageType.TRANSLATION
       );
       const parsedResponse = await questionTranslationSchema.parse(response);
       return parsedResponse.translatedText;
     } catch (error) {
       this.logger.error(
-        `Error translating question: ${(error as Error).message}`,
+        `Error translating question: ${(error as Error).message}`
       );
       throw new HttpException(
         "Failed to translate question",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -1871,7 +1871,7 @@ export class LlmService {
   async translateText(
     text: string,
     targetLanguage: string,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<string> {
     if (!text) {
       return;
@@ -1904,7 +1904,7 @@ export class LlmService {
       const rawResponse = await this.processPrompt(
         prompt,
         assignmentId,
-        AIUsageType.TRANSLATION,
+        AIUsageType.TRANSLATION
       );
 
       // Validate the response using the Zod schema
@@ -1915,20 +1915,20 @@ export class LlmService {
       this.logger.error(`Error translating text: ${(error as Error).message}`);
       throw new HttpException(
         "Failed to translate text",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   async getLiveRecordingFeedback(
     liveRecordingData: LearnerLiveRecordingFeedback,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<string> {
     // Import the zod schema, structured parser, etc.
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         feedback: z.string().nonempty("Feedback cannot be empty"),
-      }),
+      })
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -1953,17 +1953,17 @@ export class LlmService {
         live_recording_transcript: JSON.stringify(
           liveRecordingData.transcript ?? "No transcript provided.",
           undefined,
-          2,
+          2
         ),
         live_recording_speechReport: JSON.stringify(
           safeSpeechReport,
           undefined,
-          2,
+          2
         ),
         live_recording_contentReport: JSON.stringify(
           safeContentReport,
           undefined,
-          2,
+          2
         ),
         live_recording_bodyLanguageScore: safeBodyLangScore,
         live_recording_bodyLanguageExplanation: safeBodyLangExplanation,
@@ -1975,17 +1975,17 @@ export class LlmService {
       const response = await this.processPrompt(
         prompt,
         assignmentId,
-        AIUsageType.LIVE_RECORDING_FEEDBACK,
+        AIUsageType.LIVE_RECORDING_FEEDBACK
       );
       const parsedResponse = await parser.parse(response);
       return parsedResponse.feedback;
     } catch (error) {
       this.logger.error(
-        `Error generating live recording feedback: ${(error as Error).message}`,
+        `Error generating live recording feedback: ${(error as Error).message}`
       );
       throw new HttpException(
         "Failed to generate live recording feedback",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -1993,7 +1993,7 @@ export class LlmService {
   private async processPrompt(
     prompt: PromptTemplate,
     assignmentId: number,
-    usageType: AIUsageType,
+    usageType: AIUsageType
   ): Promise<string> {
     const input = await prompt.format({});
 
@@ -2027,7 +2027,7 @@ export class LlmService {
       assignmentId,
       usageType,
       inputTokens,
-      responseTokens,
+      responseTokens
     );
 
     return response;
@@ -2059,7 +2059,7 @@ export class LlmService {
     assignmentId: number,
     usageType: AIUsageType,
     tokensIn: number,
-    tokensOut: number,
+    tokensOut: number
   ): Promise<void> {
     // Ensure that the assignment exists
     const assignmentExists = await this.prisma.assignment.findUnique({
@@ -2069,7 +2069,7 @@ export class LlmService {
     if (!assignmentExists) {
       throw new HttpException(
         `Assignment with ID ${assignmentId} does not exist`,
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 

@@ -11,7 +11,7 @@ interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {
   const [questionDisplay, setQuestionDisplay, errors] = useAssignmentConfig(
-    (state) => [state.questionDisplay, state.setQuestionDisplay, state.errors],
+    (state) => [state.questionDisplay, state.setQuestionDisplay, state.errors]
   );
   function handleChangeQuestionDisplay(e: MouseEvent<HTMLButtonElement>) {
     setQuestionDisplay(e.currentTarget.value as QuestionDisplayType);
@@ -33,7 +33,7 @@ const Component: FC<Props> = () => {
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
-                questionDisplay === "ONE_PER_PAGE" && "bg-violet-600",
+                questionDisplay === "ONE_PER_PAGE" && "bg-violet-600"
               )}
             />
           </div>
@@ -42,7 +42,7 @@ const Component: FC<Props> = () => {
               "leading-5 transition-all cursor-pointer",
               questionDisplay === "ONE_PER_PAGE"
                 ? "font-bold text-violet-600"
-                : "font-medium",
+                : "font-medium"
             )}
           >
             One question per page
@@ -64,7 +64,7 @@ const Component: FC<Props> = () => {
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
-                questionDisplay === "ALL_PER_PAGE" && "bg-violet-600",
+                questionDisplay === "ALL_PER_PAGE" && "bg-violet-600"
               )}
             />
           </div>
@@ -73,7 +73,7 @@ const Component: FC<Props> = () => {
               "leading-5 cursor-pointer transition-all",
               questionDisplay === "ALL_PER_PAGE"
                 ? "font-bold text-violet-600"
-                : "font-medium",
+                : "font-medium"
             )}
           >
             All questions in one page

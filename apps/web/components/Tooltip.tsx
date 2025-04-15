@@ -67,7 +67,7 @@ const Tooltip: FC<Props> = (props) => {
               "absolute rounded-lg z-9000 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 dark:bg-white bg-gray-950 dark:text-gray-800 text-slate-100 min-w-max group-hover/tooltip:scale-100 text-wrap",
               `group-hover/tooltip:delay-${delay}`,
               maxWidth ? `max-w-[${maxWidth}px]` : "max-w-xs",
-              getClassNamesFromDirectionAndDistance(),
+              getClassNamesFromDirectionAndDistance()
             )}
           >
             {content} {/* content can now be text or a JSX element */}

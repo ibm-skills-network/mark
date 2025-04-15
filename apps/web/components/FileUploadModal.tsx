@@ -48,15 +48,15 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     questions?: string;
   } | null>(null);
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId,
+    (state) => state.activeAssignmentId
   );
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedFileContent, setSelectedFileContent] = useState<string | null>(
-    null,
+    null
   );
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const [learningObjectives, setLearningObjectives] = useAuthorStore(
-    (state) => [state.learningObjectives, state.setLearningObjectives],
+    (state) => [state.learningObjectives, state.setLearningObjectives]
   );
   const [error, setError] = useState<string | null>(null);
   const questions = useAuthorStore((state) => state.questions);
@@ -79,7 +79,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           size: file.size,
           tokenCount: countTokens(content.content),
         };
-      }),
+      })
     );
     // append to existing files
     setFileUploaded(fileUploaded.concat(fileContents));
@@ -124,7 +124,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   const truncateContent = (content: string) => {
     if (content.length > MAX_CHAR_LIMIT) {
       alert(
-        `Content is too long (${content.length} characters). Only the first ${MAX_CHAR_LIMIT} characters will be sent.`,
+        `Content is too long (${content.length} characters). Only the first ${MAX_CHAR_LIMIT} characters will be sent.`
       );
       return content.substring(0, MAX_CHAR_LIMIT) + "...";
     }
@@ -146,7 +146,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
       return;
     } else if (learningObjectives.length > MAX_CHAR_LIMIT) {
       toast.error(
-        `Learning objectives are too long (${learningObjectives.length} characters). Please shorten the objectives.`,
+        `Learning objectives are too long (${learningObjectives.length} characters). Please shorten the objectives.`
       );
       return;
     }
@@ -212,7 +212,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
             clearInterval(intervalId);
             if (statusData.questions) {
               const questionsGenerated: QuestionAuthorStore[] = JSON.parse(
-                statusData.questions,
+                statusData.questions
               ) as QuestionAuthorStore[];
               questionsGenerated.forEach((question: QuestionAuthorStore) => {
                 question.alreadyInBackend = false;
@@ -224,21 +224,21 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   Array.isArray(question.scoring.criteria)
                     ? Math.max(
                         ...question.scoring.criteria.map(
-                          (c: Criteria) => c.points,
-                        ),
+                          (c: Criteria) => c.points
+                        )
                       )
                     : question.choices
-                      ? question.choices.reduce(
-                          (acc: number, choice: Choice) => acc + choice.points,
-                          0,
-                        )
-                      : 0;
+                    ? question.choices.reduce(
+                        (acc: number, choice: Choice) => acc + choice.points,
+                        0
+                      )
+                    : 0;
                 if (question.choices && Array.isArray(question.choices)) {
                   question.choices = question.choices.map(
                     (choice: Choice, index: number) => ({
                       ...choice,
                       id: index,
-                    }),
+                    })
                   );
                 }
               });
@@ -348,7 +348,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                           onClick={() => {
                             setSelectedFileName(file.filename);
                             setSelectedFileContent(
-                              truncateContent(file.content),
+                              truncateContent(file.content)
                             );
                             setFileInspectorModalOpen(true);
                           }}
@@ -375,8 +375,8 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                           onClick={() =>
                             setFileUploaded(
                               fileUploaded.filter(
-                                (f) => f.filename !== file.filename,
-                              ),
+                                (f) => f.filename !== file.filename
+                              )
                             )
                           }
                           aria-label={`Remove file ${file.filename}`}

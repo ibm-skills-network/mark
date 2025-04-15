@@ -13,7 +13,7 @@ interface IJwtPayload extends UserSession {
 @Injectable()
 export class JwtBearerTokenStrategy extends PassportStrategy(
   Strategy,
-  "bearer-token-strategy",
+  "bearer-token-strategy"
 ) {
   constructor(private configService: JwtConfigService) {
     super({

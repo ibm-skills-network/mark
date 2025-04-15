@@ -25,7 +25,7 @@ const FeedbackOption: React.FC<FeedbackOptionProps> = ({
   className,
 }) => {
   const currentOption = useAssignmentFeedbackConfig(
-    (state) => state.verbosityLevel,
+    (state) => state.verbosityLevel
   );
   return (
     <button
@@ -36,7 +36,7 @@ const FeedbackOption: React.FC<FeedbackOptionProps> = ({
         currentOption === id &&
           "bg-violet-50 border-violet-100 text-violet-800",
         currentOption !== id && "border-gray-200 hover:bg-gray-50",
-        className,
+        className
       )}
     >
       <div className="flex gap-1.5">
@@ -44,7 +44,7 @@ const FeedbackOption: React.FC<FeedbackOptionProps> = ({
           <div
             className={cn(
               "w-2.5 h-2.5 rounded-full",
-              currentOption === id && "bg-violet-600",
+              currentOption === id && "bg-violet-600"
             )}
           />
         </div>

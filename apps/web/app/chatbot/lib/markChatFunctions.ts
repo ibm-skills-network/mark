@@ -46,7 +46,7 @@ export async function searchKnowledgeBase(query: string): Promise<string> {
   const results = knowledgeItems.filter(
     (item) =>
       item.title.toLowerCase().includes(query.toLowerCase()) ||
-      item.description.toLowerCase().includes(query.toLowerCase()),
+      item.description.toLowerCase().includes(query.toLowerCase())
   );
 
   if (results.length === 0) {
@@ -65,7 +65,7 @@ export async function searchKnowledgeBase(query: string): Promise<string> {
 export async function reportIssue(
   issueType: string,
   description: string,
-  assignmentId?: number,
+  assignmentId?: number
 ): Promise<string> {
   if (!assignmentId) {
     const state = useAssignmentDetails.getState();
@@ -77,7 +77,7 @@ export async function reportIssue(
   console.log(
     `Issue reported: ${issueType} - ${description} for assignment ${
       assignmentId || "N/A"
-    }, attempt ${attemptId || "N/A"}`,
+    }, attempt ${attemptId || "N/A"}`
   );
 
   try {
@@ -150,7 +150,7 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
     if (question.questionResponses && question.questionResponses.length > 0) {
       result += `\n**Feedback**:\n`;
       const feedback = Array.isArray(
-        question.questionResponses.map((response: any) => response.feedback),
+        question.questionResponses.map((response: any) => response.feedback)
       )
         ? question.questionResponses.map((response: any) => response.feedback)
         : [];
@@ -172,7 +172,7 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
  * Get the rubric for an assignment
  */
 export async function getAssignmentRubric(
-  assignmentId: number,
+  assignmentId: number
 ): Promise<string> {
   const assignmentDetails = useAssignmentDetails.getState().assignmentDetails;
 
@@ -215,7 +215,7 @@ export async function getAssignmentRubric(
  */
 export async function submitFeedbackQuestion(
   questionId: number,
-  feedbackQuery: string,
+  feedbackQuery: string
 ): Promise<string> {
   const assignmentId = useAssignmentDetails.getState().assignmentDetails?.id;
   const attemptId = useLearnerStore.getState().activeAttemptId;
@@ -225,7 +225,7 @@ export async function submitFeedbackQuestion(
   }
 
   console.log(
-    `Feedback question submitted for question ${questionId}: ${feedbackQuery}`,
+    `Feedback question submitted for question ${questionId}: ${feedbackQuery}`
   );
 
   try {
@@ -267,7 +267,7 @@ export async function submitFeedbackQuestion(
 export async function requestRegrading(
   assignmentId: number,
   attemptId: number,
-  reason: string,
+  reason: string
 ): Promise<string> {
   if (!assignmentId) {
     assignmentId = useAssignmentDetails.getState().assignmentDetails?.id || 0;
@@ -282,7 +282,7 @@ export async function requestRegrading(
   }
 
   console.log(
-    `Regrading requested for assignment ${assignmentId}, attempt ${attemptId}: ${reason}`,
+    `Regrading requested for assignment ${assignmentId}, attempt ${attemptId}: ${reason}`
   );
 
   try {
@@ -327,18 +327,18 @@ async function generateQuestionsFromContent(
   assignmentId: number,
   learningObjectives: string,
   numberOfQuestions?: number,
-  questionTypes?: string[],
+  questionTypes?: string[]
 ) {
   // This would normally call an AI endpoint
   console.log(
-    `Generating questions for assignment ${assignmentId} based on: ${learningObjectives}`,
+    `Generating questions for assignment ${assignmentId} based on: ${learningObjectives}`
   );
 
   const count = numberOfQuestions || 5;
   const types = questionTypes || ["MULTIPLE_CHOICE", "TRUE_FALSE", "TEXT"];
 
   return `I'm generating ${count} questions for assignment ${assignmentId} based on the following learning objectives: "${learningObjectives}". The questions will include ${types.join(
-    ", ",
+    ", "
   )} types. This process may take a few moments. You'll receive a notification when the questions are ready for your review.`;
 }
 
@@ -349,7 +349,7 @@ async function generateQuestionsFromContent(
 export async function handleFunctionCall(
   functionName: string,
   args: any,
-  userRole: "learner" | "author",
+  userRole: "learner" | "author"
 ) {
   console.log(`Function call: ${functionName}, role: ${userRole}`);
 
@@ -362,7 +362,7 @@ export async function handleFunctionCall(
     return await reportIssue(
       args.issueType,
       args.description,
-      args.assignmentId,
+      args.assignmentId
     );
   }
 
@@ -378,14 +378,14 @@ export async function handleFunctionCall(
       case "submitFeedbackQuestion":
         return await submitFeedbackQuestion(
           args.questionId,
-          args.feedbackQuery,
+          args.feedbackQuery
         );
 
       case "requestRegrading":
         return await requestRegrading(
           args.assignmentId,
           args.attemptId,
-          args.reason,
+          args.reason
         );
 
       default:
@@ -398,7 +398,7 @@ export async function handleFunctionCall(
           args.assignmentId,
           args.questionType,
           args.questionText,
-          args.totalPoints,
+          args.totalPoints
         );
 
       case "generateQuestionVariant":
@@ -412,7 +412,7 @@ export async function handleFunctionCall(
           args.assignmentId,
           args.learningObjectives,
           args.numberOfQuestions,
-          args.questionTypes,
+          args.questionTypes
         );
 
       default:

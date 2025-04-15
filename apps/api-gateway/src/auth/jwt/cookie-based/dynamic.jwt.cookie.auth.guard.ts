@@ -7,11 +7,11 @@ import { MockJwtCookieAuthGuard } from "./mock.jwt.cookie.auth.guard";
 export class DynamicJwtCookieAuthGuard implements CanActivate {
   constructor(
     private readonly realGuard: JwtCookieAuthGuard,
-    private readonly mockGuard: MockJwtCookieAuthGuard,
+    private readonly mockGuard: MockJwtCookieAuthGuard
   ) {}
 
   canActivate(
-    context: ExecutionContext,
+    context: ExecutionContext
   ): boolean | Promise<boolean> | Observable<boolean> {
     return process.env.NODE_ENV !== "production" &&
       process.env.AUTH_DISABLED === "true"

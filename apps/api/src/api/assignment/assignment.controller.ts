@@ -80,7 +80,7 @@ import { AssignmentAccessControlGuard } from "./guards/assignment.access.control
 import { LLMResponseQuestion } from "./question/dto/create.update.question.request.dto";
 
 @ApiTags(
-  "Assignments (All endpoints need a user-session header (injected using the API Gateway)",
+  "Assignments (All endpoints need a user-session header (injected using the API Gateway)"
 )
 @Injectable()
 @Controller({
@@ -93,7 +93,7 @@ export class AssignmentController {
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly assignmentService: AssignmentService,
     private readonly llmService: LlmService,
-    private readonly jobStatusService: JobStatusService,
+    private readonly jobStatusService: JobStatusService
   ) {
     this.logger = parentLogger.child({ context: AssignmentController.name });
   }
@@ -122,7 +122,7 @@ export class AssignmentController {
   async getAssignment(
     @Param("id") id: number,
     @Req() request: UserSessionRequest,
-    @Query("lang") lang?: string,
+    @Query("lang") lang?: string
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     return this.assignmentService.get(Number(id), request.userSession, lang);
   }
@@ -138,7 +138,7 @@ export class AssignmentController {
   })
   @ApiResponse({ status: 403 })
   async listAssignments(
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<AssignmentResponseDto[]> {
     return this.assignmentService.list(request.userSession);
   }
@@ -156,11 +156,11 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   updateAssignment(
     @Param("id") id: number,
-    @Body() updateAssignmentRequestDto: UpdateAssignmentRequestDto,
+    @Body() updateAssignmentRequestDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.update(
       Number(id),
-      updateAssignmentRequestDto,
+      updateAssignmentRequestDto
     );
   }
   // Streaming real-time updates with proper completion handling
@@ -169,7 +169,7 @@ export class AssignmentController {
   @ApiParam({ name: "jobId", required: true, description: "Job ID" })
   @Sse("jobs/:jobId/status-stream")
   sendPublishJobStatus(
-    @Param("jobId", ParseIntPipe) jobId: number,
+    @Param("jobId", ParseIntPipe) jobId: number
   ): Observable<MessageEvent> {
     return this.jobStatusService.getJobStatusStream(jobId).pipe(
       map((event) => ({
@@ -180,7 +180,7 @@ export class AssignmentController {
         of({
           type: "close",
           data: { message: "Stream completed" },
-        } as MessageEvent),
+        } as MessageEvent)
       ),
       finalize(() => {
         console.log(`Stream closed for job ${jobId}`);
@@ -196,7 +196,7 @@ export class AssignmentController {
             done: true,
           },
         } as MessageEvent);
-      }),
+      })
     );
   }
   @Put(":id/publish")
@@ -213,7 +213,7 @@ export class AssignmentController {
   async updateAssignmentQuestions(
     @Param("id") id: number,
     @Body() updatedAssignment: UpdateAssignmentQuestionsDto,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<{ jobId: number; message: string }> {
     if (
       updatedAssignment === undefined ||
@@ -225,7 +225,7 @@ export class AssignmentController {
     return await this.assignmentService.publishAssignment(
       Number(id),
       updatedAssignment,
-      request.userSession.userId,
+      request.userSession.userId
     );
   }
 
@@ -242,7 +242,7 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   async generateQuestionVariant(
     @Param("id") id: number,
-    @Body() generateQuestionVariantDto: GenerateQuestionVariantDto,
+    @Body() generateQuestionVariantDto: GenerateQuestionVariantDto
   ): Promise<
     BaseAssignmentResponseDto & {
       questions?: QuestionDto[];
@@ -250,7 +250,7 @@ export class AssignmentController {
   > {
     return this.assignmentService.generateVariantsFromQuestions(
       Number(id),
-      generateQuestionVariantDto,
+      generateQuestionVariantDto
     );
   }
   // controller to get available languages
@@ -261,10 +261,10 @@ export class AssignmentController {
   @ApiResponse({ status: 200, type: [String] })
   @ApiResponse({ status: 403 })
   async getAvailableLanguages(
-    @Param("id") id: number,
+    @Param("id") id: number
   ): Promise<{ languages: string[] }> {
     const languages = await this.assignmentService.getAvailableLanguages(
-      Number(id),
+      Number(id)
     );
     return { languages };
   }
@@ -288,10 +288,10 @@ export class AssignmentController {
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   async testLanguageDetection(
-    @Body() language: { text: string },
+    @Body() language: { text: string }
   ): Promise<{ languageCode: string }> {
     const languageCode: string = await this.llmService.getLanguageCode(
-      language.text,
+      language.text
     );
     return { languageCode };
   }
@@ -309,11 +309,11 @@ export class AssignmentController {
   @ApiResponse({ status: 403 })
   replaceAssignment(
     @Param("id") id: number,
-    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto,
+    @Body() replaceAssignmentRequestDto: ReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.replace(
       Number(id),
-      replaceAssignmentRequestDto,
+      replaceAssignmentRequestDto
     );
   }
 
@@ -346,7 +346,7 @@ export class AssignmentController {
         }
         return { data: { status: job.status, progress: job.progress } };
       }),
-      map((data) => ({ data }) as MessageEvent),
+      map((data) => ({ data } as MessageEvent))
     );
   }
 
@@ -368,7 +368,7 @@ export class AssignmentController {
   async submitReport(
     @Param("assignmentId") assignmentId: number,
     @Body() body: ReportRequestDTO,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<{ message: string }> {
     const { issueType, description } = body;
 
@@ -389,7 +389,7 @@ export class AssignmentController {
       Number(assignmentId),
       issueType,
       description,
-      userId,
+      userId
     );
 
     return { message: "Report submitted successfully" };
@@ -425,7 +425,7 @@ export class AssignmentController {
   async uploadFileContents(
     @Param("assignmentId") assignmentId: number,
     @Body() body: QuestionGenerationPayload,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<{ message: string; jobId: number }> {
     const {
       fileContents,
@@ -437,7 +437,7 @@ export class AssignmentController {
 
     if (!fileContents && !learningObjectives) {
       throw new BadRequestException(
-        "Either file contents or learning objectives are required",
+        "Either file contents or learning objectives are required"
       );
     }
     if (Number.isNaN(assignmentIdNumber)) {
@@ -450,7 +450,7 @@ export class AssignmentController {
 
     const job = await this.assignmentService.createJob(
       assignmentIdNumber,
-      userId,
+      userId
     );
     void this.assignmentService.handleFileContents(
       assignmentIdNumber,
@@ -458,7 +458,7 @@ export class AssignmentController {
       assignmentType,
       questionsToGenerate,
       fileContents,
-      learningObjectives,
+      learningObjectives
     );
 
     return { message: "File processing started", jobId: job.id };

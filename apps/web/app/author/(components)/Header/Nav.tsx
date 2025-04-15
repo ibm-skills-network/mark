@@ -46,11 +46,11 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
   }, [pathname]);
 
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId,
+    (state) => state.setFocusedQuestionId
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const validateAssignmentConfig = useAssignmentConfig(
-    (state) => state.validate,
+    (state) => state.validate
   );
   const validateAssignmentSetup = useAuthorStore((state) => state.validate);
 

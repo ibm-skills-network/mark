@@ -22,7 +22,7 @@ interface IJwtPayload extends UserSessionPayload {
 @Injectable()
 export class JwtCookieStrategy extends PassportStrategy(
   Strategy,
-  "cookie-strategy",
+  "cookie-strategy"
 ) {
   constructor(private configService: JwtConfigService) {
     super({

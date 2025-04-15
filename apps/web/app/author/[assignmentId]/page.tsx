@@ -5,7 +5,7 @@ import MainContent from "../(components)/StepOne/MainContent";
 
 const DynamicSuccessPage = dynamic(
   () => import("../(components)/SuccessPage"),
-  { ssr: false },
+  { ssr: false }
 );
 
 interface Props {

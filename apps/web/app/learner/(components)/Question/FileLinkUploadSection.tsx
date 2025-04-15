@@ -13,7 +13,7 @@ interface FileLinkUploadSectionProps {
   onModeChange: (
     mode: "file" | "link",
     data: learnerFileResponse[] | string,
-    questionId: number,
+    questionId: number
   ) => void;
 }
 

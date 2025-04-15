@@ -36,7 +36,7 @@ export const useAppConfig = createWithEqualityFn<
             });
           }
         },
-      })),
+      }))
     ),
     {
       name: "appConfig",
@@ -52,6 +52,6 @@ export const useAppConfig = createWithEqualityFn<
         }
         return { DEBUG_MODE, tips: true, tipsVersion, persistTips };
       },
-    },
-  ),
+    }
+  )
 );

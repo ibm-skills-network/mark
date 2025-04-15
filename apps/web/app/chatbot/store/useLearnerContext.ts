@@ -35,7 +35,7 @@ export const useLearnerContext = () => {
       totalPointsPossible: state.totalPointsPossible,
       expiresAt: state.expiresAt,
     }),
-    shallow,
+    shallow
   );
 
   const { assignmentDetails, grade } = useAssignmentDetails(
@@ -43,7 +43,7 @@ export const useLearnerContext = () => {
       assignmentDetails: state.assignmentDetails,
       grade: state.grade,
     }),
-    shallow,
+    shallow
   );
 
   // Get attempts information from the overview store
@@ -54,7 +54,7 @@ export const useLearnerContext = () => {
         assignmentId: state.assignmentId,
         assignmentName: state.assignmentName,
       }),
-      shallow,
+      shallow
     );
 
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
@@ -74,7 +74,7 @@ export const useLearnerContext = () => {
 
   // Find current attempt info
   const currentAttempt = listOfAttempts.find(
-    (attempt) => attempt.id === activeAttemptId,
+    (attempt) => attempt.id === activeAttemptId
   );
 
   // Calculate attempts remaining
@@ -151,7 +151,7 @@ export const useLearnerContext = () => {
       const now = new Date();
       const timeRemaining = Math.max(
         0,
-        Math.floor((expiresAtDate.getTime() - now.getTime()) / 60000),
+        Math.floor((expiresAtDate.getTime() - now.getTime()) / 60000)
       );
 
       contextContent += `Time Remaining: Approximately ${timeRemaining} minutes\n`;
@@ -195,7 +195,7 @@ export const useLearnerContext = () => {
             q.questionResponses?.reduce(
               (acc: number, response: any) =>
                 acc + (response.pointsEarned || 0),
-              0,
+              0
             ) || 0;
 
           contextContent += `Question ${q.id}: ${earnedPoints}/${questionPoints} points\n`;
@@ -206,12 +206,12 @@ export const useLearnerContext = () => {
           if (q.learnerTextResponse) {
             contextContent += `Learner's text response: ${q.learnerTextResponse.replace(
               /<[^>]*>/g,
-              "",
+              ""
             )}\n`;
           }
           if (q.learnerChoices && q.learnerChoices.length > 0) {
             contextContent += `Learner's selected choices: ${q.learnerChoices.join(
-              ", ",
+              ", "
             )}\n`;
           }
           if (q.learnerAnswerChoice !== undefined) {
@@ -285,7 +285,7 @@ export const useLearnerContext = () => {
         if (currentQuestion.learnerTextResponse) {
           contextContent += `Text Response: ${currentQuestion.learnerTextResponse.replace(
             /<[^>]*>/g,
-            "",
+            ""
           )}\n`;
         }
 
@@ -294,7 +294,7 @@ export const useLearnerContext = () => {
           currentQuestion.learnerChoices.length > 0
         ) {
           contextContent += `Selected Choices: ${currentQuestion.learnerChoices.join(
-            ", ",
+            ", "
           )}\n`;
         }
 
@@ -365,7 +365,7 @@ export const useLearnerContext = () => {
             currentQuestion.learnerChoices.length > 0) ||
           currentQuestion.learnerAnswerChoice !== undefined ||
           (currentQuestion.learnerFileResponse &&
-            currentQuestion.learnerFileResponse.length > 0),
+            currentQuestion.learnerFileResponse.length > 0)
       ),
     };
   };

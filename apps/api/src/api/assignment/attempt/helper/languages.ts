@@ -29,7 +29,7 @@ export function getAllLanguageNames(): string[] {
  */
 export function getLanguageNameFromCode(code: string): string | undefined {
   return languages.find(
-    (lang) => lang.code.toLowerCase() === code.toLowerCase(),
+    (lang) => lang.code.toLowerCase() === code.toLowerCase()
   )?.name;
 }
 
@@ -39,6 +39,6 @@ export function getLanguageNameFromCode(code: string): string | undefined {
  */
 export function getLanguageCodeFromName(name: string): string | undefined {
   return languages.find(
-    (lang) => lang.name.toLowerCase() === name.toLowerCase(),
+    (lang) => lang.name.toLowerCase() === name.toLowerCase()
   )?.code;
 }

@@ -18,11 +18,11 @@ const ensureFfmpegLoaded = async (ffmpeg: FFmpeg) => {
   if (!ffmpeg.loaded) {
     await ffmpeg.load({
       coreURL: await toBlobURL(
-        "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+        "/ffmpeg-core/ffmpeg-core.js",
         "text/javascript",
       ),
       wasmURL: await toBlobURL(
-        "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+        "/ffmpeg-core/ffmpeg-core.wasm",
         "application/wasm",
       ),
     });
@@ -186,11 +186,11 @@ const VideoPresentationEditor = ({
       if (!ffmpeg.loaded) {
         await ffmpeg.load({
           coreURL: await toBlobURL(
-            "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+            "/ffmpeg-core/ffmpeg-core.js",
             "text/javascript",
           ),
           wasmURL: await toBlobURL(
-            "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+            "/ffmpeg-core/ffmpeg-core.wasm",
             "application/wasm",
           ),
         });

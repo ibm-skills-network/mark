@@ -111,8 +111,8 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
                       .split(/\r?\n/)
                       .reduce(
                         (acc, line) => acc + Math.ceil(line.length / 120),
-                        0,
-                      ),
+                        0
+                      )
                   ) * 1.5
                 }rem`,
                 wordBreak: "break-word",
@@ -201,7 +201,7 @@ interface CriteriaTableProps {
   handleUpdateCriteriaDesc: (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string,
+    value: string
   ) => void;
   maxPointsEver?: number;
   rowsRef: React.RefObject<(HTMLTableRowElement | null)[]>;
@@ -287,7 +287,7 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
                     handleUpdateCriteriaDesc(rubricIndex, criteriaIndex, value)
                   }
                 />
-              ) : null,
+              ) : null
             )
           ) : (
             <tr className="border-b border-gray-200 w-full">

@@ -37,7 +37,7 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
 
   function handleJumpToLearnerSide(
     questions: QuestionAuthorStore[],
-    assignmentId: number,
+    assignmentId: number
   ) {
     const processedQuestions = processQuestions(questions);
     localStorage.setItem("questions", JSON.stringify(processedQuestions));

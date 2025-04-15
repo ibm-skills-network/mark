@@ -5,7 +5,7 @@ import { AuthGuard } from "@nestjs/passport";
 
 @Injectable()
 export class MockJwtBearerTokenAuthGuard extends AuthGuard(
-  "bearer-token-strategy",
+  "bearer-token-strategy"
 ) {
   constructor(private reflector: Reflector) {
     super();

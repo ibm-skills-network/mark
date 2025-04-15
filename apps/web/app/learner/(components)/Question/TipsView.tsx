@@ -50,28 +50,28 @@ function TipsView() {
               <LanguageIcon className="h-6 w-6 text-gray-600" />
               <div
                 className={cn(
-                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200",
+                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200"
                 )}
                 aria-checked={false}
               >
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0",
+                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"
                   )}
                 />
               </div>
               <LanguageIcon className="h-6 w-6 text-violet-600" />
               <div
                 className={cn(
-                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600",
+                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600"
                 )}
                 aria-checked={true}
               >
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5",
+                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"
                   )}
                 />
               </div>
@@ -129,28 +129,28 @@ function TipsView() {
           <LanguageIcon className="h-6 w-6 text-gray-600" />
           <div
             className={cn(
-              "relative inline-flex h-5 w-10 flex-shrink-0  rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200",
+              "relative inline-flex h-5 w-10 flex-shrink-0  rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200"
             )}
             aria-checked={false}
           >
             <span
               aria-hidden="true"
               className={cn(
-                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0",
+                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"
               )}
             />
           </div>
           <LanguageIcon className="h-6 w-6 text-violet-600" />
           <div
             className={cn(
-              "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600",
+              "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600"
             )}
             aria-checked={true}
           >
             <span
               aria-hidden="true"
               className={cn(
-                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5",
+                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"
               )}
             />
           </div>

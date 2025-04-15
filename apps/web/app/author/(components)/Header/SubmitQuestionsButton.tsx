@@ -38,10 +38,10 @@ const SubmitQuestionsButton: FC<Props> = ({
     questionsAreReadyToBePublished();
   const questions = useAuthorStore((state) => state.questions);
   const originalAssignment = useAuthorStore(
-    (state) => state.originalAssignment,
+    (state) => state.originalAssignment
   );
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId,
+    (state) => state.setFocusedQuestionId
   );
   const isLoading = !questions;
   const hasEmptyQuestion = questions?.some((q) => q.type === "EMPTY");

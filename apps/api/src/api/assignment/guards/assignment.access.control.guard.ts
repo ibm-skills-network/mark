@@ -11,16 +11,16 @@ import { PrismaService } from "../../../prisma.service";
 
 @Injectable()
 export class AssignmentAccessControlGuard implements CanActivate {
-  constructor(
-    private reflector: Reflector,
-    private prisma: PrismaService,
-  ) {}
+  constructor(private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params } = request;
     const { id } = params;
     const assignmentId = Number(id);
+    if (!assignmentId || Number.isNaN(assignmentId)) {
+      throw new ForbiddenException("Invalid assignment ID");
+    }
 
     const [assignmentGroup, assignment] = await this.prisma.$transaction([
       this.prisma.assignmentGroup.findFirst({

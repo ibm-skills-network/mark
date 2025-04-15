@@ -29,7 +29,7 @@ const choiceTypes = new Set(["SINGLE_CORRECT", "MULTIPLE_CORRECT"]);
  * It returns a function that returns a ValidationResult.
  */
 export const useQuestionsAreReadyToBePublished = (
-  questions: Question[],
+  questions: Question[]
 ): (() => ValidationResult) => {
   const debugLog = useDebugLog();
   const assignmentConfig = useAssignmentConfig((state) => state);
@@ -38,7 +38,7 @@ export const useQuestionsAreReadyToBePublished = (
   // Helper: Validate basic question fields.
   const validateBasicFields = (
     q: Question,
-    index: number,
+    index: number
   ): ValidationError | null => {
     if (!q.question?.trim()) {
       return { message: `Question ${index + 1} text is empty.`, step: 3 };
@@ -65,7 +65,7 @@ export const useQuestionsAreReadyToBePublished = (
   const validateChoices = (
     choices: Choice[] | undefined,
     index: number,
-    type: QuestionType,
+    type: QuestionType
   ): ValidationError | null => {
     if (!choices || !Array.isArray(choices) || choices.length === 0) {
       return { message: `Question ${index + 1} has no choices.`, step: 3 };
@@ -111,7 +111,7 @@ export const useQuestionsAreReadyToBePublished = (
   // Helper: Validate scoring configuration (rubrics and criteria).
   const validateScoring = (
     scoring: Scoring | undefined,
-    index: number,
+    index: number
   ): ValidationError | null => {
     if (!scoring) {
       return {
@@ -180,7 +180,7 @@ export const useQuestionsAreReadyToBePublished = (
   const validateVariants = (
     variants: QuestionVariants[],
     qType: QuestionType,
-    index: number,
+    index: number
   ): ValidationError | null => {
     for (let v = 0; v < variants.length; v++) {
       const variant = variants[v];

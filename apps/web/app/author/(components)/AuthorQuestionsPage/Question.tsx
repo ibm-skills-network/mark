@@ -70,10 +70,10 @@ const Question: FC<QuestionProps> = ({
   preview = false,
 }) => {
   const [maxWordCount, setMaxWordCount] = useState<number | null>(
-    question.maxWords || null,
+    question.maxWords || null
   );
   const [maxCharacters, setMaxCharacters] = useState<number | null>(
-    question.maxCharacters || null,
+    question.maxCharacters || null
   );
   const setQuestionTitle = useAuthorStore((state) => state.setQuestionTitle);
   const addVariant = useAuthorStore((state) => state.addVariant);
@@ -87,22 +87,22 @@ const Question: FC<QuestionProps> = ({
   const [variantLoading, setVariantLoading] = useState(false);
   const router = useRouter();
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId,
+    (state) => state.setFocusedQuestionId
   );
   const showWordCountInput =
     questionStates[question.id]?.showWordCountInput || false;
   const countMode = questionStates[question.id]?.countMode || "CHARACTER";
   const [toggleQuestion, setToggleQuestion] = useState<boolean>(
-    !collapse || isFocusedQuestion,
+    !collapse || isFocusedQuestion
   );
   const [questionTitle, setQuestionTitleState] = useState<string>(
-    question.question || "",
+    question.question || ""
   );
   const [questionType, setQuestionTypeState] = useState<QuestionType>(
-    question.type,
+    question.type
   );
   const [responseType, setResponseType] = useState<ResponseType>(
-    question.responseType || "OTHER",
+    question.responseType || "OTHER"
   );
   const [toggleDeleteConfirmation, setToggleDeleteConfirmation] =
     useState<boolean>(false);
@@ -117,11 +117,11 @@ const Question: FC<QuestionProps> = ({
       "By default, learners will be given 0 points if they do not meet any of the criteria.",
     ],
     criteriaIds: question.scoring?.criteria?.map(
-      (c, index) => c.id || index + 1,
+      (c, index) => c.id || index + 1
     ) || [1, 2],
   });
   const [inputValue, setInputValue] = useState<string>(
-    questionIndex.toString(),
+    questionIndex.toString()
   );
 
   // Function to handle deleting a variant
@@ -144,7 +144,7 @@ const Question: FC<QuestionProps> = ({
   // Function to update the main question state
   const handleUpdateQuestionState = (
     params: UpdateQuestionStateParams,
-    variantMode = false,
+    variantMode = false
   ) => {
     if (variantMode) {
       // Update variant state
@@ -199,7 +199,7 @@ const Question: FC<QuestionProps> = ({
             question.scoring?.showRubricsToLearner,
           rubrics: params.rubrics
             ? params.rubrics
-            : (question.scoring?.rubrics ?? []),
+            : question.scoring?.rubrics ?? [],
         },
       };
       useAuthorStore.getState().modifyQuestion(questionId, updatedQuestion);
@@ -209,7 +209,7 @@ const Question: FC<QuestionProps> = ({
   // Function to update a variant
   const handleUpdateVariant = (
     variantId: number,
-    updatedData: Partial<QuestionVariants>,
+    updatedData: Partial<QuestionVariants>
   ) => {
     useAuthorStore.getState().editVariant(questionId, variantId, updatedData);
   };
@@ -282,7 +282,7 @@ const Question: FC<QuestionProps> = ({
     if (
       Array.isArray(question.variants) &&
       question.variants.some(
-        (v) => Array.isArray(v.choices) && v.choices.some((c) => !c.choice),
+        (v) => Array.isArray(v.choices) && v.choices.some((c) => !c.choice)
       )
     ) {
       toast.error("Please fill in all choices before generating variants");
@@ -292,7 +292,7 @@ const Question: FC<QuestionProps> = ({
     const questionsWithVariants = await generateQuestionVariant(
       [question],
       1,
-      question.assignmentId,
+      question.assignmentId
     );
     if (questionsWithVariants) {
       replaceQuestion(questionId, questionsWithVariants[0]);
@@ -327,7 +327,7 @@ const Question: FC<QuestionProps> = ({
         setNewIndex(parsedValue);
         const updatedQuestions = [...useAuthorStore.getState().questions];
         const currentQuestion = updatedQuestions.find(
-          (q) => q.id === questionId,
+          (q) => q.id === questionId
         );
         if (currentQuestion) {
           updatedQuestions.splice(questionIndex - 1, 1);
@@ -384,7 +384,7 @@ const Question: FC<QuestionProps> = ({
         icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    [],
+    []
   );
   const responseTypes = useMemo(
     () => [
@@ -438,24 +438,24 @@ const Question: FC<QuestionProps> = ({
       //   icon: <MicrophoneIcon className="w-5 h-5  stroke-gray-500" />,
       // },
     ],
-    [],
+    []
   );
   const toggleRandomizedChoicesMode = useAuthorStore(
-    (state) => state.toggleRandomizedChoicesMode,
+    (state) => state.toggleRandomizedChoicesMode
   );
 
   const randomizedChoices = (
     questionId: number,
     questionIndex: number,
     variantId?: number,
-    Index?: number,
+    Index?: number
   ) => {
     if (variantId) {
       const randomizedMode = toggleRandomizedChoicesMode(questionId, variantId);
       toast.info(
         `Randomized choice order for question ${questionIndex}  ${
           variantId ? `: variant ${Index}` : ""
-        } has been ${randomizedMode ? "ENABLED" : "DISABLED"}`,
+        } has been ${randomizedMode ? "ENABLED" : "DISABLED"}`
       );
       return;
     }
@@ -463,7 +463,7 @@ const Question: FC<QuestionProps> = ({
     toast.info(
       `Randomized choice order for question number ${questionIndex} has been ${
         randomizedMode ? "ENABLED" : "DISABLED"
-      }`,
+      }`
     );
   };
   const handleEditClick = (id: number) => {
@@ -561,7 +561,7 @@ const Question: FC<QuestionProps> = ({
                                 | "UPLOAD"
                                 | "CODE"
                                 | "SINGLE_CORRECT"
-                                | "TRUE_FALSE",
+                                | "TRUE_FALSE"
                             );
                             handleUpdateQuestionState({
                               questionType: qt.value as
@@ -722,7 +722,7 @@ const Question: FC<QuestionProps> = ({
                   "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
                   question.scoring?.showRubricsToLearner
                     ? "bg-violet-600"
-                    : "bg-gray-200",
+                    : "bg-gray-200"
                 )}
                 role="switch"
                 aria-checked={question.scoring?.showRubricsToLearner}
@@ -733,7 +733,7 @@ const Question: FC<QuestionProps> = ({
                     "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
                     question.scoring?.showRubricsToLearner
                       ? "translate-x-5"
-                      : "translate-x-0",
+                      : "translate-x-0"
                   )}
                 />
               </button>
@@ -778,10 +778,10 @@ const Question: FC<QuestionProps> = ({
                     onClick={() => {
                       setCountMode(
                         questionId,
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                       handleResetCounters(
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                     }}
                   />
@@ -944,10 +944,10 @@ const Question: FC<QuestionProps> = ({
                     onClick={() => {
                       setCountMode(
                         questionId,
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                       handleResetCounters(
-                        countMode === "CHARACTER" ? "WORD" : "CHARACTER",
+                        countMode === "CHARACTER" ? "WORD" : "CHARACTER"
                       );
                     }}
                   />
@@ -998,7 +998,7 @@ const Question: FC<QuestionProps> = ({
                       "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
                       question.randomizedChoices
                         ? "bg-violet-600"
-                        : "bg-gray-200",
+                        : "bg-gray-200"
                     )}
                     role="switch"
                     aria-checked={question.randomizedChoices}
@@ -1009,7 +1009,7 @@ const Question: FC<QuestionProps> = ({
                         "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
                         question.randomizedChoices
                           ? "translate-x-5"
-                          : "translate-x-0",
+                          : "translate-x-0"
                       )}
                     />
                   </button>
@@ -1069,17 +1069,17 @@ const Question: FC<QuestionProps> = ({
           {question.variants?.map((variant, index) => {
             // Local states for variant properties
             const [localVariantContent, setLocalVariantContent] = useState(
-              variant.variantContent || "",
+              variant.variantContent || ""
             );
             const [localType, setLocalType] = useState(
-              variant.type || questionType,
+              variant.type || questionType
             );
             const [localCriteria, setLocalCriteria] = useState(() =>
               variant.scoring?.criteria
                 ? {
                     points: variant.scoring.criteria.map((c) => c.points),
                     criteriaDesc: variant.scoring.criteria.map(
-                      (c) => c.description,
+                      (c) => c.description
                     ),
                     criteriaIds: variant.scoring.criteria.map((c) => c.id),
                   }
@@ -1090,7 +1090,7 @@ const Question: FC<QuestionProps> = ({
                       "By default, learners will be given 0 points if they do not meet any of the criteria.",
                     ],
                     criteriaIds: [1, 2],
-                  },
+                  }
             );
 
             return (
@@ -1120,14 +1120,14 @@ const Question: FC<QuestionProps> = ({
                               question.id,
                               questionIndex,
                               variant.id,
-                              index + 1,
+                              index + 1
                             );
                           }}
                           className={cn(
                             "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
                             variant.randomizedChoices
                               ? "bg-violet-600"
-                              : "bg-gray-200",
+                              : "bg-gray-200"
                           )}
                           role="switch"
                           aria-checked={variant.randomizedChoices}
@@ -1138,7 +1138,7 @@ const Question: FC<QuestionProps> = ({
                               "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
                               variant.randomizedChoices
                                 ? "translate-x-5"
-                                : "translate-x-0",
+                                : "translate-x-0"
                             )}
                           />
                         </button>
@@ -1177,7 +1177,7 @@ const Question: FC<QuestionProps> = ({
                             description:
                               params.questionCriteria.criteriaDesc[idx],
                             points: params.questionCriteria.points[idx],
-                          }),
+                          })
                         ),
                       };
                     }

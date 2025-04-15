@@ -10,7 +10,7 @@ const usePersistentCountdown = ({
   initialCountdown,
 }: UsePersistentCountdownProps) => {
   const [countdown, setCountdown] = useState(
-    ~~localStorage.getItem(keyString) || initialCountdown,
+    ~~localStorage.getItem(keyString) || initialCountdown
   );
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);

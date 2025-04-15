@@ -175,11 +175,11 @@ const useVideoProcessor = () => {
       if (!ffmpeg.loaded) {
         await ffmpeg.load({
           coreURL: await toBlobURL(
-            "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+            "/ffmpeg-core/ffmpeg-core.js",
             "text/javascript",
           ),
           wasmURL: await toBlobURL(
-            "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+            "/ffmpeg-core/ffmpeg-core.wasm",
             "application/wasm",
           ),
         });
@@ -561,17 +561,18 @@ export default function PresentationGrader({
   // 9) Show the "X seconds" timer
   const [currentRecordingTime, setCurrentRecordingTime] = useState(0);
 
-  // Load FFmpeg once
+  // Loading FFmpeg when the component mounts (e.g., in useEffect)
   useEffect(() => {
     const loadFFmpeg = async () => {
       if (!ffmpeg.loaded) {
         await ffmpeg.load({
+          // Use self-hosted files from the public folder
           coreURL: await toBlobURL(
-            "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+            "/ffmpeg-core/ffmpeg-core.js",
             "text/javascript",
           ),
           wasmURL: await toBlobURL(
-            "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+            "/ffmpeg-core/ffmpeg-core.wasm",
             "application/wasm",
           ),
         });

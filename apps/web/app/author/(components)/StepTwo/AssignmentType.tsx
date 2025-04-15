@@ -35,14 +35,14 @@ const Component: FC<Props> = () => {
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
-                graded === true && "bg-violet-600",
+                graded === true && "bg-violet-600"
               )}
             />
           </div>
           <p
             className={cn(
               "leading-5 transition-all cursor-pointer",
-              graded === true ? "font-bold text-violet-600" : "font-medium",
+              graded === true ? "font-bold text-violet-600" : "font-medium"
             )}
           >
             Graded
@@ -60,14 +60,14 @@ const Component: FC<Props> = () => {
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
-                graded === false && "bg-violet-600",
+                graded === false && "bg-violet-600"
               )}
             />
           </div>
           <div
             className={cn(
               "leading-5 cursor-pointer transition-all",
-              graded === false ? "font-bold text-violet-600" : "font-medium",
+              graded === false ? "font-bold text-violet-600" : "font-medium"
             )}
           >
             Practice

@@ -37,7 +37,7 @@ export const useAuthorContext = () => {
       learningObjectives: state.learningObjectives,
       fileUploaded: state.fileUploaded,
     }),
-    shallow,
+    shallow
   );
 
   // Get question states from question store
@@ -71,7 +71,7 @@ export const useAuthorContext = () => {
       name: name || "Untitled Assignment",
       questionCount: questions.length,
       hasLearningObjectives: Boolean(
-        learningObjectives && learningObjectives.trim() !== "",
+        learningObjectives && learningObjectives.trim() !== ""
       ),
       hasFocusedQuestion: Boolean(focusedQuestionId),
       hasUploadedFiles: fileUploaded.length > 0,
@@ -194,7 +194,7 @@ export const useAuthorContext = () => {
                   criterion.description || "No description"
                 } (${criterion.points || 0} points)\n`;
               });
-            },
+            }
           );
         }
 
@@ -246,11 +246,11 @@ export const useAuthorContext = () => {
       question: currentQuestion.question,
       totalPoints: currentQuestion.totalPoints,
       hasChoices: Boolean(
-        currentQuestion.choices && currentQuestion.choices.length > 0,
+        currentQuestion.choices && currentQuestion.choices.length > 0
       ),
       hasRubrics: hasRubrics(currentQuestion),
       hasVariants: Boolean(
-        currentQuestion.variants && currentQuestion.variants.length > 0,
+        currentQuestion.variants && currentQuestion.variants.length > 0
       ),
     };
   };

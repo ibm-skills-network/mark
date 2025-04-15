@@ -83,7 +83,7 @@ describe("AttemptService", () => {
                     grade: parameters.data.grade,
                     submitted: parameters.data.submitted,
                     success: true,
-                  }),
+                  })
                 ),
             },
             questionResponse: {
@@ -120,17 +120,17 @@ describe("AttemptService", () => {
   const generateRandomPoints = (): TestCase => {
     const totalPoints = Array.from(
       { length: 5 },
-      () => Math.floor(Math.random() * 100) + 1,
+      () => Math.floor(Math.random() * 100) + 1
     );
     const earnedPoints = totalPoints.map((points) =>
-      Math.floor(Math.random() * points),
+      Math.floor(Math.random() * points)
     );
     return { totalPoints, earnedPoints };
   };
 
   const testCases: TestCase[] = Array.from(
     { length: 10 },
-    generateRandomPoints,
+    generateRandomPoints
   );
 
   each(testCases).test(
@@ -208,14 +208,14 @@ describe("AttemptService", () => {
           (
             assignmentAttemptId,
             questionId: number,
-            _createQuestionResponse,
+            _createQuestionResponse
           ) => {
             return Promise.resolve(
               mockQuestionResponses.find(
-                (response) => response.questionId === questionId,
-              ) || { id: 1, questionId, totalPoints: 0, feedback: [] },
+                (response) => response.questionId === questionId
+              ) || { id: 1, questionId, totalPoints: 0, feedback: [] }
             );
-          },
+          }
         );
 
       prisma.assignment.findUnique = jest
@@ -240,7 +240,7 @@ describe("AttemptService", () => {
               submitted: parameters.data.submitted,
               success: true,
             };
-          },
+          }
         );
 
       // Execute the method
@@ -250,7 +250,7 @@ describe("AttemptService", () => {
         userId: string,
         groupId: string,
         assignmentId: number,
-        role: UserRole = UserRole.LEARNER,
+        role: UserRole = UserRole.LEARNER
         // eslint-disable-next-line unicorn/consistent-function-scoping
       ): UserSessionRequest => {
         return {
@@ -280,7 +280,7 @@ describe("AttemptService", () => {
         gradingCallbackRequired,
         userId,
         groupId,
-        assignmentId,
+        assignmentId
       );
       const result = await service.updateAssignmentAttempt(
         assignmentAttemptId,
@@ -288,22 +288,22 @@ describe("AttemptService", () => {
         updateAssignmentAttemptDto,
         authCookie,
         gradingCallbackRequired,
-        mockRequest,
+        mockRequest
       );
       // Calculate expected grade
       const totalPointsPossible = totalPoints.reduce(
         (sum, points) => sum + points,
-        0,
+        0
       );
       const totalPointsEarned = earnedPoints.reduce(
         (sum, points) => sum + points,
-        0,
+        0
       );
       const expectedGrade = totalPointsEarned / totalPointsPossible;
       // Verify the result
       expect(result.grade).toBeCloseTo(expectedGrade, 4);
       expect(result.submitted).toBe(true);
       expect(result.success).toBe(true);
-    },
+    }
   );
 });

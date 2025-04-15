@@ -45,13 +45,13 @@ const FileUploadSection = ({
   const questionType = question.type;
   const responseType = question.responseType;
   const [currentFileContent, setCurrentFileContent] = useState<string | null>(
-    null,
+    null
   );
   const addFileUpload = useLearnerStore((state) => state.addFileUpload);
   const [error, setError] = useState<string | null>(null);
   const [showContent, setShowContent] = useState(false);
   const learnerFileResponse = useLearnerStore((state) =>
-    state.getFileUpload(questionId),
+    state.getFileUpload(questionId)
   );
   const deleteFile = useLearnerStore((state) => state.deleteFile);
   const [fileBlob, setFileBlob] = useState<Blob | null>(null);
@@ -65,7 +65,7 @@ const FileUploadSection = ({
             content: result.content,
             githubUrl: "",
           };
-        }),
+        })
       );
       fileContents.forEach((file) => addFileUpload(file, questionId));
     } catch (error) {
@@ -93,7 +93,7 @@ const FileUploadSection = ({
   const { questionGitHubState } = useGitHubStore();
   const selectedFiles = questionGitHubState[questionId]?.selectedFiles || [];
   const persistStateForQuestion = useGitHubStore(
-    (state) => state.persistStateForQuestion,
+    (state) => state.persistStateForQuestion
   );
   const [octokit, setOctokit] = useState<Octokit | null>(null);
   const getTokenFromBackend = async () => {
@@ -115,11 +115,11 @@ const FileUploadSection = ({
     }));
   };
   const setActiveQuestionId = useGitHubStore(
-    (state) => state.setActiveQuestionId,
+    (state) => state.setActiveQuestionId
   );
   const changeSelectedFiles = (
     questionId: number,
-    files: learnerFileResponse[],
+    files: learnerFileResponse[]
   ) => {
     useGitHubStore.setState((state) => {
       const currentFiles =
@@ -147,11 +147,11 @@ const FileUploadSection = ({
         content: "",
         githubUrl: fileUrl,
       },
-      questionId,
+      questionId
     );
     changeSelectedFiles(
       questionId,
-      selectedFiles.filter((file) => file.githubUrl !== fileUrl),
+      selectedFiles.filter((file) => file.githubUrl !== fileUrl)
     );
   };
 
@@ -171,7 +171,7 @@ const FileUploadSection = ({
   }, []);
   const getAcceptedFileTypes = (
     questionType: QuestionType,
-    responseType?: ResponseType,
+    responseType?: ResponseType
   ): { [key: string]: string[] } => {
     const fileType =
       responseType && responseType !== undefined ? responseType : questionType;

@@ -66,7 +66,7 @@ function Dropdown<T>({
         isOpen
           ? "scale-100 opacity-100"
           : "scale-90 opacity-0 pointer-events-none",
-        "max-h-60 overflow-y-auto", // Added classes for scrollable content
+        "max-h-60 overflow-y-auto" // Added classes for scrollable content
       )}
       style={{
         top: dropdownRef.current
@@ -91,7 +91,7 @@ function Dropdown<T>({
               "block px-4 py-3 text-sm cursor-pointer transition",
               selectedItem === item.value
                 ? "hover:bg-violet-700 bg-violet-600 text-white"
-                : "hover:bg-gray-100",
+                : "hover:bg-gray-100"
             )}
             onClick={() => handleSelectItem(item.value)}
             onKeyUp={(e) => {
@@ -115,7 +115,7 @@ function Dropdown<T>({
           onClick={toggleDropdown}
           className={cn(
             "rounded-lg w-full transition-all flex justify-between items-center pl-4 px-3 py-2 text-left border border-gray-300 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-violet-600",
-            isOpen ? "ring-violet-600 ring-1" : "",
+            isOpen ? "ring-violet-600 ring-1" : ""
           )}
           {...rest}
         >
@@ -124,7 +124,7 @@ function Dropdown<T>({
               "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm transition-colors",
               selectedItem
                 ? "font-medium text-gray-700"
-                : "text-gray-500 dark:text-gray-500",
+                : "text-gray-500 dark:text-gray-500"
             )}
           >
             {items.find((item) => item.value === selectedItem)?.label ??
