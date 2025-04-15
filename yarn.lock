@@ -1702,10 +1702,10 @@
   resolved "https://registry.yarnpkg.com/@redis/time-series/-/time-series-1.1.0.tgz#cba454c05ec201bd5547aaf55286d44682ac8eb5"
   integrity sha512-c1Q99M5ljsIuc4YdaCwfUEXsofakb9c8+Zse2qxTadu8TalLXuAESzLvFAvNVbkmSlvlzIQOLpBCmWI9wTOt+g==
 
-"@reteps/dockerfmt@^0.2.5":
-  version "0.2.6"
-  resolved "https://registry.yarnpkg.com/@reteps/dockerfmt/-/dockerfmt-0.2.6.tgz#cc1d2cc4845471a9576bf565b7b46e120c214ba6"
-  integrity sha512-a3OYxLpIc6jbW1prbruEhRq9eYre9fKhcBD+boVwhri9L9ebdnKNy4LzaDa/tiu81P9phxA6Xi8r6jtV8I7Xsw==
+"@reteps/dockerfmt@^0.3.2":
+  version "0.3.5"
+  resolved "https://registry.yarnpkg.com/@reteps/dockerfmt/-/dockerfmt-0.3.5.tgz#c484ef5dc87bee3fe82274b2ee4f9220a28833e3"
+  integrity sha512-ib1LU/3lXHAH63hxaGu9O+G3nbe5JlCg5WoMS7zzfuuBUPenCeuO7cOhYhI7IwD2QaD1NBy8AJ+FrKyhaHtWLA==
 
 "@rtsao/scc@^1.1.0":
   version "1.1.0"
@@ -9609,11 +9609,11 @@ prettier-plugin-pkg@^0.19.0:
   integrity sha512-wlBvVhAZQ+iOH8/4gWc1SxJbf5++xwKmnFkqHYUsmoQIg6hgdyL1055Z9FOWa6cumqL/QwqdOzY9aH4McdjKyw==
 
 prettier-plugin-sh@^0.17.0:
-  version "0.17.1"
-  resolved "https://registry.yarnpkg.com/prettier-plugin-sh/-/prettier-plugin-sh-0.17.1.tgz#cb357d56d5f37a6ea93f858b89eafa471d822bf8"
-  integrity sha512-jbrB7MRlmgtSRx2+I3McQGdFb98VUtJTkQ5DiK6oSJSfCy6vSBxSsuyDZ1xIx13TqREUHTsMzlNrZBZScuJJXQ==
+  version "0.17.2"
+  resolved "https://registry.yarnpkg.com/prettier-plugin-sh/-/prettier-plugin-sh-0.17.2.tgz#6d16bc1cc36c446a91aa01ff223ed94a5c6d5e92"
+  integrity sha512-7+dEo/IYbhrUj4qP+1QXj41/5Hv9ZkxBuEatI1jywrcAlVF1aGhdYJF4Sn+M67nkA16iRL53W4FSRe1bitTdmQ==
   dependencies:
-    "@reteps/dockerfmt" "^0.2.5"
+    "@reteps/dockerfmt" "^0.3.2"
     sh-syntax "^0.5.6"
 
 prettier@^2.8.8:
