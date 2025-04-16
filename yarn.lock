@@ -3267,9 +3267,9 @@ agentkeepalive@^4.2.1:
     humanize-ms "^1.2.1"
 
 ai@^4.2.11:
-  version "4.3.7"
-  resolved "https://registry.yarnpkg.com/ai/-/ai-4.3.7.tgz#f740a31fb5680e07af5df8c81c547ada9e653648"
-  integrity sha512-lUwpDjv4neo/OBe092LYOZtFMoMtrBDf3/bKUuM8Tc+2MCpLNgD21NDT9+Zo6Z0g1vRzz2VIurNwH/FumVFG9g==
+  version "4.3.8"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-4.3.8.tgz#e9be7c5051751d17b2b01af0924960813ae495e6"
+  integrity sha512-94iuXn+/I1X6v8I+9nycuHCv3RjtI9UqALw3UfANwaxOGEPtITfImfQg4DAR+3asnJViJ/IdCpWbTyzVXjHWPQ==
   dependencies:
     "@ai-sdk/provider" "1.1.3"
     "@ai-sdk/provider-utils" "2.2.7"
