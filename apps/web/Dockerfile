@@ -37,6 +37,7 @@ RUN apk add --no-cache dumb-init~=1
 COPY --chown=node:node --from=sourcer $DIR/apps/web/.next ./.next
 COPY --chown=node:node --from=sourcer $DIR/package.json $DIR/package.json
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
+COPY --chown=node:node --from=sourcer $DIR/apps/web/public ./public
 COPY --chown=node:node --from=sourcer $DIR/apps/web/entrypoint.sh ./entrypoint.sh
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["./entrypoint.sh"]
