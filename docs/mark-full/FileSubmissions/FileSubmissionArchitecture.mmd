@@ -1,0 +1,58 @@
+flowchart TD
+    %% Main flow
+    Start([Learner Starts Assignment]) --> L1[View Assignment Question]
+    L1 --> L2[Select File to Upload]
+    
+    %% File Upload Process
+    subgraph UploadProcess[File Upload Process]
+        direction TB
+        F1[File Selected on Frontend] --> F2[Request Presigned URL]
+        F2 --> F3[Next.js Route: getPresignedUrl]
+        F3 --> F4[Generate Unique File Key]
+        F4 --> F5[Get Presigned URL from IBM COS]
+        F5 --> F6[Return URL, Key, Bucket to Frontend]
+        F6 --> F7[Upload File Directly to IBM COS]
+        F7 --> F8[File Upload Complete]
+        F8 --> F9[Store File Metadata in Frontend Store]
+    end
+    
+    L2 --> UploadProcess
+    UploadProcess --> L3[Continue with Assignment]
+    L3 --> L4[Complete Other Questions]
+    L4 --> L5[Submit Assignment]
+    
+    %% Backend Processing
+    L5 --> B1[Submit to NestJS Backend]
+    
+    subgraph BackendProcess[Backend Processing]
+        direction TB
+        B2[Process Assignment Data] --> B3[Retrieve File Reference]
+        B3 --> B4[Evaluate Uploaded Files]
+        B4 --> B5[Apply Scoring Rules]
+        B5 --> B6[Generate Feedback]
+        B6 --> B7[Store Results in Database]
+    end
+    
+    B1 --> BackendProcess
+    BackendProcess --> R1[Return Grading Results]
+    R1 --> R2[Display Feedback to Learner]
+    
+    %% IBM Cloud Object Storage
+    F7 -.-> S1[(IBM Cloud Object Storage)]
+    B4 -.-> S1
+    
+    %% Styling
+    classDef primary fill:#d8e8d5,stroke:#82b366,stroke-width:2px,color:#2D5E2E
+    classDef process fill:#ffe6cc,stroke:#d79b00,stroke-width:2px,color:#d79b00
+    classDef backend fill:#e1d5e7,stroke:#9673a6,stroke-width:2px,color:#9673a6
+    classDef storage fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px,color:#6c8ebf
+    classDef results fill:#d5e8d4,stroke:#82b366,stroke-width:2px,color:#82b366,font-weight:bold
+    classDef endpoint fill:#f5f5f5,stroke:#666666,stroke-width:2px,color:#333333,font-weight:bold,border-radius:10px
+    
+    class Start,R2 endpoint
+    class L1,L2,L3,L4,L5 primary
+    class UploadProcess process
+    class BackendProcess backend
+    class S1 storage
+    class R1,R2 results
+    
