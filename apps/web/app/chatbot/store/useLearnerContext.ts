@@ -13,10 +13,37 @@ type ContextMessage = {
   content: string;
 };
 
+export interface UseLearnerContextInterface {
+  getContextMessage: () => Promise<ContextMessage>;
+  isGradedAssignment: boolean;
+  isFeedbackMode: boolean;
+  currentQuestion: any;
+  getCurrentQuestionInfo: () => {
+    id: number;
+    type: string;
+    question: string;
+    points: number;
+    hasResponse: boolean;
+  } | null;
+  assignmentMeta: {
+    name?: string;
+    type?: string;
+    passingGrade?: number;
+    numAttempts?: number;
+    attemptsRemaining?: number;
+  } | null;
+  questions: any[];
+  currentAttempt: any | null;
+  activeAttemptId: number | null;
+  assignmentId: number | null;
+  attemptsRemaining: number | null;
+  setActiveQuestionNumber: (questionNumber: number) => void;
+}
+
 /**
  * A hook that provides comprehensive assignment context for the Mark chatbot when in learner mode
  */
-export const useLearnerContext = () => {
+export const useLearnerContext = (): UseLearnerContextInterface => {
   const {
     questions,
     activeQuestionNumber,
@@ -34,8 +61,9 @@ export const useLearnerContext = () => {
       totalPointsEarned: state.totalPointsEarned,
       totalPointsPossible: state.totalPointsPossible,
       expiresAt: state.expiresAt,
+      setActiveQuestionNumber: state.setActiveQuestionNumber,
     }),
-    shallow
+    shallow,
   );
 
   const { assignmentDetails, grade } = useAssignmentDetails(
@@ -43,7 +71,7 @@ export const useLearnerContext = () => {
       assignmentDetails: state.assignmentDetails,
       grade: state.grade,
     }),
-    shallow
+    shallow,
   );
 
   // Get attempts information from the overview store
@@ -54,7 +82,7 @@ export const useLearnerContext = () => {
         assignmentId: state.assignmentId,
         assignmentName: state.assignmentName,
       }),
-      shallow
+      shallow,
     );
 
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
@@ -74,7 +102,7 @@ export const useLearnerContext = () => {
 
   // Find current attempt info
   const currentAttempt = listOfAttempts.find(
-    (attempt) => attempt.id === activeAttemptId
+    (attempt) => attempt.id === activeAttemptId,
   );
 
   // Calculate attempts remaining
@@ -151,7 +179,7 @@ export const useLearnerContext = () => {
       const now = new Date();
       const timeRemaining = Math.max(
         0,
-        Math.floor((expiresAtDate.getTime() - now.getTime()) / 60000)
+        Math.floor((expiresAtDate.getTime() - now.getTime()) / 60000),
       );
 
       contextContent += `Time Remaining: Approximately ${timeRemaining} minutes\n`;
@@ -195,7 +223,7 @@ export const useLearnerContext = () => {
             q.questionResponses?.reduce(
               (acc: number, response: any) =>
                 acc + (response.pointsEarned || 0),
-              0
+              0,
             ) || 0;
 
           contextContent += `Question ${q.id}: ${earnedPoints}/${questionPoints} points\n`;
@@ -206,12 +234,12 @@ export const useLearnerContext = () => {
           if (q.learnerTextResponse) {
             contextContent += `Learner's text response: ${q.learnerTextResponse.replace(
               /<[^>]*>/g,
-              ""
+              "",
             )}\n`;
           }
           if (q.learnerChoices && q.learnerChoices.length > 0) {
             contextContent += `Learner's selected choices: ${q.learnerChoices.join(
-              ", "
+              ", ",
             )}\n`;
           }
           if (q.learnerAnswerChoice !== undefined) {
@@ -285,7 +313,7 @@ export const useLearnerContext = () => {
         if (currentQuestion.learnerTextResponse) {
           contextContent += `Text Response: ${currentQuestion.learnerTextResponse.replace(
             /<[^>]*>/g,
-            ""
+            "",
           )}\n`;
         }
 
@@ -294,7 +322,7 @@ export const useLearnerContext = () => {
           currentQuestion.learnerChoices.length > 0
         ) {
           contextContent += `Selected Choices: ${currentQuestion.learnerChoices.join(
-            ", "
+            ", ",
           )}\n`;
         }
 
@@ -365,7 +393,7 @@ export const useLearnerContext = () => {
             currentQuestion.learnerChoices.length > 0) ||
           currentQuestion.learnerAnswerChoice !== undefined ||
           (currentQuestion.learnerFileResponse &&
-            currentQuestion.learnerFileResponse.length > 0)
+            currentQuestion.learnerFileResponse.length > 0),
       ),
     };
   };
@@ -382,5 +410,10 @@ export const useLearnerContext = () => {
     activeAttemptId,
     assignmentId: assignmentId || assignmentDetails?.id,
     attemptsRemaining: calculateAttemptsRemaining(),
+    setActiveQuestionNumber: (questionNumber: number) => {
+      if (questionNumber > 0 && questionNumber <= questions.length) {
+        setCurrentQuestion(questions[questionNumber - 1]);
+      }
+    },
   };
 };

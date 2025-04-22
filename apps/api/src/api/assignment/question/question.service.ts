@@ -21,12 +21,12 @@ import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.req
 export class QuestionService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly llmService: LlmService
+    private readonly llmService: LlmService,
   ) {}
 
   async create(
     assignmentId: number,
-    createQuestionRequestDto: CreateUpdateQuestionRequestDto
+    createQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(createQuestionRequestDto);
     const scoring = createQuestionRequestDto.scoring
@@ -34,7 +34,7 @@ export class QuestionService {
       : undefined;
     const choices = createQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(createQuestionRequestDto.choices)
+          JSON.stringify(createQuestionRequestDto.choices),
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
     const result = await this.prisma.question.create({
@@ -84,13 +84,13 @@ export class QuestionService {
   async update(
     assignmentId: number,
     id: number,
-    updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring = (updateQuestionRequestDto.scoring as object) || undefined;
     const choices = updateQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(updateQuestionRequestDto.choices)
+          JSON.stringify(updateQuestionRequestDto.choices),
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
     const result = await this.prisma.question.update({
@@ -112,7 +112,7 @@ export class QuestionService {
   async replace(
     assignmentId: number,
     id: number,
-    updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     await this.applyGuardRails(updateQuestionRequestDto);
     const scoring =
@@ -121,7 +121,7 @@ export class QuestionService {
     const answer = updateQuestionRequestDto.answer || null;
     const choices = updateQuestionRequestDto.choices
       ? (JSON.parse(
-          JSON.stringify(updateQuestionRequestDto.choices)
+          JSON.stringify(updateQuestionRequestDto.choices),
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
 
@@ -154,7 +154,7 @@ export class QuestionService {
   async createMarkingRubric(
     question: QuestionDto,
     assignmentId: number,
-    rubricIndex?: number
+    rubricIndex?: number,
   ): Promise<ScoringDto | Choice[]> {
     if (!question) {
       throw new NotFoundException(`Question DTO not provided or is invalid.`);
@@ -165,20 +165,20 @@ export class QuestionService {
       return await this.llmService.createMarkingRubric(
         question,
         assignmentId,
-        rubricIndex ?? undefined
+        rubricIndex ?? undefined,
       );
     } else if (choiceTypes.has(question.type)) {
       return await this.llmService.createChoices(question, assignmentId);
     } else {
       throw new HttpException(
         "Invalid question type for creating marking rubric",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
   }
   async expandMarkingRubric(
     question: QuestionDto,
-    assignmentId: number
+    assignmentId: number,
   ): Promise<QuestionDto> {
     if (!question) {
       throw new NotFoundException(`Question DTO not provided or is invalid.`);
@@ -187,7 +187,7 @@ export class QuestionService {
     if (textTypes.has(question.type)) {
       const expandedRubric = await this.llmService.expandMarkingRubric(
         question,
-        assignmentId
+        assignmentId,
       );
       return {
         ...question,
@@ -199,14 +199,14 @@ export class QuestionService {
     } else {
       throw new HttpException(
         "Invalid question type for creating marking rubric",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
   }
 
   async getLiveRecordingFeedback(
     liveRecordingData: LearnerLiveRecordingFeedback,
-    assignmentId: number
+    assignmentId: number,
   ): Promise<{ feedback: string }> {
     if (!liveRecordingData.question) {
       throw new NotFoundException(`Question is not found.`);
@@ -214,7 +214,7 @@ export class QuestionService {
 
     const feedback = await this.llmService.getLiveRecordingFeedback(
       liveRecordingData,
-      assignmentId
+      assignmentId,
     );
 
     // Return structured object
@@ -232,7 +232,7 @@ export class QuestionService {
     assignmentId: number,
     question: QuestionDto,
     languageCode: string,
-    language: string
+    language: string,
   ): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
     if (!question) {
       throw new NotFoundException(`Question DTO not provided or is invalid.`);
@@ -275,7 +275,7 @@ export class QuestionService {
       await this.llmService.generateQuestionTranslation(
         assignmentId,
         question.question,
-        language
+        language,
       );
 
     // If needed, you can uncomment and handle choices as well:
@@ -308,15 +308,15 @@ export class QuestionService {
   }
 
   private async applyGuardRails(
-    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<void> {
     const guardRailsValidation = await this.llmService.applyGuardRails(
-      JSON.stringify(createUpdateQuestionRequestDto)
+      JSON.stringify(createUpdateQuestionRequestDto),
     );
     if (!guardRailsValidation) {
       throw new HttpException(
         "Question validation failed due to inappropriate or unacceptable content",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
   }

@@ -452,6 +452,7 @@ export interface Assignment extends ReplaceAssignmentRequest {
   name: string;
   type?: "AI_GRADED" | "MANUAL";
 }
+export type IssueSeverity = "info" | "warning" | "error" | "critical";
 
 export interface GetAssignmentResponse extends Assignment {
   success: boolean;

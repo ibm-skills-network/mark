@@ -10,7 +10,7 @@ interface Props extends ComponentPropsWithoutRef<"div"> {}
 
 const Component: FC<Props> = () => {
   const [displayOrder, setDisplayOrder, errors] = useAssignmentConfig(
-    (state) => [state.displayOrder, state.setDisplayOrder, state.errors]
+    (state) => [state.displayOrder, state.setDisplayOrder, state.errors],
   );
   function handleGradedChange(e: MouseEvent<HTMLButtonElement>) {
     setDisplayOrder(e.currentTarget.value === "DEFINED" ? "DEFINED" : "RANDOM");
@@ -28,7 +28,7 @@ const Component: FC<Props> = () => {
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
-                displayOrder === "DEFINED" && "bg-violet-600"
+                displayOrder === "DEFINED" && "bg-violet-600",
               )}
             />
           </div>
@@ -37,7 +37,7 @@ const Component: FC<Props> = () => {
               "leading-5 transition-all cursor-pointer",
               displayOrder === "DEFINED"
                 ? "font-bold text-violet-600"
-                : "font-medium"
+                : "font-medium",
             )}
           >
             Strict
@@ -54,7 +54,7 @@ const Component: FC<Props> = () => {
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
-                displayOrder === "RANDOM" && "bg-violet-600"
+                displayOrder === "RANDOM" && "bg-violet-600",
               )}
             />
           </div>
@@ -63,7 +63,7 @@ const Component: FC<Props> = () => {
               "leading-5 cursor-pointer transition-all",
               displayOrder === "RANDOM"
                 ? "font-bold text-violet-600"
-                : "font-medium"
+                : "font-medium",
             )}
           >
             Randomized

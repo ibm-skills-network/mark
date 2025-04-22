@@ -15,7 +15,7 @@ const MdViewer = dynamic(
     import("@uiw/react-md-editor").then((mod) => {
       return mod.default.Markdown;
     }),
-  { ssr: false }
+  { ssr: false },
 );
 
 const FeedbackFormatter: FC<Props> = (props) => {

@@ -94,14 +94,14 @@ export class AttemptService {
     private readonly llmService: LlmService,
     private readonly questionService: QuestionService,
     private readonly assignmentService: AssignmentService,
-    private readonly httpService: HttpService
+    private readonly httpService: HttpService,
   ) {}
 
   async submitFeedback(
     assignmentId: number,
     attemptId: number,
     feedbackDto: AssignmentFeedbackDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<AssignmentFeedbackResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -109,19 +109,19 @@ export class AttemptService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `Assignment attempt with ID ${attemptId} not found.`
+        `Assignment attempt with ID ${attemptId} not found.`,
       );
     }
 
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
-        "Assignment ID does not match the attempt."
+        "Assignment ID does not match the attempt.",
       );
     }
 
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
-        "You do not have permission to submit feedback for this attempt."
+        "You do not have permission to submit feedback for this attempt.",
       );
     }
 
@@ -168,7 +168,7 @@ export class AttemptService {
   async getFeedback(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<AssignmentFeedbackDto> {
     const feedback = await this.prisma.assignmentFeedback.findFirst({
       where: {
@@ -196,7 +196,7 @@ export class AttemptService {
     assignmentId: number,
     attemptId: number,
     regradingRequestDto: RegradingRequestDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<RequestRegradingResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -204,19 +204,19 @@ export class AttemptService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `Assignment attempt with ID ${attemptId} not found.`
+        `Assignment attempt with ID ${attemptId} not found.`,
       );
     }
 
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
-        "Assignment ID does not match the attempt."
+        "Assignment ID does not match the attempt.",
       );
     }
 
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
-        "You do not have permission to request regrading for this attempt."
+        "You do not have permission to request regrading for this attempt.",
       );
     }
 
@@ -238,7 +238,7 @@ export class AttemptService {
             regradingStatus: RegradingStatus.PENDING,
             updatedAt: new Date(),
           },
-        }
+        },
       );
 
       return {
@@ -264,7 +264,7 @@ export class AttemptService {
   async getRegradingStatus(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<RegradingStatusResponseDto> {
     const regradingRequest = await this.prisma.regradingRequest.findFirst({
       where: {
@@ -276,7 +276,7 @@ export class AttemptService {
 
     if (!regradingRequest) {
       throw new NotFoundException(
-        `Regrading request for assignment ${assignmentId} and attempt ${attemptId} not found.`
+        `Regrading request for assignment ${assignmentId} and attempt ${attemptId} not found.`,
       );
     }
 
@@ -293,7 +293,7 @@ export class AttemptService {
    */
   async listAssignmentAttempts(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<AssignmentAttemptResponseDto[]> {
     const { userId, role } = userSession;
 
@@ -334,11 +334,11 @@ export class AttemptService {
    */
   async createAssignmentAttempt(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<BaseAssignmentAttemptResponseDto> {
     const assignment = await this.assignmentService.findOne(
       assignmentId,
-      userSession
+      userSession,
     );
     await this.validateNewAttempt(assignment, userSession);
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
@@ -374,7 +374,7 @@ export class AttemptService {
       questions.sort(
         (a, b) =>
           assignment.questionOrder.indexOf(a.id) -
-          assignment.questionOrder.indexOf(b.id)
+          assignment.questionOrder.indexOf(b.id),
       );
     }
     await this.prisma.assignmentAttempt.update({
@@ -387,7 +387,7 @@ export class AttemptService {
     const attemptQuestionVariantsData = questions.map((question) => {
       const questionAndVariants = [undefined, ...question.variants];
       const randomIndex = Math.floor(
-        Math.random() * questionAndVariants.length
+        Math.random() * questionAndVariants.length,
       );
       const chosenVariant = questionAndVariants[randomIndex];
 
@@ -398,12 +398,12 @@ export class AttemptService {
         variantId = chosenVariant.id ?? undefined;
         randomizedChoices = this.maybeShuffleChoices(
           chosenVariant.choices as unknown as Choice[],
-          chosenVariant.randomizedChoices === true
+          chosenVariant.randomizedChoices === true,
         );
       } else {
         randomizedChoices = this.maybeShuffleChoices(
           question.choices as unknown as Choice[],
-          question.randomizedChoices === true
+          question.randomizedChoices === true,
         );
       }
 
@@ -475,7 +475,7 @@ export class AttemptService {
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     gradingCallbackRequired: boolean,
-    request: UserSessionRequest
+    request: UserSessionRequest,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role, userId } = request.userSession;
     if (role === UserRole.LEARNER) {
@@ -492,7 +492,7 @@ export class AttemptService {
       });
       if (!assignmentAttempt) {
         throw new NotFoundException(
-          `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
+          `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
         );
       }
       const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
@@ -528,7 +528,7 @@ export class AttemptService {
       for (const response of updateAssignmentAttemptDto.responsesForQuestions) {
         const questionId: number = response.id;
         const variantMapping = assignmentAttempt.questionVariants.find(
-          (qv) => qv.questionId === questionId
+          (qv) => qv.questionId === questionId,
         );
         let question: QuestionDto;
         if (variantMapping && variantMapping.questionVariant !== null) {
@@ -545,17 +545,17 @@ export class AttemptService {
             scoring:
               typeof variant.scoring === "string"
                 ? (JSON.parse(variant.scoring) as ScoringDto)
-                : (variant.scoring as unknown as ScoringDto) ??
+                : ((variant.scoring as unknown as ScoringDto) ??
                   (typeof baseQuestion.scoring === "string"
                     ? (JSON.parse(baseQuestion.scoring) as ScoringDto)
-                    : (baseQuestion.scoring as unknown as ScoringDto)),
+                    : (baseQuestion.scoring as unknown as ScoringDto))),
             choices:
               typeof variant.choices === "string"
                 ? (JSON.parse(variant.choices) as Choice[])
-                : (variant.choices as unknown as Choice[]) ??
+                : ((variant.choices as unknown as Choice[]) ??
                   (typeof baseQuestion.choices === "string"
                     ? (JSON.parse(baseQuestion.choices) as Choice[])
-                    : (baseQuestion.choices as unknown as Choice[])),
+                    : (baseQuestion.choices as unknown as Choice[]))),
             answer: baseQuestion.answer ?? variant.answer,
             alreadyInBackend: true,
             totalPoints: baseQuestion.totalPoints,
@@ -568,7 +568,7 @@ export class AttemptService {
         question = await this.applyTranslationToQuestion(
           question,
           updateAssignmentAttemptDto.language,
-          variantMapping
+          variantMapping,
         );
         preTranslatedQuestions.set(questionId, question);
       }
@@ -592,17 +592,17 @@ export class AttemptService {
       updateAssignmentAttemptDto.language,
       updateAssignmentAttemptDto.authorQuestions,
       updateAssignmentAttemptDto.authorAssignmentDetails,
-      updateAssignmentAttemptDto.preTranslatedQuestions
+      updateAssignmentAttemptDto.preTranslatedQuestions,
     );
     const { grade, totalPointsEarned, totalPossiblePoints } =
       role === UserRole.LEARNER
         ? this.calculateGradeForLearner(
             successfulQuestionResponses,
-            assignment as unknown as GetAssignmentAttemptResponseDto
+            assignment as unknown as GetAssignmentAttemptResponseDto,
           )
         : this.calculateGradeForAuthor(
             successfulQuestionResponses,
-            updateAssignmentAttemptDto.authorQuestions
+            updateAssignmentAttemptDto.authorQuestions,
           );
 
     if (gradingCallbackRequired && role === UserRole.LEARNER) {
@@ -639,14 +639,14 @@ export class AttemptService {
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
-          assignment as unknown as LearnerGetAssignmentResponseDto
+          assignment as unknown as LearnerGetAssignmentResponseDto,
         ),
       };
     } else {
       const result = await this.updateAssignmentAttemptInDb(
         assignmentAttemptId,
         updateAssignmentAttemptDto,
-        grade
+        grade,
       );
       return {
         id: result.id,
@@ -658,7 +658,7 @@ export class AttemptService {
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
-          assignment as unknown as LearnerGetAssignmentResponseDto
+          assignment as unknown as LearnerGetAssignmentResponseDto,
         ),
       };
     }
@@ -704,7 +704,7 @@ export class AttemptService {
    * @throws BadRequestException If stored data formats are invalid
    */
   async getLearnerAssignmentAttempt(
-    assignmentAttemptId: number
+    assignmentAttemptId: number,
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -717,7 +717,7 @@ export class AttemptService {
     });
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
       );
     }
 
@@ -726,7 +726,7 @@ export class AttemptService {
     });
     if (!questions) {
       throw new NotFoundException(
-        `Questions for assignment with Id ${assignmentAttempt.assignmentId} not found.`
+        `Questions for assignment with Id ${assignmentAttempt.assignmentId} not found.`,
       );
     }
 
@@ -790,7 +790,7 @@ export class AttemptService {
     });
 
     const questionVariantsMap = new Map(
-      questionsWithVariants.map((question) => [question.id, question])
+      questionsWithVariants.map((question) => [question.id, question]),
     );
     const mergedQuestions = questions.map((originalQ) => {
       const variantQ = questionVariantsMap.get(originalQ.id);
@@ -811,7 +811,7 @@ export class AttemptService {
         liveRecordingConfig:
           (question.liveRecordingConfig as unknown as JsonValue) ?? undefined,
       })),
-      assignmentAttempt.questionResponses as QuestionResponse[]
+      assignmentAttempt.questionResponses as QuestionResponse[],
     );
     const finalQuestions = questionOrder
       .map((qId) => questionsWithResponses.find((q) => q.id === qId))
@@ -909,7 +909,7 @@ export class AttemptService {
    */
   async getAssignmentAttempt(
     assignmentAttemptId: number,
-    language: string
+    language: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
     // 1. Normalize language (e.g., "en-US" -> "en")
     if (!language) {
@@ -935,7 +935,7 @@ export class AttemptService {
     });
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
       );
     }
 
@@ -1036,7 +1036,7 @@ export class AttemptService {
         if (typeof qv.randomizedChoices === "string") {
           try {
             randomizedChoicesArray = JSON.parse(
-              qv.randomizedChoices
+              qv.randomizedChoices,
             ) as Choice[];
           } catch {
             randomizedChoicesArray = [];
@@ -1049,11 +1049,11 @@ export class AttemptService {
             return normalizedChoices.findIndex((bc) => bc.id === rChoice.id);
           }
           return normalizedChoices.findIndex(
-            (bc) => bc.choice === rChoice.choice
+            (bc) => bc.choice === rChoice.choice,
           );
         });
         const orderedBaseChoices = permutation?.map(
-          (index) => normalizedChoices[index]
+          (index) => normalizedChoices[index],
         );
         if (orderedBaseChoices?.length === normalizedChoices?.length) {
           finalChoices = orderedBaseChoices;
@@ -1073,7 +1073,7 @@ export class AttemptService {
             const origTranslatedChoices =
               translationObject.translatedChoices as Choice[];
             const reorderedTranslatedChoices = permutation.map(
-              (index) => origTranslatedChoices[index]
+              (index) => origTranslatedChoices[index],
             );
             translationObject.translatedChoices = reorderedTranslatedChoices;
           }
@@ -1104,7 +1104,7 @@ export class AttemptService {
 
     // 9. Create a map of "question ID -> merged question data"
     const questionVariantsMap = new Map(
-      questionsWithVariants.map((question) => [question.id, question])
+      questionsWithVariants.map((question) => [question.id, question]),
     );
 
     // 10. For any questions that didn't have a variant, use the original question
@@ -1112,7 +1112,7 @@ export class AttemptService {
       where: { assignmentId: assignmentAttempt.assignmentId },
     });
     const nonVariantQuestions = questions.filter(
-      (originalQ) => !questionVariantsMap.has(originalQ.id)
+      (originalQ) => !questionVariantsMap.has(originalQ.id),
     );
 
     // 11. Combine them
@@ -1160,7 +1160,7 @@ export class AttemptService {
         typeof question.randomizedChoices === "string"
       ) {
         const randomizedArray = JSON.parse(
-          question.randomizedChoices
+          question.randomizedChoices,
         ) as Choice[];
         for (const choice of randomizedArray) {
           delete choice.points;
@@ -1233,7 +1233,7 @@ export class AttemptService {
     language: string,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
-    preTranslatedQuestions?: Map<number, QuestionDto> // new optional parameter
+    preTranslatedQuestions?: Map<number, QuestionDto>, // new optional parameter
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     let question: QuestionDto;
     let assignmentContext: {
@@ -1260,11 +1260,11 @@ export class AttemptService {
           });
         if (!assignmentAttempt) {
           throw new NotFoundException(
-            `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
+            `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
           );
         }
         const variantMapping = assignmentAttempt.questionVariants.find(
-          (qv) => qv.questionId === questionId
+          (qv) => qv.questionId === questionId,
         );
         if (
           variantMapping &&
@@ -1283,17 +1283,17 @@ export class AttemptService {
             scoring:
               typeof variant.scoring === "string"
                 ? (JSON.parse(variant.scoring) as ScoringDto)
-                : (variant.scoring as unknown as ScoringDto) ??
+                : ((variant.scoring as unknown as ScoringDto) ??
                   (typeof baseQuestion.scoring === "string"
                     ? (JSON.parse(baseQuestion.scoring) as ScoringDto)
-                    : (baseQuestion.scoring as unknown as ScoringDto)),
+                    : (baseQuestion.scoring as unknown as ScoringDto))),
             choices:
               typeof variant.choices === "string"
                 ? (JSON.parse(variant.choices) as Choice[])
-                : (variant.choices as unknown as Choice[]) ??
+                : ((variant.choices as unknown as Choice[]) ??
                   (typeof baseQuestion.choices === "string"
                     ? (JSON.parse(baseQuestion.choices) as Choice[])
-                    : (baseQuestion.choices as unknown as Choice[])),
+                    : (baseQuestion.choices as unknown as Choice[]))),
             answer: baseQuestion.answer ?? variant.answer,
             alreadyInBackend: true,
             totalPoints: baseQuestion.totalPoints,
@@ -1306,7 +1306,7 @@ export class AttemptService {
         assignmentId,
         questionId,
         assignmentAttemptId,
-        role
+        role,
       );
     } else if (role === UserRole.AUTHOR) {
       question = authorQuestions.find((q) => q.id === questionId);
@@ -1320,7 +1320,7 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto,
       assignmentContext,
       assignmentId,
-      language
+      language,
     );
     const result = await this.prisma.questionResponse.create({
       data: {
@@ -1377,7 +1377,7 @@ export class AttemptService {
     attemptId: number,
     issueType: ReportType,
     description: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     // Ensure the assignment exists
     const assignmentExists = await this.prisma.assignment.findUnique({
@@ -1406,7 +1406,7 @@ export class AttemptService {
     });
     if (reports.length >= 5) {
       throw new UnprocessableEntityException(
-        "You have reached the maximum number of reports allowed in a 24-hour period."
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
       );
     }
 
@@ -1431,7 +1431,7 @@ export class AttemptService {
    */
   private async validateNewAttempt(
     assignment: LearnerGetAssignmentResponseDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<void> {
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
@@ -1462,12 +1462,12 @@ export class AttemptService {
     const ongoingAttempts = attempts.filter(
       (sub) =>
         !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null)
+        (sub.expiresAt >= new Date() || sub.expiresAt === null),
     );
 
     const attemptsInTimeRange = attempts.filter(
       (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
+        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
     );
     if (ongoingAttempts.length > 0) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
@@ -1478,18 +1478,18 @@ export class AttemptService {
       attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
     ) {
       throw new UnprocessableEntityException(
-        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
+        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
       );
     }
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
-        assignment.id
+        assignment.id,
       );
 
       if (attemptCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
+          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
         );
       }
     }
@@ -1501,7 +1501,7 @@ export class AttemptService {
    * @returns The expiration date or null.
    */
   private calculateAttemptExpiresAt(
-    assignment: LearnerGetAssignmentResponseDto
+    assignment: LearnerGetAssignmentResponseDto,
   ): Date | null {
     if (
       assignment.allotedTimeMinutes !== undefined &&
@@ -1514,7 +1514,7 @@ export class AttemptService {
 
   private maybeShuffleChoices(
     choices: Choice[] | string | null | undefined,
-    shouldShuffle: boolean
+    shouldShuffle: boolean,
   ): string | null {
     if (!choices) return;
     let parsed: Choice[];
@@ -1555,7 +1555,7 @@ export class AttemptService {
     language: string,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
-    preTranslatedQuestions?: Map<number, QuestionDto>
+    preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
@@ -1569,13 +1569,13 @@ export class AttemptService {
           language,
           authorQuestions,
           assignmentDetails,
-          preTranslatedQuestions
+          preTranslatedQuestions,
         );
-      }
+      },
     );
 
     const questionResponses = await Promise.allSettled(
-      questionResponsesPromise
+      questionResponsesPromise,
     );
     const successfulResponses = questionResponses
       .filter((response) => response.status === "fulfilled")
@@ -1587,7 +1587,7 @@ export class AttemptService {
 
     if (failedResponses.length > 0) {
       throw new InternalServerErrorException(
-        `Failed to submit questions: ${failedResponses.join(", ")}`
+        `Failed to submit questions: ${failedResponses.join(", ")}`,
       );
     }
 
@@ -1602,20 +1602,20 @@ export class AttemptService {
    */
   private calculateGradeForAuthor(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    authorQuestions: QuestionDto[]
+    authorQuestions: QuestionDto[],
   ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
     if (successfulQuestionResponses.length === 0) {
       return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
     }
     const totalPointsEarned = successfulQuestionResponses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
-      0
+      0,
     );
 
     const totalPossiblePoints = authorQuestions.reduce(
       (accumulator: number, question: QuestionDto) =>
         accumulator + question.totalPoints,
-      0
+      0,
     );
 
     const grade = totalPointsEarned / totalPossiblePoints;
@@ -1630,20 +1630,20 @@ export class AttemptService {
    */
   private calculateGradeForLearner(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: GetAssignmentAttemptResponseDto
+    assignment: GetAssignmentAttemptResponseDto,
   ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
     if (successfulQuestionResponses.length === 0) {
       return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
     }
     const totalPointsEarned = successfulQuestionResponses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
-      0
+      0,
     );
 
     const totalPossiblePoints = assignment.questions.reduce(
       (accumulator: number, question: { totalPoints: number }) =>
         accumulator + question.totalPoints,
-      0
+      0,
     );
 
     const grade = totalPointsEarned / totalPossiblePoints;
@@ -1657,7 +1657,7 @@ export class AttemptService {
    */
   private async sendGradeToLtiGateway(
     grade: number,
-    authCookie: string
+    authCookie: string,
   ): Promise<void> {
     const ltiGatewayResponse = await this.httpService
       .put(
@@ -1667,7 +1667,7 @@ export class AttemptService {
           headers: {
             Cookie: `authentication=${authCookie}`,
           },
-        }
+        },
       )
       .toPromise();
 
@@ -1686,7 +1686,7 @@ export class AttemptService {
   private async updateAssignmentAttemptInDb(
     assignmentAttemptId: number,
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
-    grade: number
+    grade: number,
   ) {
     // Omit fields that shouldn't be part of the update
     const {
@@ -1718,7 +1718,7 @@ export class AttemptService {
    */
   private constructFeedbacksForQuestions(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: LearnerGetAssignmentResponseDto
+    assignment: LearnerGetAssignmentResponseDto,
   ) {
     return successfulQuestionResponses.map((feedbackForQuestion) => {
       const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
@@ -1738,7 +1738,7 @@ export class AttemptService {
     const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
     if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
       throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
       );
     }
   }
@@ -1758,7 +1758,7 @@ export class AttemptService {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
-    language: string
+    language: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse:
@@ -1768,7 +1768,7 @@ export class AttemptService {
   }> {
     if (
       Array.isArray(
-        createQuestionResponseAttemptRequestDto.learnerFileResponse
+        createQuestionResponseAttemptRequestDto.learnerFileResponse,
       ) &&
       createQuestionResponseAttemptRequestDto.learnerFileResponse.length ===
         0 &&
@@ -1782,7 +1782,7 @@ export class AttemptService {
       (createQuestionResponseAttemptRequestDto.learnerPresentationResponse ===
         undefined ||
         (Array.isArray(
-          createQuestionResponseAttemptRequestDto.learnerPresentationResponse
+          createQuestionResponseAttemptRequestDto.learnerPresentationResponse,
         ) &&
           createQuestionResponseAttemptRequestDto.learnerPresentationResponse
             .length === 0))
@@ -1806,7 +1806,7 @@ export class AttemptService {
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
           assignmentId,
-          language
+          language,
         );
       }
       case QuestionType.LINK_FILE: {
@@ -1816,7 +1816,7 @@ export class AttemptService {
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
             assignmentId,
-            language
+            language,
           );
         } else if (
           createQuestionResponseAttemptRequestDto.learnerFileResponse
@@ -1826,11 +1826,11 @@ export class AttemptService {
             question.type,
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
-            language
+            language,
           );
         } else {
           throw new BadRequestException(
-            "Expected a file-based response (learnerFileResponse) or URL-based response (learnerUrlResponse), but did not receive one."
+            "Expected a file-based response (learnerFileResponse) or URL-based response (learnerUrlResponse), but did not receive one.",
           );
         }
       }
@@ -1840,21 +1840,21 @@ export class AttemptService {
             question,
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
-            assignmentId
+            assignmentId,
           );
         } else if (question.responseType === "PRESENTATION") {
           return this.handleVideoPresentationQuestionResponse(
             question,
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
-            assignmentId
+            assignmentId,
           );
         } else {
           return this.handleFileUploadQuestionResponse(
             question,
             question.type,
             createQuestionResponseAttemptRequestDto,
-            assignmentContext
+            assignmentContext,
           );
         }
       }
@@ -1864,28 +1864,28 @@ export class AttemptService {
           createQuestionResponseAttemptRequestDto,
           assignmentContext,
           assignmentId,
-          language
+          language,
         );
       }
       case QuestionType.TRUE_FALSE: {
         return this.handleTrueFalseQuestionResponse(
           question,
           createQuestionResponseAttemptRequestDto,
-          language
+          language,
         );
       }
       case QuestionType.SINGLE_CORRECT: {
         return this.handleSingleCorrectQuestionResponse(
           question,
           createQuestionResponseAttemptRequestDto,
-          language
+          language,
         );
       }
       case QuestionType.MULTIPLE_CORRECT: {
         return this.handleMultipleCorrectQuestionResponse(
           question,
           createQuestionResponseAttemptRequestDto,
-          language
+          language,
         );
       }
       default: {
@@ -1901,14 +1901,14 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
-    assignmentId: number
+    assignmentId: number,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerPresentationResponse;
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerPresentationResponse) {
       throw new BadRequestException(
-        "Expected a presentation-based response (learnerPresentationResponse), but did not receive one."
+        "Expected a presentation-based response (learnerPresentationResponse), but did not receive one.",
       );
     }
 
@@ -1924,12 +1924,12 @@ export class AttemptService {
         question.scoring?.type ?? "",
         question.scoring,
         question.type,
-        question.responseType ?? "OTHER"
+        question.responseType ?? "OTHER",
       );
 
     const model = await this.llmService.gradePresentationQuestion(
       presentationQuestionEvaluateModel,
-      assignmentId
+      assignmentId,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1944,14 +1944,14 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
-    assignmentId: number
+    assignmentId: number,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerPresentationResponse;
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerPresentationResponse) {
       throw new BadRequestException(
-        "Expected a presentation-based response (learnerPresentationResponse), but did not receive one."
+        "Expected a presentation-based response (learnerPresentationResponse), but did not receive one.",
       );
     }
 
@@ -1968,12 +1968,12 @@ export class AttemptService {
         question.scoring,
         question.type,
         question.responseType ?? "OTHER",
-        question.videoPresentationConfig
+        question.videoPresentationConfig,
       );
 
     const model = await this.llmService.gradeVideoPresentationQuestion(
       videoPresentationQuestionEvaluateModel,
-      assignmentId
+      assignmentId,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -1990,14 +1990,14 @@ export class AttemptService {
       assignmentInstructions: string;
       questionAnswerContext: QuestionAnswerContext[];
     },
-    language?: string
+    language?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerFileUpload[];
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerFileResponse) {
       throw new BadRequestException(
-        "Expected a file-based response (learnerFileResponse), but did not receive one."
+        "Expected a file-based response (learnerFileResponse), but did not receive one.",
       );
     }
     const learnerResponse =
@@ -2011,12 +2011,12 @@ export class AttemptService {
       question.scoring?.type ?? "",
       question.scoring,
       questionType,
-      question.responseType ?? "OTHER"
+      question.responseType ?? "OTHER",
     );
     const model = await this.llmService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,
       question.assignmentId,
-      language
+      language,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -2037,14 +2037,14 @@ export class AttemptService {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
-    language?: string
+    language?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   }> {
     const learnerResponse = await AttemptHelper.validateAndGetTextResponse(
       questionType,
-      createQuestionResponseAttemptRequestDto
+      createQuestionResponseAttemptRequestDto,
     );
 
     const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
@@ -2055,13 +2055,13 @@ export class AttemptService {
       question.totalPoints,
       question.scoring?.type ?? "",
       question.scoring,
-      question.responseType ?? "OTHER"
+      question.responseType ?? "OTHER",
     );
 
     const model = await this.llmService.gradeTextBasedQuestion(
       textBasedQuestionEvaluateModel,
       assignmentId,
-      language
+      language,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -2081,26 +2081,25 @@ export class AttemptService {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
-    language?: string
+    language?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
   }> {
     if (!createQuestionResponseAttemptRequestDto.learnerUrlResponse) {
       throw new BadRequestException(
-        "Expected a URL-based response (learnerUrlResponse), but did not receive one."
+        "Expected a URL-based response (learnerUrlResponse), but did not receive one.",
       );
     }
 
     const learnerResponse =
       createQuestionResponseAttemptRequestDto.learnerUrlResponse;
 
-    const urlFetchResponse = await AttemptHelper.fetchPlainTextFromUrl(
-      learnerResponse
-    );
+    const urlFetchResponse =
+      await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
     if (!urlFetchResponse.isFunctional) {
       throw new BadRequestException(
-        `Unable to extract content from the provided URL: ${learnerResponse}`
+        `Unable to extract content from the provided URL: ${learnerResponse}`,
       );
     }
 
@@ -2114,13 +2113,13 @@ export class AttemptService {
       question.totalPoints,
       question.scoring?.type ?? "",
       question.scoring,
-      question.responseType ?? "OTHER"
+      question.responseType ?? "OTHER",
     );
 
     const model = await this.llmService.gradeUrlBasedQuestion(
       urlBasedQuestionEvaluateModel,
       assignmentId,
-      language
+      language,
     );
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -2129,7 +2128,7 @@ export class AttemptService {
     return { responseDto, learnerResponse };
   }
   private getSafeChoices(
-    choices: Choice[] | string | null | undefined
+    choices: Choice[] | string | null | undefined,
   ): string | null {
     if (!choices) return;
     return typeof choices === "string" ? choices : JSON.stringify(choices);
@@ -2140,7 +2139,7 @@ export class AttemptService {
   private handleTrueFalseQuestionResponse(
     question: QuestionDto,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
-    language: string
+    language: string,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -2150,14 +2149,14 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto.learnerAnswerChoice === undefined
     ) {
       throw new BadRequestException(
-        this.getLocalizedString("expectedTrueFalse", language)
+        this.getLocalizedString("expectedTrueFalse", language),
       );
     }
     const learnerChoice =
       createQuestionResponseAttemptRequestDto.learnerAnswerChoice;
     if (learnerChoice === null) {
       throw new BadRequestException(
-        this.getLocalizedString("invalidTrueFalse", language)
+        this.getLocalizedString("invalidTrueFalse", language),
       );
     }
     const correctAnswer = question.choices[0].isCorrect;
@@ -2188,7 +2187,7 @@ export class AttemptService {
   private async applyTranslationToQuestion(
     question: QuestionDto,
     language: string,
-    variantMapping?: { questionId: number; questionVariant: QuestionVariant }
+    variantMapping?: { questionId: number; questionVariant: QuestionVariant },
   ): Promise<QuestionDto> {
     if (!language || language === "en") return question;
 
@@ -2232,7 +2231,7 @@ export class AttemptService {
         if (typeof translation.translatedChoices === "string") {
           try {
             question.choices = JSON.parse(
-              translation.translatedChoices
+              translation.translatedChoices,
             ) as Choice[];
           } catch {
             question.choices = []; // Default to empty array on failure
@@ -2251,11 +2250,11 @@ export class AttemptService {
    */
   private formatFeedback(
     feedbackTemplate: string,
-    data: { [key: string]: unknown }
+    data: { [key: string]: unknown },
   ): string {
     return feedbackTemplate.replaceAll(
       /\${(.*?)}/g,
-      (_, g: string) => (data[g] as string) || ""
+      (_, g: string) => (data[g] as string) || "",
     );
   }
   /**
@@ -2264,7 +2263,7 @@ export class AttemptService {
   private handleSingleCorrectQuestionResponse(
     question: QuestionDto,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
-    language: string
+    language: string,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -2278,7 +2277,7 @@ export class AttemptService {
 
     // Use normalized comparison here.
     const selectedChoice = choices.find(
-      (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice
+      (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice,
     );
 
     const data = {
@@ -2328,7 +2327,7 @@ export class AttemptService {
   private handleMultipleCorrectQuestionResponse(
     question: QuestionDto,
     createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
-    language: string
+    language: string,
   ): {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -2354,7 +2353,7 @@ export class AttemptService {
       createQuestionResponseAttemptRequestDto.learnerChoices;
     // Normalize the learner's submitted choices
     const normalizedLearnerChoices = new Set(
-      learnerChoices.map((choice) => this.normalizeText(choice))
+      learnerChoices.map((choice) => this.normalizeText(choice)),
     );
 
     // Parse the choices from the question and build normalized versions
@@ -2367,7 +2366,7 @@ export class AttemptService {
     // Get normalized texts for all correct choices
     const correctChoices = choices.filter((choice) => choice.isCorrect) || [];
     const correctChoiceTexts = correctChoices.map((choice) =>
-      this.normalizeText(choice.choice)
+      this.normalizeText(choice.choice),
     );
 
     let totalPoints = 0;
@@ -2377,7 +2376,7 @@ export class AttemptService {
     for (const learnerChoice of learnerChoices) {
       const normalizedLearnerChoice = this.normalizeText(learnerChoice);
       const matchedChoice = normalizedChoices.find(
-        (item) => item.normalized === normalizedLearnerChoice
+        (item) => item.normalized === normalizedLearnerChoice,
       );
 
       if (matchedChoice) {
@@ -2390,7 +2389,7 @@ export class AttemptService {
         if (matchedChoice.original.feedback) {
           choiceFeedback = this.formatFeedback(
             matchedChoice.original.feedback,
-            data
+            data,
           );
         } else {
           choiceFeedback = matchedChoice.original.isCorrect
@@ -2402,20 +2401,20 @@ export class AttemptService {
         feedbackDetails.push(
           this.getLocalizedString("invalidSelection", language, {
             learnerChoice,
-          })
+          }),
         );
       }
     }
 
     const maxPoints = correctChoices.reduce(
       (accumulator, choice) => accumulator + choice.points,
-      0
+      0,
     );
     const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
 
     // Check if every correct choice (normalized) is among the learner's normalized choices
     const allCorrectSelected = correctChoiceTexts.every((correctText) =>
-      normalizedLearnerChoices.has(correctText)
+      normalizedLearnerChoices.has(correctText),
     );
 
     const feedbackMessage = `
@@ -2457,11 +2456,11 @@ export class AttemptService {
    * @returns The time range start date.
    */
   private calculateTimeRangeStartDate(
-    assignment: LearnerGetAssignmentResponseDto
+    assignment: LearnerGetAssignmentResponseDto,
   ): Date {
     if (assignment.attemptsTimeRangeHours) {
       return new Date(
-        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000
+        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000,
       );
     }
     return new Date();
@@ -2475,7 +2474,7 @@ export class AttemptService {
    */
   private async countUserAttempts(
     userId: string,
-    assignmentId: number
+    assignmentId: number,
   ): Promise<number> {
     return this.prisma.assignmentAttempt.count({
       where: {
@@ -2490,7 +2489,7 @@ export class AttemptService {
   private getLocalizedString(
     key: string,
     language: string,
-    placeholders?: { [key: string]: string | number }
+    placeholders?: { [key: string]: string | number },
   ): string {
     const translations: Record<string, any> = {
       en: {
@@ -2791,7 +2790,7 @@ export class AttemptService {
 
   private parseBooleanResponse(
     learnerChoice: string,
-    language: string
+    language: string,
   ): boolean | null {
     const mapping: Record<string, Record<string, boolean>> = {
       en: { true: true, false: false },
@@ -2834,7 +2833,7 @@ export class AttemptService {
    */
   private constructQuestionsWithResponses(
     questions: Question[],
-    questionResponses: QuestionResponse[]
+    questionResponses: QuestionResponse[],
   ): AssignmentAttemptQuestions[] {
     return questions.map((question) => {
       const extendedQuestion = question as ExtendedQuestion;
@@ -2885,7 +2884,7 @@ export class AttemptService {
           points: choice.points,
           feedback: choice.feedback,
           isCorrect: choice.isCorrect,
-        })
+        }),
       );
 
       return {
@@ -2933,7 +2932,7 @@ export class AttemptService {
     assignmentAttemptId: number,
     role: UserRole,
     authorQuestions?: QuestionDto[],
-    assignmentDetails?: Assignment
+    assignmentDetails?: Assignment,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
@@ -3009,9 +3008,8 @@ export class AttemptService {
             groupedResponses[contextQuestion.id]?.learnerResponse || "";
 
           if (contextQuestion.type === "URL" && learnerResponse) {
-            const urlContent = await AttemptHelper.fetchPlainTextFromUrl(
-              learnerResponse
-            );
+            const urlContent =
+              await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
             learnerResponse = JSON.stringify({
               url: learnerResponse,
               ...urlContent,
@@ -3022,7 +3020,7 @@ export class AttemptService {
             question: contextQuestion.question,
             answer: learnerResponse,
           };
-        })
+        }),
       );
     }
 

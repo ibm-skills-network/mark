@@ -18,7 +18,6 @@ export default async function Home() {
     return <ErrorPage error="assignmentId not found" />;
   }
   if (user?.role === "author") {
-    useAuthorStore.setState({ activeAssignmentId: user.assignmentId });
     redirect(`/author/${user.assignmentId}`);
   } else if (user?.role === "learner") {
     redirect(`/learner/${user.assignmentId}`);

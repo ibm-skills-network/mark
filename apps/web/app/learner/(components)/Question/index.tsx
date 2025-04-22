@@ -31,7 +31,7 @@ function QuestionPage(props: Props) {
   const questionsStore = useLearnerStore((state) => state.questions);
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.setAssignmentDetails]
+    (state) => [state.assignmentDetails, state.setAssignmentDetails],
   );
   const [pageState, setPageState] = useState<
     "loading" | "success" | "no-questions"
@@ -152,7 +152,7 @@ function QuestionPage(props: Props) {
         "bg-gray-50 flex-grow min-h-0 grid gap-4",
         tips
           ? "grid-cols-1 md:grid-cols-[260px_1fr_265px]"
-          : "grid-cols-1 md:grid-cols-[260px_1fr]"
+          : "grid-cols-1 md:grid-cols-[260px_1fr]",
       )}
     >
       <div className="rounded-md h-auto pt-6 px-4 w-full md:w-auto">
@@ -193,7 +193,7 @@ function QuestionPage(props: Props) {
                   }
                   lastQuestionNumber={questionsStore.length}
                 />
-              ) : null
+              ) : null,
             )}
       </div>
       {tips && (

@@ -88,7 +88,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 }) => {
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes."
+    "Are you sure you want to leave this page? You will lose any unsaved changes.",
   ); // Prompt the user before leaving the page
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
     state.focusedQuestionId,
@@ -99,10 +99,10 @@ const AuthorQuestionsPage: FC<Props> = ({
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId
+    (state) => state.activeAssignmentId,
   );
   const setActiveAssignmentId = useAuthorStore(
-    (state) => state.setActiveAssignmentId
+    (state) => state.setActiveAssignmentId,
   );
   const [isMassVariationLoading, setIsMassVariationLoading] = useState(false);
   const [questionVariationNumber, setQuestionVariationNumber] =
@@ -153,7 +153,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
-    []
+    [],
   );
 
   useEffect(() => {
@@ -167,7 +167,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 
             const unifyScoringRubrics = (
               scoring: Scoring,
-              defaultQuestionText: string
+              defaultQuestionText: string,
             ): Scoring => {
               if (!scoring || scoring.type !== "CRITERIA_BASED") {
                 return {
@@ -192,7 +192,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   return {
                     ...rubric,
                     rubricQuestion: stripHtml(
-                      rubric.rubricQuestion || defaultQuestionText
+                      rubric.rubricQuestion || defaultQuestionText,
                     ),
                     criteria: rubricCriteria,
                   };
@@ -209,7 +209,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   (c: Criteria, i: number) => ({
                     ...c,
                     id: i,
-                  })
+                  }),
                 );
                 return {
                   type: "CRITERIA_BASED",
@@ -239,12 +239,12 @@ const AuthorQuestionsPage: FC<Props> = ({
                 (question: QuestionAuthorStore, index: number) => {
                   const unifiedQuestionScoring = unifyScoringRubrics(
                     question.scoring,
-                    question.question
+                    question.question,
                   );
 
                   unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
                     rubric.criteria.sort(
-                      (a: Criteria, b: Criteria) => a.points - b.points
+                      (a: Criteria, b: Criteria) => a.points - b.points,
                     );
                   });
 
@@ -252,14 +252,14 @@ const AuthorQuestionsPage: FC<Props> = ({
                     question.variants?.map((variant: QuestionVariants) => {
                       const unifiedVariantScoring = unifyScoringRubrics(
                         variant.scoring,
-                        variant.variantContent ?? question.question
+                        variant.variantContent ?? question.question,
                       );
                       unifiedVariantScoring.rubrics?.forEach(
                         (rubric: Rubric) => {
                           rubric.criteria.sort(
-                            (a: Criteria, b: Criteria) => a.points - b.points
+                            (a: Criteria, b: Criteria) => a.points - b.points,
                           );
-                        }
+                        },
                       );
 
                       return {
@@ -279,7 +279,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                     variants: parsedVariants,
                     scoring: unifiedQuestionScoring,
                   };
-                }
+                },
               ) ?? [];
 
             if (questions.length > 0) {
@@ -342,7 +342,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       | "URL"
       | "CODE"
       | "UPLOAD"
-      | "LINK_FILE"
+      | "LINK_FILE",
   ) => {
     const question: CreateQuestionRequest = {
       question: "",
@@ -399,13 +399,13 @@ const AuthorQuestionsPage: FC<Props> = ({
     const nonEditableQuestions = questions.filter(
       (question) =>
         question.responseType === "PRESENTATION" ||
-        question.responseType === "LIVE_RECORDING"
+        question.responseType === "LIVE_RECORDING",
     );
 
     const editableQuestions = questions.filter(
       (question) =>
         question.responseType !== "PRESENTATION" &&
-        question.responseType !== "LIVE_RECORDING"
+        question.responseType !== "LIVE_RECORDING",
     );
 
     setIsMassVariationLoading(true);
@@ -413,7 +413,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     const questionsWithVariants = await generateQuestionVariant(
       editableQuestions,
       questionVariationNumber,
-      assignmentId
+      assignmentId,
     );
 
     if (questionsWithVariants) {
@@ -601,7 +601,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         prevProps.question === nextProps.question &&
         prevProps.questionIndex === nextProps.questionIndex
       );
-    }
+    },
   );
 
   const SortableList = React.memo(
@@ -623,7 +623,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     },
     (prevProps, nextProps) => {
       return prevProps.questions === nextProps.questions;
-    }
+    },
   );
 
   /**
@@ -727,7 +727,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   <SortableItem
                     question={questions.find((q) => q.id === activeId)}
                     questionIndex={questions.findIndex(
-                      (q) => q.id === activeId
+                      (q) => q.id === activeId,
                     )}
                   />
                 ) : null}
@@ -781,7 +781,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                                     | "URL"
                                     | "LINK_FILE"
                                     | "UPLOAD"
-                                    | "CODE"
+                                    | "CODE",
                                 )
                               }
                               className={`${
@@ -1089,7 +1089,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     setSelectedQuestions((prevSelected: number[]) =>
       prevSelected.includes(questionId)
         ? prevSelected.filter((id: number) => id !== questionId)
-        : [...prevSelected, questionId]
+        : [...prevSelected, questionId],
     );
   };
 
@@ -1107,7 +1107,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     }
 
     const updatedQuestions = questions.filter(
-      (q) => !deletedQuestionIds.includes(q.id)
+      (q) => !deletedQuestionIds.includes(q.id),
     );
     updatedQuestions.forEach((q, index) => {
       q.index = index + 1;
@@ -1171,7 +1171,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
                     setSelectedQuestions(
                       selectedQuestions.length === questions.length
                         ? []
-                        : questions.map((q) => q.id)
+                        : questions.map((q) => q.id),
                     );
                   }}
                   className="text-gray-500 hover:text-violet-600 transition-colors duration-300"

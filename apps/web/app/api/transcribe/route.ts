@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     if (!audioFile || !(audioFile instanceof Blob)) {
       return NextResponse.json(
         { error: "Invalid or missing audio file" },
-        { status: 400 }
+        { status: 400 },
       );
     }
     // Prepare formData for OpenAI API
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: openAiFormData,
-      }
+      },
     );
 
     if (!response.ok) {
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       console.error("OpenAI API Error:", errorText);
       return NextResponse.json(
         { error: "OpenAI API request failed", details: errorText },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     console.error("Error processing transcription:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

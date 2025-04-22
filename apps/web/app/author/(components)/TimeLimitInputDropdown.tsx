@@ -50,7 +50,7 @@ const Component: FC<Props> = (props) => {
           onClick={() => setIsOpen(true)}
           className={cn(
             "w-full transition-all flex gap-x-2 justify-between items-center border relative border-gray-300 rounded-md h-12 pl-4 pr-3 py-2 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-blue-600",
-            isOpen ? "rounded-t-md ring-blue-600 ring-1" : "rounded-md"
+            isOpen ? "rounded-t-md ring-blue-600 ring-1" : "rounded-md",
           )}
         >
           {/* <p
@@ -109,7 +109,7 @@ const Component: FC<Props> = (props) => {
       <div
         className={cn(
           "absolute w-full bg-white rounded-b-md shadow-lg border border-gray-300 origin-top duration-150 z-10",
-          isOpen ? "scale-100" : "scale-0"
+          isOpen ? "scale-100" : "scale-0",
         )}
       >
         {value ? (

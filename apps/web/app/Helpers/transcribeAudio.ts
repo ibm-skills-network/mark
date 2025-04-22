@@ -1,7 +1,7 @@
 import { TranscriptionResult } from "@/config/types";
 
 export const transcribeAudio = async (
-  audioBlob: Blob
+  audioBlob: Blob,
 ): Promise<TranscriptionResult> => {
   const formData = new FormData();
   formData.append("audio", audioBlob);

@@ -19,7 +19,7 @@ export class TrueFalseBasedQuestionEvaluateModel
     assignmentInstrctions: string,
     answer: boolean,
     learnerChoice: boolean,
-    totalPoints: number
+    totalPoints: number,
   ) {
     this.question = question;
     this.answer = answer;

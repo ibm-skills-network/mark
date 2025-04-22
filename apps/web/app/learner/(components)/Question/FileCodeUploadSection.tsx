@@ -41,10 +41,10 @@ const FileCodeUploadSection = ({
   const selectedFiles = questionGitHubState[questionId]?.selectedFiles || [];
   const addToPath = useGitHubStore((state) => state.addToPath);
   const persistStateForQuestion = useGitHubStore(
-    (state) => state.persistStateForQuestion
+    (state) => state.persistStateForQuestion,
   );
   const learnerFileResponse = useLearnerStore(
-    (state) => state.questions[questionId].learnerFileResponse
+    (state) => state.questions[questionId].learnerFileResponse,
   );
   const [octokit, setOctokit] = useState<Octokit | null>(null);
   const getTokenFromBackend = async () => {
@@ -65,11 +65,11 @@ const FileCodeUploadSection = ({
     }));
   };
   const setActiveQuestionId = useGitHubStore(
-    (state) => state.setActiveQuestionId
+    (state) => state.setActiveQuestionId,
   );
   const changeSelectedFiles = (
     questionId: number,
-    files: learnerFileResponse[]
+    files: learnerFileResponse[],
   ) => {
     useGitHubStore.setState((state) => {
       const currentFiles =
@@ -97,11 +97,11 @@ const FileCodeUploadSection = ({
         content: "",
         githubUrl: fileUrl,
       },
-      questionId
+      questionId,
     );
     changeSelectedFiles(
       questionId,
-      selectedFiles.filter((file) => file.filename !== filename)
+      selectedFiles.filter((file) => file.filename !== filename),
     );
   };
 
@@ -209,7 +209,7 @@ const FileCodeUploadSection = ({
                             onClick={() => {
                               void handleRemoveFile(
                                 file.filename,
-                                file.githubUrl
+                                file.githubUrl,
                               );
                             }}
                           />

@@ -1,3 +1,7 @@
+"use client";
+
+/* eslint-disable */
+
 import {
   AuthorAssignmentState,
   AuthorFileUploads,
@@ -31,7 +35,7 @@ export type AuthorState = {
   role?: string;
 };
 
-type OptionalQuestion = {
+export type OptionalQuestion = {
   [K in keyof QuestionAuthorStore]?: QuestionAuthorStore[K];
 };
 
@@ -50,52 +54,52 @@ export type AuthorActions = {
   removeQuestion: (question: number) => void;
   replaceQuestion: (
     questionId: number,
-    newQuestion: QuestionAuthorStore
+    newQuestion: QuestionAuthorStore,
   ) => void;
   modifyQuestion: (questionId: number, modifiedData: OptionalQuestion) => void;
   addOneRubric: (questionId: number, variantId?: number) => void;
   removeRubric: (
     questionId: number,
     rubricIndex: number,
-    variantId?: number
+    variantId?: number,
   ) => void;
   setRubricCriteriaDescription: (
     questionId: number,
     variantId: number,
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => void;
   setQuestionScoring: (
     questionId: number,
     scoring: Scoring,
-    variantId?: number
+    variantId?: number,
   ) => void;
   setRubricQuestionText: (
     questionId: number,
     variantId: number,
     rubricIndex: number,
-    value: string
+    value: string,
   ) => void;
   setCriterias: (
     questionId: number,
     rubricIndex: number,
-    criterias: Criteria[]
+    criterias: Criteria[],
   ) => Criteria[];
   addCriteria: (
     questionId: number,
     rubricIndex: number,
-    criteria: Criteria
+    criteria: Criteria,
   ) => void;
   removeCriteria: (
     questionId: number,
     rubricIndex: number,
-    criteriaIndex: number
+    criteriaIndex: number,
   ) => void;
   addTrueFalseChoice: (
     questionId: number,
     isTrueOrFalse: boolean,
-    variantId?: number
+    variantId?: number,
   ) => void;
   getTrueFalsePoints: (questionId: number) => number;
   updatePointsTrueFalse: (questionId: number, points: number) => void;
@@ -103,34 +107,34 @@ export type AuthorActions = {
   setChoices: (
     questionId: number,
     choices: Choice[],
-    variantId?: number
+    variantId?: number,
   ) => void;
   addChoice: (questionId: number, choice?: Choice, variantId?: number) => void;
   removeChoice: (
     questionId: number,
     choiceIndex: number,
-    variantId?: number
+    variantId?: number,
   ) => void;
   toggleChoice: (
     questionId: number,
     choiceIndex: number,
-    variantId?: number
+    variantId?: number,
   ) => void;
   handleUpdateAllVariantsCriteria: (
     questionId: number,
-    criteria: Criteria[]
+    criteria: Criteria[],
   ) => void;
   modifyChoice: (
     questionId: number,
     choiceIndex: number,
     modifiedData: Partial<Choice>,
-    variantId?: number
+    variantId?: number,
   ) => void;
   modifyChoiceFeedback: (
     questionId: number,
     choiceIndex: number,
     feedback: string,
-    variantId?: number
+    variantId?: number,
   ) => void;
   setPoints: (questionId: number, points: number) => void;
   setPageState: (state: "loading" | "success" | "error") => void;
@@ -139,18 +143,18 @@ export type AuthorActions = {
   setQuestionVariantTitle: (
     questionVariantTitle: string,
     questionId: number,
-    variantId: number
+    variantId: number,
   ) => void;
   addVariant: (questionId: number, newVariant: QuestionVariants) => void;
   editVariant: (
     questionId: number,
     variantId: number,
-    updatedData: Partial<QuestionVariants>
+    updatedData: Partial<QuestionVariants>,
   ) => void;
   updateQuestionTitle: (
     questionId: number,
     title: string,
-    variantId?: number
+    variantId?: number,
   ) => void;
   deleteVariant: (questionId: number, variantId: number) => void;
   setQuestionOrder: (order: number[]) => void;
@@ -160,29 +164,29 @@ export type AuthorActions = {
   setRole: (role: string) => void;
   toggleRandomizedChoicesMode: (
     questionId: number,
-    variantId?: number
+    variantId?: number,
   ) => boolean;
   setEvaluateBodyLanguage: (
     questionId: number,
-    bodyLanguageBool: boolean
+    bodyLanguageBool: boolean,
   ) => void;
   setRealTimeAiCoach: (
     questionId: number,
-    realTimeAiCoachBool: boolean
+    realTimeAiCoachBool: boolean,
   ) => void;
   setEvaluateTimeManagement: (
     questionId: number,
     timeManagementBool: boolean,
-    responseType: string
+    responseType: string,
   ) => void;
   setTargetTime: (
     questionId: number,
     time: number,
-    responseType: string
+    responseType: string,
   ) => void;
   setEvaluateSlidesQuality: (
     questionId: number,
-    slidesQualityBool: boolean
+    slidesQualityBool: boolean,
   ) => void;
   errors: Record<string, string>;
 };
@@ -212,23 +216,23 @@ interface QuestionState {
   setToggleTitle: (
     questionId: number,
     value: boolean,
-    variantId?: number
+    variantId?: number,
   ) => void;
   setSelectedRubric: (
     questionId: number,
     value: RubricType,
-    variantId?: number
+    variantId?: number,
   ) => void;
   getSelectedRubric: (
     questionId: number,
-    variantId?: number
+    variantId?: number,
   ) => RubricType | undefined;
   setShowCriteriaHeader: (value: boolean) => void;
   setCriteriaMode: (questionId: number, mode: "AI_GEN" | "CUSTOM") => void;
   toggleLoading: (
     questionId: number,
     value: boolean,
-    variantId?: number
+    variantId?: number,
   ) => void;
 }
 
@@ -318,8 +322,8 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
                     ...state.questionStates[questionId],
                     variants: Object.fromEntries(
                       Object.entries(
-                        state.questionStates[questionId]?.variants || {}
-                      ).filter(([key]) => key !== variantId.toString())
+                        state.questionStates[questionId]?.variants || {},
+                      ).filter(([key]) => key !== variantId.toString()),
                     ),
                   }
                 : {}),
@@ -363,7 +367,7 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
                     ...vstate,
                     isloading: value,
                   },
-                ])
+                ]),
               );
             }
 
@@ -421,8 +425,8 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
     }),
     {
       name: "QuestionStore", // Optional: Name your store for easier identification in DevTools
-    }
-  )
+    },
+  ),
 );
 
 export const useAuthorStore = createWithEqualityFn<
@@ -469,7 +473,7 @@ export const useAuthorStore = createWithEqualityFn<
                   const updatedVariants = q.variants.map((variant) =>
                     variant.id === variantId
                       ? { ...variant, variantContent: title }
-                      : variant
+                      : variant,
                   );
                   return { ...q, variants: updatedVariants };
                 }
@@ -504,7 +508,7 @@ export const useAuthorStore = createWithEqualityFn<
                                 : [newRubric],
                           },
                         }
-                      : variant
+                      : variant,
                   );
                   return { ...q, variants: updatedVariants };
                 } else {
@@ -526,7 +530,7 @@ export const useAuthorStore = createWithEqualityFn<
           variantId,
           rubricIndex,
           criteriaIndex,
-          value
+          value,
         ) => {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -725,7 +729,7 @@ export const useAuthorStore = createWithEqualityFn<
         setEvaluateTimeManagement: (
           questionId,
           timeManagementBool,
-          responseType
+          responseType,
         ) => {
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
@@ -800,19 +804,23 @@ export const useAuthorStore = createWithEqualityFn<
             return { questions: updatedQuestions };
           });
         },
-        addQuestion: (question) =>
-          set(
-            (state) => (
-              console.log("Adding question", question),
-              { questions: [...state.questions, question] }
-            )
-          ),
+        addQuestion: (question) => {
+          set((state) => {
+            const updatedQuestions = [...state.questions];
+            updatedQuestions.push({ ...question });
+
+            return {
+              questions: updatedQuestions,
+              updatedAt: Date.now(),
+            };
+          });
+        },
         removeQuestion: (questionId) =>
           set((state) => {
             const index = state.questions.findIndex((q) => q.id === questionId);
             if (index === -1) return {}; // No changes
             const updatedQuestions = state.questions.filter(
-              (q) => q.id !== questionId
+              (q) => q.id !== questionId,
             );
             useQuestionStore.getState().clearQuestionState(questionId);
             return { questions: updatedQuestions };
@@ -825,26 +833,50 @@ export const useAuthorStore = createWithEqualityFn<
             updatedQuestions[index] = newQuestion;
             return { questions: updatedQuestions };
           }),
-        modifyQuestion: (questionId, modifiedData) =>
+        modifyQuestion: (questionId, modifiedData) => {
           set((state) => {
             const index = state.questions.findIndex((q) => q.id === questionId);
-            if (index === -1) return {}; // No changes
+            if (index === -1) {
+              console.warn(`Question with ID ${questionId} not found.`);
+              return {}; // No changes
+            }
 
             const existingQuestion = state.questions[index];
+
+            // Create a new object with the updated properties
             const updatedQuestion = {
               ...existingQuestion,
               ...modifiedData,
             };
 
-            if (existingQuestion === updatedQuestion) {
-              return {}; // No changes
+            // Explicitly handle special cases like nested objects
+            if (modifiedData.scoring) {
+              updatedQuestion.scoring = {
+                ...(existingQuestion.scoring || {}),
+                ...modifiedData.scoring,
+              };
             }
 
+            if (modifiedData.choices) {
+              updatedQuestion.choices = [...modifiedData.choices];
+            }
+
+            // Create a new array to ensure Zustand detects the change
             const updatedQuestions = [...state.questions];
             updatedQuestions[index] = updatedQuestion;
 
-            return { questions: updatedQuestions };
-          }),
+            return {
+              questions: updatedQuestions,
+              updatedAt: Date.now(),
+            };
+          });
+
+          // Log the updated state to confirm the change
+          const newState = useAuthorStore.getState();
+          const updatedQuestion = newState.questions.find(
+            (q) => q.id === questionId,
+          );
+        },
         setCriterias: (questionId, rubricIndex, criterias) => {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -896,12 +928,12 @@ export const useAuthorStore = createWithEqualityFn<
                       return {
                         ...rubric,
                         criteria: rubric.criteria.filter(
-                          (_, idx) => idx !== criteriaIndex
+                          (_, idx) => idx !== criteriaIndex,
                         ),
                       };
                     }
                     return rubric;
-                  }
+                  },
                 );
                 return {
                   ...q,
@@ -915,7 +947,7 @@ export const useAuthorStore = createWithEqualityFn<
         setQuestionScoring: (
           questionId: number,
           scoring: Scoring,
-          variantId?: number
+          variantId?: number,
         ) => {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -936,8 +968,11 @@ export const useAuthorStore = createWithEqualityFn<
           }));
         },
 
-        setChoices: (questionId, choices, variantId) =>
+        setChoices: (questionId, choices, variantId) => {
           set((state) => {
+            // Create deep copies of the choices array to ensure proper updates
+            const deepCopiedChoices = choices.map((choice) => ({ ...choice }));
+
             if (variantId) {
               // Set choices for variant
               return {
@@ -947,18 +982,20 @@ export const useAuthorStore = createWithEqualityFn<
                       if (variant.id === variantId) {
                         return {
                           ...variant,
-                          choices,
+                          choices: deepCopiedChoices,
                         };
                       }
-                      return variant;
+                      return { ...variant }; // Create new references for all variants
                     });
                     return {
                       ...q,
                       variants: updatedVariants,
+                      updatedAt: Date.now(), // Add timestamp to force UI update
                     };
                   }
-                  return q;
+                  return { ...q }; // Create new references for all questions
                 }),
+                updatedAt: Date.now(), // Update global timestamp as well
               };
             } else {
               // Set choices for main question
@@ -967,14 +1004,23 @@ export const useAuthorStore = createWithEqualityFn<
                   if (q.id === questionId) {
                     return {
                       ...q,
-                      choices,
+                      choices: deepCopiedChoices,
+                      updatedAt: Date.now(), // Add timestamp to force UI update
                     };
                   }
-                  return q;
+                  return { ...q }; // Create new references for all questions
                 }),
+                updatedAt: Date.now(), // Update global timestamp as well
               };
             }
-          }),
+          });
+
+          // Log the updated state to confirm the change
+          const newState = useAuthorStore.getState();
+          const updatedQuestion = newState.questions.find(
+            (q) => q.id === questionId,
+          );
+        },
         toggleRandomizedChoicesMode: (questionId: number, variantId: number) =>
           // Toggle randomized choices mode (boolean) for a question or variant (if variantId is provided)
           {
@@ -1208,7 +1254,7 @@ export const useAuthorStore = createWithEqualityFn<
                       if (variant.id === variantId) {
                         const updatedChoices = Array.isArray(variant.choices)
                           ? variant.choices.filter(
-                              (_, index) => index !== choiceIndex
+                              (_, index) => index !== choiceIndex,
                             )
                           : [];
                         return {
@@ -1232,7 +1278,7 @@ export const useAuthorStore = createWithEqualityFn<
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
                     const updatedChoices = q.choices.filter(
-                      (_, index) => index !== choiceIndex
+                      (_, index) => index !== choiceIndex,
                     );
                     return {
                       ...q,
@@ -1279,7 +1325,7 @@ export const useAuthorStore = createWithEqualityFn<
                           ? variant.choices.map((choice, index) =>
                               index === choiceIndex
                                 ? { ...choice, ...modifiedData }
-                                : choice
+                                : choice,
                             )
                           : variant.choices;
                         return {
@@ -1305,7 +1351,7 @@ export const useAuthorStore = createWithEqualityFn<
                     const updatedChoices = q.choices.map((choice, index) =>
                       index === choiceIndex
                         ? { ...choice, ...modifiedData }
-                        : choice
+                        : choice,
                     );
                     return {
                       ...q,
@@ -1361,14 +1407,14 @@ export const useAuthorStore = createWithEqualityFn<
                     ...q,
                     question: questionTitle,
                   }
-                : q
+                : q,
             ),
           }));
         },
         setQuestionVariantTitle: (
           questionVariantTitle,
           questionId,
-          variantId
+          variantId,
         ) => {
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
@@ -1394,27 +1440,68 @@ export const useAuthorStore = createWithEqualityFn<
           });
         },
 
-        addVariant: (questionId, newVariant) =>
+        addVariant: (questionId, newVariant) => {
           set((state) => {
             const questionIndex = state.questions.findIndex(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
-            if (questionIndex === -1) return {};
+            if (questionIndex === -1) {
+              console.warn(`Question with ID ${questionId} not found.`);
+              return {};
+            }
 
+            // Create deep copies of everything
             const updatedQuestions = [...state.questions];
             const question = { ...updatedQuestions[questionIndex] };
+
+            // Deep copy the new variant
+            const deepCopiedVariant = {
+              ...newVariant,
+              choices: Array.isArray(newVariant.choices)
+                ? [...newVariant.choices.map((c) => ({ ...c }))]
+                : undefined,
+              scoring: newVariant.scoring
+                ? {
+                    ...newVariant.scoring,
+                    rubrics: newVariant.scoring.rubrics
+                      ? [
+                          ...newVariant.scoring.rubrics.map((r) => ({
+                            ...r,
+                            criteria: r.criteria
+                              ? [...r.criteria.map((c) => ({ ...c }))]
+                              : [],
+                          })),
+                        ]
+                      : [],
+                  }
+                : undefined,
+            };
+
+            // Add the variant with proper array initialization if needed
             question.variants = [
               ...(question.variants || []),
-              { ...newVariant },
-            ]; // Deep copy the variant array
+              deepCopiedVariant,
+            ];
+
             updatedQuestions[questionIndex] = question;
-            return { questions: updatedQuestions };
-          }),
+
+            return {
+              questions: updatedQuestions,
+              updatedAt: Date.now(), // Force UI update
+            };
+          });
+
+          // Log the updated state to confirm the change
+          const newState = useAuthorStore.getState();
+          const updatedQuestion = newState.questions.find(
+            (q) => q.id === questionId,
+          );
+        },
 
         editVariant: (questionId, variantId, updatedData) =>
           set((state) => {
             const questionIndex = state.questions.findIndex(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
             if (questionIndex === -1) {
               console.warn(`Question with ID ${questionId} not found.`);
@@ -1426,33 +1513,50 @@ export const useAuthorStore = createWithEqualityFn<
             const updatedVariants = question.variants.map((variant) =>
               variant.id === variantId
                 ? { ...variant, ...updatedData }
-                : { ...variant }
+                : { ...variant },
             );
             question.variants = updatedVariants;
             updatedQuestions[questionIndex] = question;
             return { questions: updatedQuestions };
           }),
 
-        deleteVariant: (questionId, variantId) =>
+        deleteVariant: (questionId, variantId) => {
           set((state) => {
             const questionIndex = state.questions.findIndex(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
-            if (questionIndex === -1) return {}; // No changes if question not found
+            if (questionIndex === -1) {
+              console.warn(`Question with ID ${questionId} not found.`);
+              return {};
+            }
 
             const updatedQuestions = [...state.questions];
             const question = { ...updatedQuestions[questionIndex] };
+
+            // Filter out the variant to be deleted
             question.variants = question.variants.filter(
-              (variant) => variant.id !== variantId
+              (v) => v.id !== variantId,
             );
+
             updatedQuestions[questionIndex] = question;
-            // delete from questionStates
+
+            // Clean up any related UI state
             useQuestionStore
               .getState()
               .clearQuestionState(questionId, variantId);
 
-            return { questions: updatedQuestions };
-          }),
+            return {
+              questions: updatedQuestions,
+              updatedAt: Date.now(), // Force UI update
+            };
+          });
+
+          // Log the updated state to confirm the change
+          const newState = useAuthorStore.getState();
+          const updatedQuestion = newState.questions.find(
+            (q) => q.id === questionId,
+          );
+        },
 
         setQuestionOrder: (order) => {
           set((state) => ({
@@ -1505,16 +1609,24 @@ export const useAuthorStore = createWithEqualityFn<
         enabled: process.env.NODE_ENV === "development",
         trace: true,
         traceLimit: 25,
-      }
+      },
     ),
     {
       name: getAuthorStoreName(),
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() =>
+        typeof window !== "undefined"
+          ? localStorage
+          : {
+              getItem: () => null,
+              setItem: () => {},
+              removeItem: () => {},
+            },
+      ),
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(
-            ([_, value]) => typeof value !== "function"
-          )
+            ([_, value]) => typeof value !== "function",
+          ),
         );
       },
       onRehydrateStorage: (state) => (storedState) => {
@@ -1523,13 +1635,13 @@ export const useAuthorStore = createWithEqualityFn<
           state?.deleteStore(); // Clear outdated data
         }
       },
-    }
+    },
   ),
-  shallow
+  shallow,
 );
 function getAuthorStoreName() {
   if (typeof window !== "undefined") {
     return `assignment-${extractAssignmentId(window.location.pathname)}-author`;
   }
-  return "assignment-feedback-author";
+  return "assignment-1-author";
 }

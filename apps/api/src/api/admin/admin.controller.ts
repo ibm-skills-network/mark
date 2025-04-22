@@ -35,7 +35,7 @@ import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignm
   new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
-  })
+  }),
 )
 @ApiBearerAuth()
 @Injectable()
@@ -55,11 +55,11 @@ export class AdminController {
   @ApiResponse({ status: 403 })
   cloneAssignment(
     @Param("id") assignmentId: number,
-    @Body() assignmentCloneRequestDto: AdminAssignmentCloneRequestDto
+    @Body() assignmentCloneRequestDto: AdminAssignmentCloneRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.cloneAssignment(
       Number(assignmentId),
-      assignmentCloneRequestDto.groupId
+      assignmentCloneRequestDto.groupId,
     );
   }
 
@@ -70,11 +70,11 @@ export class AdminController {
   @ApiResponse({ status: 403 })
   addAssignmentToGroup(
     @Param("assignmentId") assignmentId: number,
-    @Param("groupId") groupId: string
+    @Param("groupId") groupId: string,
   ): Promise<AdminAddAssignmentToGroupResponseDto> {
     return this.adminService.addAssignmentToGroup(
       Number(assignmentId),
-      groupId
+      groupId,
     );
   }
 
@@ -84,7 +84,7 @@ export class AdminController {
   @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   createAssignment(
-    @Body() createAssignmentRequestDto: AdminCreateAssignmentRequestDto
+    @Body() createAssignmentRequestDto: AdminCreateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.createAssignment(createAssignmentRequestDto);
   }
@@ -95,7 +95,7 @@ export class AdminController {
   @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   async getAssignment(
-    @Param("id") id: number
+    @Param("id") id: number,
   ): Promise<AdminGetAssignmentResponseDto> {
     return this.adminService.getAssignment(Number(id));
   }
@@ -108,11 +108,11 @@ export class AdminController {
   @ApiResponse({ status: 403 })
   replaceAssignment(
     @Param("id") id: number,
-    @Body() replaceAssignmentRequestDto: AdminReplaceAssignmentRequestDto
+    @Body() replaceAssignmentRequestDto: AdminReplaceAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.replaceAssignment(
       Number(id),
-      replaceAssignmentRequestDto
+      replaceAssignmentRequestDto,
     );
   }
 
@@ -124,11 +124,11 @@ export class AdminController {
   @ApiResponse({ status: 403 })
   updateAssignment(
     @Param("id") id: number,
-    @Body() updateAssignmentRequestDto: AdminUpdateAssignmentRequestDto
+    @Body() updateAssignmentRequestDto: AdminUpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.updateAssignment(
       Number(id),
-      updateAssignmentRequestDto
+      updateAssignmentRequestDto,
     );
   }
 
@@ -138,7 +138,7 @@ export class AdminController {
   @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   deleteAssignment(
-    @Param("id") id: number
+    @Param("id") id: number,
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.removeAssignment(Number(id));
   }

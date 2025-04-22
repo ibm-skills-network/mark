@@ -22,7 +22,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
     <div
       className={cn(
         "flex items-center gap-1.5 py-2 w-full max-md:flex-wrap max-md:max-w-full justify-between",
-        !lastItem && "border-b"
+        !lastItem && "border-b",
       )}
     >
       <div className="flex flex-col justify-center text-base leading-6 font-[450]">
@@ -34,7 +34,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
         onClick={toggleValue}
         className={cn(
           "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-          value ? "bg-violet-600" : "bg-gray-200"
+          value ? "bg-violet-600" : "bg-gray-200",
         )}
         role="switch"
         aria-checked={value}
@@ -43,7 +43,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
           aria-hidden="true"
           className={cn(
             "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-            value ? "translate-x-5" : "translate-x-0"
+            value ? "translate-x-5" : "translate-x-0",
           )}
         />
       </button>

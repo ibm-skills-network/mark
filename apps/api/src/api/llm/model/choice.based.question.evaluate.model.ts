@@ -24,7 +24,7 @@ export class ChoiceBasedQuestionEvaluateModel
     learnerChoices: string[],
     totalPoints: number,
     scoringCriteriaType?: string,
-    scoringCriteria?: object
+    scoringCriteria?: object,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
@@ -41,7 +41,7 @@ export class ChoiceBasedQuestionEvaluateModel
     let penaltyPoints = 0;
 
     const totalCorrectChoices = this.validChoices.filter(
-      (c) => c.isCorrect
+      (c) => c.isCorrect,
     ).length;
     const penaltyPerIncorrect =
       totalCorrectChoices > 0
@@ -50,7 +50,7 @@ export class ChoiceBasedQuestionEvaluateModel
     let learnerChoice: string;
     for (learnerChoice of this.learnerChoices) {
       const matchingChoice = this.validChoices.find(
-        (c) => c.choice === learnerChoice
+        (c) => c.choice === learnerChoice,
       );
 
       if (matchingChoice) {

@@ -14,7 +14,7 @@ export const FooterNavigation = () => {
     state.activeAssignmentId,
   ]);
   const validateAssignmentConfig = useAssignmentConfig(
-    (state) => state.validate
+    (state) => state.validate,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const goToNextStep = () => {

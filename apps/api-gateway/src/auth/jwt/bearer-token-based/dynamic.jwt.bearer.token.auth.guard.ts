@@ -7,11 +7,11 @@ import { MockJwtBearerTokenAuthGuard } from "./mock.jwt.bearer.token.auth.guard"
 export class DynamicJwtBearerTokenAuthGuard implements CanActivate {
   constructor(
     private readonly realGuard: JwtBearerTokenAuthGuard,
-    private readonly mockGuard: MockJwtBearerTokenAuthGuard
+    private readonly mockGuard: MockJwtBearerTokenAuthGuard,
   ) {}
 
   canActivate(
-    context: ExecutionContext
+    context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
     return process.env.NODE_ENV !== "production" &&
       process.env.AUTH_DISABLED === "true"

@@ -15,10 +15,10 @@ const BeginTheAssignment: React.FC<Props> = (props) => {
   const { assignmentState, assignmentId, className, role, attemptsLeft } =
     props;
   const userPreferedLanguage = useLearnerStore(
-    (state) => state.userPreferedLanguage
+    (state) => state.userPreferedLanguage,
   );
   const setUserPreferedLanguage = useLearnerStore(
-    (state) => state.setUserPreferedLanguage
+    (state) => state.setUserPreferedLanguage,
   );
   const MoveToQuestionPage = () => {
     setUserPreferedLanguage(userPreferedLanguage);

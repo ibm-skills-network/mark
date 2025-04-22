@@ -38,7 +38,7 @@ async function LearnerLayout(props: Props) {
   }
 
   const unsubmittedAssignment = listOfAttempts.find(
-    (attempt) => attempt.submitted === false
+    (attempt) => attempt.submitted === false,
   );
   const attemptId = unsubmittedAssignment
     ? unsubmittedAssignment.id
@@ -99,7 +99,7 @@ async function AttemptLoader({
     Number(assignmentId),
     Number(attemptId),
     cookieHeader,
-    lang
+    lang,
   );
   if (!attempt) {
     throw new Error("Attempt could not be fetched.");

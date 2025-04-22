@@ -1,5 +1,4 @@
 import { absoluteUrl } from "../lib/utils";
-import type { Criteria } from "./types";
 
 const BASE_API_PATH = absoluteUrl("/api/v1");
 
@@ -13,6 +12,8 @@ export const BASE_API_ROUTES = {
   // admin
   admin: `${BASE_API_PATH}/admin`,
   rubric: `${BASE_API_PATH}/assignments`,
+  // reports
+  reports: `${BASE_API_PATH}/reports`,
 };
 
 export const stepTwoSections = {

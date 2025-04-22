@@ -56,7 +56,7 @@ function Timer(props: Props) {
       questionOrder: [],
       updatedAt: 0,
       questions: [],
-    }
+    },
   );
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   const assignmentId = assignmentDetails?.id;
@@ -86,7 +86,7 @@ function Timer(props: Props) {
         learnerChoices: q.learnerChoices || [],
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
         learnerFileResponse: q.learnerFileResponse || [],
-      })
+      }),
     );
 
     const res = await submitAssignment(
@@ -95,7 +95,7 @@ function Timer(props: Props) {
       responsesForQuestions,
       "en",
       role === "author" ? authorQuestions : undefined,
-      role === "author" ? authorAssignmentDetails : undefined
+      role === "author" ? authorAssignmentDetails : undefined,
     );
 
     if (!res || !res.success) {
@@ -114,7 +114,7 @@ function Timer(props: Props) {
           {
             id: feedback.id,
             learnerAnswerChoice: responsesForQuestions.find(
-              (q) => q.id === feedback.questionId
+              (q) => q.id === feedback.questionId,
             )?.learnerAnswerChoice,
             points: feedback.totalPoints,
             feedback: feedback.feedback,
@@ -160,7 +160,7 @@ function Timer(props: Props) {
       <div
         className={cn(
           "text-base font-bold leading-tight",
-          hours === 0 && minutes < 5 ? "text-red-500" : "text-blue-600"
+          hours === 0 && minutes < 5 ? "text-red-500" : "text-blue-600",
         )}
       >
         {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}

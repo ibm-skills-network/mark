@@ -34,7 +34,7 @@ export class VideoPresentationQuestionEvaluateModel
       evaluateSlidesQuality: boolean;
       evaluateTimeManagement: boolean;
       targetTime: number;
-    }
+    },
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;

@@ -5,7 +5,7 @@ import type { StateCreator, StoreApi } from "zustand";
  */
 export const withUpdatedAt =
   <T extends object & { pageState?: "loading" | "success" | "error" }>(
-    config: StateCreator<T>
+    config: StateCreator<T>,
   ): StateCreator<T> =>
   (set, get, api: StoreApi<T>) =>
     config(
@@ -24,9 +24,9 @@ export const withUpdatedAt =
             ...partial,
             updatedAt: new Date().getTime(),
           }),
-          replace
+          replace,
         );
       },
       get,
-      api
+      api,
     );

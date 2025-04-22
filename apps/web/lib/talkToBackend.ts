@@ -69,7 +69,7 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
 export async function replaceAssignment(
   data: ReplaceAssignmentRequest,
   id: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<boolean> {
   try {
     //
@@ -102,7 +102,7 @@ export async function replaceAssignment(
 export async function updateAssignment(
   data: Partial<ReplaceAssignmentRequest>,
   id: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<boolean> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments + `/${id}`, {
@@ -139,7 +139,7 @@ export async function updateAssignment(
 export async function getAssignment(
   id: number,
   userPreferedLanguage?: string,
-  cookies?: string
+  cookies?: string,
 ): Promise<Assignment> {
   try {
     const url = userPreferedLanguage
@@ -158,7 +158,7 @@ export async function getAssignment(
 
     if (!res.ok) {
       throw new Error(
-        responseBody.message || `Request failed with status ${res.status}`
+        responseBody.message || `Request failed with status ${res.status}`,
       );
     }
 
@@ -176,7 +176,7 @@ export async function getAssignment(
  * @returns An array of assignments.
  */
 export async function getAssignments(
-  cookies?: string
+  cookies?: string,
 ): Promise<Assignment[] | undefined> {
   try {
     const res = await fetch(BASE_API_ROUTES.assignments, {
@@ -206,7 +206,7 @@ export async function getAssignments(
 export async function createQuestion(
   assignmentId: number,
   question: CreateQuestionRequest,
-  cookies?: string
+  cookies?: string,
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions`;
 
@@ -237,7 +237,7 @@ export async function createQuestion(
 export function subscribeToJobStatus(
   jobId: number,
   onProgress?: (percentage: number, progressText?: string) => void,
-  setQuestions?: (questions: Question[]) => void
+  setQuestions?: (questions: Question[]) => void,
 ): Promise<[boolean, Question[]]> {
   return new Promise<[boolean, Question[]]>((resolve, reject) => {
     let eventSource: EventSource | null = null;
@@ -277,7 +277,7 @@ export function subscribeToJobStatus(
         `${
           BASE_API_ROUTES.assignments
         }/jobs/${jobId}/status-stream?_=${Date.now()}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       // Abort the connection when the controller signal is aborted
@@ -291,7 +291,7 @@ export function subscribeToJobStatus(
         // Set job processing timeout (e.g. 5 minutes)
         timeoutId = setTimeout(
           () => handleError("Job processing timeout"),
-          300000
+          300000,
         );
       };
 
@@ -340,7 +340,7 @@ export function subscribeToJobStatus(
           } catch {
             handleError("Invalid finalize event response");
           }
-        }
+        },
       );
 
       // Optional: Listen for "close" events
@@ -369,7 +369,7 @@ export function subscribeToJobStatus(
 export async function publishAssignment(
   assignmentId: number,
   updatedAssignment: ReplaceAssignmentRequest,
-  cookies?: string
+  cookies?: string,
 ): Promise<{ jobId: number; message: string } | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/publish`;
 
@@ -414,7 +414,7 @@ export async function replaceQuestion(
   assignmentId: number,
   questionId: number,
   question: CreateQuestionRequest,
-  cookies?: string
+  cookies?: string,
 ): Promise<number | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}`;
 
@@ -447,7 +447,7 @@ export async function generateQuestionVariant(
   questionsFromFrontend: QuestionAuthorStore[],
   questionVariationNumber: number,
   assignmentId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<QuestionAuthorStore[] | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/question/generate-variant`;
 
@@ -467,7 +467,7 @@ export async function generateQuestionVariant(
     if (!res.ok) {
       const errorBody = (await res.json()) as { message: string };
       throw new Error(
-        errorBody.message || "Failed to generate question variant"
+        errorBody.message || "Failed to generate question variant",
       );
     }
     const { success, error, questions } =
@@ -490,7 +490,7 @@ export async function generateRubric(
   question: QuestionAuthorStore,
   assignmentId: number,
   rubricIndex?: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<Scoring | Choice[]> {
   const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/create-marking-rubric`;
   try {
@@ -518,7 +518,7 @@ export async function generateRubric(
 export async function expandMarkingRubric(
   question: QuestionAuthorStore,
   assignmentId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<QuestionAuthorStore> {
   const endpointURL = `${BASE_API_ROUTES.rubric}/${assignmentId}/questions/expand-marking-rubric`;
 
@@ -550,7 +550,7 @@ export async function expandMarkingRubric(
 export async function deleteQuestion(
   assignmentId: number,
   questionId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<boolean> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}`;
 
@@ -587,7 +587,7 @@ export async function deleteQuestion(
  */
 export async function getAttempts(
   assignmentId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
 
@@ -617,7 +617,7 @@ export async function getAttempts(
  */
 export async function createAttempt(
   assignmentId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<number | undefined | "no more attempts"> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts`;
   try {
@@ -658,7 +658,7 @@ export async function getAttempt(
   assignmentId: number,
   attemptId: number,
   cookies?: string,
-  language = "en"
+  language = "en",
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}?lang=${language}`;
 
@@ -686,7 +686,7 @@ export async function getAttempt(
  * @throws An error if the request fails.
  */
 export async function getSupportedLanguages(
-  assignmentId: number
+  assignmentId: number,
 ): Promise<string[]> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/languages`;
 
@@ -718,7 +718,7 @@ export async function getSupportedLanguages(
 export async function getCompletedAttempt(
   assignmentId: number,
   attemptId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/completed`;
 
@@ -748,7 +748,7 @@ export async function submitQuestion(
   attemptId: number,
   questionId: number,
   requestBody: QuestionAttemptRequest,
-  cookies?: string
+  cookies?: string,
 ): Promise<QuestionAttemptResponse | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
@@ -783,7 +783,7 @@ export async function submitQuestion(
 export async function getLiveRecordingFeedback(
   assignmentId: number,
   liveRecordingData: LiveRecordingData,
-  cookies?: string
+  cookies?: string,
 ): Promise<{ feedback: string }> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/live-recording-feedback`;
 
@@ -800,7 +800,7 @@ export async function getLiveRecordingFeedback(
     if (!res.ok) {
       const errorBody = (await res.json()) as { message: string };
       throw new Error(
-        errorBody.message || "Failed to fetch live recording feedback"
+        errorBody.message || "Failed to fetch live recording feedback",
       );
     }
 
@@ -824,7 +824,7 @@ export async function submitAssignment(
   language?: string,
   authorQuestions?: QuestionStore[],
   authorAssignmentDetails?: ReplaceAssignmentRequest,
-  cookies?: string
+  cookies?: string,
 ): Promise<SubmitAssignmentResponse | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}`;
 
@@ -859,7 +859,7 @@ export async function submitAssignment(
 
 export async function uploadFiles(
   payload: QuestionGenerationPayload,
-  cookies?: string
+  cookies?: string,
 ): Promise<{ success: boolean; jobId?: number }> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${payload.assignmentId}/generate-questions`;
   const TIMEOUT = 1000000;
@@ -877,7 +877,7 @@ export async function uploadFiles(
         body: JSON.stringify({ ...payload }),
       }),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Request timed out")), TIMEOUT)
+        setTimeout(() => reject(new Error("Request timed out")), TIMEOUT),
       ),
     ])) as Response;
 
@@ -915,7 +915,7 @@ export async function uploadFiles(
  */
 export async function getJobStatus(
   jobId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<
   | {
       status: string;
@@ -954,7 +954,7 @@ export async function getJobStatus(
 export async function getFeedback(
   assignmentId: number,
   attemptId: number,
-  cookies?: string
+  cookies?: string,
 ): Promise<AssignmentFeedback | undefined> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/feedback`;
 
@@ -980,7 +980,7 @@ export async function submitFeedback(
   assignmentId: number,
   attemptId: number,
   feedback: AssignmentFeedback,
-  cookies?: string
+  cookies?: string,
 ): Promise<boolean> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/attempts/${attemptId}/feedback`;
 
@@ -1007,7 +1007,7 @@ export async function submitFeedback(
 
 export async function submitRegradingRequest(
   regradingRequest: RegradingRequest,
-  cookies?: string
+  cookies?: string,
 ): Promise<boolean> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${regradingRequest.assignmentId}/attempts/${regradingRequest.attemptId}/regrade`;
   try {
@@ -1034,7 +1034,7 @@ export async function submitReportAuthor(
   assignmentId: number,
   issueType: REPORT_TYPE,
   description: string,
-  cookies?: string
+  cookies?: string,
 ): Promise<{ success: boolean } | undefined> {
   try {
     const response:
@@ -1054,12 +1054,12 @@ export async function submitReportAuthor(
           issueType,
           description,
         }),
-      }
+      },
     );
 
     if (response.status === 422) {
       throw new Error(
-        "You have reached the maximum number of reports allowed in a 24-hour period."
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
       );
     } else if (!response.ok) {
       throw new Error("Failed to submit report");
@@ -1077,7 +1077,7 @@ export async function submitReportAuthor(
 export async function AuthorizeGithubBackend(
   assignmentId: number,
   redirectUrl: string,
-  cookies?: string
+  cookies?: string,
 ): Promise<{ url: string } | undefined> {
   try {
     const res = await fetch(`${BASE_API_PATH}/github/oauth-url`, {
@@ -1109,7 +1109,7 @@ export async function AuthorizeGithubBackend(
  * @returns The GitHub token if found, or null if not found or expired.
  */
 export async function getStoredGithubToken(
-  cookies?: string
+  cookies?: string,
 ): Promise<string | null> {
   try {
     const res = await fetch(`${BASE_API_PATH}/github/github_token`, {
@@ -1137,7 +1137,7 @@ export async function getStoredGithubToken(
 }
 export async function exchangeGithubCodeForToken(
   code: string,
-  cookies?: string
+  cookies?: string,
 ): Promise<string | null> {
   try {
     const res = await fetch(`${BASE_API_PATH}/github/oauth-callback`, {
@@ -1162,7 +1162,7 @@ export async function translateQuestion(
   question: QuestionStore,
   selectedLanguage: string,
   selectedLanguageCode: string,
-  cookies?: string
+  cookies?: string,
 ): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
   const endpointURL = `${BASE_API_ROUTES.assignments}/${assignmentId}/questions/${questionId}/translations`;
 
@@ -1200,7 +1200,7 @@ export async function submitReportLearner(
   attemptId: number,
   issueType: REPORT_TYPE,
   description: string,
-  cookies?: string
+  cookies?: string,
 ): Promise<{ success: boolean } | undefined> {
   try {
     const response:
@@ -1220,12 +1220,12 @@ export async function submitReportLearner(
           issueType,
           description,
         }),
-      }
+      },
     );
 
     if (response.status === 422) {
       throw new Error(
-        "You have reached the maximum number of reports allowed in a 24-hour period."
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
       );
     } else if (!response.ok) {
       throw new Error("Failed to submit report");

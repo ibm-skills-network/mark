@@ -12,7 +12,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
     className?: string;
     IconForTitle?: ElementType;
     error?: string;
-  }
+  },
 ) {
   const {
     as,
@@ -40,7 +40,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
           <span
             className={cn(
               required && "after:text-violet-600 after:content-['*']",
-              IconForTitle && "pl-1.5"
+              IconForTitle && "pl-1.5",
             )}
           >
             {title}

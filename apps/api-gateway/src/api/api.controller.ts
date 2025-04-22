@@ -20,7 +20,7 @@ export enum DownstreamService {
 }
 
 @ApiTags(
-  "Api (All endpoints use a JWT Cookie named 'authentication' for authorization)"
+  "Api (All endpoints use a JWT Cookie named 'authentication' for authorization)",
 )
 @Injectable()
 @Controller({
@@ -40,19 +40,19 @@ export class ApiController {
   @ApiBadRequestResponse({ description: "Bad request" })
   async handleLtiOauthConsumers(
     @Req() request: UserSessionRequest,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     // If request is SSE, use native HTTP forwarding.
     if (request.headers.accept?.includes("text/event-stream")) {
       const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
         DownstreamService.LTI_CREDENTIAL_MANAGER,
-        request
+        request,
       );
       await this.apiService.forwardRequestUsingHttp(
         request,
         response,
         endpoint,
-        extraHeaders
+        extraHeaders,
       );
       return;
     }
@@ -60,7 +60,7 @@ export class ApiController {
     // Otherwise, use the axios-based forwarding.
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.LTI_CREDENTIAL_MANAGER,
-      request
+      request,
     );
     return response.status(apiResponse.status).send(apiResponse.data);
   }
@@ -71,24 +71,24 @@ export class ApiController {
   @ApiBadRequestResponse({ description: "Bad request" })
   async handleAdminApiRequests(
     @Req() request: UserSessionRequest,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     if (request.headers.accept?.includes("text/event-stream")) {
       const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
         DownstreamService.MARK_API,
-        request
+        request,
       );
       await this.apiService.forwardRequestUsingHttp(
         request,
         response,
         endpoint,
-        extraHeaders
+        extraHeaders,
       );
       return;
     }
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
-      request
+      request,
     );
     return response.status(apiResponse.status).send(apiResponse.data);
   }
@@ -99,24 +99,24 @@ export class ApiController {
   @ApiBadRequestResponse({ description: "Bad request" })
   async handleApiRequests(
     @Req() request: UserSessionRequest,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     if (request.headers.accept?.includes("text/event-stream")) {
       const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
         DownstreamService.MARK_API,
-        request
+        request,
       );
       await this.apiService.forwardRequestUsingHttp(
         request,
         response,
         endpoint,
-        extraHeaders
+        extraHeaders,
       );
       return;
     }
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.MARK_API,
-      request
+      request,
     );
     return response.status(apiResponse.status).send(apiResponse.data);
   }

@@ -52,10 +52,10 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
     choices,
   } = question;
   const showSubmissionFeedback = useLearnerStore(
-    (state) => state.showSubmissionFeedback
+    (state) => state.showSubmissionFeedback,
   );
   const [selectedFileContent, setSelectedFileContent] = useState<string | null>(
-    null
+    null,
   );
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [octokit, setOctokit] = useState<Octokit | null>(null);
@@ -89,15 +89,15 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
           // remove code from url
           const newUrl = window.location.href.replace(
             window.location.search,
-            ""
+            "",
           );
           window.history.replaceState({}, document.title, newUrl);
           toast.success(
-            "Github token has been authenticated successfully. You can now view files."
+            "Github token has been authenticated successfully. You can now view files.",
           );
         } else {
           toast.warning(
-            "Looks like there was an issue with the authentication. Please try to check your github file again."
+            "Looks like there was an issue with the authentication. Please try to check your github file again.",
           );
         }
         return;
@@ -116,7 +116,7 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
       for (const response of questionResponses) {
         if (response.learnerResponse) {
           const learnerResponse = parseLearnerResponse(
-            response.learnerResponse
+            response.learnerResponse,
           );
           if (Array.isArray(learnerResponse)) {
             for (const file of learnerResponse as {
@@ -189,7 +189,7 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
         : undefined;
     }
     return questionResponses.reduce((acc, curr) =>
-      acc.points > curr.points ? acc : curr
+      acc.points > curr.points ? acc : curr,
     );
   }, [questionResponses, showSubmissionFeedback]);
 
@@ -220,8 +220,8 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
             highestScoreResponse?.points === totalPoints
               ? "bg-green-50 border border-green-500 rounded p-2"
               : highestScoreResponse?.points > 0
-              ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-              : "bg-red-50 border border-red-700 rounded p-2"
+                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                : "bg-red-50 border border-red-700 rounded p-2"
           }
           
           `}
@@ -284,8 +284,8 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
                       ? "bg-green-50 border border-green-500 rounded"
                       : "bg-red-50 border border-red-700 rounded"
                     : isCorrect && showSubmissionFeedback
-                    ? "bg-green-50 border border-green-500 rounded"
-                    : ""
+                      ? "bg-green-50 border border-green-500 rounded"
+                      : ""
                 }`}
               >
                 <div className="flex items-center">
@@ -326,17 +326,17 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
             highestScoreResponse?.points === totalPoints
               ? "bg-green-50 border border-green-500 rounded p-2"
               : highestScoreResponse?.points > 0
-              ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-              : "bg-red-50 border border-red-700 rounded p-2"
+                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                : "bg-red-50 border border-red-700 rounded p-2"
           }
           
           `}
         >
           {learnerResponse
-            ? trueFalseTranslations[language]?.true ??
-              trueFalseTranslations.en.true
-            : trueFalseTranslations[language]?.false ??
-              trueFalseTranslations.en.false}
+            ? (trueFalseTranslations[language]?.true ??
+              trueFalseTranslations.en.true)
+            : (trueFalseTranslations[language]?.false ??
+              trueFalseTranslations.en.false)}
         </p>
       );
     } else if (
@@ -359,8 +359,8 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
               highestScoreResponse?.points === totalPoints
                 ? "bg-green-50 border border-green-500 rounded p-2"
                 : highestScoreResponse?.points > 0
-                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-                : "bg-red-50 border border-red-700 rounded p-2"
+                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                  : "bg-red-50 border border-red-700 rounded p-2"
             }
           `}
           >
@@ -407,8 +407,8 @@ const Question: FC<Props> = ({ question, number, language = "en" }) => {
               highestScoreResponse?.points === totalPoints
                 ? "bg-green-50 border border-green-500 rounded p-2"
                 : highestScoreResponse?.points > 0
-                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-                : "bg-red-50 border border-red-700 rounded p-2"
+                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                  : "bg-red-50 border border-red-700 rounded p-2"
             }
           
           `}

@@ -29,7 +29,7 @@ function URLQuestion(props: Props) {
         "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" + // port and path
         "(\\?[;&a-z\\d%_.~+=-]*)?" + // query string
         "(\\#[-a-z\\d_]*)?$",
-      "i"
+      "i",
     ); // fragment locator
     return pattern.test(str);
   };
@@ -40,7 +40,7 @@ function URLQuestion(props: Props) {
       className={cn(
         "w-full p-2 border rounded",
         !validURL ? "border-red-500" : "border-gray-300",
-        className
+        className,
       )}
       value={url}
       placeholder="Enter website URL"

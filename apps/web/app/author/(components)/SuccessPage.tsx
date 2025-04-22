@@ -35,7 +35,7 @@ function SuccessPage(props: Props) {
     state.setAssignmentConfigStore,
   ]);
   const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
-    (state) => [state.setAssignmentFeedbackConfigStore]
+    (state) => [state.setAssignmentFeedbackConfigStore],
   );
   const fetchAssignment = async () => {
     const assignment = await getAssignment(activeAssignmentId);
@@ -58,7 +58,7 @@ function SuccessPage(props: Props) {
       // Author store
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
-        decodedAssignment
+        decodedAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
@@ -66,7 +66,7 @@ function SuccessPage(props: Props) {
       });
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
-        decodedAssignment
+        decodedAssignment,
       );
       if (decodedAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
@@ -83,7 +83,7 @@ function SuccessPage(props: Props) {
       // Merge assignment feedback config data.
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
-        decodedAssignment
+        decodedAssignment,
       );
       const {
         updatedAt: assignmentFeedbackUpdatedAt,

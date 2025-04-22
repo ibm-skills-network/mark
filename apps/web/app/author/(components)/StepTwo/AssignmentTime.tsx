@@ -46,7 +46,7 @@ const Component: FC<Props> = () => {
           <p
             className={cn(
               "leading-5 transition-all cursor-pointer justify-center self-center after:content-['*'] after:text-transparent",
-              strictTimeLimit && "after:text-violet-600"
+              strictTimeLimit && "after:text-violet-600",
             )}
           >
             Enforce a strict time limit for this assignment?
@@ -56,7 +56,7 @@ const Component: FC<Props> = () => {
             onClick={toggleStrictTimeLimit}
             className={cn(
               "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-              strictTimeLimit ? "bg-violet-600" : "bg-gray-200"
+              strictTimeLimit ? "bg-violet-600" : "bg-gray-200",
             )}
             role="switch"
             aria-checked={strictTimeLimit}
@@ -65,7 +65,7 @@ const Component: FC<Props> = () => {
               aria-hidden="true"
               className={cn(
                 "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                strictTimeLimit ? "translate-x-5" : "translate-x-0"
+                strictTimeLimit ? "translate-x-5" : "translate-x-0",
               )}
             />
           </button>

@@ -121,7 +121,7 @@ export const useAssignmentConfig = createWithEqualityFn<
 
         setAssignmentConfigStore: (state) =>
           set((prevState) => ({ ...prevState, ...state })),
-      }))
+      })),
     ),
     {
       name: getAssignmentConfigName(),
@@ -129,12 +129,12 @@ export const useAssignmentConfig = createWithEqualityFn<
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(
-            ([_, value]) => typeof value !== "function"
-          )
+            ([_, value]) => typeof value !== "function",
+          ),
         );
       },
-    }
-  )
+    },
+  ),
 );
 function getAssignmentConfigName() {
   if (typeof window !== "undefined") {

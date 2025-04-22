@@ -2,8 +2,9 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
-import { toast, Toaster } from "sonner";
+import { Toaster } from "sonner";
 import { MarkChat } from "./chatbot/components/MarkChat";
+import AuthorStoreBridge from "./chatbot/store/AuthorStoreBridge";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body className={`${inter.className}`} data-color-mode="light">
         <MarkChat />
+        <AuthorStoreBridge />
         <Toaster
           richColors
           position="bottom-left"

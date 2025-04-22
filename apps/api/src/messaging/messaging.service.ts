@@ -51,7 +51,7 @@ export class MessagingService {
   async publishUser(
     username: string,
     subject: string,
-    message: unknown
+    message: unknown,
   ): Promise<unknown> {
     return this.client.publishUser(username, subject, message);
   }
@@ -59,20 +59,20 @@ export class MessagingService {
   async subscribeService(
     project: string,
     messageCallback: SubscribeFunction,
-    errorCallback: ErrorFunction
+    errorCallback: ErrorFunction,
   ): Promise<unknown> {
     return this.client.subscribeService(
       project,
       messageCallback,
       undefined,
-      errorCallback
+      errorCallback,
     );
   }
 
   async subscribeUser(
     username: string,
     messageCallback: SubscribeFunction,
-    errorCallback: ErrorFunction
+    errorCallback: ErrorFunction,
   ): Promise<unknown> {
     return this.client.subscribeUser(username, messageCallback, errorCallback);
   }

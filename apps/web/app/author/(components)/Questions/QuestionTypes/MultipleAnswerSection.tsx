@@ -24,18 +24,18 @@ interface SectionProps {
   removeChoice: (
     questionId: number,
     choiceIndex: number,
-    variantId?: number
+    variantId?: number,
   ) => void;
   setChoices: (
     questionId: number,
     choices: Choice[],
-    variantId?: number
+    variantId?: number,
   ) => void;
   modifyChoice: (
     questionId: number,
     choiceIndex: number,
     updatedChoice: Partial<Choice>,
-    variantId?: number
+    variantId?: number,
   ) => void;
   variantMode: boolean;
 }
@@ -55,7 +55,7 @@ function Section({
     state.setCriteriaMode,
   ]);
   const criteriaMode = useQuestionStore(
-    (state) => state.questionStates[questionId]?.criteriaMode
+    (state) => state.questionStates[questionId]?.criteriaMode,
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -65,20 +65,20 @@ function Section({
   const { choices, type } = question;
 
   const [localChoices, setLocalChoices] = useState(
-    choices?.map((choice) => choice?.choice ?? "") || []
+    choices?.map((choice) => choice?.choice ?? "") || [],
   );
   const [localFeedback, setLocalFeedback] = useState(
-    choices?.map((choice) => choice?.feedback ?? "") || []
+    choices?.map((choice) => choice?.feedback ?? "") || [],
   );
   const [localPoints, setLocalPoints] = useState(
-    choices?.map((choice) => choice?.points?.toString() ?? "") || []
+    choices?.map((choice) => choice?.points?.toString() ?? "") || [],
   );
 
   useEffect(() => {
     setLocalChoices(choices?.map((choice) => choice?.choice ?? "") || []);
     setLocalFeedback(choices?.map((choice) => choice?.feedback ?? "") || []);
     setLocalPoints(
-      choices?.map((choice) => choice?.points?.toString() ?? "") || []
+      choices?.map((choice) => choice?.points?.toString() ?? "") || [],
     );
   }, [choices]);
 
@@ -94,7 +94,7 @@ function Section({
   // When modifying a choice
   const handleChoiceChange = (
     choiceIndex: number,
-    updatedChoice: Partial<Choice>
+    updatedChoice: Partial<Choice>,
   ) => {
     modifyChoice(questionId, choiceIndex, updatedChoice, variantId);
   };
@@ -137,7 +137,7 @@ function Section({
 
   const handleBackspacePress = (
     choiceIndex: number,
-    event: React.KeyboardEvent
+    event: React.KeyboardEvent,
   ) => {
     const value = (event.currentTarget as HTMLInputElement).value;
 
@@ -157,7 +157,7 @@ function Section({
 
         setTimeout(() => {
           const prevChoiceInput = document.getElementById(
-            `Choice-${questionId}-${choiceIndex - 1}`
+            `Choice-${questionId}-${choiceIndex - 1}`,
           );
           if (prevChoiceInput) {
             prevChoiceInput.focus();
@@ -174,7 +174,7 @@ function Section({
     if (nextIndex < choices.length) {
       setTimeout(() => {
         const nextInput = document.getElementById(
-          `${column}-${questionId}-${nextIndex}`
+          `${column}-${questionId}-${nextIndex}`,
         );
         if (nextInput) {
           nextInput.focus();
@@ -184,7 +184,7 @@ function Section({
       handleAddChoice();
       setTimeout(() => {
         const newInput = document.getElementById(
-          `${column}-${questionId}-${choices.length}`
+          `${column}-${questionId}-${choices.length}`,
         );
         if (newInput) {
           newInput.focus();
@@ -263,7 +263,7 @@ function Section({
       } else if (choices?.some((choice) => choice?.points === 0)) {
         // if any choice has points 0, set points to -1
         const updatedChoices = choices?.map((choice) =>
-          choice.points === 0 ? { ...choice, points: -1 } : choice
+          choice.points === 0 ? { ...choice, points: -1 } : choice,
         );
         setChoices(questionId, updatedChoices);
       } else if (type === "SINGLE_CORRECT") {
@@ -276,7 +276,7 @@ function Section({
       } else if (choices?.some((choice) => choice?.points === -1)) {
         // if any choice has points 0, set points to -1
         const updatedChoices = choices?.map((choice) =>
-          choice.points === -1 ? { ...choice, points: 0 } : choice
+          choice.points === -1 ? { ...choice, points: 0 } : choice,
         );
         setChoices(questionId, updatedChoices);
       }

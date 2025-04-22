@@ -139,7 +139,7 @@ const GithubModal: React.FC<{
           setToken(backendToken);
         } else {
           showErrorOnce(
-            "Stored token is invalid or expired. Please reauthenticate."
+            "Stored token is invalid or expired. Please reauthenticate.",
           );
         }
         setLoading(false);
@@ -153,7 +153,7 @@ const GithubModal: React.FC<{
       } else {
         setLoading(false);
         showErrorOnce(
-          "Unable to authenticate with GitHub. Please try again later."
+          "Unable to authenticate with GitHub. Please try again later.",
         );
       }
     };
@@ -197,7 +197,7 @@ const GithubModal: React.FC<{
             ...repo,
             owner: { login: org.login },
           }));
-        })
+        }),
       );
       const allRepos = [...data, ...orgRepos.flat()];
       setRepos(allRepos);
@@ -205,7 +205,7 @@ const GithubModal: React.FC<{
     } catch (error) {
       console.error("Error fetching repos:", error);
       showErrorOnce(
-        "Your GitHub token might have expired. Please reauthenticate."
+        "Your GitHub token might have expired. Please reauthenticate.",
       );
       // Clear token
       setToken(null);
@@ -285,7 +285,7 @@ const GithubModal: React.FC<{
 
         if (data.items.length > 0) {
           const filteredFiles = data.items.filter((item: { name: string }) =>
-            item.name.toLowerCase().startsWith(query.toLowerCase())
+            item.name.toLowerCase().startsWith(query.toLowerCase()),
           );
 
           if (filteredFiles.length > 0) {
@@ -308,7 +308,7 @@ const GithubModal: React.FC<{
                 ] = pathnameParts;
 
                 const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${filePathParts.join(
-                  "/"
+                  "/",
                 )}`;
 
                 return {
@@ -321,7 +321,7 @@ const GithubModal: React.FC<{
                   owner: { login: repoOwner },
                   repo: repos.find((r) => r.name === repoName),
                 };
-              }
+              },
             );
 
             setRepoContents(searchResults);
@@ -388,7 +388,7 @@ const GithubModal: React.FC<{
           // 1) Validate we have the necessary info
           if (!file.owner || !file.repo || !file.path) {
             throw new Error(
-              `File missing owner/repo/path: ${JSON.stringify(file, null, 2)}`
+              `File missing owner/repo/path: ${JSON.stringify(file, null, 2)}`,
             );
           }
 
@@ -408,10 +408,10 @@ const GithubModal: React.FC<{
             } as learnerFileResponse;
           } else {
             throw new Error(
-              `Content not available for file: ${file.path} in ${file.repo.name}`
+              `Content not available for file: ${file.path} in ${file.repo.name}`,
             );
           }
-        })
+        }),
       );
       onFileChange(
         fileContents.map((file) => ({
@@ -419,7 +419,7 @@ const GithubModal: React.FC<{
           content: file.content,
           githubUrl: file.githubUrl,
         })),
-        questionId
+        questionId,
       );
       toast.success("Files added successfully!");
       onClose();
@@ -513,7 +513,7 @@ const GithubModal: React.FC<{
                         onClick={() =>
                           fetchRepoContents(
                             selectedRepo,
-                            currentPath.slice(0, index + 1)
+                            currentPath.slice(0, index + 1),
                           )
                         }
                         className={` transition-colors duration-200 font-medium ${
@@ -551,11 +551,11 @@ const GithubModal: React.FC<{
                             content.type === "dir"
                               ? ""
                               : selectedFiles.some(
-                                  (file) =>
-                                    file.githubUrl === content.download_url
-                                )
-                              ? "border border-violet-500"
-                              : ""
+                                    (file) =>
+                                      file.githubUrl === content.download_url,
+                                  )
+                                ? "border border-violet-500"
+                                : ""
                           }
                             `}
                         >
@@ -581,7 +581,7 @@ const GithubModal: React.FC<{
                                        selectedFiles.some(
                                          (file) =>
                                            file.githubUrl ===
-                                           content.download_url
+                                           content.download_url,
                                        )
                                          ? "text-violet-500"
                                          : "text-gray-600 hover:text-violet-600"
@@ -591,15 +591,15 @@ const GithubModal: React.FC<{
                                       selectedFiles.some(
                                         (file) =>
                                           file.githubUrl ===
-                                          content.download_url
+                                          content.download_url,
                                       )
                                     ) {
                                       setSelectedFiles(
                                         selectedFiles.filter(
                                           (file) =>
                                             file.githubUrl !==
-                                            content.download_url
-                                        )
+                                            content.download_url,
+                                        ),
                                       );
                                     } else {
                                       setSelectedFiles([
@@ -626,7 +626,7 @@ const GithubModal: React.FC<{
                                     octokit &&
                                     openFileInNewTab(
                                       content.download_url,
-                                      octokit
+                                      octokit,
                                     )
                                   }
                                   className="transition-colors duration-200 pr-2 underline"
@@ -659,8 +659,9 @@ const GithubModal: React.FC<{
                             onClick={() =>
                               setSelectedFiles(
                                 selectedFiles.filter(
-                                  (file) => file.githubUrl !== fileUrl.githubUrl
-                                )
+                                  (file) =>
+                                    file.githubUrl !== fileUrl.githubUrl,
+                                ),
                               )
                             }
                           >
@@ -706,7 +707,7 @@ const GithubModal: React.FC<{
                       if (!acc[owner]) acc[owner] = [];
                       acc[owner].push(repo);
                       return acc;
-                    }, {})
+                    }, {}),
                   )
                     .sort(([ownerA], [ownerB]) => ownerA.localeCompare(ownerB))
                     .map(([owner, ownerRepos]) => (

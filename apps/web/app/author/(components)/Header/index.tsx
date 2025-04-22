@@ -111,13 +111,13 @@ function AuthorHeader() {
     state.name,
   ]);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
-    questions as Question[]
+    questions as Question[],
   );
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
   const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
-    (state) => [state.setAssignmentFeedbackConfigStore]
+    (state) => [state.setAssignmentFeedbackConfigStore],
   );
   const [
     introduction,
@@ -167,10 +167,10 @@ function AuthorHeader() {
 
   const deleteAuthorStore = useAuthorStore((state) => state.deleteStore);
   const deleteAssignmentConfigStore = useAssignmentConfig(
-    (state) => state.deleteStore
+    (state) => state.deleteStore,
   );
   const deleteAssignmentFeedbackConfigStore = useAssignmentFeedbackConfig(
-    (state) => state.deleteStore
+    (state) => state.deleteStore,
   );
   const changesSummary = useChangesSummary();
 
@@ -178,7 +178,7 @@ function AuthorHeader() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
   const [currentMessage, setCurrentMessage] = useState<string>(
-    "Initializing publishing..."
+    "Initializing publishing...",
   );
   const [progressStatus, setProgressStatus] =
     useState<JobStatus>("In Progress");
@@ -237,7 +237,7 @@ function AuthorHeader() {
               },
               index: index + 1,
             };
-          }
+          },
         ) || [];
 
       newAssignment.questions = questions;
@@ -298,7 +298,7 @@ function AuthorHeader() {
 
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
-        newAssignment
+        newAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
@@ -307,7 +307,7 @@ function AuthorHeader() {
 
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
-        newAssignment
+        newAssignment,
       );
       if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
@@ -324,7 +324,7 @@ function AuthorHeader() {
 
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
-        newAssignment
+        newAssignment,
       );
       const {
         updatedAt: assignmentFeedbackUpdatedAt,
@@ -357,7 +357,7 @@ function AuthorHeader() {
         void fetchAssignment();
       } else {
         toast.error(
-          "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment."
+          "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
         );
       }
     };
@@ -372,7 +372,7 @@ function AuthorHeader() {
             (sum, rubric) =>
               sum +
               Math.max(...rubric.criteria.map((crit) => crit.points || 0)),
-            0
+            0,
           )
         : 0;
       return {
@@ -391,17 +391,17 @@ function AuthorHeader() {
     const role = await getUserRole();
     if (role !== "author") {
       toast.error(
-        "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment."
+        "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
       );
       setSubmitting(false);
       return;
     }
 
     let clonedCurrentQuestions = JSON.parse(
-      JSON.stringify(questions)
+      JSON.stringify(questions),
     ) as QuestionAuthorStore[];
     const clonedOriginalQuestions = JSON.parse(
-      JSON.stringify(originalAssignment.questions)
+      JSON.stringify(originalAssignment.questions),
     ) as QuestionAuthorStore[];
 
     function removeEphemeralFields(questionArray: QuestionAuthorStore[]) {
@@ -465,7 +465,7 @@ function AuthorHeader() {
     try {
       const response = await publishAssignment(
         activeAssignmentId,
-        assignmentData
+        assignmentData,
       );
       if (response?.jobId) {
         await subscribeToJobStatus(
@@ -475,18 +475,18 @@ function AuthorHeader() {
             setCurrentMessage(progress);
             setQuestions(clonedCurrentQuestions);
           },
-          setQuestions
+          setQuestions,
         );
         toast.success("Questions published successfully!");
         setProgressStatus("Completed");
         setTimeout(() => {
           router.push(
-            `/author/${activeAssignmentId}?submissionTime=${Date.now()}`
+            `/author/${activeAssignmentId}?submissionTime=${Date.now()}`,
           );
         }, 300);
       } else {
         toast.error(
-          "Failed to start the publishing process. Please try again."
+          "Failed to start the publishing process. Please try again.",
         );
         setProgressStatus("Failed");
       }
@@ -534,7 +534,7 @@ function AuthorHeader() {
             Make this wrapper flex-col on small screens, then row on medium.
             Also add "flex-wrap" so that if there's no space, items move to the next line.
           */}
-          <div className="flex flex-col flex-wrap lg:flex-nowrap md:flex-row md:items-center justify-between gap-2 md:gap-4">
+          <div className="flex flex-col flex-wrap lg:flex-nowrap md:flex-row md:items-center justify-between gap-2 md:gap-2">
             {/* Left side: SNIcon + Title */}
             <div className="flex flex-row items-center space-x-4">
               <SNIcon />

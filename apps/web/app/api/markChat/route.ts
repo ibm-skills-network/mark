@@ -1,8 +1,5 @@
 // Import function handlers from your existing code
-import {
-  reportIssue,
-  searchKnowledgeBase,
-} from "@/app/chatbot/lib/markChatFunctions";
+import { searchKnowledgeBase } from "@/app/chatbot/lib/markChatFunctions";
 /* eslint-disable */ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { z } from "zod";
@@ -43,12 +40,11 @@ const commonTools = {
         .number()
         .optional()
         .describe(
-          "The ID of the assignment where the issue was encountered (if applicable)"
+          "The ID of the assignment where the issue was encountered (if applicable)",
         ),
     }),
     execute: async ({ issueType, description, assignmentId }) => {
       try {
-        return await reportIssue(issueType, description, assignmentId);
       } catch (error) {
         console.error("Error reporting issue:", error);
         return "I couldn't report the issue due to an error. Please try again.";
@@ -65,7 +61,7 @@ export async function POST(req: NextRequest) {
     if (!userRole || !userText || !conversation) {
       return NextResponse.json(
         { error: "Missing required fields" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -97,12 +93,12 @@ IMPORTANT CAPABILITIES:
 
     // Extract any system context messages for additional information
     const systemContextMessages = conversation.filter(
-      (msg: any) => msg.role === "system" && msg.id?.includes("context")
+      (msg: any) => msg.role === "system" && msg.id?.includes("context"),
     );
 
     // Regular conversation messages (exclude system context)
     const regularMessages = conversation.filter(
-      (msg: any) => msg.role !== "system" || !msg.id?.includes("context")
+      (msg: any) => msg.role !== "system" || !msg.id?.includes("context"),
     );
 
     // Prepare messages for OpenAI
@@ -435,7 +431,7 @@ IMPORTANT CAPABILITIES:
                 result: "An error occurred while processing the function call.",
               };
             }
-          })
+          }),
         );
 
         // Return the function results

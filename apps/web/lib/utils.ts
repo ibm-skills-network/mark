@@ -37,7 +37,7 @@ export interface DataWithUpdatedAt {
 
 export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
-  backendData: Partial<T>
+  backendData: Partial<T>,
 ): T | Partial<T> {
   // If either updatedAt is missing, fallback to backend data.
   if (!localData?.updatedAt || !backendData.updatedAt) {
@@ -69,7 +69,7 @@ export const useDebugLog = () => {
         console.debug("[DEBUG LOG]:", ...args);
       }
     },
-    [debugMode]
+    [debugMode],
   );
 
   return debugLog;
@@ -102,7 +102,7 @@ export function parseLearnerResponse(response: string, attempts = 0) {
   } catch (e) {
     console.error(
       `Failed to parse learnerResponse after ${attempts} attempts:`,
-      e
+      e,
     );
     return response;
   }
@@ -124,7 +124,7 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
       (q.learnerChoices?.length ?? 0) > 0 ||
       q.learnerAnswerChoice !== undefined ||
       q.learnerFileResponse !== undefined ||
-      q.presentationResponse !== undefined
+      q.presentationResponse !== undefined,
   );
 
 export const generateTempQuestionId = (): number => {

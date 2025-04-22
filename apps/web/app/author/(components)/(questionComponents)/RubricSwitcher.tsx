@@ -22,17 +22,17 @@ interface RubricSwitcherProps {
   onPointsInputChange: (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => void;
   onPointsChange: (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => void;
   onCriteriaChange: (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => void;
   onCriteriaBlur: (rubricIndex: number) => void;
   onRemoveCriteria: (rubricIndex: number, criteriaIndex: number) => void;
@@ -66,12 +66,12 @@ interface RubricItemProps {
   onPointsChange: (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => void;
   onCriteriaChange: (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => void;
   onCriteriaBlur: (rubricIndex: number) => void;
   onRemoveCriteria: (rubricIndex: number, criteriaIndex: number) => void;
@@ -80,7 +80,7 @@ interface RubricItemProps {
   handleUpdateCriteriaDesc: (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => void;
   maxPointsEver: number;
   rowsRef: React.RefObject<(HTMLTableRowElement | null)[]>;
@@ -110,10 +110,10 @@ const RubricItem: React.FC<RubricItemProps> = ({
   inProgressRubricIndex,
 }) => {
   const setRubricQuestionText = useAuthorStore(
-    (state) => state.setRubricQuestionText
+    (state) => state.setRubricQuestionText,
   );
   const [localRubricQuestion, setLocalRubricQuestion] = useState(
-    rubricItem?.rubricQuestion ?? ""
+    rubricItem?.rubricQuestion ?? "",
   );
   const removeRubric = useAuthorStore((state) => state.removeRubric);
 
@@ -226,20 +226,20 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
 }) => {
   const rubric = questionFromParent.scoring.rubrics || [];
   const setRubricCriteriaDescription = useAuthorStore(
-    (state) => state.setRubricCriteriaDescription
+    (state) => state.setRubricCriteriaDescription,
   );
   const [generatingRubric, setGeneratingRubric] = useState(false);
   const handleUpdateCriteriaDesc = (
     rubricIndex: number,
     criteriaIndex: number,
-    value: string
+    value: string,
   ) => {
     setRubricCriteriaDescription(
       questionId,
       variantId,
       rubricIndex,
       criteriaIndex,
-      value
+      value,
     );
   };
   const addOneRubric = useAuthorStore((state) => state.addOneRubric);

@@ -38,7 +38,7 @@ export class AppModule implements NestModule {
       .forRoutes(
         { path: "/v1/assignments*", method: RequestMethod.ALL },
         { path: "/v1/github*", method: RequestMethod.ALL },
-        { path: "/v1/user-session", method: RequestMethod.GET }
+        { path: "/v1/user-session", method: RequestMethod.GET },
       );
   }
 }

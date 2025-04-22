@@ -18,7 +18,7 @@ function Title(props: Props) {
         { "text-xl": level === 4 },
         { "text-lg": level === 5 },
         "font-bold text-gray-900",
-        className
+        className,
       )}
     >
       {children}

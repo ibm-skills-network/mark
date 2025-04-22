@@ -67,7 +67,7 @@ export class AssignmentService {
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
     private readonly jobStatusService: JobStatusService,
-    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = new Logger("AssignmentService");
     this.languageTranslation =
@@ -98,12 +98,12 @@ export class AssignmentService {
   async get(
     assignmentId: number,
     userSession: UserSession,
-    lang?: string
+    lang?: string,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const backendData = await this.findOne(Number(assignmentId), userSession);
 
     const originalLanguage = await this.llmService.getLanguageCode(
-      backendData.introduction || "en"
+      backendData.introduction || "en",
     );
 
     // If a language is provided and it's different from the original, try to fetch the translation.
@@ -151,7 +151,7 @@ export class AssignmentService {
   }
   async findOne(
     id: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession.role === UserRole.LEARNER;
 
@@ -184,7 +184,7 @@ export class AssignmentService {
           if (typeof variant.choices === "string") {
             try {
               variant.choices = JSON.parse(
-                variant.choices
+                variant.choices,
               ) as unknown as Prisma.JsonValue;
             } catch (error) {
               console.error("Error parsing choices:", error);
@@ -198,7 +198,7 @@ export class AssignmentService {
       result.questions.sort(
         (a, b) =>
           result.questionOrder.indexOf(a.id) -
-          result.questionOrder.indexOf(b.id)
+          result.questionOrder.indexOf(b.id),
       );
     }
 
@@ -225,7 +225,7 @@ export class AssignmentService {
 
     if (!results) {
       throw new NotFoundException(
-        `Group with Id ${userSession.groupId} not found.`
+        `Group with Id ${userSession.groupId} not found.`,
       );
     }
 
@@ -236,7 +236,7 @@ export class AssignmentService {
 
   async replace(
     id: number,
-    replaceAssignmentDto: ReplaceAssignmentRequestDto
+    replaceAssignmentDto: ReplaceAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -265,7 +265,7 @@ export class AssignmentService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     files?: { filename: string; content: string }[],
-    learningObjectives?: string
+    learningObjectives?: string,
   ): Promise<void> {
     // Start the job processing asynchronously
     setImmediate(() => {
@@ -275,7 +275,7 @@ export class AssignmentService {
         assignmentType,
         questionsToGenerate,
         files,
-        learningObjectives
+        learningObjectives,
       ).catch((error) => {
         console.error(`Error processing job ID ${jobId}:`, error);
       });
@@ -287,7 +287,7 @@ export class AssignmentService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     files?: { filename: string; content: string }[],
-    learningObjectives?: string
+    learningObjectives?: string,
   ): Promise<void> {
     try {
       let content = "";
@@ -346,7 +346,7 @@ export class AssignmentService {
         assignmentType,
         questionsToGenerate,
         content,
-        learningObjectives
+        learningObjectives,
       )) as LLMResponseQuestion[];
 
       // Update job status and store the generated questions
@@ -373,7 +373,7 @@ export class AssignmentService {
 
   async update(
     id: number,
-    updateAssignmentDto: UpdateAssignmentRequestDto
+    updateAssignmentDto: UpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
@@ -449,7 +449,7 @@ export class AssignmentService {
     progress: string,
     status = "In Progress",
     result?: unknown,
-    percentage?: number
+    percentage?: number,
   ): Promise<void> {
     // Update database first
     await this.prisma.publishJob.update({
@@ -469,14 +469,14 @@ export class AssignmentService {
       progress,
       status,
       result,
-      percentage
+      percentage,
     );
   }
 
   async publishAssignment(
     assignmentId: number,
     updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
-    userId: string
+    userId: string,
   ): Promise<{ jobId: number; message: string }> {
     const job = await this.prisma.publishJob.create({
       data: {
@@ -489,10 +489,10 @@ export class AssignmentService {
     this.processPublishingJob(
       job.id,
       assignmentId,
-      updateAssignmentQuestionsDto
+      updateAssignmentQuestionsDto,
     ).catch((error) => {
       this.logger.error(
-        `Error processing publishing job: ${(error as Error).message}`
+        `Error processing publishing job: ${(error as Error).message}`,
       );
     });
 
@@ -516,7 +516,7 @@ export class AssignmentService {
   private async processPublishingJob(
     jobId: number,
     assignmentId: number,
-    updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto
+    updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
   ): Promise<{ jobId: number; message: string }> {
     const {
       introduction,
@@ -545,7 +545,7 @@ export class AssignmentService {
 
     if (!introduction) {
       this.logger.error(
-        `Introduction not provided for assignment: ${assignmentId}`
+        `Introduction not provided for assignment: ${assignmentId}`,
       );
       throw new UnprocessableEntityException("Introduction not provided.");
     }
@@ -565,7 +565,7 @@ export class AssignmentService {
     // --- Translation Progress Tracking ---
     const totalQuestionTranslations = safeQuestions.reduce(
       (accumulator, question) => accumulator + supportedLanguages.length,
-      0
+      0,
     );
     let totalVariantTranslations = 0;
     for (const question of safeQuestions) {
@@ -584,7 +584,7 @@ export class AssignmentService {
       const calculatedProgress =
         translationBasePercentage +
         Math.floor(
-          (completedTranslations / totalTranslationTasks) * translationRange
+          (completedTranslations / totalTranslationTasks) * translationRange,
         );
       if (calculatedProgress > currentTranslationProgress) {
         currentTranslationProgress = calculatedProgress;
@@ -611,7 +611,7 @@ export class AssignmentService {
             "Updating assignment settings",
             "In Progress",
             null,
-            10
+            10,
           );
           const updatedAtDate = updatedAt ? new Date(updatedAt) : new Date();
           const languageCode =
@@ -660,10 +660,10 @@ export class AssignmentService {
 
           // 2. Mark questions for deletion that are no longer present.
           const newQuestionIds = new Set<number>(
-            safeQuestions.map((q) => q.id)
+            safeQuestions.map((q) => q.id),
           );
           const questionsToDelete = activeQuestions.filter(
-            (q) => !newQuestionIds.has(q.id)
+            (q) => !newQuestionIds.has(q.id),
           );
           if (questionsToDelete.length > 0) {
             await this.prisma.question.updateMany({
@@ -687,12 +687,12 @@ export class AssignmentService {
                 totalPoints: questionDto.totalPoints ?? 0,
                 choices: questionDto.choices
                   ? (JSON.parse(
-                      JSON.stringify(questionDto.choices)
+                      JSON.stringify(questionDto.choices),
                     ) as Prisma.JsonValue)
                   : Prisma.JsonNull,
                 scoring: questionDto.scoring
                   ? (JSON.parse(
-                      JSON.stringify(questionDto.scoring)
+                      JSON.stringify(questionDto.scoring),
                     ) as Prisma.JsonValue)
                   : Prisma.JsonNull,
                 maxWords: questionDto.maxWords,
@@ -702,7 +702,7 @@ export class AssignmentService {
                 liveRecordingConfig: questionDto?.liveRecordingConfig,
                 videoPresentationConfig: questionDto?.videoPresentationConfig
                   ? (JSON.parse(
-                      JSON.stringify(questionDto.videoPresentationConfig)
+                      JSON.stringify(questionDto.videoPresentationConfig),
                     ) as Prisma.JsonValue)
                   : Prisma.JsonNull,
                 assignment: { connect: { id: assignmentId } },
@@ -713,7 +713,7 @@ export class AssignmentService {
                 existingQuestion.question !== questionDto.question
               ) {
                 await this.applyGuardRails(
-                  questionData as unknown as CreateUpdateQuestionRequestDto
+                  questionData as unknown as CreateUpdateQuestionRequestDto,
                 );
               }
 
@@ -735,7 +735,7 @@ export class AssignmentService {
                 upsertedQuestion.id,
                 questionDto,
                 supportedLanguages,
-                updateTranslationProgress
+                updateTranslationProgress,
               );
 
               // 5. Process question variants.
@@ -749,10 +749,10 @@ export class AssignmentService {
               }
               // Mark variants for deletion.
               const newVariantContents = new Set(
-                questionDto.variants?.map((v) => v.variantContent) ?? []
+                questionDto.variants?.map((v) => v.variantContent) ?? [],
               );
               const variantsToDelete = existingVariants.filter(
-                (v) => !newVariantContents.has(v.variantContent)
+                (v) => !newVariantContents.has(v.variantContent),
               );
               if (variantsToDelete.length > 0) {
                 await this.prisma.questionVariant.updateMany({
@@ -765,18 +765,18 @@ export class AssignmentService {
                 await Promise.all(
                   questionDto.variants.map(async (variantDto) => {
                     const existingVariant = existingVariantsMap.get(
-                      variantDto.variantContent
+                      variantDto.variantContent,
                     );
                     const variantData: Prisma.QuestionVariantCreateInput = {
                       variantContent: variantDto.variantContent,
                       choices: variantDto.choices
                         ? (JSON.parse(
-                            JSON.stringify(variantDto.choices)
+                            JSON.stringify(variantDto.choices),
                           ) as Prisma.JsonValue)
                         : Prisma.JsonNull,
                       scoring: variantDto.scoring
                         ? (JSON.parse(
-                            JSON.stringify(variantDto.scoring)
+                            JSON.stringify(variantDto.scoring),
                           ) as Prisma.JsonValue)
                         : Prisma.JsonNull,
                       maxWords: variantDto.maxWords,
@@ -799,7 +799,7 @@ export class AssignmentService {
                         upsertedQuestion.id,
                         updatedVariant,
                         supportedLanguages,
-                        updateTranslationProgress
+                        updateTranslationProgress,
                       );
                     } else {
                       const newVariant =
@@ -812,13 +812,13 @@ export class AssignmentService {
                         upsertedQuestion.id,
                         newVariant,
                         supportedLanguages,
-                        updateTranslationProgress
+                        updateTranslationProgress,
                       );
                     }
-                  })
+                  }),
                 );
               }
-            })
+            }),
           );
         },
       },
@@ -832,12 +832,12 @@ export class AssignmentService {
             "Starting to translate assignment information",
             "In Progress",
             null,
-            40
+            40,
           );
           await this.handleAssignmentTranslations(
             assignmentId,
             supportedLanguages,
-            job
+            job,
           );
         },
       },
@@ -851,7 +851,7 @@ export class AssignmentService {
             "Finalizing and marking assignment as published...",
             "In Progress",
             null,
-            90
+            90,
           );
           const questionOrder = safeQuestions.map((q) => {
             const backendId = frontendToBackendIdMap.get(q.id);
@@ -878,7 +878,7 @@ export class AssignmentService {
             `${step.name} skipped`,
             "In Progress",
             null,
-            step.targetPercentage
+            step.targetPercentage,
           );
           continue;
         }
@@ -887,7 +887,7 @@ export class AssignmentService {
           `Starting: ${step.name}`,
           "In Progress",
           null,
-          step.targetPercentage * 0.8
+          step.targetPercentage * 0.8,
         );
         try {
           await step.run();
@@ -896,7 +896,7 @@ export class AssignmentService {
             `${step.name} completed`,
             "In Progress",
             null,
-            step.targetPercentage
+            step.targetPercentage,
           );
         } catch (error) {
           await this.updateJobStatus(
@@ -904,7 +904,7 @@ export class AssignmentService {
             `Error during ${step.name}: ${(error as Error).message}`,
             "Failed",
             null,
-            step.targetPercentage
+            step.targetPercentage,
           );
           throw error;
         }
@@ -919,7 +919,7 @@ export class AssignmentService {
         return backendId || q.id;
       });
       allQuestions.sort(
-        (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id)
+        (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id),
       );
 
       const responseData: UpdateAssignmentQuestionsResponseDto = {
@@ -939,12 +939,12 @@ export class AssignmentService {
         "Publishing completed successfully!",
         "Completed",
         responseData,
-        100
+        100,
       );
       return { jobId: job.id, message: "Assignment published successfully." };
     } catch (error) {
       this.logger.error(
-        `Error publishing assignment: ${(error as Error).message}`
+        `Error publishing assignment: ${(error as Error).message}`,
       );
       const errorResponse: UpdateAssignmentQuestionsResponseDto = {
         id: assignmentId,
@@ -955,11 +955,11 @@ export class AssignmentService {
         job,
         `Error: ${(error as Error).message}`,
         "Failed",
-        errorResponse
+        errorResponse,
       );
       throw new HttpException(
         "Failed to publish assignment.",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -967,7 +967,7 @@ export class AssignmentService {
   private async handleAssignmentTranslations(
     assignmentId: number,
     languages: string[],
-    job?: Job
+    job?: Job,
   ): Promise<void> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -991,11 +991,11 @@ export class AssignmentService {
               await this.updateJobStatus(
                 job,
                 `Updating assignment translation that is in ${getLanguageNameFromCode(
-                  lang
+                  lang,
                 )}`,
                 "In Progress",
                 null,
-                60
+                60,
               );
             }
             if (
@@ -1006,8 +1006,8 @@ export class AssignmentService {
                 this.llmService
                   .translateText(assignment.name, lang, assignmentId)
                   .then(
-                    (translated) => (updatedData.translatedName = translated)
-                  )
+                    (translated) => (updatedData.translatedName = translated),
+                  ),
               );
             }
             if (
@@ -1019,8 +1019,8 @@ export class AssignmentService {
                   .translateText(assignment.instructions, lang, assignmentId)
                   .then(
                     (translated) =>
-                      (updatedData.translatedInstructions = translated)
-                  )
+                      (updatedData.translatedInstructions = translated),
+                  ),
               );
             }
             if (
@@ -1033,13 +1033,13 @@ export class AssignmentService {
                   .translateText(
                     assignment.gradingCriteriaOverview,
                     lang,
-                    assignmentId
+                    assignmentId,
                   )
                   .then(
                     (translated) =>
                       (updatedData.translatedGradingCriteriaOverview =
-                        translated)
-                  )
+                        translated),
+                  ),
               );
             }
             if (
@@ -1051,8 +1051,8 @@ export class AssignmentService {
                   .translateText(assignment.introduction, lang, assignmentId)
                   .then(
                     (translated) =>
-                      (updatedData.translatedIntroduction = translated)
-                  )
+                      (updatedData.translatedIntroduction = translated),
+                  ),
               );
             }
 
@@ -1073,7 +1073,7 @@ export class AssignmentService {
                 `Translating assignment to ${getLanguageNameFromCode(lang)}`,
                 "In Progress",
                 null,
-                80
+                80,
               );
             }
             const [
@@ -1085,22 +1085,22 @@ export class AssignmentService {
               this.llmService.translateText(
                 assignment.name,
                 lang,
-                assignmentId
+                assignmentId,
               ),
               this.llmService.translateText(
                 assignment.instructions,
                 lang,
-                assignmentId
+                assignmentId,
               ),
               this.llmService.translateText(
                 assignment.gradingCriteriaOverview,
                 lang,
-                assignmentId
+                assignmentId,
               ),
               this.llmService.translateText(
                 assignment.introduction,
                 lang,
-                assignmentId
+                assignmentId,
               ),
             ]);
 
@@ -1122,10 +1122,10 @@ export class AssignmentService {
         } catch (error) {
           this.logger.error(
             `Failed to translate assignment ${assignmentId} to ${lang}`,
-            error
+            error,
           );
         }
-      })
+      }),
     );
   }
 
@@ -1141,7 +1141,7 @@ export class AssignmentService {
     questionId: number,
     question: UpdateAssignmentQuestionsDto["questions"][number],
     languages: string[],
-    updateTranslationProgress: () => number
+    updateTranslationProgress: () => number,
   ): Promise<void> {
     const normalizedText = question.question.trim();
     const normalizedChoices = question.choices ?? null;
@@ -1156,16 +1156,16 @@ export class AssignmentService {
           await this.updateJobStatus(
             job,
             `Translating Question #${questionId} to ${getLanguageNameFromCode(
-              lang
+              lang,
             )}`,
             "In Progress",
             null,
-            updateTranslationProgress()
+            updateTranslationProgress(),
           );
 
           if (questionLang === "unknown") {
             this.logger.warn(
-              `Skipping translation for Q#${questionId} to ${lang}; unknown source.`
+              `Skipping translation for Q#${questionId} to ${lang}; unknown source.`,
             );
             return;
           }
@@ -1202,7 +1202,7 @@ export class AssignmentService {
 
                   untranslatedText: normalizedText,
                   untranslatedChoices: JSON.parse(
-                    JSON.stringify(normalizedChoices)
+                    JSON.stringify(normalizedChoices),
                   ) as Prisma.JsonValue,
 
                   translatedText: existingReusable.translatedText,
@@ -1219,13 +1219,13 @@ export class AssignmentService {
 
           if (questionLang.toLowerCase() === lang.toLowerCase()) {
             translatedChoices = JSON.parse(
-              JSON.stringify(normalizedChoices)
+              JSON.stringify(normalizedChoices),
             ) as Prisma.JsonValue;
           } else {
             translatedText = await this.llmService.generateQuestionTranslation(
               assignmentId,
               normalizedText,
-              lang
+              lang,
             );
 
             if (normalizedChoices) {
@@ -1233,7 +1233,7 @@ export class AssignmentService {
                 (await this.llmService.generateChoicesTranslation(
                   normalizedChoices,
                   assignmentId,
-                  lang
+                  lang,
                 )) as unknown as Prisma.JsonValue;
             }
           }
@@ -1246,15 +1246,15 @@ export class AssignmentService {
 
               untranslatedText: normalizedText,
               untranslatedChoices: JSON.parse(
-                JSON.stringify(normalizedChoices)
+                JSON.stringify(normalizedChoices),
               ) as Prisma.JsonValue,
 
               translatedText: translatedText,
               translatedChoices: translatedChoices ?? Prisma.JsonNull,
             },
           });
-        })
-      )
+        }),
+      ),
     );
   }
 
@@ -1270,7 +1270,7 @@ export class AssignmentService {
     questionId: number,
     variant: QuestionVariant,
     languages: string[],
-    updateTranslationProgress: () => number
+    updateTranslationProgress: () => number,
   ): Promise<void> {
     const normalizedText = variant.variantContent.trim();
 
@@ -1289,12 +1289,12 @@ export class AssignmentService {
             `Translating variant #${variant.id} of Q#${questionId} to ${lang}`,
             "In Progress",
             null,
-            updateTranslationProgress()
+            updateTranslationProgress(),
           );
 
           if (variantLang === "unknown") {
             this.logger.warn(
-              `Variant #${variant.id} has unknown language; skipping translation to ${lang}.`
+              `Variant #${variant.id} has unknown language; skipping translation to ${lang}.`,
             );
             return;
           }
@@ -1353,7 +1353,7 @@ export class AssignmentService {
             translatedText = await this.llmService.generateQuestionTranslation(
               assignmentId,
               normalizedText,
-              lang
+              lang,
             );
 
             if (normalizedChoices) {
@@ -1361,7 +1361,7 @@ export class AssignmentService {
                 (await this.llmService.generateChoicesTranslation(
                   normalizedChoices as unknown as Choice[],
                   assignmentId,
-                  lang
+                  lang,
                 )) as unknown as Prisma.JsonValue;
             }
           }
@@ -1377,8 +1377,8 @@ export class AssignmentService {
               translatedChoices: translatedChoices ?? Prisma.JsonNull,
             },
           });
-        })
-      )
+        }),
+      ),
     );
   }
 
@@ -1459,7 +1459,7 @@ export class AssignmentService {
     assignmentId: number,
     issueType: ReportType,
     description: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     // Ensure the assignment exists
     const assignmentExists = await this.prisma.assignment.findUnique({
@@ -1480,7 +1480,7 @@ export class AssignmentService {
     });
     if (reports.length >= 5) {
       throw new UnprocessableEntityException(
-        "You have reached the maximum number of reports allowed in a 24-hour period."
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
       );
     }
 
@@ -1497,7 +1497,7 @@ export class AssignmentService {
   }
   async generateVariantsFromQuestions(
     assignmentId: number,
-    generateQuestionVariantDto: GenerateQuestionVariantDto
+    generateQuestionVariantDto: GenerateQuestionVariantDto,
   ): Promise<
     BaseAssignmentResponseDto & {
       questions?: QuestionDto[];
@@ -1525,7 +1525,7 @@ export class AssignmentService {
 
           const newVariants = await this.generateVariantsFromQuestion(
             question,
-            numberOfRequiredVariants
+            numberOfRequiredVariants,
           );
           if (Array.isArray(question.variants)) {
             question.variants.push(
@@ -1533,13 +1533,13 @@ export class AssignmentService {
                 ...variant,
                 questionId: question.id,
                 id: Number(
-                  `${question.id}${question.variants.length + variantId++}`
+                  `${question.id}${question.variants.length + variantId++}`,
                 ),
                 choices: variant.choices,
                 scoring: variant.scoring,
                 variantType: variant.variantType,
                 randomizedChoices: true,
-              })) as VariantDto[])
+              })) as VariantDto[]),
             );
           } else {
             question.variants = newVariants.map((variant) => ({
@@ -1553,7 +1553,7 @@ export class AssignmentService {
             })) as VariantDto[];
           }
         }
-      })
+      }),
     );
 
     return {
@@ -1565,13 +1565,13 @@ export class AssignmentService {
 
   private async generateVariantsFromQuestion(
     question: QuestionDto,
-    numberOfVariants = 1
+    numberOfVariants = 1,
   ): Promise<VariantDto[]> {
     try {
       if (!question) {
         throw new HttpException(
           "Question not found",
-          HttpStatus.INTERNAL_SERVER_ERROR
+          HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
       const variants = await this.llmService.generateQuestionRewordings(
@@ -1580,7 +1580,7 @@ export class AssignmentService {
         question.type,
         question.assignmentId,
         question.choices,
-        question.variants
+        question.variants,
       );
       const variantData = variants.map((variant) => ({
         id: variant.id,
@@ -1600,7 +1600,7 @@ export class AssignmentService {
       console.error("Error generating and saving reworded variants:", error);
       throw new HttpException(
         "Failed to generate and save reworded variants",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -1618,15 +1618,15 @@ export class AssignmentService {
   }
 
   private async applyGuardRails(
-    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    createUpdateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<void> {
     const guardRailsValidation = await this.llmService.applyGuardRails(
-      JSON.stringify(createUpdateQuestionRequestDto)
+      JSON.stringify(createUpdateQuestionRequestDto),
     );
     if (!guardRailsValidation) {
       throw new HttpException(
         "Question validation failed due to inappropriate or unacceptable content",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
   }
@@ -1658,19 +1658,19 @@ export class AssignmentService {
     const questionGradingContextMap =
       await this.llmService.generateQuestionGradingContext(
         questionsForGradingContext,
-        assignmentId
+        assignmentId,
       );
 
     const updates = [];
 
     for (const [questionId, gradingContextQuestionIds] of Object.entries(
-      questionGradingContextMap
+      questionGradingContextMap,
     )) {
       updates.push(
         this.prisma.question.update({
           where: { id: Number.parseInt(questionId) },
           data: { gradingContextQuestionIds },
-        })
+        }),
       );
     }
 

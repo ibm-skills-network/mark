@@ -49,7 +49,7 @@ interface AttemptTableRow {
 
 export default function AssignmentAttempts() {
   const listOfAttempts = useLearnerOverviewStore(
-    (state) => state.listOfAttempts
+    (state) => state.listOfAttempts,
   );
   const [assignmentDetails] = useAssignmentDetails((state) => [
     state.assignmentDetails,
@@ -58,7 +58,7 @@ export default function AssignmentAttempts() {
   const sortedAttempts = [...listOfAttempts].sort((a, b) =>
     a.createdAt && b.createdAt
       ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      : 0
+      : 0,
   );
 
   const attemptsData: AttemptTableRow[] = useMemo(
@@ -117,7 +117,7 @@ export default function AssignmentAttempts() {
           isLatest: index === 0,
         };
       }),
-    [sortedAttempts]
+    [sortedAttempts],
   );
 
   const columns = useMemo<TableColumn<AttemptTableRow>[]>(
@@ -177,7 +177,7 @@ export default function AssignmentAttempts() {
             onClick={() => {
               window.open(
                 `/learner/${row.assignmentId}/successPage/${row.id}`,
-                "_self"
+                "_self",
               );
             }}
             className="flex items-center gap-1 text-blue-600 hover:text-violet-600 underline"
@@ -192,7 +192,7 @@ export default function AssignmentAttempts() {
         width: "70px",
       },
     ],
-    []
+    [],
   );
 
   const [filterText, setFilterText] = useState("");

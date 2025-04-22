@@ -31,7 +31,7 @@ export class FileUploadQuestionEvaluateModel
     scoringCriteriaType: string,
     scoringCriteria: object,
     questionType: QuestionType,
-    responseType: ResponseType
+    responseType: ResponseType,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;

@@ -49,7 +49,7 @@ function MultipleChoiceQuestion({
               "text-lg font-normal",
               isSelected
                 ? "  text-violet-900"
-                : "bg-white text-gray-800 hover:bg-gray-50"
+                : "bg-white text-gray-800 hover:bg-gray-50",
             )}
             onClick={() => handleChoiceClick(index)} // Store index instead of text
           >
@@ -62,7 +62,7 @@ function MultipleChoiceQuestion({
                 isSelected &&
                   (isSingleCorrect
                     ? "bg-violet-500"
-                    : "bg-violet-500 text-white")
+                    : "bg-violet-500 text-white"),
               )}
             >
               {isSelected ? (

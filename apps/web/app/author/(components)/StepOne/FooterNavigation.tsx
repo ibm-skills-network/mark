@@ -30,13 +30,13 @@ export const FooterNavigation: FC<Props> = ({
     state.questions,
   ]);
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId
+    (state) => state.setFocusedQuestionId,
   );
   const [tooltipMessage, setTooltipMessage] = useState<React.ReactNode>("");
   const validateAssignmentSetup = useAuthorStore((state) => state.validate);
   const [disableButton, setDisableButton] = useState<boolean>(false);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
-    questions as Question[]
+    questions as Question[],
   );
   const goToNextStep = () => {
     const isValid = validateAssignmentSetup();
@@ -64,7 +64,7 @@ export const FooterNavigation: FC<Props> = ({
             Take me there
           </button>
         )}
-      </>
+      </>,
     );
   }, [questions]);
 

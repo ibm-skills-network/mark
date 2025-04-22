@@ -12,7 +12,7 @@ const escapeCurlyBraces = (content: string): string =>
 const sanitizeContent = (content: string, extension: string): string => {
   // Escape curly braces for non-code files to avoid LLM prompt issues
   const needsEscaping = ["txt", "docx", "md", "csv", "pptx", "pdf"].includes(
-    extension
+    extension,
   );
   return needsEscaping ? escapeCurlyBraces(content) : content;
 };
@@ -49,7 +49,7 @@ const readFileAsTextFromBuffer = (file: File): Promise<string> =>
  */
 export const readAsText = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   readFileAsTextFromBuffer(file).then((text) => {
     const sanitized = sanitizeContent(text, "txt");
@@ -61,7 +61,7 @@ export const readAsText = (
  */
 export const readPdf = async (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> => {
   try {
     // pdfToText accepts a File object directly.
@@ -77,7 +77,7 @@ export const readPdf = async (
  */
 export const readMarkdown = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   readFileAsTextFromBuffer(file).then(async (text) => {
     try {
@@ -94,7 +94,7 @@ export const readMarkdown = (
  */
 export const readDocx = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -135,7 +135,7 @@ export const readCsv = (file: File, questionId: number): Promise<FileContent> =>
  */
 export const readIpynb = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   readFileAsTextFromBuffer(file).then((text) => {
     try {
@@ -200,7 +200,7 @@ export const readIpynb = (
 export const readPlainText = (
   file: File,
   questionId: number,
-  extension: string
+  extension: string,
 ): Promise<FileContent> =>
   readFileAsTextFromBuffer(file).then((text) => {
     const sanitized = sanitizeContent(text, extension);
@@ -216,7 +216,7 @@ export const readPlainText = (
  */
 export const readPptx = async (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> => {
   try {
     // Load the PPTX file as a zip archive.
@@ -224,7 +224,7 @@ export const readPptx = async (
 
     // Find all slide XML files (e.g. ppt/slides/slide1.xml, slide2.xml, etc.)
     const slideFilenames = Object.keys(zip.files).filter((filename) =>
-      /^ppt\/slides\/slide\d+\.xml$/.test(filename)
+      /^ppt\/slides\/slide\d+\.xml$/.test(filename),
     );
 
     // Sort slide filenames by their numeric order.
@@ -283,7 +283,7 @@ export const readPptx = async (
  */
 export const readImage = (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<FileContent> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -305,7 +305,7 @@ export const readImage = (
  */
 export const readFile = async (
   file: File,
-  questionId: number
+  questionId: number,
 ): Promise<ExtendedFileContent> => {
   // supported file types txt, pdf, md, docx, csv, pptx, ipynb, py, js, sh, html, css, sql, ts, tsx,
   // and now images (jpg, jpeg, png, gif, svg)

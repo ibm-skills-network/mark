@@ -43,14 +43,15 @@ interface AboutTheAssignmentProps {
 // Utility function to determine assignment state
 const getAssignmentState = (
   attempts: AssignmentAttempt[],
-  numAttempts: number
+  numAttempts: number,
 ): LearnerAssignmentState => {
   if (numAttempts !== -1 && attempts.length >= numAttempts) return "completed";
 
   const inProgress = attempts.find(
     (attempt) =>
       !attempt.submitted &&
-      (!attempt.expiresAt || Date.now() < new Date(attempt.expiresAt).getTime())
+      (!attempt.expiresAt ||
+        Date.now() < new Date(attempt.expiresAt).getTime()),
   );
 
   return inProgress ? "in-progress" : "not-started";
@@ -78,7 +79,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     published = false,
   } = assignment;
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
-    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage]
+    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
   const [languageModalTriggered, setLanguageModalTriggered] =
     useLearnerOverviewStore((state) => [
@@ -88,7 +89,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const router = useRouter();
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(
-    userPreferedLanguage
+    userPreferedLanguage,
   );
   const [isLoading, setIsLoading] = useState(false);
   const pathname = usePathname();
