@@ -1053,9 +1053,9 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/community@^0.3.26":
-  version "0.3.39"
-  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.39.tgz#d9f0246adc251666cf0adbd4b49316a3d94c1270"
-  integrity sha512-8sMJD22bUNlQVoh0b8PgRSpO2Hz5zO6BuZeNY3ElgW3cNVXCoywHW7FBmqbwrygGocJQDee76RqiIN0XQunhTg==
+  version "0.3.41"
+  resolved "https://registry.yarnpkg.com/@langchain/community/-/community-0.3.41.tgz#8a7cc5dd206b804718e9543ff9541edeef6b6de4"
+  integrity sha512-i/DQ4bkKW+0W+zFy8ZrH7gRiag3KZuZU15pFXYom7wdZ8zcHJZZh2wi43hiBEWt8asx8Osyx4EhYO5SNp9ewkg==
   dependencies:
     "@langchain/openai" ">=0.2.0 <0.6.0"
     binary-extensions "^2.2.0"
@@ -1063,7 +1063,7 @@
     flat "^5.0.2"
     js-yaml "^4.1.0"
     langchain ">=0.2.3 <0.3.0 || >=0.3.4 <0.4.0"
-    langsmith ">=0.2.8 <0.4.0"
+    langsmith "^0.3.16"
     uuid "^10.0.0"
     zod "^3.22.3"
     zod-to-json-schema "^3.22.5"
@@ -7952,6 +7952,19 @@ kuler@^2.0.0:
   version "0.3.15"
   resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.15.tgz#96501ecd3441e94fc2f86aac9b86a28c6eaf4c83"
   integrity sha512-cv3ebg0Hh0gRbl72cv/uzaZ+KOdfa2mGF1s74vmB2vlNVO/Ap/O9RYaHV+tpR8nwhGZ50R3ILnTOwSwGP+XQxw==
+  dependencies:
+    "@types/uuid" "^10.0.0"
+    chalk "^4.1.2"
+    console-table-printer "^2.12.1"
+    p-queue "^6.6.2"
+    p-retry "4"
+    semver "^7.6.3"
+    uuid "^10.0.0"
+
+langsmith@^0.3.16:
+  version "0.3.21"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.21.tgz#a5ccd54049031174aae386a3c3ff89246262eab3"
+  integrity sha512-klsPStt91LqcO5+FAHOuD2FJMrpKFSqa5H4ANv+YYs/fCdL2Ey9hg/YAFYKsDsCLabzcD1tCt/SN9A9JsIZ9ag==
   dependencies:
     "@types/uuid" "^10.0.0"
     chalk "^4.1.2"
