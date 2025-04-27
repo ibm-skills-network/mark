@@ -1087,12 +1087,12 @@
     zod-to-json-schema "^3.22.3"
 
 "@langchain/openai@>=0.1.0 <0.6.0", "@langchain/openai@>=0.2.0 <0.6.0", "@langchain/openai@^0.5.0":
-  version "0.5.4"
-  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.5.4.tgz#94dfc1f51d57173d08d40315b6cfa8a1d2df7cb0"
-  integrity sha512-fBIEgaAMs1OHHjSuOwtonhtFTlRyFETAS9y/4SZxlXV5lLdwEU5OAbfaBTcCR0A58rrlmgt8iPnm2IWn4Onjjw==
+  version "0.5.7"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.5.7.tgz#a502319774eef33c6645d8ccc24da261796cb4fa"
+  integrity sha512-2azobl6XqPJIwe1MC4G33/77sOuvWtsbv2Wa8K6qsEEmIsznOXBXrOcKrp+1PTxRKy3UkIV2JV9mQas+ewPU0Q==
   dependencies:
     js-tiktoken "^1.0.12"
-    openai "^4.87.3"
+    openai "^4.93.0"
     zod "^3.22.4"
     zod-to-json-schema "^3.22.3"
 
@@ -9280,10 +9280,23 @@ onetime@^5.1.0, onetime@^5.1.2:
   dependencies:
     mimic-fn "^2.1.0"
 
-openai@^4.87.3, openai@^4.91.1:
+openai@^4.91.1:
   version "4.93.0"
   resolved "https://registry.yarnpkg.com/openai/-/openai-4.93.0.tgz#12e74a5bff0b15fdb12e523232af1a8d5ee11e3f"
   integrity sha512-2kONcISbThKLfm7T9paVzg+QCE1FOZtNMMUfXyXckUAoXRRS/mTP89JSDHPMp8uM5s0bz28RISbvQjArD6mgUQ==
+  dependencies:
+    "@types/node" "^18.11.18"
+    "@types/node-fetch" "^2.6.4"
+    abort-controller "^3.0.0"
+    agentkeepalive "^4.2.1"
+    form-data-encoder "1.7.2"
+    formdata-node "^4.3.2"
+    node-fetch "^2.6.7"
+
+openai@^4.93.0:
+  version "4.96.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-4.96.0.tgz#d1a821e99949ac2c55709f4e28e18bb1d9fd8ef9"
+  integrity sha512-dKoW56i02Prv2XQolJ9Rl9Svqubqkzg3QpwEOBuSVZLk05Shelu7s+ErRTwFc1Bs3JZ2qBqBfVpXQiJhwOGG8A==
   dependencies:
     "@types/node" "^18.11.18"
     "@types/node-fetch" "^2.6.4"
