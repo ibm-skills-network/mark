@@ -1,9 +1,7 @@
-# local-test/ui.Dockerfile
 # Using a consistent base for all stages
 ARG BASE_IMAGE=node:20-alpine
 FROM ${BASE_IMAGE} AS builder
 
-ARG SN_GITHUB_NPM_TOKEN
 ARG DIR=/usr/src/app
 
 # Pruning using turbo for the Next.js app
