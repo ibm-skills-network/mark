@@ -1,0 +1,79 @@
+name: Build and Publish PR Images
+
+on:
+  push:
+    branches:
+      - '*'
+    tags:
+      - '*'
+
+jobs:
+  build_and_publish_pr_images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Log in to GitHub Container Registry
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract PR metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        id: pr_metadata
+        run: |
+          echo "::set-output name=TAG_NAME::${GITHUB_REF##*/}"
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "SHORT_SHA=$(git rev-parse --short ${{ github.event.pull_request.head.sha }})" >> $GITHUB_ENV
+          echo "BRANCH_NAME=$(echo ${{ github.event.pull_request.head.ref }} | sed 's/[^a-zA-Z0-9]/-/g')" >> $GITHUB_ENV
+      
+      - name: Build and push API Gateway image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: apps/api-gateway/Dockerfile
+          target: patched
+          build-args: |
+            BASE_IMAGE=node:20-alpine
+            SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/mark-api-gateway:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: patched
+          build-args: |
+            BASE_IMAGE=node:20-alpine
+            SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/mark-api:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+      - name: Build and push Web image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          target: patched
+          build-args: |
+            BASE_IMAGE=node:20-alpine
+            SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/mark-web:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}

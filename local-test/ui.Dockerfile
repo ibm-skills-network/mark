@@ -1,15 +1,16 @@
-# local-test/ui.Dockerfile
 # Using a consistent base for all stages
 ARG BASE_IMAGE=node:20-alpine
 FROM ${BASE_IMAGE} AS builder
 
 ARG SN_GITHUB_NPM_TOKEN
+ARG SN_GITHUB_NPM_REGISTRY=https://npm.pkg.github.com
 ARG DIR=/usr/src/app
 
 # Pruning using turbo for the Next.js app
 WORKDIR $DIR
 COPY . .
 RUN yarn global add turbo@^2.0.3
+RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc
 RUN turbo prune web --docker && rm -f .npmrc
 
 # Installing the isolated workspace for the Next.js app
