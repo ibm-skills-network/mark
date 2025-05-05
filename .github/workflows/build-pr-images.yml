@@ -1,10 +1,11 @@
 name: Build and Publish PR Images
 
 on:
-  pull_request:
+  push:
     branches:
-      - master
-    types: [opened, synchronize, reopened]
+      - '*'
+    tags:
+      - '*'
 
 jobs:
   build_and_publish_pr_images:
@@ -24,6 +25,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       
       - name: Login to GitHub Container Registry
+        if: startsWith(github.ref, 'refs/tags/')
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -38,6 +40,7 @@ jobs:
           echo "BRANCH_NAME=$(echo ${{ github.event.pull_request.head.ref }} | sed 's/[^a-zA-Z0-9]/-/g')" >> $GITHUB_ENV
       
       - name: Build and push API Gateway image
+        if: startsWith(github.ref, 'refs/tags/')
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -49,3 +52,30 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/mark-api-gateway:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+
+            - name: Build and push API image
+            uses: docker/build-push-action@v4
+            with:
+              context: .
+              file: apps/api/Dockerfile
+              target: patched
+              build-args: |
+                BASE_IMAGE=node:20-alpine
+                SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
+              push: true
+              tags: |
+                ghcr.io/${{ github.repository }}/mark-api:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+      - name: Build and push Web image
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          target: patched
+          build-args: |
+            BASE_IMAGE=node:20-alpine
+            SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/mark-web:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+    

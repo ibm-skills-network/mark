@@ -7,8 +7,6 @@ services:
       context: .
       dockerfile: ./local-test/api-gateway.Dockerfile
       target: patched
-      args:
-        SN_GITHUB_NPM_TOKEN: ${SN_GITHUB_NPM_TOKEN:-dummy-token}
     image: local/mark-api-gateway:pr-test
     container_name: mark-api-gateway-test
     command: ["echo", "API Gateway image built successfully"]
@@ -20,8 +18,6 @@ services:
       context: .
       dockerfile: ./local-test/api.Dockerfile
       target: patched
-      args:
-        SN_GITHUB_NPM_TOKEN: ${SN_GITHUB_NPM_TOKEN:-dummy-token}
     image: local/mark-api:pr-test
     container_name: mark-api-test
     command: ["echo", "API image built successfully"]
@@ -33,8 +29,6 @@ services:
       context: .
       dockerfile: ./local-test/ui.Dockerfile
       target: patched
-      args:
-        SN_GITHUB_NPM_TOKEN: ${SN_GITHUB_NPM_TOKEN:-dummy-token}
     image: local/mark-ui:pr-test
     container_name: mark-ui-test
     command: ["echo", "UI image built successfully"]
@@ -45,9 +39,6 @@ services:
     image: local/mark-api-gateway:pr-test
     ports:
       - "8080:8080"
-    depends_on:
-      api-gateway-build:
-        condition: service_completed_successfully
     container_name: mark-api-gateway-running
     profiles: ["run"]
 
@@ -55,18 +46,10 @@ services:
     image: local/mark-api:pr-test
     ports:
       - "3000:3000"
-    depends_on:
-      api-build:
-        condition: service_completed_successfully
-    container_name: mark-api-running
-    profiles: ["run"]
-
+    container_name: mark-api-runn
   ui:
     image: local/mark-ui:pr-test
     ports:
       - "80:80"
-    depends_on:
-      ui-build:
-        condition: service_completed_successfully
     container_name: mark-ui-running
     profiles: ["run"]

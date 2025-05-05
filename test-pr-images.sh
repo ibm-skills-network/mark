@@ -7,15 +7,12 @@ cat > local-test/api.Dockerfile << 'EOF'
 ARG BASE_IMAGE=node:20-alpine
 FROM ${BASE_IMAGE} AS builder
 
-ARG SN_GITHUB_NPM_TOKEN
-ARG SN_GITHUB_NPM_REGISTRY=https://npm.pkg.github.com
 ARG DIR=/usr/src/app
 
 # Pruning using turbo
 WORKDIR $DIR
 COPY . .
 RUN yarn global add turbo@^2.0.3
-RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc
 RUN turbo prune api --docker && rm -f .npmrc
 
 # Installing the isolated workspace
@@ -69,15 +66,12 @@ cat > local-test/api-gateway.Dockerfile << 'EOF'
 ARG BASE_IMAGE=node:20-alpine
 FROM ${BASE_IMAGE} AS builder
 
-ARG SN_GITHUB_NPM_TOKEN
-ARG SN_GITHUB_NPM_REGISTRY=https://npm.pkg.github.com
 ARG DIR=/usr/src/app
 
 # Pruning using turbo
 WORKDIR $DIR
 COPY . .
 RUN yarn global add turbo@^2.0.3
-RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc
 RUN turbo prune api-gateway --docker && rm -f .npmrc
 
 # Installing the isolated workspace
@@ -123,15 +117,12 @@ cat > local-test/ui.Dockerfile << 'EOF'
 ARG BASE_IMAGE=node:20-alpine
 FROM ${BASE_IMAGE} AS builder
 
-ARG SN_GITHUB_NPM_TOKEN
-ARG SN_GITHUB_NPM_REGISTRY=https://npm.pkg.github.com
 ARG DIR=/usr/src/app
 
 # Pruning using turbo for the Next.js app
 WORKDIR $DIR
 COPY . .
 RUN yarn global add turbo@^2.0.3
-RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc
 RUN turbo prune web --docker && rm -f .npmrc
 
 # Installing the isolated workspace for the Next.js app
@@ -180,8 +171,6 @@ services:
       context: .
       dockerfile: ./local-test/api-gateway.Dockerfile
       target: patched
-      args:
-        SN_GITHUB_NPM_TOKEN: ${SN_GITHUB_NPM_TOKEN:-dummy-token}
     image: local/mark-api-gateway:pr-test
     container_name: mark-api-gateway-test
     command: ["echo", "API Gateway image built successfully"]
@@ -193,8 +182,6 @@ services:
       context: .
       dockerfile: ./local-test/api.Dockerfile
       target: patched
-      args:
-        SN_GITHUB_NPM_TOKEN: ${SN_GITHUB_NPM_TOKEN:-dummy-token}
     image: local/mark-api:pr-test
     container_name: mark-api-test
     command: ["echo", "API image built successfully"]
@@ -206,8 +193,6 @@ services:
       context: .
       dockerfile: ./local-test/ui.Dockerfile
       target: patched
-      args:
-        SN_GITHUB_NPM_TOKEN: ${SN_GITHUB_NPM_TOKEN:-dummy-token}
     image: local/mark-ui:pr-test
     container_name: mark-ui-test
     command: ["echo", "UI image built successfully"]
@@ -218,9 +203,6 @@ services:
     image: local/mark-api-gateway:pr-test
     ports:
       - "8080:8080"
-    depends_on:
-      api-gateway-build:
-        condition: service_completed_successfully
     container_name: mark-api-gateway-running
     profiles: ["run"]
 
@@ -228,19 +210,11 @@ services:
     image: local/mark-api:pr-test
     ports:
       - "3000:3000"
-    depends_on:
-      api-build:
-        condition: service_completed_successfully
-    container_name: mark-api-running
-    profiles: ["run"]
-
+    container_name: mark-api-runn
   ui:
     image: local/mark-ui:pr-test
     ports:
       - "80:80"
-    depends_on:
-      ui-build:
-        condition: service_completed_successfully
     container_name: mark-ui-running
     profiles: ["run"]
 EOF
@@ -255,23 +229,6 @@ echo "🔍 Testing PR Image Builds Locally"
 echo "📌 Branch: $BRANCH_NAME"
 echo "📌 Commit: $SHORT_SHA"
 echo "====================================================="
-
-# Check if we need to enter a GitHub token
-if [ -z "$SN_GITHUB_NPM_TOKEN" ]; then
-    echo "⚠️  No SN_GITHUB_NPM_TOKEN environment variable found."
-    echo "   If your build requires access to private npm packages,"
-    echo "   you should set this variable before running this script."
-    echo ""
-    read -p "Would you like to enter a GitHub token now? (y/n): " TOKEN_ANSWER
-    
-    if [[ $TOKEN_ANSWER == "y" || $TOKEN_ANSWER == "Y" ]]; then
-        read -sp "Enter your GitHub token: " SN_GITHUB_NPM_TOKEN
-        echo ""
-        export SN_GITHUB_NPM_TOKEN
-    else
-        echo "Continuing without a token. This may fail if your build needs private packages."
-    fi
-fi
 
 # Ask which services to build
 echo "Which services would you like to build?"
@@ -361,16 +318,17 @@ if [[ $RUN_ANSWER == "y" || $RUN_ANSWER == "Y" ]]; then
 fi
 
 # Create the GitHub workflow file for PR image builds
-mkdir -p .github/workflows
+mkdir -p .github/workflows/testLocal
 
 cat > .github/workflows/build-pr-images.yml << 'EOF'
 name: Build and Publish PR Images
 
 on:
-  pull_request:
+  push:
     branches:
-      - master
-    types: [opened, synchronize, reopened]
+      - '*'
+    tags:
+      - '*'
 
 jobs:
   build_and_publish_pr_images:
@@ -382,15 +340,16 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
       
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -404,7 +363,8 @@ jobs:
           echo "BRANCH_NAME=$(echo ${{ github.event.pull_request.head.ref }} | sed 's/[^a-zA-Z0-9]/-/g')" >> $GITHUB_ENV
       
       - name: Build and push API Gateway image
-        uses: docker/build-push-action@v4
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/api-gateway/Dockerfile
@@ -415,3 +375,30 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/mark-api-gateway:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+
+            - name: Build and push API image
+            uses: docker/build-push-action@v4
+            with:
+              context: .
+              file: apps/api/Dockerfile
+              target: patched
+              build-args: |
+                BASE_IMAGE=node:20-alpine
+                SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
+              push: true
+              tags: |
+                ghcr.io/${{ github.repository }}/mark-api:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+      - name: Build and push Web image
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          target: patched
+          build-args: |
+            BASE_IMAGE=node:20-alpine
+            SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/mark-web:pr-${{ env.PR_NUMBER }}-${{ env.SHORT_SHA }}
+    
