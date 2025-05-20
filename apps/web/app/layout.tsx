@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 import { MarkChat } from "./chatbot/components/MarkChat";
 import AuthorStoreBridge from "./chatbot/store/AuthorStoreBridge";
+import { Providers } from "@/components/Providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,7 +33,8 @@ export const metadata: Metadata = {
 };
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <Providers>
+      <html lang="en">
       <body className={`${inter.className}`} data-color-mode="light">
         <MarkChat />
         <AuthorStoreBridge />
@@ -45,5 +47,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {children}
       </body>
     </html>
+    </Providers>
   );
 }

@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
 
 @Injectable()
 export class ReportsService {
@@ -71,6 +72,11 @@ export class ReportsService {
    */
   async reportIssue(
     dto: ReportIssueDto,
+    userSession?: {
+      role?: UserRole;
+      assignmentId?: number;
+      attemptId?: number;
+    },
   ): Promise<{ message: string; issueNumber?: number }> {
     const { issueType, description, assignmentId, attemptId, role, severity } =
       dto;

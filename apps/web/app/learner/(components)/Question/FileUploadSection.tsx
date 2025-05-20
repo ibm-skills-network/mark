@@ -10,7 +10,6 @@ import {
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
-import { DocumentTextIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Octokit } from "@octokit/rest";
 import {
   IconBrandGithub,

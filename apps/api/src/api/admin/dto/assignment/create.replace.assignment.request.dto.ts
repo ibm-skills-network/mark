@@ -1,6 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentType } from "@prisma/client";
-import { IsDefined, IsEnum, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import { IsDefined, IsEnum, IsString, ValidateNested } from "class-validator";
+import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 
 export class AdminReplaceAssignmentRequestDto {
   @ApiProperty({
@@ -31,4 +33,23 @@ export class AdminCreateAssignmentRequestDto extends AdminReplaceAssignmentReque
   @IsDefined()
   @IsString()
   groupId: string;
+
+  // published 
+  @ApiProperty({
+    description: "The published status of the assignment.",
+    type: Boolean,
+    required: false,
+  })
+  @IsDefined()
+  @IsString()
+  published: boolean;
+
+  // questions
+    @ApiProperty({
+      description: "Question object",
+      type: QuestionDto,
+    })
+    @ValidateNested()
+    @Type(() => QuestionDto)
+    questions: QuestionDto[];
 }

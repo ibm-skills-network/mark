@@ -29,6 +29,8 @@ import {
 } from "./dto/assignment/create.replace.assignment.request.dto";
 import { AdminGetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
 import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
+import { AdminRepository } from "./admin.repository";
+import { Assignment } from "@prisma/client";
 
 @ApiTags("Admin")
 @UsePipes(
@@ -44,7 +46,9 @@ import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignm
   version: "1",
 })
 export class AdminController {
-  constructor(private adminService: AdminService) {}
+  constructor(private adminService: AdminService, 
+    private adminRepository: AdminRepository, // Assuming this is the correct service for repository methods
+  ) {}
 
   @Post("assignments/clone/:id")
   @ApiOperation({
@@ -99,7 +103,13 @@ export class AdminController {
   ): Promise<AdminGetAssignmentResponseDto> {
     return this.adminService.getAssignment(Number(id));
   }
-
+  @Get("/assignments")
+  @ApiOperation({ summary: "Get all assignments" })
+  @ApiResponse({ status: 200, type: [BaseAssignmentResponseDto] })
+  @ApiResponse({ status: 403 })
+  getAssignments(): Promise<Assignment[]> {
+    return this.adminRepository.findAllAssignments();
+  }
   @Put("/assignments/:id")
   @ApiOperation({ summary: "Replace an assignment" })
   @ApiParam({ name: "id", required: true })

@@ -182,6 +182,9 @@ export type RegradingRequest = {
   userId: string;
   attemptId: number;
   reason: string;
+  id: number;
+  createdAt: string;
+  regradingStatus: "PENDING" | "COMPLETED" | "REJECTED" | "APPROVED"
 };
 
 export enum REPORT_TYPE {
@@ -450,6 +453,7 @@ export type ReplaceAssignmentRequest = {
 export interface Assignment extends ReplaceAssignmentRequest {
   id: number;
   name: string;
+  groupId: string;
   type?: "AI_GRADED" | "MANUAL";
 }
 export type IssueSeverity = "info" | "warning" | "error" | "critical";
