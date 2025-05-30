@@ -65,7 +65,7 @@
     "lottie-react": "^2.4.0",
     "mammoth": "^1.8.0",
     "marked": "^4.0.10",
-    "next": "^14.2.18",
+    "next": "^15.0.0",
     "node-fetch": "^2.6.7",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "^4.7.76",
