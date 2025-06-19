@@ -3,18 +3,15 @@
 import TooltipMessage from "@/app/components/ToolTipMessage";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import {
-  handleJumpToQuestion,
   handleJumpToQuestionTitle,
 } from "@/app/Helpers/handleJumpToQuestion";
 import Spinner from "@/components/svgs/Spinner";
 import Tooltip from "@/components/Tooltip";
-import { Choice, QuestionVariants } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import { useRouter } from "next/navigation";
 import type { FC } from "react";
-import { useEffect, useState } from "react";
 
 interface Props {
   submitting: boolean;

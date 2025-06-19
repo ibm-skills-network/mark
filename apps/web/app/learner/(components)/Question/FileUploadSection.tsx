@@ -1,7 +1,6 @@
 // FileUploadSection.js
 import { readFile } from "@/app/Helpers/fileReader";
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
-import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionStore, QuestionType, ResponseType } from "@/config/types";
 import { getStoredGithubToken } from "@/lib/talkToBackend";
 import {
@@ -10,7 +9,6 @@ import {
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
-import { DocumentTextIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Octokit } from "@octokit/rest";
 import {
   IconBrandGithub,

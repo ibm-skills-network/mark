@@ -3,7 +3,7 @@
 import Tooltip from "@/components/Tooltip";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { PencilIcon, SparklesIcon } from "@heroicons/react/24/solid";
-import React, { FC, useEffect, useRef, useState } from "react";
+import React, { FC, useEffect, useState } from "react";
 
 interface CriteriaRowProps {
   initialPoints: number;

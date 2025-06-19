@@ -1,6 +1,5 @@
 import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 import {
-  handleJumpToQuestion,
   handleJumpToQuestionTitle,
 } from "@/app/Helpers/handleJumpToQuestion";
 import Tooltip from "@/components/Tooltip";

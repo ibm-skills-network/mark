@@ -7,7 +7,6 @@ import type {
 import useCountdown from "@/hooks/use-countdown";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
-import { editedQuestionsOnly } from "@/lib/utils";
 import {
   useAssignmentDetails,
   useGitHubStore,

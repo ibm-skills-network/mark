@@ -12,7 +12,6 @@ import ProgressBar, { JobStatus } from "@/components/ProgressBar";
 import Tooltip from "@/components/Tooltip";
 import {
   Assignment,
-  AuthorAssignmentState,
   Choice,
   Criteria,
   Question,
@@ -524,13 +523,13 @@ function AuthorHeader() {
   // -- RESPONSIVE LAYOUT TWEAKS BELOW --
   return (
     <>
-      {/* 
+      {/*
         Use container / max-w-screen-xl for typical responsive layout
-        Then space-y for vertical gaps on smaller screens 
+        Then space-y for vertical gaps on smaller screens
       */}
       <div className="fixed w-full z-50">
         <header className="border-b border-gray-300 bg-white px-2 sm:px-4 md:px-6 py-2 md:py-4 flex flex-col">
-          {/* 
+          {/*
             Make this wrapper flex-col on small screens, then row on medium.
             Also add "flex-wrap" so that if there's no space, items move to the next line.
           */}
@@ -593,9 +592,9 @@ function AuthorHeader() {
         </header>
       </div>
 
-      {/* 
+      {/*
         Modal wrapper is usually responsive by default since it covers the screen.
-        Just ensure any internal content has some padding and wraps well. 
+        Just ensure any internal content has some padding and wraps well.
       */}
       {showAreYouSureModal && (
         <Modal
