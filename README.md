@@ -318,7 +318,6 @@ class NATS,GHAPI externalLayer
 
 ```
 
-
 ## Acknowledgments
 
 - NestJS Team for the excellent framework

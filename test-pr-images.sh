@@ -4,7 +4,7 @@ mkdir -p local-test
 
 cat > local-test/api.Dockerfile << 'EOF'
 # Using a consistent base for all stages
-ARG BASE_IMAGE=node:20-alpine
+ARG BASE_IMAGE=node:22-alpine
 FROM ${BASE_IMAGE} AS builder
 
 ARG DIR=/usr/src/app
@@ -63,7 +63,7 @@ EOF
 
 cat > local-test/api-gateway.Dockerfile << 'EOF'
 # Using a consistent base for all stages
-ARG BASE_IMAGE=node:20-alpine
+ARG BASE_IMAGE=node:22-alpine
 FROM ${BASE_IMAGE} AS builder
 
 ARG DIR=/usr/src/app
@@ -114,7 +114,7 @@ EOF
 
 cat > local-test/ui.Dockerfile << 'EOF'
 # Using a consistent base for all stages
-ARG BASE_IMAGE=node:20-alpine
+ARG BASE_IMAGE=node:22-alpine
 FROM ${BASE_IMAGE} AS builder
 
 ARG DIR=/usr/src/app
@@ -370,7 +370,7 @@ jobs:
           file: apps/api-gateway/Dockerfile
           target: patched
           build-args: |
-            BASE_IMAGE=node:20-alpine
+            BASE_IMAGE=node:22-alpine
             SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
           push: true
           tags: |
@@ -383,7 +383,7 @@ jobs:
               file: apps/api/Dockerfile
               target: patched
               build-args: |
-                BASE_IMAGE=node:20-alpine
+                BASE_IMAGE=node:22-alpine
                 SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
               push: true
               tags: |
@@ -396,7 +396,7 @@ jobs:
           file: apps/web/Dockerfile
           target: patched
           build-args: |
-            BASE_IMAGE=node:20-alpine
+            BASE_IMAGE=node:22-alpine
             SN_GITHUB_NPM_TOKEN=${{ secrets.SN_GITHUB_NPM_TOKEN }}
           push: true
           tags: |

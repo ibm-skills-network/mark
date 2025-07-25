@@ -1,7 +1,7 @@
 # local-test/api.Dockerfile
 # Using a consistent base for all stages
-ARG BASE_IMAGE=node:20-alpine
-FROM node:20-alpine AS builder
+ARG BASE_IMAGE=node:22-alpine
+FROM node:22-alpine AS builder
 
 ARG DIR=/usr/src/app
 
@@ -12,7 +12,7 @@ RUN yarn global add turbo@^2.0.3
 RUN turbo prune api --docker && rm -f .npmrc
 
 # Installing the isolated workspace
-FROM node:20-alpine AS installer
+FROM node:22-alpine AS installer
 ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=builder $DIR/out/json/ .
@@ -22,7 +22,7 @@ COPY --from=builder $DIR/packages ./packages
 RUN yarn install --ignore-scripts --frozen-lockfile
 
 # Running build using turbo
-FROM node:20-alpine AS sourcer
+FROM node:22-alpine AS sourcer
 ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=installer $DIR/ .
@@ -34,7 +34,7 @@ WORKDIR $DIR
 RUN yarn build --filter=api && yarn install --production --ignore-scripts --frozen-lockfile
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 ARG DIR=/usr/src/app
 ENV NODE_ENV production
 WORKDIR $DIR
