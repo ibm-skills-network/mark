@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  # Service to build API Gateway image
+  api-gateway-build:
+    build:
+      context: .
+      dockerfile: ./local-test/api-gateway.Dockerfile
+      target: patched
+    image: local/mark-api-gateway:pr-test
+    container_name: mark-api-gateway-test
+    command: ["echo", "API Gateway image built successfully"]
+    profiles: ["build"]
+
+  # Service to build API image
+  api-build:
+    build:
+      context: .
+      dockerfile: ./local-test/api.Dockerfile
+      target: patched
+    image: local/mark-api:pr-test
+    container_name: mark-api-test
+    command: ["echo", "API image built successfully"]
+    profiles: ["build"]
+
+  # Service to build UI image
+  ui-build:
+    build:
+      context: .
+      dockerfile: ./local-test/ui.Dockerfile
+      target: patched
+    image: local/mark-ui:pr-test
+    container_name: mark-ui-test
+    command: ["echo", "UI image built successfully"]
+    profiles: ["build"]
+
+  # Services for actually running the applications once built
+  api-gateway:
+    image: local/mark-api-gateway:pr-test
+    ports:
+      - "8080:8080"
+    container_name: mark-api-gateway-running
+    profiles: ["run"]
+
+  api:
+    image: local/mark-api:pr-test
+    ports:
+      - "3000:3000"
+    container_name: mark-api-runn
+  ui:
+    image: local/mark-ui:pr-test
+    ports:
+      - "80:80"
+    container_name: mark-ui-running
+    profiles: ["run"]
