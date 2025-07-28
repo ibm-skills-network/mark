@@ -8,7 +8,7 @@ CREATE TYPE "AssignmentQuestionDisplayOrder" AS ENUM ('DEFINED', 'RANDOM');
 CREATE TYPE "QuestionType" AS ENUM ('TEXT', 'SINGLE_CORRECT', 'MULTIPLE_CORRECT', 'TRUE_FALSE', 'URL', 'UPLOAD', 'LINK_FILE');
 
 -- CreateEnum
-CREATE TYPE "ResponseType" AS ENUM ('REPO', 'CODE', 'ESSAY', 'REPORT', 'PRESENTATION', 'VIDEO', 'AUDIO', 'SPREADSHEET', 'LIVE_RECORDING', 'OTHER');
+CREATE TYPE "ResponseType" AS ENUM ('REPO', 'CODE', 'ESSAY', 'REPORT', 'PRESENTATION', 'VIDEO', 'AUDIO', 'IMAGES', 'SPREADSHEET', 'LIVE_RECORDING', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "QuestionDisplay" AS ENUM ('ONE_PER_PAGE', 'ALL_PER_PAGE');
@@ -18,6 +18,9 @@ CREATE TYPE "ScoringType" AS ENUM ('CRITERIA_BASED', 'LOSS_PER_MISTAKE', 'AI_GRA
 
 -- CreateEnum
 CREATE TYPE "AIUsageType" AS ENUM ('QUESTION_GENERATION', 'ASSIGNMENT_GENERATION', 'ASSIGNMENT_GRADING', 'TRANSLATION', 'LIVE_RECORDING_FEEDBACK');
+
+-- CreateEnum
+CREATE TYPE "ChatRole" AS ENUM ('USER', 'ASSISTANT', 'SYSTEM');
 
 -- CreateEnum
 CREATE TYPE "VariantType" AS ENUM ('REWORDED', 'RANDOMIZED', 'DIFFICULTY_ADJUSTED');
@@ -63,6 +66,22 @@ CREATE TABLE "Job" (
 );
 
 -- CreateTable
+CREATE TABLE "GradingJob" (
+    "id" SERIAL NOT NULL,
+    "attemptId" INTEGER,
+    "assignmentId" INTEGER NOT NULL,
+    "userId" TEXT NOT NULL,
+    "status" TEXT NOT NULL,
+    "progress" TEXT NOT NULL,
+    "percentage" INTEGER,
+    "result" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "GradingJob_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "publishJob" (
     "id" SERIAL NOT NULL,
     "userId" TEXT NOT NULL,
@@ -88,6 +107,7 @@ CREATE TABLE "AIUsage" (
     "usageDetails" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "userId" TEXT,
 
     CONSTRAINT "AIUsage_pkey" PRIMARY KEY ("id")
 );
@@ -100,6 +120,31 @@ CREATE TABLE "UserCredential" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "UserCredential_pkey" PRIMARY KEY ("userId")
+);
+
+-- CreateTable
+CREATE TABLE "Chat" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastActiveAt" TIMESTAMP(3) NOT NULL,
+    "title" TEXT,
+    "assignmentId" INTEGER,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "Chat_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ChatMessage" (
+    "id" SERIAL NOT NULL,
+    "chatId" TEXT NOT NULL,
+    "role" "ChatRole" NOT NULL,
+    "content" TEXT NOT NULL,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "toolCalls" JSONB,
+
+    CONSTRAINT "ChatMessage_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -132,11 +177,13 @@ CREATE TABLE "Assignment" (
     "passingGrade" INTEGER DEFAULT 50,
     "displayOrder" "AssignmentQuestionDisplayOrder",
     "questionDisplay" "QuestionDisplay" DEFAULT 'ONE_PER_PAGE',
+    "numberOfQuestionsPerAttempt" INTEGER,
     "questionOrder" INTEGER[],
     "published" BOOLEAN NOT NULL,
     "showAssignmentScore" BOOLEAN NOT NULL DEFAULT true,
     "showQuestionScore" BOOLEAN NOT NULL DEFAULT true,
     "showSubmissionFeedback" BOOLEAN NOT NULL DEFAULT true,
+    "showQuestions" BOOLEAN NOT NULL DEFAULT true,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "languageCode" TEXT,
 
@@ -234,6 +281,10 @@ CREATE TABLE "AssignmentFeedback" (
     "aiGradingRating" INTEGER,
     "assignmentRating" INTEGER,
     "aiFeedbackRating" INTEGER,
+    "allowContact" BOOLEAN NOT NULL DEFAULT false,
+    "firstName" TEXT,
+    "lastName" TEXT,
+    "email" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -258,15 +309,39 @@ CREATE TABLE "RegradingRequest" (
 CREATE TABLE "Report" (
     "id" SERIAL NOT NULL,
     "reporterId" TEXT NOT NULL,
-    "assignmentId" INTEGER NOT NULL,
+    "assignmentId" INTEGER,
     "attemptId" INTEGER,
     "issueType" "ReportType" NOT NULL,
     "description" TEXT NOT NULL,
     "author" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "status" "ReportStatus" NOT NULL DEFAULT 'OPEN',
+    "issueNumber" INTEGER,
+    "statusMessage" TEXT,
+    "resolution" TEXT,
+    "comments" TEXT,
+    "closureReason" TEXT,
+    "duplicateOfReportId" INTEGER,
+    "relatedToReportId" INTEGER,
+    "similarityScore" DOUBLE PRECISION,
 
     CONSTRAINT "Report_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "UserNotification" (
+    "id" SERIAL NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "metadata" TEXT,
+    "read" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "UserNotification_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -316,6 +391,12 @@ CREATE TABLE "FeedbackTranslation" (
     CONSTRAINT "FeedbackTranslation_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "_ChatToUserCredential" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL
+);
+
 -- CreateIndex
 CREATE INDEX "GradingAudit_questionId_idx" ON "GradingAudit"("questionId");
 
@@ -326,7 +407,28 @@ CREATE INDEX "GradingAudit_assignmentId_idx" ON "GradingAudit"("assignmentId");
 CREATE INDEX "GradingAudit_timestamp_idx" ON "GradingAudit"("timestamp");
 
 -- CreateIndex
+CREATE INDEX "GradingJob_attemptId_idx" ON "GradingJob"("attemptId");
+
+-- CreateIndex
+CREATE INDEX "GradingJob_assignmentId_idx" ON "GradingJob"("assignmentId");
+
+-- CreateIndex
+CREATE INDEX "GradingJob_userId_idx" ON "GradingJob"("userId");
+
+-- CreateIndex
+CREATE INDEX "GradingJob_status_idx" ON "GradingJob"("status");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "AIUsage_assignmentId_usageType_key" ON "AIUsage"("assignmentId", "usageType");
+
+-- CreateIndex
+CREATE INDEX "Chat_userId_startedAt_idx" ON "Chat"("userId", "startedAt");
+
+-- CreateIndex
+CREATE INDEX "Chat_assignmentId_idx" ON "Chat"("assignmentId");
+
+-- CreateIndex
+CREATE INDEX "ChatMessage_chatId_timestamp_idx" ON "ChatMessage"("chatId", "timestamp");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Group_id_key" ON "Group"("id");
@@ -343,6 +445,12 @@ CREATE UNIQUE INDEX "AssignmentTranslation_assignmentId_languageCode_key" ON "As
 -- CreateIndex
 CREATE UNIQUE INDEX "FeedbackTranslation_questionId_languageCode_key" ON "FeedbackTranslation"("questionId", "languageCode");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "_ChatToUserCredential_AB_unique" ON "_ChatToUserCredential"("A", "B");
+
+-- CreateIndex
+CREATE INDEX "_ChatToUserCredential_B_index" ON "_ChatToUserCredential"("B");
+
 -- AddForeignKey
 ALTER TABLE "GradingAudit" ADD CONSTRAINT "GradingAudit_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -350,7 +458,22 @@ ALTER TABLE "GradingAudit" ADD CONSTRAINT "GradingAudit_questionId_fkey" FOREIGN
 ALTER TABLE "GradingAudit" ADD CONSTRAINT "GradingAudit_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "GradingJob" ADD CONSTRAINT "GradingJob_attemptId_fkey" FOREIGN KEY ("attemptId") REFERENCES "AssignmentAttempt"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "GradingJob" ADD CONSTRAINT "GradingJob_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "AIUsage" ADD CONSTRAINT "AIUsage_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AIUsage" ADD CONSTRAINT "AIUsage_userId_fkey" FOREIGN KEY ("userId") REFERENCES "UserCredential"("userId") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Chat" ADD CONSTRAINT "Chat_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ChatMessage" ADD CONSTRAINT "ChatMessage_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AssignmentGroup" ADD CONSTRAINT "AssignmentGroup_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -389,7 +512,13 @@ ALTER TABLE "RegradingRequest" ADD CONSTRAINT "RegradingRequest_assignmentId_fke
 ALTER TABLE "RegradingRequest" ADD CONSTRAINT "RegradingRequest_attemptId_fkey" FOREIGN KEY ("attemptId") REFERENCES "AssignmentAttempt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Report" ADD CONSTRAINT "Report_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Report" ADD CONSTRAINT "Report_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Report" ADD CONSTRAINT "Report_duplicateOfReportId_fkey" FOREIGN KEY ("duplicateOfReportId") REFERENCES "Report"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Report" ADD CONSTRAINT "Report_relatedToReportId_fkey" FOREIGN KEY ("relatedToReportId") REFERENCES "Report"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Translation" ADD CONSTRAINT "Translation_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -402,3 +531,9 @@ ALTER TABLE "AssignmentTranslation" ADD CONSTRAINT "AssignmentTranslation_assign
 
 -- AddForeignKey
 ALTER TABLE "FeedbackTranslation" ADD CONSTRAINT "FeedbackTranslation_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ChatToUserCredential" ADD CONSTRAINT "_ChatToUserCredential_A_fkey" FOREIGN KEY ("A") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ChatToUserCredential" ADD CONSTRAINT "_ChatToUserCredential_B_fkey" FOREIGN KEY ("B") REFERENCES "UserCredential"("userId") ON DELETE CASCADE ON UPDATE CASCADE;

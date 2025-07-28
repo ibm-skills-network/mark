@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE "Report" ADD COLUMN     "author" BOOLEAN NOT NULL DEFAULT false,
-ALTER COLUMN "attemptId" DROP NOT NULL;
