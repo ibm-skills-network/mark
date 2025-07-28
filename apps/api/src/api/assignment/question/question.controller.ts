@@ -1,4 +1,3 @@
-import { extname } from "node:path";
 import {
   Body,
   Controller,

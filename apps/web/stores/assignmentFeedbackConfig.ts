@@ -1,7 +1,7 @@
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
-import type { FeedbackData, VerbosityLevels } from "../config/types";
+import type { FeedbackData, VerbosityLevels } from "@config/types";
 import { withUpdatedAt } from "./middlewares";
 
 type FeedbackDataActions = {

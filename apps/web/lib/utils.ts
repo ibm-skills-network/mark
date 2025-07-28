@@ -1,6 +1,5 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
-import { useAppConfig } from "@/stores/appConfig";
 import { useCallback } from "react";
 
 export function absoluteUrl(path: string) {

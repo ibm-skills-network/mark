@@ -1,6 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsArray, IsOptional } from "class-validator";
-import { optional } from "zod";
 import type { CreateQuestionResponseAttemptResponseDto } from "../question-response/create.question.response.attempt.response.dto";
 import { BaseAssignmentAttemptResponseDto } from "./base.assignment.attempt.response.dto";
 

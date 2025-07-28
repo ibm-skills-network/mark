@@ -4,7 +4,6 @@
  */
 import { toast } from "sonner";
 import type {
-  AssignmentAttempt,
   AssignmentAttemptWithQuestions,
   AssignmentFeedback,
   BaseBackendResponse,

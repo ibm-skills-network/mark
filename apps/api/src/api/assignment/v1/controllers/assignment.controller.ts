@@ -28,26 +28,8 @@ import {
 } from "@nestjs/swagger";
 import { ReportType, ResponseType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import {
-  concatWith,
-  EMPTY,
-  from,
-  interval,
-  Observable,
-  of,
-  Subject,
-  timer,
-} from "rxjs";
-import {
-  catchError,
-  expand,
-  finalize,
-  map,
-  mergeMap,
-  switchMap,
-  takeWhile,
-  tap,
-} from "rxjs/operators";
+import { concatWith, interval, Observable, of } from "rxjs";
+import { catchError, finalize, map, mergeMap } from "rxjs/operators";
 import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {

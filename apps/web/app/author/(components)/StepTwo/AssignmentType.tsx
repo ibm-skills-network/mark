@@ -3,12 +3,7 @@
 import { stepTwoSections } from "@/config/constants";
 import { cn } from "@/lib/strings";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import {
-  useEffect,
-  type ComponentPropsWithoutRef,
-  type FC,
-  type MouseEvent,
-} from "react";
+import { type ComponentPropsWithoutRef, type FC, type MouseEvent } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
 type Props = ComponentPropsWithoutRef<"div">;

@@ -8,13 +8,11 @@ import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   LanguageIcon,
   TagIcon as OutlineTagIcon,
 } from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
 import ShowHideRubric from "./ShowHideRubric";

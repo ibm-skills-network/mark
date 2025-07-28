@@ -2,7 +2,6 @@ import { AVAILABLE_LANGUAGES } from "@/app/Helpers/getLanguageName";
 import type {
   Assignment,
   AssignmentAttempt,
-  AssignmentDetails,
   Choice,
   PresentationQuestionResponse,
   QuestionStatus,
@@ -12,7 +11,6 @@ import type {
   slideMetaData,
 } from "@/config/types";
 import { getUser } from "@/lib/talkToBackend";
-import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";

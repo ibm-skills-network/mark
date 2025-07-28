@@ -12,7 +12,6 @@ import ProgressBar, { JobStatus } from "@/components/ProgressBar";
 import Tooltip from "@/components/Tooltip";
 import {
   Assignment,
-  AuthorAssignmentState,
   Choice,
   Criteria,
   Question,

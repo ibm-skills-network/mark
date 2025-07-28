@@ -1,10 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsString } from "class-validator";
-import { Choice } from "src/api/assignment/dto/update.questions.request.dto";
 
 export class GeneralFeedbackDto {
   @ApiProperty({
-    description: "The feedback earned by the leanrer.",
+    description: "The feedback earned by the learner.",
     type: String,
     required: true,
   })

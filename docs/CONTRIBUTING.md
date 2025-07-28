@@ -1,9 +1,11 @@
 # CONTRIBUTING GUIDE
-
 ## Table of Contents
 
 - [CONTRIBUTING GUIDE](#contributing-guide)
   - [Table of Contents](#table-of-contents)
+  - [Reporting Bugs](#reporting-bugs)
+  - [Suggesting New Features](#suggesting-new-features)
+  - [Pull Request Process](#pull-request-pr-process)
   - [Prerequisites](#prerequisites)
   - [Environment Setup Guide](#environment-setup-guide)
     - [Step 1: Locate the `.env.template` Files](#step-1-locate-the-envtemplate-files)
@@ -19,7 +21,58 @@
     - [Useful Resources](#useful-resources)
   - [Troubleshooting](#troubleshooting)
 
+## Reporting Bugs
+
+To report a bug:
+
+1. **Navigate** to the **Issues** tab.
+2. **Click** **New Issue**.
+3. **Describe** your bug with:
+
+   * A clear **title**
+   * **Steps to reproduce**
+   * **Expected vs. actual behavior**
+   * Relevant **logs** or **screenshots**
+
+Our team reviews new issues **daily** and will respond **as soon as possible**.
+
 ---
+
+## Suggesting New Features
+
+To propose a new feature:
+
+1. **Open** the roadmap board:
+   [https://github.com/orgs/ibm-skills-network/projects/9](https://github.com/orgs/ibm-skills-network/projects/9)
+2. **Add** your idea to the **TODO** column.
+3. **Assign** it to a team member for initial review.
+
+---
+
+## Pull Request (PR) Process
+
+We follow **semantic conventions** for branches, versions, and PRs:
+
+### A. Conventions & Resources
+
+* **Branch Naming**
+  [https://gist.github.com/seunggabi/87f8c722d35cd07deb3f649d45a31082](https://gist.github.com/seunggabi/87f8c722d35cd07deb3f649d45a31082)
+* **Semantic Versioning**
+  [https://www.geeksforgeeks.org/introduction-semantic-versioning/](https://www.geeksforgeeks.org/introduction-semantic-versioning/)
+* **React Code Style**
+  [https://developer.dynatrace.com/develop/react-style-guide/](https://developer.dynatrace.com/develop/react-style-guide/)
+* **Stacked PRs**
+  [https://blog.logrocket.com/using-stacked-pull-requests-in-github/](https://blog.logrocket.com/using-stacked-pull-requests-in-github/)
+
+### B. Workflow
+
+1. **Pick up** an issue.
+2. **Create** a branch named per our conventions (e.g., `feature/ISSUE-123-description`).
+3. **Break down** large issues into multiple, focused PRs.
+4. **Stack** related PRs under a main branch if needed.
+5. **Submit** each PR for review.
+6. **Merge** once approved.
+7. **Release** a new version if the change is client-facing.
 
 ## Prerequisites
 

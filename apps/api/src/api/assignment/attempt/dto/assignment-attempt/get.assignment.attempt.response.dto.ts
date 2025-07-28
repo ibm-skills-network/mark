@@ -2,11 +2,7 @@ import { Optional } from "@nestjs/common";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionResponse, QuestionType, ResponseType } from "@prisma/client";
 import { Type } from "class-transformer";
-import { IsOptional } from "class-validator";
-import {
-  AttemptQuestionDto,
-  ScoringDto,
-} from "src/api/assignment/dto/update.questions.request.dto";
+import { AttemptQuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "../../../question/dto/create.update.question.request.dto";
 
 export class AssignmentAttemptResponseDto {

@@ -1,15 +1,9 @@
 "use client";
 
-import MarkdownEditor from "@/components/MarkDownEditor";
 import { QuestionAuthorStore, Rubric } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import { TrashIcon } from "@heroicons/react/24/outline";
-import {
-  MinusIcon,
-  PencilIcon,
-  PlusIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/solid";
+import { PencilIcon, PlusIcon, SparklesIcon } from "@heroicons/react/24/solid";
 import React, { useState } from "react";
 import CriteriaTable from "./CriteriaTable";
 

@@ -1,13 +1,7 @@
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import { useLearnerStore } from "@/stores/learner";
 import type { QuestionStore } from "@config/types";
-import { TagIcon } from "@heroicons/react/20/solid";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { useCallback, useEffect, type ComponentPropsWithoutRef } from "react";
 import Timer from "./Timer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
