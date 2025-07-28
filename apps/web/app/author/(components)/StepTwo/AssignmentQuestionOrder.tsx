@@ -168,13 +168,17 @@ const Component: FC<Props> = () => {
           {showPopup && <Popup message={popupMessage} />}
         </div>
         <p className="text-gray-500 text-left">
-        {numberOfQuestionsPerAttempt ? (
+          {numberOfQuestionsPerAttempt ? (
             <>
-              For each assignment attempt learners will be given <b>{numberOfQuestionsPerAttempt}</b> randomly selected question(s) from your total set of <b>{totalQuestions}</b> questions.
+              For each assignment attempt learners will be given{" "}
+              <b>{numberOfQuestionsPerAttempt}</b> randomly selected question(s)
+              from your total set of <b>{totalQuestions}</b> questions.
             </>
           ) : (
             <>
-              For each assignment attempt learners will be given a subset of randomly selected question(s) from your total set of <b>{totalQuestions}</b> questions.
+              For each assignment attempt learners will be given a subset of
+              randomly selected question(s) from your total set of{" "}
+              <b>{totalQuestions}</b> questions.
             </>
           )}
         </p>

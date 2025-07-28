@@ -748,7 +748,7 @@ const AuthorQuestionsPage: FC<Props> = ({
    */
   const handleImportQuestions = (
     importedQuestions: QuestionAuthorStore[],
-    options: { replaceExisting: boolean }
+    options: { replaceExisting: boolean },
   ) => {
     try {
       // Process imported questions with proper total points calculation
