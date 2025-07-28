@@ -1,0 +1,11 @@
+{{- if .Values.apiGateway.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mark.api-gateway.name" . }}-config
+data:
+{{- range $name, $value := .Values.apiGateway.env }}
+  {{ $name }}: {{ $value | quote }}
+{{- end }}
+{{- end }}

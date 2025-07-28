@@ -1,0 +1,33 @@
+{
+  "extends": "tsconfig/nextjs.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["./*"],
+      "@config/*": ["config/*"],
+      "@components/*": ["components/*"],
+      "@lib/*": ["lib/*"],
+      "@learnerComponents/*": [
+        "app/learner/(components)/*",
+        "pages/api/transcriber.js"
+      ],
+      "@authorComponents/*": [
+        "app/author/(components)/*",
+        "pages/api/transcriber.js"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "../api/src/api/report/helpers/program.ts"
+  ],
+  "exclude": ["node_modules", "components/depreciated"]
+}

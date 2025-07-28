@@ -1,0 +1,21 @@
+{{- if .Values.ui.enabled }}
+{{- with .Values.ui }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mark.ui.name" $ }}
+  labels:
+    {{- include "mark.ui.labels" $ | nindent 4 }}
+spec:
+  {{- with .service }}
+  type: {{ .type }}
+  ports:
+    - port: {{ .port }}
+  {{- end }}
+      targetPort: {{ .containerPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "mark.ui.labels" $ | nindent 4 }}
+{{- end }}
+{{- end }}

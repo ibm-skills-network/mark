@@ -1,0 +1,3 @@
+{
+  "importOrderParserPlugins": ["typescript", "decorators-legacy"]
+}

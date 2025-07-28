@@ -1,0 +1,99 @@
+{
+  "name": "Mathematics Quiz",
+  "introduction": "Welcome to the Mathematics Quiz! This AI-graded quiz aims to test your math skills in a fun and interactive way.",
+  "instructions": null,
+  "type": "AI_GRADED",
+  "graded": true,
+  "numAttempts": 5,
+  "allotedTimeMinutes": 60,
+  "attemptsPerTimeRange": 5,
+  "attemptsTimeRangeHours": 2,
+  "passingGrade": 70,
+  "displayOrder": "RANDOM",
+  "showAssignmentScore": true,
+  "showQuestionScore": true,
+  "provideSubmissionsFeedback": true,
+  "exercises": [
+    {
+      "totalPoints": 3,
+      "type": "TEXT",
+      "question": "Write a brief note about the significance of the Pythagoras theorem in mathematics.",
+      "scoring": {
+        "type": "CRITERIA_BASED",
+        "criteria": [
+          {
+            "points": 1,
+            "description": "The learner provides a basic description of the Pythagoras theorem."
+          },
+          {
+            "points": 3,
+            "description": "The learner's response is clear, accurate, and easy to understand with a good writing style."
+          }
+        ]
+      }
+    },
+    {
+      "totalPoints": 4,
+      "type": "true_false",
+      "question": "Is 0 an even number?",
+      "answer": true
+    },
+    {
+      "totalPoints": 2,
+      "type": "SINGLE_CORRECT",
+      "question": "What is the square root of 64?",
+      "choices": {
+        "6": false,
+        "8": true,
+        "10": false
+      }
+    },
+    {
+      "totalPoints": 2,
+      "type": "MULTIPLE_CORRECT",
+      "question": "Which of the following are prime numbers?",
+      "choices": {
+        "4": false,
+        "7": true,
+        "13": true,
+        "15": false
+      }
+    },
+    {
+      "totalPoints": 5,
+      "type": "url",
+      "question": "Please provide a URL to your project repository.",
+      "scoring": {
+        "type": "CRITERIA_BASED",
+        "criteria": [
+          {
+            "points": 2,
+            "description": "URL points to a valid repository."
+          },
+          {
+            "points": 5,
+            "description": "The repository is fully accessible and relevant to the assignment."
+          }
+        ]
+      }
+    },
+    {
+      "totalPoints": 7,
+      "type": "upload",
+      "question": "Upload a document summarizing your project findings.",
+      "scoring": {
+        "type": "CRITERIA_BASED",
+        "criteria": [
+          {
+            "points": 7,
+            "description": "Document is well-organized, logically structured, and written in clear, concise language and covers all required aspects of the project findings."
+          },
+          {
+            "points": 3,
+            "description": "Document is well-organized, logically structured, and written in clear, concise language."
+          }
+        ]
+      }
+    }
+  ]
+}

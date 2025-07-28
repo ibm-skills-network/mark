@@ -1,0 +1,21 @@
+{{- if .Values.apiGateway.enabled }}
+{{- with .Values.apiGateway }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mark.api-gateway.name" $ }}
+  labels:
+    {{- include "mark.api-gateway.labels" $ | nindent 4 }}
+spec:
+  {{- with .service }}
+  type: {{ .type }}
+  ports:
+    - port: {{ .port }}
+  {{- end }}
+      targetPort: {{ .containerPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "mark.api-gateway.labels" $ | nindent 4 }}
+{{- end }}
+{{- end }}

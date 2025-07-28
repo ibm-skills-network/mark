@@ -1,0 +1,165 @@
+# Default values for mark.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+fullnameOverride: ""
+nameOverride: ""
+
+# Global configurations applicable across components
+global:
+  imagePullSecrets:
+    - name: icr-global
+
+# API Gateway configurations
+apiGateway:
+  enabled: true
+  autoscaling:
+    enabled: false
+  replicaCount: 3
+  image:
+    repository: icr.io/skills-network/mark-api-gateway
+    pullPolicy: IfNotPresent
+  containerPort: 3000  
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  livenessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 1
+    periodSeconds: 15
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 1
+    periodSeconds: 15
+  env:
+    API_GATEWAY_PORT: 3000
+  secretEnv: {}
+
+# LTI Gateway configurations
+lti-gateway:
+  replicaCount: 3
+  resources: {}
+  secretEnv: {}
+  ltiCredentials: {}
+  jwtCredentials: {}
+  imagePullSecrets:
+    - name: icr-global 
+
+# API configurations
+api:
+  enabled: true
+  autoscaling:
+    enabled: false
+  replicaCount: 3
+  image:
+    repository: icr.io/skills-network/mark-api
+    pullPolicy: IfNotPresent
+  containerPort: 3000  
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  livenessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 1
+    periodSeconds: 15
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 1
+    periodSeconds: 15
+  markDBName: ''
+  usePgBouncer: true
+  env:
+    API_PORT: 3000
+  secretEnv: {}
+
+# UI configurations
+ui:
+  enabled: true
+  autoscaling:
+    enabled: false
+  replicaCount: 3
+  image:
+    repository: icr.io/skills-network/mark-ui
+    pullPolicy: IfNotPresent
+  containerPort: 3000  
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  env:
+    PORT: 3000
+  secretEnv: {} 
+
+# LTI Credentials Manager configurations
+ltiCredentialsManager:
+  enabled: true
+  autoscaling:
+    enabled: false
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 80
+  replicaCount: 3
+  podAnnotations: {}
+  podSecurityContext: {}
+  securityContext: {}
+  image:
+    repository: icr.io/skills-network-labs/admin
+    pullPolicy: IfNotPresent
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  accessKey: ""
+  secretKey: ""
+  secretKeyBase: ""
+  env:
+    DB_NAME: "mark-lti"
+    MALLOC_ARENA_MAX: "2"
+    PICARD_ENV: production
+    RAILS_ENV: production
+    PG_SSL_MODE: "disable"
+  secretEnv: {}
+
+# Ingress configurations
+ingress:
+  enabled: true
+  className: public-iks-k8s-nginx
+  annotations: 
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  tls:
+    secretName: ""
+
+privateIngress:
+  enabled: true
+  className: private-iks-k8s-nginx
+  nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+postgres:
+  username: ""
+  password: ""
+  hostname: ""
+  port: 5432
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""    
+
+linkerd:
+  enabled: false
+
+baseDomain: ""
+
+networkPolicy:
+  enabled: true
+  natsPort: ""

@@ -1,0 +1,10 @@
+{
+  "extends": "tsconfig/nestjs.json",
+  "compilerOptions": {
+    "lib": ["es2021", "dom"],
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "resolveJsonModule": true
+  },
+  "exclude": ["./ensureDb.js"]
+}

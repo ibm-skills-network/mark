@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "intorduction": {
+      "type": "string"
+    },
+    "instructions": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["AI_GRADED", "MANUAL"]
+    },
+    "graded": {
+      "type": "boolean"
+    },
+    "allotedTimeMinutes": {
+      "type": "integer"
+    },
+    "passingGrade": {
+      "type": "integer"
+    },
+    "displayOrder": {
+      "type": "string",
+      "enum": ["DEFINED", "RANDOM"]
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "totalPoints": {
+            "type": "integer"
+          },
+          "numRetries": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "scoring": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["CRITERIA_BASED", "LOSS_PER_MISTAKE", "AI_GRADED"]
+              },
+              "criteria": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["type"]
+          },
+          "choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          },
+          "answer": {
+            "type": "boolean"
+          }
+        },
+        "required": ["total_points", "type", "question"]
+      }
+    }
+  },
+  "required": [
+    "name",
+    "type",
+    "numAttempts",
+    "allotedTimeMinutes",
+    "passingGrade",
+    "displayOrder",
+    "exercises"
+  ]
+}

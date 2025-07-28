@@ -1,0 +1,215 @@
+{{- if .Values.networkPolicy.enabled }}
+---   
+# For lti-gateway: allow all ingress and egress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lti-gateway-policy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: lti-gateway
+  ingress:
+    - ports:
+      - protocol: TCP
+        port: {{ index .Values "lti-gateway" "containerPort" }}
+  egress:
+    - {} # Allow all egress traffic (lti-gateway might need to send the LTI grades back to lms like Coursera)
+  policyTypes:
+    - Ingress
+    - Egress
+---
+
+# For mark-api-gateway: allow ingress traffic from ingress and egress traffic to mark-api and lti-credentials-manager only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+  ingress:
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.apiGateway.containerPort }}
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api.labels" $ | nindent 12 }}
+      - podSelector:
+          matchLabels:
+            {{- include "mark.lti-credentials-manager.labels" $ | nindent 12 }}      
+  policyTypes:
+    - Ingress
+    - Egress    
+---    
+
+# For mark-ui: allow ingress traffic from ingress and egress traffic to api-gateway only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ui-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.ui.labels" $ | nindent 6 }}
+  ingress:
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.ui.containerPort }}      
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+  policyTypes:
+  - Ingress
+  - Egress          
+---
+
+# For mark-api: allow ingress traffic from api-gateway only and allow egress traffic to lti-gateway and to port 5432 (for postgres db).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.api.labels" $ | nindent 6 }}
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.api.containerPort }}      
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: lti-gateway
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apps-postgres-pgbouncer
+    - ports: # Permit outbound traffic on port 443, enabling the application to initiate API requests to external services like OpenAI.
+      - protocol: TCP
+        port: 443                      
+  policyTypes:
+  - Ingress
+  - Egress             
+---
+
+# For mark-lti-credentials-manager: allow traffic from api-gateway only and block all egress traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lti-credentials-manager-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.lti-credentials-manager.labels" $ | nindent 6 }}
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+    - ports:
+      - protocol: TCP
+        port: {{ .Values.ltiCredentialsManager.containerPort }}         
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apps-postgres-pgbouncer 
+  policyTypes:
+  - Ingress
+  - Egress
+---    
+
+# Allow all pods to send DNS query
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-dns
+spec:
+  podSelector: {}
+  egress:
+    - ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+  policyTypes:
+    - Egress
+---
+
+# Allow all pods to connect to NATS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nats-traffic
+spec:
+  podSelector: {}
+  egress:
+    - ports:
+      - protocol: TCP
+        port: {{.Values.networkPolicy.natsPort}}
+  policyTypes:
+    - Egress
+---
+
+# Allow ingress and egress to control-plane traffic
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-control-plane-traffic
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: linkerd
+      ports:
+      - port: 4143
+        protocol: TCP
+      - port: 4191
+        protocol: TCP
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: linkerd
+  policyTypes:
+    - Ingress
+    - Egress
+---
+
+# Deny all by default
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress    
+{{- end }}
+

@@ -1,0 +1,93 @@
+{{- if .Values.ltiCredentialsManager.enabled }}
+{{- with .Values.ltiCredentialsManager }}
+{{- if .enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mark.lti-credentials-manager.name" $ }}-migration
+  labels:
+    {{- include "mark.lti-credentials-manager.labels" $ | nindent 4 }}
+  annotations:
+    {{- include "mark.migrations.annotations" $ | nindent 4}}
+spec:
+  parallelism: 1
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 100
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: lti-credentials-manager-migration
+        checksum/secrets: {{ include (print $.Template.BasePath "/lti-credentials-manager/secret.yaml") $ | sha256sum }}
+      {{- with $.Values.globalPodAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mark.lti-credentials-manager.labels" $ | nindent 8 }}
+      {{- with .podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      imagePullSecrets:
+        {{- include "mark.imagePullSecrets" $ | nindent 8 }}
+      serviceAccountName: {{ include "mark.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml .podSecurityContext | nindent 8 }}
+      restartPolicy: Never
+      {{- if $.Values.linkerd.enabled }}
+      volumes:
+        {{- include "sn-common.linkerd-await.volume" . | nindent 12 }}
+      initContainers:
+        {{- include "sn-common.linkerd-await.initContainer" . | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: lti-credentials-manager-migration
+          securityContext:
+            {{- toYaml .securityContext | nindent 12 }}
+          {{- with .image }}
+          image: "{{ .repository }}:{{ .tag }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          env:
+            - name: "SAFETY_ASSURED"
+              value: "1"
+          envFrom:
+            - configMapRef:
+                name: {{ include "mark.lti-credentials-manager.name" $ }}
+            - secretRef:
+                name: {{ include "mark.lti-credentials-manager.name" $ }}
+          {{- if $.Values.linkerd.enabled }}
+          volumeMounts:
+            {{- include "sn-common.linkerd-await.volumeMount" . | nindent 16 }}
+          command:
+            - /linkerd-await/linkerd-await
+            - --shutdown
+            - --
+          args:
+          {{- else }}
+          command:
+          {{- end }}
+          - sh
+          - -c
+          - |
+            bundle exec rake db:create && 
+            bundle exec rake db:migrate
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

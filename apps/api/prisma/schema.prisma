@@ -1,0 +1,500 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// prisma/schema.prisma
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_DIRECT")
+}
+
+/// This enum represents the types of assignments
+enum AssignmentType {
+  AI_GRADED /// The assignment is graded by an AI
+  MANUAL /// The assignment is manually graded by a human
+}
+
+/// This enum defines the order in which assignments are displayed
+enum AssignmentQuestionDisplayOrder {
+  DEFINED /// The assignments are displayed in a predefined order
+  RANDOM /// The assignments are displayed in a random order
+}
+model GradingAudit {
+  id                Int           @id @default(autoincrement())
+  questionId        Int
+  question          Question      @relation(fields: [questionId], references: [id])
+  assignmentId      Int?
+  assignment        Assignment?   @relation(fields: [assignmentId], references: [id])
+  requestPayload    String        @db.Text    // JSON string of the request
+  responsePayload   String        @db.Text    // JSON string of the response
+  gradingStrategy   String        // Name of the grading strategy used
+  metadata          String?       @db.Text    // Optional additional metadata
+  timestamp         DateTime      @default(now())
+  
+  @@index([questionId])
+  @@index([assignmentId])
+  @@index([timestamp])
+}
+
+/// This enum represents the types of questions that can be part of an assignment
+enum QuestionType {
+  TEXT /// The question requires a text response
+  SINGLE_CORRECT /// The question has multiple choices, only one of which is correct
+  MULTIPLE_CORRECT /// The question has multiple choices, more than one of which can be correct
+  TRUE_FALSE /// The question requires a True/False response
+  URL /// The question requires a URL response
+  UPLOAD /// The question requires the upload of a file as a response
+  LINK_FILE /// The question requires the upload of a file or a URL as a response
+}
+enum ResponseType{
+  REPO
+  CODE
+  ESSAY
+  REPORT
+  PRESENTATION
+  VIDEO
+  AUDIO
+  IMAGES
+  SPREADSHEET
+  LIVE_RECORDING
+  OTHER
+}
+enum QuestionDisplay {
+  ONE_PER_PAGE /// Display one question per page
+  ALL_PER_PAGE /// Display all questions on one page
+}
+
+/// This enum represents the ways in which an assignment can be scored
+enum ScoringType {
+  CRITERIA_BASED /// The assignment is scored based on specifying one or more criterias
+  LOSS_PER_MISTAKE /// Points are deducted for each mistake in the assignment
+  AI_GRADED /// The assignment is graded by an AI
+}
+model Job {
+  id          Int       @id @default(autoincrement())
+  userId       String
+  assignmentId Int
+  status      String
+  progress    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  result       Json?    // Add this field to store generated questions
+}
+model GradingJob {
+  id           Int      @id @default(autoincrement())
+  attemptId    Int?     // Made optional for author preview mode
+  assignmentId Int
+  userId       String
+  status       String   // Pending, Processing, Completed, Failed
+  progress     String
+  percentage   Int?
+  result       Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  attempt      AssignmentAttempt? @relation(fields: [attemptId], references: [id])
+  assignment   Assignment         @relation(fields: [assignmentId], references: [id])
+
+  @@index([attemptId])
+  @@index([assignmentId])
+  @@index([userId])
+  @@index([status])
+}
+model publishJob {
+  id          Int       @id @default(autoincrement())
+  userId       String
+  assignmentId Int
+  status      String
+  progress    String?
+  percentage  Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  result       Json?    // Add this field to store generated questions
+}
+/// This model tracks the AI usage for each assignment and usage type
+model AIUsage {
+  id                Int         @id @default(autoincrement()) /// Unique identifier for the AI usage log
+  assignmentId      Int         /// The ID of the assignment for which the AI was used
+  assignment        Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
+  usageType         AIUsageType /// Enum to define the type of AI usage (e.g., question generation, assignment generation, grading)
+  tokensIn          Int         @default(0) /// The number of tokens sent to the AI (input)
+  tokensOut         Int         @default(0) /// The number of tokens received from the AI (output)
+  usageCount        Int         @default(0) /// Tracks how many times this AI feature was used for this assignment
+  usageDetails      Json?       /// Optional field to store additional details about the AI usage
+  createdAt         DateTime    @default(now()) /// Timestamp for when the AI was used
+  updatedAt         DateTime    @updatedAt     /// Timestamp for when the usage record was last updated
+  userId            String? /// The ID of the user who used the AI feature
+  user              UserCredential? @relation(fields: [userId], references: [userId]) /// Relation to the UserCredential model
+  @@unique([assignmentId, usageType]) /// Ensure each assignment has a unique usage record for each AI feature
+}
+
+/// Enum to track different types of AI usage
+enum AIUsageType {
+  QUESTION_GENERATION /// AI was used to generate questions
+  ASSIGNMENT_GENERATION /// AI was used to generate an entire assignment
+  ASSIGNMENT_GRADING /// AI was used for grading the assignment
+  TRANSLATION /// AI was used for translation
+  LIVE_RECORDING_FEEDBACK /// AI was used for live recording feedback
+}
+
+model UserCredential {
+  userId      String   @id /// The unique ID of the user
+  githubToken String?  /// The GitHub token for the user
+  createdAt   DateTime @default(now()) /// The DateTime at which the user was created
+  updatedAt   DateTime @updatedAt /// The DateTime at which the user was last updated
+  chats       Chat[]   /// The list of chats associated with the user
+
+  AIUsage AIUsage[]
+}
+// Chat Models for tracking user conversations
+model Chat {
+  id           String         @id @default(uuid())
+  userId       String         // User ID of the participant
+  startedAt    DateTime       @default(now())
+  lastActiveAt DateTime       @updatedAt
+  title        String?        // Optional title for the chat
+  messages     ChatMessage[]  // Related messages
+  assignmentId Int?           // Optional related assignment
+  assignment   Assignment?    @relation(fields: [assignmentId], references: [id])
+  isActive     Boolean        @default(true) // Whether the chat is active
+  
+  @@index([userId, startedAt])
+  @@index([assignmentId])
+  UserCredential UserCredential[]
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      ChatRole // user, assistant, system
+  content   String   @db.Text
+  timestamp DateTime @default(now())
+  toolCalls Json?    // Optional JSON for storing tool calls
+  
+  @@index([chatId, timestamp])
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+/// The Group model represents a particular group of assignments (having the same groupID)
+model Group {
+  id          String            @unique /// Unique ID of the course
+  assignments AssignmentGroup[] /// The list of assignments associated with this group
+}
+
+/// The AssignmentGroup model represents the many-to-many relationship between Assignments and Groups
+model AssignmentGroup {
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// The associated Assignment model
+  assignmentId Int /// Relation scalar field  (used in the `@relation` attribute above)
+  group        Group      @relation(fields: [groupId], references: [id]) /// The associated Group model
+  groupId      String /// Relation scalar field  (used in the `@relation` attribute above)
+
+  @@id([assignmentId, groupId]) /// Unique identifier for the relationship
+}
+
+/// The Assignment model represents a particular assignment
+model Assignment {
+  id                      Int                             @id @default(autoincrement()) /// Unique identifier for the assignment
+  name                    String /// Name of the assignment
+  introduction            String? /// Introduction Paragraph for the assignment
+  instructions            String? /// Instructions for the assignment
+  gradingCriteriaOverview String? /// Grading Criteria for the assignment
+  timeEstimateMinutes     Int? /// Estimated time it will take to complete the assignment in minutes
+  type                    AssignmentType /// Type of assignment
+  graded                  Boolean? @default(false) /// Is the assignment graded or not
+  numAttempts             Int? @default(-1) /// Max number of times a learner can attempt the assignment
+  allotedTimeMinutes      Int? /// Time allotted to complete the assignment in minutes
+  attemptsPerTimeRange    Int? /// Number of allowed attempts within the specified time range.
+  attemptsTimeRangeHours  Int? /// Time range, in hours, over which the attempts are counted.
+  passingGrade            Int? @default(50) /// The minimum grade required to pass the assignment
+  displayOrder            AssignmentQuestionDisplayOrder? /// The order in which the assignment is displayed
+  questionDisplay         QuestionDisplay?                @default(ONE_PER_PAGE) /// The display of questions in the assignment
+  numberOfQuestionsPerAttempt Int? /// Number of questions to be displayed per attempt
+  questionOrder           Int[] /// An array of questionIds to infer in which order should they be displayed
+  questions               Question[] /// The list of questions in the assignment
+  groups                  AssignmentGroup[] /// List of groups associated with the assignment
+  published               Boolean /// Is the assignment published or not
+  showAssignmentScore     Boolean                         @default(true) /// Should the assignment score be shown to the learner after its submission
+  showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
+  showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
+  showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
+  updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
+  languageCode            String?                         /// The language code for the assignment
+  AIUsage AIUsage[]
+  AssignmentFeedback AssignmentFeedback[]
+  RegradingRequest RegradingRequest[]
+  Report Report[]
+  AssignmentTranslation AssignmentTranslation[]
+  GradingAudit GradingAudit[]
+
+  Chat Chat[]
+
+  GradingJob GradingJob[]
+}
+enum VariantType {
+  REWORDED /// The variant is reworded
+  RANDOMIZED /// The variant is randomized
+  DIFFICULTY_ADJUSTED /// The variant is adjusted for difficulty
+}
+
+/// The Question model represents a question in an assignment
+model Question {
+  id                        Int              @id @default(autoincrement()) /// Unique identifier for the question
+  totalPoints               Int /// Total points that can be scored for the question
+  type                      QuestionType /// Type of question
+  responseType              ResponseType? /// Type of response expected from the learner
+  question                  String /// The text of the question
+  variants                  QuestionVariant[] /// AI-generated variants for this question
+  maxWords                  Int? /// Optional maximum number of words allowed for a written response type question
+  scoring                   Json? /// Scoring details for the question, stored as JSON
+  choices                   Json? /// Possible choices for the question, stored as JSON
+  randomizedChoices         Boolean? /// Are the choices randomized?
+  answer                    Boolean? /// The correct answer for the question (used for auto grading)
+  assignmentId              Int /// The ID of the assignment to which the question belongs
+  assignment                Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// The assignment to which the question belongs
+  gradingContextQuestionIds Int[] /// List of question Ids that are used as contextual questions when auto grading this question
+  maxCharacters             Int? /// Maximum number of characters allowed for a written response type question
+  AssignmentAttemptQuestionVariant AssignmentAttemptQuestionVariant[]
+  isDeleted      Boolean  @default(false) // New flag for archiving
+  translations              Translation[]    /// List of translations for the question
+  FeedbackTranslation FeedbackTranslation[]
+  videoPresentationConfig   Json? /// Configuration for video presentation questions
+  liveRecordingConfig       Json? /// Configuration for live recording questions
+
+  GradingAudit GradingAudit[]
+}
+model AssignmentAttempt {
+  id                Int                   @id @default(autoincrement())
+  assignmentId      Int
+  userId            String
+  questionResponses QuestionResponse[]
+  submitted         Boolean
+  grade             Float?
+  expiresAt         DateTime?
+  createdAt         DateTime              @default(now())
+  questionVariants  AssignmentAttemptQuestionVariant[]
+  AssignmentFeedback AssignmentFeedback[]
+  questionOrder    Int[]
+  RegradingRequest RegradingRequest[]
+  comments         String?               /// Additional comments or notes for the assignment attempt from the system
+  preferredLanguage String?
+
+  GradingJob GradingJob[]
+}
+
+model AssignmentAttemptQuestionVariant {
+  assignmentAttemptId Int
+  questionId          Int
+  questionVariantId   Int?
+  assignmentAttempt   AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id], onDelete: Cascade)
+  questionVariant     QuestionVariant?   @relation(fields: [questionVariantId], references: [id])
+  question            Question           @relation(fields: [questionId], references: [id])
+  randomizedChoices   Json?
+  @@id([assignmentAttemptId, questionId])
+}
+
+model QuestionVariant {
+  id              Int         @id @default(autoincrement())
+  questionId      Int
+  variantOf       Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  variantContent  String
+  choices         Json?
+  maxWords        Int?
+  scoring         Json?
+  answer          Boolean?
+  maxCharacters   Int?
+  createdAt       DateTime    @default(now())
+  difficultyLevel Int?
+  variantType     VariantType
+  randomizedChoices Boolean?
+  assignmentAttemptVariants AssignmentAttemptQuestionVariant[]
+  isDeleted      Boolean  @default(false) // New flag for archiving
+
+  @@unique([questionId, variantContent])
+  Translation Translation[]
+}
+
+
+/// This model represents a student's response to a question
+model QuestionResponse {
+  id                  Int               @id @default(autoincrement()) /// Unique identifier for the question response
+  assignmentAttemptId Int /// The ID of the assignment attempt that includes this response
+  assignmentAttempt   AssignmentAttempt @relation(fields: [assignmentAttemptId], references: [id]) /// The assignment attempt that includes this response
+  questionId          Int /// The ID of the question to which the student is responding
+  learnerResponse     String /// The student's response to the question
+  points              Float /// The points earned by the student for this response
+  feedback            Json /// Feedback on the student's response, stored as JSON
+  metadata            Json? /// Optional additional metadata about the response
+  gradedAt           DateTime? /// Timestamp for when the response was graded
+}
+
+/// This model captures feedback and regrading requests for assignments
+model AssignmentFeedback {
+  id                Int              @id @default(autoincrement()) /// Unique identifier for the feedback
+  assignmentId      Int              /// The ID of the assignment for which feedback is provided
+  assignment        Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
+  attemptId         Int              /// The ID of the assignment attempt
+  assignmentAttempt AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  userId            String           /// The ID of the user providing feedback
+  comments          String?          /// Additional comments or suggestions
+  aiGradingRating   Int?             /// Rating for AI grading (1-5 scale)
+  assignmentRating  Int?             /// Rating for the overall assignment (1-5 scale)
+  aiFeedbackRating  Int?             /// Rating for the feedback provided by AI (1-5 scale)
+  allowContact      Boolean          @default(false) /// Whether the user allows being contacted
+  firstName         String?          /// User's first name (required if allowContact is true)
+  lastName          String?          /// User's last name (required if allowContact is true)
+  email             String?          /// User's email (required if allowContact is true)
+  createdAt         DateTime         @default(now()) /// Timestamp for when the feedback was created
+  updatedAt         DateTime         @updatedAt       /// Timestamp for the last update to the feedback
+}
+
+model RegradingRequest {
+  id                Int              @id @default(autoincrement()) /// Unique identifier for the regrading request
+  assignmentId      Int              /// The ID of the assignment for which feedback is provided
+  userId            String           /// The ID of the user requesting regrading
+  assignment        Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
+  attemptId         Int              /// The ID of the assignment attempt
+  assignmentAttempt AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  regradingReason   String?          /// Reason for requesting regrading
+  regradingStatus   RegradingStatus  @default(PENDING) /// Status of the regrading request
+  createdAt         DateTime         @default(now()) /// Timestamp for when the regrading request was created
+  updatedAt         DateTime         @updatedAt       /// Timestamp for the last update to the regrading request
+}
+
+enum RegradingStatus {
+  PENDING    /// The regrading request is pending review
+  APPROVED   /// The regrading request has been approved
+  REJECTED   /// The regrading request has been rejected
+  COMPLETED  /// The regrading process is completed
+}
+/// The Report model represents user or system-generated reports for developers
+model Report {
+  id                  Int            @id @default(autoincrement())
+  reporterId          String         // ID of the user reporting the issue
+  assignmentId        Int?           // Optional assignment ID
+  attemptId           Int?           // Optional attempt ID
+  assignment          Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  issueType           ReportType     // Type of the issue
+  description         String         // Detailed description of the issue
+  author              Boolean        @default(false) // Is the reporter the author of the assignment
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  status              ReportStatus   @default(OPEN) // Status of the report
+  issueNumber         Int?           // GitHub issue number for reference
+  statusMessage       String?        // Optional message explaining the current status
+  resolution          String?        // Resolution details when the issue is resolved
+  comments            String?        // Developer comments on the issue
+  closureReason      String?        // Reason for closing the issue
+  // Fields for duplicate/similar issue tracking
+  duplicateOfReportId Int?           // ID of a report this one is a duplicate of
+  duplicateOfReport   Report?        @relation("DuplicateReports", fields: [duplicateOfReportId], references: [id])
+  duplicates          Report[]       @relation("DuplicateReports")
+  
+  relatedToReportId   Int?           // ID of a report this one is related to
+  relatedToReport     Report?        @relation("RelatedReports", fields: [relatedToReportId], references: [id])
+  relatedReports      Report[]       @relation("RelatedReports")
+  
+  similarityScore     Float?         // Similarity score (0-1) with the parent report
+}
+// Add to schema.prisma
+model UserNotification {
+  id          Int      @id @default(autoincrement())
+  userId      String
+  type        String
+  title       String
+  message     String
+  metadata    String?  @db.Text
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Enum representing different types of reports
+enum ReportType {
+  BUG          /// Bug report
+  FEEDBACK     /// General feedback
+  SUGGESTION   /// Suggestion for improvement
+  PERFORMANCE  /// Performance-related issue
+  FALSE_MARKING /// Report for false marking
+  OTHER        /// Other types of reports
+}
+
+/// Enum representing the status of a report
+enum ReportStatus {
+  OPEN         /// Report is open and requires attention
+  IN_PROGRESS  /// Report is being investigated or resolved
+  RESOLVED     /// Report has been resolved
+  CLOSED       /// Report is closed without resolution
+}
+enum AssignmentTypeEnum {
+  Quiz
+  Assignment
+  Project
+  Midterm
+  Final
+  Exam
+  Test
+  Lab
+  Homework
+  Practice
+  Assessment
+  Survey
+  Evaluation
+  Review
+  Reflection
+}
+model Translation {
+  id                Int    @id @default(autoincrement())
+  questionId        Int?
+  question          Question?       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  variantId         Int?  
+  variant           QuestionVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  languageCode      String
+  translatedText    String
+  untranslatedText  String?
+  translatedChoices Json?
+  untranslatedChoices Json? 
+  createdAt         DateTime @default(now())
+
+  // Use an index instead of unique constraint to allow nullable variantId
+  @@index([questionId, variantId, languageCode])
+}
+
+model AssignmentTranslation {
+  id                      Int         @id @default(autoincrement())
+  assignmentId            Int
+  languageCode            String
+  name                    String  /// Translated assignment name
+  introduction            String /// Translated introduction/overview
+  instructions            String? /// Translated instructions
+  gradingCriteriaOverview String? /// Translated grading criteria overview
+  translatedName                    String?  /// Translated assignment name
+  translatedIntroduction            String? /// Translated introduction/overview
+  translatedInstructions            String? /// Translated instructions
+  translatedGradingCriteriaOverview String? /// Translated grading criteria overview
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  assignment              Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  @@unique([assignmentId, languageCode])
+}
+model FeedbackTranslation {
+  id                 Int      @id @default(autoincrement())
+  questionId         Int
+  languageCode       String
+  untranslatedFeedback Json /// A JSON object mapping each choice (or option identifier) to its untranslated feedback.
+  translatedFeedback Json /// A JSON object mapping each choice (or option identifier) to its translated feedback.
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  question           Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  @@unique([questionId, languageCode])
+}

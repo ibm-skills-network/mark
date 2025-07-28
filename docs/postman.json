@@ -1,0 +1,332 @@
+{
+    "info": {
+      "name": "AssignmentControllerV2 API Tests",
+      "description": "A collection to test all endpoints in the AssignmentControllerV2",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+      {
+        "key": "baseUrl",
+        "value": "http://localhost:8000/api/v2",
+        "type": "string"
+      },
+      {
+        "key": "authToken",
+        "value": "your-auth-token-here",
+        "type": "string"
+      },
+      {
+        "key": "assignmentId",
+        "value": "1",
+        "type": "string"
+      },
+      {
+        "key": "jobId",
+        "value": "1", 
+        "type": "string"
+      }
+    ],
+    "auth": {
+      "type": "bearer",
+      "bearer": [
+        {
+          "key": "token",
+          "value": "{{authToken}}",
+          "type": "string"
+        }
+      ]
+    },
+    "item": [
+      {
+        "name": "Assignment Management",
+        "item": [
+          {
+            "name": "Get Assignment by ID (AUTHOR)",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}"]
+              },
+              "description": "Get assignment by ID with AUTHOR role"
+            }
+          },
+          {
+            "name": "Get Assignment by ID with Language (LEARNER)",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}?lang=en",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}"],
+                "query": [
+                  {
+                    "key": "lang",
+                    "value": "en"
+                  }
+                ]
+              },
+              "description": "Get assignment by ID with specific language for a LEARNER"
+            }
+          },
+          {
+            "name": "List Assignments",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{baseUrl}}/assignments",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments"]
+              },
+              "description": "List all assignments for current user"
+            }
+          },
+          {
+            "name": "Update Assignment",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json",
+                  "type": "text"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"name\": \"Updated Assignment Name\",\n  \"description\": \"Updated assignment description\",\n  \"instructions\": \"New instructions for the assignment\",\n  \"contextData\": {\n    \"documents\": []\n  }\n}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}"]
+              },
+              "description": "Update an assignment's properties"
+            }
+          },
+          {
+            "name": "Replace Assignment",
+            "request": {
+              "method": "PUT",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json",
+                  "type": "text"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"name\": \"Completely New Assignment\",\n  \"description\": \"New assignment description\",\n  \"instructions\": \"New instructions\",\n  \"contextData\": {\n    \"documents\": []\n  },\n  \"questions\": [\n    {\n      \"stem\": \"New question stem\",\n      \"type\": \"multiple_choice\",\n      \"options\": [\n        { \"value\": \"A\", \"text\": \"Option A\" },\n        { \"value\": \"B\", \"text\": \"Option B\" },\n        { \"value\": \"C\", \"text\": \"Option C\" }\n      ],\n      \"correctOption\": \"A\",\n      \"explanation\": \"Explanation for correct answer\"\n    }\n  ]\n}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}"]
+              },
+              "description": "Replace an entire assignment"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Question Management",
+        "item": [
+          {
+            "name": "Generate Question Variant",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json",
+                  "type": "text"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"questionId\": 1,\n  \"config\": {\n    \"difficulty\": \"medium\",\n    \"theme\": \"science\"\n  }\n}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}/question/generate-variant",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}", "question", "generate-variant"]
+              },
+              "description": "Generate a new variant for a question"
+            }
+          },
+          {
+            "name": "Generate Questions",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json",
+                  "type": "text"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"numQuestions\": 5,\n  \"config\": {\n    \"difficulty\": \"medium\",\n    \"topics\": [\"mathematics\", \"science\"],\n    \"questionTypes\": [\"multiple_choice\", \"short_answer\"]\n  }\n}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}/generate-questions",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}", "generate-questions"]
+              },
+              "description": "Generate questions for an assignment"
+            }
+          },
+          {
+            "name": "Publish Assignment with Updated Questions",
+            "request": {
+              "method": "PUT",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json",
+                  "type": "text"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"questions\": [\n    {\n      \"id\": 1,\n      \"stem\": \"Updated question stem\",\n      \"type\": \"multiple_choice\",\n      \"options\": [\n        { \"value\": \"A\", \"text\": \"Option A\" },\n        { \"value\": \"B\", \"text\": \"Option B\" },\n        { \"value\": \"C\", \"text\": \"Option C\" }\n      ],\n      \"correctOption\": \"B\",\n      \"explanation\": \"New explanation for correct answer\"\n    },\n    {\n      \"id\": 2,\n      \"stem\": \"Another updated question\",\n      \"type\": \"short_answer\",\n      \"correctAnswer\": \"Correct answer text\",\n      \"explanation\": \"Explanation for this answer\"\n    }\n  ]\n}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}/publish",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}", "publish"]
+              },
+              "description": "Publish assignment with updated questions"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Languages",
+        "item": [
+          {
+            "name": "Get Available Languages",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}/languages",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}", "languages"]
+              },
+              "description": "Get available languages for an assignment"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Job Management",
+        "item": [
+          {
+            "name": "Get Job Status",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{baseUrl}}/assignments/jobs/{{jobId}}/status",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "jobs", "{{jobId}}", "status"]
+              },
+              "description": "Get the status of a job"
+            }
+          },
+          {
+            "name": "Stream Job Status",
+            "request": {
+              "method": "GET",
+              "header": [
+                {
+                  "key": "Accept",
+                  "value": "text/event-stream",
+                  "type": "text"
+                }
+              ],
+              "url": {
+                "raw": "{{baseUrl}}/assignments/jobs/{{jobId}}/status-stream",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "jobs", "{{jobId}}", "status-stream"]
+              },
+              "description": "Stream job status updates for publishing an assignment"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Reports",
+        "item": [
+          {
+            "name": "Submit Report",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json",
+                  "type": "text"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"issueType\": \"CONTENT_ERROR\",\n  \"description\": \"There is an error in question #3. The correct answer should be B, not C.\"\n}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/assignments/{{assignmentId}}/report",
+                "host": ["{{baseUrl}}"],
+                "path": ["assignments", "{{assignmentId}}", "report"]
+              },
+              "description": "Submit a report for an assignment"
+            }
+          }
+        ]
+      }
+    ],
+    "event": [
+      {
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            ""
+          ]
+        }
+      },
+      {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test(\"Status code is 200 or 201\", function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+            "});",
+            "",
+            "if (pm.response.code === 200 || pm.response.code === 201) {",
+            "    try {",
+            "        var jsonData = pm.response.json();",
+            "        if (jsonData.jobId) {",
+            "            pm.collectionVariables.set(\"jobId\", jsonData.jobId);",
+            "            console.log(\"Job ID stored: \" + jsonData.jobId);",
+            "        }",
+            "        if (jsonData.id) {",
+            "            pm.collectionVariables.set(\"assignmentId\", jsonData.id);",
+            "            console.log(\"Assignment ID stored: \" + jsonData.id);",
+            "        }",
+            "    } catch (e) {",
+            "        console.log(\"No JSON response or expected properties\");",
+            "    }",
+            "}"
+          ]
+        }
+      }
+    ]
+  }

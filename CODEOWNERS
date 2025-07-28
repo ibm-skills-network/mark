@@ -1,0 +1,41 @@
+* @oliver-z-luo
+* @MmagdyHafezZ
+
+
+yarn.lock
+
+
+#### Organization Synced Configuration Below ####
+# If you want to add to the below, please do so in the security-compliance-automation repo and sync the file to every repo
+
+# Dependency Resolution and Supported Package Manager Files
+# Reference: https://docs.mend.io/bundle/wsk/page/dependency_resolution_and_supported_package_manager_files.html
+
+# Python
+requirements.txt
+Pipfile
+Pipfile.lock
+pyproject.toml
+poetry.lock
+setup.py
+setup.cfg
+environment.yml
+
+# JavaScript
+package.json
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Go
+go.mod
+go.sum
+
+# Ruby
+Gemfile
+Gemfile.lock
+
+# Elixer, Erlang
+mix.exs
+mix.lock
+rebar.config

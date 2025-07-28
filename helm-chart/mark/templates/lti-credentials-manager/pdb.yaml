@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mark.lti-credentials-manager.name" . }}
+  labels:
+    {{- include "mark.lti-credentials-manager.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 10%
+  selector:
+    matchLabels:
+      {{- include "mark.lti-credentials-manager.labels" . | nindent 6 }}
