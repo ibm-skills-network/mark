@@ -37,6 +37,8 @@
     "secrets:check": "scripts/detect-secrets.sh",
     "secrets:check:staged": "scripts/detect-secrets-staged.sh",
     "secrets:setup": "detect-secrets scan --update .secrets.baseline",
+    "security:audit": "audit-ci --config .audit-ci.json",
+    "security:audit-better": "better-npm-audit audit --level moderate",
     "seed:update": "turbo run seed:update --filter=api",
     "setup": "[ -d \"$(git rev-parse --show-toplevel)/apps/api\" ] && cd \"$(git rev-parse --show-toplevel)/apps/api\" && dotenv -e ./dev.env -- npx prisma migrate dev && npx prisma generate; cd $(git rev-parse --show-toplevel)",
     "setup:no-git": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma migrate dev && npx prisma generate; cd ../../",
@@ -96,6 +98,8 @@
     "zod": "^3.23.5"
   },
   "devDependencies": {
+    "audit-ci": "^7.1.0",
+    "better-npm-audit": "^3.8.0",
     "detect-secrets": "^1.0.6",
     "dotenv-cli": "^8.0.0",
     "prettier": "^3.5.3",

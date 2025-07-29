@@ -1,0 +1,15 @@
+{
+  "moderate": true,
+  "high": true,
+  "critical": true,
+  "advisories": ["1096727"],
+  "allowlist": {
+    "1096727": {
+      "reason": "request package - SSRF vulnerability but no patch available. Used by octonode dependency.",
+      "expiry": "2025-12-31"
+    }
+  },
+  "report-type": "full",
+  "output-format": "text",
+  "skip-dev": false
+}
