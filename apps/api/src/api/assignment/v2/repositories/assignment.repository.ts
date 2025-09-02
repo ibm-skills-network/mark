@@ -266,6 +266,8 @@ export class AssignmentRepository {
       allotedTimeMinutes: undefined,
       attemptsPerTimeRange: undefined,
       attemptsTimeRangeHours: undefined,
+      attemptsBeforeCoolDown: undefined,
+      retakeAttemptCoolDownMinutes: undefined,
       displayOrder: undefined as unknown as AssignmentQuestionDisplayOrder,
     };
   }

@@ -210,6 +210,8 @@ model Assignment {
   instructions            String? /// Instructions for the assignment
   gradingCriteriaOverview String? /// Grading Criteria for the assignment
   timeEstimateMinutes     Int? /// Estimated time it will take to complete the assignment in minutes
+  attemptsBeforeCoolDown  Int? @default(1) /// How many attempts someone has before they have to go through a cooldown period, cooldown starts after first attempt
+  retakeAttemptCoolDownMinutes Int? @default(5) /// How long before someone can make another attempt, defaulted to 5 minutes
   type                    AssignmentType /// Type of assignment
   graded                  Boolean? @default(false) /// Is the assignment graded or not
   numAttempts             Int? @default(-1) /// Max number of times a learner can attempt the assignment
@@ -227,7 +229,7 @@ model Assignment {
   showAssignmentScore     Boolean                         @default(true) /// Should the assignment score be shown to the learner after its submission
   showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
-  showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
+  showQuestions           Boolean                         @default(true) /// Should the questions be shown to the learner
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
   languageCode            String?                         /// The language code for the assignment
   AIUsage AIUsage[]

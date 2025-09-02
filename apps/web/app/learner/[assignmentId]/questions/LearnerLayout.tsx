@@ -69,6 +69,18 @@ async function LearnerLayout(props: Props) {
     );
   }
 
+  if (attemptId === "in cooldown period") {
+    return (
+      <ErrorPage
+        className="h-[calc(100vh-100px)]"
+        statusCode={429}
+        error={
+          "You need to wait until the cooldown period is complete before being able to retake the assignment. Please wait until this period is complete before reattempting."
+        }
+      />
+    );
+  }
+
   return (
     <Suspense fallback={<LoadingPage animationData={animationData} />}>
       <AttemptLoader

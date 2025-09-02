@@ -1,19 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/unbound-method */
-import { Test, TestingModule } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
-import { PrismaService } from "src/prisma.service";
+import { Test, TestingModule } from "@nestjs/testing";
 import { Assignment, QuestionType } from "@prisma/client";
+import { BaseAssignmentResponseDto } from "src/api/admin/dto/assignment/base.assignment.response.dto";
 import { GetAssignmentResponseDto } from "src/api/assignment/dto/get.assignment.response.dto";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
-import { AssignmentRepository } from "../../../repositories/assignment.repository";
+import { PrismaService } from "src/prisma.service";
 import {
   createMockAssignment,
   sampleAuthorSession,
   sampleLearnerSession,
 } from "../__mocks__/ common-mocks";
-import { BaseAssignmentResponseDto } from "src/api/admin/dto/assignment/base.assignment.response.dto";
+import { AssignmentRepository } from "../../../repositories/assignment.repository";
 
 describe("AssignmentRepository", () => {
   let repository: AssignmentRepository;
@@ -439,6 +439,8 @@ describe("AssignmentRepository", () => {
       jest.spyOn(repository as any, "createEmptyDto").mockReturnValue({
         instructions: undefined,
         numAttempts: undefined,
+        attemptsBeforeCoolDown: undefined,
+        retakeAttemptCoolDownMinutes: undefined,
         allotedTimeMinutes: undefined,
         attemptsPerTimeRange: undefined,
         attemptsTimeRangeHours: undefined,

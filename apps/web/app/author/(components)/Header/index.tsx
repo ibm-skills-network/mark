@@ -133,6 +133,8 @@ function AuthorHeader() {
   ]);
   const [
     numAttempts,
+    retakeAttemptCoolDownMinutes,
+    attemptsBeforeCoolDown,
     passingGrade,
     displayOrder,
     graded,
@@ -143,6 +145,8 @@ function AuthorHeader() {
     numberOfQuestionsPerAttempt,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
+    state.retakeAttemptCoolDownMinutes,
+    state.attemptsBeforeCoolDown,
     state.passingGrade,
     state.displayOrder,
     state.graded,
@@ -252,6 +256,9 @@ function AuthorHeader() {
 
       useAssignmentConfig.getState().setAssignmentConfigStore({
         numAttempts: newAssignment.numAttempts,
+        retakeAttemptCoolDownMinutes:
+          newAssignment.retakeAttemptCoolDownMinutes,
+        attemptsBeforeCoolDown: newAssignment.attemptsBeforeCoolDown,
         passingGrade: newAssignment.passingGrade,
         displayOrder: newAssignment.displayOrder,
         graded: newAssignment.graded,
@@ -446,6 +453,8 @@ function AuthorHeader() {
     const assignmentData: ReplaceAssignmentRequest = {
       ...encodedFields,
       numAttempts,
+      retakeAttemptCoolDownMinutes,
+      attemptsBeforeCoolDown,
       passingGrade,
       displayOrder,
       graded,

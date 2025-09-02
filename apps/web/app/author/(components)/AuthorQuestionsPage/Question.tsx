@@ -919,8 +919,8 @@ const Question: FC<QuestionProps> = ({
                 <Tooltip
                   content={
                     question.randomizedChoices
-                      ? "Disable randomized choice order"
-                      : "Enable randomized choice order"
+                      ? "Click to Disable randomized choice order"
+                      : "Click to Enable randomized choice order"
                   }
                   className="flex items-center gap-2"
                 >

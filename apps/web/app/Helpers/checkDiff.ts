@@ -58,6 +58,8 @@ export function useChangesSummary(): string {
     questionDisplay,
     questionVariationNumber,
     numAttempts,
+    attemptsBeforeCoolDown,
+    retakeAttemptCoolDownMinutes,
     passingGrade,
     timeEstimateMinutes,
     allotedTimeMinutes,
@@ -372,6 +374,24 @@ export function useChangesSummary(): string {
 
     if (!safeCompare(numAttempts, originalAssignment.numAttempts)) {
       diffs.push("Updated number of attempts.");
+    }
+
+    if (
+      !safeCompare(
+        attemptsBeforeCoolDown,
+        originalAssignment.attemptsBeforeCoolDown,
+      )
+    ) {
+      diffs.push("Updated number of attempts before cooldown period.");
+    }
+
+    if (
+      !safeCompare(
+        retakeAttemptCoolDownMinutes,
+        originalAssignment.retakeAttemptCoolDownMinutes,
+      )
+    ) {
+      diffs.push("Updated the cooldown time before retries allowed.");
     }
 
     if (!safeCompare(passingGrade, originalAssignment.passingGrade)) {

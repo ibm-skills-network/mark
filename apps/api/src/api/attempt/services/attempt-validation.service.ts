@@ -1,4 +1,9 @@
-import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import {
+  Injectable,
+  UnprocessableEntityException,
+  HttpException,
+  HttpStatus,
+} from "@nestjs/common";
 import { PrismaService } from "../../../prisma.service";
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
 import {
@@ -6,6 +11,7 @@ import {
   TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+  IN_COOLDOWN_PERIOD,
 } from "src/api/assignment/attempt/api-exceptions/exceptions";
 import {
   GetAssignmentResponseDto,
@@ -25,6 +31,7 @@ export class AttemptValidationService {
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
     userSession: UserSession,
   ): Promise<void> {
+    const now = new Date();
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
     const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -35,7 +42,7 @@ export class AttemptValidationService {
           {
             submitted: false,
             expiresAt: {
-              gte: new Date(),
+              gte: now,
             },
           },
           {
@@ -45,17 +52,25 @@ export class AttemptValidationService {
           {
             createdAt: {
               gte: timeRangeStartDate,
-              lte: new Date(),
+              lte: now,
             },
           },
         ],
       },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const lastSubmittedAttempt = await this.prisma.assignmentAttempt.findFirst({
+      where: {
+        userId: userSession.userId,
+        assignmentId: assignment.id,
+        submitted: true,
+      },
+      orderBy: { expiresAt: "desc" },
     });
 
     const ongoingAttempts = attempts.filter(
-      (sub) =>
-        !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null),
+      (sub) => !sub.submitted && (!sub.expiresAt || sub.expiresAt >= now),
     );
 
     if (ongoingAttempts.length > 0) {
@@ -63,8 +78,7 @@ export class AttemptValidationService {
     }
 
     const attemptsInTimeRange = attempts.filter(
-      (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
+      (sub) => sub.createdAt >= timeRangeStartDate && sub.createdAt <= now,
     );
 
     if (
@@ -77,15 +91,39 @@ export class AttemptValidationService {
     }
 
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
-      const attemptCount = await this.countUserAttempts(
+      const totalAttempts = await this.countUserAttempts(
         userSession.userId,
         assignment.id,
       );
 
-      if (attemptCount >= assignment.numAttempts) {
+      if (totalAttempts >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
           MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
         );
+      }
+
+      const attemptsBeforeCooldown = assignment.attemptsBeforeCoolDown ?? 1;
+      const cooldownMinutes = assignment.retakeAttemptCoolDownMinutes ?? 0;
+
+      if (
+        attemptsBeforeCooldown > 0 &&
+        totalAttempts >= attemptsBeforeCooldown
+      ) {
+        const lastAttemptTime = new Date(
+          lastSubmittedAttempt.expiresAt,
+        ).getTime();
+        const cooldownMs = cooldownMinutes * 60_000;
+        const nextEligibleTime = lastAttemptTime + cooldownMs;
+
+        if (now.getTime() < nextEligibleTime) {
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.TOO_MANY_REQUESTS,
+              message: IN_COOLDOWN_PERIOD,
+            },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
       }
     }
   }
