@@ -47,7 +47,7 @@
     "translation-audit:dev": "cd ./apps/api && dotenv -e ./dev.env -- ts-node src/scripts/translation-audit.ts"
   },
   "dependencies": {
-    "@cypress/request": "3.0.0",
+    "@cypress/request": "3.0.9",
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/sortable": "^8.0.0",
     "@mozilla/readability": "^0.6.0",
