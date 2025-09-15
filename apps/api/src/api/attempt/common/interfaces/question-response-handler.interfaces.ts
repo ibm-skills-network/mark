@@ -1,7 +1,7 @@
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
-import { QuestionAnswerContext } from "../../../llm/model/base.question.evaluate.model";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { QuestionAnswerContext } from "../../../llm/model/base.question.evaluate.model";
 
 /**
  * Interface for question response handlers

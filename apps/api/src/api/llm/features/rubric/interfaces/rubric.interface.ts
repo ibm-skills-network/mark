@@ -1,8 +1,8 @@
 import {
-  QuestionDto,
-  ScoringDto,
   Choice,
+  QuestionDto,
   RubricDto,
+  ScoringDto,
 } from "../../../../assignment/dto/update.questions.request.dto";
 
 export interface IRubricService {

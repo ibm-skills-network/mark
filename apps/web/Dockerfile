@@ -3,7 +3,6 @@
 ARG BASE_IMAGE=node:22-alpine
 FROM ${BASE_IMAGE} AS builder
 
-ARG SN_GITHUB_NPM_TOKEN
 ARG DIR=/usr/src/app
 
 # Pruning using turbo for the Next.js app
@@ -18,27 +17,32 @@ ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=builder $DIR/ .
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn install --ignore-scripts --frozen-lockfile --network-timeout 600000 && yarn cache clean
+RUN yarn install --ignore-scripts --frozen-lockfile && yarn cache clean
 
 # Running build using turbo for the Next.js app
 FROM installer AS sourcer
 WORKDIR $DIR
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn build --filter=web && yarn install --production --ignore-scripts --frozen-lockfile --network-timeout 600000 && yarn cache clean
+RUN yarn build --filter=web && yarn install --production --ignore-scripts --frozen-lockfile && yarn cache clean
 
 # Production stage
 FROM ${BASE_IMAGE} AS production
 ARG DIR=/usr/src/app
 ENV NODE_ENV production
+
 WORKDIR $DIR
-RUN apk add --no-cache dumb-init
+RUN ls 
+
+RUN apk add --no-cache dumb-init~=1
 COPY --chown=node:node --from=sourcer $DIR/apps/web/.next ./.next
-COPY --chown=node:node --from=sourcer $DIR/package.json $DIR/package.json
+COPY --chown=node:node --from=sourcer $DIR/apps/web/package.json ./package.json
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 COPY --chown=node:node --from=sourcer $DIR/apps/web/public ./public
 COPY --chown=node:node --from=sourcer $DIR/apps/web/entrypoint.sh ./entrypoint.sh
+ENV NODE_OPTIONS="--require ./node_modules/@instana/collector/src/immediate"
+
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["./entrypoint.sh"]
+CMD ["sh","-c","NODE_OPTIONS='--require ./node_modules/@instana/collector/src/immediate'  ./entrypoint.sh"]
 EXPOSE 3000
 
 # Patched stage with updates

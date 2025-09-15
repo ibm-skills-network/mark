@@ -452,17 +452,6 @@ export class AttemptServiceV2 {
     }, 30_000); // Every 30 seconds
 
     try {
-      // You can send progress updates during the grading process
-      const sendProgress = (message: string) => {
-        response.write(
-          `data: ${JSON.stringify({
-            status: "processing",
-            message,
-          })}\n\n`,
-        );
-      };
-
-      // Call your existing submission service with progress callback
       const result = await this.submissionService.updateAssignmentAttempt(
         attemptId,
         assignmentId,

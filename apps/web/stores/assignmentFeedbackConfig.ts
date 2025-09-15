@@ -1,8 +1,8 @@
+import type { FeedbackData, VerbosityLevels } from "../config/types";
+import { withUpdatedAt } from "./middlewares";
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
-import type { FeedbackData, VerbosityLevels } from "@config/types";
-import { withUpdatedAt } from "./middlewares";
 
 type FeedbackDataActions = {
   setVerbosityLevel: (verbosityLevel: VerbosityLevels) => void;
@@ -11,11 +11,13 @@ type FeedbackDataActions = {
   toggleShowQuestionScore: () => void;
   toggleShowAssignmentScore: () => void;
   toggleShowQuestions: () => void;
+  toggleShowCorrectAnswer: () => void;
 
   setShowSubmissionFeedback: (showSubmissionFeedback: boolean) => void;
   setShowQuestionScore: (showQuestionScore: boolean) => void;
   setShowQuestion: (showQuestions: boolean) => void;
   setShowAssignmentScore: (showAssignmentScore: boolean) => void;
+  setShowCorrectAnswer: (showCorrectAnswer: boolean) => void;
 
   setUpdatedAt: (updatedAt: number) => void;
   setAssignmentFeedbackConfigStore: (state: Partial<FeedbackData>) => void;
@@ -33,9 +35,28 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
         showQuestionScore: true,
         showAssignmentScore: true,
         showQuestions: true,
+        showCorrectAnswer: true,
         setShowQuestion: (showQuestions: boolean) => set({ showQuestions }),
         toggleShowQuestions: () =>
           set((state) => ({ showQuestions: !state.showQuestions })),
+        toggleShowCorrectAnswer: () =>
+          set((state) => {
+            const newValue = !state.showCorrectAnswer;
+            // Clear localStorage when showCorrectAnswer changes
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("questions");
+              localStorage.removeItem("assignmentConfig");
+            }
+            return { showCorrectAnswer: newValue };
+          }),
+        setShowCorrectAnswer: (showCorrectAnswer: boolean) => {
+          // Clear localStorage when showCorrectAnswer changes
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("questions");
+            localStorage.removeItem("assignmentConfig");
+          }
+          set({ showCorrectAnswer });
+        },
         updatedAt: Date.now(),
         setVerbosityLevel: (verbosityLevel) => set({ verbosityLevel }),
         toggleShowSubmissionFeedback: () =>
@@ -61,6 +82,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
             showSubmissionFeedback: true,
             showQuestionScore: true,
             showAssignmentScore: true,
+            showCorrectAnswer: true,
             updatedAt: Date.now(),
           })),
       })),

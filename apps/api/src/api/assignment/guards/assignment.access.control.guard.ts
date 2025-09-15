@@ -19,8 +19,9 @@ export class AssignmentAccessControlGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params } = request;
-    const { id } = params;
-    const assignmentId = Number(id) || userSession.assignmentId;
+    const { id, assignmentId: parameterAssignmentId } = params;
+    const assignmentId =
+      Number(parameterAssignmentId) || Number(id) || userSession.assignmentId;
     if (!assignmentId || Number.isNaN(assignmentId)) {
       throw new ForbiddenException("Invalid assignment ID");
     }

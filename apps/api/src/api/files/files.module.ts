@@ -2,10 +2,11 @@
 import { Module } from "@nestjs/common";
 import { MulterModule } from "@nestjs/platform-express";
 import { memoryStorage } from "multer"; // ← import this
+
+import { PrismaService } from "src/prisma.service";
 import { FilesController } from "./files.controller";
 import { FilesService } from "./services/files.service";
 import { S3Service } from "./services/s3.service";
-import { PrismaService } from "src/prisma.service";
 
 @Module({
   imports: [

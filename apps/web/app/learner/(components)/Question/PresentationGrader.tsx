@@ -143,7 +143,13 @@ const useVideoProcessor = () => {
       ]);
 
       const audioData = await ffmpeg.readFile("output.wav");
-      return new Blob([audioData], { type: "audio/wav" });
+      const bytes = audioData as Uint8Array;
+      const arrayBuffer = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      ) as ArrayBuffer;
+
+      return new Blob([arrayBuffer], { type: "audio/wav" });
     } finally {
       try {
         await ffmpeg.deleteFile("input.webm");

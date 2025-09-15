@@ -1,4 +1,5 @@
 import { absoluteUrl } from "../lib/utils";
+import { versions } from "process";
 
 export const API_VERSIONS = {
   V1: "v1",
@@ -50,6 +51,8 @@ export function getApiRoutes() {
 
     assignments: `${BASE_API_PATH}/assignments`,
 
+    versions: `${getBaseApiPath("v2")}/assignments`,
+
     admin: `${BASE_API_PATH}/admin`,
     rubric: `${BASE_API_PATH}/assignments`,
 
@@ -87,3 +90,13 @@ export const stepTwoSections = {
     required: false,
   },
 } as const;
+
+export const formatPricePerMillionTokens = (pricePerToken: number) => {
+  const pricePerMillion = pricePerToken * 1000000;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(pricePerMillion);
+};

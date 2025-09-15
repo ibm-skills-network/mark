@@ -2,8 +2,9 @@
 /**
  * API functions specific to learners
  */
-import { toast } from "sonner";
+import { getApiRoutes } from "@/config/constants";
 import type {
+  AssignmentAttempt,
   AssignmentAttemptWithQuestions,
   AssignmentFeedback,
   BaseBackendResponse,
@@ -17,7 +18,7 @@ import type {
   REPORT_TYPE,
   SubmitAssignmentResponse,
 } from "@config/types";
-import { getApiRoutes } from "@/config/constants";
+import { toast } from "sonner";
 
 /**
  * Creates a attempt for a given assignment.
@@ -254,7 +255,6 @@ export async function submitAssignment(
     }
 
     const responseData = (await res.json()) as SubmitAssignmentResponse;
-    console.log("PATCH response:", responseData);
 
     const { gradingJobId, message } = responseData;
 
@@ -262,10 +262,7 @@ export async function submitAssignment(
       throw new Error("No grading job ID returned");
     }
 
-    console.log(`Grading job created: ${gradingJobId}. ${message}`);
-
     const sseUrl = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/grading/${gradingJobId}/status-stream`;
-    console.log("Connecting to SSE URL:", sseUrl);
 
     return new Promise((resolve, reject) => {
       const eventSource = new EventSource(sseUrl, {
@@ -289,7 +286,6 @@ export async function submitAssignment(
       resetTimeout();
 
       eventSource.onopen = () => {
-        console.log("Connected to grading status stream");
         onProgress?.("processing", 0, "Connected to grading service...");
       };
 
@@ -302,11 +298,9 @@ export async function submitAssignment(
           if (data.status === "Processing" || data.status === "Pending") {
             const percentage = data.percentage || 0;
             const progress = data.progress || "Processing...";
-            console.log(`Grading progress: ${progress} (${percentage}%)`);
             onProgress?.("processing", percentage, progress);
           } else if (data.status === "Completed" && !isCompleted) {
             isCompleted = true;
-            console.log("Grading completed successfully");
             onProgress?.("completed", 100, "Grading completed successfully!");
 
             eventSource.close();
@@ -344,7 +338,6 @@ export async function submitAssignment(
           resetTimeout();
           try {
             const data = JSON.parse(event.data);
-            console.log("Update event:", data);
 
             if (data.progress && data.percentage !== undefined) {
               onProgress?.("processing", data.percentage, data.progress);
@@ -360,7 +353,6 @@ export async function submitAssignment(
           try {
             isCompleted = true;
             const data = JSON.parse(event.data);
-            console.log("Grading finalized:", data);
             onProgress?.("completed", 100, "Grading completed successfully!");
 
             eventSource.close();
@@ -396,7 +388,6 @@ export async function submitAssignment(
             reject(new Error("Grading stream error"));
           }
         } else {
-          console.log("SSE connection closed after completion");
           eventSource.close();
         }
       };
@@ -544,5 +535,88 @@ export async function submitReportLearner(
     } else {
       toast.error("Failed to submit report");
     }
+  }
+}
+
+// =============================================================================
+// VERSION CONTROL API FUNCTIONS (Learner Read-Only Access)
+// =============================================================================
+
+export interface VersionSummary {
+  id: number;
+  versionNumber: string;
+  versionDescription?: string;
+  isDraft: boolean;
+  isActive: boolean;
+  published: boolean;
+  createdBy: string;
+  createdAt: string;
+  questionCount: number;
+}
+
+/**
+ * Gets the current active version of an assignment (for learners)
+ * @param assignmentId The assignment ID
+ * @param cookies Optional cookies for authentication
+ * @returns Assignment version data or undefined on error
+ */
+export async function getCurrentAssignmentVersion(
+  assignmentId: number,
+  cookies?: string,
+): Promise<any | undefined> {
+  try {
+    // Learners access assignments through the regular assignment endpoint
+    // which automatically returns the current active version
+    const endpointURL = `${getApiRoutes().assignments}/${assignmentId}`;
+
+    const res = await fetch(endpointURL, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to fetch assignment");
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.error("Error fetching current assignment version:", err);
+    return undefined;
+  }
+}
+
+/**
+ * Gets version information for an assignment (learner view)
+ * This only returns published, non-draft versions that learners can see
+ * @param assignmentId The assignment ID
+ * @param cookies Optional cookies for authentication
+ * @returns Limited version info or undefined on error
+ */
+export async function getAssignmentVersionInfo(
+  assignmentId: number,
+  cookies?: string,
+): Promise<
+  { currentVersion?: VersionSummary; totalVersions: number } | undefined
+> {
+  try {
+    // This would be a learner-specific endpoint if we want to show version info
+    // For now, we'll return basic info from the assignment endpoint
+    const assignment = await getCurrentAssignmentVersion(assignmentId, cookies);
+
+    if (assignment) {
+      return {
+        currentVersion: assignment.currentVersion,
+        totalVersions: assignment.totalVersions || 1,
+      };
+    }
+
+    return undefined;
+  } catch (err) {
+    console.error("Error fetching assignment version info:", err);
+    return undefined;
   }
 }

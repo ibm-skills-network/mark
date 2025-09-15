@@ -1,12 +1,13 @@
+import instana from "@instana/collector";
 import { VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import * as cookieParser from "cookie-parser";
+import { json, urlencoded } from "express";
 import helmet from "helmet";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
 import { winstonOptions } from "./logger/config";
-import instana from "@instana/collector";
 
 instana();
 
@@ -15,7 +16,8 @@ async function bootstrap() {
     cors: false,
     logger: WinstonModule.createLogger(winstonOptions),
   });
-
+  app.use(json({ limit: "1000mb" }));
+  app.use(urlencoded({ limit: "1000mb", extended: true }));
   app.setGlobalPrefix("api", {
     exclude: ["health", "health/liveness", "health/readiness"],
   });

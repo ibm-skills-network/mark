@@ -1,9 +1,4 @@
 /* eslint-disable */
-
-import { streamText } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
-
 import { MarkChatService } from "../services/markChatService";
 import {
   getAssignmentRubric,
@@ -12,6 +7,9 @@ import {
   searchKnowledgeBase,
   submitFeedbackQuestion,
 } from "@/app/chatbot/lib/markChatFunctions";
+import { openai } from "@ai-sdk/openai";
+import { streamText } from "ai";
+import { z } from "zod";
 
 const STANDARD_ERROR_MESSAGE =
   "Sorry for the inconvenience, I am still new around here and this capability is not there yet, my developers are working on it!";
@@ -51,12 +49,17 @@ export function learnerTools(cookieHeader: string) {
       }),
     },
     reportIssue: {
-      description: "Report a technical issue or bug with the platform",
+      description:
+        "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
       parameters: z.object({
         issueType: z
           .enum(["technical", "content", "grading", "other"])
           .describe("The type of issue being reported"),
-        description: z.string().describe("Detailed description of the issue"),
+        description: z
+          .string()
+          .describe(
+            "Detailed description of the issue - extract this from the user's message to prefill the form",
+          ),
         assignmentId: z
           .number()
           .optional()
@@ -68,19 +71,131 @@ export function learnerTools(cookieHeader: string) {
           .optional()
           .describe("The severity of the issue"),
       }),
-      execute: withErrorHandling(
-        async ({ issueType, description, assignmentId, severity }) => {
-          // const res = await MarkChatService.reportIssue(issueType, description, {
-          //   assignmentId,
-          //   userRole: "learner",
-          //   severity: severity || "info",
-          //   category: "Learner Issue",
-          //   cookieHeader,
-          // });
-
-          return STANDARD_ERROR_MESSAGE;
-        },
-      ),
+      execute: async ({ issueType, description, assignmentId, severity }) => {
+        // Return a client execution request for form preview instead of immediate submission
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            type: "report",
+            issueType,
+            description,
+            assignmentId,
+            severity: severity || "info",
+            userRole: "learner",
+            category: "Learner Issue",
+          },
+        });
+      },
+    },
+    provideFeedback: {
+      description:
+        "Provide general feedback about the learning experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
+      parameters: z.object({
+        feedbackType: z
+          .enum(["general", "assignment", "grading", "experience"])
+          .describe("The type of feedback being provided"),
+        description: z
+          .string()
+          .describe(
+            "Detailed feedback comments - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if feedback is assignment-specific)",
+          ),
+        rating: z
+          .number()
+          .min(1)
+          .max(5)
+          .optional()
+          .describe("Optional rating from 1-5 stars"),
+      }),
+      execute: async ({ feedbackType, description, assignmentId, rating }) => {
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            type: "feedback",
+            issueType: "FEEDBACK",
+            description,
+            assignmentId,
+            rating,
+            userRole: "learner",
+            category: "Learner Feedback",
+          },
+        });
+      },
+    },
+    submitSuggestion: {
+      description:
+        "Submit suggestions for improving the platform or assignments. Extract the user's suggestion text and use it as the description to prefill the form.",
+      parameters: z.object({
+        suggestionType: z
+          .enum(["feature", "content", "ui", "general"])
+          .describe("The type of suggestion being made"),
+        description: z
+          .string()
+          .describe(
+            "Detailed suggestion or improvement idea - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if suggestion is assignment-specific)",
+          ),
+      }),
+      execute: async ({ suggestionType, description, assignmentId }) => {
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            type: "suggestion",
+            issueType: "SUGGESTION",
+            description,
+            assignmentId,
+            userRole: "learner",
+            category: "Learner Suggestion",
+          },
+        });
+      },
+    },
+    submitInquiry: {
+      description:
+        "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+      parameters: z.object({
+        inquiryType: z
+          .enum(["general", "technical", "academic", "other"])
+          .describe("The type of inquiry being made"),
+        description: z
+          .string()
+          .describe(
+            "The question or inquiry details - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if inquiry is assignment-specific)",
+          ),
+      }),
+      execute: async ({ inquiryType, description, assignmentId }) => {
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            type: "inquiry",
+            issueType: "OTHER",
+            description,
+            assignmentId,
+            userRole: "learner",
+            category: "Learner Inquiry",
+          },
+        });
+      },
     },
     getQuestionDetails: {
       description:
@@ -362,12 +477,17 @@ export function authorTools(cookieHeader: string) {
       }),
     },
     reportIssue: {
-      description: "Report a technical issue or bug with the platform",
+      description:
+        "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
       parameters: z.object({
         issueType: z
           .enum(["technical", "content", "grading", "other"])
           .describe("The type of issue being reported"),
-        description: z.string().describe("Detailed description of the issue"),
+        description: z
+          .string()
+          .describe(
+            "Detailed description of the issue - extract this from the user's message to prefill the form",
+          ),
         assignmentId: z
           .number()
           .optional()
@@ -379,20 +499,130 @@ export function authorTools(cookieHeader: string) {
           .optional()
           .describe("The severity of the issue"),
       }),
-      execute: withErrorHandling(
-        async ({ issueType, description, assignmentId, severity }) => {
-          // const res = await MarkChatService.reportIssue(issueType, description, {
-          //   assignmentId,
-          //   userRole: "author",
-          //   severity: severity || "info",
-          //   category: "Author Issue",
-          //   cookieHeader,
-          // });
-
-          // return typeof res === "string" ? res : res || STANDARD_ERROR_MESSAGE;
-          return STANDARD_ERROR_MESSAGE;
-        },
-      ),
+      execute: async ({ issueType, description, assignmentId, severity }) => {
+        // Return a client execution request for form preview instead of immediate submission
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            issueType,
+            description,
+            assignmentId,
+            severity: severity || "info",
+            userRole: "author",
+            category: "Author Issue",
+          },
+        });
+      },
+    },
+    provideFeedback: {
+      description:
+        "Provide general feedback about the teaching experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
+      parameters: z.object({
+        feedbackType: z
+          .enum(["general", "assignment", "grading", "experience"])
+          .describe("The type of feedback being provided"),
+        description: z
+          .string()
+          .describe(
+            "Detailed feedback comments - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if feedback is assignment-specific)",
+          ),
+        rating: z
+          .number()
+          .min(1)
+          .max(5)
+          .optional()
+          .describe("Optional rating from 1-5 stars"),
+      }),
+      execute: async ({ feedbackType, description, assignmentId, rating }) => {
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            type: "feedback",
+            issueType: "FEEDBACK",
+            description,
+            assignmentId,
+            rating,
+            userRole: "author",
+            category: "Author Feedback",
+          },
+        });
+      },
+    },
+    submitSuggestion: {
+      description:
+        "Submit suggestions for improving the platform or teaching tools. Extract the user's suggestion text and use it as the description to prefill the form.",
+      parameters: z.object({
+        suggestionType: z
+          .enum(["feature", "content", "ui", "general"])
+          .describe("The type of suggestion being made"),
+        description: z
+          .string()
+          .describe(
+            "Detailed suggestion or improvement idea - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if suggestion is assignment-specific)",
+          ),
+      }),
+      execute: async ({ suggestionType, description, assignmentId }) => {
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            type: "suggestion",
+            issueType: "SUGGESTION",
+            description,
+            assignmentId,
+            userRole: "author",
+            category: "Author Suggestion",
+          },
+        });
+      },
+    },
+    submitInquiry: {
+      description:
+        "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+      parameters: z.object({
+        inquiryType: z
+          .enum(["general", "technical", "academic", "other"])
+          .describe("The type of inquiry being made"),
+        description: z
+          .string()
+          .describe(
+            "The question or inquiry details - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if inquiry is assignment-specific)",
+          ),
+      }),
+      execute: async ({ inquiryType, description, assignmentId }) => {
+        return JSON.stringify({
+          clientExecution: true,
+          function: "showReportPreview",
+          params: {
+            type: "inquiry",
+            issueType: "OTHER",
+            description,
+            assignmentId,
+            userRole: "author",
+            category: "Author Inquiry",
+          },
+        });
+      },
     },
   };
 }
@@ -400,6 +630,7 @@ export function authorTools(cookieHeader: string) {
 function generateSystemPrompt(userRole, assignmentInfo) {
   const assignmentMode = assignmentInfo?.mode || "unknown";
   const isSubmitted = assignmentInfo?.submitted === true;
+  const assignmentId = assignmentInfo?.assignmentId;
 
   const systemPrompts = {
     author: `You are Mark, an AI assistant for assignment authors on an educational platform. Your primary purpose is to help instructors create high-quality educational content through direct action.
@@ -459,7 +690,12 @@ TOOL USAGE:
 - Use deleteQuestion for removing questions
 - Use generateQuestionsFromObjectives for AI-generated content
 - Use updateLearningObjectives for curriculum planning
-- Use reportIssue only after exhausting troubleshooting options
+- Use reportIssue only for technical issues after exhausting troubleshooting options
+- Use provideFeedback for sharing general feedback about teaching experience
+- Use submitSuggestion for platform or teaching tool improvement ideas
+- Use submitInquiry for general questions or inquiries
+
+IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
 
 RESPONSE STYLE:
 - Be conversational and encouraging
@@ -573,11 +809,16 @@ EMOTIONAL SUPPORT & ENCOURAGEMENT:
 
 TOOL USAGE:
 - Use searchKnowledgeBase for platform help
-- Use reportIssue ONLY after troubleshooting
+- Use reportIssue ONLY for technical issues after troubleshooting
 - Use getQuestionDetails for question information
 - Use getAssignmentRubric for grading criteria
 - Use submitFeedbackQuestion for feedback concerns
 - Use requestRegrading for regrade requests
+- Use provideFeedback for sharing general feedback about learning experience
+- Use submitSuggestion for platform improvement ideas
+- Use submitInquiry for general questions or inquiries
+
+IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
 
 RESPONSE STYLE:
 - Warm, encouraging, and patient
@@ -680,6 +921,10 @@ export async function POST(req) {
       const systemPrompt = generateSystemPrompt(userRole, {
         mode: assignmentMode,
         submitted: isSubmitted,
+        assignmentId:
+          userRole === "learner"
+            ? parseInt(assignmentInfo?.assignmentId || "0")
+            : undefined,
       });
 
       const result = await streamText({
@@ -757,18 +1002,49 @@ export async function POST(req) {
           const toolResults = (await result.toolResults) || [];
           for (const toolResult of toolResults) {
             if (toolResult && toolResult.result) {
+              // Handle report, feedback, suggestion, and inquiry tool results
               if (
-                !fullContent.includes(toolResult.result) &&
-                toolResult.toolName === "reportIssue"
+                [
+                  "reportIssue",
+                  "provideFeedback",
+                  "submitSuggestion",
+                  "submitInquiry",
+                ].includes(toolResult.toolName)
               ) {
-                const toolResponse = `\n\n${toolResult.result}`;
-                fullContent += toolResponse;
-                await writer.write(new TextEncoder().encode(toolResponse));
+                try {
+                  const parsedResult = JSON.parse(toolResult.result);
+                  if (
+                    parsedResult.clientExecution &&
+                    parsedResult.function === "showReportPreview"
+                  ) {
+                    // Add to client executions for report preview
+                    trackedClientExecutions.push({
+                      function: parsedResult.function,
+                      params: parsedResult.params,
+                    });
+                  } else {
+                    // Regular tool result - add to content if not already there
+                    if (!fullContent.includes(toolResult.result)) {
+                      const toolResponse = `\n\n${toolResult.result}`;
+                      fullContent += toolResponse;
+                      await writer.write(
+                        new TextEncoder().encode(toolResponse),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  // If parsing fails, treat as regular result
+                  if (!fullContent.includes(toolResult.result)) {
+                    const toolResponse = `\n\n${toolResult.result}`;
+                    fullContent += toolResponse;
+                    await writer.write(new TextEncoder().encode(toolResponse));
+                  }
+                }
               }
             }
           }
 
-          if (trackedClientExecutions.length > 0 && userRole === "author") {
+          if (trackedClientExecutions.length > 0) {
             const marker = `\n\n<!-- CLIENT_EXECUTION_MARKER
 ${JSON.stringify(trackedClientExecutions)}
 -->`;

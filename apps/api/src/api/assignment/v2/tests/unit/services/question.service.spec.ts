@@ -4,36 +4,33 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable unicorn/no-useless-undefined */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-import { Test, TestingModule } from "@nestjs/testing";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { PrismaService } from "src/prisma.service";
-import { QuestionService } from "../../../services/question.service";
-import { QuestionRepository } from "../../../repositories/question.repository";
-import { VariantRepository } from "../../../repositories/variant.repository";
-import { TranslationService } from "../../../services/translation.service";
-import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { JobStatusServiceV2 } from "../../../services/job-status.service";
-
-import {
-  QuestionDto,
-  VariantDto,
-  GenerateQuestionVariantDto,
-  VariantType,
-  Choice,
-} from "src/api/assignment/dto/update.questions.request.dto";
+import { Test, TestingModule } from "@nestjs/testing";
 import { QuestionType, ResponseType } from "@prisma/client";
 import {
-  createMockPrismaService,
-  createMockQuestionRepository,
-  createMockVariantRepository,
-  createMockTranslationService,
-  createMockLlmFacadeService,
-  createMockJobStatusService,
-  createMockQuestionDto,
-  createMockVariantDto,
+  Choice,
+  GenerateQuestionVariantDto,
+  VariantDto,
+} from "src/api/assignment/dto/update.questions.request.dto";
+import { LlmFacadeService } from "src/api/llm/llm-facade.service";
+import { PrismaService } from "src/prisma.service";
+import {
   createMockJob,
+  createMockJobStatusService,
+  createMockLlmFacadeService,
+  createMockPrismaService,
+  createMockQuestionDto,
   createMockQuestionGenerationPayload,
+  createMockQuestionRepository,
+  createMockTranslationService,
+  createMockVariantDto,
+  createMockVariantRepository,
 } from "../__mocks__/ common-mocks";
+import { QuestionRepository } from "../../../repositories/question.repository";
+import { VariantRepository } from "../../../repositories/variant.repository";
+import { JobStatusServiceV2 } from "../../../services/job-status.service";
+import { QuestionService } from "../../../services/question.service";
+import { TranslationService } from "../../../services/translation.service";
 
 describe("QuestionService", () => {
   let questionService: QuestionService;
@@ -247,7 +244,7 @@ describe("QuestionService", () => {
         expect(translationService.translateQuestion).toHaveBeenCalled();
       });
 
-      it("should skip translation for unchanged content", async () => {
+      it("should only translate questions when content changes", async () => {
         const assignmentId = 1;
         const jobId = 1;
 
@@ -262,7 +259,46 @@ describe("QuestionService", () => {
           jobId,
         );
 
-        expect(translationService.translateQuestion).not.toHaveBeenCalled();
+        expect(translationService.translateQuestion).toHaveBeenCalledWith(
+          assignmentId,
+          question.id,
+          question,
+          jobId,
+          true, // questionContentChanged should be true for unchanged content - will retranslate
+        );
+      });
+
+      it("should force translation when question content changes", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const existingQuestion = createMockQuestionDto({
+          id: 1,
+          question: "Original question text",
+        });
+        const updatedQuestion = createMockQuestionDto({
+          id: 1,
+          question: "Updated question text",
+        });
+
+        questionRepository.findByAssignmentId.mockResolvedValue([
+          existingQuestion,
+        ]);
+        questionRepository.upsert.mockResolvedValue(updatedQuestion);
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [updatedQuestion],
+          jobId,
+        );
+
+        expect(translationService.translateQuestion).toHaveBeenCalledWith(
+          assignmentId,
+          updatedQuestion.id,
+          updatedQuestion,
+          jobId,
+          true, // questionContentChanged should be true - will force retranslation
+        );
       });
     });
 

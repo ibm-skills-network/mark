@@ -130,6 +130,7 @@ model AIUsage {
   updatedAt         DateTime    @updatedAt     /// Timestamp for when the usage record was last updated
   userId            String? /// The ID of the user who used the AI feature
   user              UserCredential? @relation(fields: [userId], references: [userId]) /// Relation to the UserCredential model
+  modelKey          String?     /// The key of the LLM model actually used for this AI operation
   @@unique([assignmentId, usageType]) /// Ensure each assignment has a unique usage record for each AI feature
 }
 
@@ -140,6 +141,7 @@ enum AIUsageType {
   ASSIGNMENT_GRADING /// AI was used for grading the assignment
   TRANSLATION /// AI was used for translation
   LIVE_RECORDING_FEEDBACK /// AI was used for live recording feedback
+  GRADING_VALIDATION
 }
 
 model UserCredential {
@@ -228,8 +230,11 @@ model Assignment {
   showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
+  showCorrectAnswer       Boolean                         @default(true) /// Should the correct answer be shown to the learner after its submission
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
   languageCode            String?                         /// The language code for the assignment
+  currentVersionId        Int?                            /// The ID of the current active version
+  currentVersion          AssignmentVersion?              @relation("CurrentVersion", fields: [currentVersionId], references: [id])
   AIUsage AIUsage[]
   AssignmentFeedback AssignmentFeedback[]
   RegradingRequest RegradingRequest[]
@@ -240,7 +245,103 @@ model Assignment {
   Chat Chat[]
 
   GradingJob GradingJob[]
+  AssignmentAuthor AssignmentAuthor[]
+  versions AssignmentVersion[] @relation("AssignmentVersions")
+  versionHistory VersionHistory[]
+  drafts AssignmentDraft[]
 }
+
+/// The AssignmentVersion model represents a specific version of an assignment
+model AssignmentVersion {
+  id                      Int                             @id @default(autoincrement()) /// Unique identifier for the version
+  assignmentId            Int                             /// The ID of the parent assignment
+  assignment              Assignment                      @relation("AssignmentVersions", fields: [assignmentId], references: [id], onDelete: Cascade)
+  versionNumber           String                          /// Semantic version number (e.g., "1.0.0", "1.0.0-rc1")
+  name                    String                          /// Name of the assignment in this version
+  introduction            String?                         /// Introduction for this version
+  instructions            String?                         /// Instructions for this version
+  gradingCriteriaOverview String?                         /// Grading criteria for this version
+  timeEstimateMinutes     Int?                            /// Time estimate for this version
+  type                    AssignmentType                  /// Type of assignment
+  graded                  Boolean?                        @default(false) /// Is the assignment graded
+  numAttempts             Int?                            @default(-1) /// Max attempts allowed
+  allotedTimeMinutes      Int?                            /// Time allotted to complete
+  attemptsPerTimeRange    Int?                            /// Attempts per time range
+  attemptsTimeRangeHours  Int?                            /// Time range in hours
+  passingGrade            Int?                            @default(50) /// Minimum passing grade
+  displayOrder            AssignmentQuestionDisplayOrder? /// Question display order
+  questionDisplay         QuestionDisplay?                @default(ONE_PER_PAGE) /// Question display mode
+  numberOfQuestionsPerAttempt Int?                        /// Questions per attempt
+  questionOrder           Int[]                           /// Order of questions
+  published               Boolean                         @default(false) /// Is this version published
+  showAssignmentScore     Boolean                         @default(true) /// Show assignment score
+  showQuestionScore       Boolean                         @default(true) /// Show question score
+  showSubmissionFeedback  Boolean                         @default(true) /// Show submission feedback
+  showQuestions           Boolean                         @default(true) /// Show questions
+  languageCode            String?                         /// Language code
+  createdBy               String                          /// User who created this version
+  createdAt               DateTime                        @default(now()) /// When version was created
+  isDraft                 Boolean                         @default(true) /// Is this a draft version
+  versionDescription      String?                         /// Description of changes in this version
+  isActive                Boolean                         @default(false) /// Is this the active version
+  questionVersions        QuestionVersion[]               /// Questions in this version
+  assignmentUsingAsCurrentVersion Assignment[]            @relation("CurrentVersion")
+  versionHistoryFrom      VersionHistory[]                @relation("VersionHistoryFrom")
+  versionHistoryTo        VersionHistory[]                @relation("VersionHistoryTo")
+  assignmentAttempts      AssignmentAttempt[]             /// Attempts that used this version
+
+  @@unique([assignmentId, versionNumber])
+  @@index([assignmentId])
+  @@index([isActive])
+  @@index([isDraft])
+}
+
+/// The QuestionVersion model represents a specific version of a question within an assignment version
+model QuestionVersion {
+  id                        Int                @id @default(autoincrement()) /// Unique identifier for the question version
+  assignmentVersionId       Int                /// The ID of the assignment version this belongs to
+  assignmentVersion         AssignmentVersion  @relation(fields: [assignmentVersionId], references: [id], onDelete: Cascade)
+  questionId                Int?               /// Reference to original question (null for new questions in version)
+  totalPoints               Int                /// Points for this question
+  type                      QuestionType       /// Type of question
+  responseType              ResponseType?      /// Expected response type
+  question                  String             /// The question text
+  maxWords                  Int?               /// Maximum words allowed
+  scoring                   Json?              /// Scoring configuration
+  choices                   Json?              /// Question choices
+  randomizedChoices         Boolean?           /// Are choices randomized
+  answer                    Boolean?           /// Correct answer
+  gradingContextQuestionIds Int[]              /// Context questions for grading
+  maxCharacters             Int?               /// Maximum characters allowed
+  videoPresentationConfig   Json?              /// Video presentation config
+  liveRecordingConfig       Json?              /// Live recording config
+  displayOrder              Int?               /// Display order within version
+  createdAt                 DateTime           @default(now()) /// When this version was created
+
+  @@index([assignmentVersionId])
+  @@index([questionId])
+}
+
+/// The VersionHistory model tracks version transitions and changes
+model VersionHistory {
+  id             Int               @id @default(autoincrement()) /// Unique identifier
+  assignmentId   Int               /// The assignment being versioned
+  assignment     Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  fromVersionId  Int?              /// The version being changed from (null for initial)
+  fromVersion    AssignmentVersion? @relation("VersionHistoryFrom", fields: [fromVersionId], references: [id], onDelete: SetNull)
+  toVersionId    Int               /// The version being changed to
+  toVersion      AssignmentVersion @relation("VersionHistoryTo", fields: [toVersionId], references: [id], onDelete: Cascade)
+  action         String            /// Action performed (created, published, restored, draft_saved)
+  description    String?           /// Description of the change
+  userId         String            /// User who performed the action
+  createdAt      DateTime          @default(now()) /// When the action occurred
+  metadata       Json?             /// Additional metadata about the change
+
+  @@index([assignmentId])
+  @@index([createdAt])
+  @@index([userId])
+}
+
 enum VariantType {
   REWORDED /// The variant is reworded
   RANDOMIZED /// The variant is randomized
@@ -274,22 +375,31 @@ model Question {
   GradingAudit GradingAudit[]
 }
 model AssignmentAttempt {
-  id                Int                   @id @default(autoincrement())
-  assignmentId      Int
-  userId            String
-  questionResponses QuestionResponse[]
-  submitted         Boolean
-  grade             Float?
-  expiresAt         DateTime?
-  createdAt         DateTime              @default(now())
-  questionVariants  AssignmentAttemptQuestionVariant[]
-  AssignmentFeedback AssignmentFeedback[]
-  questionOrder    Int[]
-  RegradingRequest RegradingRequest[]
-  comments         String?               /// Additional comments or notes for the assignment attempt from the system
-  preferredLanguage String?
+  id                    Int                   @id @default(autoincrement())
+  assignmentId          Int
+  assignmentVersionId   Int?                  /// The ID of the assignment version used for this attempt
+  assignmentVersion     AssignmentVersion?    @relation(fields: [assignmentVersionId], references: [id])
+  userId                String
+  questionResponses     QuestionResponse[]
+  submitted             Boolean
+  grade                 Float?
+  expiresAt             DateTime?
+  createdAt             DateTime              @default(now())
+  questionVariants      AssignmentAttemptQuestionVariant[]
+  AssignmentFeedback    AssignmentFeedback[]
+  questionOrder         Int[]
+  RegradingRequest      RegradingRequest[]
+  comments              String?               /// Additional comments or notes for the assignment attempt from the system
+  preferredLanguage     String?
 
   GradingJob GradingJob[]
+  
+  @@index([assignmentId])
+  @@index([userId])
+  @@index([assignmentId, submitted])
+  @@index([createdAt])
+  @@index([assignmentId, userId])
+  @@index([assignmentVersionId])
 }
 
 model AssignmentAttemptQuestionVariant {
@@ -356,6 +466,9 @@ model AssignmentFeedback {
   email             String?          /// User's email (required if allowContact is true)
   createdAt         DateTime         @default(now()) /// Timestamp for when the feedback was created
   updatedAt         DateTime         @updatedAt       /// Timestamp for the last update to the feedback
+  
+  @@index([assignmentId])
+  @@index([assignmentId, assignmentRating])
 }
 
 model RegradingRequest {
@@ -470,6 +583,43 @@ model Translation {
   @@index([questionId, variantId, languageCode])
 }
 
+/// The AssignmentDraft model represents user-specific drafts (separate from versions)
+model AssignmentDraft {
+  id                      Int                             @id @default(autoincrement()) /// Unique identifier for the draft
+  assignmentId            Int                             /// The ID of the parent assignment
+  assignment              Assignment                      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  userId                  String                          /// User who created this draft
+  draftName               String                          /// User-defined name for this draft
+  name                    String                          /// Assignment name in this draft
+  introduction            String?                         /// Introduction for this draft
+  instructions            String?                         /// Instructions for this draft
+  gradingCriteriaOverview String?                         /// Grading criteria for this draft
+  timeEstimateMinutes     Int?                            /// Time estimate for this draft
+  type                    AssignmentType                  /// Type of assignment
+  graded                  Boolean?                        @default(false) /// Is the assignment graded
+  numAttempts             Int?                            @default(-1) /// Max attempts allowed
+  allotedTimeMinutes      Int?                            /// Time allotted to complete
+  attemptsPerTimeRange    Int?                            /// Attempts per time range
+  attemptsTimeRangeHours  Int?                            /// Time range in hours
+  passingGrade            Int?                            @default(50) /// Minimum passing grade
+  displayOrder            AssignmentQuestionDisplayOrder? /// Question display order
+  questionDisplay         QuestionDisplay?                @default(ONE_PER_PAGE) /// Question display mode
+  numberOfQuestionsPerAttempt Int?                        /// Questions per attempt
+  questionOrder           Int[]                           /// Order of questions
+  published               Boolean                         @default(false) /// Is this draft published
+  showAssignmentScore     Boolean                         @default(true) /// Show assignment score
+  showQuestionScore       Boolean                         @default(true) /// Show question score
+  showSubmissionFeedback  Boolean                         @default(true) /// Show submission feedback
+  showQuestions           Boolean                         @default(true) /// Show questions
+  languageCode            String?                         /// Language code
+  questionsData           Json?                           /// Serialized questions data
+  createdAt               DateTime                        @default(now()) /// When draft was created
+  updatedAt               DateTime                        @updatedAt /// When draft was last updated
+  @@index([assignmentId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
 model AssignmentTranslation {
   id                      Int         @id @default(autoincrement())
   assignmentId            Int
@@ -497,4 +647,159 @@ model FeedbackTranslation {
   updatedAt          DateTime @updatedAt
   question           Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   @@unique([questionId, languageCode])
+}
+
+model AdminVerificationCode {
+  id        Int      @id @default(autoincrement())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  used      Boolean  @default(false)
+
+  @@index([email])
+  @@index([code])
+  @@index([expiresAt])
+}
+
+model AdminSession {
+  id           Int      @id @default(autoincrement())
+  email        String
+  sessionToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([email])
+  @@index([sessionToken])
+  @@index([expiresAt])
+}
+
+/// This model tracks the authors of assignments
+model AssignmentAuthor {
+  id           Int        @id @default(autoincrement())
+  assignmentId Int        /// The ID of the assignment
+  userId       String     /// The ID of the user who authored the assignment
+  createdAt    DateTime   @default(now()) /// When the author was added
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  
+  @@unique([assignmentId, userId])
+  @@index([assignmentId])
+  @@index([userId])
+}
+
+/// Enum for different pricing sources
+enum PricingSource {
+  OPENAI_API /// Pricing fetched from OpenAI API
+  MANUAL /// Manually entered pricing
+  WEB_SCRAPING /// Pricing scraped from web sources
+}
+
+/// This model represents different LLM models supported by the system
+model LLMModel {
+  id          Int          @id @default(autoincrement())
+  modelKey    String       @unique /// Unique identifier for the model (e.g., "gpt-4o", "gpt-4o-mini")
+  displayName String       /// Human-readable name for the model
+  provider    String       /// Provider name (e.g., "OpenAI", "Anthropic")
+  isActive    Boolean      @default(true) /// Whether this model is currently supported
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  pricingHistory LLMPricing[] /// Historical pricing data for this model
+  featureAssignments LLMFeatureAssignment[] /// Features assigned to this model
+  
+  @@index([modelKey])
+  @@index([provider])
+}
+
+/// This model tracks pricing changes for LLM models over time
+model LLMPricing {
+  id                Int           @id @default(autoincrement())
+  modelId           Int           /// The ID of the LLM model
+  model             LLMModel      @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  inputTokenPrice   Float         /// Price per input token (e.g., 0.000001)
+  outputTokenPrice  Float         /// Price per output token (e.g., 0.000003)
+  effectiveDate     DateTime      /// When this pricing became effective
+  source            PricingSource /// Source of this pricing information
+  isActive          Boolean       @default(true) /// Whether this pricing is currently active
+  metadata          Json?         /// Additional metadata about the pricing (e.g., API response, notes)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([modelId, effectiveDate])
+  @@index([effectiveDate])
+  @@index([isActive])
+  @@unique([modelId, effectiveDate, source])
+}
+
+/// This model stores price upscaling factors that are applied to base pricing
+model LLMPriceUpscaling {
+  id                    Int       @id @default(autoincrement())
+  globalFactor          Float?    /// Global upscaling factor applied to all usage types
+  usageTypeFactors      Json?     /// Usage-type specific upscaling factors (e.g., {"TRANSLATION": 1.2, "GRADING": 1.5})
+  reason                String?   /// Reason for the price upscaling
+  appliedBy             String?   /// Email of admin who applied the upscaling
+  isActive              Boolean   @default(true) /// Whether this upscaling is currently active
+  effectiveDate         DateTime  @default(now()) /// When this upscaling became effective
+  deactivatedAt         DateTime? /// When this upscaling was deactivated (if applicable)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  @@index([isActive, effectiveDate])
+  @@index([effectiveDate])
+}
+
+/// Enum for different AI features in the system
+enum AIFeatureType {
+  TEXT_GRADING /// AI grading for text-based questions
+  FILE_GRADING /// AI grading for file uploads
+  IMAGE_GRADING /// AI grading for image submissions
+  URL_GRADING /// AI grading for URL submissions
+  PRESENTATION_GRADING /// AI grading for presentation files
+  VIDEO_GRADING /// AI grading for video presentations
+  QUESTION_GENERATION /// AI-powered question generation
+  TRANSLATION /// AI translation services
+  RUBRIC_GENERATION /// AI rubric creation
+  CONTENT_MODERATION /// AI content moderation
+  ASSIGNMENT_GENERATION /// AI assignment creation
+  LIVE_RECORDING_FEEDBACK /// AI feedback for live recordings
+}
+
+/// This model represents AI features available in the system
+model AIFeature {
+  id              Int             @id @default(autoincrement())
+  featureKey      String          @unique /// Unique identifier for the feature (e.g., "text_grading", "question_generation")
+  featureType     AIFeatureType   /// Type of AI feature
+  displayName     String          /// Human-readable name for the feature
+  description     String?         /// Description of what this feature does
+  isActive        Boolean         @default(true) /// Whether this feature is currently enabled
+  requiresModel   Boolean         @default(true) /// Whether this feature requires an LLM model
+  defaultModelKey String?         /// Default model to use if no assignment exists
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  assignments     LLMFeatureAssignment[] /// Current and historical model assignments
+  
+  @@index([featureKey])
+  @@index([featureType])
+  @@index([isActive])
+}
+
+/// This model tracks which LLM model is assigned to each AI feature
+model LLMFeatureAssignment {
+  id              Int         @id @default(autoincrement())
+  featureId       Int         /// The AI feature this assignment is for
+  feature         AIFeature   @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  modelId         Int         /// The LLM model assigned to this feature
+  model           LLMModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  isActive        Boolean     @default(true) /// Whether this assignment is currently active
+  priority        Int         @default(0) /// Priority for model selection (higher = more preferred)
+  assignedBy      String?     /// Email of admin who made the assignment
+  assignedAt      DateTime    @default(now()) /// When this assignment was made
+  deactivatedAt   DateTime?   /// When this assignment was deactivated (if applicable)
+  metadata        Json?       /// Additional configuration for this assignment
+  
+  @@index([featureId, isActive])
+  @@index([modelId])
+  @@index([isActive])
+  @@unique([featureId, modelId])
 }

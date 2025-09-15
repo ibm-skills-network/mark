@@ -1,16 +1,16 @@
 /* eslint-disable */
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { S3Service } from "src/api/files/services/s3.service";
-import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
-import pdfParse from "pdf-parse";
-import * as mammoth from "mammoth";
-import * as XLSX from "xlsx";
-import csv from "csv-parser";
-import { Readable } from "node:stream";
-import * as unzipper from "unzipper";
-import { parseStringPromise } from "xml2js";
-import * as path from "path";
 import * as crypto from "crypto";
+import { Readable } from "node:stream";
+import * as path from "path";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import csv from "csv-parser";
+import * as mammoth from "mammoth";
+import pdfParse from "pdf-parse";
+import { S3Service } from "src/api/files/services/s3.service";
+import * as unzipper from "unzipper";
+import * as XLSX from "xlsx";
+import { parseStringPromise } from "xml2js";
+import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
 
 export interface ExtractedFileContent {
   filename: string;
@@ -164,7 +164,9 @@ export class FileContentExtractionService {
           return {
             filename: file.filename,
             content:
-              `[ERROR extracting ${file.filename}: ${error instanceof Error ? error.message : "Unknown error"}]\n` +
+              `[ERROR extracting ${file.filename}: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }]\n` +
               `File type: ${file.fileType}\n` +
               `This file could not be processed, but it exists in the submission.`,
             fileType: file.fileType,
@@ -615,7 +617,9 @@ export class FileContentExtractionService {
         const strings = this.extractStringsFromBinary(buffer);
         if (strings.length > 0) {
           return {
-            text: `[BINARY FILE: ${filename}]\nExtracted strings:\n${strings.join("\n")}`,
+            text: `[BINARY FILE: ${filename}]\nExtracted strings:\n${strings.join(
+              "\n",
+            )}`,
             encoding: "binary",
             extractedText: `Found ${strings.length} text strings`,
           };
@@ -845,8 +849,12 @@ export class FileContentExtractionService {
       extractedText += `Total Cells: ${notebook.cells?.length || 0}\n`;
 
       if (notebook.metadata) {
-        extractedText += `Language: ${notebook.metadata.language_info?.name || "Unknown"}\n`;
-        extractedText += `Kernel: ${notebook.metadata.kernelspec?.display_name || "Unknown"}\n`;
+        extractedText += `Language: ${
+          notebook.metadata.language_info?.name || "Unknown"
+        }\n`;
+        extractedText += `Kernel: ${
+          notebook.metadata.kernelspec?.display_name || "Unknown"
+        }\n`;
       }
       extractedText += "\n";
 
@@ -857,7 +865,9 @@ export class FileContentExtractionService {
             `outputs=${cell.outputs?.length || 0}`,
         );
 
-        extractedText += `\n=== CELL ${index + 1} [${cell.cell_type.toUpperCase()}]`;
+        extractedText += `\n=== CELL ${
+          index + 1
+        } [${cell.cell_type.toUpperCase()}]`;
         if (cell.execution_count) {
           extractedText += ` [${cell.execution_count}]`;
         }
@@ -1079,7 +1089,9 @@ export class FileContentExtractionService {
       const slideCount = Math.max(1, Math.floor(strings.length / 10));
 
       return {
-        text: `[LEGACY PPT FILE]\nExtracted text fragments:\n${strings.join("\n")}`,
+        text: `[LEGACY PPT FILE]\nExtracted text fragments:\n${strings.join(
+          "\n",
+        )}`,
         extractedText: strings.join("\n"),
         additionalMetadata: { slideCount },
       };
@@ -1206,7 +1218,9 @@ export class FileContentExtractionService {
 
           for (const entry of zip.files) {
             const size = entry.uncompressedSize || 0;
-            extractedContent += `${entry.path} (${this.formatFileSize(size)})\n`;
+            extractedContent += `${entry.path} (${this.formatFileSize(
+              size,
+            )})\n`;
             fileList.push(entry.path);
 
             if (this.isTextFile(entry.path) && size < 100000) {
@@ -1228,7 +1242,9 @@ export class FileContentExtractionService {
           }
         } catch (error) {
           extractedContent += `Error reading archive: ${error}\n`;
-          extractedContent += `Archive size: ${this.formatFileSize(buffer.length)}\n`;
+          extractedContent += `Archive size: ${this.formatFileSize(
+            buffer.length,
+          )}\n`;
         }
       } else {
         extractedContent += `Archive type: ${type}\n`;
@@ -1310,7 +1326,9 @@ export class FileContentExtractionService {
         summary += `Length: ${parsed.length}\n`;
       } else {
         summary += `Keys: ${Object.keys(parsed).length}\n`;
-        summary += `Top-level keys: ${Object.keys(parsed).slice(0, 10).join(", ")}`;
+        summary += `Top-level keys: ${Object.keys(parsed)
+          .slice(0, 10)
+          .join(", ")}`;
         if (Object.keys(parsed).length > 10) {
           summary += "...";
         }
@@ -1333,7 +1351,9 @@ export class FileContentExtractionService {
         const objects = lines.map((line) => JSON.parse(line));
 
         return {
-          text: `=== JSONL DATA ===\nLines: ${objects.length}\n\n${JSON.stringify(objects, null, 2)}`,
+          text: `=== JSONL DATA ===\nLines: ${
+            objects.length
+          }\n\n${JSON.stringify(objects, null, 2)}`,
           extractedText: JSON.stringify(objects, null, 2),
           encoding: "utf8",
         };
@@ -1782,9 +1802,21 @@ export class FileContentExtractionService {
       const id3v1 = buffer.slice(-128);
       if (id3v1.slice(0, 3).toString() === "TAG") {
         result += "\nID3v1 Tags found:\n";
-        result += `Title: ${id3v1.slice(3, 33).toString().replace(/\0/g, "").trim()}\n`;
-        result += `Artist: ${id3v1.slice(33, 63).toString().replace(/\0/g, "").trim()}\n`;
-        result += `Album: ${id3v1.slice(63, 93).toString().replace(/\0/g, "").trim()}\n`;
+        result += `Title: ${id3v1
+          .slice(3, 33)
+          .toString()
+          .replace(/\0/g, "")
+          .trim()}\n`;
+        result += `Artist: ${id3v1
+          .slice(33, 63)
+          .toString()
+          .replace(/\0/g, "")
+          .trim()}\n`;
+        result += `Album: ${id3v1
+          .slice(63, 93)
+          .toString()
+          .replace(/\0/g, "")
+          .trim()}\n`;
         result += `Year: ${id3v1.slice(93, 97).toString()}\n`;
       }
     }
@@ -2481,7 +2513,9 @@ export class FileContentExtractionService {
           ? XLSX.utils.decode_range(worksheet["!ref"])
           : null;
         if (range) {
-          allText += `Range: ${worksheet["!ref"]} (${range.e.r - range.s.r + 1} rows × ${range.e.c - range.s.c + 1} cols)\n\n`;
+          allText += `Range: ${worksheet["!ref"]} (${
+            range.e.r - range.s.r + 1
+          } rows × ${range.e.c - range.s.c + 1} cols)\n\n`;
         }
 
         const csvText = XLSX.utils.sheet_to_csv(worksheet, {

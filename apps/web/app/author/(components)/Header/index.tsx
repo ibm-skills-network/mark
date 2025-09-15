@@ -3,6 +3,7 @@
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
+import { useChatbot } from "@/hooks/useChatbot";
 import { decodeFields } from "@/app/Helpers/decoder";
 import { encodeFields } from "@/app/Helpers/encoder";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
@@ -32,13 +33,14 @@ import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
-import { IconRefresh } from "@tabler/icons-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { BarChart3 } from "lucide-react";
+import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
+import SaveAndPublishButton from "./SaveAndPublishButton";
 
 function maybeDecodeString(str: string | null | undefined): string | null {
   if (!str) return str;
@@ -87,6 +89,7 @@ function fixScoringAndDecode(assignment: Assignment): Assignment {
 function AuthorHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  const { isOpen: isChatbotOpen } = useChatbot();
   const assignmentId = extractAssignmentId(pathname);
   const [currentStepId, setCurrentStepId] = useState<number>(0);
   const setQuestions = useAuthorStore((state) => state.setQuestions);
@@ -109,6 +112,8 @@ function AuthorHeader() {
     state.activeAssignmentId,
     state.name,
   ]);
+
+  const loadVersions = useAuthorStore((state) => state.loadVersions);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
     questions as Question[],
   );
@@ -157,19 +162,20 @@ function AuthorHeader() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showCorrectAnswer,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
+    state.showCorrectAnswer,
   ]);
-  const [role, setRole] = useAuthorStore((state) => [
-    state.role,
-    state.setRole,
-  ]);
+  const role = useAuthorStore((state) => state.role);
 
   const [showAreYouSureModal, setShowAreYouSureModal] =
     useState<boolean>(false);
+  const [showDraftModal, setShowDraftModal] = useState<boolean>(false);
+  const [draftName, setDraftName] = useState<string>("");
 
   const deleteAuthorStore = useAuthorStore((state) => state.deleteStore);
   const deleteAssignmentConfigStore = useAssignmentConfig(
@@ -273,6 +279,7 @@ function AuthorHeader() {
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
         showQuestionScore: newAssignment.showQuestionScore,
         showAssignmentScore: newAssignment.showAssignmentScore,
+        showCorrectAnswer: newAssignment.showCorrectAnswer,
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
@@ -285,6 +292,8 @@ function AuthorHeader() {
   };
 
   const fetchAssignment = async () => {
+    // For now, just load the regular assignment
+    // TODO: Re-enable draft loading once basic version control is working
     const assignment = await getAssignment(parseInt(assignmentId, 10));
     if (assignment) {
       const decodedFields = decodeFields({
@@ -371,6 +380,47 @@ function AuthorHeader() {
     void fetchData();
   }, [assignmentId, router]);
 
+  // Listen for draft activation publishing events from VersionTreeView
+  useEffect(() => {
+    const handleTriggerHeaderPublish = (event: any) => {
+      const {
+        description,
+        publishImmediately,
+        versionNumber,
+        updateExisting,
+        afterPublish,
+      } = event.detail;
+
+      // Store the afterPublish callback for later use
+      const originalAfterPublish = afterPublish;
+
+      // Call handlePublishButton with the provided parameters
+      handlePublishButton(description, publishImmediately)
+        .then(() => {
+          // After successful publishing, execute the callback if provided
+          if (
+            originalAfterPublish &&
+            typeof originalAfterPublish === "function"
+          ) {
+            originalAfterPublish();
+          }
+        })
+        .catch((error) => {
+          console.error("Header publishing failed:", error);
+          toast.error("Failed to publish version through header");
+        });
+    };
+
+    window.addEventListener("triggerHeaderPublish", handleTriggerHeaderPublish);
+
+    return () => {
+      window.removeEventListener(
+        "triggerHeaderPublish",
+        handleTriggerHeaderPublish,
+      );
+    };
+  }, [handlePublishButton]);
+
   function calculateTotalPoints(questions: QuestionAuthorStore[]) {
     return questions.map((question: QuestionAuthorStore) => {
       const totalPoints = question.scoring?.rubrics
@@ -388,10 +438,16 @@ function AuthorHeader() {
     });
   }
 
-  async function handlePublishButton() {
+  async function handlePublishButton(
+    description?: string,
+    publishImmediately = true,
+    versionNumber?: string,
+  ): Promise<void> {
     setSubmitting(true);
     setJobProgress(0);
-    setCurrentMessage("Initializing publishing...");
+    setCurrentMessage(
+      publishImmediately ? "Initializing publishing..." : "Creating version...",
+    );
     setProgressStatus("In Progress");
 
     const role = await getUserRole();
@@ -454,18 +510,25 @@ function AuthorHeader() {
       updatedAt,
       questionOrder,
       timeEstimateMinutes: timeEstimateMinutes,
-      published: true,
+      published: publishImmediately,
       showSubmissionFeedback,
       showQuestions,
       showQuestionScore,
       showAssignmentScore,
+      showCorrectAnswer,
       numberOfQuestionsPerAttempt,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)
         : null,
+      versionDescription: description,
+      versionNumber: versionNumber,
     };
     if (assignmentData.introduction === null) {
-      toast.error("Introduction is required to publish the assignment.");
+      toast.error(
+        publishImmediately
+          ? "Introduction is required to publish the assignment."
+          : "Introduction is required to create a version.",
+      );
       setSubmitting(false);
       return;
     }
@@ -484,24 +547,40 @@ function AuthorHeader() {
           },
           setQuestions,
         );
-        toast.success("Questions published successfully!");
+        if (publishImmediately) {
+          toast.success("Questions published successfully!");
+        } else {
+          toast.success("Version saved successfully!");
+        }
         setProgressStatus("Completed");
-        setTimeout(() => {
-          router.push(
-            `/author/${activeAssignmentId}?submissionTime=${Date.now()}`,
-          );
-        }, 300);
+
+        // Reload versions to reflect the new version
+        try {
+          await loadVersions();
+        } catch (error) {
+          console.error("Failed to reload versions after publish:", error);
+        }
       } else {
         toast.error(
-          "Failed to start the publishing process. Please try again.",
+          publishImmediately
+            ? "Failed to start the publishing process. Please try again."
+            : "Failed to create version. Please try again.",
         );
         setProgressStatus("Failed");
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
-        toast.error(`Error during publishing: ${error.message}`);
+        toast.error(
+          publishImmediately
+            ? `Error during publishing: ${error.message}`
+            : `Error creating version: ${error.message}`,
+        );
       } else {
-        toast.error("An unknown error occurred during publishing.");
+        toast.error(
+          publishImmediately
+            ? "An unknown error occurred during publishing."
+            : "An unknown error occurred while creating version.",
+        );
       }
       setProgressStatus("Failed");
     } finally {
@@ -528,9 +607,59 @@ function AuthorHeader() {
     toast.success("Synced with latest published version.");
   };
 
+  const handleSaveChanges = async (
+    customDraftName?: string,
+  ): Promise<boolean> => {
+    if (!activeAssignmentId) {
+      toast.error("No assignment selected");
+      return false;
+    }
+
+    try {
+      const { saveDraft } = await import("@/lib/author");
+      const draftData = {
+        draftName:
+          customDraftName || `Manual save - ${new Date().toLocaleString()}`,
+        assignmentData: {
+          name,
+          introduction,
+          instructions,
+          gradingCriteriaOverview,
+        },
+        questionsData: questions,
+      };
+
+      const result = await saveDraft(activeAssignmentId, draftData);
+      return !!result;
+    } catch (error) {
+      console.error("Save error:", error);
+      return false;
+    }
+  };
+
+  const handleConfirmSaveDraft = async () => {
+    setShowDraftModal(false);
+    const success = await handleSaveChanges(draftName || undefined);
+    if (success) {
+      toast.success("Draft saved successfully!");
+    } else {
+      toast.error("Failed to save draft. Please try again.");
+    }
+    setDraftName("");
+  };
+
+  const handleCancelSaveDraft = () => {
+    setShowDraftModal(false);
+    setDraftName("");
+  };
+
   return (
     <>
-      <div className="fixed w-full z-50">
+      <div
+        className={`fixed z-50 transition-all duration-300 ease-in-out ${
+          isChatbotOpen ? "left-0 right-[25vw]" : "w-full"
+        }`}
+      >
         <header className="border-b border-gray-300 bg-white px-2 sm:px-4 md:px-6 py-2 md:py-4 flex flex-col">
           <div className="flex flex-col flex-wrap lg:flex-nowrap md:flex-row md:items-center justify-between gap-2 md:gap-2">
             <div className="flex flex-row items-center space-x-4">
@@ -551,24 +680,36 @@ function AuthorHeader() {
             />
 
             <div className="flex flex-wrap items-center md:ml-auto gap-2 sm:gap-4 mt-2 md:mt-0 ml-auto">
-              <Tooltip
-                content="Sync with the latest published version, discarding any changes you have made."
-                distance={-3}
-              >
-                <button
-                  onClick={handleSyncWithLatestPublishedVersion}
-                  className="text-sm flex font-medium items-center justify-center px-2 sm:px-3 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950"
-                >
-                  <IconRefresh className="h-5 w-5" />
-                  <span className="ml-2">Sync with latest</span>
-                </button>
-              </Tooltip>
-
               <CheckLearnerSideButton
                 disabled={!questionsAreReadyToBePublished}
               />
 
+              {/* Admin Insights Button - Only show for admins/authors when assignment exists */}
+              {(role === "admin" || role === "author") &&
+                activeAssignmentId && (
+                  <button
+                    onClick={() =>
+                      window.open(
+                        `/admin/insights/${activeAssignmentId}`,
+                        "_blank",
+                      )
+                    }
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md"
+                    title="View admin insights and analytics for this assignment"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Admin Insights</span>
+                  </button>
+                )}
+
               <SubmitQuestionsButton
+                handlePublishButton={handlePublishButton}
+                submitting={submitting}
+                questionsAreReadyToBePublished={questionsAreReadyToBePublished}
+                currentStepId={currentStepId}
+              />
+
+              <SaveAndPublishButton
                 handlePublishButton={handlePublishButton}
                 submitting={submitting}
                 questionsAreReadyToBePublished={questionsAreReadyToBePublished}
@@ -611,6 +752,49 @@ function AuthorHeader() {
                 className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
               >
                 Sync
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showDraftModal && (
+        <Modal onClose={handleCancelSaveDraft} Title="Save as Draft">
+          <div className="p-4 space-y-4">
+            <p className="typography-body">
+              Enter a name for this draft to help you identify it later.
+            </p>
+            <div className="space-y-2">
+              <label
+                htmlFor="draft-name"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Draft Name (Optional)
+              </label>
+              <input
+                id="draft-name"
+                type="text"
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                placeholder={`Draft - ${new Date().toLocaleDateString()}`}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500">
+                If left empty, a default name with timestamp will be used.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                onClick={handleCancelSaveDraft}
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 border-gray-300 bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSaveDraft}
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-blue-500 focus:ring-2 focus:outline-none transition-all text-white border-blue-600 bg-blue-600 hover:bg-blue-700 hover:border-blue-700"
+              >
+                Save Draft
               </button>
             </div>
           </div>

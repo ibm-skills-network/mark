@@ -27,9 +27,223 @@ import {
   PencilIcon,
   StarIcon,
   DocumentArrowDownIcon,
+  DocumentArrowUpIcon,
+  XMarkIcon,
+  WrenchScrewdriverIcon,
 } from "@heroicons/react/24/solid";
 import { QuestionAuthorStore } from "@/config/types";
 import ExportModal, { ExportOptions } from "../../(components)/ExportModal";
+
+// Helper function to determine if a validation error is question-related
+const isQuestionRelatedValidationError = (message: string): boolean => {
+  const questionRelatedErrors = [
+    "question",
+    "rubric",
+    "choice",
+    "variant",
+    "description",
+    "text",
+  ];
+  const hasQuestionIssue = questionRelatedErrors.some((error) =>
+    message.toLowerCase().includes(error.toLowerCase()),
+  );
+  return hasQuestionIssue;
+};
+
+// Issues Modal Component
+const IssuesModal = ({
+  isOpen,
+  onClose,
+  questionIssues,
+  questions,
+  isValid,
+  message,
+  invalidQuestionId,
+  onNavigateToFix,
+  onAutoFix,
+  onNavigateToConfig,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  questionIssues: Record<number, string[]>;
+  questions: QuestionAuthorStore[];
+  isValid: boolean;
+  message: string;
+  invalidQuestionId: number | null;
+  onNavigateToFix: (questionId: number) => void;
+  onAutoFix: (questionId: number, issue: string) => void;
+  onNavigateToConfig: () => void;
+}) => {
+  if (!isOpen) return null;
+
+  const totalIssues = Object.keys(questionIssues).length;
+  const hasValidationError = !isValid && message;
+  const totalAllIssues = totalIssues + (hasValidationError ? 1 : 0);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
+            <h2 className="text-lg font-semibold text-gray-900">
+              Issues Found ({totalAllIssues} total)
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {/* Show configuration error only if it's not a question-specific issue */}
+          {!isValid &&
+            message &&
+            !isQuestionRelatedValidationError(message) && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <ExclamationTriangleIcon className="w-5 h-5 text-red-500 mt-0.5" />
+                    <div>
+                      <h3 className="font-medium text-red-900 mb-1">
+                        Configuration Error
+                      </h3>
+                      <p className="text-sm text-red-700">{message}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onNavigateToConfig();
+                    }}
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors flex-shrink-0 ml-4"
+                  >
+                    Go to Config
+                    <ArrowRightIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+          {/* Show note about question-related validation errors */}
+          {!isValid &&
+            message &&
+            Object.keys(questionIssues).length > 0 &&
+            isQuestionRelatedValidationError(message) && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <InformationCircleIcon className="w-5 h-5 text-blue-500 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-blue-900 mb-1">Note</h3>
+                    <p className="text-sm text-blue-700">
+                      The validation system also detected this issue, but it's
+                      shown below as a question-specific issue with fix options.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          <div className="space-y-4">
+            {Object.entries(questionIssues).map(([questionId, issues]) => {
+              const question = questions.find(
+                (q) => q.id === parseInt(questionId),
+              );
+              const questionIndex =
+                questions.findIndex((q) => q.id === parseInt(questionId)) + 1;
+
+              return (
+                <div
+                  key={questionId}
+                  className="border border-red-200 rounded-lg p-4 bg-red-50"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-medium text-red-900">
+                      Question {questionIndex}:{" "}
+                      <MarkdownViewer>
+                        {question?.question || "Untitled Question"}
+                      </MarkdownViewer>
+                    </h3>
+                    <button
+                      onClick={() => onNavigateToFix(parseInt(questionId))}
+                      className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                    >
+                      Go to Fix
+                      <ArrowRightIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {issues.map((issue, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-2 bg-white rounded border border-red-200"
+                      >
+                        <div className="flex items-start gap-2">
+                          <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm text-red-700">{issue}</span>
+                        </div>
+
+                        {/* Auto-fix button for fixable issues */}
+                        {canAutoFix(issue) && (
+                          <button
+                            onClick={() =>
+                              onAutoFix(parseInt(questionId), issue)
+                            }
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                            title="Automatically fix this issue"
+                          >
+                            <WrenchScrewdriverIcon className="w-3 h-3" />
+                            Auto Fix
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Fix these issues to ensure your assignment works properly for
+              learners.
+            </p>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Helper function to determine if an issue can be auto-fixed
+const canAutoFix = (issue: string): boolean => {
+  const autoFixableIssues = [
+    "Question type not selected",
+    "Question title is empty",
+    "No choices added",
+    "No rubrics defined",
+    "has no criteria defined",
+    "description is empty",
+    "question is empty",
+  ];
+  return autoFixableIssues.some((fixable) => issue.includes(fixable));
+};
 
 // Component to show before/after comparison
 const ChangeComparison = ({
@@ -528,6 +742,7 @@ const QuestionChanges = ({
 function Component() {
   const [viewMode, setViewMode] = useState<"changes" | "full">("changes");
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false);
 
   const [
     graded,
@@ -560,6 +775,8 @@ function Component() {
     learningObjectives,
     name,
     questionOrder,
+    replaceQuestion,
+    addQuestion,
   ] = useAuthorStore((state) => [
     state.introduction,
     state.instructions,
@@ -569,6 +786,8 @@ function Component() {
     state.learningObjectives,
     state.name,
     state.questionOrder,
+    state.replaceQuestion,
+    state.addQuestion,
   ]);
 
   const [
@@ -577,12 +796,14 @@ function Component() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showCorrectAnswer,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
+    state.showCorrectAnswer,
   ]);
 
   const router = useRouter();
@@ -622,6 +843,9 @@ function Component() {
       ),
       showAssignmentScore: filteredChanges.some((c) =>
         c.includes("Changed assignment score visibility"),
+      ),
+      showCorrectAnswer: filteredChanges.some((c) =>
+        c.includes("Changed correct answer visibility"),
       ),
       questionOrder: filteredChanges.some((c) =>
         c.includes("Modified question order"),
@@ -711,13 +935,34 @@ function Component() {
         qIssues.push("Some choices are empty");
       }
 
-      if (
-        (q.type === "TEXT" || q.type === "URL" || q.type === "UPLOAD") &&
-        (!q.scoring?.rubrics ||
-          q.scoring.rubrics.length === 0 ||
-          q.scoring.rubrics.some((r) => !r.criteria || r.criteria.length === 0))
-      ) {
-        qIssues.push("No rubric criteria defined");
+      if (q.type === "TEXT" || q.type === "URL" || q.type === "UPLOAD") {
+        if (!q.scoring?.rubrics || q.scoring.rubrics.length === 0) {
+          qIssues.push("No rubrics defined");
+        } else {
+          // Check each rubric
+          q.scoring.rubrics.forEach((rubric, rubricIndex) => {
+            // Check if rubric question is empty
+            if (!rubric.rubricQuestion || rubric.rubricQuestion.trim() === "") {
+              qIssues.push(`Rubric ${rubricIndex + 1} question is empty`);
+            }
+
+            if (!rubric.criteria || rubric.criteria.length === 0) {
+              qIssues.push(`Rubric ${rubricIndex + 1} has no criteria defined`);
+            } else {
+              // Check each criteria in the rubric
+              rubric.criteria.forEach((criteria, criteriaIndex) => {
+                if (
+                  !criteria.description ||
+                  criteria.description.trim() === ""
+                ) {
+                  qIssues.push(
+                    `Rubric ${rubricIndex + 1} criteria ${criteriaIndex + 1} description is empty`,
+                  );
+                }
+              });
+            }
+          });
+        }
       }
 
       if (qIssues.length > 0) {
@@ -731,6 +976,126 @@ function Component() {
   // Get question-specific changes
   const getQuestionChanges = (questionId: number) => {
     return changes.details.filter((d) => d.includes(`question ${questionId}`));
+  };
+
+  // Handle navigation to fix a specific question
+  const handleNavigateToFix = (questionId: number) => {
+    setIsIssuesModalOpen(false);
+    router.push(`/author/${activeAssignmentId}/questions`);
+    setTimeout(() => {
+      const element = document.getElementById(`question-${questionId}`);
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }, 500);
+  };
+
+  // Handle navigation to config page
+  const handleNavigateToConfig = () => {
+    router.push(`/author/${activeAssignmentId}/config`);
+  };
+
+  // Handle auto-fix functionality
+  const handleAutoFix = (questionId: number, issue: string) => {
+    const question = questions?.find((q) => q.id === questionId);
+    if (!question) return;
+
+    let updatedQuestion = { ...question };
+
+    // Auto-fix based on issue type
+    if (issue.includes("Question type not selected")) {
+      updatedQuestion.type = "TEXT"; // Default to text question
+    }
+
+    if (issue.includes("Question title is empty")) {
+      updatedQuestion.question = "Untitled Question";
+    }
+
+    if (
+      issue.includes("No choices added") &&
+      (question.type === "MULTIPLE_CORRECT" ||
+        question.type === "SINGLE_CORRECT")
+    ) {
+      updatedQuestion.choices = [
+        { choice: "Option 1", isCorrect: true, points: 1 },
+        { choice: "Option 2", isCorrect: false, points: 0 },
+      ];
+    }
+
+    // Handle rubric-related issues
+    if (issue.includes("No rubrics defined")) {
+      updatedQuestion.scoring = {
+        ...updatedQuestion.scoring,
+        rubrics: [
+          {
+            rubricQuestion: "Default Rubric",
+            criteria: [
+              {
+                description: "Default criteria description",
+                points: 1,
+                id: 1,
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    if (issue.includes("has no criteria defined")) {
+      // Extract rubric index from issue text like "Rubric 1 has no criteria defined"
+      const rubricMatch = issue.match(/Rubric (\d+)/);
+      if (rubricMatch && updatedQuestion.scoring?.rubrics) {
+        const rubricIndex = parseInt(rubricMatch[1]) - 1;
+        if (updatedQuestion.scoring.rubrics[rubricIndex]) {
+          updatedQuestion.scoring.rubrics[rubricIndex].criteria = [
+            {
+              description: "Default criteria description",
+              points: 1,
+              id: 1,
+            },
+          ];
+        }
+      }
+    }
+
+    if (issue.includes("description is empty")) {
+      // Extract rubric and criteria indices from issue text like "Rubric 1 criteria 1 description is empty"
+      const match = issue.match(/Rubric (\d+) criteria (\d+)/);
+      if (match && updatedQuestion.scoring?.rubrics) {
+        const rubricIndex = parseInt(match[1]) - 1;
+        const criteriaIndex = parseInt(match[2]) - 1;
+        if (
+          updatedQuestion.scoring.rubrics[rubricIndex]?.criteria?.[
+            criteriaIndex
+          ]
+        ) {
+          updatedQuestion.scoring.rubrics[rubricIndex].criteria[
+            criteriaIndex
+          ].description = "Default criteria description";
+        }
+      }
+    }
+
+    if (issue.includes("question is empty")) {
+      // Extract rubric index from issue text like "Rubric 1 question is empty"
+      const rubricMatch = issue.match(/Rubric (\d+)/);
+      if (rubricMatch && updatedQuestion.scoring?.rubrics) {
+        const rubricIndex = parseInt(rubricMatch[1]) - 1;
+        if (updatedQuestion.scoring.rubrics[rubricIndex]) {
+          updatedQuestion.scoring.rubrics[rubricIndex].rubricQuestion =
+            "Default Rubric Question";
+        }
+      }
+    }
+
+    // Update the question in the store
+    replaceQuestion(questionId, updatedQuestion);
+
+    // Show a success message (you could replace this with a toast notification)
+    alert(`Auto-fixed: ${issue}`);
   };
 
   // Handle export functionality
@@ -1090,10 +1455,35 @@ function Component() {
             )}
 
             {!isValid && (
-              <span className="flex items-center gap-2 text-sm text-red-600">
+              <button
+                onClick={() => setIsIssuesModalOpen(true)}
+                className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-md transition-colors bg-red-100 border border-red-200"
+              >
                 <ExclamationTriangleIcon className="w-5 h-5" />
-                Issues found
-              </span>
+                {(() => {
+                  const questionIssueCount = Object.keys(questionIssues).length;
+                  const hasValidationError = !isValid && message;
+                  const hasConfigError =
+                    hasValidationError &&
+                    !isQuestionRelatedValidationError(message);
+                  const totalIssues =
+                    questionIssueCount + (hasConfigError ? 1 : 0);
+
+                  if (totalIssues === 0) {
+                    return "Issues found"; // Fallback, shouldn't happen
+                  }
+
+                  if (questionIssueCount > 0 && hasConfigError) {
+                    return `${totalIssues} issues found`;
+                  } else if (questionIssueCount > 0) {
+                    return `${questionIssueCount} question issue${questionIssueCount !== 1 ? "s" : ""} found`;
+                  } else if (hasConfigError) {
+                    return "Configuration issue found";
+                  }
+
+                  return "Issues found";
+                })()}
+              </button>
             )}
           </div>
 
@@ -1102,7 +1492,7 @@ function Component() {
             onClick={() => setIsExportModalOpen(true)}
             className="px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2"
           >
-            <DocumentArrowDownIcon className="w-4 h-4" />
+            <DocumentArrowUpIcon className="w-4 h-4" />
             Export
           </button>
 
@@ -1645,6 +2035,20 @@ function Component() {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         onExport={handleExport}
+      />
+
+      {/* Issues Modal */}
+      <IssuesModal
+        isOpen={isIssuesModalOpen}
+        onClose={() => setIsIssuesModalOpen(false)}
+        questionIssues={questionIssues}
+        questions={questions || []}
+        isValid={isValid}
+        message={message}
+        invalidQuestionId={invalidQuestionId}
+        onNavigateToFix={handleNavigateToFix}
+        onAutoFix={handleAutoFix}
+        onNavigateToConfig={handleNavigateToConfig}
       />
     </main>
   );

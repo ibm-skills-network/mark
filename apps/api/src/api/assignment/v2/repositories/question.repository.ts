@@ -3,10 +3,10 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Prisma, Question, QuestionVariant } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import {
-  QuestionDto,
-  VariantDto,
   Choice,
+  QuestionDto,
   ScoringDto,
+  VariantDto,
   VideoPresentationConfig,
 } from "../../dto/update.questions.request.dto";
 
@@ -71,7 +71,7 @@ export class QuestionRepository {
    */
   async upsert(questionDto: QuestionDto): Promise<Question> {
     try {
-      const { id, variants, ...questionData } = questionDto;
+      const { id, ...questionData } = questionDto;
 
       if (id === undefined) {
         throw new Error("Question ID is required for upsert operation");

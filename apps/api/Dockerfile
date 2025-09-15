@@ -1,18 +1,19 @@
-# local-test/api.Dockerfile
 # Using a consistent base for all stages
 ARG BASE_IMAGE=node:22-alpine
-FROM node:22-alpine AS builder
+# hadolint ignore=DL3006
+FROM ${BASE_IMAGE} AS builder
 
 ARG DIR=/usr/src/app
 
-# Pruning using turbo
+# Copy package files for dependency resolution
 WORKDIR $DIR
 COPY . .
 RUN yarn global add turbo@^2.0.3
 RUN turbo prune api --docker && rm -f .npmrc
 
 # Installing the isolated workspace
-FROM node:22-alpine AS installer
+# hadolint ignore=DL3006
+FROM ${BASE_IMAGE} AS installer
 ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=builder $DIR/out/json/ .
@@ -20,36 +21,38 @@ COPY --from=builder $DIR/out/yarn.lock ./yarn.lock
 COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
 COPY --from=builder $DIR/apps/api/prisma ./prisma
-RUN yarn install --ignore-scripts --frozen-lockfile --network-timeout 600000
+# Install build dependencies (including pkgconf) and rebuild native modules
 RUN apk add --no-cache python3~=3 make~=4 g++~=14 pkgconf~=2 \
+  && yarn install --frozen-lockfile \
   && yarn prisma generate \
   && npm rebuild cld --build-from-source
+
 # Running build using turbo
-FROM node:22-alpine AS sourcer
+# hadolint ignore=DL3006
+FROM ${BASE_IMAGE} AS sourcer
 ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=installer $DIR/ .
 COPY --from=builder $DIR/out/full/ .
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-WORKDIR $DIR/apps/api
-RUN npx prisma generate
-WORKDIR $DIR
-RUN yarn build --filter=api && yarn install --production --ignore-scripts --frozen-lockfile --network-timeout 600000
+RUN yarn build --filter=api && yarn install --production --ignore-scripts --frozen-lockfile
 
 # Production stage
-FROM node:22-alpine AS production
-ARG DIR=/usr/src/app
+# hadolint ignore=DL3006
+FROM ${BASE_IMAGE} AS production
 ENV NODE_ENV production
+ARG DIR=/usr/src/app
 WORKDIR $DIR
-RUN apk add --no-cache dumb-init=1.2.5-r3
+RUN apk add --no-cache dumb-init~=1 postgresql15-client~=15
 COPY --chown=node:node --from=sourcer $DIR/apps/api/package.json ./package.json
 COPY --chown=node:node --from=sourcer $DIR/apps/api/dist ./dist
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 COPY --chown=node:node --from=sourcer $DIR/prisma ./prisma
 COPY --chown=node:node --from=sourcer $DIR/apps/api/migrate.sh ./migrate.sh
 COPY --chown=node:node --from=sourcer $DIR/apps/api/ensureDb.js ./ensureDb.js
+COPY --chown=node:node --from=sourcer $DIR/apps/api/src/scripts ./scripts
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
 EXPOSE 3000
 
 # Patched stage with updates

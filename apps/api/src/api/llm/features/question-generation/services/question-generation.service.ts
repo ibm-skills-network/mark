@@ -236,7 +236,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
     for (let attempt = 0; attempt < this.MAX_GENERATION_RETRIES; attempt++) {
       try {
         // Create prompt focused on current batch
-        const parser = this.createOutputParser(types, counts);
+        const parser = this.createOutputParser(types);
         const prompt = this.createBatchPrompt(
           types,
           counts,
@@ -361,7 +361,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
     // If we failed completely, use template questions as fallback
     if (!success && generatedQuestions.length < totalCount) {
       this.logger.warn("Generation failed, using fallbacks");
-      const remaining = totalCount - generatedQuestions.length;
       const fallbacks = this.generateFallbackQuestions(
         types,
         counts.map((count) =>
@@ -388,7 +387,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
 
   private createOutputParser(
     types: QuestionType[],
-    counts: number[],
   ): StructuredOutputParser<any> {
     return StructuredOutputParser.fromZodSchema(
       z.object({
@@ -674,8 +672,7 @@ FORMAT INSTRUCTIONS:
       question: question.question?.replaceAll("```", "").trim(),
       totalPoints: question.totalPoints || this.getDefaultPoints(question.type),
       type: question.type,
-      responseType:
-        question.responseType || this.getDefaultResponseType(question.type),
+      responseType: question.responseType || this.getDefaultResponseType(),
       difficultyLevel: question.difficultyLevel,
       maxWords:
         question.maxWords ||
@@ -1238,7 +1235,7 @@ FORMAT INSTRUCTIONS:
       question: questionText,
       totalPoints: this.getDefaultPoints(type, difficultyLevel),
       type: type,
-      responseType: this.getDefaultResponseType(type),
+      responseType: this.getDefaultResponseType(),
       difficultyLevel: difficultyLevel,
       scoring: this.getDefaultScoring(type, difficultyLevel),
     };
@@ -1668,7 +1665,7 @@ FORMAT INSTRUCTIONS:
     return undefined;
   }
 
-  private getDefaultResponseType(questionType: QuestionType): ResponseType {
+  private getDefaultResponseType(): ResponseType {
     return ResponseType.OTHER;
   }
   private getDefaultChoices(
@@ -2043,7 +2040,7 @@ FORMAT INSTRUCTIONS:
         .array(
           z.object({
             choice: z.enum(["true", "false", "True", "False"]),
-            points: z.number().min(1),
+            points: z.number().min(0),
             feedback: z.string().optional(),
             isCorrect: z.boolean(),
           }),
@@ -2137,6 +2134,7 @@ QUALITY REQUIREMENTS:
    - Ensure distractors remain equally plausible
    - Provide educational feedback for each choice
    - Keep original point distribution
+   - IMPORTANT: Points must be non-negative integers (>= 0) for all questions
 
 4. Avoid simply:
    - Changing minor words or punctuation

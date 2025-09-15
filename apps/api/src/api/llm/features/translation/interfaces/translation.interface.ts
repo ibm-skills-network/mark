@@ -5,7 +5,15 @@ export interface ITranslationService {
    * Detect the language of text
    */
 
-  getLanguageCode(text: string): Promise<string>;
+  getLanguageCode(text: string, assignmentId?: number): Promise<string>;
+
+  /**
+   * Batch detect languages for multiple texts
+   */
+  batchGetLanguageCodes(
+    texts: string[],
+    assignmentId?: number,
+  ): Promise<string[]>;
 
   /**
    * Translate a question to a target language

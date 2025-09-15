@@ -1,13 +1,13 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable, Logger } from "@nestjs/common";
 import { Prisma, QuestionVariant } from "@prisma/client";
+import { PrismaService } from "src/prisma.service";
 import {
   Choice,
   ScoringDto,
   VariantDto,
   VariantType,
 } from "../../dto/update.questions.request.dto";
-import { PrismaService } from "src/prisma.service";
 
 /**
  * Repository for Question Variant data access operations

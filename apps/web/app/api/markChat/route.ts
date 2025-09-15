@@ -1,8 +1,9 @@
+/* eslint-disable */
+import { authorTools, learnerTools } from "./stream/route";
 import { searchKnowledgeBase } from "@/app/chatbot/lib/markChatFunctions";
-/* eslint-disable */ import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { z } from "zod";
-import { authorTools, learnerTools } from "./stream/route";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

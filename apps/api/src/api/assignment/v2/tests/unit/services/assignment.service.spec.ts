@@ -4,10 +4,13 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 
 import { Test, TestingModule } from "@nestjs/testing";
-import { QuestionType, VariantType } from "@prisma/client";
+import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UpdateAssignmentRequestDto } from "src/api/assignment/dto/update.assignment.request.dto";
-import { UpdateAssignmentQuestionsDto } from "src/api/assignment/dto/update.questions.request.dto";
+import {
+  UpdateAssignmentQuestionsDto,
+  VariantType as VariantTypeDto,
+} from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/v2/services/question.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/prisma.service";
@@ -26,6 +29,7 @@ import {
   createMockTranslationService,
   createMockUpdateAssignmentDto,
   createMockUpdateAssignmentQuestionsDto,
+  createMockVersionManagementService,
   sampleAuthorSession,
   sampleLearnerSession,
 } from "../__mocks__/ common-mocks";
@@ -33,12 +37,16 @@ import { AssignmentRepository } from "../../../repositories/assignment.repositor
 import { AssignmentServiceV2 } from "../../../services/assignment.service";
 import { JobStatusServiceV2 } from "../../../services/job-status.service";
 import { TranslationService } from "../../../services/translation.service";
+import { VersionManagementService } from "../../../services/version-management.service";
 
 describe("AssignmentServiceV2 – full unit-suite", () => {
   let service: AssignmentServiceV2;
   let assignmentRepository: ReturnType<typeof createMockAssignmentRepository>;
   let questionService: ReturnType<typeof createMockQuestionService>;
   let translationService: ReturnType<typeof createMockTranslationService>;
+  let versionManagementService: ReturnType<
+    typeof createMockVersionManagementService
+  >;
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
   let logger: ReturnType<typeof createMockLogger>;
 
@@ -46,6 +54,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     assignmentRepository = createMockAssignmentRepository();
     questionService = createMockQuestionService();
     translationService = createMockTranslationService();
+    versionManagementService = createMockVersionManagementService();
     jobStatusService = createMockJobStatusService();
     const llmService = createMockLlmFacadeService();
     logger = createMockLogger();
@@ -56,6 +65,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         { provide: AssignmentRepository, useValue: assignmentRepository },
         { provide: QuestionService, useValue: questionService },
         { provide: TranslationService, useValue: translationService },
+        {
+          provide: VersionManagementService,
+          useValue: versionManagementService,
+        },
         { provide: JobStatusServiceV2, useValue: jobStatusService },
         { provide: LlmFacadeService, useValue: llmService },
         { provide: PrismaService, useValue: createMockPrismaService() },
@@ -212,7 +225,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         1,
         "author-123",
       );
-      expect(spy).toHaveBeenCalledWith(1, 1, dto);
+      expect(spy).toHaveBeenCalledWith(1, 1, dto, "author-123");
       expect(response).toEqual({ jobId: 1, message: "Publishing started" });
     });
 
@@ -245,7 +258,12 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
         .mockReturnValue(true);
 
-      await service["startPublishingProcess"](jobId, assignmentId, dto);
+      await service["startPublishingProcess"](
+        jobId,
+        assignmentId,
+        dto,
+        "author-123",
+      );
 
       expect(
         questionService.processQuestionsForPublishing,
@@ -297,7 +315,12 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
     assignmentRepository.findById.mockResolvedValue(existingAssignment);
 
-    await service["startPublishingProcess"](jobId, assignmentId, dto);
+    await service["startPublishingProcess"](
+      jobId,
+      assignmentId,
+      dto,
+      "author-123",
+    );
 
     expect(translationService.translateAssignment).not.toHaveBeenCalled();
     expect(questionService.updateQuestionGradingContext).not.toHaveBeenCalled();
@@ -340,6 +363,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         showQuestionScore: false,
         showSubmissionFeedback: false,
         showQuestions: false,
+        showCorrectAnswer: false,
       };
 
       expect(
@@ -401,14 +425,22 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       const existing = [
         createMockQuestionDto({
           variants: [
-            { id: 101, variantContent: "A", variantType: VariantType.REWORDED },
+            {
+              id: 101,
+              variantContent: "A",
+              variantType: VariantTypeDto.REWORDED,
+            },
           ],
         }),
       ];
       const updated = [
         createMockQuestionDto({
           variants: [
-            { id: 101, variantContent: "B", variantType: VariantType.REWORDED },
+            {
+              id: 101,
+              variantContent: "B",
+              variantType: VariantTypeDto.REWORDED,
+            },
           ],
         }),
       ];

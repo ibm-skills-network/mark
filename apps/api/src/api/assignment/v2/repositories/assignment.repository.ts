@@ -6,19 +6,19 @@ import {
   QuestionVariant,
 } from "@prisma/client";
 import {
-  UserSession,
   UserRole,
+  UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/prisma.service";
 import {
+  AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
-  AssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import {
+  Choice,
   QuestionDto,
   ScoringDto,
-  Choice,
   VariantDto,
   VideoPresentationConfig,
 } from "../../dto/update.questions.request.dto";
@@ -90,6 +90,22 @@ export class AssignmentRepository {
   async findAllForUser(
     userSession: UserSession,
   ): Promise<AssignmentResponseDto[]> {
+    // If user is an author, only show assignments they've authored
+    if (userSession.role === UserRole.AUTHOR) {
+      const authoredAssignments = await this.prisma.assignment.findMany({
+        where: {
+          AssignmentAuthor: {
+            some: {
+              userId: userSession.userId,
+            },
+          },
+        },
+      });
+
+      return authoredAssignments;
+    }
+
+    // For non-authors (learners, admins), show assignments from their group
     const results = await this.prisma.assignmentGroup.findMany({
       where: { groupId: userSession.groupId },
       include: {

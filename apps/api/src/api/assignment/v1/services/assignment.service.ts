@@ -1,4 +1,9 @@
 /* eslint-disable unicorn/no-null */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   HttpException,
   HttpStatus,
@@ -148,14 +153,97 @@ export class AssignmentServiceV1 {
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession.role === UserRole.LEARNER;
 
-    const result = await this.prisma.assignment.findUnique({
-      where: { id },
-      include: {
-        questions: {
-          include: { variants: true },
+    let result: any;
+
+    if (isLearner) {
+      // For learners, fetch the active published version
+      const assignment = await this.prisma.assignment.findUnique({
+        where: { id },
+        include: {
+          currentVersion: {
+            include: {
+              questionVersions: { orderBy: { displayOrder: "asc" } },
+            },
+          },
         },
-      },
-    });
+      });
+
+      if (!assignment) {
+        throw new NotFoundException(`Assignment with Id ${id} not found.`);
+      }
+
+      // If there's an active version, use it; otherwise fall back to main assignment
+      if (assignment.currentVersion) {
+        const version = assignment.currentVersion;
+
+        // Convert versioned data to the expected assignment format
+        result = {
+          id: assignment.id,
+          name: version.name,
+          introduction: version.introduction,
+          instructions: version.instructions,
+          gradingCriteriaOverview: version.gradingCriteriaOverview,
+          timeEstimateMinutes: version.timeEstimateMinutes,
+          type: version.type,
+          graded: version.graded,
+          numAttempts: version.numAttempts,
+          allotedTimeMinutes: version.allotedTimeMinutes,
+          attemptsPerTimeRange: version.attemptsPerTimeRange,
+          attemptsTimeRangeHours: version.attemptsTimeRangeHours,
+          passingGrade: version.passingGrade,
+          displayOrder: version.displayOrder,
+          questionDisplay: version.questionDisplay,
+          numberOfQuestionsPerAttempt: version.numberOfQuestionsPerAttempt,
+          questionOrder: version.questionOrder,
+          published: version.published,
+          showAssignmentScore: version.showAssignmentScore,
+          showQuestionScore: version.showQuestionScore,
+          showSubmissionFeedback: version.showSubmissionFeedback,
+          showQuestions: version.showQuestions,
+          languageCode: version.languageCode,
+          updatedAt: assignment.updatedAt,
+          questions: version.questionVersions.map((qv: any) => ({
+            id: qv.questionId || qv.id,
+            totalPoints: qv.totalPoints,
+            type: qv.type,
+            responseType: qv.responseType,
+            question: qv.question,
+            maxWords: qv.maxWords,
+            scoring: qv.scoring,
+            choices: qv.choices,
+            randomizedChoices: qv.randomizedChoices,
+            answer: qv.answer,
+            gradingContextQuestionIds: qv.gradingContextQuestionIds,
+            maxCharacters: qv.maxCharacters,
+            videoPresentationConfig: qv.videoPresentationConfig,
+            liveRecordingConfig: qv.liveRecordingConfig,
+            displayOrder: qv.displayOrder,
+            isDeleted: false,
+            variants: [], // Question versions don't have variants in the same structure
+          })),
+        };
+      } else {
+        // Fallback to main assignment if no current version
+        result = await this.prisma.assignment.findUnique({
+          where: { id },
+          include: {
+            questions: {
+              include: { variants: true },
+            },
+          },
+        });
+      }
+    } else {
+      // For authors, use the main assignment table (current editing state)
+      result = await this.prisma.assignment.findUnique({
+        where: { id },
+        include: {
+          questions: {
+            include: { variants: true },
+          },
+        },
+      });
+    }
 
     if (!result) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
@@ -208,6 +296,22 @@ export class AssignmentServiceV1 {
   }
 
   async list(userSession: UserSession): Promise<AssignmentResponseDto[]> {
+    // If user is an author, only show assignments they've authored
+    if (userSession.role === UserRole.AUTHOR) {
+      const authoredAssignments = await this.prisma.assignment.findMany({
+        where: {
+          AssignmentAuthor: {
+            some: {
+              userId: userSession.userId,
+            },
+          },
+        },
+      });
+
+      return authoredAssignments;
+    }
+
+    // For non-authors (learners, admins), show assignments from their group
     const results = await this.prisma.assignmentGroup.findMany({
       where: { groupId: userSession.groupId },
       include: {
@@ -460,6 +564,7 @@ export class AssignmentServiceV1 {
       job.id,
       assignmentId,
       updateAssignmentQuestionsDto,
+      userId,
     ).catch((error) => {
       this.logger.error(
         `Error processing publishing job: ${(error as Error).message}`,
@@ -487,6 +592,7 @@ export class AssignmentServiceV1 {
     jobId: number,
     assignmentId: number,
     updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
+    userId: string,
   ): Promise<{ jobId: number; message: string }> {
     const {
       introduction,
@@ -604,6 +710,35 @@ export class AssignmentServiceV1 {
               showQuestions,
             },
           });
+
+          // Store the user as an author of this assignment
+          try {
+            // Check if this author relationship already exists to avoid duplicates
+            const existingAuthor = await this.prisma.assignmentAuthor.findFirst(
+              {
+                where: {
+                  assignmentId,
+                  userId,
+                },
+              },
+            );
+
+            if (!existingAuthor) {
+              await this.prisma.assignmentAuthor.create({
+                data: {
+                  assignmentId,
+                  userId,
+                },
+              });
+            }
+          } catch (error) {
+            // Log but don't fail the publishing process if author tracking fails
+            this.logger.warn(
+              `Failed to store assignment author: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`,
+            );
+          }
         },
       },
       {

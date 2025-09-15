@@ -25,6 +25,7 @@ export class UsageTrackerService implements IUsageTracker {
     usageType: AIUsageType,
     tokensIn: number,
     tokensOut: number,
+    modelKey?: string,
   ): Promise<void> {
     try {
       const assignmentIdToDatabase = Number(assignmentId);
@@ -54,6 +55,7 @@ export class UsageTrackerService implements IUsageTracker {
           tokensOut: { increment: tokensOut },
           usageCount: { increment: 1 },
           updatedAt: new Date(),
+          ...(modelKey && { modelKey }),
         },
         create: {
           assignmentId: assignmentIdToDatabase,
@@ -63,6 +65,7 @@ export class UsageTrackerService implements IUsageTracker {
           usageCount: 1,
           createdAt: new Date(),
           updatedAt: new Date(),
+          modelKey,
         },
       });
 

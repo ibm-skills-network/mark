@@ -11,7 +11,6 @@ import {
   Post,
   Query,
   Req,
-  Res,
   Sse,
   UseGuards,
 } from "@nestjs/common";
@@ -23,7 +22,6 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { ReportType } from "@prisma/client";
-import { Response as ExpressResponse } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Observable } from "rxjs";
 import {
@@ -52,7 +50,9 @@ import {
 } from "../assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
+import { GRADING_AUDIT_SERVICE } from "./attempt.constants";
 import { AttemptServiceV2 } from "./services/attempt.service";
+import { GradingAuditService } from "./services/question-response/grading-audit.service";
 
 @ApiTags("Attempts")
 @Injectable()
@@ -65,6 +65,8 @@ export class AttemptControllerV2 {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly attemptService: AttemptServiceV2,
+    @Inject(GRADING_AUDIT_SERVICE)
+    private readonly gradingAuditService: GradingAuditService,
   ) {
     this.logger = parentLogger.child({ context: AttemptControllerV2.name });
   }
@@ -442,5 +444,67 @@ export class AttemptControllerV2 {
     );
 
     return { message: "Report submitted successfully" };
+  }
+
+  @Get("grading/monitoring")
+  @Roles(UserRole.AUTHOR)
+  @ApiOperation({
+    summary: "Get grading architecture monitoring data for debugging",
+    description:
+      "Returns statistics about grading audit records and logs usage summary",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Grading monitoring data",
+    schema: {
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        statistics: {
+          type: "object",
+          properties: {
+            totalGradings: { type: "number" },
+            strategiesByCount: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  strategy: { type: "string" },
+                  count: { type: "number" },
+                },
+              },
+            },
+            mostActiveQuestions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  questionId: { type: "number" },
+                  count: { type: "number" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: "Forbidden - Author role required" })
+  async getGradingMonitoring(): Promise<{
+    message: string;
+    statistics: any;
+  }> {
+    // Log the usage summary to Winston logs
+    await this.gradingAuditService.logArchitectureUsageSummary();
+
+    // Also return statistics for API response
+    const statistics =
+      await this.gradingAuditService.getGradingUsageStatistics();
+
+    return {
+      message:
+        "Grading architecture usage summary logged. Check application logs for detailed output.",
+      statistics,
+    };
   }
 }

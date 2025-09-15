@@ -541,11 +541,41 @@ export class UpdateAssignmentQuestionsDto {
   showQuestions: boolean;
 
   @ApiProperty({
+    description:
+      "Should the correct answer be shown to the learner after its submission",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showCorrectAnswer: boolean;
+
+  @ApiProperty({
     description: "updatedAt",
     required: false,
   })
   @IsOptional()
   updatedAt: Date;
+  // versionDescription
+  @ApiProperty({
+    description: "versionDescription",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  versionDescription: string;
+
+  // versionNumber
+  @ApiProperty({
+    description:
+      "versionNumber - the specific version number to create when publishing",
+    type: String,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  versionNumber: string;
 }
 /**
  * If a questionVariant is present (not null), you can expand this class

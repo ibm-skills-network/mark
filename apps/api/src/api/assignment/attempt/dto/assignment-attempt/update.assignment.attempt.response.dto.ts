@@ -41,6 +41,14 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
     required: false,
   })
   showQuestions: boolean;
+
+  @ApiProperty({
+    description: "Show correct answer",
+    type: Boolean,
+    required: false,
+  })
+  showCorrectAnswer: boolean;
+
   @ApiProperty({
     description: "The total points earned by the learner.",
     type: Number,

@@ -8,20 +8,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/unbound-method */
 
-import { Test, TestingModule } from "@nestjs/testing";
 import {
   BadRequestException,
   Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { PrismaService } from "src/prisma.service";
+import { Test, TestingModule } from "@nestjs/testing";
 import { ReportType } from "@prisma/client";
-import { ReportService } from "../../../services/report.repository";
+import { PrismaService } from "src/prisma.service";
 import {
   createMockAssignment,
   createMockReport,
 } from "../__mocks__/ common-mocks";
+import { ReportService } from "../../../services/report.repository";
 
 describe("ReportService", () => {
   let service: ReportService;

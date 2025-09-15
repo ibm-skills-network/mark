@@ -32,6 +32,7 @@ interface Props {
   number: number;
   language: string;
   showSubmissionFeedback?: boolean;
+  showCorrectAnswer?: boolean;
 }
 
 interface HighestScoreResponseType {
@@ -104,6 +105,7 @@ const Question: FC<Props> = ({
   number,
   language = "en",
   showSubmissionFeedback,
+  showCorrectAnswer,
 }) => {
   const {
     question: questionText,
@@ -567,7 +569,7 @@ const Question: FC<Props> = ({
                     ? isCorrect
                       ? "bg-green-50 border border-green-500 rounded"
                       : "bg-red-50 border border-red-700 rounded"
-                    : isCorrect && showSubmissionFeedback
+                    : isCorrect && showCorrectAnswer
                       ? "bg-green-50 border border-green-500 rounded"
                       : ""
                 }`}
@@ -612,10 +614,10 @@ const Question: FC<Props> = ({
                   </div>
 
                   <div className="flex-shrink-0 ml-2">
-                    {isCorrect && showSubmissionFeedback && (
+                    {isCorrect && showCorrectAnswer && (
                       <CheckIcon className="w-5 h-5 text-green-500" />
                     )}
-                    {!isCorrect && isSelected && showSubmissionFeedback && (
+                    {!isCorrect && isSelected && (
                       <XMarkIcon className="w-5 h-5 text-red-500" />
                     )}
                   </div>

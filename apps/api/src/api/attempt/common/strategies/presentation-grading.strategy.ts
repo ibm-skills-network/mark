@@ -1,12 +1,20 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { Injectable, BadRequestException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
+import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
-import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
-import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
-import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
+import { Logger } from "winston";
+import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import {
   LearnerPresentationResponse,
@@ -21,9 +29,17 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
   constructor(
     private readonly llmFacadeService: LlmFacadeService,
     protected readonly localizationService: LocalizationService,
+    @Inject(GRADING_AUDIT_SERVICE)
     protected readonly gradingAuditService: GradingAuditService,
+    @Optional() @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger,
   ) {
-    super(localizationService, gradingAuditService);
+    super(
+      localizationService,
+      gradingAuditService,
+      undefined,
+      undefined,
+      parentLogger,
+    );
   }
 
   /**
@@ -88,15 +104,37 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
     learnerResponse: LearnerPresentationResponse,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    let responseDto: CreateQuestionResponseAttemptResponseDto;
+
     if (question.responseType === "LIVE_RECORDING") {
-      return this.gradeLiveRecording(question, learnerResponse, context);
+      responseDto = await this.gradeLiveRecording(
+        question,
+        learnerResponse,
+        context,
+      );
     } else if (question.responseType === "PRESENTATION") {
-      return this.gradePresentation(question, learnerResponse, context);
+      responseDto = await this.gradePresentation(
+        question,
+        learnerResponse,
+        context,
+      );
     } else {
       throw new BadRequestException(
         `Unsupported presentation response type: ${question.responseType}`,
       );
     }
+
+    await this.recordGrading(
+      question,
+      {
+        learnerPresentationResponse: learnerResponse,
+      } as CreateQuestionResponseAttemptRequestDto,
+      responseDto,
+      context,
+      `PresentationGradingStrategy-${question.responseType}`,
+    );
+
+    return responseDto;
   }
 
   /**

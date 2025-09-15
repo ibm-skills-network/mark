@@ -1,5 +1,4 @@
 /* eslint-disable */
-
 import { getBaseApiPath } from "@/config/constants";
 import { IssueSeverity } from "@/config/types";
 import { BASE_API_ROUTES } from "@/lib/talkToBackend";
@@ -19,6 +18,7 @@ interface ReportResponse {
   content: string;
   issueId?: string | number;
   issueNumber?: number;
+  reportId?: number;
   error?: string;
 }
 
@@ -51,7 +51,6 @@ export class ReportingService {
         category: details.category || "General Issue",
         ...details,
       };
-      console.log("Forwarding cookies:", cookieHeader);
 
       const response = await fetch(`${getBaseApiPath("v1")}/reports`, {
         method: "POST",
@@ -80,6 +79,7 @@ export class ReportingService {
           data.message ||
           `Thank you for reporting this issue. Our team will review it shortly.`,
         issueNumber: data.issueNumber,
+        reportId: data.reportId,
       };
     } catch (error) {
       return {

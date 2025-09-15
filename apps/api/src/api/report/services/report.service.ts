@@ -1,26 +1,339 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { ReportStatus, ReportType } from "@prisma/client";
+import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
+import * as jwt from "jsonwebtoken";
 import * as natural from "natural";
+import { FilesService } from "src/api/files/services/files.service";
 import { NotificationsService } from "src/api/user/services/notification.service";
-import { UserRole } from "src/auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSession,
+} from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/prisma.service";
 import { ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 
+interface FeedbackFilterParameters {
+  page: number;
+  limit: number;
+  search?: string;
+  assignmentId?: number;
+  allowContact?: boolean;
+  startDate?: string;
+  endDate?: string;
+  userSession?: UserSession;
+}
+
+interface ReportFilterParameters {
+  page: number;
+  limit: number;
+  search?: string;
+  assignmentId?: number;
+  status?: string;
+  issueType?: string;
+  startDate?: string;
+  endDate?: string;
+}
 @Injectable()
 export class ReportsService {
+  private ghTokenCache: { value: string; expiresAt: number } | null = null;
+  private ghInstallationIdCache: number | null = null;
+
   constructor(
     private readonly floService: FloService,
     private readonly prisma: PrismaService,
+    private readonly filesService: FilesService,
     private readonly notificationsService: NotificationsService,
   ) {}
+  private getPrivateKey(): string {
+    const raw = process.env.GITHUB_APP_PRIVATE_KEY || "";
+    const processed = raw.includes("\\n") ? raw.replaceAll("\\n", "\n") : raw;
+    return processed;
+  }
 
+  private buildAppJWT(): string {
+    const appId = process.env.GITHUB_APP_ID;
+    if (!appId) {
+      throw new InternalServerErrorException("GITHUB_APP_ID missing");
+    }
+    const privateKey = this.getPrivateKey();
+    const now = Math.floor(Date.now() / 1000);
+
+    try {
+      const token = jwt.sign(
+        {
+          iat: now - 60,
+          exp: now + 9 * 60,
+          iss: appId,
+        },
+        privateKey,
+        { algorithm: "RS256" },
+      );
+      return token;
+    } catch (error) {
+      console.error("Failed to create JWT:", error);
+      throw new InternalServerErrorException("Failed to create GitHub App JWT");
+    }
+  }
+
+  private async getInstallationId(): Promise<number> {
+    if (this.ghInstallationIdCache) return this.ghInstallationIdCache;
+
+    const explicit = process.env.GITHUB_APP_INSTALLATION_ID;
+    if (explicit) {
+      this.ghInstallationIdCache = Number(explicit);
+      return this.ghInstallationIdCache;
+    }
+
+    const owner = process.env.GITHUB_OWNER;
+    const repo = process.env.GITHUB_REPO;
+    if (!owner || !repo) {
+      throw new InternalServerErrorException(
+        "GITHUB_OWNER or GITHUB_REPO missing",
+      );
+    }
+
+    try {
+      const appJwt = this.buildAppJWT();
+
+      const { data } = await axios.get(
+        `https://api.github.com/repos/${owner}/${repo}/installation`,
+        {
+          headers: {
+            Authorization: `Bearer ${appJwt}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        },
+      );
+      // data.id is the installation id
+      this.ghInstallationIdCache = Number(data.id);
+      return this.ghInstallationIdCache;
+    } catch (error) {
+      console.error("Failed to get installation ID:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("Response status:", error.response?.status);
+        console.error("Response data:", error.response?.data);
+      }
+      throw new InternalServerErrorException(
+        "Failed to get GitHub App installation ID",
+      );
+    }
+  }
+  private async getInstallationToken(): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+
+    if (this.ghTokenCache && this.ghTokenCache.expiresAt - 60 > now) {
+      return this.ghTokenCache.value;
+    }
+
+    try {
+      const installationId = await this.getInstallationId();
+      const appJwt = this.buildAppJWT();
+
+      const { data } = await axios.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${appJwt}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        },
+      );
+
+      const token = data.token as string;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      const expiresAt = Math.floor(new Date(data.expires_at).getTime() / 1000);
+      this.ghTokenCache = { value: token, expiresAt };
+      return token;
+    } catch (error) {
+      console.error("Failed to get installation token:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("Response status:", error.response?.status);
+        console.error("Response data:", error.response?.data);
+      }
+      throw new InternalServerErrorException(
+        "Failed to get GitHub App installation token",
+      );
+    }
+  }
+
+  async getFeedback(parameters: FeedbackFilterParameters) {
+    const {
+      page,
+      limit,
+      search,
+      assignmentId,
+      allowContact,
+      startDate,
+      endDate,
+      userSession,
+    } = parameters;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AssignmentFeedbackWhereInput = {};
+
+    // If user is an author, only show feedback for their assignments
+    if (userSession && userSession.role === UserRole.AUTHOR) {
+      where.assignment = {
+        AssignmentAuthor: {
+          some: {
+            userId: userSession.userId,
+          },
+        },
+      };
+    }
+
+    if (assignmentId) {
+      where.assignmentId = assignmentId;
+    }
+
+    if (allowContact !== undefined) {
+      where.allowContact = allowContact;
+    }
+
+    if (search) {
+      where.OR = [
+        { comments: { contains: search, mode: "insensitive" } },
+        { firstName: { contains: search, mode: "insensitive" } },
+        { lastName: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        where.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.createdAt.lte = new Date(endDate);
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.assignmentFeedback.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          assignment: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          assignmentAttempt: {
+            select: {
+              id: true,
+              grade: true,
+              submitted: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+      this.prisma.assignmentFeedback.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getReports(parameters: ReportFilterParameters) {
+    const {
+      page,
+      limit,
+      search,
+      assignmentId,
+      status,
+      issueType,
+      startDate,
+      endDate,
+    } = parameters;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ReportWhereInput = {};
+
+    if (assignmentId) {
+      where.assignmentId = assignmentId;
+    }
+
+    if (status) {
+      where.status = status as unknown;
+    }
+
+    if (issueType) {
+      where.issueType = issueType as unknown;
+    }
+
+    if (search) {
+      where.OR = [
+        { description: { contains: search, mode: "insensitive" } },
+        { statusMessage: { contains: search, mode: "insensitive" } },
+        { resolution: { contains: search, mode: "insensitive" } },
+        { comments: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        where.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.createdAt.lte = new Date(endDate);
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.report.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          assignment: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+      this.prisma.report.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
   private async createGithubIssue(
     title: string,
     body: string,
@@ -28,41 +341,56 @@ export class ReportsService {
   ): Promise<{ number: number; [key: string]: any }> {
     const githubOwner = process.env.GITHUB_OWNER;
     const githubRepo = process.env.GITHUB_REPO;
-    const token = process.env.GITHUB_APP_TOKEN;
+
+    const token = await this.getInstallationToken();
     if (!githubOwner || !githubRepo || !token) {
+      const missingConfig = [];
+      if (!githubOwner) missingConfig.push("GITHUB_OWNER");
+      if (!githubRepo) missingConfig.push("GITHUB_REPO");
+      if (!token) missingConfig.push("installation token");
+      console.error("Missing GitHub configuration:", missingConfig);
       throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
+        `GitHub repository configuration or token missing: ${missingConfig.join(
+          ", ",
+        )}`,
       );
     }
 
     try {
-      const response = await axios.post(
-        `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues`,
-        {
-          title,
-          body,
-          labels,
+      const url = `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues`;
+      const payload = { title, body, labels };
+      const response = await axios.post(url, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
         },
-        {
-          headers: {
-            Authorization: `token ${token}`,
-            Accept: "application/vnd.github.v3+json",
-          },
-        },
-      );
+      });
 
       return response.data as { number: number; [key: string]: any };
     } catch (error) {
-      const error_ = axios.isAxiosError(error)
-        ? new InternalServerErrorException(
-            `Failed to create GitHub issue: ${error.message}`,
-          )
-        : new InternalServerErrorException(
-            `Failed to create GitHub issue: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          );
-      throw error_;
+      console.error("Failed to create GitHub issue:", error);
+
+      if (axios.isAxiosError(error)) {
+        console.error("HTTP Status:", error.response?.status);
+        console.error("Response headers:", error.response?.headers);
+        console.error("Response data:", error.response?.data);
+
+        const errorMessage: string =
+          error.response?.data?.message || error.message;
+        const status = error.response?.status;
+
+        throw new InternalServerErrorException(
+          `Failed to create GitHub issue (${status}): ${errorMessage}`,
+        );
+      } else {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        console.error("Non-HTTP error:", errorMessage);
+        throw new InternalServerErrorException(
+          `Failed to create GitHub issue: ${errorMessage}`,
+        );
+      }
     }
   }
 
@@ -74,7 +402,7 @@ export class ReportsService {
   }> {
     const githubOwner = process.env.GITHUB_OWNER;
     const githubRepo = process.env.GITHUB_REPO;
-    const token = process.env.GITHUB_APP_TOKEN;
+    const token = await this.getInstallationToken();
     if (!githubOwner || !githubRepo || !token) {
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
@@ -86,8 +414,9 @@ export class ReportsService {
         `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}`,
         {
           headers: {
-            Authorization: `token ${token}`,
-            Accept: "application/vnd.github.v3+json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
           },
         },
       );
@@ -406,6 +735,7 @@ export class ReportsService {
       attemptId?: number;
       userId?: string;
     },
+    screenshot?: Express.Multer.File,
   ): Promise<{
     message: string;
     issueNumber?: number;
@@ -419,7 +749,8 @@ export class ReportsService {
     }>;
     isDuplicate?: boolean;
   }> {
-    const { issueType, description, attemptId, severity } = dto;
+    const { issueType, description, attemptId, severity, additionalDetails } =
+      dto;
     const assignmentId = userSession?.assignmentId;
 
     if (!issueType) {
@@ -456,6 +787,34 @@ export class ReportsService {
       };
     }
 
+    let screenshotUrl: string | undefined;
+    if (screenshot && screenshot.buffer) {
+      try {
+        const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
+        if (debugBucket) {
+          const uniqueId =
+            Date.now().toString(36) + Math.random().toString(36).slice(2);
+          const screenshotKey = `issue-screenshots/${uniqueId}-${screenshot.originalname}`;
+
+          await this.filesService.directUpload(
+            screenshot,
+            debugBucket,
+            screenshotKey,
+          );
+
+          screenshotUrl = screenshotKey;
+          console.log("Screenshot uploaded successfully:", screenshotUrl);
+        } else {
+          console.warn(
+            "IBM_COS_DEBUG_BUCKET not configured, skipping screenshot upload",
+          );
+        }
+      } catch (uploadError) {
+        console.error("Failed to upload screenshot:", uploadError);
+        // Continue with report creation even if screenshot upload fails
+      }
+    }
+
     const mappedIssueType = this.mapIssueTypeToReportType(issueType);
 
     const similarReports = await this.findSimilarReports(
@@ -490,6 +849,39 @@ ${isProduction ? "PROD" : "DEV"}] [${role}] ${issueSeverity.toUpperCase()} ${
 ${description}
 `;
 
+    // Include screenshot if provided (either from additionalDetails or uploaded file)
+    const finalScreenshotUrl =
+      screenshotUrl || additionalDetails?.screenshotUrl;
+    if (finalScreenshotUrl && typeof finalScreenshotUrl === "string") {
+      // Get environment variable for IBM COS debug bucket
+      const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
+      const cosEndpoint = process.env.IBM_COS_ENDPOINT;
+
+      // If we uploaded the screenshot (screenshotUrl is set) or it's a full bucket path
+      if (
+        cosEndpoint &&
+        debugBucket &&
+        (screenshotUrl || finalScreenshotUrl.includes(debugBucket))
+      ) {
+        // Construct full IBM COS URL for the screenshot
+        const fullScreenshotUrl = screenshotUrl
+          ? `${cosEndpoint}/${debugBucket}/${screenshotUrl}`
+          : `${cosEndpoint}/${debugBucket}/${finalScreenshotUrl}`;
+
+        issueBody += `
+### Screenshot
+![Screenshot](${fullScreenshotUrl})
+
+*Screenshot uploaded to IBM Cloud Object Storage: \`${finalScreenshotUrl}\`*
+`;
+      } else {
+        issueBody += `
+### Screenshot
+Screenshot Key: \`${finalScreenshotUrl}\`
+`;
+      }
+    }
+
     if (similarReports.length > 0) {
       issueBody += `\n\n### Similar Issues\n`;
       for (const report of similarReports.slice(0, 3)) {
@@ -519,7 +911,7 @@ ${description}
 
         const githubOwner = process.env.GITHUB_OWNER;
         const githubRepo = process.env.GITHUB_REPO;
-        const token = process.env.GITHUB_APP_TOKEN;
+        const token = await this.getInstallationToken();
 
         if (!githubOwner || !githubRepo || !token) {
           throw new InternalServerErrorException(
@@ -527,7 +919,7 @@ ${description}
           );
         }
 
-        const commentBody = `
+        let commentBody = `
 ## Duplicate Report Detected
 
 Another user has reported a nearly identical issue:
@@ -542,13 +934,34 @@ Another user has reported a nearly identical issue:
 ${description}
 `;
 
+        // Include screenshot in duplicate report comment if provided
+        const screenshotUrl = additionalDetails?.screenshotUrl;
+        if (screenshotUrl && typeof screenshotUrl === "string") {
+          const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
+          if (debugBucket && screenshotUrl.includes(debugBucket)) {
+            const cosEndpoint = process.env.IBM_COS_ENDPOINT;
+            const fullScreenshotUrl = `${cosEndpoint}/${debugBucket}/${screenshotUrl}`;
+
+            commentBody += `
+### Screenshot from duplicate report
+![Screenshot](${fullScreenshotUrl})
+`;
+          } else {
+            commentBody += `
+### Screenshot from duplicate report
+Screenshot Key: \`${screenshotUrl}\`
+`;
+          }
+        }
+
         await axios.post(
           `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${parentIssueNumber}/comments`,
           { body: commentBody },
           {
             headers: {
-              Authorization: `token ${token}`,
-              Accept: "application/vnd.github.v3+json",
+              Authorization: `Bearer ${token}`,
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
             },
           },
         );
@@ -557,8 +970,9 @@ ${description}
           `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${parentIssueNumber}`,
           {
             headers: {
-              Authorization: `token ${token}`,
-              Accept: "application/vnd.github.v3+json",
+              Authorization: `Bearer ${token}`,
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
             },
           },
         );
@@ -570,14 +984,9 @@ ${description}
           closed_at?: string | null;
         };
 
-        let parentClosureReason = "duplicate";
-
         if (issue.state === "closed") {
-          const { status, closureReason } =
-            await this.checkGitHubIssueStatus(parentIssueNumber);
-          if (closureReason) {
-            parentClosureReason = closureReason;
-          }
+          await this.checkGitHubIssueStatus(parentIssueNumber);
+          // Parent closure reason can be used if needed for future enhancements
         }
       } else if (highSimilarityReport?.issueNumber) {
         const labels = ["chat-report", "related-issue"];
@@ -595,7 +1004,7 @@ ${description}
 
         const githubOwner = process.env.GITHUB_OWNER;
         const githubRepo = process.env.GITHUB_REPO;
-        const token = process.env.GITHUB_APP_TOKEN;
+        const token = await this.getInstallationToken();
 
         if (githubOwner && githubRepo && token) {
           const relationComment = `
@@ -612,8 +1021,9 @@ A new related issue has been created: #${issue.number}
             { body: relationComment },
             {
               headers: {
-                Authorization: `token ${token}`,
-                Accept: "application/vnd.github.v3+json",
+                Authorization: `Bearer ${token}`,
+                Accept: "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
               },
             },
           );
@@ -1244,7 +1654,7 @@ A new related issue has been created: #${issue.number}
   }> {
     const githubOwner = process.env.GITHUB_OWNER;
     const githubRepo = process.env.GITHUB_REPO;
-    const token = process.env.GITHUB_APP_TOKEN;
+    const token = await this.getInstallationToken();
 
     if (!githubOwner || !githubRepo || !token) {
       throw new InternalServerErrorException(
@@ -1257,8 +1667,9 @@ A new related issue has been created: #${issue.number}
         `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}`,
         {
           headers: {
-            Authorization: `token ${token}`,
-            Accept: "application/vnd.github.v3+json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
           },
         },
       );
@@ -1594,7 +2005,7 @@ A new related issue has been created: #${issue.number}
       try {
         const githubOwner = process.env.GITHUB_OWNER;
         const githubRepo = process.env.GITHUB_REPO;
-        const token = process.env.GITHUB_APP_TOKEN;
+        const token = await this.getInstallationToken();
 
         if (githubOwner && githubRepo && token) {
           let updatedBody = report.description;
@@ -1628,8 +2039,9 @@ A new related issue has been created: #${issue.number}
               },
               {
                 headers: {
-                  Authorization: `token ${token}`,
-                  Accept: "application/vnd.github.v3+json",
+                  Authorization: `Bearer ${token}`,
+                  Accept: "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
                 },
               },
             );
@@ -1811,7 +2223,7 @@ A new related issue has been created: #${issue.number}
       try {
         const githubOwner = process.env.GITHUB_OWNER;
         const githubRepo = process.env.GITHUB_REPO;
-        const token = process.env.GITHUB_APP_TOKEN;
+        const token = await this.getInstallationToken();
 
         if (githubOwner && githubRepo && token) {
           await axios.post(
@@ -1821,8 +2233,9 @@ A new related issue has been created: #${issue.number}
             },
             {
               headers: {
-                Authorization: `token ${token}`,
-                Accept: "application/vnd.github.v3+json",
+                Authorization: `Bearer ${token}`,
+                Accept: "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
               },
             },
           );
@@ -2073,5 +2486,82 @@ ${description}
           "We encountered an issue while submitting your feedback. Please try again later.",
       };
     }
+  }
+
+  async addScreenshotToReport(
+    reportId: number,
+    screenshotUrl: string,
+    userId: string,
+    bucket?: string,
+  ) {
+    // Find the report and verify the user owns it
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+    });
+
+    if (!report) {
+      throw new NotFoundException(`Report with ID ${reportId} not found`);
+    }
+
+    if (report.reporterId !== userId) {
+      throw new NotFoundException(`Report with ID ${reportId} not found`);
+    }
+
+    // Add screenshot URL to the GitHub issue if it exists
+    if (report.issueNumber) {
+      try {
+        const token = await this.getInstallationToken();
+        const owner = process.env.GITHUB_OWNER;
+        const repo = process.env.GITHUB_REPO;
+
+        // Construct the full COS URL for the screenshot
+        const debugBucket = bucket || process.env.IBM_COS_DEBUG_BUCKET;
+        const cosEndpoint = process.env.IBM_COS_ENDPOINT;
+        const fullScreenshotUrl = `${cosEndpoint}/${debugBucket}/${screenshotUrl}`;
+
+        const commentBody = `
+### Screenshot Added
+
+![Screenshot](${fullScreenshotUrl})
+
+*Screenshot uploaded to IBM Cloud Object Storage: \`${screenshotUrl}\`*
+`;
+
+        await axios.post(
+          `https://api.github.com/repos/${owner}/${repo}/issues/${report.issueNumber}/comments`,
+          {
+            body: commentBody,
+          },
+          {
+            headers: {
+              Authorization: `token ${token}`,
+              Accept: "application/vnd.github.v3+json",
+            },
+          },
+        );
+
+        console.log(`Screenshot added to GitHub issue #${report.issueNumber}`);
+      } catch (error) {
+        console.error(`Error adding screenshot to GitHub issue:`, error);
+      }
+    }
+
+    // Update the report's comments to include the screenshot URL
+    const currentComments = report.comments || "";
+    const screenshotComment = `\n[Screenshot: ${screenshotUrl}]`;
+
+    await this.prisma.report.update({
+      where: { id: reportId },
+      data: {
+        comments: currentComments + screenshotComment,
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      message: "Screenshot added to report successfully",
+      screenshotUrl,
+    };
   }
 }

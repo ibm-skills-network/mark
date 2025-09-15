@@ -161,13 +161,10 @@ export interface FileAccessResponse {
 export type QuestionAttemptRequest = {
   learnerTextResponse?: string;
   learnerUrlResponse?: string;
-
   learnerChoices?: string[];
-
   learnerAnswerChoice?: boolean | undefined;
-
   learnerFileResponse?: learnerFileResponse[] | undefined;
-  learnePresentationResponse?: PresentationQuestionResponse;
+  learnerPresentationResponse?: PresentationQuestionResponse;
 };
 export type RepoType = {
   id: number;
@@ -219,6 +216,7 @@ export type AuthorAssignmentState = {
   showQuestionScore: boolean;
   showSubmissionFeedback: boolean;
   showQuestions: boolean;
+  showCorrectAnswer: boolean;
   updatedAt: number;
   numberOfQuestionsPerAttempt?: number;
 };
@@ -495,11 +493,12 @@ export type QuestionStore = LearnerGetQuestionResponse &
     translationOn: boolean;
     selectedLanguage: string;
     translatedQuestion: string;
-    translatedChoices: Choice[];
+    translatedChoices: string[];
     answers?: string[];
     presentationResponse?: PresentationQuestionResponse;
     videoPresentationConfig?: videoPresentationConfig;
     liveRecordingConfig?: LiveRecordingConfig;
+    learnerPresentationResponse?: PresentationQuestionResponse;
   };
 
 export type slideMetaData = {
@@ -561,6 +560,7 @@ export type FeedbackData = {
   showQuestions: boolean;
 
   showAssignmentScore: boolean;
+  showCorrectAnswer: boolean;
   updatedAt: number | undefined;
 };
 
@@ -583,8 +583,11 @@ export type ReplaceAssignmentRequest = {
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
+  showCorrectAnswer?: boolean;
   updatedAt: number;
   questionVariationNumber?: number;
+  versionDescription?: string;
+  versionNumber?: string;
 };
 
 export interface Assignment extends ReplaceAssignmentRequest {
@@ -623,6 +626,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   showAssignmentScore?: boolean;
   showQuestions?: boolean;
   showQuestionScore?: boolean;
+  showCorrectAnswer?: boolean;
   comments?: string;
   preferredLanguage?: string;
 }
@@ -644,6 +648,7 @@ export interface AssignmentDetails {
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
+  showCorrectAnswer?: boolean;
   numberOfQuestionsPerAttempt?: number;
 }
 
@@ -656,6 +661,7 @@ export interface AssignmentDetailsLocal extends AssignmentDetails {
   showAssignmentScore: boolean;
   showQuestionScore: boolean;
   showSubmissionFeedback: boolean;
+  showCorrectAnswer: boolean;
 }
 
 export type BaseBackendResponse = {

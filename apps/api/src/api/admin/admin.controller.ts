@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await */
 import {
   Body,
   Controller,
@@ -19,6 +20,8 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { Assignment } from "@prisma/client";
+import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
@@ -44,7 +47,10 @@ import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignm
   version: "1",
 })
 export class AdminController {
-  constructor(private adminService: AdminService) {}
+  constructor(
+    private adminService: AdminService,
+    private adminRepository: AdminRepository,
+  ) {}
 
   @Post("assignments/clone/:id")
   @ApiOperation({
@@ -77,7 +83,13 @@ export class AdminController {
       groupId,
     );
   }
-
+  @Get("/assignments")
+  @ApiOperation({ summary: "Get all assignments" })
+  @ApiResponse({ status: 200, type: [BaseAssignmentResponseDto] })
+  @ApiResponse({ status: 403 })
+  getAssignments(): Promise<Assignment[]> {
+    return this.adminRepository.findAllAssignments();
+  }
   @Post("/assignments")
   @ApiOperation({ summary: "Create an assignment" })
   @ApiBody({ type: AdminCreateAssignmentRequestDto })

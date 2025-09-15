@@ -3,6 +3,7 @@ import { Request } from "express";
 export enum UserRole {
   LEARNER = "learner",
   AUTHOR = "author",
+  ADMIN = "admin",
 }
 
 export interface UserSession {

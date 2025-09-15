@@ -1,16 +1,23 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
+import { useAppConfig } from "@/stores/appConfig";
+import { type ClassValue, clsx } from "clsx";
 import { useCallback } from "react";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export function absoluteUrl(path: string) {
   const base = getBaseUrl();
   return `${base}${path}`;
 }
-
 const getBaseUrl = () => {
   if (typeof window !== "undefined") return "";
-  if (process.env.NODE_ENV === "production") return "http://mark-api-gateway";
-  return `http://localhost:${process.env.PORT ?? 3000}`;
+  if (process.env.NODE_ENV === "production")
+    return `${process.env.API_GATEWAY_HOST}`;
+  return `http://localhost:${process.env.PORT ?? 3010}`;
 };
 
 export const getFeedbackColors = (score: number, totalPoints: number) => {

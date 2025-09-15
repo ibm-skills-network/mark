@@ -1,14 +1,23 @@
 import { Global, Module } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
 import { S3Service } from "../files/services/s3.service";
+import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
+import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
+import { Gpt5NanoLlmService } from "./core/services/gpt5-nano-llm.service";
+import { LLMAssignmentService } from "./core/services/llm-assignment.service";
+import { LLMPricingService } from "./core/services/llm-pricing.service";
+import { LLMResolverService } from "./core/services/llm-resolver.service";
 import { LlmRouter } from "./core/services/llm-router.service";
 import { ModerationService } from "./core/services/moderation.service";
 import { OpenAiLlmMiniService } from "./core/services/openai-llm-mini.service";
+import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.service";
 import { OpenAiLlmService } from "./core/services/openai-llm.service";
+// import { LlamaLlmService } from "./core/services/llama-llm.service";
 import { PromptProcessorService } from "./core/services/prompt-processor.service";
 import { TokenCounterService } from "./core/services/token-counter.service";
 import { UsageTrackerService } from "./core/services/usage-tracking.service";
 import { FileGradingService } from "./features/grading/services/file-grading.service";
+import { GradingJudgeService } from "./features/grading/services/grading-judge.service";
 import { ImageGradingService } from "./features/grading/services/image-grading.service";
 import { PresentationGradingService } from "./features/grading/services/presentation-grading.service";
 import { TextGradingService } from "./features/grading/services/text-grading.service";
@@ -22,7 +31,11 @@ import { LlmFacadeService } from "./llm-facade.service";
 import {
   ALL_LLM_PROVIDERS,
   FILE_GRADING_SERVICE,
+  GRADING_JUDGE_SERVICE,
   IMAGE_GRADING_SERVICE,
+  LLM_ASSIGNMENT_SERVICE,
+  LLM_PRICING_SERVICE,
+  LLM_RESOLVER_SERVICE,
   MODERATION_SERVICE,
   PRESENTATION_GRADING_SERVICE,
   PROMPT_PROCESSOR,
@@ -36,7 +49,6 @@ import {
   VALIDATOR_SERVICE,
   VIDEO_PRESENTATION_GRADING_SERVICE,
 } from "./llm.constants";
-import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.service";
 
 @Global()
 @Module({
@@ -46,6 +58,10 @@ import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.s
     OpenAiLlmService,
     OpenAiLlmMiniService,
     Gpt4VisionPreviewLlmService,
+    Gpt5LlmService,
+    Gpt5MiniLlmService,
+    Gpt5NanoLlmService,
+    // LlamaLlmService,
     LlmRouter,
     {
       provide: ALL_LLM_PROVIDERS,
@@ -53,17 +69,28 @@ import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.s
         p1: OpenAiLlmService,
         p2: OpenAiLlmMiniService,
         p3: Gpt4VisionPreviewLlmService,
+        p4: Gpt5LlmService,
+        p5: Gpt5MiniLlmService,
+        p6: Gpt5NanoLlmService,
+        // p7: LlamaLlmService,
       ) => {
-        return [p1, p2, p3];
+        return [p1, p2, p3, p4, p5, p6];
       },
       inject: [
         OpenAiLlmService,
         OpenAiLlmMiniService,
         Gpt4VisionPreviewLlmService,
+        Gpt5LlmService,
+        Gpt5MiniLlmService,
+        Gpt5NanoLlmService,
+        // LlamaLlmService,
       ],
     },
     S3Service,
-
+    {
+      provide: GRADING_JUDGE_SERVICE,
+      useClass: GradingJudgeService,
+    },
     {
       provide: VALIDATOR_SERVICE,
       useClass: QuestionValidatorService,
@@ -83,6 +110,18 @@ import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.s
     {
       provide: USAGE_TRACKER,
       useClass: UsageTrackerService,
+    },
+    {
+      provide: LLM_PRICING_SERVICE,
+      useClass: LLMPricingService,
+    },
+    {
+      provide: LLM_ASSIGNMENT_SERVICE,
+      useClass: LLMAssignmentService,
+    },
+    {
+      provide: LLM_RESOLVER_SERVICE,
+      useClass: LLMResolverService,
     },
 
     {
@@ -133,6 +172,10 @@ import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.s
     MODERATION_SERVICE,
     TOKEN_COUNTER,
     USAGE_TRACKER,
+    GRADING_JUDGE_SERVICE,
+    LLM_PRICING_SERVICE,
+    LLM_ASSIGNMENT_SERVICE,
+    LLM_RESOLVER_SERVICE,
     TEXT_GRADING_SERVICE,
     FILE_GRADING_SERVICE,
     IMAGE_GRADING_SERVICE,

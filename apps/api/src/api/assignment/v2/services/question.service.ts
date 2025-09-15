@@ -180,12 +180,6 @@ export class QuestionService {
           (q) => q.id === backendId,
         );
 
-        const questionContentChanged =
-          forceTranslation ||
-          !existingQuestion ||
-          existingQuestion.question !== questionDto.question ||
-          !this.areChoicesEqual(existingQuestion.choices, questionDto.choices);
-
         if (
           existingQuestion &&
           existingQuestion.question !== questionDto.question
@@ -219,30 +213,26 @@ export class QuestionService {
           liveRecordingConfig: questionDto.liveRecordingConfig,
           videoPresentationConfig: questionDto.videoPresentationConfig,
           gradingContextQuestionIds: questionDto.gradingContextQuestionIds,
+          isDeleted: false, // Explicitly set to false during publishing
         });
 
         if (!existingQuestion) {
           frontendToBackendIdMap.set(questionDto.id, upsertedQuestion.id);
         }
 
-        if (questionContentChanged || forceTranslation) {
-          await updateProgress(
-            questionStartProgress + progressPerQuestion * 0.5,
-            `Translating question ${index + 1}`,
-          );
+        // Always translate the original question (with variantId: null)
+        await updateProgress(
+          questionStartProgress + progressPerQuestion * 0.5,
+          `Translating question ${index + 1}`,
+        );
 
-          const translationJob = await this.jobStatusService.createJob(
-            assignmentId,
-            "system",
-          );
-
-          await this.translationService.translateQuestion(
-            assignmentId,
-            upsertedQuestion.id,
-            questionDto,
-            translationJob.id,
-          );
-        }
+        await this.translationService.translateQuestion(
+          assignmentId,
+          upsertedQuestion.id,
+          questionDto,
+          jobId || 0, // Use main job or fallback
+          true, // Force retranslation on every publish
+        );
 
         const variantCount = questionDto.variants?.length || 0;
         if (variantCount > 0) {
@@ -251,18 +241,14 @@ export class QuestionService {
             `Processing ${variantCount} variants for question ${index + 1}`,
           );
 
-          const checkVariantsChanged = this.checkVariantsForChanges(
-            existingQuestion?.variants || [],
-            questionDto.variants || [],
-          );
-
           await this.processVariantsForQuestion(
             assignmentId,
             upsertedQuestion.id,
             questionDto.variants || [],
             existingQuestion?.variants || [],
-            undefined,
-            checkVariantsChanged || forceTranslation,
+            jobId,
+            // checkVariantsChanged || forceTranslation
+            true, // Always force translation for variants
           );
         }
 
@@ -640,29 +626,32 @@ export class QuestionService {
           variantData,
         );
 
-        if (jobId && contentChanged) {
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "In Progress",
-            progress: `Translating variant ${
-              index + 1
-            }/${totalVariants} for question #${questionId}`,
-          });
-
-          await this.translationService.translateVariant(
-            assignmentId,
-            questionId,
-            updatedVariant.id,
-            updatedVariant as unknown as VariantDto,
-            jobId,
-          );
-        } else if (jobId) {
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "In Progress",
-            progress: `Variant ${
-              index + 1
-            }/${totalVariants} unchanged, skipping translation`,
-          });
+        if (jobId) {
+          await (contentChanged
+            ? this.jobStatusService.updateJobStatus(jobId, {
+                status: "In Progress",
+                progress: `Translating variant ${
+                  index + 1
+                }/${totalVariants} for question #${questionId} (content changed)`,
+              })
+            : this.jobStatusService.updateJobStatus(jobId, {
+                status: "In Progress",
+                progress: `Ensuring translations for variant ${
+                  index + 1
+                }/${totalVariants} for question #${questionId}`,
+              }));
         }
+
+        // Always translate variants, regardless of jobId
+        await this.translationService.translateVariant(
+          assignmentId,
+          questionId,
+          updatedVariant.id,
+          updatedVariant as unknown as VariantDto,
+          jobId || 0, // Use 0 as fallback jobId for non-job contexts
+          // contentChanged // Force retranslation only if content changed
+          true, // Always force translation for existing variants
+        );
       } else {
         const newVariant = await this.variantRepository.create(variantData);
 
@@ -673,15 +662,17 @@ export class QuestionService {
               index + 1
             }/${totalVariants} for question #${questionId}`,
           });
-
-          await this.translationService.translateVariant(
-            assignmentId,
-            questionId,
-            newVariant.id,
-            newVariant as unknown as VariantDto,
-            jobId,
-          );
         }
+
+        // Always translate new variants, regardless of jobId
+        await this.translationService.translateVariant(
+          assignmentId,
+          questionId,
+          newVariant.id,
+          newVariant as unknown as VariantDto,
+          jobId || 0, // Use 0 as fallback jobId for non-job contexts
+          true, // Always force translation for new variants
+        );
       }
     }
   }

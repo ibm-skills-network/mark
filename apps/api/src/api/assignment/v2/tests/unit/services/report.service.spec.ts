@@ -3,20 +3,20 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/unbound-method */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-import { Test, TestingModule } from "@nestjs/testing";
-import { PrismaService } from "src/prisma.service";
-import { ReportType } from "@prisma/client";
 import {
   BadRequestException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { ReportService } from "../../../services/report.repository";
+import { Test, TestingModule } from "@nestjs/testing";
+import { ReportType } from "@prisma/client";
+import { PrismaService } from "src/prisma.service";
 import {
-  createMockPrismaService,
   createMockAssignment,
+  createMockPrismaService,
   createMockReport,
 } from "../__mocks__/ common-mocks";
+import { ReportService } from "../../../services/report.repository";
 
 describe("ReportService", () => {
   let service: ReportService;

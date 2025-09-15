@@ -1,11 +1,21 @@
+// src/llm/llm.constants.ts
+
+// LLM Provider tokens
 export const OPENAI_LLM_PROVIDER_4o = "OPENAI_LLM_PROVIDER_4o";
 export const OPENAI_LLM_PROVIDER_mini = "OPENAI_LLM_PROVIDER_mini";
+// export const LLAMA_LLM_PROVIDER = "LLAMA_LLM_PROVIDER";
+export const ALL_LLM_PROVIDERS = Symbol("ALL_LLM_PROVIDERS");
+
+// Core service tokens
 export const PROMPT_PROCESSOR = "PROMPT_PROCESSOR";
 export const MODERATION_SERVICE = "MODERATION_SERVICE";
 export const TOKEN_COUNTER = "TOKEN_COUNTER";
 export const USAGE_TRACKER = "USAGE_TRACKER";
-export const ALL_LLM_PROVIDERS = Symbol("ALL_LLM_PROVIDERS");
+export const LLM_PRICING_SERVICE = "LLM_PRICING_SERVICE";
+export const LLM_ASSIGNMENT_SERVICE = "LLM_ASSIGNMENT_SERVICE";
+export const LLM_RESOLVER_SERVICE = "LLM_RESOLVER_SERVICE";
 
+// Grading service tokens
 export const TEXT_GRADING_SERVICE = "TEXT_GRADING_SERVICE";
 export const FILE_GRADING_SERVICE = "FILE_GRADING_SERVICE";
 export const IMAGE_GRADING_SERVICE = "IMAGE_GRADING_SERVICE";
@@ -13,24 +23,35 @@ export const URL_GRADING_SERVICE = "URL_GRADING_SERVICE";
 export const PRESENTATION_GRADING_SERVICE = "PRESENTATION_GRADING_SERVICE";
 export const VIDEO_PRESENTATION_GRADING_SERVICE =
   "VIDEO_PRESENTATION_GRADING_SERVICE";
+export const GRADING_JUDGE_SERVICE = "GRADING_JUDGE_SERVICE";
+
+// Feature service tokens
 export const QUESTION_GENERATION_SERVICE = "QUESTION_GENERATION_SERVICE";
 export const RUBRIC_SERVICE = "RUBRIC_SERVICE";
 export const TRANSLATION_SERVICE = "TRANSLATION_SERVICE";
 export const VALIDATOR_SERVICE = "VALIDATOR_SERVICE";
 
+// Default model
 export const DEFAULT_LLM_MODEL = "gpt-4o";
 
+// Available LLM models
+export const AVAILABLE_MODELS = {
+  OPENAI_GPT4O: "gpt-4o",
+  OPENAI_GPT4O_MINI: "gpt-4o-mini",
+  // LLAMA_4_MAVERICK: "llama-4-maverick",
+} as const;
+
+// Response type specific instructions
 export const RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS = {
   CODE: `
     **Feedback Structure:**
     Provide feedback in the following format:
 
     1. **Accuracy**: Assess whether the response meets the task requirements and identify any discrepancies.
-    2. **Functionality**: Evaluate whether the response works as expected and achieves the intended outcome.
-    3. **Efficiency**: Discuss the approach taken and identify any areas for optimization.
-    4. **Style**: Examine the clarity, readability, and presentation of the response, noting areas for improvement.
-    5. **Practices**: Comment on adherence to best practices, including maintainability, modularity, and clarity.
-    6. **Strengths**: Highlight notable features or aspects of the response that demonstrate understanding or innovation.
+    2. **Efficiency**: Discuss the approach taken and identify any areas for optimization.
+    3. **Style**: Examine the clarity, readability, and presentation of the response, noting areas for improvement.
+    4. **Practices**: Comment on adherence to best practices, including maintainability, modularity, and clarity.
+    5. **Strengths**: Highlight notable features or aspects of the response that demonstrate understanding or innovation.
 
     **Instructions for Feedback:**
     - Ensure feedback is constructive and actionable.
@@ -91,6 +112,15 @@ export const RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS = {
     - **Engagement**: Determine how well the image captures attention and conveys its message.
     - **Professionalism**: Ensure adherence to professional standards in visual communication.
   `,
+  IMAGES: `
+    Critique the image submission based on:
+    - **Content Relevance**: Ensure the image aligns with the assignment question and objectives.
+    - **Visual Clarity**: Assess the quality, focus, and overall presentation of the image.
+    - **Creativity**: Evaluate the originality and thoughtfulness of the image.
+    - **Technical Execution**: Comment on composition, lighting, and any editing techniques used.
+    - **Engagement**: Determine how well the image captures attention and conveys its message.
+    - **Professionalism**: Ensure adherence to professional standards in visual communication.
+  `,
   URL: `
     Critique the URL submission based on:
     - **Content Relevance**: Ensure the linked content directly addresses the assignment question.
@@ -124,5 +154,41 @@ export const RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS = {
     - **Fairness**: Comment on the fairness and objectivity of the grading criteria.
     - **Detail**: Determine if the rubric provides sufficient detail for effective evaluation.
     - **Professionalism**: Ensure adherence to professional standards in tone and presentation.
+  `,
+  REPO: `
+    Critique the repository submission based on:
+    - **Repository Structure**: Evaluate organization, file naming, and directory structure.
+    - **Code Quality**: Assess code readability, maintainability, and adherence to best practices.
+    - **Documentation**: Review README quality, code comments, and API documentation.
+    - **Testing**: Evaluate test coverage, quality, and CI/CD setup if applicable.
+    - **Version Control**: Comment on commit history, branching strategy, and collaboration practices.
+    - **Technical Excellence**: Highlight innovative solutions or exceptional implementation details.
+  `,
+  SPREADSHEET: `
+    Critique the spreadsheet submission based on:
+    - **Data Organization**: Evaluate structure, naming conventions, and data relationships.
+    - **Formula Accuracy**: Assess correctness and efficiency of formulas and calculations.
+    - **Visual Presentation**: Review formatting, charts, and visual elements for clarity.
+    - **Documentation**: Comment on cell comments, legend, and explanatory notes.
+    - **Functionality**: Evaluate any macros, pivot tables, or advanced features used.
+    - **Professional Standards**: Ensure adherence to spreadsheet best practices.
+  `,
+  LIVE_RECORDING: `
+    Critique the live recording submission based on:
+    - **Content Delivery**: Evaluate accuracy and completeness of presented information.
+    - **Presentation Skills**: Assess confidence, clarity, and engagement techniques.
+    - **Time Management**: Comment on pacing and adherence to time constraints.
+    - **Audience Interaction**: Review handling of questions or interactive elements.
+    - **Technical Execution**: Evaluate audio/video quality and any technical issues.
+    - **Overall Impact**: Determine effectiveness in conveying the intended message.
+  `,
+  OTHER: `
+    Provide comprehensive feedback based on:
+    - **Content Quality**: Evaluate relevance, accuracy, and completeness.
+    - **Organization**: Assess structure and logical flow of information.
+    - **Technical Execution**: Comment on the quality of implementation or presentation.
+    - **Creativity and Innovation**: Highlight unique approaches or solutions.
+    - **Adherence to Requirements**: Ensure all assignment criteria are met.
+    - **Areas for Improvement**: Provide specific, actionable suggestions.
   `,
 };

@@ -1,4 +1,7 @@
-import { getLanguageName } from "@/app/Helpers/getLanguageName";
+import {
+  getLanguageCode,
+  getLanguageName,
+} from "@/app/Helpers/getLanguageName";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
@@ -8,11 +11,14 @@ import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   LanguageIcon,
   TagIcon as OutlineTagIcon,
+  ArrowRightIcon,
 } from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
 import ShowHideRubric from "./ShowHideRubric";
@@ -161,7 +167,13 @@ function Component(props: Props) {
 
       setTranslatedQuestion(questionId, translation.translatedQuestion);
       if (translation.translatedChoices) {
-        setTranslatedChoices(questionId, translation.translatedChoices);
+        // Extract choice text from Choice objects
+        const choiceTexts = translation.translatedChoices.map((choice) =>
+          typeof choice === "string"
+            ? choice
+            : choice?.choice || String(choice),
+        );
+        setTranslatedChoices(questionId, choiceTexts);
       }
     } catch (error) {
       console.error("Error fetching translation:", error);
@@ -178,6 +190,15 @@ function Component(props: Props) {
     }
     if (question.selectedLanguage === userPreferedLanguageName) {
       setTranslatedQuestion(questionId, question.question);
+      if (question.choices) {
+        // Extract choice text from Choice objects for consistency
+        const choiceTexts = question.choices.map((choice) =>
+          typeof choice === "string"
+            ? choice
+            : choice?.choice || String(choice),
+        );
+        setTranslatedChoices(questionId, choiceTexts);
+      }
     }
   }, [question.selectedLanguage]);
   useEffect(() => {
@@ -241,110 +262,42 @@ function Component(props: Props) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-y-4">
-        <div className="flex justify-between items-center">
+      {/* Question header with language toggle for all types */}
+      <div className="flex justify-between items-center">
+        <div className="flex-grow">
           <MarkdownViewer
-            className="text-gray-800 px-2 border-gray-300 flex-grow"
+            className="text-gray-800 px-2 border-gray-300"
             id={`question-${question.id}-${userPreferedLanguage}`}
           >
             {question.translations?.[userPreferedLanguage]?.translatedText ??
               question.question}
           </MarkdownViewer>
-          <div className="flex items-start gap-x-2 ml-auto ">
-            <LanguageIcon
-              className={`h-6 w-6 ${
-                translationOn ? "text-violet-600" : "text-gray-600"
-              }`}
-            />
-            <button
-              type="button"
-              onClick={toggleTranslation}
-              className={cn(
-                "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                translationOn ? "bg-violet-600" : "bg-gray-200",
-              )}
-              role="switch"
-              aria-checked={translationOn}
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                  translationOn ? "translate-x-5" : "translate-x-0",
-                )}
-              />
-            </button>
-          </div>
         </div>
-
-        {translationOn && (
-          <div className="flex flex-col gap-y-4 bg-gray-100 rounded-md p-4">
-            <div className="flex items-center gap-x-2">
-              <span className="text-gray-600 font-medium">
-                {userPreferedLanguageName}
-              </span>
-              <ArrowLongRightIcon className="w-5 h-5 text-gray-600" />
-              <select
-                className="border border-gray-300 rounded-md p-2 w-[150px]"
-                value={question.selectedLanguage}
-                onChange={(e) => handleLanguageChange(e.target.value)}
-              >
-                {languages.map((lang) => (
-                  <option key={lang.code} value={lang.name}>
-                    {lang.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {loadingTranslation ? (
-              <motion.div
-                className="flex items-center gap-x-3"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-              >
-                <svg
-                  className="animate-spin h-5 w-5 text-violet-600"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  ></path>
-                </svg>
-
-                <motion.div
-                  key={currentWord}
-                  className="text-violet-600 font-semibold text-lg shimmer"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  {currentWord}
-                </motion.div>
-
-                <div className="dots text-violet-600 font-semibold">...</div>
-              </motion.div>
-            ) : (
-              <MarkdownViewer className="text-gray-800 px-2 border-gray-300 font-semibold">
-                {question.translatedQuestion || question.question}
-              </MarkdownViewer>
+        <div className="flex items-center gap-x-2 ml-4">
+          <LanguageIcon
+            className={`h-6 w-6 ${
+              translationOn ? "text-violet-600" : "text-gray-600"
+            }`}
+          />
+          <button
+            type="button"
+            onClick={toggleTranslation}
+            className={cn(
+              "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+              translationOn ? "bg-violet-600" : "bg-gray-200",
             )}
-          </div>
-        )}
+            role="switch"
+            aria-checked={translationOn}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                translationOn ? "translate-x-5" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
       </div>
       {checkToShowRubric() && (
         <ShowHideRubric
@@ -352,20 +305,155 @@ function Component(props: Props) {
           showPoints={showPoints}
         />
       )}
+      {/* Render question based on type and translation state */}
+      {translationOn ? (
+        <>
+          {/* Split view for SINGLE_CORRECT and MULTIPLE_CORRECT */}
+          {question.type === "SINGLE_CORRECT" ||
+          question.type === "MULTIPLE_CORRECT" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12 relative">
+              {/* Arrow indicator - only on desktop */}
+              <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                <ArrowRightIcon className="w-6 h-6 text-black" />
+              </div>
 
-      <RenderQuestion
-        questionType={question.type}
-        question={{
-          ...question,
-          choices: question?.choices?.map((choice, index) =>
-            question.translations?.[userPreferedLanguage]?.translatedChoices
-              ? question.translations[userPreferedLanguage].translatedChoices[
-                  index
-                ]
-              : choice,
-          ),
-        }}
-      />
+              {/* Original Language Column */}
+              <div className="space-y-3 lg:pr-6">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    {userPreferedLanguageName || "Original"}
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                    Original
+                  </span>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 flex flex-col">
+                  <div className="flex-grow">
+                    <RenderQuestion
+                      questionType={question.type}
+                      question={{
+                        ...question,
+                        choices: question?.choices?.map((choice, index) =>
+                          question.translations?.[userPreferedLanguage]
+                            ?.translatedChoices
+                            ? question.translations[userPreferedLanguage]
+                                .translatedChoices[index]
+                            : choice,
+                        ),
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Translated Language Column */}
+              <div className="space-y-3 lg:pl-6 border-t lg:border-t-0 pt-4 lg:pt-0 mt-4 lg:mt-0">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                  <select
+                    className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
+                    value={question.selectedLanguage}
+                    onChange={(e) => handleLanguageChange(e.target.value)}
+                  >
+                    {languages.map((lang) => (
+                      <option key={lang.code} value={lang.name}>
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
+                    Translation
+                  </span>
+                </div>
+                {loadingTranslation ? (
+                  <div className="flex items-center justify-center py-8 min-h-[200px]">
+                    <div className="text-center">
+                      <div className="animate-pulse text-violet-600 mb-2">
+                        {currentWord}...
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Loading translation
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-violet-50 rounded-lg p-4 flex flex-col">
+                    <div className="flex-grow">
+                      <RenderQuestion
+                        questionType={question.type}
+                        question={{
+                          ...question,
+                          choices: question?.choices?.map((choice, index) =>
+                            question.translations?.[
+                              getLanguageCode(question.selectedLanguage)
+                            ]?.translatedChoices
+                              ? question.translations[
+                                  getLanguageCode(question.selectedLanguage)
+                                ].translatedChoices[index]
+                              : choice,
+                          ),
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* For other question types, show translation below */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                <select
+                  className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
+                  value={question.selectedLanguage}
+                  onChange={(e) => handleLanguageChange(e.target.value)}
+                >
+                  {languages.map((lang) => (
+                    <option key={lang.code} value={lang.name}>
+                      {lang.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
+                  Translation
+                </span>
+              </div>
+              <MarkdownViewer className="text-gray-800 px-2 border-gray-300 font-semibold">
+                {question.translatedQuestion || question.question}
+              </MarkdownViewer>
+
+              {/* Original Answer Field */}
+              <RenderQuestion
+                questionType={question.type}
+                question={{
+                  ...question,
+                  choices: question?.choices?.map((choice, index) =>
+                    question.translations?.[userPreferedLanguage]
+                      ?.translatedChoices
+                      ? question.translations[userPreferedLanguage]
+                          .translatedChoices[index]
+                      : choice,
+                  ),
+                }}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        /* Translation OFF - show normal view */
+        <RenderQuestion
+          questionType={question.type}
+          question={{
+            ...question,
+            choices: question?.choices?.map((choice, index) =>
+              question.translations?.[userPreferedLanguage]?.translatedChoices
+                ? question.translations[userPreferedLanguage].translatedChoices[
+                    index
+                  ]
+                : choice,
+            ),
+          }}
+        />
+      )}
 
       {questionDisplay === "ONE_PER_PAGE" && (
         <div className="flex justify-between">

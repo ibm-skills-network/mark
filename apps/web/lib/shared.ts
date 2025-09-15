@@ -1,4 +1,5 @@
 /* eslint-disable */
+import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
 import type {
   Assignment,
@@ -19,7 +20,6 @@ import type {
   UploadType,
   User,
 } from "@config/types";
-import { absoluteUrl } from "./utils";
 import { JSONValue } from "ai";
 
 export interface FileProxyInfo {
@@ -137,9 +137,6 @@ export async function uploadWithPresignedUrl(
       },
       onUploadProgress: onUploadProgress
         ? (progressEvent) => {
-            console.log(
-              `Uploading ${file.name}: ${progressEvent.loaded} bytes of ${file.size}`,
-            );
             if (progressEvent.total) {
               onUploadProgress({
                 loaded: progressEvent.loaded,
@@ -158,6 +155,64 @@ export async function uploadWithPresignedUrl(
     throw new Error(
       axiosError.message || "Failed to upload file with presigned URL",
     );
+  }
+}
+
+/**
+ * Direct upload a file through the backend (bypasses CORS issues)
+ */
+export async function directUpload(
+  file: File,
+  uploadRequest: UploadRequest,
+  cookies?: string,
+  onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void,
+): Promise<{
+  success: boolean;
+  key: string;
+  bucket: string;
+  fileType: string;
+  fileName: string;
+  uploadType: string;
+  size: number;
+  etag: string;
+}> {
+  const url = `${getBaseApiPath("v1")}/files/direct-upload`;
+
+  if (file.size === 0) {
+    throw new Error("Cannot upload empty file");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("fileName", uploadRequest.fileName);
+  formData.append("fileType", uploadRequest.fileType);
+  formData.append("uploadType", uploadRequest.uploadType);
+
+  if (uploadRequest.context) {
+    const contextJson = JSON.stringify(uploadRequest.context);
+    formData.append("context", contextJson);
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to upload file directly");
+    }
+
+    return await res.json();
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Failed to upload file directly");
   }
 }
 
@@ -1083,6 +1138,616 @@ export async function getMoreMessages(
   return (await res.json()) as ChatMessage[];
 }
 
+/**
+ * Admin Data Types
+ */
+export interface FeedbackData {
+  id: number;
+  assignmentId: number;
+  aiFeedbackRating?: number;
+  userId: string;
+  comments: string;
+  aiGradingRating: number;
+  assignmentRating: number;
+  allowContact: boolean;
+  firstName: string;
+  lastName: string;
+  email: string;
+  createdAt: string;
+  assignment: {
+    id: number;
+    name: string;
+  };
+  assignmentAttempt: {
+    id: number;
+    grade: number;
+    submittedAt: string;
+  };
+}
+
+export interface AssignmentAnalyticsData {
+  id: number;
+  name: string;
+  totalCost: number;
+  uniqueLearners: number;
+  totalAttempts: number;
+  completedAttempts: number;
+  averageGrade: number;
+  averageRating: number;
+  published: boolean;
+  insights: {
+    questionInsights: Array<{
+      questionId: number;
+      questionText: string;
+      correctPercentage: number;
+      firstAttemptSuccessRate: number;
+      avgPointsEarned: number;
+      maxPoints: number;
+      insight: string;
+    }>;
+    performanceInsights: string[];
+    costBreakdown: {
+      grading: number;
+      questionGeneration: number;
+      translation: number;
+      other: number;
+    };
+  };
+}
+
+export interface AssignmentAnalyticsResponse {
+  data: AssignmentAnalyticsData[];
+  pagination: AdminPaginationInfo;
+}
+
+export interface ReportData {
+  id: number;
+  reporterId: string;
+  assignmentId: number;
+  attemptId: number;
+  issueType: string;
+  description: string;
+  author: boolean;
+  status: string;
+  issueNumber: number;
+  statusMessage: string;
+  resolution: string;
+  comments: string;
+  closureReason: string;
+  createdAt: string;
+  updatedAt: string;
+  assignment: {
+    id: number;
+    name: string;
+  };
+}
+
+export interface AdminPaginationInfo {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface FeedbackResponse {
+  data: FeedbackData[];
+  pagination: AdminPaginationInfo;
+}
+
+export interface ReportsResponse {
+  data: ReportData[];
+  pagination: AdminPaginationInfo;
+}
+
+export interface FeedbackFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  assignmentId?: string;
+  allowContact?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface ReportsFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  assignmentId?: string;
+  status?: string;
+  issueType?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Get admin feedback data with pagination and filtering
+ */
+export async function getAdminFeedback(
+  filters: FeedbackFilters = {},
+  cookies?: string,
+  adminToken?: string,
+): Promise<FeedbackResponse> {
+  const params = new URLSearchParams();
+
+  // Add all filter parameters
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      params.append(key, value.toString());
+    }
+  });
+
+  const url = `${getBaseApiPath("v1")}/reports/feedback?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (cookies) {
+    headers.Cookie = cookies;
+  }
+
+  if (adminToken) {
+    headers["x-admin-token"] = adminToken;
+  }
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to fetch feedback data");
+  }
+
+  return (await res.json()) as FeedbackResponse;
+}
+
+/**
+ * Get admin reports data with pagination and filtering
+ */
+export async function getAdminReports(
+  filters: ReportsFilters = {},
+  cookies?: string,
+  adminToken?: string,
+): Promise<ReportsResponse> {
+  const params = new URLSearchParams();
+
+  // Add all filter parameters
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      params.append(key, value.toString());
+    }
+  });
+
+  const url = `${getBaseApiPath("v1")}/reports?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (cookies) {
+    headers.Cookie = cookies;
+  }
+
+  if (adminToken) {
+    headers["x-admin-token"] = adminToken;
+  }
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to fetch reports data");
+  }
+
+  return (await res.json()) as ReportsResponse;
+}
+
+/**
+ * Get assignment analytics data with detailed insights
+ */
+export async function getAssignmentAnalytics(
+  sessionToken: string,
+  page: number = 1,
+  limit: number = 10,
+  search?: string,
+): Promise<AssignmentAnalyticsResponse> {
+  const params = new URLSearchParams();
+  params.append("page", page.toString());
+  params.append("limit", limit.toString());
+  if (search) {
+    params.append("search", search);
+  }
+
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/analytics?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(
+      errorBody.message || "Failed to fetch assignment analytics",
+    );
+  }
+
+  return (await res.json()) as AssignmentAnalyticsResponse;
+}
+
+/**
+ * Dashboard admin functions
+ */
+export async function getDashboardAssignments(
+  sessionToken: string,
+  page: number = 1,
+  limit: number = 10,
+  search?: string,
+) {
+  const params = new URLSearchParams();
+  params.append("page", page.toString());
+  params.append("limit", limit.toString());
+  if (search) {
+    params.append("search", search);
+  }
+
+  const url = `${getBaseApiPath("v1")}/admin/dashboard/assignments?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(
+      errorBody.message || "Failed to fetch dashboard assignments",
+    );
+  }
+
+  return await res.json();
+}
+
+export async function getDashboardReports(
+  sessionToken: string,
+  page: number = 1,
+  limit: number = 10,
+  search?: string,
+) {
+  const params = new URLSearchParams();
+  params.append("page", page.toString());
+  params.append("limit", limit.toString());
+  if (search) {
+    params.append("search", search);
+  }
+
+  const url = `${getBaseApiPath("v1")}/admin/dashboard/reports?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to fetch dashboard reports");
+  }
+
+  return await res.json();
+}
+
+export async function getDashboardFeedback(
+  sessionToken: string,
+  page: number = 1,
+  limit: number = 10,
+  search?: string,
+) {
+  const params = new URLSearchParams();
+  params.append("page", page.toString());
+  params.append("limit", limit.toString());
+  if (search) {
+    params.append("search", search);
+  }
+
+  const url = `${getBaseApiPath("v1")}/admin/dashboard/feedback?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to fetch dashboard feedback");
+  }
+
+  return await res.json();
+}
+
+/**
+ * Check if user email is authorized for admin access
+ */
+export async function checkAdminAccess(email: string): Promise<boolean> {
+  try {
+    const url = `${getBaseApiPath("v1")}/auth/admin/send-code`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    return res.ok; // Returns true if email is authorized
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send admin verification code to email
+ */
+export async function sendAdminVerificationCode(
+  email: string,
+): Promise<boolean> {
+  const url = `${getBaseApiPath("v1")}/auth/admin/send-code`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to send verification code");
+  }
+
+  return true;
+}
+
+/**
+ * Verify admin code and get session token
+ */
+export async function verifyAdminCode(
+  email: string,
+  code: string,
+): Promise<string> {
+  const url = `${getBaseApiPath("v1")}/auth/admin/verify-code`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, code }),
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to verify code");
+  }
+
+  const result = await res.json();
+  return result.sessionToken;
+}
+
+/**
+ * Get current admin user information
+ */
+export async function getCurrentAdminUser(sessionToken: string): Promise<{
+  email: string;
+  role: string;
+  isAdmin: boolean;
+  success: boolean;
+}> {
+  const url = `${getBaseApiPath("v1")}/auth/admin/me`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ sessionToken }),
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to get current admin user");
+  }
+
+  return await res.json();
+}
+
+/**
+ * Check if the current user is a super admin
+ */
+export async function isCurrentUserSuperAdmin(
+  sessionToken: string,
+): Promise<boolean> {
+  try {
+    const userInfo = await getCurrentAdminUser(sessionToken);
+    return userInfo.isAdmin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Logout admin session
+ */
+export async function logoutAdmin(sessionToken: string): Promise<void> {
+  const url = `${getBaseApiPath("v1")}/auth/admin/logout`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ sessionToken }),
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to logout");
+  }
+}
+
+export async function getDashboardStats(
+  sessionToken: string,
+  filters?: {
+    startDate?: string;
+    endDate?: string;
+    assignmentId?: number;
+    assignmentName?: string;
+    userId?: string;
+  },
+  bustCache = false,
+) {
+  const params = new URLSearchParams();
+  if (filters?.startDate) params.append("startDate", filters.startDate);
+  if (filters?.endDate) params.append("endDate", filters.endDate);
+  if (filters?.assignmentId)
+    params.append("assignmentId", filters.assignmentId.toString());
+  if (filters?.assignmentName)
+    params.append("assignmentName", filters.assignmentName);
+  if (filters?.userId) params.append("userId", filters.userId);
+
+  if (bustCache) {
+    params.append("_t", Date.now().toString());
+  }
+
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/stats${params.toString() ? `?${params.toString()}` : ""}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+    ...(bustCache ? { "Cache-Control": "no-cache" } : {}),
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to fetch dashboard stats");
+  }
+
+  return await res.json();
+}
+
+export async function upscalePricing(
+  sessionToken: string,
+  upscaleData: {
+    globalFactor?: number;
+    usageFactors?: { [usageType: string]: number };
+    reason?: string;
+  },
+) {
+  const url = `${getBaseApiPath("v1")}/llm-pricing/upscale`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(upscaleData),
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to upscale pricing");
+  }
+
+  return await res.json();
+}
+
+export async function getCurrentPriceUpscaling(
+  sessionToken: string,
+  bustCache = false,
+) {
+  const baseUrl = `${getBaseApiPath("v1")}/llm-pricing/upscaling/current`;
+  const url = bustCache ? `${baseUrl}?_t=${Date.now()}` : baseUrl;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+    "Cache-Control": "no-cache",
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(
+      errorBody.message || "Failed to fetch current price upscaling",
+    );
+  }
+
+  return await res.json();
+}
+
+export async function removePriceUpscaling(
+  sessionToken: string,
+  reason?: string,
+) {
+  const url = `${getBaseApiPath("v1")}/llm-pricing/upscaling/remove`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ reason }),
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to remove price upscaling");
+  }
+
+  return await res.json();
+}
+
 const V1_USER_ROUTE = absoluteUrl("/api/v1/user-session");
 
 export async function getUser(cookies?: string): Promise<User | undefined> {
@@ -1218,4 +1883,62 @@ export async function translateQuestion(
     translatedQuestion: string;
     translatedChoices?: Choice[];
   };
+}
+
+/**
+ * Get detailed insights for a specific assignment
+ */
+export async function getDetailedAssignmentInsights(
+  sessionToken: string,
+  assignmentId: number,
+) {
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/assignments/${assignmentId}/insights`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(
+      errorBody.message || "Failed to fetch detailed assignment insights",
+    );
+  }
+
+  return await res.json();
+}
+
+/**
+ * Execute a quick action for dashboard insights
+ */
+export async function executeQuickAction(
+  sessionToken: string,
+  action: string,
+  limit?: number,
+) {
+  const params = new URLSearchParams();
+  if (limit) params.append("limit", limit.toString());
+
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/quick-actions/${action}${params.toString() ? `?${params.toString()}` : ""}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-token": sessionToken,
+  };
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to execute quick action");
+  }
+
+  return await res.json();
 }

@@ -199,4 +199,14 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsBoolean()
   showSubmissionFeedback: boolean;
+
+  @ApiProperty({
+    description:
+      "Should the correct answer be shown to the learner after its submission",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showCorrectAnswer: boolean;
 }

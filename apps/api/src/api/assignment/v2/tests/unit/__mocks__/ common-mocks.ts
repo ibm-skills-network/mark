@@ -545,7 +545,7 @@ export const sampleReactVariants = {
         },
       ],
       createdAt: "2025-04-30T22:47:52.581Z",
-      variantType: "REWORDED",
+      variantType: VariantType.REWORDED,
       randomizedChoices: true,
     },
   ],
@@ -591,7 +591,7 @@ export const sampleReactVariants = {
         },
       ],
       createdAt: "2025-04-30T22:47:53.159Z",
-      variantType: "REWORDED",
+      variantType: VariantType.REWORDED,
       randomizedChoices: true,
     },
   ],
@@ -764,7 +764,7 @@ export const createMockQuestionVariant = (
  */
 export const createMockVariantDto = (
   overrides: Partial<VariantDto> = {},
-  questionId = 1,
+  _questionId = 1,
   variantType: VariantType = VariantType.REWORDED,
 ): VariantDto => {
   const baseVariantDto: VariantDto = {
@@ -961,12 +961,13 @@ export const createMockAssignment = (
   questionOrder: [1, 2],
   published: false,
   showAssignmentScore: true,
+  showCorrectAnswer: true,
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
   updatedAt: new Date(),
   languageCode: "en",
-
+  currentVersionId: 1,
   ...overrides,
 });
 
@@ -1061,6 +1062,7 @@ export const createMockUpdateAssignmentDto = (
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
+  showCorrectAnswer: true,
   ...overrides,
 });
 
@@ -1114,7 +1116,9 @@ export const createMockUpdateAssignmentQuestionsDto = (
     showQuestionScore: true,
     showSubmissionFeedback: true,
     showQuestions: true,
-
+    showCorrectAnswer: true,
+    versionNumber: "0.0.1",
+    versionDescription: "Updated questions version",
     updatedAt: new Date(),
     questions: includeQuestions
       ? [
@@ -1148,6 +1152,7 @@ export const createMockAssignmentAttempt = (
     questionOrder: [1, 2],
     comments: null,
     preferredLanguage: "en",
+    assignmentVersionId: 1,
   };
 
   return {
@@ -1574,6 +1579,7 @@ export const createMockPrismaService = () => ({
     findMany: jest.fn().mockResolvedValue([createMockAssignmentTranslation()]),
     create: jest.fn().mockResolvedValue(createMockAssignmentTranslation()),
     update: jest.fn().mockResolvedValue(createMockAssignmentTranslation()),
+    count: jest.fn().mockResolvedValue(1),
   },
   assignmentFeedback: {
     findUnique: jest.fn().mockResolvedValue(createMockAssignmentFeedback()),
@@ -1796,6 +1802,10 @@ export const createMockTranslationService = () => ({
   translateAssignment: jest.fn().mockResolvedValue(undefined),
   translateQuestion: jest.fn().mockResolvedValue(undefined),
   translateVariant: jest.fn().mockResolvedValue(undefined),
+  ensureTranslationCompleteness: jest.fn().mockResolvedValue({
+    missingTranslations: [],
+    allComplete: true,
+  }),
   applyTranslationsToAttempt: jest
     .fn()
     .mockImplementation((attempt: unknown): unknown => attempt),
@@ -1855,7 +1865,7 @@ export const createMockLlmFacadeService = () => ({
   }),
   generateQuestionTranslation: jest
     .fn()
-    .mockImplementation((assignmentId: number, text: string) =>
+    .mockImplementation((_assignmentId: number, text: string) =>
       Promise.resolve(`Translated: ${text}`),
     ),
   generateChoicesTranslation: jest.fn().mockResolvedValue([
@@ -1941,4 +1951,70 @@ export const createMockAttemptService = () => ({
     .mockResolvedValue(createMockRegradingRequest()),
   getRegradingStatus: jest.fn().mockResolvedValue(createMockRegradingRequest()),
   createReport: jest.fn().mockResolvedValue(undefined),
+});
+
+/**
+ * Create a mock VersionManagementService with pre-defined implementations
+ */
+export const createMockVersionManagementService = () => ({
+  createVersion: jest.fn().mockResolvedValue({
+    id: 1,
+    versionNumber: 1,
+    versionDescription: "Test version",
+    isDraft: false,
+    isActive: true,
+    createdBy: "test-user",
+    createdAt: new Date(),
+    questionCount: 2,
+  }),
+  listVersions: jest.fn().mockResolvedValue([]),
+  getVersion: jest.fn().mockResolvedValue(null),
+  saveDraft: jest.fn().mockResolvedValue({
+    id: 1,
+    versionNumber: 1,
+    versionDescription: "Draft version",
+    isDraft: true,
+    isActive: false,
+    createdBy: "test-user",
+    createdAt: new Date(),
+    questionCount: 2,
+  }),
+  restoreVersion: jest.fn().mockResolvedValue({
+    id: 2,
+    versionNumber: 2,
+    versionDescription: "Restored version",
+    isDraft: false,
+    isActive: true,
+    createdBy: "test-user",
+    createdAt: new Date(),
+    questionCount: 2,
+  }),
+  compareVersions: jest.fn().mockResolvedValue({
+    fromVersion: {
+      id: 1,
+      versionNumber: 1,
+      versionDescription: "From version",
+      isDraft: false,
+      isActive: false,
+      createdBy: "test-user",
+      createdAt: new Date(),
+      questionCount: 2,
+    },
+    toVersion: {
+      id: 2,
+      versionNumber: 2,
+      versionDescription: "To version",
+      isDraft: false,
+      isActive: true,
+      createdBy: "test-user",
+      createdAt: new Date(),
+      questionCount: 2,
+    },
+    assignmentChanges: [],
+    questionChanges: [],
+  }),
+  getVersionHistory: jest.fn().mockResolvedValue([]),
+  getUserLatestDraft: jest.fn().mockResolvedValue(null),
+  restoreDeletedQuestions: jest.fn().mockResolvedValue(undefined),
+  updateVersionDescription: jest.fn().mockResolvedValue(undefined),
 });

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "QuestionResponse" ALTER COLUMN "points" SET DATA TYPE DOUBLE PRECISION;

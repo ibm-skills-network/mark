@@ -1,25 +1,24 @@
 /* eslint-disable unicorn/no-null */
-import { Injectable, Inject } from "@nestjs/common";
-import { AIUsageType } from "@prisma/client";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { Inject, Injectable } from "@nestjs/common";
+import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
-import { z } from "zod";
-
-import { PROMPT_PROCESSOR } from "../../../llm.constants";
-import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { IRubricService } from "../interfaces/rubric.interface";
-import {
-  QuestionDto,
-  ScoringDto,
-  RubricDto,
-  Choice,
-} from "../../../../assignment/dto/update.questions.request.dto";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
 import {
   Criteria,
   ScoringType,
 } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { Logger } from "winston";
+import { z } from "zod";
+import {
+  Choice,
+  QuestionDto,
+  RubricDto,
+  ScoringDto,
+} from "../../../../assignment/dto/update.questions.request.dto";
+import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import { IRubricService } from "../interfaces/rubric.interface";
 
 @Injectable()
 export class RubricService implements IRubricService {
@@ -39,7 +38,6 @@ export class RubricService implements IRubricService {
   async createMarkingRubric(
     question: QuestionDto,
     assignmentId: number,
-    rubricIndex?: number,
   ): Promise<ScoringDto> {
     const rubricTemplate = this.selectRubricTemplate(question.type);
 
@@ -381,12 +379,13 @@ export class RubricService implements IRubricService {
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
-        AIUsageType.QUESTION_GENERATION,
+        AIUsageType.ASSIGNMENT_GRADING,
+        "rubric_generation",
+        "gpt-4o-mini",
       );
-
       let parsed:
         | {
             newRubrics?: {

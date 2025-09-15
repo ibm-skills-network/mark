@@ -4,15 +4,19 @@ import MarkdownViewer from "@/components/MarkdownViewer";
 import WarningAlert from "@/components/WarningAlert";
 import type {
   Choice,
+  Criteria,
   QuestionAuthorStore,
   QuestionType,
   ResponseType,
+  Rubric,
+  RubricType,
   UpdateQuestionStateParams,
 } from "@/config/types";
 import { expandMarkingRubric, generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
+import { ArrowDownIcon, PlusIcon } from "@heroicons/react/24/solid";
 import React, {
   FC,
   useEffect,

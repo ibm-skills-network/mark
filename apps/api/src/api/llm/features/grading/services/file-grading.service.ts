@@ -7,6 +7,15 @@ import { FileUploadQuestionEvaluateModel } from "src/api/llm/model/file.based.qu
 import { FileBasedQuestionResponseModel } from "src/api/llm/model/file.based.question.response.model";
 import { Logger } from "winston";
 import { z } from "zod";
+import { IModerationService } from "../../../core/interfaces/moderation.interface";
+import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import {
+  LLM_RESOLVER_SERVICE,
+  MODERATION_SERVICE,
+  PROMPT_PROCESSOR,
+} from "../../../llm.constants";
+import { IFileGradingService } from "../interfaces/file-grading.interface";
 
 // Define types to avoid deep instantiation issues
 type RubricScore = {
@@ -25,10 +34,6 @@ type GradingOutput = {
   guidance: string;
   rubricScores?: RubricScore[];
 };
-import { IModerationService } from "../../../core/interfaces/moderation.interface";
-import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
-import { IFileGradingService } from "../interfaces/file-grading.interface";
 
 @Injectable()
 export class FileGradingService implements IFileGradingService {
@@ -39,6 +44,8 @@ export class FileGradingService implements IFileGradingService {
     private readonly promptProcessor: IPromptProcessor,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
+    @Inject(LLM_RESOLVER_SERVICE)
+    private readonly llmResolver: LLMResolverService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: FileGradingService.name });
@@ -146,28 +153,41 @@ export class FileGradingService implements IFileGradingService {
         format_instructions: () => formatInstructions,
       },
     });
+    const extractedContent = learnerResponse
+      .map((item) => item.content)
+      .join(" ");
+    const inputLength =
+      question.length +
+      extractedContent.length +
+      JSON.stringify(scoringCriteria).length;
+    const criteriaCount = Array.isArray(scoringCriteria)
+      ? scoringCriteria.length
+      : 1;
+
+    const selectedModel = await this.llmResolver.getModelForGradingTask(
+      "file_grading",
+      responseType,
+      inputLength,
+      criteriaCount,
+    );
 
     const response = await this.promptProcessor.processPrompt(
       prompt,
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
+      selectedModel,
     );
 
     try {
-      const parsedResponse = (await parser.parse(response)) as GradingOutput;
+      let parsedResponse = (await parser.parse(response)) as GradingOutput;
 
-      // Validate and format rubric scores if available
-      let rubricDetails = "";
       let calculatedTotalPoints = 0;
 
       if (
         parsedResponse.rubricScores &&
         parsedResponse.rubricScores.length > 0
       ) {
-        rubricDetails = "\n\n**Rubric Scoring:**\n";
         for (const score of parsedResponse.rubricScores) {
-          rubricDetails += `${score.pointsAwarded}/${score.maxPoints} points\n`;
-          rubricDetails += `Justification: ${score.justification}\n\n`;
           calculatedTotalPoints += score.pointsAwarded;
         }
 
@@ -179,44 +199,56 @@ export class FileGradingService implements IFileGradingService {
           this.logger.warn(
             `LLM total points (${parsedResponse.points}) doesn't match sum of rubric scores (${calculatedTotalPoints}). Using rubric sum.`,
           );
-          parsedResponse.points = calculatedTotalPoints;
+          // Create corrected response object
+          parsedResponse = {
+            ...parsedResponse,
+            points: calculatedTotalPoints,
+          };
         }
       }
 
-      // Combine the AEEG components into comprehensive feedback
-      const aeegFeedback = `
-**Analysis:**
-${parsedResponse.analysis}
-
-**Evaluation:**
-${parsedResponse.evaluation}${rubricDetails}
-
-**Explanation:**
-${parsedResponse.explanation}
-
-**Guidance:**
-${parsedResponse.guidance}
-`.trim();
-
-      const fileBasedQuestionResponseModel = {
-        points: parsedResponse.points,
-        feedback: aeegFeedback,
-      };
+      const fileBasedQuestionResponseModel = new FileBasedQuestionResponseModel(
+        parsedResponse.points,
+        parsedResponse.feedback,
+        parsedResponse.analysis,
+        parsedResponse.evaluation,
+        parsedResponse.explanation,
+        parsedResponse.guidance,
+        parsedResponse.rubricScores,
+      );
 
       const parsedPoints = fileBasedQuestionResponseModel.points;
+      let finalModel = fileBasedQuestionResponseModel;
+
       if (parsedPoints > maxTotalPoints) {
         this.logger.warn(
           `LLM awarded ${parsedPoints} points, which exceeds maximum of ${maxTotalPoints}. Capping at maximum.`,
         );
-        fileBasedQuestionResponseModel.points = maxTotalPoints;
+        finalModel = new FileBasedQuestionResponseModel(
+          maxTotalPoints,
+          fileBasedQuestionResponseModel.feedback,
+          fileBasedQuestionResponseModel.analysis,
+          fileBasedQuestionResponseModel.evaluation,
+          fileBasedQuestionResponseModel.explanation,
+          fileBasedQuestionResponseModel.guidance,
+          fileBasedQuestionResponseModel.rubricScores,
+        );
       } else if (parsedPoints < 0) {
         this.logger.warn(
           `LLM awarded negative points (${parsedPoints}). Setting to 0.`,
         );
-        fileBasedQuestionResponseModel.points = 0;
+        finalModel = new FileBasedQuestionResponseModel(
+          0,
+          fileBasedQuestionResponseModel.feedback,
+          fileBasedQuestionResponseModel.analysis,
+          fileBasedQuestionResponseModel.evaluation,
+          fileBasedQuestionResponseModel.explanation,
+          fileBasedQuestionResponseModel.guidance,
+          fileBasedQuestionResponseModel.rubricScores,
+        );
       }
 
-      return fileBasedQuestionResponseModel as FileBasedQuestionResponseModel;
+      return finalModel;
     } catch (error) {
       this.logger.error(
         `Error parsing LLM response: ${
@@ -258,85 +290,40 @@ ${parsedResponse.guidance}
       fileTypeDescriptions[responseType] || fileTypeDescriptions.OTHER;
 
     return `
-    You are an expert educator evaluating a student's ${fileTypeContext} using the AEEG (Analyze, Evaluate, Explain, Guide) approach.
-    
-    QUESTION:
-    {question}
-    
-    FILES SUBMITTED:
-    {files}
-    
-    SCORING INFORMATION:
-    Total Points Available: {total_points}
-    Scoring Type: {scoring_type}
-    Scoring Criteria: {scoring_criteria}
-    
-    CRITICAL GRADING INSTRUCTIONS:
-    You MUST grade according to the EXACT rubric provided in the scoring criteria. If the scoring type is "CRITERIA_BASED" with rubrics:
-    1. Evaluate the submission against EACH rubric question provided
-    2. For EACH rubric:
-       - Read the rubricQuestion carefully
-       - Review ALL criteria options for that rubric
-       - Select EXACTLY ONE criterion that best matches the student's performance
-       - Award the EXACT points specified for that selected criterion (not an average or adjusted value)
-    3. Do NOT use generic grading criteria unless specifically mentioned in the rubric
-    4. Do NOT interpolate between criteria levels - select the ONE that best fits
-    5. The total points awarded must equal the sum of points from the selected criterion for each rubric
-    6. Include a rubricScores array in your response with one entry per rubric showing:
-       - rubricQuestion: the exact text of the rubric question
-       - pointsAwarded: the exact points from the selected criterion
-       - maxPoints: the maximum possible points for that rubric
-       - justification: why you selected that specific criterion level
-    7. The total points must not exceed {total_points}
-    
-    GRADING APPROACH (AEEG):
-    
-    1. ANALYZE: Carefully examine the submitted files and describe what you observe
-       - Identify the key elements and structure of the submission
-       - Note specific techniques, approaches, or methodologies used
-       - Observe the quality and completeness of the work
-       - Recognize strengths and unique aspects of the submission
-       - Focus your analysis on aspects relevant to the rubric criteria
-    
-    2. EVALUATE: For each rubric question in the scoring criteria:
-       - Read the rubric question carefully
-       - Examine how the submission addresses this specific rubric question
-       - Compare the submission against ALL criterion levels for this rubric
-       - Select EXACTLY ONE criterion that best matches the student's performance
-       - Award the EXACT points specified for that selected criterion
-       - Do NOT average, interpolate, or adjust points - use the exact value from the selected criterion
-       - Record your selection in the rubricScores array
-    
-    3. EXPLAIN: Provide clear reasons for the grade based on specific observations
-       - For each rubric, explain why you selected that specific criterion level
-       - Reference specific parts of the submitted files
-       - Connect your observations directly to the rubric descriptions
-       - Justify points awarded with concrete evidence from the submission
-       - Clearly articulate what was well-executed
-       - Transparently address any deficiencies or areas that fell short
-    
-    4. GUIDE: Offer concrete suggestions for improvement
-       - Provide specific, actionable feedback based on the rubric criteria
-       - Suggest ways to reach higher criterion levels in each rubric
-       - Recommend resources, techniques, or strategies for improvement
-       - Focus guidance on the specific skills and competencies assessed by the rubrics
-       - Include practical tips relevant to the submission type
-    
-    GRADING INSTRUCTIONS:
-    - Be fair, consistent, and constructive in your evaluation
-    - Use encouraging language while maintaining high standards
-    - Ensure all feedback is specific to the files submitted
-    - Consider the context and requirements of the assignment
-    - For CRITERIA_BASED scoring, you MUST include rubricScores array
-    
+    Grade ${fileTypeContext} using AEEG approach.
+
+    QUESTION: {question}
+    FILES: {files}
+    POINTS: {total_points} | TYPE: {scoring_type}
+    CRITERIA: {scoring_criteria}
+
+    RUBRIC RULES:
+    - Select EXACTLY ONE criterion per rubric (no interpolation)
+    - Award EXACT points from selected criterion
+    - Total = sum of rubric points (max {total_points})
+    - Include rubricScores array with: rubricQuestion, pointsAwarded, maxPoints, justification
+
+    AEEG APPROACH:
+    1. ANALYZE: Key elements, structure, techniques, quality
+    2. EVALUATE: Match submission to each rubric criterion, select best fit
+    3. EXPLAIN: Justify grade with specific evidence
+    4. GUIDE: Actionable improvement suggestions
+
     LANGUAGE: {language}
+
+    JSON Response:
+    - Points (rubric sum)
+    - Feedback (overall assessment)
+    - Analysis (submission examination)
+    - Evaluation (rubric-based scoring)
+    - Explanation (grade justification)
+    - Guidance (improvement tips)
+    - rubricScores array (if CRITERIA_BASED)
     
-    Respond with a JSON object containing:
-    - Points awarded (sum of all rubric scores)
-    - Comprehensive feedback incorporating all four AEEG components
-    - Separate fields for each AEEG component
-    - If scoring type is CRITERIA_BASED, include rubricScores array with score for each rubric
+    AVOID REDUNDANCY: Each field should contain unique information and not repeat content from other fields.
     
+    Make sure your feedback is short and concise.
+
     {format_instructions}
     `;
   }

@@ -1,3 +1,4 @@
+/* eslint-disable */
 import {
   BadRequestException,
   Body,
@@ -75,6 +76,168 @@ export class FilesController {
       uploadRequest,
       request.userSession.userId,
     );
+  }
+
+  @Post("direct-upload")
+  @UseGuards(AuthGuard)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+      },
+    }),
+  )
+  @ApiOperation({
+    summary: "Direct upload file through backend (bypasses CORS)",
+  })
+  async directUpload(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+    @Req() request: UserSessionRequest,
+  ) {
+    if (!file) {
+      throw new BadRequestException("No file provided");
+    }
+
+    // Parse multipart form data manually
+    console.log("[DIRECT UPLOAD] Received body:", body);
+    const uploadType = body.uploadType;
+    let context: any = {};
+
+    // Parse context JSON if provided
+    if (body.context) {
+      console.log(
+        "[DIRECT UPLOAD] Raw context value:",
+        body.context,
+        "type:",
+        typeof body.context,
+      );
+      try {
+        context =
+          typeof body.context === "string"
+            ? JSON.parse(body.context)
+            : body.context;
+        console.log("[DIRECT UPLOAD] Parsed context:", context);
+        console.log(
+          "[DIRECT UPLOAD] reportId from context:",
+          context.reportId,
+          "type:",
+          typeof context.reportId,
+        );
+      } catch (error) {
+        console.error(
+          "[DIRECT UPLOAD] Failed to parse context:",
+          body.context,
+          error,
+        );
+        throw new BadRequestException("Invalid context JSON");
+      }
+    }
+
+    const userId = request.userSession.userId;
+
+    // Generate the appropriate bucket and key using the same logic as generateUploadUrl
+    const bucket = this.s3Service.getBucketName(uploadType);
+    console.log("[DIRECT UPLOAD] Upload type:", uploadType);
+    console.log("[DIRECT UPLOAD] Resolved bucket:", bucket);
+    console.log("[DIRECT UPLOAD] All bucket env vars:");
+    console.log("  - IBM_COS_DEBUG_BUCKET:", process.env.IBM_COS_DEBUG_BUCKET);
+    console.log(
+      "  - IBM_COS_AUTHOR_BUCKET:",
+      process.env.IBM_COS_AUTHOR_BUCKET,
+    );
+    console.log(
+      "  - IBM_COS_LEARNER_BUCKET:",
+      process.env.IBM_COS_LEARNER_BUCKET,
+    );
+
+    // Also test bucket resolution for all types
+    try {
+      console.log("[DIRECT UPLOAD] Testing bucket resolution:");
+      console.log("  - debug bucket:", this.s3Service.getBucketName("debug"));
+      console.log("  - author bucket:", this.s3Service.getBucketName("author"));
+      console.log(
+        "  - learner bucket:",
+        this.s3Service.getBucketName("learner"),
+      );
+    } catch (resolutionError) {
+      console.error(
+        "[DIRECT UPLOAD] Bucket resolution error:",
+        resolutionError,
+      );
+    }
+
+    if (!bucket) {
+      throw new BadRequestException("Invalid upload type");
+    }
+
+    // Skip bucket access test - let the actual upload handle any bucket issues
+    console.log(
+      `[DIRECT UPLOAD] Proceeding with upload to bucket "${bucket}"...`,
+    );
+
+    // Use the same prefix generation logic from FilesService
+    let prefix = "";
+    const normalizedPath = context.path?.startsWith("/")
+      ? context.path.slice(1)
+      : (context.path ?? "");
+
+    switch (uploadType) {
+      case "author": {
+        prefix = normalizedPath ? `${normalizedPath}/` : `authors/${userId}/`;
+        break;
+      }
+      case "learner": {
+        if (typeof context.assignmentId !== "number") {
+          throw new BadRequestException(
+            "Missing assignmentId in context for learner upload",
+          );
+        }
+        if (typeof context.questionId !== "number") {
+          throw new BadRequestException(
+            "Missing questionId in context for learner upload",
+          );
+        }
+        prefix = normalizedPath
+          ? `${normalizedPath}/`
+          : `${context.assignmentId}/${userId}/${context.questionId}/`;
+        break;
+      }
+      case "debug": {
+        if (typeof context.reportId !== "number") {
+          throw new BadRequestException(
+            "Missing reportId in context for debug upload",
+          );
+        }
+        prefix = normalizedPath
+          ? `${normalizedPath}/`
+          : `debug/${context.reportId}/`;
+        break;
+      }
+      default: {
+        throw new BadRequestException("Invalid upload type");
+      }
+    }
+
+    // Generate unique key
+    const uniqueId =
+      Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const key = `${prefix}${uniqueId}-${file.originalname}`;
+
+    // Direct upload through backend
+    const result = await this.filesService.directUpload(file, bucket, key);
+
+    return {
+      success: true,
+      key,
+      bucket,
+      fileType: file.mimetype,
+      fileName: file.originalname,
+      uploadType,
+      size: file.size,
+      etag: result.etag,
+    };
   }
 
   @Get("access")

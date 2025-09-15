@@ -2,7 +2,7 @@
 
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import Tooltip from "@/components/Tooltip";
-import { QuestionAuthorStore } from "@/config/types";
+import { Choice, QuestionAuthorStore } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
 import { EyeIcon } from "@heroicons/react/24/solid";
@@ -24,11 +24,13 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showCorrectAnswer,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
+    state.showCorrectAnswer,
   ]);
   const assignmentConfig = {
     questionDisplay: assignmentConfigstate.questionDisplay,
@@ -43,6 +45,7 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     showQuestions: showQuestions,
     showAssignmentScore: showAssignmentScore,
     showQuestionScore: showQuestionScore,
+    showCorrectAnswer: showCorrectAnswer,
     instructions: authorState.instructions ?? "",
     gradingCriteriaOverview: authorState.gradingCriteriaOverview ?? "",
     showSubmissionFeedback: showSubmissionFeedback,

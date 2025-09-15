@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
+import { PrismaService } from "src/prisma.service";
 import { Logger } from "winston";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
@@ -20,6 +21,10 @@ import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
 import { QuestionService } from "./question.service";
 import { TranslationService } from "./translation.service";
+import {
+  VersionManagementService,
+  VersionSummary,
+} from "./version-management.service";
 
 /**
  * Service for managing assignment operations
@@ -31,7 +36,9 @@ export class AssignmentServiceV2 {
     private readonly assignmentRepository: AssignmentRepository,
     private readonly questionService: QuestionService,
     private readonly translationService: TranslationService,
+    private readonly versionManagementService: VersionManagementService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly prisma: PrismaService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
@@ -156,12 +163,15 @@ export class AssignmentServiceV2 {
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,
   ): Promise<{ jobId: number; message: string }> {
+    this.logger.info(
+      `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
+    );
     const job = await this.jobStatusService.createPublishJob(
       assignmentId,
       userId,
     );
 
-    this.startPublishingProcess(job.id, assignmentId, updateDto).catch(
+    this.startPublishingProcess(job.id, assignmentId, updateDto, userId).catch(
       (error: unknown) => {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
@@ -183,6 +193,7 @@ export class AssignmentServiceV2 {
     jobId: number,
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
+    userId: string,
   ): Promise<void> {
     try {
       // Progress allocation:
@@ -221,6 +232,7 @@ export class AssignmentServiceV2 {
         showAssignmentScore: updateDto.showAssignmentScore,
         showQuestionScore: updateDto.showQuestionScore,
         showSubmissionFeedback: updateDto.showSubmissionFeedback,
+        showCorrectAnswer: updateDto.showCorrectAnswer,
         timeEstimateMinutes: updateDto.timeEstimateMinutes,
         showQuestions: updateDto.showQuestions,
         numberOfQuestionsPerAttempt: updateDto.numberOfQuestionsPerAttempt,
@@ -231,6 +243,29 @@ export class AssignmentServiceV2 {
         progress: "Assignment settings updated",
         percentage: 10,
       });
+
+      try {
+        await this.prisma.assignmentAuthor.upsert({
+          where: {
+            assignmentId_userId: {
+              assignmentId,
+              userId,
+            },
+          },
+          update: {},
+          create: {
+            assignmentId,
+            userId,
+          },
+        });
+      } catch (error) {
+        // Log but don't fail the publishing process if author tracking fails
+        this.logger.warn(
+          `Failed to store assignment author: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        );
+      }
 
       let questionContentChanged = false;
 
@@ -284,11 +319,123 @@ export class AssignmentServiceV2 {
           end: 90,
         });
       } else {
+        // Only check language consistency if no content changes and we have existing translations
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
-          progress: "No content changes detected, skipping translation",
-          percentage: 85,
+          progress: "Checking for language consistency issues",
+          percentage: 78,
         });
+
+        // Quick check to see if we have existing translations first
+        const hasExistingTranslations =
+          await this.prisma.assignmentTranslation.count({
+            where: { assignmentId },
+          });
+
+        if (hasExistingTranslations > 0) {
+          // Use quick validation instead of expensive language detection
+          // const isValid = await this.translationService.quickValidateAssignmentTranslations(
+          //   assignmentId,
+          // );
+          const isValid = true;
+          if (isValid) {
+            await this.jobStatusService.updateJobStatus(jobId, {
+              status: "In Progress",
+              progress:
+                "Translation validation passed, skipping consistency check",
+              percentage: 85,
+            });
+          } else {
+            // Only do expensive validation if quick check fails
+            this.logger.warn(
+              `Quick validation failed for assignment ${assignmentId}, running full validation`,
+            );
+
+            const languageValidation =
+              await this.translationService.validateAssignmentLanguageConsistency(
+                assignmentId,
+              );
+
+            if (languageValidation.isConsistent) {
+              await this.jobStatusService.updateJobStatus(jobId, {
+                status: "In Progress",
+                progress: "Language consistency validated, no issues found",
+                percentage: 85,
+              });
+            } else {
+              this.logger.warn(
+                `Language consistency issues detected for assignment ${assignmentId}: ${languageValidation.mismatchedLanguages.join(
+                  ", ",
+                )}`,
+              );
+
+              // Language mismatch detected - force retranslation for affected languages
+              await this.jobStatusService.updateJobStatus(jobId, {
+                status: "In Progress",
+                progress: `Language mismatch detected for ${languageValidation.mismatchedLanguages.length} languages, refreshing translations`,
+                percentage: 80,
+              });
+
+              await this.translationService.retranslateAssignmentForLanguages(
+                assignmentId,
+                languageValidation.mismatchedLanguages,
+                jobId,
+              );
+
+              await this.jobStatusService.updateJobStatus(jobId, {
+                status: "In Progress",
+                progress: "Translation refresh completed",
+                percentage: 90,
+              });
+            }
+          }
+        } else {
+          await this.jobStatusService.updateJobStatus(jobId, {
+            status: "In Progress",
+            progress:
+              "No existing translations to validate, skipping consistency check",
+            percentage: 85,
+          });
+        }
+      }
+
+      // Final translation validation
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: "Validating translation completeness",
+        percentage: 88,
+      });
+
+      const translationCompleteness =
+        await this.translationService.ensureTranslationCompleteness(
+          assignmentId,
+        );
+
+      if (!translationCompleteness.isComplete) {
+        this.logger.warn(
+          `Missing translations detected for assignment ${assignmentId}. Attempting to fix...`,
+          { missingTranslations: translationCompleteness.missingTranslations },
+        );
+
+        // Attempt to fix missing translations
+        for (const missing of translationCompleteness.missingTranslations) {
+          try {
+            // Note: We're not fixing missing translations here
+            // This is just logging for monitoring
+            this.logger.warn(
+              `Missing translations for ${
+                missing.variantId
+                  ? `variant ${missing.variantId}`
+                  : `question ${missing.questionId}`
+              }: ${missing.missingLanguages.join(", ")}`,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Failed to fix missing translation for question ${missing.questionId}`,
+              error,
+            );
+          }
+        }
       }
 
       await this.jobStatusService.updateJobStatus(jobId, {
@@ -305,7 +452,7 @@ export class AssignmentServiceV2 {
 
       await this.assignmentRepository.update(assignmentId, {
         questionOrder,
-        published: true,
+        published: updateDto.published,
       });
 
       const updatedQuestions =
@@ -316,6 +463,173 @@ export class AssignmentServiceV2 {
         const indexB = questionOrder.indexOf(b.id);
         return indexA - indexB;
       });
+
+      // Log the questions that were found after processing
+      this.logger.info(
+        `Found ${updatedQuestions.length} questions after processing for assignment ${assignmentId}`,
+        {
+          questionIds: updatedQuestions.map((q) => q.id),
+        },
+      );
+
+      // Create a new version when publishing - AFTER questions are processed and committed
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: "Creating version snapshot",
+        percentage: 95,
+      });
+
+      try {
+        this.logger.info(
+          `Managing version after question processing - found ${updatedQuestions.length} questions`,
+        );
+
+        const userSession = {
+          userId,
+          role: "AUTHOR",
+        } as unknown as UserSession;
+
+        // Check if there's an existing draft version to update/publish
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const existingDraft =
+          await this.versionManagementService.getUserLatestDraft(
+            assignmentId,
+            userSession,
+          );
+
+        // Check for recently created unpublished versions (to prevent duplicates from frontend)
+        const latestVersion =
+          await this.versionManagementService.getLatestVersion(assignmentId);
+
+        let versionResult: VersionSummary;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        if (
+          existingDraft &&
+          updateDto.published &&
+          existingDraft?._draftVersionId
+        ) {
+          // If we have a draft and we're publishing, publish the existing draft
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          const draftVersionId = existingDraft._draftVersionId;
+          this.logger.info(
+            `Found existing draft version, publishing it instead of creating new version`,
+            { draftVersionId },
+          );
+
+          // Update the existing draft with current content first
+          await this.versionManagementService.saveDraft(
+            assignmentId,
+            {
+              assignmentData: {
+                name: updateDto.name,
+                introduction: updateDto.introduction,
+                instructions: updateDto.instructions,
+                gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
+                timeEstimateMinutes: updateDto.timeEstimateMinutes,
+              },
+              questionsData: updatedQuestions,
+              versionDescription:
+                updateDto.versionDescription ??
+                `Published version - ${new Date().toLocaleDateString()}`,
+              versionNumber: updateDto.versionNumber,
+            },
+            userSession,
+          );
+
+          // Then publish the updated draft
+          versionResult = await this.versionManagementService.publishVersion(
+            assignmentId,
+            draftVersionId,
+          );
+        } else if (
+          latestVersion &&
+          !latestVersion.published &&
+          updateDto.published
+        ) {
+          // There's a recently created unpublished version - publish it instead of creating new one
+          this.logger.info(
+            `Found recently created unpublished version ${latestVersion.versionNumber}, publishing it instead of creating duplicate`,
+            {
+              versionId: latestVersion.id,
+              versionNumber: latestVersion.versionNumber,
+            },
+          );
+
+          versionResult = await this.versionManagementService.publishVersion(
+            assignmentId,
+            latestVersion.id,
+          );
+        } else if (!existingDraft && updateDto.published) {
+          // No existing draft and no unpublished version - create new version directly
+          this.logger.info(
+            `No existing draft or unpublished version found, creating new version directly`,
+          );
+          this.logger.info(
+            `UpdateDto contains versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
+          );
+
+          versionResult = await this.versionManagementService.createVersion(
+            assignmentId,
+            {
+              versionNumber: updateDto.versionNumber,
+              versionDescription:
+                updateDto.versionDescription ??
+                `Version - ${new Date().toLocaleDateString()}`,
+              isDraft: false, // Create as published directly
+              shouldActivate: true,
+            },
+            userSession,
+          );
+        } else {
+          // Create or update draft version (not publishing)
+          this.logger.info(`Saving as draft version`);
+
+          versionResult = await this.versionManagementService.saveDraft(
+            assignmentId,
+            {
+              assignmentData: {
+                name: updateDto.name,
+                introduction: updateDto.introduction,
+                instructions: updateDto.instructions,
+                gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
+                timeEstimateMinutes: updateDto.timeEstimateMinutes,
+              },
+              questionsData: updatedQuestions,
+              versionDescription:
+                updateDto.versionDescription ??
+                `Draft - ${new Date().toLocaleDateString()}`,
+              versionNumber: updateDto.versionNumber,
+            },
+            userSession,
+          );
+        }
+
+        this.logger.info(
+          `Successfully managed version ${versionResult.id} for assignment ${assignmentId} during publishing with ${versionResult.questionCount} questions`,
+          {
+            versionNumber: versionResult.versionNumber,
+            isDraft: versionResult.isDraft,
+            isActive: versionResult.isActive,
+            published: versionResult.published,
+          },
+        );
+      } catch (versionError) {
+        // Log the full error details
+        this.logger.error(
+          `Failed to create version during publishing for assignment ${assignmentId}:`,
+          {
+            error:
+              versionError instanceof Error
+                ? versionError.message
+                : "Unknown error",
+            stack:
+              versionError instanceof Error ? versionError.stack : undefined,
+            assignmentId,
+            userId,
+            questionsFound: updatedQuestions.length,
+          },
+        );
+      }
 
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "Completed",

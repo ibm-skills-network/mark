@@ -163,26 +163,13 @@ export class PresentationGradingService implements IPresentationGradingService {
       const parsedResponse = await parser.parse(response);
       console.log("Parsed Response:", parsedResponse);
 
-      // Format rubric scores if available
-      let rubricDetails = "";
-      if (
-        parsedResponse.rubricScores &&
-        parsedResponse.rubricScores.length > 0
-      ) {
-        rubricDetails = "\n\n**Rubric Scoring:**\n";
-        for (const score of parsedResponse.rubricScores) {
-          rubricDetails += `${score.pointsAwarded}/${score.maxPoints} points\n`;
-          rubricDetails += `Justification: ${score.justification}\n\n`;
-        }
-      }
-
       // Combine the AEEG components into comprehensive feedback
       const aeegFeedback = `
 **Analysis:**
 ${parsedResponse.analysis}
 
 **Evaluation:**
-${parsedResponse.evaluation}${rubricDetails}
+${parsedResponse.evaluation}
 
 **Explanation:**
 ${parsedResponse.explanation}

@@ -9,5 +9,6 @@ export interface IUsageTracker {
     usageType: AIUsageType,
     tokensIn: number,
     tokensOut: number,
+    modelKey?: string,
   ): Promise<void>;
 }

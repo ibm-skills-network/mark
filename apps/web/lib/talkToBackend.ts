@@ -5,12 +5,11 @@
  * functions from the refactored API structure to maintain backward
  * compatibility with existing code.
  */
-
 import * as apiConfig from "../config/constants";
-import * as apiShared from "./shared";
 import * as apiAuthor from "./author";
-import * as apiLearner from "./learner";
 import * as apiGithub from "./github";
+import * as apiLearner from "./learner";
+import * as apiShared from "./shared";
 
 export const BASE_API_ROUTES = apiConfig.getApiRoutes();
 
@@ -22,6 +21,36 @@ export const getAssignments = apiShared.getAssignments;
 export const getSupportedLanguages = apiShared.getSupportedLanguages;
 export const translateQuestion = apiShared.translateQuestion;
 export const getFileAccess = apiShared.getFileAccess;
+
+// Admin functions
+export const getAdminFeedback = apiShared.getAdminFeedback;
+export const getAdminReports = apiShared.getAdminReports;
+export const getDashboardAssignments = apiShared.getDashboardAssignments;
+export const getDashboardReports = apiShared.getDashboardReports;
+export const getDashboardFeedback = apiShared.getDashboardFeedback;
+export const getDashboardStats = apiShared.getDashboardStats;
+export const getAssignmentAnalytics = apiShared.getAssignmentAnalytics;
+export const getDetailedAssignmentInsights =
+  apiShared.getDetailedAssignmentInsights;
+export const executeQuickAction = apiShared.executeQuickAction;
+export const getCurrentAdminUser = apiShared.getCurrentAdminUser;
+export const isCurrentUserSuperAdmin = apiShared.isCurrentUserSuperAdmin;
+export const upscalePricing = apiShared.upscalePricing;
+export const getCurrentPriceUpscaling = apiShared.getCurrentPriceUpscaling;
+export const removePriceUpscaling = apiShared.removePriceUpscaling;
+
+// Admin types
+export type {
+  FeedbackData,
+  ReportData,
+  AdminPaginationInfo,
+  FeedbackResponse,
+  ReportsResponse,
+  FeedbackFilters,
+  ReportsFilters,
+  AssignmentAnalyticsData,
+  AssignmentAnalyticsResponse,
+} from "./shared";
 
 export const replaceAssignment = apiAuthor.replaceAssignment;
 export const updateAssignment = apiAuthor.updateAssignment;

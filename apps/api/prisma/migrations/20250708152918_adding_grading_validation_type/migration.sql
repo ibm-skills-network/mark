@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AIUsageType" ADD VALUE 'GRADING_VALIDATION';

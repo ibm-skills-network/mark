@@ -64,6 +64,7 @@ const Component: FC<Props> = () => {
     setShowSubmissionFeedback,
     setShowQuestionScore,
     setShowQuestion,
+    setShowCorrectAnswer,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.setVerbosityLevel,
@@ -71,17 +72,20 @@ const Component: FC<Props> = () => {
     state.setShowSubmissionFeedback,
     state.setShowQuestionScore,
     state.setShowQuestion,
+    state.setShowCorrectAnswer,
   ]);
   const [
     showAssignmentScore,
     showSubmissionFeedback,
     showQuestionScore,
     showQuestions,
+    showCorrectAnswer,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showAssignmentScore,
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showQuestions,
+    state.showCorrectAnswer,
   ]);
   const handleButtonClick = (verbosity: VerbosityLevels) => {
     setVerbosityLevel(verbosity);
@@ -91,36 +95,53 @@ const Component: FC<Props> = () => {
         setShowSubmissionFeedback(true);
         setShowQuestionScore(true);
         setShowQuestion(true);
+        setShowCorrectAnswer(true);
         break;
       case "Custom":
         setShowAssignmentScore(true);
         setShowSubmissionFeedback(false);
         setShowQuestionScore(true);
         setShowQuestion(true);
+        setShowCorrectAnswer(true);
         break;
       case "None":
         setShowAssignmentScore(false);
         setShowSubmissionFeedback(false);
         setShowQuestionScore(false);
         setShowQuestion(false);
+        setShowCorrectAnswer(false);
         break;
       default:
         break;
     }
   };
   useEffect(() => {
-    if (showAssignmentScore && showSubmissionFeedback && showQuestionScore) {
+    if (
+      showAssignmentScore &&
+      showSubmissionFeedback &&
+      showQuestionScore &&
+      showQuestions &&
+      showCorrectAnswer
+    ) {
       setVerbosityLevel("Full");
     } else if (
       !showAssignmentScore &&
       !showSubmissionFeedback &&
-      !showQuestionScore
+      !showQuestionScore &&
+      !showQuestions &&
+      !showCorrectAnswer
     ) {
       setVerbosityLevel("None");
     } else {
       setVerbosityLevel("Custom");
     }
-  }, [showAssignmentScore, showSubmissionFeedback, showQuestionScore]);
+  }, [
+    showAssignmentScore,
+    showSubmissionFeedback,
+    showQuestionScore,
+    showQuestions,
+    showCorrectAnswer,
+  ]);
 
   return (
     <SectionWithTitle

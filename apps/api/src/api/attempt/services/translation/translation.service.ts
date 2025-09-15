@@ -1,19 +1,20 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../../../prisma.service";
-import {
-  QuestionDto,
-  Choice,
-  ScoringDto,
-} from "src/api/assignment/dto/update.questions.request.dto";
-import { QuestionService } from "src/api/assignment/question/question.service";
 import {
   AssignmentAttempt,
   QuestionVariant,
   Translation,
 } from "@prisma/client";
 import { QuestionResponse } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
+import {
+  Choice,
+  QuestionDto,
+  ScoringDto,
+} from "src/api/assignment/dto/update.questions.request.dto";
+import { QuestionService } from "src/api/assignment/question/question.service";
+import { PrismaService } from "../../../../prisma.service";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
+
 export type VariantMapping = {
   questionId: number;
   questionVariant: QuestionVariant | null;
@@ -244,10 +245,7 @@ export class TranslationService {
     if (typeof field === "string") {
       try {
         return JSON.parse(field);
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-
+      } catch {
         return null;
       }
     }

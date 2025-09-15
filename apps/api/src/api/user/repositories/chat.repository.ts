@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/require-await */
 
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../../prisma.service";
 import { Chat, ChatMessage, ChatRole, Prisma } from "@prisma/client";
+import { PrismaService } from "../../../prisma.service";
 
 /**
  * Repository for Chat-related database operations

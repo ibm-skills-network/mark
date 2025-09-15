@@ -1,11 +1,19 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   Choice,
   QuestionDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { Logger } from "winston";
+import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
@@ -15,9 +23,17 @@ import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
   constructor(
     protected readonly localizationService: LocalizationService,
+    @Inject(GRADING_AUDIT_SERVICE)
     protected readonly gradingAuditService: GradingAuditService,
+    @Optional() @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger,
   ) {
-    super(localizationService, gradingAuditService);
+    super(
+      localizationService,
+      gradingAuditService,
+      undefined,
+      undefined,
+      parentLogger,
+    );
   }
 
   /**
@@ -28,7 +44,7 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
     if (
-      requestDto.learnerAnswerChoice === null &&
+      requestDto.learnerAnswerChoice === null ||
       requestDto.learnerAnswerChoice === undefined
     ) {
       throw new BadRequestException(
@@ -98,14 +114,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
         ),
       );
     }
-    if (correctAnswer === undefined) {
-      throw new BadRequestException(
-        this.localizationService.getLocalizedString(
-          "missingCorrectAnswer",
-          context.language,
-        ),
-      );
-    }
     const isCorrect = learnerResponse === correctAnswer;
 
     const feedback = isCorrect
@@ -148,6 +156,17 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
       possiblePoints: correctPoints,
       awardedPoints: pointsAwarded,
     };
+
+    // Record grading for audit and consistency
+    await this.recordGrading(
+      question,
+      {
+        learnerAnswerChoice: learnerResponse,
+      } as CreateQuestionResponseAttemptRequestDto,
+      responseDto,
+      context,
+      "TrueFalseGradingStrategy",
+    );
 
     return responseDto;
   }

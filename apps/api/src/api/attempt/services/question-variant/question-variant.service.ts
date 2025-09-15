@@ -1,8 +1,8 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../../../prisma.service";
-import { Choice } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { Choice } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { PrismaService } from "../../../../prisma.service";
 
 @Injectable()
 export class QuestionVariantService {

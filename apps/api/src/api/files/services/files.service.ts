@@ -126,14 +126,8 @@ export class FilesService {
     bucket: string,
     key: string,
   ): Promise<any> {
-    try {
-      await this.s3Service.headBucket({ Bucket: bucket });
-    } catch {
-      throw new NotFoundException(
-        "Bucket does not exist or you do not have permission to access it",
-      );
-    }
-
+    // Skip bucket validation - let the actual S3 operation handle any bucket issues
+    // This matches the behavior of presigned URL uploads which work fine
     const result = await this.s3Service.putObject({
       Bucket: bucket,
       Key: key,
@@ -496,7 +490,7 @@ export class FilesService {
       if (MIME_TYPES[extension]) return MIME_TYPES[extension];
     }
 
-    const lastExtension = parts.pop()!;
+    const lastExtension = parts.pop();
     return MIME_TYPES[lastExtension] ?? "application/octet-stream";
   }
 }

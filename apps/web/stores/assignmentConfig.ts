@@ -1,8 +1,8 @@
+import { withUpdatedAt } from "./middlewares";
 import { GradingData, QuestionDisplayType } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
-import { withUpdatedAt } from "./middlewares";
 
 type GradingDataActions = {
   questionDisplay: QuestionDisplayType;
@@ -86,8 +86,8 @@ export const useAssignmentConfig = createWithEqualityFn<
             return {
               ...state,
               strictTimeLimit: newStrictTimeLimit,
-              allotedTimeMinutes: newStrictTimeLimit ? 1 : null,
-              timeEstimateMinutes: newStrictTimeLimit ? 1 : null,
+              allotedTimeMinutes: newStrictTimeLimit ? 20 : null,
+              timeEstimateMinutes: newStrictTimeLimit ? 20 : null,
             };
           });
         },

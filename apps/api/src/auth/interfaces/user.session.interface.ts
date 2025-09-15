@@ -12,6 +12,7 @@ export interface ClientUserSession {
   assignmentId: number;
   returnUrl?: string;
   launch_presentation_locale?: string;
+  sessionToken?: string;
 }
 
 export interface UserSession extends ClientUserSession {

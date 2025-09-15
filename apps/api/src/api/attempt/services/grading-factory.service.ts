@@ -1,7 +1,6 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
-import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
 import { IGradingStrategy } from "../common/interfaces/grading-strategy.interface";
 import { ChoiceGradingStrategy } from "../common/strategies/choice-grading.strategy";
 import { FileGradingStrategy } from "../common/strategies/file-grading.strategy";

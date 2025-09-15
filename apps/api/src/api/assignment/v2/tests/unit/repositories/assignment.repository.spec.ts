@@ -1,19 +1,18 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/unbound-method */
-import { Test, TestingModule } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
-import { PrismaService } from "src/prisma.service";
-import { Assignment, QuestionType } from "@prisma/client";
+import { Test, TestingModule } from "@nestjs/testing";
+import { QuestionType } from "@prisma/client";
 import { GetAssignmentResponseDto } from "src/api/assignment/dto/get.assignment.response.dto";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
-import { AssignmentRepository } from "../../../repositories/assignment.repository";
+import { PrismaService } from "src/prisma.service";
 import {
   createMockAssignment,
   sampleAuthorSession,
   sampleLearnerSession,
 } from "../__mocks__/ common-mocks";
-import { BaseAssignmentResponseDto } from "src/api/admin/dto/assignment/base.assignment.response.dto";
+import { AssignmentRepository } from "../../../repositories/assignment.repository";
 
 describe("AssignmentRepository", () => {
   let repository: AssignmentRepository;

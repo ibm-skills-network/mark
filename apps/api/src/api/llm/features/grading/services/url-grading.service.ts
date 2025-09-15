@@ -74,7 +74,7 @@ export class UrlGradingService implements IUrlGradingService {
     const formatInstructions = parser.getFormatInstructions();
 
     const responseSpecificInstruction: string =
-      (RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS[responseType] as string) ?? "";
+      RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS[responseType] ?? "";
 
     const prompt = new PromptTemplate({
       template: this.loadUrlGradingTemplate(),
