@@ -17,7 +17,8 @@ async function bootstrap() {
     cors: false,
     logger: WinstonModule.createLogger(winstonOptions),
   });
-
+  app.use(json({ limit: "1000mb" }));
+  app.use(urlencoded({ limit: "1000mb", extended: true }));
   app.setGlobalPrefix("api", {
     exclude: ["health", "health/liveness", "health/readiness"],
   });
@@ -28,9 +29,6 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
-
-  app.use(json({ limit: "10mb" }));
-  app.use(urlencoded({ limit: "10mb", extended: true }));
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.useGlobalGuards(app.select(AuthModule).get(RolesGlobalGuard));

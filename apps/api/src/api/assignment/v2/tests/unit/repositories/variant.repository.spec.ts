@@ -5,9 +5,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 import { Test, TestingModule } from "@nestjs/testing";
-import { PrismaService } from "src/prisma.service";
 import { Prisma, VariantType } from "@prisma/client";
-import { VariantRepository } from "../../../repositories/variant.repository";
+import { VariantDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { PrismaService } from "src/prisma.service";
 import {
   createMockPrismaService,
   createMockQuestionVariant,
@@ -16,7 +16,7 @@ import {
   sampleChoiceB,
   sampleChoiceC,
 } from "../__mocks__/ common-mocks";
-import { VariantDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { VariantRepository } from "../../../repositories/variant.repository";
 
 describe("VariantRepository", () => {
   let variantRepository: VariantRepository;

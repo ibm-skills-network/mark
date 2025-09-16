@@ -5,10 +5,7 @@ import {
   SetMetadata,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import {
-  UserRole,
-  UserSessionRequest,
-} from "../interfaces/user.session.interface";
+import { UserRole } from "../interfaces/user.session.interface";
 
 export const ROLES_KEY = "roles";
 export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
@@ -25,8 +22,17 @@ export class RolesGlobalGuard implements CanActivate {
     if (!requiredRoles) {
       return true;
     }
-    const request: UserSessionRequest = context.switchToHttp().getRequest();
-    const { userSession } = request;
-    return requiredRoles.includes(userSession.role);
+    const request: {
+      userSession?: { role: UserRole };
+      adminSession?: { role: UserRole };
+    } = context.switchToHttp().getRequest();
+
+    const session = request.userSession || request.adminSession;
+
+    if (!session) {
+      return false;
+    }
+
+    return requiredRoles.includes(session.role);
   }
 }

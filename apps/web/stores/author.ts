@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable */
-
 import {
   AuthorAssignmentState,
   AuthorFileUploads,
@@ -17,6 +15,48 @@ import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
+import { DraftData } from "@/hooks/useVersionControl";
+import { DraftSummary, VersionSummary } from "@/lib/author";
+const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
+  // version control state
+  "versions",
+  "currentVersion",
+  "selectedVersion",
+  "versionComparison",
+  "isLoadingVersions",
+  "versionsLoadFailed",
+  "hasAttemptedLoadVersions",
+  "lastAutoSave",
+  "hasUnsavedChanges",
+
+  // drafts
+  "drafts",
+  "isLoadingDrafts",
+  "draftsLoadFailed",
+  "hasAttemptedLoadDrafts",
+
+  // favorites
+  "favoriteVersions",
+]);
+
+export interface VersionComparison {
+  fromVersion: VersionSummary;
+  toVersion: VersionSummary;
+  assignmentChanges: Array<{
+    field: string;
+    fromValue: any;
+    toValue: any;
+    changeType: "added" | "modified" | "removed";
+  }>;
+  questionChanges: Array<{
+    questionId?: number;
+    displayOrder: number;
+    changeType: "added" | "modified" | "removed";
+    field?: string;
+    fromValue?: any;
+    toValue?: any;
+  }>;
+}
 
 export type AuthorState = {
   activeAssignmentId?: number | undefined;
@@ -33,6 +73,24 @@ export type AuthorState = {
   focusedQuestionId?: number | undefined;
   originalAssignment: AuthorAssignmentState;
   role?: string;
+  // Version control state
+  versions: VersionSummary[];
+  currentVersion?: VersionSummary; // Currently active/published version
+  checkedOutVersion?: VersionSummary; // Currently checked out version (what user is working on)
+  selectedVersion?: VersionSummary; // Version selected for comparison/operations
+  versionComparison?: VersionComparison;
+  isLoadingVersions: boolean;
+  versionsLoadFailed: boolean;
+  hasAttemptedLoadVersions: boolean;
+  lastAutoSave?: Date;
+  hasUnsavedChanges: boolean;
+  // Draft state
+  drafts: any[];
+  isLoadingDrafts: boolean;
+  draftsLoadFailed: boolean;
+  hasAttemptedLoadDrafts: boolean;
+  // Favorite versions
+  favoriteVersions: number[];
 };
 
 export type OptionalQuestion = {
@@ -166,6 +224,54 @@ export type AuthorActions = {
     questionId: number,
     variantId?: number,
   ) => boolean;
+
+  // Version control actions
+  loadVersions: () => Promise<void>;
+  createVersion: (
+    versionDescription?: string,
+    isDraft?: boolean,
+    versionNumber?: string,
+    updateExisting?: boolean,
+    versionId?: number,
+  ) => Promise<VersionSummary | undefined>;
+  saveDraft: (
+    versionDescription?: string,
+  ) => Promise<VersionSummary | undefined>;
+  restoreVersion: (
+    versionId: number,
+    createAsNewVersion?: boolean,
+  ) => Promise<VersionSummary | undefined>;
+  activateVersion: (versionId: number) => Promise<VersionSummary | undefined>;
+  compareVersions: (
+    fromVersionId: number,
+    toVersionId: number,
+  ) => Promise<void>;
+  getVersionHistory: () => Promise<any[]>;
+  autoSave: () => Promise<void>;
+  setVersions: (versions: VersionSummary[]) => void;
+  setCurrentVersion: (version?: VersionSummary) => void;
+  setCheckedOutVersion: (version?: VersionSummary) => void;
+  checkoutVersion: (versionId: number) => Promise<boolean>;
+  setSelectedVersion: (version?: VersionSummary) => void;
+  setVersionComparison: (comparison?: VersionComparison) => void;
+  setIsLoadingVersions: (loading: boolean) => void;
+  setHasUnsavedChanges: (hasChanges: boolean) => void;
+  markAutoSave: () => void;
+
+  // Draft actions
+  setDrafts: (drafts: DraftSummary[]) => void;
+  setIsLoadingDrafts: (loading: boolean) => void;
+  setDraftsLoadFailed: (failed: boolean) => void;
+  setHasAttemptedLoadDrafts: (attempted: boolean) => void;
+
+  // Favorite version actions
+  toggleFavoriteVersion: (versionId: number) => Promise<void>;
+  setFavoriteVersions: (favorites: number[]) => void;
+  loadFavoriteVersions: () => Promise<void>;
+  updateVersionDescription: (
+    versionId: number,
+    versionDescription: string,
+  ) => Promise<VersionSummary | undefined>;
   setEvaluateBodyLanguage: (
     questionId: number,
     bodyLanguageBool: boolean,
@@ -436,6 +542,24 @@ export const useAuthorStore = createWithEqualityFn<
         setRole: (role) => set({ role }),
         learningObjectives: "",
         originalAssignment: null,
+        // Version control state initialization
+        versions: [],
+        currentVersion: undefined,
+        checkedOutVersion: undefined,
+        selectedVersion: undefined,
+        versionComparison: undefined,
+        isLoadingVersions: false,
+        versionsLoadFailed: false,
+        hasAttemptedLoadVersions: false,
+        lastAutoSave: undefined,
+        hasUnsavedChanges: false,
+        // Draft state initialization
+        drafts: [],
+        isLoadingDrafts: false,
+        draftsLoadFailed: false,
+        hasAttemptedLoadDrafts: false,
+        // Favorite versions initialization
+        favoriteVersions: [],
         removeRubric(questionId, rubricIndex, variantId) {
           set((state) => ({
             questions: state.questions.map((q) => {
@@ -677,16 +801,19 @@ export const useAuthorStore = createWithEqualityFn<
         activeAssignmentId: undefined,
         setActiveAssignmentId: (id) => set({ activeAssignmentId: id }),
         name: "",
-        setName: (title) => set({ name: title }),
+        setName: (title) => set({ name: title, hasUnsavedChanges: true }),
         introduction: "",
-        setIntroduction: (introduction) => set({ introduction }),
+        setIntroduction: (introduction) =>
+          set({ introduction, hasUnsavedChanges: true }),
         instructions: "",
-        setInstructions: (instructions) => set({ instructions }),
+        setInstructions: (instructions) =>
+          set({ instructions, hasUnsavedChanges: true }),
         gradingCriteriaOverview: "",
         setGradingCriteriaOverview: (gradingCriteriaOverview) =>
-          set({ gradingCriteriaOverview }),
+          set({ gradingCriteriaOverview, hasUnsavedChanges: true }),
         questions: [],
-        setQuestions: (questions) => set({ questions }),
+        setQuestions: (questions) =>
+          set({ questions, hasUnsavedChanges: true }),
         setEvaluateBodyLanguage: (questionId, bodyLanguageBool) => {
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
@@ -702,7 +829,7 @@ export const useAuthorStore = createWithEqualityFn<
                 return q;
               }
             });
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           });
         },
         setRealTimeAiCoach: (questionId, realTimeAiCoachBool) => {
@@ -720,7 +847,7 @@ export const useAuthorStore = createWithEqualityFn<
                 return q;
               }
             });
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           });
         },
         setEvaluateTimeManagement: (
@@ -752,7 +879,7 @@ export const useAuthorStore = createWithEqualityFn<
                 return q;
               }
             });
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           });
         },
         setTargetTime: (questionId, time, responseType) => {
@@ -780,7 +907,7 @@ export const useAuthorStore = createWithEqualityFn<
                 return q;
               }
             });
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           });
         },
         setEvaluateSlidesQuality: (questionId, slidesQualityBool) => {
@@ -798,7 +925,7 @@ export const useAuthorStore = createWithEqualityFn<
                 return q;
               }
             });
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           });
         },
         addQuestion: (question) => {
@@ -809,6 +936,7 @@ export const useAuthorStore = createWithEqualityFn<
             return {
               questions: updatedQuestions,
               updatedAt: Date.now(),
+              hasUnsavedChanges: true,
             };
           });
         },
@@ -820,7 +948,7 @@ export const useAuthorStore = createWithEqualityFn<
               (q) => q.id !== questionId,
             );
             useQuestionStore.getState().clearQuestionState(questionId);
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           }),
         replaceQuestion: (questionId, newQuestion) =>
           set((state) => {
@@ -828,7 +956,7 @@ export const useAuthorStore = createWithEqualityFn<
             if (index === -1) return {};
             const updatedQuestions = [...state.questions];
             updatedQuestions[index] = newQuestion;
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           }),
         modifyQuestion: (questionId, modifiedData) => {
           set((state) => {
@@ -861,6 +989,7 @@ export const useAuthorStore = createWithEqualityFn<
             return {
               questions: updatedQuestions,
               updatedAt: Date.now(),
+              hasUnsavedChanges: true,
             };
           });
 
@@ -1419,7 +1548,7 @@ export const useAuthorStore = createWithEqualityFn<
               }
               return q;
             });
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           });
         },
 
@@ -1467,6 +1596,7 @@ export const useAuthorStore = createWithEqualityFn<
             return {
               questions: updatedQuestions,
               updatedAt: Date.now(),
+              hasUnsavedChanges: true,
             };
           });
 
@@ -1494,7 +1624,7 @@ export const useAuthorStore = createWithEqualityFn<
             );
             question.variants = updatedVariants;
             updatedQuestions[questionIndex] = question;
-            return { questions: updatedQuestions };
+            return { questions: updatedQuestions, hasUnsavedChanges: true };
           }),
 
         deleteVariant: (questionId, variantId) => {
@@ -1522,6 +1652,7 @@ export const useAuthorStore = createWithEqualityFn<
             return {
               questions: updatedQuestions,
               updatedAt: Date.now(),
+              hasUnsavedChanges: true,
             };
           });
 
@@ -1576,6 +1707,907 @@ export const useAuthorStore = createWithEqualityFn<
           set({ errors });
           return Object.keys(errors).length === 0;
         },
+
+        // Version control action implementations
+        loadVersions: async () => {
+          const state = get();
+
+          if (!state.activeAssignmentId) {
+            return;
+          }
+
+          set({
+            isLoadingVersions: true,
+            versionsLoadFailed: false,
+            hasAttemptedLoadVersions: true,
+          });
+
+          try {
+            const { listAssignmentVersions } = await import("@/lib/author");
+
+            const versions = await listAssignmentVersions(
+              state.activeAssignmentId,
+            );
+
+            const currentVersion = versions.find((v) => v.isActive);
+            const currentState = get();
+
+            // Preserve existing checked-out version if it still exists in the new version list
+            let checkedOutVersion = currentVersion;
+            if (currentState.checkedOutVersion) {
+              const existingCheckedOut = versions.find(
+                (v) => v.id === currentState.checkedOutVersion.id,
+              );
+              if (existingCheckedOut) {
+                checkedOutVersion = existingCheckedOut;
+              } else {
+              }
+            }
+
+            set({
+              versions,
+              isLoadingVersions: false,
+              versionsLoadFailed: false,
+              currentVersion,
+              checkedOutVersion,
+            });
+          } catch (error) {
+            console.error("💥 Error loading versions in store:", error);
+            set({ isLoadingVersions: false, versionsLoadFailed: true });
+          }
+        },
+
+        checkoutVersion: async (versionId: number) => {
+          const state = get();
+          if (!state.activeAssignmentId) return false;
+
+          try {
+            // Find the version to checkout
+            const versionToCheckout = state.versions.find(
+              (v) => v.id === versionId,
+            );
+            if (!versionToCheckout) {
+              console.error("Version not found:", versionId);
+              return false;
+            }
+
+            // Get the version data from the backend
+            const { getAssignmentVersion } = await import("@/lib/author");
+            const versionData = await getAssignmentVersion(
+              state.activeAssignmentId,
+              versionId,
+            );
+
+            if (versionData) {
+              // Process the version data the same way we do for regular assignments
+              const { decodeFields } = await import("@/app/Helpers/decoder");
+              const { mergeData } = await import("@/lib/utils");
+              const { stripHtml } = await import("@/app/Helpers/strippers");
+
+              // Decode base64 fields
+              const decodedFields = decodeFields({
+                introduction: versionData.introduction,
+                instructions: versionData.instructions,
+                gradingCriteriaOverview: versionData.gradingCriteriaOverview,
+              });
+
+              const decodedVersionData = {
+                ...versionData,
+                ...decodedFields,
+              };
+
+              // Apply the same processing as regular assignments
+              const processedVersionData = await import(
+                "@/app/author/(components)/Header"
+              ).then((module) => {
+                // Get the fixScoringAndDecode function from the header component
+                return decodedVersionData; // For now, we'll handle this separately
+              });
+
+              // Process questions if they exist - they come in questionVersions array
+              const rawQuestions = versionData.questionVersions || [];
+              const processedQuestions =
+                rawQuestions.map((questionVersion: any, index: number) => {
+                  // Extract the base question data from questionVersion
+                  const question = {
+                    id: questionVersion.questionId,
+                    type: questionVersion.type,
+                    responseType: questionVersion.responseType,
+                    question: questionVersion.question, // Already decoded in API response
+                    maxWords: questionVersion.maxWords,
+                    maxCharacters: questionVersion.maxCharacters,
+                    totalPoints: questionVersion.totalPoints,
+                    answer: questionVersion.answer,
+                    choices: questionVersion.choices
+                      ? (() => {
+                          try {
+                            // Check if it's valid JSON and not "[object Object]"
+                            if (
+                              questionVersion.choices === "[object Object]" ||
+                              (typeof questionVersion.choices === "string" &&
+                                !questionVersion.choices
+                                  .trim()
+                                  .startsWith("{") &&
+                                !questionVersion.choices.trim().startsWith("["))
+                            ) {
+                              console.warn(
+                                "Invalid JSON format for question choices:",
+                                questionVersion.choices,
+                              );
+                              return [];
+                            }
+                            return typeof questionVersion.choices === "string"
+                              ? JSON.parse(questionVersion.choices)
+                              : questionVersion.choices;
+                          } catch (error) {
+                            console.error(
+                              "Failed to parse question choices:",
+                              questionVersion.choices,
+                              error,
+                            );
+                            return [];
+                          }
+                        })()
+                      : null,
+                    scoring: questionVersion.scoring
+                      ? (() => {
+                          try {
+                            // Check if it's valid JSON and not "[object Object]"
+                            if (
+                              questionVersion.scoring === "[object Object]" ||
+                              (typeof questionVersion.scoring === "string" &&
+                                !questionVersion.scoring
+                                  .trim()
+                                  .startsWith("{") &&
+                                !questionVersion.scoring.trim().startsWith("["))
+                            ) {
+                              console.warn(
+                                "Invalid JSON format for question scoring:",
+                                questionVersion.scoring,
+                              );
+                              return null;
+                            }
+                            return typeof questionVersion.scoring === "string"
+                              ? JSON.parse(questionVersion.scoring)
+                              : questionVersion.scoring;
+                          } catch (error) {
+                            console.error(
+                              "Failed to parse question scoring:",
+                              questionVersion.scoring,
+                              error,
+                            );
+                            return null;
+                          }
+                        })()
+                      : null,
+                    randomizedChoices: questionVersion.randomizedChoices,
+                    gradingContextQuestionIds:
+                      questionVersion.gradingContextQuestionIds || [],
+                    videoPresentationConfig:
+                      questionVersion.videoPresentationConfig,
+                    liveRecordingConfig: questionVersion.liveRecordingConfig,
+                    displayOrder: questionVersion.displayOrder,
+                  };
+
+                  // Convert the new questionVersion format to the expected question format
+                  const processedQuestion = {
+                    ...question,
+                    alreadyInBackend: true,
+                    assignmentId: versionData.assignmentId, // Add assignmentId
+                    variants: [], // questionVersions don't have variants in the same way
+                    scoring: question.scoring || {
+                      type: "CRITERIA_BASED",
+                      rubrics: [],
+                    },
+                    index: index + 1,
+                    // Add additional fields that the frontend expects
+                    answer: question.answer ?? false, // Use provided answer or default
+                    createdAt: questionVersion.createdAt,
+                    updatedAt: questionVersion.createdAt,
+                    // Ensure all required fields are present for UI compatibility
+                    maxWords: question.maxWords || null,
+                    maxCharacters: question.maxCharacters || null,
+                  };
+
+                  return processedQuestion;
+                }) || [];
+
+              set({
+                name: decodedVersionData.name,
+                introduction: decodedVersionData.introduction,
+                instructions: decodedVersionData.instructions,
+                gradingCriteriaOverview:
+                  decodedVersionData.gradingCriteriaOverview,
+                questions: processedQuestions,
+                checkedOutVersion: versionToCheckout,
+                hasUnsavedChanges: false,
+              });
+              const { useAssignmentConfig } = await import(
+                "@/stores/assignmentConfig"
+              );
+              const { useAssignmentFeedbackConfig } = await import(
+                "@/stores/assignmentFeedbackConfig"
+              );
+
+              useAssignmentConfig.getState().setAssignmentConfigStore({
+                graded:
+                  versionData.graded !== undefined
+                    ? versionData.graded
+                    : useAssignmentConfig.getState().graded,
+                numAttempts:
+                  versionData.numAttempts !== undefined
+                    ? versionData.numAttempts
+                    : useAssignmentConfig.getState().numAttempts,
+                passingGrade:
+                  versionData.passingGrade !== undefined
+                    ? versionData.passingGrade
+                    : useAssignmentConfig.getState().passingGrade,
+                timeEstimateMinutes:
+                  versionData.timeEstimateMinutes !== undefined
+                    ? versionData.timeEstimateMinutes
+                    : useAssignmentConfig.getState().timeEstimateMinutes,
+                allotedTimeMinutes:
+                  versionData.allotedTimeMinutes !== undefined
+                    ? versionData.allotedTimeMinutes
+                    : useAssignmentConfig.getState().allotedTimeMinutes,
+                displayOrder:
+                  versionData.displayOrder !== undefined
+                    ? versionData.displayOrder
+                    : useAssignmentConfig.getState().displayOrder,
+                questionDisplay:
+                  versionData.questionDisplay !== undefined
+                    ? versionData.questionDisplay
+                    : useAssignmentConfig.getState().questionDisplay,
+              });
+
+              useAssignmentFeedbackConfig
+                .getState()
+                .setAssignmentFeedbackConfigStore({
+                  showAssignmentScore:
+                    versionData.showAssignmentScore !== undefined
+                      ? versionData.showAssignmentScore
+                      : useAssignmentFeedbackConfig.getState()
+                          .showAssignmentScore,
+                  showQuestionScore:
+                    versionData.showQuestionScore !== undefined
+                      ? versionData.showQuestionScore
+                      : useAssignmentFeedbackConfig.getState()
+                          .showQuestionScore,
+                  showSubmissionFeedback:
+                    versionData.showSubmissionFeedback !== undefined
+                      ? versionData.showSubmissionFeedback
+                      : useAssignmentFeedbackConfig.getState()
+                          .showSubmissionFeedback,
+                  showQuestions:
+                    versionData.showQuestions !== undefined
+                      ? versionData.showQuestions
+                      : useAssignmentFeedbackConfig.getState().showQuestions,
+                });
+
+              return true;
+            }
+
+            return false;
+          } catch (error) {
+            console.error("💥 Error checking out version:", error);
+            return false;
+          }
+        },
+
+        createVersion: async (
+          versionDescription?: string,
+          isDraft: boolean = false,
+          versionNumber?: string,
+          updateExisting: boolean = false,
+          versionId?: number,
+        ) => {
+          const state = get();
+          if (!state.activeAssignmentId) {
+            console.error("❌ createVersion: No active assignment ID");
+            return undefined;
+          }
+
+          try {
+            let newVersion: VersionSummary | undefined;
+
+            if (isDraft) {
+              // For draft versions, use the draft endpoint which includes questions data
+              const { createDraftVersion } = await import("@/lib/author");
+              const { encodeFields } = await import("@/app/Helpers/encoder");
+              const { processQuestions } = await import(
+                "@/app/Helpers/processQuestionsBeforePublish"
+              );
+
+              // Get config data from stores (same as publishing does)
+              const configStore = await import("@/stores/assignmentConfig");
+              const feedbackStore = await import(
+                "@/stores/assignmentFeedbackConfig"
+              );
+
+              const configData = configStore.useAssignmentConfig.getState();
+              const feedbackData =
+                feedbackStore.useAssignmentFeedbackConfig.getState();
+
+              // Encode fields (same as publishing)
+              const encodedFields = encodeFields({
+                introduction: state.introduction,
+                instructions: state.instructions,
+                gradingCriteriaOverview: state.gradingCriteriaOverview,
+              });
+
+              // Process questions (same as publishing)
+              let processedQuestions = null;
+              if (state.questions && state.questions.length > 0) {
+                const clonedQuestions = JSON.parse(
+                  JSON.stringify(state.questions),
+                );
+                // Remove ephemeral fields
+                clonedQuestions.forEach((q: any) => {
+                  delete q.alreadyInBackend;
+                  if (
+                    q.type !== "MULTIPLE_CORRECT" &&
+                    q.type !== "SINGLE_CORRECT"
+                  ) {
+                    delete q.randomizedChoices;
+                  }
+                  if (q.responseType !== "PRESENTATION") {
+                    delete q.videoPresentationConfig;
+                  }
+                  if (q.responseType !== "LIVE_RECORDING") {
+                    delete q.liveRecordingConfig;
+                  }
+                });
+                processedQuestions = processQuestions(clonedQuestions);
+              }
+
+              newVersion = await createDraftVersion(state.activeAssignmentId, {
+                assignmentData: {
+                  ...encodedFields,
+                  name: state.name,
+                  numAttempts: configData.numAttempts,
+                  passingGrade: configData.passingGrade,
+                  displayOrder: configData.displayOrder,
+                  graded: configData.graded,
+                  questionDisplay: configData.questionDisplay,
+                  allotedTimeMinutes: configData.allotedTimeMinutes || null,
+                  updatedAt: configData.updatedAt,
+                  questionOrder: state.questionOrder,
+                  timeEstimateMinutes: configData.timeEstimateMinutes,
+                  published: false, // Always false for drafts
+                  showSubmissionFeedback: feedbackData.showSubmissionFeedback,
+                  showQuestions: feedbackData.showQuestions,
+                  showQuestionScore: feedbackData.showQuestionScore,
+                  showAssignmentScore: feedbackData.showAssignmentScore,
+                  numberOfQuestionsPerAttempt:
+                    configData.numberOfQuestionsPerAttempt,
+                },
+                questionsData: processedQuestions,
+                versionNumber,
+                versionDescription,
+              });
+            } else {
+              const { createAssignmentVersion } = await import("@/lib/author");
+              newVersion = await createAssignmentVersion(
+                state.activeAssignmentId,
+                {
+                  versionNumber,
+                  versionDescription,
+                  isDraft,
+                  shouldActivate: !isDraft,
+                  updateExisting,
+                  versionId,
+                },
+              );
+            }
+
+            if (newVersion) {
+              // Show toast notification if version was auto-incremented
+              if (
+                newVersion.wasAutoIncremented &&
+                newVersion.originalVersionNumber
+              ) {
+                const { toast } = await import("sonner");
+                toast.success(
+                  `Version auto-incremented to ${newVersion.versionNumber}`,
+                  {
+                    description: `Original version ${newVersion.originalVersionNumber} already existed, so we incremented to avoid conflict.`,
+                    duration: 6000,
+                  },
+                );
+              }
+
+              let updatedVersions: VersionSummary[];
+              if (updateExisting) {
+                // Replace existing version in the list
+
+                updatedVersions = state.versions.map((v) =>
+                  v.id === newVersion.id ? newVersion : v,
+                );
+              } else {
+                // Add as new version
+                updatedVersions = [newVersion, ...state.versions];
+              }
+
+              set({
+                versions: updatedVersions,
+                currentVersion: newVersion.isActive
+                  ? newVersion
+                  : state.currentVersion,
+                // Clear checkedOutVersion so BottomVersionBar shows the latest version
+                // When user creates a new version, they should see that version in the bar
+                checkedOutVersion: newVersion,
+                hasUnsavedChanges: false,
+              });
+            }
+
+            return newVersion;
+          } catch (error) {
+            console.error("Error creating version:", error);
+            throw error; // Re-throw to allow handling in component
+          }
+        },
+
+        saveDraft: async (versionDescription?: string) => {
+          const state = get();
+          if (!state.activeAssignmentId) return undefined;
+
+          try {
+            const { saveDraft: saveDraftAPI } = await import("@/lib/author");
+
+            // Get current settings from the config stores
+            const { useAssignmentConfig } = await import(
+              "@/stores/assignmentConfig"
+            );
+            const { useAssignmentFeedbackConfig } = await import(
+              "@/stores/assignmentFeedbackConfig"
+            );
+
+            const assignmentConfig = useAssignmentConfig.getState();
+            const feedbackConfig = useAssignmentFeedbackConfig.getState();
+
+            // Generate version number for draft (RC format)
+            const latestVersion =
+              state.versions?.length > 0
+                ? Math.max(
+                    ...state.versions.map(
+                      (v) =>
+                        Number(String(v.versionNumber).replace(/\D/g, "")) || 0,
+                    ),
+                  )
+                : 0;
+            const nextMajorVersion = Math.floor(latestVersion / 100) + 1;
+            const rcVersionNumber = `${nextMajorVersion}.0.0-rc1`;
+
+            // Capture ALL assignment data (same as publishing process)
+            const draftData = {
+              versionNumber: rcVersionNumber,
+              versionDescription:
+                versionDescription ||
+                `Draft saved - ${new Date().toLocaleString()}`,
+              assignmentData: {
+                // Core assignment fields
+                name: state.name,
+                introduction: state.introduction,
+                instructions: state.instructions,
+                gradingCriteriaOverview: state.gradingCriteriaOverview,
+                updatedAt: state.updatedAt,
+
+                // Assignment configuration
+                graded: assignmentConfig.graded,
+                numAttempts: assignmentConfig.numAttempts,
+                passingGrade: assignmentConfig.passingGrade,
+                timeEstimateMinutes: assignmentConfig.timeEstimateMinutes,
+                allotedTimeMinutes: assignmentConfig.allotedTimeMinutes,
+                displayOrder: assignmentConfig.displayOrder,
+                questionDisplay: assignmentConfig.questionDisplay,
+                questionOrder: state.questionOrder,
+                numberOfQuestionsPerAttempt:
+                  assignmentConfig.numberOfQuestionsPerAttempt,
+
+                // Feedback configuration
+                showAssignmentScore: feedbackConfig.showAssignmentScore,
+                showQuestionScore: feedbackConfig.showQuestionScore,
+                showSubmissionFeedback: feedbackConfig.showSubmissionFeedback,
+                showQuestions: feedbackConfig.showQuestions,
+
+                published: false,
+              },
+              questionsData: state.questions,
+            };
+
+            const newDraft = await saveDraftAPI(
+              state.activeAssignmentId,
+              draftData,
+            );
+
+            if (newDraft) {
+              // Update versions list to reflect the new draft
+              const updatedVersions = [
+                {
+                  id: newDraft.id,
+                  versionNumber: "0.0.0",
+                  versionDescription: newDraft.draftName,
+                  isDraft: true,
+                  isActive: false,
+                  createdBy: newDraft.userId,
+                  createdAt: newDraft.createdAt,
+                  questionCount: newDraft.questionCount,
+                  published: newDraft.published,
+                  updatedAt: newDraft.updatedAt,
+                },
+                ...state.versions.filter((v) => v.id !== newDraft.id),
+              ];
+
+              set({
+                versions: updatedVersions,
+                hasUnsavedChanges: false,
+                lastAutoSave: new Date(),
+              });
+            }
+
+            return newDraft;
+          } catch (error) {
+            console.error("Error saving draft:", error);
+            return undefined;
+          }
+        },
+
+        restoreVersion: async (
+          versionId: number,
+          createAsNewVersion: boolean = false,
+        ) => {
+          const state = get();
+          if (!state.activeAssignmentId) {
+            return undefined;
+          }
+
+          try {
+            const { restoreAssignmentVersion, getAssignmentVersion } =
+              await import("@/lib/author");
+
+            // First restore the version on the backend
+            const restoredVersion = await restoreAssignmentVersion(
+              state.activeAssignmentId,
+              versionId,
+              { createAsNewVersion },
+            );
+
+            if (restoredVersion) {
+              // Now get the full assignment data for the restored version
+              const versionData = await getAssignmentVersion(
+                state.activeAssignmentId,
+                createAsNewVersion ? restoredVersion.id : versionId,
+              );
+
+              if (versionData && versionData.assignment) {
+                const assignment = versionData.assignment;
+
+                // Parse and process the assignment data similar to the existing fetchAssignment logic
+                const processedQuestions =
+                  assignment.questions?.map((question: any, index: number) => {
+                    const parsedVariants =
+                      question.variants?.map((variant: any) => ({
+                        ...variant,
+                        choices:
+                          typeof variant.choices === "string"
+                            ? (() => {
+                                try {
+                                  // Check if it's valid JSON and not "[object Object]"
+                                  if (
+                                    variant.choices === "[object Object]" ||
+                                    (!variant.choices.trim().startsWith("{") &&
+                                      !variant.choices.trim().startsWith("["))
+                                  ) {
+                                    console.warn(
+                                      "Invalid JSON format for variant choices:",
+                                      variant.choices,
+                                    );
+                                    return [];
+                                  }
+                                  return JSON.parse(variant.choices);
+                                } catch (error) {
+                                  console.error(
+                                    "Failed to parse variant choices:",
+                                    variant.choices,
+                                    error,
+                                  );
+                                  return [];
+                                }
+                              })()
+                            : variant.choices,
+                      })) || [];
+
+                    const rubricArray = question.scoring?.rubrics?.map(
+                      (rubric: any) => ({
+                        rubricQuestion: rubric.rubricQuestion,
+                        criteria: rubric.criteria.map(
+                          (crit: any, idx: number) => ({
+                            description: crit.description,
+                            points: crit.points,
+                            id: idx + 1,
+                          }),
+                        ),
+                      }),
+                    );
+
+                    return {
+                      ...question,
+                      alreadyInBackend: true,
+                      variants: parsedVariants,
+                      scoring: {
+                        type: "CRITERIA_BASED",
+                        rubrics: rubricArray || [],
+                      },
+                      index: index + 1,
+                    };
+                  }) || [];
+
+                // Update the store with the restored assignment data
+                set({
+                  name: assignment.name || state.name,
+                  introduction: assignment.introduction || state.introduction,
+                  instructions: assignment.instructions || state.instructions,
+                  gradingCriteriaOverview:
+                    assignment.gradingCriteriaOverview ||
+                    state.gradingCriteriaOverview,
+                  questions: processedQuestions,
+                  currentVersion: restoredVersion,
+                  hasUnsavedChanges: false,
+                  originalAssignment: assignment, // Update original assignment reference
+                });
+
+                // Also update assignment config stores if they exist
+                if (typeof window !== "undefined") {
+                  const { useAssignmentConfig } = await import(
+                    "@/stores/assignmentConfig"
+                  );
+                  const { useAssignmentFeedbackConfig } = await import(
+                    "@/stores/assignmentFeedbackConfig"
+                  );
+                  const assignmentConfigStore = useAssignmentConfig.getState();
+                  const feedbackConfigStore =
+                    useAssignmentFeedbackConfig.getState();
+
+                  if (assignmentConfigStore.setAssignmentConfigStore) {
+                    assignmentConfigStore.setAssignmentConfigStore({
+                      numAttempts:
+                        assignment.numAttempts ||
+                        assignmentConfigStore.numAttempts,
+                      passingGrade:
+                        assignment.passingGrade ||
+                        assignmentConfigStore.passingGrade,
+                      displayOrder:
+                        assignment.displayOrder ||
+                        assignmentConfigStore.displayOrder,
+                      graded:
+                        assignment.graded !== undefined
+                          ? assignment.graded
+                          : assignmentConfigStore.graded,
+                      questionDisplay:
+                        assignment.questionDisplay ||
+                        assignmentConfigStore.questionDisplay,
+                      timeEstimateMinutes:
+                        assignment.timeEstimateMinutes ||
+                        assignmentConfigStore.timeEstimateMinutes,
+                      allotedTimeMinutes:
+                        assignment.allotedTimeMinutes ||
+                        assignmentConfigStore.allotedTimeMinutes,
+                      updatedAt:
+                        assignment.updatedAt || assignmentConfigStore.updatedAt,
+                      showQuestions:
+                        assignment.showQuestions !== undefined
+                          ? assignment.showQuestions
+                          : assignmentConfigStore.showQuestions,
+                      showSubmissionFeedback:
+                        assignment.showSubmissionFeedback !== undefined
+                          ? assignment.showSubmissionFeedback
+                          : assignmentConfigStore.showSubmissionFeedback,
+                    });
+                  }
+
+                  if (feedbackConfigStore.setAssignmentFeedbackConfigStore) {
+                    feedbackConfigStore.setAssignmentFeedbackConfigStore({
+                      showSubmissionFeedback:
+                        assignment.showSubmissionFeedback !== undefined
+                          ? assignment.showSubmissionFeedback
+                          : feedbackConfigStore.showSubmissionFeedback,
+                      showQuestionScore:
+                        assignment.showQuestionScore !== undefined
+                          ? assignment.showQuestionScore
+                          : feedbackConfigStore.showQuestionScore,
+                      showAssignmentScore:
+                        assignment.showAssignmentScore !== undefined
+                          ? assignment.showAssignmentScore
+                          : feedbackConfigStore.showAssignmentScore,
+                    });
+                  }
+                }
+              } else {
+                console.warn("⚠️ No assignment data found in version response");
+              }
+
+              // Reload versions list to reflect changes
+              await get().loadVersions();
+            }
+
+            return restoredVersion;
+          } catch (error) {
+            console.error("💥 Error restoring version:", error);
+            return undefined;
+          }
+        },
+
+        activateVersion: async (versionId: number) => {
+          const state = get();
+          if (!state.activeAssignmentId) return undefined;
+
+          try {
+            const { activateAssignmentVersion } = await import("@/lib/author");
+            const activatedVersion = await activateAssignmentVersion(
+              state.activeAssignmentId,
+              versionId,
+            );
+
+            if (activatedVersion) {
+              set({
+                currentVersion: activatedVersion,
+                versions: state.versions.map((v) => ({
+                  ...v,
+                  isActive: v.id === versionId,
+                })),
+              });
+
+              // Don't reload page - just update local state
+              // window.location.reload(); // Removed
+            }
+
+            return activatedVersion;
+          } catch (error) {
+            console.error("Error activating version:", error);
+            return undefined;
+          }
+        },
+
+        compareVersions: async (fromVersionId: number, toVersionId: number) => {
+          const state = get();
+          if (!state.activeAssignmentId) return;
+
+          try {
+            const { compareAssignmentVersions } = await import("@/lib/author");
+            const comparison = await compareAssignmentVersions(
+              state.activeAssignmentId,
+              { fromVersionId, toVersionId },
+            );
+
+            if (comparison) {
+              set({ versionComparison: comparison });
+            }
+          } catch (error) {
+            console.error("Error comparing versions:", error);
+          }
+        },
+
+        getVersionHistory: async () => {
+          const state = get();
+          if (!state.activeAssignmentId) return [];
+
+          try {
+            const { getAssignmentVersionHistory } = await import(
+              "@/lib/author"
+            );
+            return await getAssignmentVersionHistory(state.activeAssignmentId);
+          } catch (error) {
+            console.error("Error getting version history:", error);
+            return [];
+          }
+        },
+
+        autoSave: async () => {
+          // Auto-save is disabled per user request
+        },
+
+        // Version control state setters
+        setVersions: (versions) => set({ versions }),
+        setCurrentVersion: (currentVersion) => set({ currentVersion }),
+        setCheckedOutVersion: (checkedOutVersion) => set({ checkedOutVersion }),
+        setSelectedVersion: (selectedVersion) => set({ selectedVersion }),
+        setVersionComparison: (versionComparison) => set({ versionComparison }),
+        setIsLoadingVersions: (isLoadingVersions) => set({ isLoadingVersions }),
+        setHasUnsavedChanges: (hasUnsavedChanges) => set({ hasUnsavedChanges }),
+        markAutoSave: () => set({ lastAutoSave: new Date() }),
+
+        // Draft state setters
+        setDrafts: (drafts) => set({ drafts }),
+        setIsLoadingDrafts: (isLoadingDrafts) => set({ isLoadingDrafts }),
+        setDraftsLoadFailed: (draftsLoadFailed) => set({ draftsLoadFailed }),
+        setHasAttemptedLoadDrafts: (hasAttemptedLoadDrafts) =>
+          set({ hasAttemptedLoadDrafts }),
+
+        // Favorite version actions implementation
+        setFavoriteVersions: (favoriteVersions) => set({ favoriteVersions }),
+
+        loadFavoriteVersions: async () => {
+          const state = get();
+          if (!state.activeAssignmentId) return;
+
+          try {
+            // Load favorites from localStorage for now (could be API in future)
+            const storageKey = `favorites-${state.activeAssignmentId}`;
+            const storedFavorites = localStorage.getItem(storageKey);
+            const favorites = storedFavorites
+              ? JSON.parse(storedFavorites)
+              : [];
+            set({ favoriteVersions: favorites });
+          } catch (error) {
+            console.error("❌ Error loading favorite versions:", error);
+            set({ favoriteVersions: [] });
+          }
+        },
+
+        toggleFavoriteVersion: async (versionId: number) => {
+          const state = get();
+          if (!state.activeAssignmentId) return;
+
+          try {
+            const currentFavorites = [...state.favoriteVersions];
+            const isFavorite = currentFavorites.includes(versionId);
+
+            let newFavorites;
+            if (isFavorite) {
+              // Remove from favorites
+              newFavorites = currentFavorites.filter((id) => id !== versionId);
+            } else {
+              // Add to favorites
+              newFavorites = [...currentFavorites, versionId];
+            }
+
+            // Update state
+            set({ favoriteVersions: newFavorites });
+
+            // Save to localStorage (could be API call in future)
+            const storageKey = `favorites-${state.activeAssignmentId}`;
+            localStorage.setItem(storageKey, JSON.stringify(newFavorites));
+          } catch (error) {
+            console.error("❌ Error toggling favorite version:", error);
+          }
+        },
+
+        updateVersionDescription: async (
+          versionId: number,
+          versionDescription: string,
+        ) => {
+          const state = get();
+          if (!state.activeAssignmentId) return undefined;
+
+          try {
+            const { updateVersionDescription: updateVersionDescriptionAPI } =
+              await import("@/lib/author");
+            const updatedVersion = await updateVersionDescriptionAPI(
+              state.activeAssignmentId,
+              versionId,
+              versionDescription,
+            );
+
+            if (updatedVersion) {
+              // Update the version in the local state
+              set({
+                versions: state.versions.map((v) =>
+                  v.id === versionId
+                    ? {
+                        ...v,
+                        versionDescription: updatedVersion.versionDescription,
+                      }
+                    : v,
+                ),
+              });
+            }
+
+            return updatedVersion;
+          } catch (error) {
+            console.error("❌ Error updating version description:", error);
+            return undefined;
+          }
+        },
       })),
       {
         name: "author",
@@ -1598,7 +2630,8 @@ export const useAuthorStore = createWithEqualityFn<
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(
-            ([_, value]) => typeof value !== "function",
+            ([key, value]) =>
+              typeof value !== "function" && !NON_PERSIST_KEYS.has(key as any),
           ),
         );
       },

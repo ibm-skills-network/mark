@@ -3,8 +3,8 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { PrismaService } from "../../../prisma.service";
 import { ReportType } from "@prisma/client";
+import { PrismaService } from "../../../prisma.service";
 
 @Injectable()
 export class AttemptReportingService {

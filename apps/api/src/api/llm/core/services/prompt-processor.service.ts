@@ -1,10 +1,14 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { HumanMessage } from "@langchain/core/messages";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { decodeFields, decodeIfBase64 } from "src/helpers/decoder";
 import { Logger } from "winston";
+import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
 import { USAGE_TRACKER } from "../../llm.constants";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
@@ -23,6 +27,37 @@ export class PromptProcessorService implements IPromptProcessor {
   }
 
   /**
+   * Process a prompt using assigned model for a specific feature
+   */
+  async processPromptForFeature(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    featureKey: string,
+    fallbackModel = "gpt-4o-mini",
+  ): Promise<string> {
+    try {
+      const llm = await this.router.getForFeatureWithFallback(
+        featureKey,
+        fallbackModel,
+      );
+      return await this._processPromptWithProvider(
+        prompt,
+        assignmentId,
+        usageType,
+        llm,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error processing prompt for feature ${featureKey}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Process a text prompt and return the LLM response
    */
   async processPrompt(
@@ -33,62 +68,12 @@ export class PromptProcessorService implements IPromptProcessor {
   ): Promise<string> {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4o");
-
-      if (prompt.partialVariables) {
-        const stringVariables: { [key: string]: string | null } = {};
-
-        for (const key in prompt.partialVariables) {
-          const value = prompt.partialVariables[key];
-          if (
-            (typeof value === "string" || value === null) &&
-            typeof value !== "function"
-          ) {
-            stringVariables[key] = value;
-          }
-        }
-
-        const decodedVariables = decodeFields(stringVariables);
-
-        for (const key in decodedVariables) {
-          prompt.partialVariables[key] = decodedVariables[key];
-        }
-      }
-
-      let input: string;
-      try {
-        input = await prompt.format({});
-
-        input = decodeIfBase64(input) || input;
-      } catch (formatError: unknown) {
-        const errorMessage =
-          formatError instanceof Error ? formatError.message : "Unknown error";
-        this.logger.error(`Error formatting prompt: ${errorMessage}`, {
-          stack:
-            formatError instanceof Error
-              ? formatError.stack
-              : "No stack trace available",
-          promptDetails: {
-            template: JSON.stringify(prompt.template).slice(0, 100) + "...",
-            partialVariables:
-              JSON.stringify(prompt.partialVariables || {}).slice(0, 200) +
-              "...",
-          },
-        });
-        throw formatError;
-      }
-
-      const result = await llm.invoke([new HumanMessage(input)]);
-
-      const response = this.cleanResponse(result.content);
-
-      await this.usageTracker.trackUsage(
+      return await this._processPromptWithProvider(
+        prompt,
         assignmentId,
         usageType,
-        result.tokenUsage.input,
-        result.tokenUsage.output,
+        llm,
       );
-
-      return response;
     } catch (error) {
       this.logger.error(
         `Error processing prompt: ${
@@ -109,6 +94,70 @@ export class PromptProcessorService implements IPromptProcessor {
           : new Error(`Failed to process prompt: ${JSON.stringify(error)}`);
       throw error_;
     }
+  }
+
+  /**
+   * Internal method to process a prompt with a specific LLM provider
+   */
+  private async _processPromptWithProvider(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    llm: any,
+  ): Promise<string> {
+    if (prompt.partialVariables) {
+      const stringVariables: { [key: string]: string | null } = {};
+
+      for (const key in prompt.partialVariables) {
+        const value = prompt.partialVariables[key];
+        if (
+          (typeof value === "string" || value === null) &&
+          typeof value !== "function"
+        ) {
+          stringVariables[key] = value;
+        }
+      }
+
+      const decodedVariables = decodeFields(stringVariables);
+
+      for (const key in decodedVariables) {
+        prompt.partialVariables[key] = decodedVariables[key];
+      }
+    }
+
+    let input: string;
+    try {
+      input = await prompt.format({});
+      input = decodeIfBase64(input) || input;
+    } catch (formatError: unknown) {
+      const errorMessage =
+        formatError instanceof Error ? formatError.message : "Unknown error";
+      this.logger.error(`Error formatting prompt: ${errorMessage}`, {
+        stack:
+          formatError instanceof Error
+            ? formatError.stack
+            : "No stack trace available",
+        promptDetails: {
+          template: JSON.stringify(prompt.template).slice(0, 100) + "...",
+          partialVariables:
+            JSON.stringify(prompt.partialVariables || {}).slice(0, 200) + "...",
+        },
+      });
+      throw formatError;
+    }
+
+    const result = await llm.invoke([new HumanMessage(input)]);
+    const response = this.cleanResponse(result.content);
+
+    await this.usageTracker.trackUsage(
+      assignmentId,
+      usageType,
+      result.tokenUsage.input,
+      result.tokenUsage.output,
+      llm.key,
+    );
+
+    return response;
   }
 
   /**
@@ -162,6 +211,7 @@ export class PromptProcessorService implements IPromptProcessor {
         usageType,
         result.tokenUsage.input,
         result.tokenUsage.output,
+        llm.key,
       );
 
       return response;

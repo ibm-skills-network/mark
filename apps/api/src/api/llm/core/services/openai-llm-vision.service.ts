@@ -1,15 +1,15 @@
-import { Injectable, Inject } from "@nestjs/common";
-import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
+import { ChatOpenAI } from "@langchain/openai";
+import { Inject, Injectable } from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
+import { TOKEN_COUNTER } from "../../llm.constants";
 import {
   ILlmProvider,
   LlmRequestOptions,
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
-import { TOKEN_COUNTER } from "../../llm.constants";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
 
 @Injectable()
 export class Gpt4VisionPreviewLlmService implements ILlmProvider {
@@ -128,7 +128,9 @@ export class Gpt4VisionPreviewLlmService implements ILlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `Error processing image with GPT-4 Vision Preview: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error processing image with GPT-4 Vision Preview: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
       throw error;
     }

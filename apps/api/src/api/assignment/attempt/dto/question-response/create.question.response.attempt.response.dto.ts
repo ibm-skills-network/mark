@@ -3,7 +3,7 @@ import { IsString } from "class-validator";
 
 export class GeneralFeedbackDto {
   @ApiProperty({
-    description: "The feedback earned by the learner.",
+    description: "The feedback earned by the leanrer.",
     type: String,
     required: true,
   })
@@ -55,7 +55,7 @@ export class CreateQuestionResponseAttemptResponseDto {
     type: Object,
     required: false,
   })
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, any>;
 
   @ApiProperty({
     description: "The total points earned.",
@@ -63,6 +63,9 @@ export class CreateQuestionResponseAttemptResponseDto {
     required: false,
   })
   totalPoints?: number;
+
+  // points
+  points?: number;
 
   @ApiProperty({
     description:

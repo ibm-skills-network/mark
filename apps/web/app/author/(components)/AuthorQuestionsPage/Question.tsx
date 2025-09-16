@@ -1,7 +1,9 @@
+import MarkdownEditor from "@/components/MarkDownEditor";
 import MultipleChoiceSVG from "@/components/svgs/MC";
 import Tooltip from "@/components/Tooltip";
 import type {
   CreateQuestionRequest,
+  Criteria,
   QuestionAuthorStore,
   QuestionType,
   QuestionVariants,

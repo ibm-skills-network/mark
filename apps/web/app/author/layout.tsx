@@ -1,4 +1,5 @@
 import Header from "./(components)/Header";
+import { BottomVersionBar } from "@/components/version-control/BottomVersionBar";
 
 export default function RootLayout({
   children,
@@ -8,9 +9,10 @@ export default function RootLayout({
   return (
     <>
       <Header />
-      <div className="bg-gray-50 flex flex-col flex-1 pt-28 h-screen overflow-auto">
+      <div className="bg-gray-50 flex flex-col flex-1 pt-28 pb-16 h-screen overflow-auto">
         {children}
       </div>
+      <BottomVersionBar />
     </>
   );
 }

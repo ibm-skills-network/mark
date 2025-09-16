@@ -516,6 +516,7 @@ export class AttemptServiceV1 {
           grade: 0,
           showSubmissionFeedback: false,
           showQuestions: false,
+          showCorrectAnswer: false,
           feedbacksForQuestions: [],
           message: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
         };
@@ -576,7 +577,12 @@ export class AttemptServiceV1 {
     }
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
-      include: {
+      select: {
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        showCorrectAnswer: true,
         questions: {
           where: { isDeleted: false },
         },
@@ -634,6 +640,7 @@ export class AttemptServiceV1 {
         grade: assignment.showAssignmentScore ? grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
+        showCorrectAnswer: assignment.showCorrectAnswer,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
           assignment as unknown as LearnerGetAssignmentResponseDto,
@@ -654,6 +661,7 @@ export class AttemptServiceV1 {
         showQuestions: assignment.showQuestions,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
+        showCorrectAnswer: assignment.showCorrectAnswer,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
           assignment as unknown as LearnerGetAssignmentResponseDto,
@@ -739,6 +747,7 @@ export class AttemptServiceV1 {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showCorrectAnswer: true,
       },
     });
 
@@ -869,6 +878,21 @@ export class AttemptServiceV1 {
       }
     }
 
+    // Apply visibility settings for correct answers and if learner didnt pass
+    if (
+      assignment.showCorrectAnswer === false &&
+      assignmentAttempt.grade < assignment.passingGrade
+    ) {
+      for (const question of finalQuestions) {
+        if (question.choices) {
+          for (const choice of question.choices) {
+            delete choice.isCorrect;
+            delete choice.feedback;
+          }
+        }
+      }
+    }
+
     return {
       ...assignmentAttempt,
       questions: finalQuestions.map((question) => ({
@@ -883,6 +907,7 @@ export class AttemptServiceV1 {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
+      showCorrectAnswer: assignment.showCorrectAnswer,
       comments: assignmentAttempt.comments,
     };
   }
@@ -947,6 +972,7 @@ export class AttemptServiceV1 {
         showAssignmentScore: true,
         showSubmissionFeedback: true,
         showQuestionScore: true,
+        showCorrectAnswer: true,
       },
     })) as LearnerGetAssignmentResponseDto;
 
@@ -980,6 +1006,7 @@ export class AttemptServiceV1 {
       if (!translationMap.has(key)) {
         translationMap.set(key, {});
       }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       translationMap.get(key)![t.languageCode] = {
         translatedText: t.translatedText,
         translatedChoices: t.translatedChoices,
@@ -1127,8 +1154,14 @@ export class AttemptServiceV1 {
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;
-          delete choice.isCorrect;
-          delete choice.feedback;
+          // Only remove correct answer data if showCorrectAnswer is false
+          if (
+            assignment.showCorrectAnswer === false &&
+            assignmentAttempt.grade < assignment.passingGrade
+          ) {
+            delete choice.isCorrect;
+            delete choice.feedback;
+          }
         }
       }
 
@@ -1138,8 +1171,14 @@ export class AttemptServiceV1 {
           if (translationObject?.translatedChoices) {
             for (const choice of translationObject.translatedChoices) {
               delete choice.points;
-              delete choice.isCorrect;
-              delete choice.feedback;
+              // Only remove correct answer data if showCorrectAnswer is false
+              if (
+                assignment.showCorrectAnswer === false &&
+                assignmentAttempt.grade < assignment.passingGrade
+              ) {
+                delete choice.isCorrect;
+                delete choice.feedback;
+              }
             }
           }
         }
@@ -1154,13 +1193,25 @@ export class AttemptServiceV1 {
         ) as Choice[];
         for (const choice of randomizedArray) {
           delete choice.points;
-          delete choice.isCorrect;
-          delete choice.feedback;
+          // Only remove correct answer data if showCorrectAnswer is false
+          if (
+            assignment.showCorrectAnswer === false &&
+            assignmentAttempt.grade < assignment.passingGrade
+          ) {
+            delete choice.isCorrect;
+            delete choice.feedback;
+          }
         }
         question.randomizedChoices = JSON.stringify(randomizedArray);
       }
 
-      delete question.answer;
+      // Only remove the answer field if showCorrectAnswer is false
+      if (
+        assignment.showCorrectAnswer === false &&
+        assignmentAttempt.grade < assignment.passingGrade
+      ) {
+        delete question.answer;
+      }
     }
 
     return {
@@ -1177,6 +1228,7 @@ export class AttemptServiceV1 {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
+      showCorrectAnswer: assignment.showCorrectAnswer,
     };
   }
 
@@ -1692,9 +1744,12 @@ export class AttemptServiceV1 {
     const {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       responsesForQuestions,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       authorQuestions,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       authorAssignmentDetails,
       language,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       preTranslatedQuestions,
       ...cleanedUpdateAssignmentAttemptDto
     } = updateAssignmentAttemptDto;

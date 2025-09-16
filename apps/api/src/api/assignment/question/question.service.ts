@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   HttpException,
   HttpStatus,
@@ -291,6 +292,18 @@ export class QuestionService {
         language,
       );
 
+    let translatedChoices: Choice[] | undefined;
+
+    // If the question has choices, translate them as well
+    if (question.choices && question.choices.length > 0) {
+      translatedChoices =
+        await this.llmFacadeService.generateChoicesTranslation(
+          question.choices,
+          assignmentId,
+          language,
+        );
+    }
+
     await this.prisma.translation.create({
       data: {
         questionId,
@@ -298,11 +311,18 @@ export class QuestionService {
         languageCode,
         translatedText: translatedQuestion,
         untranslatedText: question.question,
+        translatedChoices: translatedChoices
+          ? JSON.parse(JSON.stringify(translatedChoices))
+          : undefined,
+        untranslatedChoices: question.choices
+          ? JSON.parse(JSON.stringify(question.choices))
+          : undefined,
       },
     });
 
     return {
       translatedQuestion,
+      translatedChoices,
     };
   }
 

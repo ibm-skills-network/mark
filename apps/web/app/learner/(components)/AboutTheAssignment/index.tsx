@@ -306,7 +306,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 </span>
               </div>
               <div className="flex flex-col gap-y-2 text-gray-600">
-                <span className="font-semibold">Passing threshold</span>
+                <span className="font-semibold">Passing Grade</span>
                 <span>{passingGrade}%</span>
               </div>
             </div>

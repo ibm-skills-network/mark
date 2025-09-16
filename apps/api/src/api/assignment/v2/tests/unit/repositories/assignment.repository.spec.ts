@@ -3,8 +3,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { Assignment, QuestionType } from "@prisma/client";
-import { BaseAssignmentResponseDto } from "src/api/admin/dto/assignment/base.assignment.response.dto";
+import { QuestionType } from "@prisma/client";
 import { GetAssignmentResponseDto } from "src/api/assignment/dto/get.assignment.response.dto";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { PrismaService } from "src/prisma.service";

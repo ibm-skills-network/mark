@@ -16,9 +16,12 @@ import type {
   Scoring,
 } from "@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
+import { useVersionControl } from "@/hooks/useVersionControl";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import {
   closestCenter,
   DndContext,
@@ -69,6 +72,89 @@ import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
 import { handleJumpToQuestionTitle } from "@/app/Helpers/handleJumpToQuestion";
 import ImportModal from "../ImportModal";
+type ClientSnapshot = {
+  browser: { name?: string; version?: string; ua?: string };
+  os?: string;
+  deviceType: "mobile" | "tablet" | "desktop" | "unknown";
+  isMobile: boolean;
+  screen: { width: number | null; height: number | null; dpr: number | null };
+  hardware: { cores: number | null; memoryGB: number | null };
+  network: {
+    downlinkMbps: number | null;
+    effectiveType: string | null;
+    rttMs: number | null;
+  };
+  timezone: string | null;
+};
+
+function parseBrowser(ua: string) {
+  const pairs = [
+    [/Edg\/([\d.]+)/i, "Edge"],
+    [/Chrome\/([\d.]+)/i, "Chrome"],
+    [/Version\/([\d.]+).*Safari/i, "Safari"],
+    [/Firefox\/([\d.]+)/i, "Firefox"],
+  ];
+  for (const [re, name] of pairs) {
+    const m = ua.match(re as RegExp);
+    if (m) return { name, version: m[1] };
+  }
+  return { name: undefined, version: undefined };
+}
+function detectDeviceType(ua: string): ClientSnapshot["deviceType"] {
+  const s = ua.toLowerCase();
+  if (/mobile|iphone|ipod|android(?!.*tablet)/.test(s)) return "mobile";
+  if (/ipad|tablet|kindle|silk/.test(s)) return "tablet";
+  if (/cros|macintosh|windows|linux|x11/.test(s)) return "desktop";
+  return "unknown";
+}
+function getOS(ua: string) {
+  if (/Windows NT/i.test(ua)) return "Windows";
+  if (/Mac OS X/i.test(ua)) return "macOS";
+  if (/Android/i.test(ua)) return "Android";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "iOS/iPadOS";
+  if (/CrOS/i.test(ua)) return "ChromeOS";
+  if (/Linux/i.test(ua)) return "Linux";
+  return undefined;
+}
+function getNetworkInfo() {
+  const c: any =
+    (navigator as any).connection ||
+    (navigator as any).mozConnection ||
+    (navigator as any).webkitConnection;
+  return {
+    downlinkMbps: c?.downlink ?? null,
+    effectiveType: c?.effectiveType ?? null,
+    rttMs: c?.rtt ?? null,
+  };
+}
+
+export async function buildClientSnapshot(): Promise<ClientSnapshot> {
+  const uaData: any = (navigator as any).userAgentData;
+  const ua = navigator.userAgent ?? "";
+  const { name, version } = uaData
+    ? { name: uaData.brands?.[0]?.brand, version: uaData.brands?.[0]?.version }
+    : parseBrowser(ua);
+
+  const deviceType = uaData?.mobile ? "mobile" : detectDeviceType(ua);
+
+  return {
+    browser: { name, version, ua: ua || undefined },
+    os: uaData?.platform || getOS(ua),
+    deviceType,
+    isMobile: deviceType === "mobile",
+    screen: {
+      width: screen?.width ?? null,
+      height: screen?.height ?? null,
+      dpr: devicePixelRatio ?? null,
+    },
+    hardware: {
+      cores: navigator.hardwareConcurrency ?? null,
+      memoryGB: (navigator as any).deviceMemory ?? null,
+    },
+    network: getNetworkInfo(),
+    timezone: Intl.DateTimeFormat().resolvedOptions?.().timeZone ?? null,
+  };
+}
 
 interface Props {
   assignmentId: number;
@@ -96,6 +182,7 @@ const AuthorQuestionsPage: FC<Props> = ({
   //questions are previously loaded into global state through backend call
   const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
   const questions = useAuthorStore((state) => state.questions, shallow);
+
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
@@ -104,6 +191,11 @@ const AuthorQuestionsPage: FC<Props> = ({
   const setActiveAssignmentId = useAuthorStore(
     (state) => state.setActiveAssignmentId,
   );
+  const checkedOutVersion = useAuthorStore((state) => state.checkedOutVersion);
+
+  // Get version control hook to ensure version synchronization
+  const { loadVersions } = useVersionControl();
+
   const [isMassVariationLoading, setIsMassVariationLoading] = useState(false);
   const [questionVariationNumber, setQuestionVariationNumber] =
     useState<number>(null);
@@ -114,6 +206,12 @@ const AuthorQuestionsPage: FC<Props> = ({
   const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [client, setClient] = useState<any>(null);
+
+  async function testSnapshot() {
+    const snap = await buildClientSnapshot();
+    setClient(snap); // show on page
+  }
   const questionTypes = useMemo(
     () => [
       {
@@ -157,7 +255,21 @@ const AuthorQuestionsPage: FC<Props> = ({
     [],
   );
 
+  // Ensure versions are always fresh on page load
   useEffect(() => {
+    if (assignmentId) {
+      loadVersions().catch(console.error);
+    }
+  }, [assignmentId, loadVersions]);
+
+  useEffect(() => {
+    if (checkedOutVersion) {
+      if (assignmentId !== activeAssignmentId) {
+        setActiveAssignmentId(assignmentId);
+      }
+      return;
+    }
+
     if (assignmentId !== activeAssignmentId) {
       const fetchAssignment = async () => {
         try {
@@ -302,6 +414,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     setName,
     setQuestions,
     setFocusedQuestionId,
+    checkedOutVersion,
   ]);
 
   useEffect(() => {
@@ -748,7 +861,22 @@ const AuthorQuestionsPage: FC<Props> = ({
    */
   const handleImportQuestions = (
     importedQuestions: QuestionAuthorStore[],
-    options: { replaceExisting: boolean },
+    options: {
+      replaceExisting: boolean;
+      appendToExisting: boolean;
+      validateQuestions: boolean;
+      importChoices: boolean;
+      importRubrics: boolean;
+      importConfig: boolean;
+      importAssignmentSettings: boolean;
+    },
+    assignmentData?: {
+      questions?: QuestionAuthorStore[];
+      assignment?: any;
+      config?: any;
+      feedbackConfig?: any;
+      gradingCriteria?: any;
+    },
   ) => {
     try {
       // Process imported questions with proper total points calculation
@@ -843,14 +971,132 @@ const AuthorQuestionsPage: FC<Props> = ({
         .getState()
         .setQuestionOrder(updatedQuestions.map((q) => q.id));
 
+      // Handle assignment settings if requested
+      let importMessage = `Successfully imported ${importedQuestions.length} question(s)!`;
+      if (options.importAssignmentSettings && assignmentData) {
+        let settingsUpdated = false;
+
+        if (assignmentData.assignment) {
+          // Update assignment metadata if available
+          if (
+            assignmentData.assignment.name &&
+            assignmentData.assignment.name !== "Imported Assignment"
+          ) {
+            setName(assignmentData.assignment.name);
+            settingsUpdated = true;
+          }
+          if (assignmentData.assignment.introduction) {
+            useAuthorStore
+              .getState()
+              .setIntroduction(assignmentData.assignment.introduction);
+            settingsUpdated = true;
+          }
+          if (assignmentData.assignment.instructions) {
+            useAuthorStore
+              .getState()
+              .setInstructions(assignmentData.assignment.instructions);
+            settingsUpdated = true;
+          }
+          // Check for gradingCriteria in assignment object
+          if (assignmentData.assignment.gradingCriteria) {
+            useAuthorStore
+              .getState()
+              .setGradingCriteriaOverview(
+                assignmentData.assignment.gradingCriteria,
+              );
+            settingsUpdated = true;
+          }
+        }
+
+        if (assignmentData.config) {
+          // Update assignment configuration if available
+          const configStore = useAssignmentConfig.getState();
+          
+          if (assignmentData.config.graded !== undefined) {
+            configStore.setGraded(assignmentData.config.graded);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.numAttempts !== undefined) {
+            configStore.setNumAttempts(assignmentData.config.numAttempts);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.allotedTimeMinutes !== undefined) {
+            configStore.setAllotedTimeMinutes(assignmentData.config.allotedTimeMinutes);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.timeEstimateMinutes !== undefined) {
+            configStore.setTimeEstimateMinutes(assignmentData.config.timeEstimateMinutes);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.passingGrade !== undefined) {
+            configStore.setPassingGrade(assignmentData.config.passingGrade);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.numberOfQuestionsPerAttempt !== undefined) {
+            configStore.setNumberOfQuestionsPerAttempt(
+              assignmentData.config.numberOfQuestionsPerAttempt,
+            );
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.displayOrder !== undefined) {
+            configStore.setDisplayOrder(assignmentData.config.displayOrder as "DEFINED" | "RANDOM");
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.questionDisplay !== undefined) {
+            configStore.setQuestionDisplay(assignmentData.config.questionDisplay as any);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.strictTimeLimit !== undefined) {
+            configStore.setStrictTimeLimit(assignmentData.config.strictTimeLimit);
+            settingsUpdated = true;
+          }
+        }
+
+        // Check for root-level gradingCriteria
+        if (assignmentData.gradingCriteria) {
+          useAuthorStore
+            .getState()
+            .setGradingCriteriaOverview(assignmentData.gradingCriteria);
+          settingsUpdated = true;
+        }
+
+        // Import feedback configuration if available
+        if (assignmentData.feedbackConfig) {
+          const feedbackConfigStore = useAssignmentFeedbackConfig.getState();
+          
+          if (assignmentData.feedbackConfig.verbosityLevel !== undefined) {
+            feedbackConfigStore.setVerbosityLevel(assignmentData.feedbackConfig.verbosityLevel as any);
+            settingsUpdated = true;
+          }
+          if (assignmentData.feedbackConfig.showSubmissionFeedback !== undefined) {
+            feedbackConfigStore.setShowSubmissionFeedback(assignmentData.feedbackConfig.showSubmissionFeedback);
+            settingsUpdated = true;
+          }
+          if (assignmentData.feedbackConfig.showQuestionScore !== undefined) {
+            feedbackConfigStore.setShowQuestionScore(assignmentData.feedbackConfig.showQuestionScore);
+            settingsUpdated = true;
+          }
+          if (assignmentData.feedbackConfig.showAssignmentScore !== undefined) {
+            feedbackConfigStore.setShowAssignmentScore(assignmentData.feedbackConfig.showAssignmentScore);
+            settingsUpdated = true;
+          }
+          if (assignmentData.feedbackConfig.showQuestions !== undefined) {
+            feedbackConfigStore.setShowQuestion(assignmentData.feedbackConfig.showQuestions);
+            settingsUpdated = true;
+          }
+        }
+
+        if (settingsUpdated) {
+          importMessage += " Assignment settings have also been imported.";
+        }
+      }
+
       // Focus on the first imported question
       if (processedQuestions.length > 0) {
         setFocusedQuestionId(processedQuestions[0].id);
       }
 
-      toast.success(
-        `Successfully imported ${importedQuestions.length} question(s)!`,
-      );
+      toast.success(importMessage);
     } catch (error) {
       console.error("Import failed:", error);
       toast.error("Failed to import questions. Please try again.");
@@ -991,7 +1237,7 @@ const AuthorQuestionsPage: FC<Props> = ({
             >
               <DocumentArrowDownIcon className="w-4 h-4 text-purple-600" />
               <span className="text-sm font-medium">
-                Import Questions (Beta){" "}
+                Import Assignment (Beta){" "}
               </span>
             </button>
           </div>
@@ -1020,7 +1266,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                 </button>
                 <div className="flex flex-col w-full bg-white p-4 rounded-lg shadow-sm border border-gray-300">
                   <span className="text-lg mb-2 text-wrap">
-                    Mass Variations (Beta)
+                    Mass Variations
                   </span>
                   <Dropdown
                     options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as number[]}

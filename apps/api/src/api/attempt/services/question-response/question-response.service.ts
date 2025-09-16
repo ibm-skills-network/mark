@@ -5,6 +5,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -12,6 +13,7 @@ import {
 import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { authorAssignmentDetailsDTO } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
@@ -21,6 +23,7 @@ import {
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
+import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../prisma.service";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
@@ -29,12 +32,19 @@ import { GradingFactoryService } from "../grading-factory.service";
 
 @Injectable()
 export class QuestionResponseService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly questionService: QuestionService,
     private readonly localizationService: LocalizationService,
     private readonly gradingFactoryService: GradingFactoryService,
-  ) {}
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({
+      context: QuestionResponseService.name,
+    });
+  }
 
   /**
    * Submit all questions for an assignment attempt
@@ -183,43 +193,111 @@ export class QuestionResponseService {
           gradingContext,
         ));
       } else {
+        const startTime = Date.now();
+
+        this.logger.info("Starting question grading process", {
+          questionId,
+          questionType: question.type,
+          responseType: question.responseType,
+          assignmentId,
+          assignmentAttemptId,
+          userRole: role,
+          language,
+        });
+
         const gradingStrategy = this.gradingFactoryService.getStrategy(
           question.type,
           question.responseType,
         );
 
         if (!gradingStrategy) {
+          this.logger.error("No grading strategy found", {
+            questionId,
+            questionType: question.type,
+            responseType: question.responseType,
+          });
           throw new BadRequestException(
             `No grading strategy found for question type: ${question.type}`,
           );
         }
 
+        this.logger.info("Using grading strategy", {
+          questionId,
+          strategyName: gradingStrategy.constructor.name,
+          questionType: question.type,
+          responseType: question.responseType,
+        });
+
+        // Validate response
+        this.logger.debug("Validating response", { questionId });
         const isValid = await gradingStrategy.validateResponse(
           question,
           createQuestionResponseAttemptRequestDto,
         );
+
         if (!isValid) {
+          this.logger.warn("Response validation failed", {
+            questionId,
+            language: createQuestionResponseAttemptRequestDto.language,
+            strategyName: gradingStrategy.constructor.name,
+          });
           throw new BadRequestException(
             `Invalid response for question ID ${questionId}: ${createQuestionResponseAttemptRequestDto.language}`,
           );
         }
+
+        // Extract learner response
+        this.logger.debug("Extracting learner response", { questionId });
         learnerResponse = await gradingStrategy.extractLearnerResponse(
           createQuestionResponseAttemptRequestDto,
         );
+
+        // Grade the response
+        this.logger.info("Grading response with strategy", {
+          questionId,
+          strategyName: gradingStrategy.constructor.name,
+        });
+
         responseDto = await gradingStrategy.gradeResponse(
           question,
           learnerResponse,
           gradingContext,
         );
+
         if (!responseDto) {
+          this.logger.error("Strategy returned null/undefined response", {
+            questionId,
+            strategyName: gradingStrategy.constructor.name,
+          });
           throw new BadRequestException(
             `Failed to grade response for question ID ${questionId}`,
           );
         }
+
+        const duration = Date.now() - startTime;
+        this.logger.info("Successfully completed question grading", {
+          questionId,
+          strategyName: gradingStrategy.constructor.name,
+          totalPoints: responseDto.totalPoints,
+          maxPoints: question.totalPoints,
+          duration,
+          feedback: responseDto.feedback ? "present" : "missing",
+        });
       }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to process question response", {
+        questionId,
+        questionType: question.type,
+        responseType: question.responseType,
+        assignmentId,
+        assignmentAttemptId,
+        userRole: role,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
       throw new BadRequestException(
         `Failed to process question response: ${errorMessage}`,
@@ -560,6 +638,9 @@ export class QuestionResponseService {
           } catch (error: unknown) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
+            console.error(
+              `Error fetching URL content for question ${contextQuestion.id}: ${errorMessage}`,
+            );
           }
         }
 
@@ -644,7 +725,7 @@ export class QuestionResponseService {
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-
+        console.error(`Error parsing JSON field: ${errorMessage}`);
         return null;
       }
     }

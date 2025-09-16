@@ -1,6 +1,3 @@
-import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { useAuthorStore } from "@/stores/author";
-import { useCallback } from "react";
 import type {
   Choice,
   Question,
@@ -9,6 +6,9 @@ import type {
   Scoring,
 } from "../../config/types";
 import { useDebugLog } from "../../lib/utils";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
+import { useAuthorStore } from "@/stores/author";
+import { useCallback } from "react";
 
 interface ValidationError {
   message: string;
@@ -51,10 +51,7 @@ export const useQuestionsAreReadyToBePublished = (
       };
     }
     if (q.assignmentId == null) {
-      return {
-        message: `Question ${index + 1} assignment ID is missing.`,
-        step: 0,
-      };
+      q.assignmentId = useAuthorStore.getState().activeAssignmentId;
     }
     return null;
   };
@@ -236,7 +233,6 @@ export const useQuestionsAreReadyToBePublished = (
 
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-      debugLog(`Checking question ${i + 1}:`, q);
 
       const basicError = validateBasicFields(q, i);
       if (basicError) {
@@ -279,8 +275,6 @@ export const useQuestionsAreReadyToBePublished = (
           break;
         }
       }
-
-      debugLog(`Question ${i + 1} passed all checks.`);
     }
 
     if (isValid) {
@@ -317,7 +311,7 @@ export const useQuestionsAreReadyToBePublished = (
       }
       if (
         !assignmentConfig.displayOrder &&
-        assignmentConfig.numberOfQuestionsPerAttempt === null
+        assignmentConfig.numberOfQuestionsPerAttempt !== null
       ) {
         message = `Question order is required.`;
         debugLog(message);

@@ -1,22 +1,17 @@
 import {
-  Injectable,
-  UnprocessableEntityException,
-  HttpException,
-  HttpStatus,
-} from "@nestjs/common";
-import { PrismaService } from "../../../prisma.service";
-import { UserSession } from "../../../auth/interfaces/user.session.interface";
-import {
   IN_PROGRESS_SUBMISSION_EXCEPTION,
-  TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
   IN_COOLDOWN_PERIOD,
+  TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+
 } from "src/api/assignment/attempt/api-exceptions/exceptions";
 import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "src/api/assignment/dto/get.assignment.response.dto";
+import { UserSession } from "../../../auth/interfaces/user.session.interface";
+import { PrismaService } from "../../../prisma.service";
 
 @Injectable()
 export class AttemptValidationService {

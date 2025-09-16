@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { Chat, ChatMessage, ChatRole, Prisma } from "@prisma/client";
-import { ChatRepository } from "../repositories/chat.repository";
+import { Chat, ChatMessage, ChatRole } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
+import { ChatRepository } from "../repositories/chat.repository";
 
 @Injectable()
 export class ChatService {

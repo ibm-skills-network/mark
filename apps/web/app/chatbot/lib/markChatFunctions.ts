@@ -1,9 +1,9 @@
 /* eslint-disable */
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import {
   createQuestion,
   generateQuestionVariant,
 } from "../store/authorStoreUtil";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 
 /**
  * Search the knowledge base for information

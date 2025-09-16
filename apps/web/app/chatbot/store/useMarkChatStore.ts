@@ -2,10 +2,12 @@
 
 "use client";
 
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import { searchKnowledgeBase } from "../knowledgebase";
 import * as authorStoreUtils from "../store/authorStoreUtil";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+/* eslint-disable */
 
 export type ChatRole = "user" | "assistant" | "system";
 export interface ChatMessage {
@@ -113,6 +115,20 @@ export const useMarkChatStore = create<MarkChatState>()(
 
           for (const op of operations) {
             try {
+              // Handle showReportPreview specially - don't process through store operations
+              if (op.function === "showReportPreview") {
+                // This will be handled by the React component directly
+                results.push({
+                  success: true,
+                  function: op.function,
+                  result: {
+                    success: true,
+                    message: "Report preview form will be displayed",
+                  },
+                });
+                continue;
+              }
+
               const result = await authorStoreUtils.runAuthorOperation(
                 op.function,
                 op.params,
@@ -269,7 +285,7 @@ export const useMarkChatStore = create<MarkChatState>()(
                 /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
               );
 
-              if (markerMatch && userRole === "author") {
+              if (markerMatch) {
                 try {
                   const operations = JSON.parse(markerMatch[1]);
 
@@ -285,13 +301,19 @@ export const useMarkChatStore = create<MarkChatState>()(
                       clone[idx] = {
                         ...clone[idx],
                         content: cleanContent,
+                        toolCalls: operations, // Add toolCalls to the message
                       };
                     }
                     return { messages: clone };
                   });
 
                   await get().executeOperations(operations);
-                } catch (err) {}
+                } catch (err) {
+                  console.error(
+                    "Error processing client execution marker:",
+                    err,
+                  );
+                }
               }
             }
           } else {

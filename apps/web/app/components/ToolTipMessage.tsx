@@ -48,7 +48,7 @@ const TooltipMessage: FC<TooltipMessageProps> = ({
 
   return (
     <>
-      <span>Click to save and publish your changes.</span>
+      <span>Click to publish your changes.</span>
       <span className="block mt-2 text-sm font-normal text-gray-500">
         {changesSummary}
       </span>

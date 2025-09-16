@@ -1,10 +1,9 @@
 /* eslint-disable */
-
-import { executeAuthorStoreOperation } from "@/app/chatbot/store/authorStoreUtil";
-import { searchKnowledgeBase } from "@/app/chatbot/knowledgebase";
 import { ReportingService } from "./reportingService";
-import { IssueSeverity } from "@/config/types";
+import { searchKnowledgeBase } from "@/app/chatbot/knowledgebase";
+import { executeAuthorStoreOperation } from "@/app/chatbot/store/authorStoreUtil";
 import { getBaseApiPath } from "@/config/constants";
+import { IssueSeverity } from "@/config/types";
 
 /**
  * Get or create a chat session for today
@@ -112,7 +111,7 @@ export class MarkChatService {
       [key: string]: any;
     } = {},
     cookieHeader?: string,
-  ): Promise<string> {
+  ): Promise<{ content: string; reportId?: number; issueNumber?: number }> {
     try {
       const title = `[${details.userRole?.toUpperCase() || "USER"}] ${issueType.charAt(0).toUpperCase() + issueType.slice(1)} Issue Report`;
 
@@ -131,12 +130,17 @@ export class MarkChatService {
         cookieHeader,
       );
 
-      return (
-        result.content ||
-        `Thank you for your report. Our team will review it shortly.`
-      );
+      return {
+        content:
+          result.content ||
+          `Thank you for your report. Our team will review it shortly.`,
+        reportId: result.reportId,
+        issueNumber: result.issueNumber,
+      };
     } catch (error) {
-      return `There was an error submitting your issue report. Please try again later. (Error: ${error.message})`;
+      return {
+        content: `There was an error submitting your issue report. Please try again later. (Error: ${error.message})`,
+      };
     }
   }
 

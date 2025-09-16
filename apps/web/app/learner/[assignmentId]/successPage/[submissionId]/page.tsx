@@ -56,12 +56,12 @@ function SuccessPage() {
     useState<AssignmentDetails>();
   const [showSubmissionFeedback, setShowSubmissionFeedback] =
     useState<boolean>(false);
+  const [showCorrectAnswer, setShowCorrectAnswer] = useState<boolean>(true);
   const [zustandShowSubmissionFeedback, zustandShowQuestions] =
     useAssignmentDetails((state) => [
       state.assignmentDetails?.showSubmissionFeedback ?? true,
       state.assignmentDetails?.showQuestions ?? true,
     ]);
-
   const [zustandQuestions, zustandTotalPointsEarned, zustandTotalPoints] =
     useLearnerStore((state) => [
       state.questions,
@@ -120,6 +120,7 @@ function SuccessPage() {
           setShowSubmissionFeedback(
             submissionDetails.showSubmissionFeedback || false,
           );
+          setShowCorrectAnswer(submissionDetails.showCorrectAnswer ?? true);
           setShowQuestions(submissionDetails.showQuestions);
           setUserPreferredLanguage(submissionDetails.preferredLanguage);
           setGrade(submissionDetails.grade * 100);
@@ -159,6 +160,9 @@ function SuccessPage() {
         setTotalPointsEarned(zustandTotalPointsEarned);
         setTotalPoints(zustandTotalPoints);
         setAssignmentDetails(zustandAssignmentDetails);
+        setShowCorrectAnswer(
+          zustandAssignmentDetails?.showCorrectAnswer ?? true,
+        );
         setLoading(false);
       } else {
         setLoading(false);
@@ -602,6 +606,9 @@ function SuccessPage() {
                   question={question}
                   language={userPreferredLanguage}
                   showSubmissionFeedback={showSubmissionFeedback}
+                  showCorrectAnswer={
+                    !showCorrectAnswer && grade >= passingGrade
+                  }
                 />
               </motion.div>
             ))}

@@ -1,11 +1,17 @@
 import { Module } from "@nestjs/common";
+import { PrismaService } from "../../prisma.service";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
 import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
 import { AssignmentRepository } from "../assignment/v2/repositories/assignment.repository";
+import { GradingConsistencyService } from "../assignment/v2/services/grading-consistency.service";
 import { S3Service } from "../files/services/s3.service";
 import { ImageGradingService } from "../llm/features/grading/services/image-grading.service";
 import { LlmModule } from "../llm/llm.module";
+import {
+  FILE_CONTENT_EXTRACTION_SERVICE,
+  GRADING_AUDIT_SERVICE,
+} from "./attempt.constants";
 import { AttemptControllerV2 } from "./attempt.controller";
 import { ChoiceGradingStrategy } from "./common/strategies/choice-grading.strategy";
 import { FileGradingStrategy } from "./common/strategies/file-grading.strategy";
@@ -49,13 +55,20 @@ import { TranslationService } from "./services/translation/translation.service";
     PresentationGradingStrategy,
     ChoiceGradingStrategy,
     TrueFalseGradingStrategy,
-    GradingAuditService,
-    FileContentExtractionService,
+    GradingConsistencyService,
+    {
+      provide: GRADING_AUDIT_SERVICE,
+      useClass: GradingAuditService,
+    },
+    PrismaService,
+    {
+      provide: FILE_CONTENT_EXTRACTION_SERVICE,
+      useClass: FileContentExtractionService,
+    },
     ImageGradingStrategy,
     ImageGradingService,
     S3Service,
     AssignmentRepository,
-
     QuestionResponseService,
 
     QuestionVariantService,

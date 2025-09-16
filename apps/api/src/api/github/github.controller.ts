@@ -4,9 +4,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
-  Param,
   Post,
-  Query,
   Req,
 } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";

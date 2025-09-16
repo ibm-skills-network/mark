@@ -7,7 +7,6 @@
 /* eslint-disable unicorn/no-useless-undefined */
 /* eslint-disable unicorn/no-null */
 import { Test, TestingModule } from "@nestjs/testing";
-import { Job } from "@prisma/client";
 import { firstValueFrom } from "rxjs";
 import { PrismaService } from "src/prisma.service";
 import {
@@ -182,7 +181,7 @@ describe("JobStatusServiceV2", () => {
       it("should complete and remove a job stream", async () => {
         const jobId = 1;
 
-        const stream = jobStatusService.getPublishJobStatusStream(jobId);
+        jobStatusService.getPublishJobStatusStream(jobId);
 
         const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
         jest.spyOn(subject, "complete");
@@ -441,7 +440,7 @@ describe("JobStatusServiceV2", () => {
           percentage: 50,
         };
 
-        const stream = jobStatusService.getPublishJobStatusStream(jobId);
+        jobStatusService.getPublishJobStatusStream(jobId);
 
         const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
         jest.spyOn(subject, "next");
@@ -469,7 +468,7 @@ describe("JobStatusServiceV2", () => {
           result: { data: "some result" },
         };
 
-        const stream = jobStatusService.getPublishJobStatusStream(jobId);
+        jobStatusService.getPublishJobStatusStream(jobId);
 
         const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
         jest.spyOn(subject, "next");
@@ -525,7 +524,7 @@ describe("JobStatusServiceV2", () => {
           percentage: 50,
         };
 
-        const stream = jobStatusService.getPublishJobStatusStream(jobId);
+        jobStatusService.getPublishJobStatusStream(jobId);
 
         const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
         jest.spyOn(subject, "next");
@@ -555,7 +554,7 @@ describe("JobStatusServiceV2", () => {
           percentage: 50,
         };
 
-        const stream = jobStatusService.getPublishJobStatusStream(jobId);
+        jobStatusService.getPublishJobStatusStream(jobId);
 
         const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
 

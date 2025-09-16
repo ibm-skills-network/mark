@@ -5,6 +5,7 @@ import LoadingPage from "@/app/loading";
 import MarkdownEditor from "@/components/MarkDownEditor";
 import { useAuthorStore } from "@/stores/author";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import React from "react";
 
 const stepOneSections = {
   introduction: {

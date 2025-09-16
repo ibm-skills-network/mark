@@ -18,14 +18,13 @@
   "scripts": {
     "build": "turbo run build",
     "build:docker": "docker buildx build -f ./apps/api-gateway/Dockerfile -t mark-api-gateway --no-cache --platform linux/amd64 . &> build-gateway.log && docker buildx build -f ./apps/web/Dockerfile -t mark-web --no-cache --platform linux/amd64 . &> build-web.log && docker buildx build -f ./apps/api/Dockerfile -t mark-api --no-cache --platform linux/amd64 . &> build-api.log",
-    "db": "docker rm -f mark-postgres 2>/dev/null || true && source dev.env && docker run --name mark-postgres -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_DB=$POSTGRES_DB -p 6001:5432 -d postgres",
+    "db": "scripts/start-db.sh",
     "seed": "source dev.env && docker cp seed.sql mark-postgres:/tmp/seed.sql && docker exec -i mark-postgres pg_restore --username=$POSTGRES_USER --dbname=$POSTGRES_DB --no-owner --no-acl --clean --if-exists --no-password /tmp/seed.sql",
     "dev": "dotenv -e dev.env -- turbo run dev --parallel",
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md,html}\"",
     "lint": "turbo run lint -- --fix",
     "lint:staged": "turbo run lint:staged --",
-    "predb": "docker ps -aq -f name=^mark-postgres$ | xargs -r docker rm -f",
     "prepare": "husky install",
     "prisma:generate": "cd ./apps/api && source dev.env && prisma generate",
     "prisma:migrate": "cd ./apps/api && source dev.env && prisma migrate dev",
@@ -44,7 +43,8 @@
     "test:watch": "turbo run test --parallel ",
     "test:staged": "turbo run test:staged --",
     "start": "set -e && yarn db && yarn setup && yarn seed && yarn dev",
-    "studio": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma studio"
+    "studio": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma studio",
+    "translation-audit:dev": "cd ./apps/api && dotenv -e ./dev.env -- ts-node src/scripts/translation-audit.ts"
   },
   "dependencies": {
     "@cypress/request": "3.0.0",
@@ -84,6 +84,7 @@
     "react-circular-progressbar": "^2.1.0",
     "react-confetti": "^6.1.0",
     "react-dom": "^19.0.0",
+    "react-draggable": "^4.5.0",
     "react-dropzone": "^14.2.9",
     "react-pdftotext": "^1.3.3",
     "react-select": "^5.8.2",

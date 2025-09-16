@@ -1,5 +1,7 @@
 "use client";
 
+import WarningModal from "@/components/WarningModal";
+import useBeforeUnload from "@/hooks/use-before-unload";
 import { usePathname } from "next/navigation";
 
 const WarningBeforeUnload = () => {

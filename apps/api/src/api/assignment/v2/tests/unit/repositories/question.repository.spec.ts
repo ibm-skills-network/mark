@@ -11,12 +11,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { Logger } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import {
-  Question,
-  QuestionType,
-  QuestionVariant,
-  ResponseType,
-} from "@prisma/client";
+import { Question, QuestionType, QuestionVariant } from "@prisma/client";
 import {
   QuestionDto,
   ScoringDto,

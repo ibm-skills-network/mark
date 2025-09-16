@@ -37,7 +37,7 @@ function MultipleChoiceQuestion({
   }
 
   return (
-    <div className="flex flex-col gap-y-3 mt-4 w-full">
+    <div className="flex flex-col gap-y-2 w-full">
       {choices.map((choice, index) => {
         const isSelected = learnerChoices?.includes(String(index));
 
@@ -46,11 +46,11 @@ function MultipleChoiceQuestion({
             key={index}
             type="button"
             className={cn(
-              "flex w-full p-3 rounded-lg transition-colors duration-200",
+              "flex w-full p-3 rounded-lg transition-colors duration-200 border",
               "text-lg font-normal",
               isSelected
-                ? "text-violet-900"
-                : "bg-white text-gray-800 hover:bg-gray-50",
+                ? "text-violet-900 bg-violet-50 border-violet-300"
+                : "bg-white text-gray-800 hover:bg-gray-50 border-gray-200",
             )}
             onClick={() => handleChoiceClick(index)}
           >

@@ -1,5 +1,4 @@
 /* eslint-disable */
-
 import JSZip from "jszip";
 import mammoth from "mammoth";
 import Papa, { ParseResult } from "papaparse";

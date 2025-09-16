@@ -1,13 +1,16 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import { QuestionType, ResponseType } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
-import {
-  QuestionDto,
-  ScoringDto,
-} from "src/api/assignment/dto/update.questions.request.dto";
+import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
 import {
@@ -16,6 +19,8 @@ import {
   LearnerImageUpload,
 } from "src/api/llm/model/image.based.evalutate.model";
 import { ImageBasedQuestionResponseModel } from "src/api/llm/model/image.based.response.model";
+import { Logger } from "winston";
+import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
@@ -43,9 +48,17 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
   constructor(
     private readonly imageGradingService: ImageGradingService,
     protected readonly localizationService: LocalizationService,
+    @Inject(GRADING_AUDIT_SERVICE)
     protected readonly gradingAuditService: GradingAuditService,
+    @Optional() @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger,
   ) {
-    super(localizationService, gradingAuditService);
+    super(
+      localizationService,
+      gradingAuditService,
+      undefined,
+      undefined,
+      parentLogger,
+    );
   }
 
   async validateResponse(
@@ -160,10 +173,9 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       );
 
     // Validate the grading result
-    const validatedResult = this.validateGradingConsistency(
+    const validatedResult = this.validateGradingConsistencyImage(
       gradingResult,
-      question.totalPoints,
-      question.scoring,
+      question,
     );
 
     // Create response DTO
@@ -190,15 +202,25 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       `Successfully graded question ${question.id} - awarded ${responseDto.totalPoints}/${question.totalPoints} points`,
     );
 
+    await this.recordGrading(
+      question,
+      {
+        learnerFileResponse: learnerResponse,
+      } as CreateQuestionResponseAttemptRequestDto,
+      responseDto,
+      context,
+      "ImageGradingStrategy",
+    );
+
     return responseDto;
   }
-  private validateGradingConsistency(
-    gradingResult: { points?: number; feedback?: string },
-    maxPoints: number,
-    scoring: ScoringDto | undefined,
+  private validateGradingConsistencyImage(
+    response: ImageBasedQuestionResponseModel,
+    question: QuestionDto,
   ): ImageBasedQuestionResponseModel {
-    const points = gradingResult.points || 0;
-    const feedback = gradingResult.feedback || "";
+    const points = response.points || 0;
+    const feedback = response.feedback || "";
+    const maxPoints = question.totalPoints || 0;
 
     // Ensure points are within valid range
     const validatedPoints = Math.min(Math.max(points, 0), maxPoints);
@@ -247,22 +269,26 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
   private extractPointsFromFeedback(feedback: string): number[] {
     const points: number[] = [];
 
-    // Look for patterns like "X points", "awarded X", "score: X", etc.
+    // Look for patterns specifically for final scores, avoiding intermediate scores
     const patterns = [
-      /(\d+)\s*points?\s*(?:awarded|given|earned)/gi,
-      /(?:awarded|score|total):\s*(\d+)/gi,
-      /(\d+)\s*\/\s*\d+\s*points?/gi,
+      /(?:total\s*score|final\s*score|overall\s*score):\s*(\d+)/gi,
+      /(?:awarded|final\s*grade):\s*(\d+)\s*(?:points?|pts?)?$/gi,
+      /^(?:score|total):\s*(\d+)\s*(?:\/\s*\d+)?/gm, // Line starting with score
+      /(\d+)\s*(?:points?|pts?)\s*(?:out\s*of|\/)\s*\d+\s*(?:total|maximum)?$/gi, // Final score format
     ];
 
     for (const pattern of patterns) {
       const matches = feedback.matchAll(pattern);
       for (const match of matches) {
         const point = Number.parseInt(match[1], 10);
-        if (!Number.isNaN(point)) {
+        if (!Number.isNaN(point) && point >= 0) {
           points.push(point);
         }
       }
     }
+
+    // If no specific final score patterns found, avoid parsing intermediate scores
+    // to prevent the false positive warnings
 
     return points;
   }

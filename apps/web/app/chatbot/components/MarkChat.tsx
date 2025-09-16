@@ -15,10 +15,10 @@ import {
   ClockIcon,
   ArchiveBoxIcon,
   BellIcon,
+  ChatBubbleBottomCenterTextIcon,
 } from "@heroicons/react/24/outline";
 import {
   ArrowPathIcon,
-  ChevronDownIcon,
   PaperAirplaneIcon,
   SparklesIcon,
   XMarkIcon,
@@ -26,12 +26,14 @@ import {
   AdjustmentsHorizontalIcon,
 } from "@heroicons/react/24/solid";
 import { AnimatePresence, motion } from "framer-motion";
+import Draggable from "react-draggable";
 import Image from "next/image";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAuthorContext } from "../store/useAuthorContext";
 import { useLearnerContext } from "../store/useLearnerContext";
 import { ChatRole, useMarkChatStore } from "../store/useMarkChatStore";
+import { useAuthorStore } from "@/stores/author";
 import { toast } from "sonner";
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css";
@@ -42,10 +44,152 @@ import {
   addMessageToChat,
   endChat,
   getUser,
+  directUpload,
+  getFileType,
 } from "@/lib/shared";
+import { getBaseApiPath } from "@/config/constants";
 import UserReportsPanel from "./UserReportsPanel";
-// import { NotificationsPanel } from "./NotificationPanel";
-// import { getUserNotifications, markNotificationAsRead } from "@/lib/author";
+import ReportPreviewModal from "@/components/ReportPreviewModal";
+import { useChatbot } from "../../../hooks/useChatbot";
+import { useMarkSpeech } from "../../../hooks/useMarkSpeech";
+import { useUserBehaviorMonitor } from "../../../hooks/useUserBehaviorMonitor";
+import { useDropzone } from "react-dropzone";
+import { useCallback } from "react";
+import SpeechBubble from "../../../components/SpeechBubble";
+import { NotificationsPanel } from "./NotificationPanel";
+import { getUserNotifications, markNotificationAsRead } from "@/lib/author";
+
+interface ScreenshotDropzoneProps {
+  file: File | null | undefined;
+  onFileSelect: (file: File) => void;
+  onFileRemove: () => void;
+}
+
+const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
+  file,
+  onFileSelect,
+  onFileRemove,
+}) => {
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      if (acceptedFiles.length > 0) {
+        onFileSelect(acceptedFiles[0]);
+      }
+    },
+    [onFileSelect],
+  );
+
+  const { getRootProps, getInputProps, isDragActive, fileRejections } =
+    useDropzone({
+      onDrop,
+      accept: {
+        "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
+      },
+      multiple: false,
+      maxSize: 10 * 1024 * 1024, // 10MB
+      onDropRejected: (rejectedFiles) => {
+        const error = rejectedFiles[0]?.errors[0];
+        if (error?.code === "file-too-large") {
+          toast.error("File is too large. Maximum size is 10MB.");
+        } else if (error?.code === "file-invalid-type") {
+          toast.error("Invalid file type. Please select an image file.");
+        } else {
+          toast.error("File rejected. Please try another file.");
+        }
+      },
+    });
+
+  if (file) {
+    return (
+      <div className="flex items-center justify-between p-4 border-2 border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800">
+        <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <svg
+            className="w-4 h-4 text-green-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+          <span className="truncate font-medium">{file.name}</span>
+          <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+            {Math.round(file.size / 1024)}KB
+          </span>
+        </div>
+        <button
+          onClick={onFileRemove}
+          className="text-red-500 hover:text-red-700 text-sm font-medium px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+        >
+          Remove
+        </button>
+      </div>
+    );
+  }
+
+  const rootProps = getRootProps();
+
+  return (
+    <div
+      className={`cursor-pointer border-2 border-dashed rounded-md p-4 transition-colors hover:scale-105 transform ${
+        isDragActive
+          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+          : "border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
+      }`}
+      {...rootProps}
+    >
+      <input {...getInputProps()} />
+      <div className="flex flex-col items-center justify-center text-center">
+        {isDragActive ? (
+          <>
+            <svg
+              className="w-8 h-8 text-blue-500 mb-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            <p className="text-blue-600 dark:text-blue-400 font-medium">
+              Drop screenshot here
+            </p>
+          </>
+        ) : (
+          <>
+            <svg
+              className="w-8 h-8 text-gray-400 mb-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+              Drop screenshot here or click to select
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              PNG, JPG, GIF up to 10MB
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const SuggestionsPanel = ({
   suggestions,
@@ -293,6 +437,10 @@ const SpecialActionUI = ({
   handleRegradeRequest,
   handleIssueReport,
   handleCreateQuestion,
+  handleReportPreview,
+  handleFeedback,
+  handleSuggestion,
+  handleInquiry,
 }) => {
   if (!specialActions.show) return null;
   return (
@@ -378,6 +526,57 @@ const SpecialActionUI = ({
               Text Response
             </button>
           </div>
+        </div>
+      ) : specialActions.type === "feedback" ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+            <ChatBubbleBottomCenterTextIcon className="w-5 h-5" />
+            <h4 className="text-sm font-medium">Share Your Feedback</h4>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-300">
+            I'd love to hear about your experience with the platform. Your
+            feedback helps us improve!
+          </p>
+          <button
+            onClick={handleFeedback}
+            className="text-xs py-1.5 px-3 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-md transition-colors self-end mt-1"
+          >
+            Share feedback
+          </button>
+        </div>
+      ) : specialActions.type === "suggestion" ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+            <LightBulbIcon className="w-5 h-5" />
+            <h4 className="text-sm font-medium">Share Your Suggestion</h4>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-300">
+            I'd love to hear your ideas for improving the platform or adding new
+            features!
+          </p>
+          <button
+            onClick={handleSuggestion}
+            className="text-xs py-1.5 px-3 bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:hover:bg-green-800 text-green-800 dark:text-green-200 rounded-md transition-colors self-end mt-1"
+          >
+            Share suggestion
+          </button>
+        </div>
+      ) : specialActions.type === "inquiry" ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
+            <QuestionMarkCircleIcon className="w-5 h-5" />
+            <h4 className="text-sm font-medium">Ask a Question</h4>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-300">
+            I'm here to help answer your questions and provide assistance with
+            whatever you need.
+          </p>
+          <button
+            onClick={handleInquiry}
+            className="text-xs py-1.5 px-3 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900 dark:hover:bg-indigo-800 text-indigo-800 dark:text-indigo-200 rounded-md transition-colors self-end mt-1"
+          >
+            Ask question
+          </button>
         </div>
       ) : null}
     </motion.div>
@@ -524,38 +723,70 @@ const ChatMessages = ({
   chatBubbleVariants,
   getAccentColor,
   renderTypingIndicator,
+  onClientExecution,
 }) => {
+  const filteredMessages = React.useMemo(
+    () => messages.filter((msg) => msg.role !== "system"),
+    [messages],
+  );
+
+  const [processedMessageIds, setProcessedMessageIds] = React.useState(
+    new Set(),
+  );
+
+  // Handle client executions outside of the render loop
+  React.useEffect(() => {
+    if (onClientExecution) {
+      filteredMessages.forEach((msg) => {
+        // Only process messages that haven't been processed yet
+        if (
+          !processedMessageIds.has(msg.id) &&
+          msg.role === "assistant" &&
+          msg.toolCalls &&
+          Array.isArray(msg.toolCalls)
+        ) {
+          msg.toolCalls.forEach((toolCall) => {
+            if (toolCall.function === "showReportPreview") {
+              onClientExecution(toolCall);
+            }
+          });
+          // Mark this message as processed
+          setProcessedMessageIds((prev) => new Set(prev).add(msg.id));
+        }
+      });
+    }
+  }, [filteredMessages, onClientExecution, processedMessageIds]);
+
   return (
     <>
-      {messages
-        .filter((msg) => msg.role !== "system")
-        .map((msg, index) => {
-          const messageContent = msg.content;
-          return (
-            <motion.div
-              key={msg.id}
-              custom={index}
-              variants={chatBubbleVariants}
-              initial="hidden"
-              animate="visible"
-              className={`flex ${
-                msg.role === "user" ? "justify-end" : "justify-start"
+      {filteredMessages.map((msg, index) => {
+        const messageContent = msg.content;
+
+        return (
+          <motion.div
+            key={msg.id}
+            custom={index}
+            variants={chatBubbleVariants}
+            initial="hidden"
+            animate="visible"
+            className={`flex ${
+              msg.role === "user" ? "justify-end" : "justify-start"
+            }`}
+          >
+            <div
+              className={`max-w-[85%] rounded-xl p-3 ${
+                msg.role === "user"
+                  ? `bg-gradient-to-r ${getAccentColor()} text-white`
+                  : "bg-white dark:bg-gray-800 shadow-md border dark:border-gray-700"
               }`}
             >
-              <div
-                className={`max-w-[85%] rounded-xl p-3 ${
-                  msg.role === "user"
-                    ? `bg-gradient-to-r ${getAccentColor()} text-white`
-                    : "bg-white dark:bg-gray-800 shadow-md border dark:border-gray-700"
-                }`}
-              >
-                <div className="prose dark:prose-invert text-sm max-w-none">
-                  <ReactMarkdown>{messageContent}</ReactMarkdown>
-                </div>
+              <div className="prose dark:prose-invert text-sm max-w-none">
+                <ReactMarkdown>{messageContent}</ReactMarkdown>
               </div>
-            </motion.div>
-          );
-        })}
+            </div>
+          </motion.div>
+        );
+      })}
       {renderTypingIndicator()}
     </>
   );
@@ -587,7 +818,7 @@ const ChatHistoryDrawer = ({
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             className="fixed left-0 top-0 h-full w-80 bg-white dark:bg-gray-900 shadow-xl z-[999999] overflow-y-auto"
           >
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center pt-44 md:pt-36 lg:pt-36">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
               <h2 className="font-bold text-lg">Chat History</h2>
               <button
                 onClick={onClose}
@@ -652,6 +883,7 @@ const ChatHistoryDrawer = ({
 };
 
 export const MarkChat = () => {
+  const { isOpen: isChatbotOpen, toggle: toggleChatbot } = useChatbot();
   const {
     isOpen,
     toggleChat,
@@ -664,8 +896,101 @@ export const MarkChat = () => {
     resetChat,
   } = useMarkChatStore();
 
+  const {
+    activeBubble,
+    dismiss: dismissBubble,
+    sayMotionSick,
+    sayExcited,
+    sayProactiveHelp,
+    sayIdleHelp,
+    sayStuckHelp,
+  } = useMarkSpeech();
+
   const learnerContext = useLearnerContext();
   const authorContext = useAuthorContext();
+
+  // Get author store data
+  const authorStore = useAuthorStore((state) => ({
+    name: state.name,
+    questions: state.questions,
+    activeAssignmentId: state.activeAssignmentId,
+  }));
+
+  // Prepare context data for behavior monitoring
+  const contextData = React.useMemo(() => {
+    if (userRole === "author") {
+      return {
+        assignmentName: authorStore.name,
+        questions: authorStore.questions,
+        focusedQuestionId: authorContext.focusedQuestionId,
+        activeAssignmentId: authorStore.activeAssignmentId,
+      };
+    } else if (userRole === "learner") {
+      return {
+        currentQuestion: learnerContext.currentQuestion,
+        assignmentMeta: learnerContext.assignmentMeta,
+        currentQuestionIndex:
+          learnerContext.questions?.findIndex(
+            (q) => q.id === learnerContext.currentQuestion?.id,
+          ) + 1 || undefined,
+        totalQuestions: learnerContext.questions?.length,
+        isGradedAssignment: learnerContext.isGradedAssignment,
+        isFeedbackMode: learnerContext.isFeedbackMode,
+      };
+    }
+    return {};
+  }, [
+    userRole,
+    authorStore.name,
+    authorStore.questions,
+    authorContext.focusedQuestionId,
+    authorStore.activeAssignmentId,
+    learnerContext.currentQuestion,
+    learnerContext.assignmentMeta,
+    learnerContext.questions,
+    learnerContext.isGradedAssignment,
+    learnerContext.isFeedbackMode,
+  ]);
+
+  // Behavior monitoring for proactive help
+  const { behaviorData, resetHelpOffer, getChatMessage } =
+    useUserBehaviorMonitor(userRole, contextData);
+
+  // Proactive help system
+  useEffect(() => {
+    if (behaviorData.shouldOfferHelp && !isChatbotOpen) {
+      const { helpReason, currentContext } = behaviorData;
+      const subject = currentContext.detectedSubject || "general";
+
+      switch (helpReason) {
+        case "idle_too_long":
+          sayIdleHelp(userRole);
+          break;
+        case "stuck_on_question":
+          sayStuckHelp(currentContext.currentQuestionIndex, userRole);
+          break;
+        case "long_time_on_page":
+          sayProactiveHelp(subject, userRole);
+          break;
+        default:
+          sayProactiveHelp(subject, userRole);
+      }
+
+      // Reset help offer after showing
+      setTimeout(() => resetHelpOffer(), 1000);
+    }
+  }, [
+    behaviorData.shouldOfferHelp,
+    behaviorData.helpReason,
+    behaviorData.currentContext,
+    isChatbotOpen,
+    userRole,
+    sayIdleHelp,
+    sayStuckHelp,
+    sayProactiveHelp,
+    resetHelpOffer,
+  ]);
+
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const textareaRef = useRef(null);
@@ -684,6 +1009,7 @@ export const MarkChat = () => {
     type: null,
     data: null,
   });
+
   const [user, setUser] = useState(null);
   const [currentChatId, setCurrentChatId] = useState(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
@@ -692,6 +1018,11 @@ export const MarkChat = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [reportPreviewModal, setReportPreviewModal] = useState({
+    isOpen: false,
+    type: "report" as "report" | "feedback" | "suggestion" | "inquiry",
+    data: null as any,
+  });
   const handleCheckReports = useCallback(() => {
     setShowReports(true);
   }, []);
@@ -700,96 +1031,347 @@ export const MarkChat = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCheckInterval, setNotificationCheckInterval] =
     useState(null);
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 }); // Real-time position during drag
+  const [isDragging, setIsDragging] = useState(false);
+  const [hasMoved, setHasMoved] = useState(false);
+  const [isDocked, setIsDocked] = useState(false);
 
-  // const loadNotifications = useCallback(async () => {
-  //   if (!user?.userId) return;
+  // Motion sickness tracking
+  const [motionData, setMotionData] = useState({
+    dragCount: 0,
+    dragStartTime: 0,
+    lastPosition: { x: 0, y: 0 },
+    totalDistance: 0,
+    lastMotionSickTime: 0,
+    continuousDragTime: 0,
+  });
 
-  //   try {
-  //     const data = await getUserNotifications();
-  //     setNotifications(data);
-  //     setUnreadNotifications(data.filter((n) => !n.read).length);
-  //   } catch (error) {}
-  // }, [user?.userId]);
+  // Helper function to constrain position to viewport
+  const constrainToViewport = useCallback((position) => {
+    if (typeof window === "undefined") return position;
 
-  // const markNotificationRead = useCallback(async (notificationId) => {
-  //   try {
-  //     const success = await markNotificationAsRead(notificationId);
+    const padding = 10;
+    const buttonSize = 66;
 
-  //     if (success) {
-  //       setNotifications((prev) =>
-  //         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
-  //       );
-  //       setUnreadNotifications((prev) => Math.max(0, prev - 1));
-  //     }
-  //   } catch (error) {}
-  // }, []);
-  // const handleNotificationClick = useCallback(
-  //   (notification) => {
-  //     try {
-  //       let metadata: {
-  //         issueNumber?: string;
-  //         newStatus?: string;
-  //       };
+    return {
+      x: Math.max(
+        padding,
+        Math.min(position.x, window.innerWidth - buttonSize - padding),
+      ),
+      y: Math.max(
+        padding,
+        Math.min(position.y, window.innerHeight - buttonSize - padding),
+      ),
+    };
+  }, []);
 
-  //       try {
-  //         metadata = JSON.parse(notification.metadata || "{}");
-  //       } catch (e) {}
+  // Load saved position on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("mark-chat-position");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const constrainedPos = constrainToViewport(parsed);
+          setDragPosition(constrainedPos);
+          setCurrentPosition(constrainedPos);
+        } catch (e) {
+          // Default to bottom-right if parsing fails
+          const defaultPos = constrainToViewport({
+            x: window.innerWidth - 80,
+            y: window.innerHeight - 80,
+          });
+          setDragPosition(defaultPos);
+          setCurrentPosition(defaultPos);
+        }
+      } else {
+        // Default position: very bottom-right
+        const defaultPos = constrainToViewport({
+          x: window.innerWidth - 80,
+          y: window.innerHeight - 80,
+        });
+        setDragPosition(defaultPos);
+        setCurrentPosition(defaultPos);
+      }
+    }
+  }, [constrainToViewport]);
 
-  //       if (notification.type === "ISSUE_STATUS_CHANGE") {
-  //         setShowNotifications(false);
+  // Handle window resize to keep chatbot in bounds
+  useEffect(() => {
+    const handleResize = () => {
+      setDragPosition((prev) => constrainToViewport(prev));
+      setCurrentPosition((prev) => constrainToViewport(prev));
+    };
 
-  //         if (!isOpen) {
-  //           toggleChat();
-  //         }
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }
+  }, [constrainToViewport]);
 
-  //         setTimeout(() => {
-  //           useMarkChatStore.getState().addMessage({
-  //             id: `user-${Date.now()}`,
-  //             role: "user",
-  //             content: `What's the status of issue #${metadata.issueNumber || ""}?`,
-  //             timestamp: new Date().toISOString(),
-  //           });
+  const handleDragStart = useCallback(() => {
+    setHasMoved(false);
+    setMotionData((prev) => ({
+      ...prev,
+      dragCount: prev.dragCount + 1,
+      dragStartTime: Date.now(),
+      lastPosition: dragPosition,
+      totalDistance: 0,
+    }));
+  }, [dragPosition]);
 
-  //           setTimeout(() => {
-  //             useMarkChatStore.getState().addMessage({
-  //               id: `assistant-${Date.now()}`,
-  //               role: "assistant",
-  //               content: `I see that issue #${metadata.issueNumber || ""} has been ${metadata.newStatus || "updated"}.\n\n${notification.message}\n\nWould you like to see more details about this issue?`,
-  //               timestamp: new Date().toISOString(),
-  //             });
-  //           }, 500);
-  //         }, 300);
+  const handleDrag = useCallback(
+    (e, data) => {
+      if (!hasMoved) {
+        setHasMoved(true);
+        setIsDragging(true);
+      }
 
-  //         // markNotificationRead(notification.id);
-  //       }
-  //     } catch (error) {}
-  //   },
-  //   [isOpen, toggleChat, markNotificationRead],
-  // );
+      // Update real-time position for speech bubble
+      setCurrentPosition({ x: data.x, y: data.y });
 
-  // useEffect(() => {
-  //   if (user?.userId) {
-  //     loadNotifications();
+      // Calculate distance moved
+      setMotionData((prev) => {
+        const distance = Math.sqrt(
+          Math.pow(data.x - prev.lastPosition.x, 2) +
+            Math.pow(data.y - prev.lastPosition.y, 2),
+        );
+        const newTotalDistance = prev.totalDistance + distance;
+        const currentTime = Date.now();
+        const dragDuration = currentTime - prev.dragStartTime;
 
-  //     if (!notificationCheckInterval) {
-  //       const intervalId = setInterval(loadNotifications, 30000);
-  //       setNotificationCheckInterval(intervalId);
-  //     }
+        // Check for motion sickness conditions (much more lenient)
+        const shouldGetSick =
+          // Dragged for more than 5 seconds continuously (increased from 2)
+          dragDuration > 5000 ||
+          // Moved more than 500 pixels total in this drag (increased from 300)
+          newTotalDistance > 500 ||
+          // Been dragged more than 6 times in 30 seconds (more lenient)
+          (prev.dragCount > 6 &&
+            currentTime - prev.lastMotionSickTime < 30000) ||
+          // Very fast movement - only if extremely fast (increased threshold)
+          (dragDuration > 1000 && newTotalDistance / dragDuration > 1.0);
 
-  //     return () => {
-  //       if (notificationCheckInterval) {
-  //         clearInterval(notificationCheckInterval);
-  //         setNotificationCheckInterval(null);
-  //       }
-  //     };
-  //   }
-  // }, [user?.userId, loadNotifications, notificationCheckInterval]);
+        // Much longer cooldown period: 15 seconds between complaints (increased from 5)
+        // Also add random chance: only 30% chance to complain even if conditions are met
+        if (
+          shouldGetSick &&
+          currentTime - prev.lastMotionSickTime > 15000 &&
+          Math.random() < 0.3
+        ) {
+          sayMotionSick();
+          return {
+            ...prev,
+            totalDistance: newTotalDistance,
+            lastPosition: { x: data.x, y: data.y },
+            lastMotionSickTime: currentTime,
+          };
+        }
 
-  // useEffect(() => {
-  //   if (isOpen && user?.userId) {
-  //     loadNotifications();
-  //   }
-  // }, [isOpen, user?.userId, loadNotifications]);
+        return {
+          ...prev,
+          totalDistance: newTotalDistance,
+          lastPosition: { x: data.x, y: data.y },
+        };
+      });
+    },
+    [hasMoved, sayMotionSick],
+  );
+
+  const handleDragStop = useCallback(
+    (e, data) => {
+      if (hasMoved) {
+        // Constrain position to viewport bounds with some padding
+        const padding = 10;
+        const buttonSize = 66; // Approximate size of the button
+
+        const constrainedPosition = {
+          x: Math.max(
+            padding,
+            Math.min(data.x, window.innerWidth - buttonSize - padding),
+          ),
+          y: Math.max(
+            padding,
+            Math.min(data.y, window.innerHeight - buttonSize - padding),
+          ),
+        };
+
+        // Check if position should be docked to edges
+        const dockThreshold = 50; // Distance from edge to trigger docking
+        const dockedPosition = { ...constrainedPosition };
+        let docked = false;
+
+        // Dock to left edge
+        if (constrainedPosition.x < dockThreshold) {
+          dockedPosition.x = padding;
+          docked = true;
+        }
+        // Dock to right edge
+        else if (
+          constrainedPosition.x >
+          window.innerWidth - buttonSize - dockThreshold
+        ) {
+          dockedPosition.x = window.innerWidth - buttonSize - padding;
+          docked = true;
+        }
+
+        // Dock to top edge
+        if (constrainedPosition.y < dockThreshold) {
+          dockedPosition.y = padding;
+          docked = true;
+        }
+        // Dock to bottom edge
+        else if (
+          constrainedPosition.y >
+          window.innerHeight - buttonSize - dockThreshold
+        ) {
+          dockedPosition.y = window.innerHeight - buttonSize - padding;
+          docked = true;
+        }
+
+        setIsDocked(docked);
+
+        setDragPosition(dockedPosition);
+        setCurrentPosition(dockedPosition); // Keep positions in sync
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "mark-chat-position",
+            JSON.stringify(dockedPosition),
+          );
+        }
+
+        // Rarely say something excited about the new position (reduced from 30% to 10%)
+        if (Math.random() < 0.1) {
+          setTimeout(() => sayExcited(), 800); // Also increased delay
+        }
+      }
+
+      // Reset states
+      setTimeout(() => {
+        setIsDragging(false);
+        setHasMoved(false);
+      }, 50);
+    },
+    [hasMoved, sayExcited],
+  );
+
+  const handleChatToggle = useCallback(() => {
+    if (!isDragging) {
+      // If Mark just offered help, auto-populate the chat with a helpful message
+      if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
+        const helpMessage = getChatMessage();
+
+        // Set the user input to the generated message
+        setUserInput(helpMessage);
+
+        // Dismiss any active speech bubble
+        dismissBubble();
+        resetHelpOffer();
+      }
+
+      toggleChatbot();
+    }
+  }, [
+    isDragging,
+    toggleChatbot,
+    behaviorData.shouldOfferHelp,
+    behaviorData.helpReason,
+    getChatMessage,
+    setUserInput,
+    dismissBubble,
+    resetHelpOffer,
+  ]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!user?.userId) return;
+
+    try {
+      const data = await getUserNotifications();
+      setNotifications(data);
+      setUnreadNotifications(data.filter((n) => !n.read).length);
+    } catch (error) {}
+  }, [user?.userId]);
+
+  const markNotificationRead = useCallback(async (notificationId) => {
+    try {
+      const success = await markNotificationAsRead(notificationId);
+
+      if (success) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
+        );
+        setUnreadNotifications((prev) => Math.max(0, prev - 1));
+      }
+    } catch (error) {}
+  }, []);
+  const handleNotificationClick = useCallback(
+    (notification) => {
+      try {
+        let metadata: {
+          issueNumber?: string;
+          newStatus?: string;
+        };
+
+        try {
+          metadata = JSON.parse(notification.metadata || "{}");
+        } catch (e) {}
+
+        if (notification.type === "ISSUE_STATUS_CHANGE") {
+          setShowNotifications(false);
+
+          if (!isOpen) {
+            toggleChat();
+          }
+
+          setTimeout(() => {
+            useMarkChatStore.getState().addMessage({
+              id: `user-${Date.now()}`,
+              role: "user",
+              content: `What's the status of issue #${metadata.issueNumber || ""}?`,
+              timestamp: new Date().toISOString(),
+            });
+
+            setTimeout(() => {
+              useMarkChatStore.getState().addMessage({
+                id: `assistant-${Date.now()}`,
+                role: "assistant",
+                content: `I see that issue #${metadata.issueNumber || ""} has been ${metadata.newStatus || "updated"}.\n\n${notification.message}\n\nWould you like to see more details about this issue?`,
+                timestamp: new Date().toISOString(),
+              });
+            }, 500);
+          }, 300);
+
+          // markNotificationRead(notification.id);
+        }
+      } catch (error) {}
+    },
+    [isOpen, toggleChat, markNotificationRead],
+  );
+
+  useEffect(() => {
+    if (user?.userId) {
+      loadNotifications();
+
+      if (!notificationCheckInterval) {
+        const intervalId = setInterval(loadNotifications, 30000);
+        setNotificationCheckInterval(intervalId);
+      }
+
+      return () => {
+        if (notificationCheckInterval) {
+          clearInterval(notificationCheckInterval);
+          setNotificationCheckInterval(null);
+        }
+      };
+    }
+  }, [user?.userId, loadNotifications, notificationCheckInterval]);
+
+  useEffect(() => {
+    if (isOpen && user?.userId) {
+      loadNotifications();
+    }
+  }, [isOpen, user?.userId, loadNotifications]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
   const checkForIssueStatusQuery = (message: string): boolean | number => {
@@ -1047,6 +1629,64 @@ export const MarkChat = () => {
           type: "report",
           data: { assignmentId: learnerContext.assignmentId },
         });
+      } else if (
+        lowerInput.includes("feedback") ||
+        lowerInput.includes("improve") ||
+        lowerInput.includes("better") ||
+        lowerInput.includes("experience") ||
+        lowerInput.includes("what do you think") ||
+        lowerInput.includes("opinion") ||
+        lowerInput.includes("thoughts") ||
+        lowerInput.includes("comment") ||
+        lowerInput.includes("review") ||
+        lowerInput.match(/how (was|is) (this|the)/) ||
+        lowerInput.match(/rate (this|the)/)
+      ) {
+        setSpecialActions({
+          show: true,
+          type: "feedback",
+          data: { assignmentId: learnerContext.assignmentId },
+        });
+      } else if (
+        lowerInput.includes("suggest") ||
+        lowerInput.includes("recommendation") ||
+        lowerInput.includes("feature") ||
+        lowerInput.includes("enhancement") ||
+        lowerInput.includes("would be nice") ||
+        lowerInput.includes("could you") ||
+        lowerInput.includes("wish") ||
+        lowerInput.includes("idea") ||
+        lowerInput.match(/what if/) ||
+        lowerInput.match(/how about/) ||
+        lowerInput.match(/maybe (you|we) could/)
+      ) {
+        setSpecialActions({
+          show: true,
+          type: "suggestion",
+          data: { assignmentId: learnerContext.assignmentId },
+        });
+      } else if (
+        (lowerInput.includes("question") &&
+          !lowerInput.includes("quiz question") &&
+          !lowerInput.includes("test question")) ||
+        lowerInput.includes("help") ||
+        lowerInput.includes("how to") ||
+        lowerInput.includes("can you") ||
+        lowerInput.includes("inquiry") ||
+        lowerInput.includes("ask") ||
+        lowerInput.includes("support") ||
+        lowerInput.includes("assistance") ||
+        lowerInput.includes("confused") ||
+        lowerInput.includes("don't understand") ||
+        lowerInput.match(/what (is|are)/) ||
+        lowerInput.match(/how (do|does)/) ||
+        lowerInput.match(/why (is|does|do)/)
+      ) {
+        setSpecialActions({
+          show: true,
+          type: "inquiry",
+          data: { assignmentId: learnerContext.assignmentId },
+        });
       } else {
         setSpecialActions({ show: false, type: null, data: null });
       }
@@ -1121,6 +1761,62 @@ export const MarkChat = () => {
           suggestedType: questionType,
         },
       });
+    } else if (
+      lowerInput.includes("feedback") ||
+      lowerInput.includes("improve") ||
+      lowerInput.includes("better") ||
+      lowerInput.includes("experience") ||
+      lowerInput.includes("what do you think") ||
+      lowerInput.includes("opinion") ||
+      lowerInput.includes("thoughts") ||
+      lowerInput.includes("comment") ||
+      lowerInput.includes("review") ||
+      lowerInput.match(/how (was|is) (this|the)/) ||
+      lowerInput.match(/rate (this|the)/)
+    ) {
+      setSpecialActions({
+        show: true,
+        type: "feedback",
+        data: { context: "author feedback" },
+      });
+    } else if (
+      lowerInput.includes("suggest") ||
+      lowerInput.includes("recommendation") ||
+      lowerInput.includes("feature") ||
+      lowerInput.includes("enhancement") ||
+      lowerInput.includes("would be nice") ||
+      lowerInput.includes("could you") ||
+      lowerInput.includes("wish") ||
+      lowerInput.includes("idea") ||
+      lowerInput.match(/what if/) ||
+      lowerInput.match(/how about/) ||
+      lowerInput.match(/maybe (you|we) could/)
+    ) {
+      setSpecialActions({
+        show: true,
+        type: "suggestion",
+        data: { context: "author suggestion" },
+      });
+    } else if (
+      (lowerInput.includes("question") && !hasQuestionIntent) ||
+      lowerInput.includes("help") ||
+      lowerInput.includes("how to") ||
+      lowerInput.includes("can you") ||
+      lowerInput.includes("inquiry") ||
+      lowerInput.includes("ask") ||
+      lowerInput.includes("support") ||
+      lowerInput.includes("assistance") ||
+      lowerInput.includes("confused") ||
+      lowerInput.includes("don't understand") ||
+      lowerInput.match(/what (is|are)/) ||
+      lowerInput.match(/how (do|does)/) ||
+      lowerInput.match(/why (is|does|do)/)
+    ) {
+      setSpecialActions({
+        show: true,
+        type: "inquiry",
+        data: { context: "author inquiry" },
+      });
     } else {
       setSpecialActions({ show: false, type: null, data: null });
     }
@@ -1152,20 +1848,20 @@ export const MarkChat = () => {
             }
           });
 
-          // setTimeout(() => {
-          //   if (relevantNotification) {
-          //     handleNotificationClick(relevantNotification);
-          //   } else {
-          //     useMarkChatStore.getState().addMessage({
-          //       id: `assistant-${Date.now()}`,
-          //       role: "assistant",
-          //       content: `I'll check the status of issue #${issueNumber} for you. Let me show you your reported issues.`,
-          //       timestamp: new Date().toISOString(),
-          //     });
+          setTimeout(() => {
+            if (relevantNotification) {
+              handleNotificationClick(relevantNotification);
+            } else {
+              useMarkChatStore.getState().addMessage({
+                id: `assistant-${Date.now()}`,
+                role: "assistant",
+                content: `I'll check the status of issue #${issueNumber} for you. Let me show you your reported issues.`,
+                timestamp: new Date().toISOString(),
+              });
 
-          //     setTimeout(() => setShowReports(true), 800);
-          //   }
-          // }, 500);
+              setTimeout(() => setShowReports(true), 800);
+            }
+          }, 500);
         } else {
           setTimeout(() => {
             useMarkChatStore.getState().addMessage({
@@ -1476,6 +2172,152 @@ Can you help me complete and implement this question?`;
     textareaRef.current?.focus();
   }, []);
 
+  const handleFeedback = useCallback(() => {
+    const feedbackPrompt = `I'd like to provide feedback about my experience:
+
+Overall Experience: 
+What's working well: 
+What could be improved: 
+Additional comments: 
+
+Please help me submit this feedback.`;
+    setUserInput(feedbackPrompt);
+    setSpecialActions({ show: false, type: null, data: null });
+    textareaRef.current?.focus();
+  }, []);
+
+  const handleSuggestion = useCallback(() => {
+    const suggestionPrompt = `I have a suggestion for improvement:
+
+Feature/Enhancement: 
+Why it would be helpful: 
+How it might work: 
+
+Please help me submit this suggestion.`;
+    setUserInput(suggestionPrompt);
+    setSpecialActions({ show: false, type: null, data: null });
+    textareaRef.current?.focus();
+  }, []);
+
+  const handleInquiry = useCallback(() => {
+    const inquiryPrompt = `I have a question and need assistance:
+
+My question: 
+What I'm trying to do: 
+What I've tried so far: 
+
+Please help me with this.`;
+    setUserInput(inquiryPrompt);
+    setSpecialActions({ show: false, type: null, data: null });
+    textareaRef.current?.focus();
+  }, []);
+
+  const handleReportPreview = useCallback(
+    async (action, value) => {
+      if (action === "cancel") {
+        setSpecialActions({ show: false, type: null, data: null });
+        return;
+      }
+
+      if (action === "submit") {
+        // Submit the actual report with screenshot in a single request
+        try {
+          const reportData = value || specialActions.data;
+
+          // Create FormData for multipart request
+          const formData = new FormData();
+          formData.append("issueType", reportData.issueType);
+          formData.append("description", reportData.description);
+          formData.append("severity", reportData.severity || "info");
+          formData.append("category", reportData.category || "Issue Report");
+          formData.append("userRole", reportData.userRole || "learner");
+          formData.append(
+            "assignmentId",
+            reportData.assignmentId?.toString() ??
+              learnerContext?.assignmentId.toString() ??
+              authorContext?.activeAssignmentId?.toString() ??
+              "0",
+          );
+
+          // Add screenshot file if present
+          if (reportData.screenshot) {
+            formData.append("screenshot", reportData.screenshot);
+            toast.info("Submitting report with screenshot...");
+          } else {
+            toast.info("Submitting report...");
+          }
+
+          // Submit everything in one request
+          const response = await fetch(`${getBaseApiPath("v1")}/reports`, {
+            method: "POST",
+            headers: {
+              Cookie: document.cookie,
+            },
+            credentials: "include",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(
+              errorBody.message || `HTTP error ${response.status}`,
+            );
+          }
+
+          const res = await response.json();
+
+          // Show result in chat
+          const resultMessage =
+            res?.content || "Report submitted successfully!";
+          useMarkChatStore.getState().addMessage({
+            id: Date.now().toString(),
+            role: "assistant",
+            content: resultMessage,
+            timestamp: new Date().toISOString(),
+          });
+
+          setSpecialActions({ show: false, type: null, data: null });
+          setReportPreviewModal({ isOpen: false, type: "report", data: null });
+
+          if (reportData.screenshot) {
+            toast.success(
+              "Issue report with screenshot submitted successfully!",
+            );
+          } else {
+            toast.success("Issue report submitted successfully!");
+          }
+        } catch (error) {
+          console.error("Error submitting report:", error);
+          toast.error("Failed to submit report. Please try again.");
+        }
+        return;
+      }
+
+      // Handle field updates including file upload
+      if (typeof value !== "undefined") {
+        setSpecialActions((prev) => ({
+          ...prev,
+          data: {
+            ...prev.data,
+            [action]: value,
+          },
+        }));
+      }
+    },
+    [specialActions],
+  );
+
+  const handleClientExecution = useCallback((toolCall) => {
+    if (toolCall.function === "showReportPreview") {
+      // Open the report preview modal instead of inline form
+      setReportPreviewModal({
+        isOpen: true,
+        type: toolCall.params.type || "report",
+        data: toolCall.params,
+      });
+    }
+  }, []);
+
   const handleSwitchQuestion = useCallback(
     (questionId) => {
       if (userRole === "learner" && learnerContext.questions) {
@@ -1766,148 +2608,184 @@ Can you help me complete and implement this question?`;
   }, [isTyping]);
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 font-sans">
+    <>
+      {/* Mark's Speech Bubble */}
+      <SpeechBubble
+        bubble={activeBubble}
+        onDismiss={dismissBubble}
+        position={currentPosition}
+      />
+
+      {/* Floating toggle button when panel is closed */}
       <AnimatePresence>
-        {!isOpen &&
-          (MarkFace ? (
-            <motion.button
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0 }}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={toggleChat}
-              className={`p-2 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200`}
-            >
-              <Image
-                src={MarkFace}
-                alt="Mark AI Assistant"
-                width={50}
-                height={50}
-              />
-              {unreadNotifications > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                </span>
-              )}
-            </motion.button>
-          ) : (
-            <motion.button
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0 }}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={toggleChat}
-              className={`p-4 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200`}
-            >
-              <ChatBubbleLeftRightIcon className="w-7 h-7" />
-            </motion.button>
-          ))}
-      </AnimatePresence>
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40"
-              aria-hidden="true"
-              onClick={toggleChat}
-            />
-            <motion.div
-              ref={chatContainerRef}
-              variants={chatWindowVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="fixed bottom-0 right-0 w-[500px] bg-white dark:bg-gray-900 shadow-2xl rounded-t-xl border border-gray-200 dark:border-gray-700 flex flex-col z-50"
-              role="dialog"
-            >
-              <div
-                className={`flex items-center justify-between p-4 bg-gradient-to-r ${getAccentColor()} rounded-t-xl text-white`}
+        {!isChatbotOpen && (
+          <Draggable
+            position={dragPosition}
+            onStart={handleDragStart}
+            onDrag={handleDrag}
+            onStop={handleDragStop}
+            bounds={{
+              left: 10,
+              top: 10,
+              right:
+                typeof window !== "undefined" ? window.innerWidth - 76 : 800,
+              bottom:
+                typeof window !== "undefined" ? window.innerHeight - 76 : 600,
+            }}
+          >
+            <div className="fixed z-50">
+              <motion.button
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={handleChatToggle}
+                className={`p-3 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 cursor-move ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
               >
-                <div className="flex items-center space-x-3">
-                  <motion.div
-                    whileHover={{ rotate: 15 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="p-2 bg-white/10 rounded-full"
-                  >
-                    {userRole === "author" ? (
-                      <PencilIcon className="w-6 h-6" />
-                    ) : (
-                      <SparklesIcon className="w-6 h-6" />
-                    )}
-                  </motion.div>
-                  <div>
-                    <h2 className="font-bold">{getChatTitle()}</h2>
-                    <p className="text-xs opacity-80">Powered by AI</p>
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => setShowChatHistory(true)}
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                    title="Chat History"
-                  >
-                    <ClockIcon className="w-5 h-5" />
-                  </button>
-                  {/* <button
-                    onClick={() => setShowReports(true)}
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                    title="View Reported Issues"
-                  >
-                    <ExclamationTriangleIcon className="w-5 h-5" />
-                  </button> */}
-                  {/* <button
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors relative"
-                    title="Notifications"
-                  > */}
-                  {/* <BellIcon className="w-5 h-5" />
-                    {unreadNotifications > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                        {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                      </span>
-                    )} */}
-                  {/* </button> */}
-                  <button
-                    onClick={handleEndChat}
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                    title="Start New Chat"
-                    disabled={!currentChatId || isInitializing}
-                  >
-                    <ArrowPathIcon className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                    title="Settings"
-                  >
-                    <CogIcon className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={toggleExpanded}
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                    title={isExpanded ? "Collapse" : "Expand"}
-                  >
-                    <ChevronDownIcon
-                      className={`w-5 h-5 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={toggleChat}
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                  >
-                    <XMarkIcon className="w-6 h-6" />
-                  </motion.button>
+                {MarkFace ? (
+                  <Image
+                    src={MarkFace}
+                    alt="Mark AI Assistant"
+                    width={50}
+                    height={50}
+                    draggable={false}
+                    className="pointer-events-none select-none"
+                  />
+                ) : (
+                  <ChatBubbleLeftRightIcon className="w-7 h-7 pointer-events-none" />
+                )}
+                {unreadNotifications > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center pointer-events-none">
+                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                  </span>
+                )}
+              </motion.button>
+            </div>
+          </Draggable>
+        )}
+      </AnimatePresence>
+
+      {/* Side panel */}
+      <AnimatePresence>
+        {isChatbotOpen && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: "25vw", opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}
+            className="h-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden font-sans"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center space-x-3">
+                {MarkFace && (
+                  <Image
+                    src={MarkFace}
+                    alt="Mark AI Assistant"
+                    width={32}
+                    height={32}
+                  />
+                )}
+                <div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    Mark AI Assistant
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Your AI learning companion
+                  </p>
                 </div>
               </div>
+              <button
+                onClick={toggleChatbot}
+                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
 
-              <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            {/* Action buttons bar */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setShowChatHistory(true)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="Chat History"
+                >
+                  <ClockIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </button>
+                <button
+                  onClick={handleEndChat}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="Start New Chat"
+                  disabled={!currentChatId || isInitializing}
+                >
+                  <ArrowPathIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </button>
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="Settings"
+                >
+                  <CogIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </button>
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors relative"
+                  title="Notifications"
+                >
+                  <BellIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
+                  )}
+                </button>
+                {/* handleCheckReports */}
+              </div>
+              <button
+                onClick={handleCheckReports}
+                className="p-2 mr-2 rounded-sm transition-colors bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900 border border-gray-300 dark:border-gray-700 shadow-sm"
+                title="Check Reports"
+              >
+                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                  Your Reports
+                </span>
+              </button>
+            </div>
+
+            {/* Chat content */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Settings panel */}
+              <AnimatePresence>
+                {showSettings && (
+                  <SettingsPanel
+                    setShowSettings={setShowSettings}
+                    isRecording={isRecording}
+                    toggleVoiceRecognition={toggleVoiceRecognition}
+                    userRole={userRole}
+                    learnerContext={learnerContext}
+                    activeQuestion={activeQuestion}
+                    handleSwitchQuestion={handleSwitchQuestion}
+                    darkMode={darkMode}
+                    setDarkMode={setDarkMode}
+                  />
+                )}
+                {showNotifications && (
+                  <NotificationsPanel
+                    notifications={notifications}
+                    onMarkRead={markNotificationRead}
+                    onClickNotification={(notification) => {
+                      markNotificationRead(notification.id);
+                      setShowNotifications(false);
+                    }}
+                    onClose={() => setShowNotifications(false)}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Context indicators */}
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                 <ContextIndicators
                   contextReady={contextReady}
                   userRole={userRole}
@@ -1918,50 +2796,30 @@ Can you help me complete and implement this question?`;
                 />
               </div>
 
+              {/* Messages area */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-950 relative">
-                <AnimatePresence>
-                  {showSettings && (
-                    <SettingsPanel
-                      setShowSettings={setShowSettings}
-                      isRecording={isRecording}
-                      toggleVoiceRecognition={toggleVoiceRecognition}
-                      userRole={userRole}
-                      learnerContext={learnerContext}
-                      activeQuestion={activeQuestion}
-                      handleSwitchQuestion={handleSwitchQuestion}
-                      darkMode={darkMode}
-                      setDarkMode={setDarkMode}
-                    />
+                <div className="absolute right-3 bottom-3 flex space-x-2">
+                  {userInput.trim() !== "" && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={clearInput}
+                      className="p-1.5 rounded-full transition-colors bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
+                      title="Clear input"
+                    >
+                      <XMarkIcon className="w-4 h-4" />
+                    </motion.button>
                   )}
-                </AnimatePresence>
-                <AnimatePresence>
-                  {/* {showNotifications && (
-                    <NotificationsPanel
-                      notifications={notifications}
-                      onClose={() => setShowNotifications(false)}
-                      onMarkRead={markNotificationRead}
-                      onClickNotification={handleNotificationClick}
-                    />
-                  )} */}
-                </AnimatePresence>
-
+                </div>
                 <QuestionSelector
                   userRole={userRole}
                   learnerContext={learnerContext}
                   activeQuestion={activeQuestion}
                   handleSwitchQuestion={handleSwitchQuestion}
                 />
-
-                <AnimatePresence>
-                  {specialActions.show && (
-                    <SpecialActionUI
-                      specialActions={specialActions}
-                      handleRegradeRequest={handleRegradeRequest}
-                      handleIssueReport={handleIssueReport}
-                      handleCreateQuestion={handleCreateQuestion}
-                    />
-                  )}
-                </AnimatePresence>
 
                 {isInitializing ? (
                   <div className="flex items-center justify-center h-32">
@@ -1984,15 +2842,14 @@ Can you help me complete and implement this question?`;
                     chatBubbleVariants={chatBubbleVariants}
                     getAccentColor={getAccentColor}
                     renderTypingIndicator={renderTypingIndicator}
+                    onClientExecution={handleClientExecution}
                   />
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
-              <motion.div
-                variants={fadeInVariants}
-                className="border-t dark:border-gray-800 p-3 bg-white dark:bg-gray-900"
-              >
+              {/* Input area */}
+              <div className="border-t dark:border-gray-800 p-3 bg-white dark:bg-gray-900">
                 <AnimatePresence>
                   {showSuggestions && (
                     <SuggestionsPanel
@@ -2002,7 +2859,24 @@ Can you help me complete and implement this question?`;
                     />
                   )}
                 </AnimatePresence>
-                <div className="relative">
+
+                {/* Report Preview Form - positioned right above input */}
+                <AnimatePresence>
+                  {specialActions.show && (
+                    <SpecialActionUI
+                      specialActions={specialActions}
+                      handleRegradeRequest={handleRegradeRequest}
+                      handleIssueReport={handleIssueReport}
+                      handleCreateQuestion={handleCreateQuestion}
+                      handleReportPreview={handleReportPreview}
+                      handleFeedback={handleFeedback}
+                      handleSuggestion={handleSuggestion}
+                      handleInquiry={handleInquiry}
+                    />
+                  )}
+                </AnimatePresence>
+
+                <div className=" flex items-center space-x-2">
                   <textarea
                     ref={textareaRef}
                     value={userInput}
@@ -2010,29 +2884,15 @@ Can you help me complete and implement this question?`;
                     onKeyDown={handleKeyDown}
                     onFocus={() => setShowSuggestions(true)}
                     placeholder="Ask Mark anything..."
-                    className={`w-full pr-20 pl-4 py-3 text-sm border ${
+                    className={`w-full m-0  pl-4 py-3 text-sm border ${
                       isRecording
                         ? "border-red-400 dark:border-red-600"
                         : "dark:border-gray-700"
-                    } rounded-xl bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[56px] max-h-24`}
+                    } rounded-xl bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[90px] max-h-[120px]`}
                     style={{ maxHeight: "120px", overflowY: "auto" }}
                     disabled={isInitializing}
                   />
-                  <div className="absolute right-3 bottom-3 flex space-x-2">
-                    {userInput.trim() !== "" && (
-                      <motion.button
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={clearInput}
-                        className="p-1.5 rounded-full transition-colors bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
-                        title="Clear input"
-                      >
-                        <XMarkIcon className="w-4 h-4" />
-                      </motion.button>
-                    )}
+                  <div className="relative flex-col flex-1 ">
                     <motion.button
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
@@ -2078,9 +2938,9 @@ Can you help me complete and implement this question?`;
                     {getHelperText()}
                   </span>
                 </div>
-              </motion.div>
-            </motion.div>
-          </>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
       <ChatHistoryDrawer
@@ -2092,30 +2952,34 @@ Can you help me complete and implement this question?`;
         isLoading={isLoadingChats}
       />
 
-      <AnimatePresence>
-        {showReports && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center"
-            onClick={() => setShowReports(false)}
+      {showReports && (
+        <div
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center"
+          onClick={() => setShowReports(false)}
+        >
+          <div
+            className="w-full max-w-6xl m-4"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-2xl m-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <UserReportsPanel
-                userId={user?.userId || ""}
-                onClose={() => setShowReports(false)}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            <UserReportsPanel
+              userId={user?.userId || ""}
+              onClose={() => setShowReports(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      <ReportPreviewModal
+        isOpen={reportPreviewModal.isOpen}
+        onClose={() =>
+          setReportPreviewModal({ isOpen: false, type: "report", data: null })
+        }
+        reportType={reportPreviewModal.type}
+        initialData={reportPreviewModal.data}
+        isAuthor={userRole === "author"}
+        attemptId={learnerContext.assignmentId}
+        onSubmit={handleReportPreview}
+      />
+    </>
   );
 };

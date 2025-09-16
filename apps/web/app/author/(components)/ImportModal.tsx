@@ -15,7 +15,11 @@ import { ResponseType } from "@/config/types";
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (questions: QuestionAuthorStore[], options: ImportOptions) => void;
+  onImport: (
+    questions: QuestionAuthorStore[],
+    options: ImportOptions,
+    assignmentData?: ParsedData,
+  ) => void;
 }
 
 interface ImportOptions {
@@ -25,6 +29,7 @@ interface ImportOptions {
   importChoices: boolean;
   importRubrics: boolean;
   importConfig: boolean;
+  importAssignmentSettings: boolean;
 }
 
 interface ParsedData {
@@ -59,6 +64,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
     importChoices: true,
     importRubrics: true,
     importConfig: false,
+    importAssignmentSettings: false,
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [importStep, setImportStep] = useState<
@@ -445,10 +451,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           "No questions found in the file. Please check the file format and content.",
         );
       }
-
-      console.log(
-        `Successfully parsed ${data.questions.length} questions from ${file.name}`,
-      );
       setParsedData(data);
 
       if (importOptions.validateQuestions && data.questions) {
@@ -1273,7 +1275,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
       }));
     }
 
-    onImport(questionsToImport, importOptions);
+    onImport(questionsToImport, importOptions, parsedData);
     handleClose();
   };
 
@@ -1421,6 +1423,18 @@ const ImportModal: React.FC<ImportModalProps> = ({
                       {selectedFile?.name.split(".").pop()?.toUpperCase()}
                     </span>
                   </div>
+                  {parsedData.assignment && (
+                    <div>
+                      <span className="text-purple-700">Assignment data: </span>
+                      <span className="font-medium">Available</span>
+                    </div>
+                  )}
+                  {parsedData.config && (
+                    <div>
+                      <span className="text-purple-700">Configuration: </span>
+                      <span className="font-medium">Available</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1480,6 +1494,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
                       id: "importRubrics",
                       label: "Import rubrics and scoring",
                       description: "Include grading criteria",
+                    },
+                    {
+                      id: "importAssignmentSettings",
+                      label: "Import assignment settings",
+                      description:
+                        "Include assignment metadata, config, and instructions",
                     },
                     {
                       id: "validateQuestions",

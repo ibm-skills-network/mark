@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Get,
   Inject,
   Injectable,
@@ -29,6 +30,8 @@ import {
 import { Request } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Observable } from "rxjs";
+import { AdminService } from "src/api/admin/admin.service";
+import { AdminGuard } from "src/auth/guards/admin.guard";
 import {
   UserRole,
   UserSessionRequest,
@@ -58,6 +61,52 @@ import { JobStatusServiceV2 } from "../services/job-status.service";
 import { QuestionService } from "../services/question.service";
 import { ReportService } from "../services/report.repository";
 
+interface AdminSessionRequest extends Request {
+  adminSession: {
+    email: string;
+    role: UserRole;
+    sessionToken: string;
+  };
+}
+
+interface AssignmentAnalyticsResponse {
+  data: Array<{
+    id: number;
+    name: string;
+    totalCost: number;
+    uniqueLearners: number;
+    totalAttempts: number;
+    completedAttempts: number;
+    averageGrade: number;
+    averageRating: number;
+    published: boolean;
+    insights: {
+      questionInsights: Array<{
+        questionId: number;
+        questionText: string;
+        correctPercentage: number;
+        firstAttemptSuccessRate: number;
+        avgPointsEarned: number;
+        maxPoints: number;
+        insight: string;
+      }>;
+      performanceInsights: string[];
+      costBreakdown: {
+        grading: number;
+        questionGeneration: number;
+        translation: number;
+        other: number;
+      };
+    };
+  }>;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 /**
  * Controller that handles assignment-related API endpoints
  */
@@ -77,6 +126,7 @@ export class AssignmentControllerV2 {
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
     private readonly prisma: PrismaService,
+    private readonly adminService: AdminService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV2.name });
   }
@@ -400,6 +450,35 @@ export class AssignmentControllerV2 {
       assignmentId,
       payload,
       request.userSession.userId,
+    );
+  }
+
+  /**
+   * Get assignment analytics with detailed insights
+   */
+  @Get("analytics")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary:
+      "Get detailed assignment analytics with insights (for authors and admins)",
+  })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({ name: "search", required: false, type: String })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403 })
+  async getAssignmentAnalytics(
+    @Req() request: UserSessionRequest,
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query("search") search?: string,
+  ): Promise<AssignmentAnalyticsResponse> {
+    return await this.adminService.getAssignmentAnalytics(
+      request.userSession,
+      page,
+      limit,
+      search,
     );
   }
 }

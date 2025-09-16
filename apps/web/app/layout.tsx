@@ -2,9 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
-import { Toaster } from "sonner";
-import { MarkChat } from "./chatbot/components/MarkChat";
-import AuthorStoreBridge from "./chatbot/store/AuthorStoreBridge";
+import LayoutContent from "../components/LayoutContent";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,19 +28,15 @@ export const metadata: Metadata = {
     },
   ],
 };
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className}`} data-color-mode="light">
-        <MarkChat />
-        <AuthorStoreBridge />
-        <Toaster
-          richColors
-          position="bottom-left"
-          expand={true}
-          closeButton={true}
-        />
-        {children}
+    <html lang="en" className="h-full">
+      <body
+        className={`${inter.className} h-full m-0 p-0`}
+        data-color-mode="light"
+      >
+        <LayoutContent>{children}</LayoutContent>
       </body>
     </html>
   );

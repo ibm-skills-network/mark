@@ -120,7 +120,7 @@ async function runPgRestore(sqlFilePath: string) {
   const port = process.env.POSTGRES_PORT;
   const command = `PGPASSWORD=${password} pg_restore -d ${database} -U ${user} -h ${host} -p ${port} ${sqlFilePath}`;
   return new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
+    exec(command, (error, stdout) => {
       if (error) {
         reject(error);
       } else {
@@ -133,16 +133,15 @@ async function runPgRestore(sqlFilePath: string) {
 async function main() {
   // eslint-disable-next-line unicorn/prefer-module
   const sqlFilePath = path.join(__dirname, "seed.sql");
-  if (fs.existsSync(sqlFilePath)) {
-    await runPgRestore(sqlFilePath);
-  } else {
-    const assignment = await prisma.assignment.create({
-      data: {
-        name: "Cybersecurity Job Listing",
-        type: "AI_GRADED",
-        introduction:
-          "In this project, you will explore a Cybersecurity job listing and relate it to the concepts learned in the course.",
-        instructions: `Before submitting your responses, please ensure you have completed the following tasks:
+  await (fs.existsSync(sqlFilePath)
+    ? runPgRestore(sqlFilePath)
+    : prisma.assignment.create({
+        data: {
+          name: "Cybersecurity Job Listing",
+          type: "AI_GRADED",
+          introduction:
+            "In this project, you will explore a Cybersecurity job listing and relate it to the concepts learned in the course.",
+          instructions: `Before submitting your responses, please ensure you have completed the following tasks:
 
   **Task 1: Identify Cybersecurity Role and Find Job Listing**
   [A] - Identify a Cybersecurity job role that interests you.
@@ -160,7 +159,7 @@ async function main() {
   **Task 5: Create a Plan**
   Develop a roadmap to become eligible for this job.
   `,
-        gradingCriteriaOverview: `The assignment is worth 10 points and requires 60% to pass.
+          gradingCriteriaOverview: `The assignment is worth 10 points and requires 60% to pass.
 
   [1] (1 point) Provide the URL for your selected job listing.
   [2] (2 points) Provide company name, job title, and job location.
@@ -169,47 +168,46 @@ async function main() {
   [5] (3 points) Outline a plan to qualify for the job.
 
   Click "Begin Assignment" to submit your responses.`,
-        graded: true,
-        allotedTimeMinutes: 1,
-        displayOrder: "RANDOM",
-        showAssignmentScore: true,
-        showQuestionScore: true,
-        showSubmissionFeedback: true,
-        numAttempts: undefined,
-        timeEstimateMinutes: 1,
-        published: true,
-        questions: {
-          createMany: {
-            data: questions.map((q) => ({
-              ...q,
-              scoring: q.scoring as unknown as Prisma.InputJsonValue,
-              choices: q.choices as unknown as Prisma.InputJsonValue,
-            })),
+          graded: true,
+          allotedTimeMinutes: 1,
+          displayOrder: "RANDOM",
+          showAssignmentScore: true,
+          showQuestionScore: true,
+          showSubmissionFeedback: true,
+          numAttempts: undefined,
+          timeEstimateMinutes: 1,
+          published: true,
+          questions: {
+            createMany: {
+              data: questions.map((q) => ({
+                ...q,
+                scoring: q.scoring as unknown as Prisma.InputJsonValue,
+                choices: q.choices as unknown as Prisma.InputJsonValue,
+              })),
+            },
           },
-        },
-        groups: {
-          create: [
-            {
-              group: {
-                connectOrCreate: {
-                  where: {
-                    id: "test-group-id",
-                  },
-                  create: {
-                    id: "test-group-id",
+          groups: {
+            create: [
+              {
+                group: {
+                  connectOrCreate: {
+                    where: {
+                      id: "test-group-id",
+                    },
+                    create: {
+                      id: "test-group-id",
+                    },
                   },
                 },
               },
-            },
-          ],
+            ],
+          },
         },
-      },
-    });
-  }
+      }));
 }
 
 main()
-  .catch((error) => {
+  .catch(() => {
     // eslint-disable-next-line unicorn/no-process-exit
     process.exit(1);
   })

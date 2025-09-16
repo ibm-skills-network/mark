@@ -207,7 +207,7 @@ function LearnerHeader() {
                   .filter((choice) => choice !== undefined) || [],
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
         learnerFileResponse: q.learnerFileResponse || [],
-        learnerPresentationResponse: q.presentationResponse || [],
+        learnerPresentationResponse: q.presentationResponse ?? null,
       }));
     } catch (error: unknown) {
       const errorMessage =
@@ -249,8 +249,6 @@ function LearnerHeader() {
         undefined,
         handleProgressUpdate,
       );
-      console.log("Submission response:", res);
-
       // Process the response immediately after getting it
       if (res) {
         const { grade, feedbacksForQuestions } = res;

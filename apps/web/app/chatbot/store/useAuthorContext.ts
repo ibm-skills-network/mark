@@ -1,9 +1,12 @@
 /* eslint-disable */
 
 "use client";
+
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import { useEffect, useState, useCallback } from "react";
 import { shallow } from "zustand/shallow";
+
+/* eslint-disable */
 
 export interface UseAuthorContextInterface {
   getContextMessage: () => Promise<any>;

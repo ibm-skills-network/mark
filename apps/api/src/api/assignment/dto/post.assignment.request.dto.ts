@@ -1,6 +1,6 @@
-import { QuestionType } from "@prisma/client";
+import { QuestionType, ResponseType } from "@prisma/client";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
-import { ResponseType } from "@prisma/client";
+
 export interface QuestionsToGenerate {
   multipleChoice: number;
   multipleSelect: number;

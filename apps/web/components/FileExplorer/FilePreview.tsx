@@ -295,11 +295,6 @@ const FilePreview = ({
             }}
             draggable={false}
             onLoad={(e) => {
-              console.log(`[PREVIEW] Image loaded successfully:`, {
-                url: content.url,
-                naturalWidth: e.currentTarget.naturalWidth,
-                naturalHeight: e.currentTarget.naturalHeight,
-              });
               setIsLoading(false);
               setError(null);
             }}

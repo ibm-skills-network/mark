@@ -7,6 +7,7 @@ import type {
 import useCountdown from "@/hooks/use-countdown";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
+import { editedQuestionsOnly } from "@/lib/utils";
 import {
   useAssignmentDetails,
   useGitHubStore,
@@ -118,7 +119,8 @@ function Timer(props: Props) {
           }
           return file;
         }),
-        learnerPresentationResponse: q.presentationResponse || [],
+        learnerPresentationResponse: q.presentationResponse ?? null,
+        selectedLanguage: q.selectedLanguage, // Include question-specific language selection
       }),
     );
 

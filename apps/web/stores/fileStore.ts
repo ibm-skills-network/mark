@@ -1,7 +1,7 @@
 // stores/fileStore.ts
+import { getFileExtension } from "../components/FileExplorer/utils/fileUtils";
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
-import { getFileExtension } from "../components/FileExplorer/utils/fileUtils";
 
 export interface FileObject {
   id: string;

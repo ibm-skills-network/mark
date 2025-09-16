@@ -280,6 +280,21 @@ export function setQuestionTitle(questionId, title) {
 }
 
 /**
+ * Show a report preview form - this is handled client-side only
+ * @param {object} params - Parameters for the report preview (issueType, description, severity, etc.)
+ * @returns {Promise} - Promise that resolves with success
+ */
+export function showReportPreview(params) {
+  // This is a client-side only operation that triggers UI changes
+  // The actual form display is handled by the MarkChat component
+  return Promise.resolve({
+    success: true,
+    message: "Report preview form displayed",
+    data: params,
+  });
+}
+
+/**
  * Run an author operation directly without using the utility functions
  * This is a more flexible approach that can be used for any operation
  * @param {string} operation - The operation name
@@ -328,6 +343,12 @@ export function runAuthorOperation(operation, params) {
       return updateLearningObjectives(params.learningObjectives);
     case "setQuestionTitle":
       return setQuestionTitle(params.questionId, params.title);
+    case "showReportPreview":
+      // This is handled directly by the React component, not through store operations
+      return Promise.resolve({
+        success: true,
+        message: "Report preview handled by component",
+      });
     default:
       return Promise.reject(new Error(`Unknown operation: ${operation}`));
   }
@@ -343,6 +364,7 @@ export default {
   generateQuestionsFromObjectives,
   updateLearningObjectives,
   setQuestionTitle,
+  showReportPreview,
   executeAuthorStoreOperation,
   runAuthorOperation,
   waitForBridge,

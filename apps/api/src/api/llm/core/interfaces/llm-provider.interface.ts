@@ -1,4 +1,4 @@
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 
 export interface LlmRequestOptions {
   temperature?: number;

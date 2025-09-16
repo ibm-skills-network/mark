@@ -1,4 +1,6 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable unicorn/no-null */
+/* eslint-disable unicorn/number-literal-case */
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
@@ -79,7 +81,6 @@ export class ImageGradingService implements IImageGradingService {
       topBucket,
       topKey,
       learnerImages,
-      assignmentId,
     );
 
     const maxTotalPoints = this.calculateMaxPoints(
@@ -225,6 +226,8 @@ GRADING STANDARDS FOR IMAGES (STRICTLY ENFORCED):
 
 Remember: Most casual photographs should score in the "Needs Improvement" or "Satisfactory" range unless they demonstrate exceptional qualities.
 
+Make sure your feedback is short and concise.
+
 Respond with a JSON object containing:
 - Points awarded (sum of all rubric scores)
 - Separate fields for each AEEG component (analysis, evaluation, explanation, guidance)
@@ -260,23 +263,13 @@ Respond with a JSON object containing:
         finalPoints = 0;
       }
 
-      // Format rubric scores if available
-      let rubricDetails = "";
-      if (parsed.rubricScores && parsed.rubricScores.length > 0) {
-        rubricDetails = "\n\n**Rubric Scoring:**\n";
-        for (const score of parsed.rubricScores) {
-          rubricDetails += `${score.pointsAwarded}/${score.maxPoints} points\n`;
-          rubricDetails += `Justification: ${score.justification}\n\n`;
-        }
-      }
-
       // Combine the AEEG components into comprehensive feedback
       const aeegFeedback = `
 **Analysis:**
 ${parsed.analysis}
 
 **Evaluation:**
-${parsed.evaluation}${rubricDetails}
+${parsed.evaluation}
 
 **Explanation:**
 ${parsed.explanation}
@@ -430,7 +423,6 @@ ${parsed.guidance}
     topBucket: string,
     topKey: string,
     learnerImages: LearnerImageUpload[],
-    assignmentId: number,
   ): Promise<ProcessedImageData> {
     if (topImageData && topImageData !== "InCos") {
       return await this.processDirectImageData(topImageData);

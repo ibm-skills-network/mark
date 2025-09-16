@@ -1,9 +1,9 @@
 // src/components/FileExplorer/utils/fileActions.ts
-import axios, { AxiosProgressEvent } from "axios";
-import { FileObject } from "@/stores/fileStore";
 import { ExtendedFileContent, readFile } from "@/app/Helpers/fileReader";
-import { toast } from "sonner";
 import { EnhancedFileObject } from "@/config/types";
+import { FileObject } from "@/stores/fileStore";
+import axios, { AxiosProgressEvent } from "axios";
+import { toast } from "sonner";
 
 // Type definitions for responses
 interface PresignedUrlResponse {

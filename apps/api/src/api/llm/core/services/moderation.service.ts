@@ -1,10 +1,9 @@
-import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
-import { OpenAIModerationChain } from "langchain/chains";
+import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { sanitize } from "isomorphic-dompurify";
-import { IModerationService } from "../interfaces/moderation.interface";
+import { OpenAIModerationChain } from "langchain/chains";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Inject } from "@nestjs/common";
 import { Logger } from "winston";
+import { IModerationService } from "../interfaces/moderation.interface";
 
 @Injectable()
 export class ModerationService implements IModerationService {
@@ -33,7 +32,9 @@ export class ModerationService implements IModerationService {
       );
     } catch (error) {
       this.logger.error(
-        `Error validating content: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error validating content: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
 
       return true;
@@ -52,7 +53,9 @@ export class ModerationService implements IModerationService {
       return sanitizedContent;
     } catch (error) {
       this.logger.error(
-        `Error sanitizing content: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error sanitizing content: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
 
       return content;

@@ -1,6 +1,6 @@
 import { EnhancedQuestionsToGenerate } from "src/api/assignment/dto/post.assignment.request.dto";
-import { ValidationResult } from "../services/question-validator.service";
 import { DifficultyLevel } from "../services/question-generation.service";
+import { ValidationResult } from "../services/question-validator.service";
 
 /**
  * Interface for the question validator service

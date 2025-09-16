@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
   ChoiceBasedFeedbackDto,
@@ -11,6 +17,8 @@ import {
   QuestionDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { Logger } from "winston";
+import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
@@ -20,9 +28,17 @@ import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
   constructor(
     protected readonly localizationService: LocalizationService,
+    @Inject(GRADING_AUDIT_SERVICE)
     protected readonly gradingAuditService: GradingAuditService,
+    @Optional() @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger,
   ) {
-    super(localizationService, gradingAuditService);
+    super(
+      localizationService,
+      gradingAuditService,
+      undefined,
+      undefined,
+      parentLogger,
+    );
   }
 
   /**
@@ -92,25 +108,29 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     learnerResponse: string[],
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    let responseDto: CreateQuestionResponseAttemptResponseDto;
+
     if (question.type === QuestionType.SINGLE_CORRECT) {
       const result = await this.gradeSingleChoice(
         question,
         learnerResponse,
         context,
       );
-      return result.responseDto;
+      responseDto = result.responseDto;
     } else if (question.type === QuestionType.MULTIPLE_CORRECT) {
       const result = await this.gradeMultipleChoice(
         question,
         learnerResponse,
         context,
       );
-      return result.responseDto;
+      responseDto = result.responseDto;
     } else {
       throw new BadRequestException(
         `Unsupported choice question type: ${question.type}`,
       );
     }
+
+    return responseDto;
   }
 
   /**

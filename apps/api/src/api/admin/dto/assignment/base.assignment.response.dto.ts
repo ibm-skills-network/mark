@@ -15,6 +15,26 @@ export class BaseAssignmentResponseDto {
   })
   success: boolean;
 
+  @ApiProperty({
+    description: "The name of the assignment.",
+    type: String,
+    required: true,
+  })
+  name: string;
+
+  @ApiProperty({
+    description: "The type of the assignment.",
+    type: String,
+    required: true,
+  })
+  type: string;
+
   @ApiPropertyOptional({ description: "Optional error message.", type: String })
   error?: string;
+  @ApiProperty({
+    description: "The number of unique users associated with the assignment.",
+    type: Number,
+    required: true,
+  })
+  uniqueUsers?: number;
 }

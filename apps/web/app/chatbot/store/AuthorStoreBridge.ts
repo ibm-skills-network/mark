@@ -2,9 +2,11 @@
 
 "use client";
 
-import { useEffect } from "react";
-import { OptionalQuestion, useAuthorStore } from "@/stores/author";
 import { QuestionType } from "@/config/types";
+import { OptionalQuestion, useAuthorStore } from "@/stores/author";
+import { useEffect } from "react";
+
+/* eslint-disable */
 
 declare global {
   interface Window {

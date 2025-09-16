@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
 import { HttpService } from "@nestjs/axios";
 import {
@@ -5,7 +6,14 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { AssignmentAttempt, Question } from "@prisma/client";
+import {
+  AssignmentAttempt,
+  AssignmentQuestionDisplayOrder,
+  Question,
+  QuestionType,
+  QuestionVariant,
+  ResponseType,
+} from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { GRADE_SUBMISSION_EXCEPTION } from "src/api/assignment/attempt/api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
@@ -74,28 +82,87 @@ export class AttemptSubmissionService {
 
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
 
+    // Get the assignment with its active version for version-aware attempt creation
+    const assignmentWithActiveVersion = await this.prisma.assignment.findUnique(
+      {
+        where: { id: assignmentId },
+        include: {
+          currentVersion: {
+            include: {
+              questionVersions: true,
+            },
+          },
+          // Fallback to legacy questions if no active version exists
+          questions: {
+            where: { isDeleted: false },
+            include: {
+              variants: {
+                where: { isDeleted: false },
+              },
+            },
+          },
+        },
+      },
+    );
+
+    if (!assignmentWithActiveVersion) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentId} not found.`,
+      );
+    }
+
+    const activeVersionId = assignmentWithActiveVersion.currentVersionId;
+
     const assignmentAttempt = await this.prisma.assignmentAttempt.create({
       data: {
         expiresAt: attemptExpiresAt,
         submitted: false,
         assignmentId,
+        assignmentVersionId: activeVersionId, // Store the active version ID
         grade: undefined,
         userId: userSession.userId,
         questionOrder: [],
       },
     });
 
-    const questions = (await this.prisma.question.findMany({
-      where: {
-        assignmentId,
-        isDeleted: false,
-      },
-      include: {
-        variants: {
-          where: { isDeleted: false },
-        },
-      },
-    })) as unknown as QuestionDto[];
+    // Use questions from active version if available, otherwise fallback to legacy questions
+    const questions: QuestionDto[] =
+      assignmentWithActiveVersion?.currentVersion?.questionVersions?.length > 0
+        ? assignmentWithActiveVersion.currentVersion.questionVersions.map(
+            (qv) => ({
+              id: qv.questionId || qv.id, // Use questionId if available, fallback to qv.id
+              question: qv.question,
+              type: qv.type,
+              assignmentId: assignmentId, // Set from parameter since QuestionVersion doesn't have this
+              totalPoints: qv.totalPoints,
+              maxWords: qv.maxWords,
+              maxCharacters: qv.maxCharacters,
+              choices: qv.choices as unknown as Choice[],
+              scoring: qv.scoring as unknown as ScoringDto,
+              answer: qv.answer,
+              variants: [], // QuestionVersions don't have variants, use empty array
+              gradingContextQuestionIds: qv.gradingContextQuestionIds,
+              responseType: qv.responseType,
+              isDeleted: false, // QuestionVersions are not deleted by definition
+              randomizedChoices: qv.randomizedChoices,
+              videoPresentationConfig:
+                qv.videoPresentationConfig as unknown as VideoPresentationConfig,
+              liveRecordingConfig: qv.liveRecordingConfig as object,
+            }),
+          )
+        : ((assignmentWithActiveVersion?.questions || []).map((q) => ({
+            ...q,
+            scoring: q.scoring as unknown as ScoringDto,
+            choices: q.choices as unknown as Choice[],
+            videoPresentationConfig:
+              q.videoPresentationConfig as unknown as VideoPresentationConfig,
+            liveRecordingConfig: q.liveRecordingConfig as object,
+            variants: (q.variants || []).map((v: QuestionVariant) => ({
+              ...v,
+              choices: v.choices as unknown as Choice[],
+              scoring: v.scoring as unknown as ScoringDto,
+            })),
+          })) as QuestionDto[]);
 
     // match number of questions to the assignment settings numberOfQuestionsPerAttempt
     if (
@@ -195,7 +262,7 @@ export class AttemptSubmissionService {
     request: UserSessionRequest,
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
-    const { role, userId } = request.userSession;
+    const { role } = request.userSession;
     if (role === UserRole.LEARNER) {
       return this.updateLearnerAttempt(
         attemptId,
@@ -231,6 +298,11 @@ export class AttemptSubmissionService {
         questionVariants: {
           include: { questionVariant: { include: { variantOf: true } } },
         },
+        assignmentVersion: {
+          include: {
+            questionVersions: true,
+          },
+        },
       },
     });
 
@@ -240,9 +312,31 @@ export class AttemptSubmissionService {
       );
     }
 
-    const questions = await this.prisma.question.findMany({
-      where: { assignmentId: assignmentAttempt.assignmentId },
-    });
+    // Use version-specific questions if available, otherwise fallback to legacy questions
+    const questions: unknown[] =
+      assignmentAttempt.assignmentVersionId &&
+      assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
+        ? assignmentAttempt.assignmentVersion.questionVersions.map((qv) => ({
+            id: qv.questionId || qv.id,
+            question: qv.question,
+            type: qv.type,
+            assignmentId: assignmentAttempt.assignmentId,
+            totalPoints: qv.totalPoints,
+            maxWords: qv.maxWords,
+            maxCharacters: qv.maxCharacters,
+            choices: qv.choices,
+            scoring: qv.scoring,
+            answer: qv.answer,
+            gradingContextQuestionIds: qv.gradingContextQuestionIds,
+            responseType: qv.responseType,
+            isDeleted: false,
+            randomizedChoices: qv.randomizedChoices,
+            videoPresentationConfig: qv.videoPresentationConfig,
+            liveRecordingConfig: qv.liveRecordingConfig,
+          }))
+        : await this.prisma.question.findMany({
+            where: { assignmentId: assignmentAttempt.assignmentId },
+          });
 
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
@@ -255,6 +349,7 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showCorrectAnswer: true,
       },
     });
 
@@ -264,48 +359,75 @@ export class AttemptSubmissionService {
       );
     }
 
-    const questionDtos: EnhancedAttemptQuestionDto[] = questions.map((q) => ({
-      id: q.id,
-      question: q.question,
-      type: q.type,
-      assignmentId: q.assignmentId,
-      totalPoints: q.totalPoints,
-      maxWords: q.maxWords || undefined,
-      maxCharacters: q.maxCharacters || undefined,
-      choices: this.parseJsonValue<Choice[]>(q.choices, []),
-      scoring: this.parseJsonValue<ScoringDto>(q.scoring, {
-        type: ScoringType.CRITERIA_BASED,
-        showRubricsToLearner: false,
-        rubrics: [],
-      }),
-      answer:
-        typeof q.answer === "boolean"
-          ? String(q.answer)
-          : q.answer !== null && q.answer !== undefined
-            ? String(q.answer)
-            : undefined,
-      gradingContextQuestionIds: q.gradingContextQuestionIds || [],
-      responseType: q.responseType || undefined,
-      isDeleted: q.isDeleted,
-      randomizedChoices:
-        typeof q.randomizedChoices === "string"
-          ? q.randomizedChoices
-          : JSON.stringify(q.randomizedChoices ?? false),
-      videoPresentationConfig:
-        this.parseJsonValue<VideoPresentationConfig | null>(
-          q.videoPresentationConfig,
-          null,
-        ),
-      liveRecordingConfig: this.parseJsonValue<Record<string, unknown> | null>(
-        q.liveRecordingConfig,
-        null,
-      ),
-    }));
+    const questionDtos: EnhancedAttemptQuestionDto[] = questions.map((q) => {
+      const question = q as Record<string, unknown>;
+
+      const answerValue =
+        typeof question.answer === "boolean"
+          ? String(question.answer)
+          : question.answer !== null && question.answer !== undefined
+            ? String(question.answer)
+            : undefined;
+
+      const randomizedChoicesValue: string =
+        typeof question.randomizedChoices === "string"
+          ? question.randomizedChoices
+          : JSON.stringify(question.randomizedChoices ?? false);
+
+      return {
+        id: question.id as number,
+        question: question.question as string,
+        type: question.type as QuestionType,
+        assignmentId: question.assignmentId as number,
+        totalPoints: question.totalPoints as number,
+        maxWords: (question.maxWords as number) || undefined,
+        maxCharacters: (question.maxCharacters as number) || undefined,
+        choices: this.parseJsonValue<Choice[]>(question.choices, []),
+        scoring: this.parseJsonValue<ScoringDto>(question.scoring, {
+          type: ScoringType.CRITERIA_BASED,
+          showRubricsToLearner: false,
+          rubrics: [],
+        }),
+        answer: answerValue,
+        gradingContextQuestionIds:
+          (question.gradingContextQuestionIds as number[]) || [],
+        responseType: (question.responseType as ResponseType) || undefined,
+        isDeleted: question.isDeleted as boolean,
+        randomizedChoices: randomizedChoicesValue,
+        videoPresentationConfig:
+          this.parseJsonValue<VideoPresentationConfig | null>(
+            question.videoPresentationConfig,
+            null,
+          ),
+        liveRecordingConfig: this.parseJsonValue<Record<
+          string,
+          unknown
+        > | null>(question.liveRecordingConfig, null),
+      };
+    });
 
     const formattedAttempt: AssignmentAttemptWithRelations = {
       ...assignmentAttempt,
       questionVariants: assignmentAttempt.questionVariants.map((qv) => ({
         questionId: qv.questionId,
+        questionVariant: qv.questionVariant
+          ? {
+              ...qv.questionVariant,
+              answer:
+                typeof qv.questionVariant.answer === "boolean"
+                  ? String(qv.questionVariant.answer)
+                  : qv.questionVariant.answer,
+              variantOf: qv.questionVariant.variantOf
+                ? {
+                    ...qv.questionVariant.variantOf,
+                    answer:
+                      typeof qv.questionVariant.variantOf.answer === "boolean"
+                        ? String(qv.questionVariant.variantOf.answer)
+                        : qv.questionVariant.variantOf.answer,
+                  }
+                : undefined,
+            }
+          : null,
         randomizedChoices:
           typeof qv.randomizedChoices === "string"
             ? qv.randomizedChoices
@@ -335,6 +457,7 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestions: assignment.showQuestions,
       showQuestionScore: assignment.showQuestionScore,
+      showCorrectAnswer: assignment.showCorrectAnswer,
       comments: assignmentAttempt.comments,
     };
   }
@@ -361,6 +484,11 @@ export class AttemptSubmissionService {
             },
           },
         },
+        assignmentVersion: {
+          include: {
+            questionVersions: true,
+          },
+        },
       },
     });
 
@@ -370,7 +498,7 @@ export class AttemptSubmissionService {
       );
     }
 
-    const assignment = await this.prisma.assignment.findUnique({
+    const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
         questions: true,
@@ -381,13 +509,50 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestions: true,
         showQuestionScore: true,
+        showCorrectAnswer: true,
       },
-    });
+    })) as {
+      questions: Question[];
+      questionOrder: number[];
+      displayOrder: AssignmentQuestionDisplayOrder | null;
+      passingGrade: number;
+      showAssignmentScore: boolean;
+      showSubmissionFeedback: boolean;
+      showQuestions: boolean;
+      showQuestionScore: boolean;
+      showCorrectAnswer: boolean;
+    };
+
+    // Get version-specific questions for translation if available
+    const questionsForTranslation: QuestionDto[] =
+      assignmentAttempt.assignmentVersionId &&
+      assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
+        ? (assignmentAttempt.assignmentVersion.questionVersions.map((qv) => ({
+            id: qv.questionId || qv.id,
+            question: qv.question,
+            type: qv.type,
+            assignmentId: assignmentAttempt.assignmentId,
+            totalPoints: qv.totalPoints,
+            maxWords: qv.maxWords,
+            maxCharacters: qv.maxCharacters,
+            choices: qv.choices as unknown as Choice[],
+            scoring: qv.scoring as unknown as ScoringDto,
+            answer: qv.answer,
+            variants: [],
+            gradingContextQuestionIds: qv.gradingContextQuestionIds,
+            responseType: qv.responseType,
+            isDeleted: false,
+            randomizedChoices: qv.randomizedChoices,
+            videoPresentationConfig:
+              qv.videoPresentationConfig as unknown as VideoPresentationConfig,
+            liveRecordingConfig: qv.liveRecordingConfig as object,
+          })) as QuestionDto[])
+        : (assignment.questions as unknown as QuestionDto[]);
 
     const translations =
       await this.translationService.getTranslationsForAttempt(
         assignmentAttempt,
-        assignment.questions as unknown as QuestionDto[],
+        questionsForTranslation,
       );
 
     const formattedAttempt: AssignmentAttemptWithRelations = {
@@ -425,7 +590,7 @@ export class AttemptSubmissionService {
         normalizedLanguage,
       );
 
-    this.removeSensitiveData(finalQuestions);
+    this.removeSensitiveData(finalQuestions, assignment);
 
     return {
       ...assignmentAttempt,
@@ -435,6 +600,7 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
+      showCorrectAnswer: assignment.showCorrectAnswer,
     };
   }
 
@@ -572,6 +738,7 @@ export class AttemptSubmissionService {
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
+        showCorrectAnswer: assignment.showCorrectAnswer,
         feedbacksForQuestions:
           this.gradingService.constructFeedbacksForQuestions(
             successfulQuestionResponses,
@@ -658,6 +825,7 @@ export class AttemptSubmissionService {
         grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
+        showCorrectAnswer: assignment.showCorrectAnswer,
         feedbacksForQuestions:
           this.gradingService.constructFeedbacksForQuestions(
             successfulQuestionResponses,
@@ -701,6 +869,7 @@ export class AttemptSubmissionService {
       feedbacksForQuestions: [],
       message: "The attempt deadline has passed.",
       showQuestions: false,
+      showCorrectAnswer: false,
     };
   }
 
@@ -909,6 +1078,7 @@ export class AttemptSubmissionService {
       showSubmissionFeedback?: boolean;
       showQuestionScore?: boolean;
       showQuestions?: boolean;
+      showCorrectAnswer?: boolean;
     },
   ): void {
     if (assignment.showAssignmentScore === false) {
@@ -942,7 +1112,12 @@ export class AttemptSubmissionService {
   /**
    * Remove sensitive data from questions
    */
-  private removeSensitiveData(questions: AttemptQuestionDto[]): void {
+  private removeSensitiveData(
+    questions: AttemptQuestionDto[],
+    assignment: {
+      showCorrectAnswer?: boolean;
+    },
+  ): void {
     for (const question of questions) {
       if (!question.scoring?.showRubricsToLearner) {
         delete question.scoring?.rubrics;
@@ -951,8 +1126,10 @@ export class AttemptSubmissionService {
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;
-          delete choice.isCorrect;
-          delete choice.feedback;
+          if (assignment.showCorrectAnswer === false) {
+            delete choice.isCorrect;
+            delete choice.feedback;
+          }
         }
       }
 
@@ -962,8 +1139,10 @@ export class AttemptSubmissionService {
           if (translationObject?.translatedChoices) {
             for (const choice of translationObject.translatedChoices) {
               delete choice.points;
-              delete choice.isCorrect;
-              delete choice.feedback;
+              if (assignment.showCorrectAnswer === false) {
+                delete choice.isCorrect;
+                delete choice.feedback;
+              }
             }
           }
         }
@@ -984,8 +1163,10 @@ export class AttemptSubmissionService {
         if (Array.isArray(randomizedArray)) {
           for (const choice of randomizedArray) {
             delete choice.points;
-            delete choice.isCorrect;
-            delete choice.feedback;
+            if (assignment.showCorrectAnswer === false) {
+              delete choice.isCorrect;
+              delete choice.feedback;
+            }
           }
           question.randomizedChoices = JSON.stringify(randomizedArray);
         } else {

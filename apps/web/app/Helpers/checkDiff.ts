@@ -75,6 +75,7 @@ export function useChangesSummary(): string {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showCorrectAnswer,
   } = useAssignmentFeedbackConfig();
 
   const changesSummary = useMemo(() => {
@@ -113,6 +114,14 @@ export function useChangesSummary(): string {
       !safeCompare(showAssignmentScore, originalAssignment.showAssignmentScore)
     )
       diffs.push("Changed assignment score visibility.");
+
+    if (
+      !safeCompare(
+        showCorrectAnswer,
+        originalAssignment.showCorrectAnswer ?? true,
+      )
+    )
+      diffs.push("Changed correct answer visibility.");
 
     // check if question order is different
     if (!safeArrayCompare(questionOrder, originalAssignment.questionOrder)) {

@@ -16,6 +16,12 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   status,
 }) => {
   const [messages, setMessages] = useState<string[]>([]);
+  const [maxProgress, setMaxProgress] = useState(0);
+
+  // track max progress so it never goes backwards
+  useEffect(() => {
+    setMaxProgress((prev) => (progress > prev ? progress : prev));
+  }, [progress]);
 
   useEffect(() => {
     if (
@@ -47,11 +53,11 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
 
   const progressVariants = {
     hidden: { width: 0 },
-    visible: { width: `${progress}%` },
+    visible: { width: `${maxProgress}%` }, // use maxProgress instead of raw progress
   };
 
   return (
-    <div className="w-full p-2 sm:p-4 bg-white rounded-lg shadow-md">
+    <div className="w-full p-2 sm:p-4 ">
       <div className="relative mb-3 sm:mb-4">
         <div className="h-2 sm:h-3 rounded-full bg-gray-200 overflow-hidden">
           <motion.div
@@ -69,7 +75,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            {Math.round(progress)}% {getStatusIcon()}
+            {Math.round(maxProgress)}% {getStatusIcon()}
           </motion.span>
         </div>
       </div>

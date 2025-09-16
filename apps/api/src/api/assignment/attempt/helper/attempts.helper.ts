@@ -7,6 +7,7 @@ import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { ChoiceBasedQuestionResponseModel } from "../../../llm/model/choice.based.question.response.model";
+import { FileBasedQuestionResponseModel } from "../../../llm/model/file.based.question.response.model";
 import { TextBasedQuestionResponseModel } from "../../../llm/model/text.based.question.response.model";
 import { TrueFalseBasedQuestionResponseModel } from "../../../llm/model/true.false.based.question.response.model";
 import { UrlBasedQuestionResponseModel } from "../../../llm/model/url.based.question.response.model";
@@ -24,10 +25,12 @@ export const AttemptHelper = {
       | UrlBasedQuestionResponseModel
       | TextBasedQuestionResponseModel
       | ChoiceBasedQuestionResponseModel
-      | TrueFalseBasedQuestionResponseModel,
+      | TrueFalseBasedQuestionResponseModel
+      | FileBasedQuestionResponseModel,
     responseDto: CreateQuestionResponseAttemptResponseDto,
   ) {
     responseDto.totalPoints = model.points;
+
     if (model instanceof ChoiceBasedQuestionResponseModel) {
       responseDto.feedback = model.feedback as ChoiceBasedFeedbackDto[];
     } else if (model instanceof TrueFalseBasedQuestionResponseModel) {
@@ -37,6 +40,109 @@ export const AttemptHelper = {
           feedback: model.feedback,
         },
       ] as TrueFalseBasedFeedbackDto[];
+    } else if (model instanceof FileBasedQuestionResponseModel) {
+      // Handle file-based responses with enhanced rubric data
+      const generalFeedbackDto = new GeneralFeedbackDto();
+      generalFeedbackDto.feedback = model.feedback;
+
+      // Add AEEG components if available and not already present in feedback
+      if (
+        model.analysis ||
+        model.evaluation ||
+        model.explanation ||
+        model.guidance
+      ) {
+        const feedbackLower = generalFeedbackDto.feedback.toLowerCase();
+        const hasExistingStructure =
+          feedbackLower.includes("analysis:") ||
+          feedbackLower.includes("evaluation:") ||
+          feedbackLower.includes("explanation:") ||
+          feedbackLower.includes("guidance:");
+
+        if (!hasExistingStructure) {
+          let aeegSection = "\n\n**Detailed Breakdown:**\n";
+          if (model.analysis) {
+            aeegSection += `\n**Analysis:** ${model.analysis}\n`;
+          }
+          if (model.evaluation) {
+            aeegSection += `\n**Evaluation:** ${model.evaluation}\n`;
+          }
+          if (model.explanation) {
+            aeegSection += `\n**Explanation:** ${model.explanation}\n`;
+          }
+          if (model.guidance) {
+            aeegSection += `\n**Guidance:** ${model.guidance}\n`;
+          }
+          generalFeedbackDto.feedback += aeegSection;
+        }
+      }
+
+      responseDto.feedback = [generalFeedbackDto];
+
+      // Add rubric metadata for judge validation
+      if (model.rubricScores && model.rubricScores.length > 0) {
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          rubricScores: model.rubricScores,
+          hasDetailedRubrics: true,
+          rubricCount: model.rubricScores.length,
+        };
+      }
+    } else if (model instanceof TextBasedQuestionResponseModel) {
+      // Handle text-based responses with enhanced rubric data (similar to file-based)
+      const generalFeedbackDto = new GeneralFeedbackDto();
+      generalFeedbackDto.feedback = model.feedback;
+
+      // Add AEEG components if available and not already present in feedback
+      if (
+        model.analysis ||
+        model.evaluation ||
+        model.explanation ||
+        model.guidance
+      ) {
+        const feedbackLower = generalFeedbackDto.feedback.toLowerCase();
+        const hasExistingStructure =
+          feedbackLower.includes("analysis:") ||
+          feedbackLower.includes("evaluation:") ||
+          feedbackLower.includes("explanation:") ||
+          feedbackLower.includes("guidance:");
+
+        if (!hasExistingStructure) {
+          let aeegSection = "\n\n**Detailed Breakdown:**\n";
+          if (model.analysis) {
+            aeegSection += `\n**Analysis:** ${model.analysis}\n`;
+          }
+          if (model.evaluation) {
+            aeegSection += `\n**Evaluation:** ${model.evaluation}\n`;
+          }
+          if (model.explanation) {
+            aeegSection += `\n**Explanation:** ${model.explanation}\n`;
+          }
+          if (model.guidance) {
+            aeegSection += `\n**Guidance:** ${model.guidance}\n`;
+          }
+          generalFeedbackDto.feedback += aeegSection;
+        }
+      }
+      responseDto.feedback = [generalFeedbackDto];
+
+      // Add rubric metadata for judge validation
+      if (model.rubricScores && model.rubricScores.length > 0) {
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          rubricScores: model.rubricScores,
+          hasDetailedRubrics: true,
+          rubricCount: model.rubricScores.length,
+        };
+      }
+
+      // Add judge metadata if available
+      if (model.metadata) {
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          ...model.metadata,
+        };
+      }
     } else {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
@@ -169,7 +275,7 @@ export const AttemptHelper = {
               );
               if (fileList.length > 0) {
                 content += "Repository Files:\n";
-                fileList.each((index, element) => {
+                fileList.each((_, element) => {
                   const fileName = $(element)
                     .find(".js-navigation-open")
                     .text()

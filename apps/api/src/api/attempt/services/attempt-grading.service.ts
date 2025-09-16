@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Assignment } from "@prisma/client";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 
 @Injectable()
 export class AttemptGradingService {

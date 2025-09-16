@@ -85,6 +85,14 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     required: false,
   })
   showQuestionScore: boolean;
+
+  @ApiProperty({
+    description: "Show correct answer",
+    type: Boolean,
+    required: false,
+  })
+  showCorrectAnswer: boolean;
+
   @ApiPropertyOptional({
     description: "The comments for the question.",
     type: String,

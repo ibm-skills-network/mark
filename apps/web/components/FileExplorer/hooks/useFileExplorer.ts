@@ -1,8 +1,8 @@
 // hooks/useFileExplorer.ts
-import { useState, useCallback, useEffect } from "react";
-import axios from "axios";
-import { FileObject, useFileStore } from "@/stores/fileStore";
 import { ExtendedFileContent, readFile } from "@/app/Helpers/fileReader";
+import { FileObject, useFileStore } from "@/stores/fileStore";
+import axios from "axios";
+import { useState, useCallback, useEffect } from "react";
 
 interface UseFileExplorerProps {
   uploadType: "author" | "learner" | "debug";

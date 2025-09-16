@@ -1,6 +1,6 @@
 import { Controller, Get, Injectable, Param, Post, Req } from "@nestjs/common";
-import { NotificationsService } from "../services/notification.service";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import { NotificationsService } from "../services/notification.service";
 
 @Injectable()
 @Controller({

@@ -2,6 +2,7 @@ import { AVAILABLE_LANGUAGES } from "@/app/Helpers/getLanguageName";
 import type {
   Assignment,
   AssignmentAttempt,
+  AssignmentDetails,
   Choice,
   PresentationQuestionResponse,
   QuestionStatus,
@@ -11,6 +12,7 @@ import type {
   slideMetaData,
 } from "@/config/types";
 import { getUser } from "@/lib/talkToBackend";
+import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
@@ -428,7 +430,7 @@ export type LearnerActions = {
   ) => void;
   setTranslatedChoices: (
     questionId: number,
-    translatedChoices: Choice[],
+    translatedChoices: string[],
   ) => void;
   setGlobalLanguage: (language: string) => void;
   setUserPreferedLanguage: (language: string) => void;
@@ -452,7 +454,7 @@ const isQuestionEdited = (question: QuestionStore) => {
     learnerChoices,
     learnerAnswerChoice,
     learnerFileResponse,
-    learnePresentationResponse,
+    learnerPresentationResponse,
   } = question;
   return (
     (learnerTextResponse &&
@@ -462,7 +464,7 @@ const isQuestionEdited = (question: QuestionStore) => {
     (learnerChoices && learnerChoices.length > 0) ||
     learnerAnswerChoice !== undefined ||
     learnerFileResponse?.map((file) => file?.content).join("") !== "" ||
-    learnePresentationResponse !== undefined ||
+    learnerPresentationResponse !== undefined ||
     false
   );
 };

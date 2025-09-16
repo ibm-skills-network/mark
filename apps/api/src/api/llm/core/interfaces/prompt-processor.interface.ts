@@ -3,6 +3,17 @@ import { AIUsageType } from "@prisma/client";
 
 export interface IPromptProcessor {
   /**
+   * Process a prompt using assigned model for a specific feature
+   */
+  processPromptForFeature(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    featureKey: string,
+    fallbackModel?: string,
+  ): Promise<string>;
+
+  /**
    * Process a text prompt and return the LLM response
    */
   processPrompt(

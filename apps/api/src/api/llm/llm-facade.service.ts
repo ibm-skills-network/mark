@@ -1,36 +1,41 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
-
-import {
-  PROMPT_PROCESSOR,
-  MODERATION_SERVICE,
-  TEXT_GRADING_SERVICE,
-  FILE_GRADING_SERVICE,
-  IMAGE_GRADING_SERVICE,
-  URL_GRADING_SERVICE,
-  PRESENTATION_GRADING_SERVICE,
-  VIDEO_PRESENTATION_GRADING_SERVICE,
-  QUESTION_GENERATION_SERVICE,
-  RUBRIC_SERVICE,
-  TRANSLATION_SERVICE,
-} from "./llm.constants";
-
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
+import { LearnerLiveRecordingFeedback } from "../assignment/attempt/dto/assignment-attempt/types";
 import { QuestionsToGenerate } from "../assignment/dto/post.assignment.request.dto";
 import {
-  QuestionDto,
-  ScoringDto,
   Choice,
-  VariantDto,
+  QuestionDto,
   RubricDto,
+  ScoringDto,
+  VariantDto,
 } from "../assignment/dto/update.questions.request.dto";
-import { LearnerLiveRecordingFeedback } from "../assignment/attempt/dto/assignment-attempt/types";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { IModerationService } from "./core/interfaces/moderation.interface";
 import { IPromptProcessor } from "./core/interfaces/prompt-processor.interface";
+import { IFileGradingService } from "./features/grading/interfaces/file-grading.interface";
+import { IImageGradingService } from "./features/grading/interfaces/image-grading.interface";
+import { IPresentationGradingService } from "./features/grading/interfaces/presentation-grading.interface";
 import { ITextGradingService } from "./features/grading/interfaces/text-grading.interface";
+import { IUrlGradingService } from "./features/grading/interfaces/url-grading.interface";
+import { IVideoPresentationGradingService } from "./features/grading/interfaces/video-grading.interface";
 import { IQuestionGenerationService } from "./features/question-generation/interfaces/question-generation.interface";
+import { AssignmentTypeEnum } from "./features/question-generation/services/question-generation.service";
 import { IRubricService } from "./features/rubric/interfaces/rubric.interface";
 import { ITranslationService } from "./features/translation/interfaces/translation.interface";
+import {
+  FILE_GRADING_SERVICE,
+  IMAGE_GRADING_SERVICE,
+  MODERATION_SERVICE,
+  PRESENTATION_GRADING_SERVICE,
+  PROMPT_PROCESSOR,
+  QUESTION_GENERATION_SERVICE,
+  RUBRIC_SERVICE,
+  TEXT_GRADING_SERVICE,
+  TRANSLATION_SERVICE,
+  URL_GRADING_SERVICE,
+  VIDEO_PRESENTATION_GRADING_SERVICE,
+} from "./llm.constants";
 import { FileUploadQuestionEvaluateModel } from "./model/file.based.question.evaluate.model";
 import { FileBasedQuestionResponseModel } from "./model/file.based.question.response.model";
 import { ImageBasedQuestionEvaluateModel } from "./model/image.based.evalutate.model";
@@ -43,13 +48,6 @@ import { UrlBasedQuestionEvaluateModel } from "./model/url.based.question.evalua
 import { UrlBasedQuestionResponseModel } from "./model/url.based.question.response.model";
 import { VideoPresentationQuestionEvaluateModel } from "./model/video-presentation.question.evaluate.model";
 import { VideoPresentationQuestionResponseModel } from "./model/video-presentation.question.response.model";
-import { Logger } from "winston";
-import { IFileGradingService } from "./features/grading/interfaces/file-grading.interface";
-import { IImageGradingService } from "./features/grading/interfaces/image-grading.interface";
-import { IPresentationGradingService } from "./features/grading/interfaces/presentation-grading.interface";
-import { IUrlGradingService } from "./features/grading/interfaces/url-grading.interface";
-import { IVideoPresentationGradingService } from "./features/grading/interfaces/video-grading.interface";
-import { AssignmentTypeEnum } from "./features/question-generation/services/question-generation.service";
 
 /**
  * LLM Facade Service
@@ -311,8 +309,18 @@ export class LlmFacadeService {
    * Detect the language of text
    */
 
-  async getLanguageCode(text: string): Promise<string> {
-    return this.translationService.getLanguageCode(text);
+  async getLanguageCode(text: string, assignmentId?: number): Promise<string> {
+    return this.translationService.getLanguageCode(text, assignmentId);
+  }
+
+  /**
+   * Batch detect languages for multiple texts
+   */
+  async batchGetLanguageCodes(
+    texts: string[],
+    assignmentId: number,
+  ): Promise<string[]> {
+    return this.translationService.batchGetLanguageCodes(texts, assignmentId);
   }
 
   /**
