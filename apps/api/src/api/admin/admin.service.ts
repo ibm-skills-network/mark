@@ -985,9 +985,10 @@ export class AdminService {
     }
     return {
       id: result.id,
+      success: true,
       name: result.name,
       type: result.type,
-      success: true,
+      metadata: result,
     };
   }
 

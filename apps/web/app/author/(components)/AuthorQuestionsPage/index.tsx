@@ -1011,7 +1011,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         if (assignmentData.config) {
           // Update assignment configuration if available
           const configStore = useAssignmentConfig.getState();
-          
+
           if (assignmentData.config.graded !== undefined) {
             configStore.setGraded(assignmentData.config.graded);
             settingsUpdated = true;
@@ -1021,11 +1021,15 @@ const AuthorQuestionsPage: FC<Props> = ({
             settingsUpdated = true;
           }
           if (assignmentData.config.allotedTimeMinutes !== undefined) {
-            configStore.setAllotedTimeMinutes(assignmentData.config.allotedTimeMinutes);
+            configStore.setAllotedTimeMinutes(
+              assignmentData.config.allotedTimeMinutes,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.config.timeEstimateMinutes !== undefined) {
-            configStore.setTimeEstimateMinutes(assignmentData.config.timeEstimateMinutes);
+            configStore.setTimeEstimateMinutes(
+              assignmentData.config.timeEstimateMinutes,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.config.passingGrade !== undefined) {
@@ -1039,15 +1043,21 @@ const AuthorQuestionsPage: FC<Props> = ({
             settingsUpdated = true;
           }
           if (assignmentData.config.displayOrder !== undefined) {
-            configStore.setDisplayOrder(assignmentData.config.displayOrder as "DEFINED" | "RANDOM");
+            configStore.setDisplayOrder(
+              assignmentData.config.displayOrder as "DEFINED" | "RANDOM",
+            );
             settingsUpdated = true;
           }
           if (assignmentData.config.questionDisplay !== undefined) {
-            configStore.setQuestionDisplay(assignmentData.config.questionDisplay as any);
+            configStore.setQuestionDisplay(
+              assignmentData.config.questionDisplay as any,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.config.strictTimeLimit !== undefined) {
-            configStore.setStrictTimeLimit(assignmentData.config.strictTimeLimit);
+            configStore.setStrictTimeLimit(
+              assignmentData.config.strictTimeLimit,
+            );
             settingsUpdated = true;
           }
         }
@@ -1063,25 +1073,37 @@ const AuthorQuestionsPage: FC<Props> = ({
         // Import feedback configuration if available
         if (assignmentData.feedbackConfig) {
           const feedbackConfigStore = useAssignmentFeedbackConfig.getState();
-          
+
           if (assignmentData.feedbackConfig.verbosityLevel !== undefined) {
-            feedbackConfigStore.setVerbosityLevel(assignmentData.feedbackConfig.verbosityLevel as any);
+            feedbackConfigStore.setVerbosityLevel(
+              assignmentData.feedbackConfig.verbosityLevel as any,
+            );
             settingsUpdated = true;
           }
-          if (assignmentData.feedbackConfig.showSubmissionFeedback !== undefined) {
-            feedbackConfigStore.setShowSubmissionFeedback(assignmentData.feedbackConfig.showSubmissionFeedback);
+          if (
+            assignmentData.feedbackConfig.showSubmissionFeedback !== undefined
+          ) {
+            feedbackConfigStore.setShowSubmissionFeedback(
+              assignmentData.feedbackConfig.showSubmissionFeedback,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.feedbackConfig.showQuestionScore !== undefined) {
-            feedbackConfigStore.setShowQuestionScore(assignmentData.feedbackConfig.showQuestionScore);
+            feedbackConfigStore.setShowQuestionScore(
+              assignmentData.feedbackConfig.showQuestionScore,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.feedbackConfig.showAssignmentScore !== undefined) {
-            feedbackConfigStore.setShowAssignmentScore(assignmentData.feedbackConfig.showAssignmentScore);
+            feedbackConfigStore.setShowAssignmentScore(
+              assignmentData.feedbackConfig.showAssignmentScore,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.feedbackConfig.showQuestions !== undefined) {
-            feedbackConfigStore.setShowQuestion(assignmentData.feedbackConfig.showQuestions);
+            feedbackConfigStore.setShowQuestion(
+              assignmentData.feedbackConfig.showQuestions,
+            );
             settingsUpdated = true;
           }
         }
