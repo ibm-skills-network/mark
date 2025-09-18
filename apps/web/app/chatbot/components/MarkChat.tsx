@@ -58,6 +58,7 @@ import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { NotificationsPanel } from "./NotificationPanel";
 import { getUserNotifications, markNotificationAsRead } from "@/lib/author";
+import { useNotificationSSE, type Notification } from "@/lib/notificationSSE";
 
 interface ScreenshotDropzoneProps {
   file: File | null | undefined;
@@ -1026,11 +1027,12 @@ export const MarkChat = () => {
   const handleCheckReports = useCallback(() => {
     setShowReports(true);
   }, []);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [sseConnected, setSseConnected] = useState(false);
   const [notificationCheckInterval, setNotificationCheckInterval] =
-    useState(null);
+    useState<NodeJS.Timeout | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 }); // Real-time position during drag
   const [isDragging, setIsDragging] = useState(false);
@@ -1283,7 +1285,42 @@ export const MarkChat = () => {
     resetHelpOffer,
   ]);
 
-  const loadNotifications = useCallback(async () => {
+  // SSE setup for real-time notifications
+  const notificationSSE = useNotificationSSE({
+    onInitial: (initialNotifications) => {
+      setNotifications(initialNotifications);
+      setUnreadNotifications(
+        initialNotifications.filter((n) => !n.read).length,
+      );
+    },
+    onNew: (notification) => {
+      setNotifications((prev) => [notification, ...prev]);
+      if (!notification.read) {
+        setUnreadNotifications((prev) => prev + 1);
+      }
+    },
+    onRead: (notificationId) => {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
+      );
+      setUnreadNotifications((prev) => Math.max(0, prev - 1));
+    },
+    onConnect: () => {
+      setSseConnected(true);
+    },
+    onDisconnect: () => {
+      setSseConnected(false);
+    },
+    onError: (error) => {
+      console.error("Notification SSE error:", error);
+      setSseConnected(false);
+      // Fallback to polling if SSE fails
+      loadNotificationsFallback();
+    },
+  });
+
+  // Fallback function for when SSE fails
+  const loadNotificationsFallback = useCallback(async () => {
     if (!user?.userId) return;
 
     try {
@@ -1292,6 +1329,9 @@ export const MarkChat = () => {
       setUnreadNotifications(data.filter((n) => !n.read).length);
     } catch (error) {}
   }, [user?.userId]);
+
+  // Alias for backward compatibility (use SSE primarily, fallback when needed)
+  const loadNotifications = loadNotificationsFallback;
 
   const markNotificationRead = useCallback(async (notificationId) => {
     try {
@@ -1351,27 +1391,25 @@ export const MarkChat = () => {
 
   useEffect(() => {
     if (user?.userId) {
-      loadNotifications();
+      // Connect to SSE for real-time notifications
+      notificationSSE.connect();
 
-      if (!notificationCheckInterval) {
-        const intervalId = setInterval(loadNotifications, 30000);
-        setNotificationCheckInterval(intervalId);
-      }
+      // Load initial notifications as fallback
+      loadNotifications();
 
       return () => {
-        if (notificationCheckInterval) {
-          clearInterval(notificationCheckInterval);
-          setNotificationCheckInterval(null);
-        }
+        // Disconnect SSE when component unmounts or user changes
+        notificationSSE.disconnect();
       };
     }
-  }, [user?.userId, loadNotifications, notificationCheckInterval]);
+  }, [user?.userId, loadNotifications]);
 
   useEffect(() => {
-    if (isOpen && user?.userId) {
+    if (isOpen && user?.userId && !sseConnected) {
+      // Only load notifications manually if SSE is not connected
       loadNotifications();
     }
-  }, [isOpen, user?.userId, loadNotifications]);
+  }, [isOpen, user?.userId, loadNotifications, sseConnected]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
   const checkForIssueStatusQuery = (message: string): boolean | number => {
@@ -2253,7 +2291,7 @@ Please help me with this.`;
             headers: {
               Cookie: document.cookie,
             },
-            credentials: "include",
+            credentials: "include", // pragma: allowlist secret
             body: formData,
           });
 
