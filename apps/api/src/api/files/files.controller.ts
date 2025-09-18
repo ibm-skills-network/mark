@@ -23,7 +23,7 @@ import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
-import { UploadRequestDto } from "./dto/upload.dto";
+import { UploadRequestDto, UploadType } from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
 import { FilesService } from "./services/files.service";
 import { S3Service } from "./services/s3.service";
@@ -744,5 +744,58 @@ export class FilesController {
   @UseGuards(AuthGuard)
   async renameFile(@Body() renameFileDto: RenameFileDto) {
     return this.filesService.renameFile(renameFileDto);
+  }
+
+  @Get("bucket-info")
+  @ApiOperation({
+    summary: "Get bucket information including region and environment",
+  })
+  @ApiQuery({
+    name: "bucket",
+    required: true,
+    description: "Bucket name to get information for",
+  })
+  async getBucketInfo(@Query("bucket") bucket: string) {
+    if (!bucket) {
+      throw new BadRequestException("Bucket parameter is required");
+    }
+
+    return this.filesService.getBucketInfo(bucket);
+  }
+
+  @Get("bucket-for-environment")
+  @ApiOperation({
+    summary: "Get appropriate bucket name for upload type and environment",
+  })
+  @ApiQuery({
+    name: "uploadType",
+    required: true,
+    description: "Upload type (author, learner, debug)",
+  })
+  @ApiQuery({
+    name: "isProduction",
+    required: false,
+    description: "Whether to use production bucket (default: false)",
+  })
+  async getBucketForEnvironment(
+    @Query("uploadType") uploadType: string,
+    @Query("isProduction") isProduction = "false",
+  ) {
+    if (!uploadType) {
+      throw new BadRequestException("uploadType parameter is required");
+    }
+
+    const isProductionBool = isProduction.toLowerCase() === "true";
+    const bucket = this.filesService.getBucketForEnvironment(
+      uploadType as UploadType,
+      isProductionBool,
+    );
+
+    return {
+      bucket,
+      uploadType,
+      isProduction: isProductionBool,
+      ...this.filesService.getBucketInfo(bucket),
+    };
   }
 }

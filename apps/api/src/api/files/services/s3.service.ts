@@ -3,10 +3,12 @@ import { S3 } from "aws-sdk";
 
 @Injectable()
 export class S3Service {
-  private s3Client: S3;
+  private s3ClientEast: S3;
+  private s3ClientSouth: S3;
 
   constructor() {
-    this.s3Client = new S3({
+    // US East client (primary)
+    this.s3ClientEast = new S3({
       endpoint: process.env.IBM_COS_ENDPOINT ?? "",
       credentials: {
         accessKeyId: process.env.IBM_COS_ACCESS_KEY_ID ?? "",
@@ -16,21 +18,47 @@ export class S3Service {
       signatureVersion: "v4",
       region: process.env.IBM_COS_REGION ?? "us-east",
     });
+
+    // US South client (secondary)
+    this.s3ClientSouth = new S3({
+      endpoint: process.env.IBM_COS_ENDPOINT_SOUTH ?? "",
+      credentials: {
+        accessKeyId: process.env.IBM_COS_ACCESS_KEY_ID_SOUTH ?? "",
+        secretAccessKey: process.env.IBM_COS_SECRET_ACCESS_KEY_SOUTH ?? "",
+      },
+      s3ForcePathStyle: true,
+      signatureVersion: "v4",
+      region: process.env.IBM_COS_REGION_SOUTH ?? "us-south",
+    });
+  }
+
+  private getS3Client(bucket: string): S3 {
+    // Route to us-south if bucket is production learner submissions
+    if (bucket === process.env.IBM_COS_LEARNER_BUCKET_PROD) {
+      return this.s3ClientSouth;
+    }
+    // Default to us-east for all other buckets
+    return this.s3ClientEast;
   }
   async getObjectMetadata(
     bucket: string,
     key: string,
   ): Promise<S3.HeadObjectOutput> {
-    return this.s3Client.headObject({ Bucket: bucket, Key: key }).promise();
+    const client = this.getS3Client(bucket);
+    return client.headObject({ Bucket: bucket, Key: key }).promise();
   }
+
   async headObject(
     parameters: S3.HeadObjectRequest,
   ): Promise<S3.HeadObjectOutput> {
-    return this.s3Client.headObject(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.headObject(parameters).promise();
   }
+
   async objectExists(bucket: string, key: string): Promise<boolean> {
     try {
-      await this.s3Client.headObject({ Bucket: bucket, Key: key }).promise();
+      const client = this.getS3Client(bucket);
+      await client.headObject({ Bucket: bucket, Key: key }).promise();
       return true;
     } catch (error: unknown) {
       if (
@@ -48,55 +76,79 @@ export class S3Service {
   async getObject(
     parameters: S3.GetObjectRequest,
   ): Promise<S3.GetObjectOutput> {
-    return this.s3Client.getObject(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.getObject(parameters).promise();
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getSignedUrl(operation: string, parameters: any): string {
-    return this.s3Client.getSignedUrl(operation, parameters);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    const bucket = parameters.Bucket;
+    const client = this.getS3Client(bucket);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return client.getSignedUrl(operation, parameters);
   }
 
   async putObject(
     parameters: S3.PutObjectRequest,
   ): Promise<S3.PutObjectOutput> {
-    return this.s3Client.putObject(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.putObject(parameters).promise();
   }
 
   async deleteObject(
     parameters: S3.DeleteObjectRequest,
   ): Promise<S3.DeleteObjectOutput> {
-    return this.s3Client.deleteObject(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.deleteObject(parameters).promise();
   }
 
   async deleteObjects(
     parameters: S3.DeleteObjectsRequest,
   ): Promise<S3.DeleteObjectsOutput> {
-    return this.s3Client.deleteObjects(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.deleteObjects(parameters).promise();
   }
 
   async copyObject(
     parameters: S3.CopyObjectRequest,
   ): Promise<S3.CopyObjectOutput> {
-    return this.s3Client.copyObject(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.copyObject(parameters).promise();
   }
 
   async listObjectsV2(
     parameters: S3.ListObjectsV2Request,
   ): Promise<S3.ListObjectsV2Output> {
-    return this.s3Client.listObjectsV2(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.listObjectsV2(parameters).promise();
   }
 
   async headBucket(parameters: S3.HeadBucketRequest): Promise<any> {
-    return this.s3Client.headBucket(parameters).promise();
+    const client = this.getS3Client(parameters.Bucket);
+    return client.headBucket(parameters).promise();
   }
 
   getBucketName(uploadType: string): string | undefined {
     const buckets: Record<string, string> = {
       author: process.env.IBM_COS_AUTHOR_BUCKET ?? "",
       learner: process.env.IBM_COS_LEARNER_BUCKET ?? "",
+      "learner-prod": process.env.IBM_COS_LEARNER_BUCKET_PROD ?? "",
       debug: process.env.IBM_COS_DEBUG_BUCKET ?? "",
     };
     if (buckets[uploadType]) {
       return buckets[uploadType];
     }
     throw new Error(`Bucket not found for upload type: ${uploadType}`);
+  }
+
+  /**
+   * Get the region for a given bucket
+   */
+  getBucketRegion(bucket: string): string {
+    if (bucket === process.env.IBM_COS_LEARNER_BUCKET_PROD) {
+      return process.env.IBM_COS_REGION_SOUTH ?? "us-south";
+    }
+    return process.env.IBM_COS_REGION ?? "us-east";
   }
 }
