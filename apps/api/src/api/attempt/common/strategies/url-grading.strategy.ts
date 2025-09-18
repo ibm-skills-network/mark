@@ -17,6 +17,7 @@ import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
+import { UrlBasedQuestionResponseModel } from "src/api/llm/model/url.based.question.response.model";
 import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
@@ -49,31 +50,41 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
-    if (
-      !requestDto.learnerUrlResponse ||
-      requestDto.learnerUrlResponse.trim() === ""
-    ) {
-      throw new BadRequestException(
-        this.localizationService.getLocalizedString(
-          "expectedUrlResponse",
-          requestDto.language,
-        ),
-      );
-    }
-
     try {
-      new URL(requestDto.learnerUrlResponse);
-    } catch {
+      if (
+        !requestDto.learnerUrlResponse ||
+        requestDto.learnerUrlResponse.trim() === ""
+      ) {
+        throw new BadRequestException(
+          this.localizationService?.getLocalizedString?.(
+            "expectedUrlResponse",
+            requestDto.language,
+          ) || "Expected a URL response, but did not receive one.",
+        );
+      }
+
+      try {
+        new URL(requestDto.learnerUrlResponse);
+      } catch {
+        throw new BadRequestException(
+          this.localizationService?.getLocalizedString?.(
+            "invalidUrl",
+            requestDto.language,
+            { url: requestDto.learnerUrlResponse },
+          ) || `Invalid URL: ${requestDto.learnerUrlResponse}`,
+        );
+      }
+
+      return true;
+    } catch (error) {
+      // If localization service fails, provide fallback error messages
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new BadRequestException(
-        this.localizationService.getLocalizedString(
-          "invalidUrl",
-          requestDto.language,
-          { url: requestDto.learnerUrlResponse },
-        ),
+        "URL validation failed due to system error",
       );
     }
-
-    return true;
   }
 
   /**
@@ -98,18 +109,29 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     try {
       urlFetchResponse = await this.fetchUrlContent(learnerResponse);
     } catch {
-      urlFetchResponse =
-        await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+      try {
+        urlFetchResponse =
+          await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+      } catch {
+        // If both methods fail, create a fallback response
+        return this.createFallbackResponse(
+          question,
+          learnerResponse,
+          context,
+          "url_fetch_completely_failed",
+        );
+      }
     }
 
     if (!urlFetchResponse.isFunctional) {
       const responseDto = this.createResponseDto(0, [
         {
-          feedback: this.localizationService.getLocalizedString(
-            "unableToFetchUrl",
-            context.language,
-            { url: learnerResponse },
-          ),
+          feedback:
+            this.localizationService?.getLocalizedString?.(
+              "unableToFetchUrl",
+              context.language,
+              { url: learnerResponse },
+            ) || `Unable to fetch content from URL: ${learnerResponse}`,
         },
       ]);
 
@@ -145,11 +167,22 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       question.responseType ?? "OTHER",
     );
 
-    const gradingModel = await this.llmFacadeService.gradeUrlBasedQuestion(
-      urlBasedQuestionEvaluateModel,
-      context.assignmentId,
-      context.language,
-    );
+    let gradingModel: UrlBasedQuestionResponseModel;
+    try {
+      gradingModel = await this.llmFacadeService.gradeUrlBasedQuestion(
+        urlBasedQuestionEvaluateModel,
+        context.assignmentId,
+        context.language,
+      );
+    } catch {
+      // If LLM grading fails, return fallback response
+      return this.createFallbackResponse(
+        question,
+        learnerResponse,
+        context,
+        "llm_grading_failed",
+      );
+    }
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
@@ -174,6 +207,42 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       context,
       "UrlGradingStrategy-Success",
     );
+
+    return responseDto;
+  }
+
+  /**
+   * Create a fallback response when URL grading fails
+   */
+  private createFallbackResponse(
+    question: QuestionDto,
+    learnerResponse: string,
+    context: GradingContext,
+    errorType: string,
+  ): CreateQuestionResponseAttemptResponseDto {
+    const maxPoints = question.totalPoints || 0;
+    const fallbackPoints = maxPoints > 0 ? Math.floor(maxPoints * 0.5) : 0; // 50% fallback credit or 0 if no points
+
+    const errorMessages: Record<string, string> = {
+      url_fetch_completely_failed: "Unable to access the provided URL",
+      llm_grading_failed: "Automated grading service temporarily unavailable",
+    };
+
+    const errorMessage = errorMessages[errorType] || "Technical error occurred";
+
+    const responseDto = this.createResponseDto(fallbackPoints, [
+      {
+        feedback: `${errorMessage}. Partial credit (${fallbackPoints}/${maxPoints}) awarded pending manual review. URL submitted: ${learnerResponse}`,
+      },
+    ]);
+
+    responseDto.metadata = {
+      error: errorType,
+      url: learnerResponse,
+      status: "fallback_grading",
+      fallbackReason: errorMessage,
+      requiresManualReview: true,
+    };
 
     return responseDto;
   }

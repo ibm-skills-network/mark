@@ -70,7 +70,7 @@ const judgeParserCache = new WeakMap<any, StructuredOutputParser<any>>();
 @Injectable()
 export class GradingJudgeService implements IGradingJudgeService {
   private readonly logger: Logger;
-  private readonly maxJudgeTimeout = 60_000;
+  private readonly maxJudgeTimeout = 120_000; // Increased from 60s to 120s
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -95,31 +95,10 @@ export class GradingJudgeService implements IGradingJudgeService {
       const parser = this.getOrCreateParser();
       const formatInstructions = parser.getFormatInstructions();
 
-      let actualSum = 0;
-      if (
-        input.proposedGrading.rubricScores &&
-        Array.isArray(input.proposedGrading.rubricScores)
-      ) {
-        const actualSum = input.proposedGrading.rubricScores
-          .map(
-            (score: {
-              pointsAwarded?: number;
-              points?: number;
-              score?: number;
-            }) => score.pointsAwarded ?? score.points ?? score.score ?? 0,
-          )
-          .filter((points): points is number => typeof points === "number")
-          .reduce((a, b) => a + b, 0);
-
-        this.logger.info(
-          `Calculated actual sum: ${actualSum} from ${input.proposedGrading.rubricScores.length} rubric scores`,
-        );
-      } else {
-        actualSum = input.proposedGrading.points || 0;
-        this.logger.info(
-          `No rubric scores found, using proposed points as actual sum: ${actualSum}`,
-        );
-      }
+      // REMOVED: Arithmetic calculations - Judge LLM should not do mathematical validation
+      this.logger.info(
+        `Judge will focus on qualitative assessment only, ignoring mathematical calculations`,
+      );
 
       const template = this.loadJudgeTemplate();
 
@@ -132,7 +111,6 @@ export class GradingJudgeService implements IGradingJudgeService {
             input.learnerResponse || "No response provided",
           scoring_criteria: () => JSON.stringify(input.scoringCriteria || {}),
           proposed_points: () => String(input.proposedGrading.points || 0),
-          actual_sum: () => String(actualSum),
           max_points: () => String(input.proposedGrading.maxPoints || 0),
           proposed_feedback: () =>
             input.proposedGrading.feedback || "No feedback provided",
@@ -171,7 +149,7 @@ export class GradingJudgeService implements IGradingJudgeService {
       );
 
       const parsedResponse = await parser.parse(response);
-      const result = this.buildJudgeResult(parsedResponse, input, actualSum);
+      const result = this.buildJudgeResult(parsedResponse, input);
 
       const endTime = Date.now();
       this.logger.info(
@@ -229,28 +207,12 @@ export class GradingJudgeService implements IGradingJudgeService {
   private buildJudgeResult(
     parsedResponse: ParsedJudgeResponse,
     input: GradingJudgeInput,
-    actualSum: number,
   ): GradingJudgeResult {
-    // CRITICAL: Override if math is actually wrong
-    const mathIsCorrect = input.proposedGrading.points === actualSum;
-
-    // If math is correct but judge thinks it's wrong, fix the judge's response
-    if (mathIsCorrect && !parsedResponse.mathematicallyCorrect) {
-      this.logger.warn(
-        `Judge incorrectly flagged math as wrong. Total: ${input.proposedGrading.points}, Sum: ${actualSum}. Overriding judge.`,
-      );
-      parsedResponse.mathematicallyCorrect = true;
-      // If math is the only issue, approve it
-      if (parsedResponse.fairnessScore >= 5 && parsedResponse.rubricAdherence) {
-        parsedResponse.approved = true;
-      }
-    }
-
-    // If math is wrong, always reject
-    if (!mathIsCorrect) {
-      parsedResponse.mathematicallyCorrect = false;
-      parsedResponse.approved = false;
-    }
+    // REMOVED: Mathematical validation - Judge LLM should not do arithmetic
+    // The Judge LLM should only focus on qualitative aspects like fairness and rubric adherence
+    this.logger.info(
+      `Judge focusing on qualitative assessment only. Ignoring mathematical calculations.`,
+    );
 
     const result: GradingJudgeResult = {
       approved: parsedResponse.approved,
@@ -261,13 +223,8 @@ export class GradingJudgeService implements IGradingJudgeService {
     if (!parsedResponse.approved) {
       result.corrections = {};
 
-      // Only suggest math correction if math is actually wrong
-      if (!mathIsCorrect) {
-        result.corrections.points = actualSum;
-        result.issues = [
-          `Mathematical error: Total should be ${actualSum}, not ${input.proposedGrading.points}`,
-        ];
-      } else if (parsedResponse.fairnessScore < 5) {
+      // Focus only on qualitative issues, not arithmetic
+      if (parsedResponse.fairnessScore < 5) {
         // Only reject for severe unfairness
         result.issues = [
           `Grading appears unfair (fairness score: ${parsedResponse.fairnessScore}/10)`,
@@ -310,8 +267,7 @@ export class GradingJudgeService implements IGradingJudgeService {
       if (
         parsedResponse.correctedRubricScores &&
         Array.isArray(parsedResponse.correctedRubricScores) &&
-        parsedResponse.correctedRubricScores.length > 0 &&
-        !mathIsCorrect // Only suggest rubric corrections if math is wrong
+        parsedResponse.correctedRubricScores.length > 0
       ) {
         result.corrections.rubricScores = parsedResponse.correctedRubricScores;
       }
@@ -349,21 +305,23 @@ export class GradingJudgeService implements IGradingJudgeService {
   }
 
   private loadJudgeTemplate(): string {
-    return `Validate grading for MATHEMATICAL ACCURACY & TECHNICAL COMPLIANCE only. DO NOT re-grade.
+    return `Validate grading for QUALITATIVE FAIRNESS & RUBRIC ADHERENCE only. DO NOT do mathematical calculations or re-grade.
 
 GRADING TO VALIDATE:
-Points: {proposed_points} | Sum: {actual_sum} | Max: {max_points}
+Points: {proposed_points} | Max: {max_points}
 Scores: {proposed_rubric_scores}
 
 CRITERIA: {scoring_criteria}
 
-VALIDATION:
-1. Math: {proposed_points} = {actual_sum}? If NO → REJECT
-2. Valid rubric values per criteria? If NO → REJECT  
+VALIDATION (NO ARITHMETIC):
+1. Fairness: Is the grading reasonable and fair given the learner response?
+2. Rubric adherence: Are the rubric scores appropriate for the response quality?
 3. Extremely unfair (fairness < 5/10)? If YES → REJECT
 
-✅ APPROVE: Math correct + valid values + fairness ≥5
-❌ REJECT: Math wrong OR invalid values OR fairness <5
+✅ APPROVE: Valid rubric application + fairness ≥5
+❌ REJECT: Invalid rubric application OR fairness <5
+
+IMPORTANT: Do NOT validate mathematical accuracy. Focus only on qualitative assessment.
 
 Context: {question} | {learner_response}
 

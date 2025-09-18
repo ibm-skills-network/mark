@@ -171,12 +171,25 @@ export class FileGradingService implements IFileGradingService {
       criteriaCount,
     );
 
-    const response = await this.promptProcessor.processPrompt(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      selectedModel,
-    );
+    let response: string;
+    try {
+      response = await this.processPromptWithRetry(
+        prompt,
+        assignmentId,
+        selectedModel,
+        maxTotalPoints,
+        rubricMaxPoints,
+      );
+    } catch (retryError) {
+      this.logger.error(
+        `All LLM retry attempts failed: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+      );
+      return this.createFallbackResponse(
+        maxTotalPoints,
+        "All LLM models failed - using fallback grading",
+        rubricMaxPoints,
+      );
+    }
 
     try {
       let parsedResponse = (await parser.parse(response)) as GradingOutput;
@@ -253,13 +266,153 @@ export class FileGradingService implements IFileGradingService {
       this.logger.error(
         `Error parsing LLM response: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`,
+        }. Response: "${response?.slice(0, 200)}..."`,
       );
-      throw new HttpException(
-        "Failed to parse grading response",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+
+      // Return fallback response instead of throwing
+      return this.createFallbackResponse(
+        maxTotalPoints,
+        "Failed to parse LLM response - using fallback grading",
+        rubricMaxPoints,
       );
     }
+  }
+
+  /**
+   * Process prompt with retry mechanism and fallback model
+   */
+  private async processPromptWithRetry(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    primaryModel: string,
+    _maxTotalPoints: number,
+    _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
+  ): Promise<string> {
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+
+    // Try with primary model (up to 3 attempts)
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.logger.debug(
+          `LLM attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
+        );
+
+        const response = await this.promptProcessor.processPrompt(
+          prompt,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          primaryModel,
+        );
+
+        // Check if response is valid
+        if (this.isValidLLMResponse(response)) {
+          if (attempt > 1) {
+            this.logger.info(
+              `LLM succeeded on attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
+            );
+          }
+          return response;
+        }
+
+        this.logger.warn(
+          `LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(0, 100)}..."`,
+        );
+        lastError = new Error(
+          `Invalid LLM response: ${response?.slice(0, 100)}`,
+        );
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        this.logger.warn(
+          `LLM attempt ${attempt}/${maxRetries} failed with model ${primaryModel}: ${lastError.message}`,
+        );
+      }
+
+      // Wait before retry (exponential backoff)
+      if (attempt < maxRetries) {
+        await this.delay(Math.pow(2, attempt - 1) * 1000); // 1s, 2s, 4s
+      }
+    }
+
+    // Try with fallback model
+    try {
+      const fallbackModel = await this.llmResolver.getModelKeyWithFallback(
+        "file_grading_fallback",
+        "gpt-4o-mini",
+      );
+      this.logger.warn(
+        `Primary model ${primaryModel} failed after ${maxRetries} attempts, trying fallback model ${fallbackModel}`,
+      );
+
+      const response = await this.promptProcessor.processPrompt(
+        prompt,
+        assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        fallbackModel,
+      );
+
+      if (this.isValidLLMResponse(response)) {
+        this.logger.info(`Fallback model ${fallbackModel} succeeded`);
+        return response;
+      }
+
+      this.logger.error(
+        `Fallback model ${fallbackModel} also returned invalid response`,
+      );
+    } catch (fallbackError) {
+      this.logger.error(
+        `Fallback model also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+      );
+    }
+
+    // If all attempts failed, throw to trigger fallback response
+    throw lastError || new Error("All LLM attempts failed");
+  }
+
+  /**
+   * Check if LLM response is valid
+   */
+  private isValidLLMResponse(response: string): boolean {
+    return !!(response && response.trim() && response.length >= 10);
+  }
+
+  /**
+   * Delay utility for retry backoff
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Create a fallback response when LLM fails
+   */
+  private createFallbackResponse(
+    maxTotalPoints: number,
+    reason: string,
+    rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
+  ): FileBasedQuestionResponseModel {
+    const fallbackPoints =
+      maxTotalPoints > 0 ? Math.floor(maxTotalPoints * 0.5) : 0; // Give 50% as fallback or 0 if no points
+
+    // Create fallback rubric scores if rubrics exist
+    const fallbackRubricScores =
+      rubricMaxPoints?.map((rubric) => ({
+        rubricQuestion: rubric.rubricQuestion,
+        pointsAwarded: Math.floor(rubric.maxPoints * 0.5),
+        maxPoints: rubric.maxPoints,
+        justification:
+          "Automatic scoring temporarily unavailable - partial credit awarded pending manual review",
+      })) || [];
+
+    return new FileBasedQuestionResponseModel(
+      fallbackPoints,
+      `Automated grading temporarily unavailable. ${reason}. Partial credit (${fallbackPoints}/${maxTotalPoints}) awarded pending manual review.`,
+      "Automatic analysis unavailable due to technical issues.",
+      "Unable to complete automated evaluation at this time.",
+      "This submission requires manual review due to system limitations.",
+      "Please contact your instructor for manual grading of this submission.",
+      fallbackRubricScores,
+    );
   }
 
   private getTemplateForFileType(responseType: ResponseType): string {
