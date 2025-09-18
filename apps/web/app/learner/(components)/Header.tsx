@@ -51,6 +51,7 @@ function LearnerHeader() {
     activeAttemptId,
     setTotalPointsEarned,
     setTotalPointsPossible,
+    clearLearnerAnswers,
   ] = useLearnerStore((state) => [
     state.questions,
     state.setQuestion,
@@ -58,6 +59,7 @@ function LearnerHeader() {
     state.activeAttemptId,
     state.setTotalPointsEarned,
     state.setTotalPointsPossible,
+    state.clearLearnerAnswers,
   ]);
   const setUserRole = useMarkChatStore((s) => s.setUserRole);
   useEffect(() => {
@@ -289,6 +291,7 @@ function LearnerHeader() {
           });
         }
         clearGithubStore();
+        clearLearnerAnswers(); // Clear all learner responses after successful submission
         useLearnerStore.getState().setActiveQuestionNumber(null);
         router.push(`/learner/${assignmentId}/successPage/${res.id}`);
 

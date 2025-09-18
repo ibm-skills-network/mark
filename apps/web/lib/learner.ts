@@ -19,6 +19,7 @@ import type {
   SubmitAssignmentResponse,
 } from "@config/types";
 import { toast } from "sonner";
+import { submitReportAuthor } from "@/lib/talkToBackend";
 
 /**
  * Creates a attempt for a given assignment.
@@ -265,132 +266,285 @@ export async function submitAssignment(
     const sseUrl = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/grading/${gradingJobId}/status-stream`;
 
     return new Promise((resolve, reject) => {
-      const eventSource = new EventSource(sseUrl, {
-        withCredentials: true,
-      });
+      let retryCount = 0;
+      const maxRetries = 3;
+      let allErrors: Array<{
+        attempt: number;
+        error: string;
+        timestamp: string;
+        readyState?: number;
+        url?: string;
+      }> = [];
 
-      let timeout: NodeJS.Timeout;
-      let isCompleted = false;
+      const attemptConnection = () => {
+        retryCount++;
+        const currentAttempt = retryCount;
 
-      const resetTimeout = () => {
-        if (timeout) clearTimeout(timeout);
-        timeout = setTimeout(() => {
-          if (!isCompleted) {
-            eventSource.close();
-            onProgress?.("failed", 0, "Grading timeout - no updates received");
-            reject(new Error("Grading timeout - no updates received"));
-          }
-        }, 300000); // 5 minutes
-      };
+        console.log(`SSE Connection attempt ${currentAttempt}/${maxRetries}`);
 
-      resetTimeout();
+        const eventSource = new EventSource(sseUrl, {
+          withCredentials: true,
+        });
 
-      eventSource.onopen = () => {
-        onProgress?.("processing", 0, "Connected to grading service...");
-      };
+        let timeout: NodeJS.Timeout;
+        let isCompleted = false;
 
-      eventSource.onmessage = (event) => {
+        const resetTimeout = () => {
+          if (timeout) clearTimeout(timeout);
+          timeout = setTimeout(() => {
+            if (!isCompleted) {
+              const timeoutError = "Grading timeout - no updates received";
+              allErrors.push({
+                attempt: currentAttempt,
+                error: timeoutError,
+                timestamp: new Date().toISOString(),
+                readyState: eventSource.readyState,
+                url: sseUrl,
+              });
+
+              eventSource.close();
+              onProgress?.("failed", 0, timeoutError);
+
+              if (currentAttempt < maxRetries) {
+                setTimeout(() => attemptConnection(), 2000 * currentAttempt); // Progressive delay
+              } else {
+                handleFinalFailure();
+              }
+            }
+          }, 300000); // 5 minutes
+        };
+
         resetTimeout();
 
-        try {
-          const data = JSON.parse(event.data);
+        eventSource.onopen = () => {
+          console.log(`SSE connection opened on attempt ${currentAttempt}`);
+          onProgress?.(
+            "processing",
+            0,
+            `Connected to grading service... (attempt ${currentAttempt})`,
+          );
+        };
 
-          if (data.status === "Processing" || data.status === "Pending") {
-            const percentage = data.percentage || 0;
-            const progress = data.progress || "Processing...";
-            onProgress?.("processing", percentage, progress);
-          } else if (data.status === "Completed" && !isCompleted) {
-            isCompleted = true;
-            onProgress?.("completed", 100, "Grading completed successfully!");
-
-            eventSource.close();
-            clearTimeout(timeout);
-
-            let result = data.result;
-            if (typeof result === "string") {
-              try {
-                result = JSON.parse(result);
-              } catch (e) {
-                console.error("Failed to parse result:", e);
-              }
-            }
-            resolve(result);
-          } else if (data.status === "Failed" && !isCompleted) {
-            isCompleted = true;
-            console.error("Grading failed:", data.progress);
-            onProgress?.("failed", 0, data.progress || "Grading failed");
-
-            eventSource.close();
-            clearTimeout(timeout);
-
-            setTimeout(() => {
-              toast.error(data.progress || "Grading failed");
-              reject(new Error(data.progress || "Grading failed"));
-            }, 2000);
-          }
-        } catch (error) {
-          console.error("Error parsing SSE data:", error);
-        }
-      };
-
-      eventSource.addEventListener("update", (event: any) => {
-        if (!isCompleted) {
+        eventSource.onmessage = (event) => {
           resetTimeout();
-          try {
-            const data = JSON.parse(event.data);
 
-            if (data.progress && data.percentage !== undefined) {
-              onProgress?.("processing", data.percentage, data.progress);
+          try {
+            let data;
+            try {
+              data = JSON.parse(event.data);
+            } catch (parseError) {
+              // Handle non-JSON data (legacy format)
+              data = event.data;
+            }
+
+            // Handle heartbeat messages
+            if (data.heartbeat) {
+              console.log(`Heartbeat received for grading job ${data.jobId}`);
+              return;
+            }
+
+            // Handle connection messages
+            if (data.message && data.connectionId) {
+              onProgress?.("processing", 0, data.message);
+              return;
+            }
+
+            if (data.status === "Processing" || data.status === "Pending") {
+              const percentage = data.percentage || 0;
+              const progress = data.progress || "Processing...";
+              onProgress?.("processing", percentage, progress);
+            } else if (data.status === "Completed" && !isCompleted) {
+              isCompleted = true;
+              onProgress?.("completed", 100, "Grading completed successfully!");
+
+              eventSource.close();
+              clearTimeout(timeout);
+
+              let result = data.result;
+              if (typeof result === "string") {
+                try {
+                  result = JSON.parse(result);
+                } catch (e) {
+                  console.error("Failed to parse result:", e);
+                }
+              }
+              resolve(result);
+            } else if (data.status === "Failed" && !isCompleted) {
+              isCompleted = true;
+              console.error("Grading failed:", data.progress);
+              onProgress?.("failed", 0, data.progress || "Grading failed");
+
+              eventSource.close();
+              clearTimeout(timeout);
+
+              setTimeout(() => {
+                toast.error(data.progress || "Grading failed");
+                reject(new Error(data.progress || "Grading failed"));
+              }, 2000);
             }
           } catch (error) {
-            console.error("Error parsing update event:", error);
+            console.error("Error parsing SSE data:", error);
           }
-        }
-      });
+        };
 
-      eventSource.addEventListener("finalize", (event: any) => {
-        if (!isCompleted) {
-          try {
-            isCompleted = true;
-            const data = JSON.parse(event.data);
-            onProgress?.("completed", 100, "Grading completed successfully!");
+        eventSource.addEventListener("update", (event: any) => {
+          if (!isCompleted) {
+            resetTimeout();
+            try {
+              const data = JSON.parse(event.data);
+
+              // Handle heartbeat in update events
+              if (data.heartbeat) {
+                console.log(
+                  `Heartbeat received via update event for job ${data.jobId}`,
+                );
+                return;
+              }
+
+              if (data.progress && data.percentage !== undefined) {
+                onProgress?.("processing", data.percentage, data.progress);
+              }
+            } catch (error) {
+              console.error("Error parsing update event:", error);
+            }
+          }
+        });
+
+        eventSource.addEventListener("heartbeat", (event: any) => {
+          if (!isCompleted) {
+            resetTimeout();
+            try {
+              const data = JSON.parse(event.data);
+              console.log(`Heartbeat event received for job ${data.jobId}`);
+              // Heartbeats don't need to update the UI, just reset the timeout
+            } catch (error) {
+              console.error("Error parsing heartbeat event:", error);
+            }
+          }
+        });
+
+        eventSource.addEventListener("finalize", (event: any) => {
+          if (!isCompleted) {
+            try {
+              isCompleted = true;
+              const data = JSON.parse(event.data);
+              onProgress?.("completed", 100, "Grading completed successfully!");
+
+              eventSource.close();
+              clearTimeout(timeout);
+
+              let result = data.result;
+              if (typeof result === "string") {
+                try {
+                  result = JSON.parse(result);
+                } catch (e) {
+                  console.error("Failed to parse result:", e);
+                }
+              }
+              resolve(result);
+            } catch (error) {
+              console.error("Error in finalize event:", error);
+              reject(error);
+            }
+          }
+        });
+
+        eventSource.onerror = (error) => {
+          if (!isCompleted) {
+            const errorDetails = {
+              attempt: currentAttempt,
+              error:
+                eventSource.readyState === EventSource.CLOSED
+                  ? "Connection to grading service lost"
+                  : "Grading stream error",
+              timestamp: new Date().toISOString(),
+              readyState: eventSource.readyState,
+              url: sseUrl,
+            };
+
+            allErrors.push(errorDetails);
+            console.error(
+              `SSE error on attempt ${currentAttempt}:`,
+              error,
+              errorDetails,
+            );
 
             eventSource.close();
             clearTimeout(timeout);
 
-            let result = data.result;
-            if (typeof result === "string") {
-              try {
-                result = JSON.parse(result);
-              } catch (e) {
-                console.error("Failed to parse result:", e);
-              }
+            if (currentAttempt < maxRetries) {
+              const retryDelay = 2000 * currentAttempt; // Progressive delay: 2s, 4s, 6s
+              onProgress?.(
+                "failed",
+                0,
+                `Connection lost. Retrying in ${retryDelay / 1000} seconds... (attempt ${currentAttempt}/${maxRetries})`,
+              );
+              setTimeout(() => attemptConnection(), retryDelay);
+            } else {
+              handleFinalFailure();
             }
-            resolve(result);
-          } catch (error) {
-            console.error("Error in finalize event:", error);
-            reject(error);
-          }
-        }
-      });
-
-      eventSource.onerror = (error) => {
-        if (!isCompleted) {
-          console.error("SSE error:", error);
-          eventSource.close();
-          clearTimeout(timeout);
-
-          if (eventSource.readyState === EventSource.CLOSED) {
-            onProgress?.("failed", 0, "Lost connection to grading service");
-            toast.error("Lost connection to grading service");
-            reject(new Error("Connection to grading service lost"));
           } else {
-            reject(new Error("Grading stream error"));
+            eventSource.close();
           }
-        } else {
-          eventSource.close();
-        }
+        };
       };
+
+      const handleFinalFailure = async () => {
+        console.error("All SSE connection attempts failed:", allErrors);
+
+        // Create detailed error report
+        const detailedErrorReport = {
+          assignmentId,
+          attemptId,
+          gradingJobId,
+          sseUrl,
+          totalAttempts: maxRetries,
+          allErrors,
+          finalFailureTime: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          url: window.location.href,
+        };
+
+        // Try to submit error report
+        try {
+          await submitReportLearner(
+            assignmentId,
+            attemptId,
+            "TECHNICAL_ISSUE" as REPORT_TYPE,
+            `SSE Connection Failed After ${maxRetries} Attempts\n\nDetailed Error Report:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
+            cookies,
+          );
+          console.log("Error report submitted successfully");
+        } catch (reportError) {
+          console.error("Failed to submit error report:", reportError);
+
+          // Fallback: try author report
+          try {
+            await submitReportAuthor(
+              assignmentId,
+              "TECHNICAL_ISSUE" as REPORT_TYPE,
+              `SSE Connection Failed - Learner Report Fallback\n\nAttempt ID: ${attemptId}\nError Details:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
+              cookies,
+            );
+            console.log("Fallback error report submitted successfully");
+          } catch (fallbackError) {
+            console.error("All error reporting methods failed:", fallbackError);
+          }
+        }
+
+        // Final user notification
+        const finalErrorMessage = `Connection failed after ${maxRetries} attempts. Error details have been automatically reported.`;
+        onProgress?.("failed", 0, finalErrorMessage);
+        toast.error(finalErrorMessage);
+        reject(
+          new Error(
+            `SSE connection failed after ${maxRetries} attempts. Last error: ${allErrors[allErrors.length - 1]?.error || "Unknown error"}`,
+          ),
+        );
+      };
+
+      // Start the first connection attempt
+      attemptConnection();
     });
   } catch (err) {
     console.error("Submit assignment error:", err);

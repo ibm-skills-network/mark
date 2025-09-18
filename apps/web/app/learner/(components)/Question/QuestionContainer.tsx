@@ -265,13 +265,48 @@ function Component(props: Props) {
       {/* Question header with language toggle for all types */}
       <div className="flex justify-between items-center">
         <div className="flex-grow">
-          <MarkdownViewer
-            className="text-gray-800 px-2 border-gray-300"
-            id={`question-${question.id}-${userPreferedLanguage}`}
-          >
-            {question.translations?.[userPreferedLanguage]?.translatedText ??
-              question.question}
-          </MarkdownViewer>
+          {/* Original Question */}
+          <div className="mb-2">
+            <MarkdownViewer
+              className="text-gray-800 px-2 border-gray-300"
+              id={`question-${question.id}-original`}
+            >
+              {question.question}
+            </MarkdownViewer>
+          </div>
+
+          {/* Translated Question - only show when translation is on and we have a translation */}
+          {translationOn &&
+            question.translatedQuestion &&
+            question.translatedQuestion !== question.question && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
+                    Translated
+                  </span>
+                </div>
+                <MarkdownViewer
+                  className="text-gray-700 px-2 border-gray-300 bg-violet-50 rounded-lg p-3"
+                  id={`question-${question.id}-translated`}
+                >
+                  {question.translatedQuestion}
+                </MarkdownViewer>
+              </div>
+            )}
+
+          {/* Loading translation indicator */}
+          {translationOn && loadingTranslation && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-500">
+                  {currentWord}...
+                </span>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-x-2 ml-4">
           <LanguageIcon

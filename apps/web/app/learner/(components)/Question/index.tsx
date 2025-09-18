@@ -31,6 +31,7 @@ function QuestionPage(props: Props) {
   const questionsStore = useLearnerStore((state) => state.questions);
 
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
+  const setQuestions = useLearnerStore((state) => state.setQuestions);
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
     (state) => [state.assignmentDetails, state.setAssignmentDetails],
   );
@@ -110,18 +111,21 @@ function QuestionPage(props: Props) {
 
     debugLog("attemptId, expiresAt", id, new Date(expiresAt).getTime());
 
-    const currentStore = {
-      questions: questionsWithStatus,
+    // Use setQuestions to merge fresh assignment data with existing user responses
+    // This preserves any responses the user has already entered
+    setQuestions(questionsWithStatus);
+
+    // Update other store properties that don't contain user responses
+    const currentStoreUpdate = {
       activeAttemptId: id,
       expiresAt: new Date(expiresAt).getTime(),
     };
 
-    const hasChanges =
-      JSON.stringify(questionsWithStatus) !== JSON.stringify(questions) ||
-      id !== currentStore.activeAttemptId ||
-      new Date(expiresAt).getTime() !== currentStore.expiresAt;
-    if (hasChanges) {
-      setLearnerStore(currentStore);
+    const hasOtherChanges =
+      id !== useLearnerStore.getState().activeAttemptId ||
+      new Date(expiresAt).getTime() !== useLearnerStore.getState().expiresAt;
+    if (hasOtherChanges) {
+      setLearnerStore(currentStoreUpdate);
     }
     if (questions.length) {
       setPageState("success");
@@ -134,6 +138,7 @@ function QuestionPage(props: Props) {
     questions,
     id,
     expiresAt,
+    setQuestions,
     setLearnerStore,
     setAssignmentDetails,
   ]);
