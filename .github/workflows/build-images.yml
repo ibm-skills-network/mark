@@ -461,3 +461,142 @@ jobs:
           
           echo "📊 **View detailed reports in the workflow artifacts**" >> $GITHUB_STEP_SUMMARY
 
+  helm-lint:
+    name: Helm Chart Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if Helm chart needs linting
+        id: changes
+        run: |
+          # Check if this is a scheduled run, tag, or if helm files changed
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_lint=true" >> $GITHUB_OUTPUT
+          else
+            # Check for changes in helm chart files
+            if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^helm-chart/|^\.github/workflows/build-images\.yml)"; then
+              echo "needs_lint=true" >> $GITHUB_OUTPUT
+            else
+              echo "needs_lint=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Install Helm
+        if: steps.changes.outputs.needs_lint == 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - id: helm-auth-app
+        if: steps.changes.outputs.needs_lint == 'true' && vars.HELM_REPO_AUTH_APP_ID != ''
+        uses: getsentry/action-github-app-token@v3
+        with:
+          app_id: ${{ secrets.HELM_REPO_AUTH_APP_ID || vars.HELM_REPO_AUTH_APP_ID }}
+          private_key: ${{ secrets.HELM_REPO_AUTH_PRIVATE_KEY }}
+
+      - name: Add chart repos
+        if: steps.changes.outputs.needs_lint == 'true' && vars.HELM_REPO_URL != ''
+        env:
+          USERNAME: ${{ vars.HELM_REPO_USERNAME || 'anything' }}
+          TOKEN: ${{ steps.helm-auth-app.outputs.token || secrets.HELM_REPO_TOKEN }}
+          REPO_NAME: ${{ vars.HELM_REPO_NAME || 'upstream' }}
+          REPO_URL: ${{ vars.HELM_REPO_URL }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$REPO_URL" ]; then
+            helm repo add --username "$USERNAME" --password "$TOKEN" "$REPO_NAME" "$REPO_URL"
+          else
+            echo "⚠️ Helm repository configuration not found - skipping external repo setup"
+            echo "To configure: Set HELM_REPO_URL variable and either HELM_REPO_AUTH_APP_ID + HELM_REPO_AUTH_PRIVATE_KEY secrets, or HELM_REPO_TOKEN secret"
+          fi
+
+      - name: Fetch charts dependencies
+        if: steps.changes.outputs.needs_lint == 'true'
+        run: |
+          cd helm-chart/mark
+          helm dependency build
+
+      - name: Lint charts
+        if: steps.changes.outputs.needs_lint == 'true'
+        run: |
+          cd helm-chart/mark
+          helm lint
+
+  helm-release:
+    name: Helm Chart Release
+    if: github.event_name == 'push' # Only run on push events, not on pull_request events
+    runs-on: ubuntu-latest
+    needs: [security-scan, lint-and-test, build-and-deploy, helm-lint]
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if Helm chart needs releasing
+        id: changes
+        run: |
+          # Check if this is a scheduled run, tag, or if helm files changed
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_release=true" >> $GITHUB_OUTPUT
+          else
+            # Check for changes in helm chart files
+            if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^helm-chart/|^\.github/workflows/build-images\.yml)"; then
+              echo "needs_release=true" >> $GITHUB_OUTPUT
+            else
+              echo "needs_release=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Install Helm
+        if: steps.changes.outputs.needs_release == 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - id: helm-auth-app
+        if: steps.changes.outputs.needs_release == 'true' && vars.HELM_REPO_AUTH_APP_ID != ''
+        uses: getsentry/action-github-app-token@v3
+        with:
+          app_id: ${{ secrets.HELM_REPO_AUTH_APP_ID || vars.HELM_REPO_AUTH_APP_ID }}
+          private_key: ${{ secrets.HELM_REPO_AUTH_PRIVATE_KEY }}
+
+      - name: Add chart repos
+        if: steps.changes.outputs.needs_release == 'true' && vars.HELM_REPO_URL != ''
+        env:
+          USERNAME: ${{ vars.HELM_REPO_USERNAME || 'anything' }}
+          TOKEN: ${{ steps.helm-auth-app.outputs.token || secrets.HELM_REPO_TOKEN }}
+          REPO_NAME: ${{ vars.HELM_REPO_NAME || 'upstream' }}
+          REPO_URL: ${{ vars.HELM_REPO_URL }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$REPO_URL" ]; then
+            helm repo add --username "$USERNAME" --password "$TOKEN" "$REPO_NAME" "$REPO_URL"
+          else
+            echo "⚠️ Helm repository configuration not found - skipping external repo setup"
+            echo "To configure: Set HELM_REPO_URL variable and either HELM_REPO_AUTH_APP_ID + HELM_REPO_AUTH_PRIVATE_KEY secrets, or HELM_REPO_TOKEN secret"
+          fi
+
+      - name: Configure Git
+        if: steps.changes.outputs.needs_release == 'true'
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Run chart-releaser
+        if: steps.changes.outputs.needs_release == 'true'
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: helm-chart
+          mark_as_latest: false
+          packages_with_index: true
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+

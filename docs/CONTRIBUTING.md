@@ -382,8 +382,253 @@ Update the URL as follows:
 
 ---
 
+---
+
+## 🚢 Contributing to Helm Charts
+
+Mark includes comprehensive Helm charts for Kubernetes deployment. Contributing to charts follows additional guidelines beyond application code.
+
+### Helm Chart Prerequisites
+
+- **Helm**: 3.4+ for chart development
+- **Kubernetes**: Access to a cluster for testing (local or remote)
+- **kubectl**: Configured to access your test cluster
+
+### Chart Development Setup
+
+1. **Install Helm** (if not already installed):
+   ```bash
+   # macOS
+   brew install helm
+
+   # Or download from https://helm.sh/docs/intro/install/
+   ```
+
+2. **Set up chart dependencies**:
+   ```bash
+   cd helm-chart/mark
+   helm dependency update
+   ```
+
+3. **Test chart locally**:
+   ```bash
+   helm lint .
+   helm template test-release . --debug
+   ```
+
+### Chart Standards and Best Practices
+
+- **Helm Best Practices**: Follow [official Helm chart best practices](https://helm.sh/docs/chart_best_practices/)
+- **Semantic Versioning**: Charts follow SemVer for versioning
+- **Documentation**: All values must be documented in both `values.yaml` and `README.md`
+- **Testing**: Charts must pass linting and template testing
+- **Examples**: Provide realistic configuration examples
+
+### Chart File Structure
+
+```
+helm-chart/
+├── mark/                    # Main chart
+│   ├── Chart.yaml          # Chart metadata (version, dependencies)
+│   ├── values.yaml         # Default configuration values
+│   ├── templates/          # Kubernetes resource templates
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── ingress.yaml
+│   │   └── ...
+│   └── README.md           # Chart-specific documentation
+├── examples/               # Example configurations
+│   ├── minimal.yaml        # Development setup
+│   ├── production.yaml     # Production-ready config
+│   └── with-database.yaml  # External database config
+└── docs/                   # Additional documentation
+    └── VERSIONING.md       # Versioning strategy
+```
+
+### Making Chart Changes
+
+#### 1. Version Management
+
+Update `Chart.yaml` following semantic versioning:
+
+| Change Type | Version Bump | Example |
+|-------------|--------------|---------|
+| Breaking changes to templates or values | MAJOR | 1.4.0 → 2.0.0 |
+| New features, backwards compatible | MINOR | 1.4.0 → 1.5.0 |
+| Bug fixes, security patches | PATCH | 1.4.0 → 1.4.1 |
+
+#### 2. Template Best Practices
+
+When modifying templates:
+- Use proper indentation (2 spaces)
+- Include resource limits and requests
+- Add proper labels and annotations using `_helpers.tpl`
+- Use conditional rendering: `{{- if .Values.feature.enabled }}`
+- Include security contexts and non-root users
+- Add health checks (liveness/readiness probes)
+
+Example template structure:
+```yaml
+{{- if .Values.apiGateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mark.fullname" . }}-api-gateway
+  labels:
+    {{- include "mark.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  replicas: {{ .Values.apiGateway.replicaCount }}
+  # ... rest of template
+{{- end }}
+```
+
+#### 3. Values Configuration
+
+When adding new configuration options:
+- Group related values logically
+- Provide sensible defaults
+- Document each value with inline comments
+- Use consistent naming conventions
+
+Example values structure:
+```yaml
+# API Gateway configuration
+apiGateway:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api-gateway
+    tag: ""  # Defaults to appVersion
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+```
+
+#### 4. Documentation Updates
+
+Always update documentation when making changes:
+- **Chart README.md**: Parameter reference and examples
+- **Main README.md**: Update if new major features added
+- **CHANGELOG.md**: Document all changes
+- **Examples**: Add or update example configurations
+
+### Testing Helm Charts
+
+#### Lint Testing
+```bash
+cd helm-chart/mark
+
+# Basic linting
+helm lint .
+
+# Lint with specific values
+helm lint . -f ../examples/production.yaml
+```
+
+#### Template Testing
+```bash
+# Test template rendering
+helm template test-release . --debug
+
+# Test with different values
+helm template test-release . -f ../examples/production.yaml --debug
+
+# Test specific templates
+helm template test-release . --show-only templates/deployment.yaml
+```
+
+#### Installation Testing
+```bash
+# Dry-run installation
+helm install test-release . --dry-run --debug
+
+# Actual installation (requires cluster)
+helm install test-release . --create-namespace --namespace mark-test
+
+# Test upgrade
+helm upgrade test-release . --dry-run --debug
+```
+
+### Chart Pull Request Process
+
+#### Before Submitting
+
+1. **Test thoroughly**:
+   ```bash
+   # Run all chart tests
+   helm lint helm-chart/mark/
+   helm template test-release helm-chart/mark/ --debug
+   helm install test-release helm-chart/mark/ --dry-run
+   ```
+
+2. **Update documentation**:
+   - Chart README.md with new parameters
+   - Examples if new features added
+   - CHANGELOG.md with version changes
+
+3. **Version appropriately**:
+   - Bump chart version in `Chart.yaml`
+   - Update `appVersion` if application changed
+
+#### Chart PR Checklist
+
+- [ ] Chart version bumped appropriately
+- [ ] Templates follow Helm best practices
+- [ ] All values documented
+- [ ] Examples updated if needed
+- [ ] Tests pass (lint + template)
+- [ ] CHANGELOG.md updated
+- [ ] Breaking changes documented
+- [ ] Installation tested (if possible)
+
+### Chart Release Process
+
+Charts are automatically released when:
+1. Changes are merged to master branch
+2. Chart version is bumped in `Chart.yaml`
+3. The `chart-releaser` GitHub Action creates a release
+
+The process:
+1. **Packages** the chart into a `.tgz` file
+2. **Creates** a GitHub release with the chart package
+3. **Updates** the `gh-pages` branch with chart index
+4. **Publishes** to GitHub Pages for public access
+
+### Helm Chart Documentation
+
+For complete Helm chart documentation, see:
+- **📚 [Helm Chart README](../helm-chart/README.md)** - Complete usage guide
+- **⚙️ [Chart Parameters](../helm-chart/mark/README.md)** - Detailed parameter reference
+- **📋 [Versioning Guide](../helm-chart/docs/VERSIONING.md)** - Versioning strategy
+- **🔧 [Examples](../helm-chart/examples/)** - Ready-to-use configurations
+
+---
+
 ## Troubleshooting
 
 ### Unable to Reach Localhost:
 
 Ensure your local database and API are running correctly. Verify your `.env` configuration and that required ports are not blocked.
+
+### Helm Chart Issues:
+
+#### Chart Won't Install
+- Check Kubernetes cluster connectivity: `kubectl cluster-info`
+- Verify chart syntax: `helm lint helm-chart/mark/`
+- Test template rendering: `helm template test helm-chart/mark/ --debug`
+
+#### Template Errors
+- Use `--debug` flag for detailed error messages
+- Check value references and template syntax
+- Validate YAML indentation (2 spaces)
+
+#### Version Conflicts
+- Ensure chart version is unique
+- Check for dependency version conflicts
+- Use `helm dependency update` to refresh dependencies

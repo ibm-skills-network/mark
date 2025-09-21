@@ -1,0 +1,162 @@
+# Mark configuration with external database
+# This example shows how to configure Mark with an external PostgreSQL database
+
+# External database configuration
+externalDatabase:
+  enabled: true
+  host: "postgres-primary.database.svc.cluster.local"
+  port: 5432
+  database: "mark_production"
+  username: "mark_user"
+  # Password should be stored in a secret
+  existingSecret: "mark-database-secret" # pragma: allowlist secret
+  existingSecretPasswordKey: "password" # pragma: allowlist secret
+
+# External Redis configuration
+externalRedis:
+  enabled: true
+  host: "redis-master.cache.svc.cluster.local"
+  port: 6379
+  # If Redis requires authentication
+  existingSecret: "mark-redis-secret" # pragma: allowlist secret
+  existingSecretPasswordKey: "password" # pragma: allowlist secret
+
+# API Gateway configuration
+apiGateway:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api-gateway
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Core API with database configuration
+api:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  # Environment variables for database connection
+  env:
+    NODE_ENV: "production"
+    LOG_LEVEL: "info"
+    DATABASE_HOST: "postgres-primary.database.svc.cluster.local"
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: "mark_production"
+    DATABASE_USER: "mark_user"
+    REDIS_HOST: "redis-master.cache.svc.cluster.local"
+    REDIS_PORT: "6379"
+
+  # Sensitive configuration via secrets
+  secretEnv:
+    DATABASE_PASSWORD:
+      secretName: "mark-database-secret"
+      secretKey: "password"
+    REDIS_PASSWORD:
+      secretName: "mark-redis-secret"
+      secretKey: "password"
+    JWT_SECRET:
+      secretName: "mark-app-secrets"
+      secretKey: "jwt-secret"
+    OPENAI_API_KEY:
+      secretName: "mark-app-secrets"
+      secretKey: "openai-api-key"
+
+# Web UI configuration
+ui:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-web
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Database migration job
+databaseMigration:
+  enabled: true
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api
+    tag: "v1.0.0"
+  env:
+    DATABASE_HOST: "postgres-primary.database.svc.cluster.local"
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: "mark_production"
+    DATABASE_USER: "mark_user"
+  secretEnv:
+    DATABASE_PASSWORD:
+      secretName: "mark-database-secret"
+      secretKey: "password"
+
+# Backup configuration for external database
+backup:
+  enabled: true
+  type: "external"
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: "30d"
+  database:
+    host: "postgres-primary.database.svc.cluster.local"
+    port: 5432
+    database: "mark_production"
+    username: "mark_backup_user"
+    secretName: "mark-backup-secret"
+    secretKey: "password"
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+  prometheusRule:
+    enabled: true
+    rules:
+      - alert: MarkDatabaseConnectionHigh
+        expr: mark_database_connections_active / mark_database_connections_max > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mark database connection usage is high"
+          description: "Database connection usage is above 80% for 5 minutes"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: mark.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mark-tls-cert
+      hosts:
+        - mark.example.com

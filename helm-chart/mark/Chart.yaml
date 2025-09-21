@@ -1,27 +1,51 @@
 apiVersion: v2
 name: mark
-description: A Helm chart for Kubernetes
+description: |
+  Mark is a comprehensive educational platform for assignment management and grading.
+  This Helm chart deploys the complete Mark application stack including API Gateway,
+  Core API, Web UI, and LTI integration capabilities.
 
-# A chart can be either an 'application' or a 'library' chart.
-#
-# Application charts are a collection of templates that can be packaged into versioned archives
-# to be deployed.
-#
-# Library charts provide useful utilities or functions for the chart developer. They're included as
-# a dependency of application charts to inject those utilities and functions into the rendering
-# pipeline. Library charts do not define any templates and therefore cannot be deployed.
 type: application
-
-# This is the chart version. This version number should be incremented each time you make changes
-# to the chart and its templates, including the app version.
-# Versions are expected to follow Semantic Versioning (https://semver.org/)
 version: 1.4.0
-
-# This is the version number of the application being deployed. This version number should be
-# incremented each time you make changes to the application. Versions are not expected to
-# follow Semantic Versioning. They should reflect the version the application is using.
-# It is recommended to use it with quotes.
 appVersion: "1.0.0"
+
+# Chart metadata for discoverability
+home: https://github.com/ibm-skills-network/mark
+sources:
+  - https://github.com/ibm-skills-network/mark
+keywords:
+  - education
+  - lti
+  - assignment
+  - grading
+  - learning-management
+  - educational-technology
+  - kubernetes
+  - microservices
+
+maintainers:
+  - name: Mark Development Team
+    email: maintainers@mark-platform.dev
+    url: https://github.com/ibm-skills-network/mark
+
+annotations:
+  # Artifact Hub annotations for better discoverability
+  artifacthub.io/license: MIT
+  artifacthub.io/operator: "false"
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/images: |
+    - name: mark-api-gateway
+      image: ghcr.io/ibm-skills-network/mark/mark-api-gateway:latest
+    - name: mark-api
+      image: ghcr.io/ibm-skills-network/mark/mark-api:latest
+    - name: mark-web
+      image: ghcr.io/ibm-skills-network/mark/mark-web:latest
+  artifacthub.io/links: |
+    - name: Chart Source
+      url: https://github.com/ibm-skills-network/mark/tree/master/helm-chart/mark
+    - name: Documentation
+      url: https://github.com/ibm-skills-network/mark/blob/master/helm-chart/README.md
 
 dependencies:
   - name: lti-gateway

@@ -1,0 +1,172 @@
+# Production configuration for Mark
+# This configuration includes high availability, security, and performance optimizations
+
+# Global settings
+global:
+  imagePullSecrets:
+    - name: ghcr-registry-secret
+
+# API Gateway - production ready
+apiGateway:
+  enabled: true
+  replicaCount: 5
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api-gateway
+    tag: "v1.0.0"  # Use specific version in production
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  livenessProbe:
+    initialDelaySeconds: 30
+    timeoutSeconds: 5
+    periodSeconds: 15
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 3
+    periodSeconds: 10
+    failureThreshold: 3
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+# Core API - production ready
+api:
+  enabled: true
+  replicaCount: 5
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  env:
+    NODE_ENV: "production"
+    LOG_LEVEL: "info"
+    MAX_PAYLOAD_SIZE: "10mb"
+  secretEnv:
+    DATABASE_URL: "postgresql://mark:${DATABASE_PASSWORD}@postgres-primary:5432/mark_production"
+    REDIS_URL: "redis://redis-master:6379"
+    JWT_SECRET: "${JWT_SECRET}"
+    OPENAI_API_KEY: "${OPENAI_API_KEY}"
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+# Web UI - production ready
+ui:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-web
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+# Ingress - production with TLS
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: mark.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mark-tls-cert
+      hosts:
+        - mark.example.com
+
+# LTI Gateway - production configuration
+lti-gateway:
+  replicaCount: 3
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  secretEnv:
+    LTI_SECRET: "${LTI_SECRET}"
+    JWT_SECRET: "${JWT_SECRET}"
+
+# Network Policies for security
+networkPolicies:
+  enabled: true
+
+# Pod Security Standards
+podSecurityPolicy:
+  enabled: true
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: "30d"

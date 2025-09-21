@@ -1,0 +1,83 @@
+# Minimal development configuration for Mark
+# This configuration is suitable for local development and testing
+
+# Global settings
+global:
+  imagePullSecrets: []  # No private registry needed for development
+
+# API Gateway - minimal resources
+apiGateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api-gateway
+    tag: "latest"
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  autoscaling:
+    enabled: false
+
+# Core API - minimal resources
+api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-api
+    tag: "latest"
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  env:
+    NODE_ENV: "development"
+    LOG_LEVEL: "debug"
+
+# Web UI - minimal resources
+ui:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-web
+    tag: "latest"
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# Ingress - simple local access
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: mark.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # No TLS for local development
+
+# LTI Gateway - minimal configuration
+lti-gateway:
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"

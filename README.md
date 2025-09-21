@@ -91,10 +91,63 @@ Mark System V2 represents a significant evolution from the original architecture
    - System health checks
    - Recovery from stalled processes
 
+## 🚀 Deployment
+
+### Kubernetes with Helm (Recommended)
+
+Mark is designed to run on Kubernetes and includes comprehensive Helm charts for easy deployment:
+
+```bash
+# Add the Mark Helm repository
+helm repo add mark https://ibm-skills-network.github.io/mark/
+helm repo update
+
+# Install Mark with default configuration
+helm install my-mark mark/mark
+
+# Or install with custom values
+helm install my-mark mark/mark -f my-values.yaml
+```
+
+**📚 Complete Helm Documentation**: See [helm-chart/README.md](./helm-chart/README.md) for:
+
+- 🏗️ Architecture overview and components
+- ⚙️ Complete configuration options
+- 🔧 Production deployment examples
+- 📖 Troubleshooting and best practices
+- 🔄 Upgrade guides and versioning
+
+### Quick Deployment Examples
+
+- **Development**: [helm-chart/examples/minimal.yaml](./helm-chart/examples/minimal.yaml)
+- **Production**: [helm-chart/examples/production.yaml](./helm-chart/examples/production.yaml)
+- **With External DB**: [helm-chart/examples/with-database.yaml](./helm-chart/examples/with-database.yaml)
+
+### Docker Compose (Local Development)
+
+For local development, you can also use Docker Compose:
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
 ### Contribution Guidelines
 
-Contributions are welcome.
-Please see [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md) to get started.
+Contributions are welcome! Please see our comprehensive contribution guide:
+
+**📖 [Contributing Guide](./docs/CONTRIBUTING.md)** - includes:
+
+- Development setup instructions
+- Code standards and guidelines
+- Testing requirements
+- Helm chart contribution guidelines
+- Pull request process
+
+**Quick contribution steps:**
 
 1. Create a feature branch
 2. Implement your changes with tests
