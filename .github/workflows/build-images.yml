@@ -11,6 +11,7 @@ on:
       - 'apps/api/**'
       - 'apps/web/**'
       - '.github/workflows/build-images.yml'
+      - 'helm-chart/**'
   pull_request:
     branches:
     - master
