@@ -24,7 +24,10 @@ export class HealthService {
     return this.health.check([
       () =>
         this.disk.checkStorage("storage", { path: "/", thresholdPercent: 0.9 }),
-      () => this.prisma.pingCheck("database", this.prismaService),
+      () =>
+        this.prisma.pingCheck("database", this.prismaService, {
+          timeout: 5000,
+        }),
     ]);
   }
 }

@@ -152,7 +152,7 @@ export class ReportsController {
         ...dto.additionalDetails,
         category: dto.category,
         portalName: dto.portalName,
-        userEmail: dto.userEmail,
+        userEmail: request.userSession?.userId,
       },
     };
     console.log("Reporting issue:", reportDto);

@@ -265,13 +265,30 @@ function Component(props: Props) {
       {/* Question header with language toggle for all types */}
       <div className="flex justify-between items-center">
         <div className="flex-grow">
-          <MarkdownViewer
-            className="text-gray-800 px-2 border-gray-300"
-            id={`question-${question.id}-${userPreferedLanguage}`}
-          >
-            {question.translations?.[userPreferedLanguage]?.translatedText ??
-              question.question}
-          </MarkdownViewer>
+          {/* Original Question */}
+          <div className="mb-2">
+            <MarkdownViewer
+              className="text-gray-800 px-2 border-gray-300"
+              id={`question-${question.id}-original`}
+            >
+              {question.translations?.[userPreferedLanguage]?.translatedText ??
+                question.question}
+            </MarkdownViewer>
+          </div>
+
+          {/* Loading translation indicator */}
+          {translationOn && loadingTranslation && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-500">
+                  {currentWord}...
+                </span>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-x-2 ml-4">
           <LanguageIcon
@@ -311,93 +328,113 @@ function Component(props: Props) {
           {/* Split view for SINGLE_CORRECT and MULTIPLE_CORRECT */}
           {question.type === "SINGLE_CORRECT" ||
           question.type === "MULTIPLE_CORRECT" ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12 relative">
-              {/* Arrow indicator - only on desktop */}
-              <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-                <ArrowRightIcon className="w-6 h-6 text-black" />
-              </div>
-
-              {/* Original Language Column */}
-              <div className="space-y-3 lg:pr-6">
-                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    {userPreferedLanguageName || "Original"}
-                  </span>
-                  <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
-                    Original
-                  </span>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 flex flex-col">
-                  <div className="flex-grow">
-                    <RenderQuestion
-                      questionType={question.type}
-                      question={{
-                        ...question,
-                        choices: question?.choices?.map((choice, index) =>
-                          question.translations?.[userPreferedLanguage]
-                            ?.translatedChoices
-                            ? question.translations[userPreferedLanguage]
-                                .translatedChoices[index]
-                            : choice,
-                        ),
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Translated Language Column */}
-              <div className="space-y-3 lg:pl-6 border-t lg:border-t-0 pt-4 lg:pt-0 mt-4 lg:mt-0">
-                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-                  <select
-                    className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
-                    value={question.selectedLanguage}
-                    onChange={(e) => handleLanguageChange(e.target.value)}
-                  >
-                    {languages.map((lang) => (
-                      <option key={lang.code} value={lang.name}>
-                        {lang.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
-                    Translation
-                  </span>
-                </div>
-                {loadingTranslation ? (
-                  <div className="flex items-center justify-center py-8 min-h-[200px]">
-                    <div className="text-center">
-                      <div className="animate-pulse text-violet-600 mb-2">
-                        {currentWord}...
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Loading translation
-                      </div>
+            <>
+              {translationOn &&
+                question.translatedQuestion &&
+                question.translatedQuestion !== question.question && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
+                        Translated
+                      </span>
                     </div>
+                    <MarkdownViewer
+                      className="text-gray-700 px-2 border-gray-300 bg-violet-50 rounded-lg p-3"
+                      id={`question-${question.id}-translated`}
+                    >
+                      {question.translatedQuestion}
+                    </MarkdownViewer>
                   </div>
-                ) : (
-                  <div className="bg-violet-50 rounded-lg p-4 flex flex-col">
+                )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12 relative">
+                {/* Arrow indicator - only on desktop */}
+                <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                  <ArrowRightIcon className="w-6 h-6 text-black" />
+                </div>
+
+                {/* Original Language Column */}
+                <div className="space-y-3 lg:pr-6">
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                    <span className="text-sm font-medium text-gray-700">
+                      {userPreferedLanguageName || "Original"}
+                    </span>
+                    <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                      Original
+                    </span>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 flex flex-col">
                     <div className="flex-grow">
                       <RenderQuestion
                         questionType={question.type}
                         question={{
                           ...question,
                           choices: question?.choices?.map((choice, index) =>
-                            question.translations?.[
-                              getLanguageCode(question.selectedLanguage)
-                            ]?.translatedChoices
-                              ? question.translations[
-                                  getLanguageCode(question.selectedLanguage)
-                                ].translatedChoices[index]
+                            question.translations?.[userPreferedLanguage]
+                              ?.translatedChoices
+                              ? question.translations[userPreferedLanguage]
+                                  .translatedChoices[index]
                               : choice,
                           ),
                         }}
                       />
                     </div>
                   </div>
-                )}
+                </div>
+
+                {/* Translated Language Column */}
+                <div className="space-y-3 lg:pl-6 border-t lg:border-t-0 pt-4 lg:pt-0 mt-4 lg:mt-0">
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                    <select
+                      className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
+                      value={question.selectedLanguage}
+                      onChange={(e) => handleLanguageChange(e.target.value)}
+                    >
+                      {languages.map((lang) => (
+                        <option key={lang.code} value={lang.name}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
+                      Translation
+                    </span>
+                  </div>
+                  {loadingTranslation ? (
+                    <div className="flex items-center justify-center py-8 min-h-[200px]">
+                      <div className="text-center">
+                        <div className="animate-pulse text-violet-600 mb-2">
+                          {currentWord}...
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Loading translation
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-violet-50 rounded-lg p-4 flex flex-col">
+                      <div className="flex-grow">
+                        <RenderQuestion
+                          questionType={question.type}
+                          question={{
+                            ...question,
+                            choices: question?.choices?.map((choice, index) =>
+                              question.translations?.[
+                                getLanguageCode(question.selectedLanguage)
+                              ]?.translatedChoices
+                                ? question.translations[
+                                    getLanguageCode(question.selectedLanguage)
+                                  ].translatedChoices[index]
+                                : choice,
+                            ),
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            </>
           ) : (
             /* For other question types, show translation below */
             <div className="space-y-4">

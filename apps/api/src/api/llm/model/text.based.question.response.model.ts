@@ -4,6 +4,8 @@ import { RubricScore } from "./file.based.question.response.model";
 
 export interface GradingMetadata {
   judgeApproved: boolean;
+  judgeUsed?: boolean;
+  thresholdReason?: string;
   attempts: number;
   gradingTimeMs: number;
   contentHash: string;

@@ -21,6 +21,11 @@ export class LocalizationService {
       en: {
         noResponse: "You did not provide a response to this question.",
 
+        expectedUrlResponse:
+          "Expected a URL response, but did not receive one.",
+        invalidUrl: "Invalid URL: {url}",
+        unableToFetchUrl: "Unable to fetch content from URL: {url}",
+
         expectedTrueFalse:
           "Expected a true/false response, but did not receive one.",
         invalidTrueFalse: "Invalid true/false response.",
@@ -40,6 +45,10 @@ export class LocalizationService {
       },
       ar: {
         noResponse: "لم تقدم إجابة على هذا السؤال.",
+        expectedUrlResponse:
+          "كان من المتوقع الحصول على رابط، ولكن لم يتم الحصول عليه.",
+        invalidUrl: "رابط غير صالح: {url}",
+        unableToFetchUrl: "غير قادر على جلب المحتوى من الرابط: {url}",
         expectedTrueFalse:
           "كان من المتوقع الحصول على إجابة صحيحة/خاطئة، ولكن لم يتم الحصول عليها.",
         invalidTrueFalse: "إجابة صحيحة/خاطئة غير صالحة.",
@@ -58,6 +67,9 @@ export class LocalizationService {
       },
       id: {
         noResponse: "Anda tidak memberikan jawaban untuk pertanyaan ini.",
+        expectedUrlResponse: "Diharapkan respons URL, tetapi tidak diterima.",
+        invalidUrl: "URL tidak valid: {url}",
+        unableToFetchUrl: "Tidak dapat mengambil konten dari URL: {url}",
         expectedTrueFalse:
           "Diharapkan jawaban benar/salah, tetapi tidak diterima.",
         invalidTrueFalse: "Jawaban benar/salah tidak valid.",
@@ -75,6 +87,10 @@ export class LocalizationService {
       },
       de: {
         noResponse: "Sie haben keine Antwort auf diese Frage gegeben.",
+        expectedUrlResponse:
+          "Eine URL-Antwort wurde erwartet, aber nicht erhalten.",
+        invalidUrl: "Ungültige URL: {url}",
+        unableToFetchUrl: "Inhalt von URL konnte nicht abgerufen werden: {url}",
         expectedTrueFalse:
           "Eine Ja/Nein-Antwort wurde erwartet, aber nicht erhalten.",
         invalidTrueFalse: "Ungültige Ja/Nein-Antwort.",
@@ -94,6 +110,10 @@ export class LocalizationService {
       },
       es: {
         noResponse: "No proporcionaste una respuesta a esta pregunta.",
+        expectedUrlResponse:
+          "Se esperaba una respuesta URL, pero no se recibió.",
+        invalidUrl: "URL inválida: {url}",
+        unableToFetchUrl: "No se pudo obtener contenido de la URL: {url}",
         expectedTrueFalse:
           "Se esperaba una respuesta verdadero/falso, pero no se recibió.",
         invalidTrueFalse: "Respuesta verdadero/falso inválida.",
@@ -113,6 +133,9 @@ export class LocalizationService {
       },
       fr: {
         noResponse: "Vous n'avez pas répondu à cette question.",
+        expectedUrlResponse: "Une réponse URL était attendue, mais non reçue.",
+        invalidUrl: "URL invalide: {url}",
+        unableToFetchUrl: "Impossible de récupérer le contenu de l'URL: {url}",
         expectedTrueFalse:
           "Une réponse vrai/faux était attendue, mais non reçue.",
         invalidTrueFalse: "Réponse vrai/faux invalide.",

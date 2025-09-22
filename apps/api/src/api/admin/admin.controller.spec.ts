@@ -22,7 +22,8 @@ describe("AdminController", () => {
         .fn()
         .mockResolvedValue({ email: "admin@test.com", role: "admin" }),
       createAdminSession: jest.fn().mockResolvedValue("mock-session-token"),
-      revokeSession: jest.fn().mockResolvedValue(),
+      revokeSession: jest.fn().mockResolvedValue(true),
+      isAdminSessionValid: jest.fn().mockResolvedValue(true),
     };
 
     const module: TestingModule = await Test.createTestingModule({

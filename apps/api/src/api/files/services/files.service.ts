@@ -22,6 +22,37 @@ import { S3Service } from "./s3.service";
 export class FilesService {
   constructor(private s3Service: S3Service) {}
 
+  /**
+   * Get the appropriate bucket name based on environment and upload type
+   */
+  getBucketForEnvironment(
+    uploadType: UploadType,
+    isProduction = false,
+  ): string {
+    if (uploadType === UploadType.LEARNER && isProduction) {
+      return this.s3Service.getBucketName(UploadType.LEARNER_PROD);
+    }
+    return this.s3Service.getBucketName(uploadType);
+  }
+
+  /**
+   * Determine if a bucket is in the production environment (us-south)
+   */
+  isProductionBucket(bucket: string): boolean {
+    return bucket === process.env.IBM_COS_LEARNER_BUCKET_PROD;
+  }
+
+  /**
+   * Get bucket region information
+   */
+  getBucketInfo(bucket: string): { region: string; isProduction: boolean } {
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+      region: this.s3Service.getBucketRegion(bucket),
+      isProduction: this.isProductionBucket(bucket),
+    };
+  }
+
   private getCurrentMonth(): string {
     const now = new Date();
     return now.toLocaleString("default", { month: "long" }).toLowerCase();
@@ -63,6 +94,24 @@ export class FilesService {
         if (typeof context.questionId !== "number") {
           throw new BadRequestException(
             "Missing questionId in context for learner upload",
+          );
+        }
+
+        prefix = normalizedPath
+          ? `${normalizedPath}/`
+          : `${context.assignmentId}/${userId}/${context.questionId}/`;
+        break;
+      }
+
+      case UploadType.LEARNER_PROD: {
+        if (typeof context.assignmentId !== "number") {
+          throw new BadRequestException(
+            "Missing assignmentId in context for learner production upload",
+          );
+        }
+        if (typeof context.questionId !== "number") {
+          throw new BadRequestException(
+            "Missing questionId in context for learner production upload",
           );
         }
 
