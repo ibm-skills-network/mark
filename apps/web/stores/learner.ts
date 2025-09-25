@@ -435,6 +435,7 @@ export type LearnerActions = {
   setGlobalLanguage: (language: string) => void;
   setUserPreferedLanguage: (language: string) => void;
   getUserPreferedLanguageFromLTI: () => Promise<string>;
+  clearLearnerAnswers: () => void;
 };
 
 export type AssignmentDetailsState = {
@@ -950,6 +951,19 @@ export const useLearnerStore = createWithEqualityFn<
         setTotalPointsEarned: (totalPointsEarned) => set({ totalPointsEarned }),
         setTotalPointsPossible: (totalPointsPossible) =>
           set({ totalPointsPossible }),
+        clearLearnerAnswers: () =>
+          set((state) => ({
+            questions: state.questions.map((q) => ({
+              ...q,
+              learnerTextResponse: "",
+              learnerUrlResponse: "",
+              learnerChoices: [],
+              learnerAnswerChoice: null,
+              learnerFileResponse: [],
+              presentationResponse: null,
+              status: "unedited" as QuestionStatus,
+            })),
+          })),
       }),
       {
         name: `learner-${ASSIGNMENT_ID}`,

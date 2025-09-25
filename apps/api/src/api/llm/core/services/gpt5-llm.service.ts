@@ -36,7 +36,7 @@ export class Gpt5LlmService implements ILlmProvider {
     return new ChatOpenAI({
       temperature: options?.temperature ?? 0.5,
       modelName: options?.modelName ?? Gpt5LlmService.DEFAULT_MODEL,
-      maxTokens: options?.maxTokens,
+      maxCompletionTokens: options?.maxTokens,
     });
   }
 

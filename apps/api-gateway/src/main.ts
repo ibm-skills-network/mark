@@ -1,4 +1,3 @@
-import instana from "@instana/collector";
 import { VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -8,8 +7,6 @@ import helmet from "helmet";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
 import { winstonOptions } from "./logger/config";
-
-instana();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {

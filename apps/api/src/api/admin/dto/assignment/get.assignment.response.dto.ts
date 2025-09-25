@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AssignmentType } from "@prisma/client";
+import { Assignment, AssignmentType } from "@prisma/client";
 import { BaseAssignmentResponseDto } from "./base.assignment.response.dto";
 
 export class AdminGetAssignmentResponseDto extends BaseAssignmentResponseDto {
@@ -16,4 +16,9 @@ export class AdminGetAssignmentResponseDto extends BaseAssignmentResponseDto {
     enum: AssignmentType,
   })
   type: AssignmentType;
+  @ApiProperty({
+    description: "The full assignment object",
+    required: true,
+  })
+  metadata: Assignment;
 }

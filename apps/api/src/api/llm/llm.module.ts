@@ -18,6 +18,7 @@ import { TokenCounterService } from "./core/services/token-counter.service";
 import { UsageTrackerService } from "./core/services/usage-tracking.service";
 import { FileGradingService } from "./features/grading/services/file-grading.service";
 import { GradingJudgeService } from "./features/grading/services/grading-judge.service";
+import { GradingThresholdService } from "./features/grading/services/grading-threshold.service";
 import { ImageGradingService } from "./features/grading/services/image-grading.service";
 import { PresentationGradingService } from "./features/grading/services/presentation-grading.service";
 import { TextGradingService } from "./features/grading/services/text-grading.service";
@@ -32,6 +33,7 @@ import {
   ALL_LLM_PROVIDERS,
   FILE_GRADING_SERVICE,
   GRADING_JUDGE_SERVICE,
+  GRADING_THRESHOLD_SERVICE,
   IMAGE_GRADING_SERVICE,
   LLM_ASSIGNMENT_SERVICE,
   LLM_PRICING_SERVICE,
@@ -90,6 +92,10 @@ import {
     {
       provide: GRADING_JUDGE_SERVICE,
       useClass: GradingJudgeService,
+    },
+    {
+      provide: GRADING_THRESHOLD_SERVICE,
+      useClass: GradingThresholdService,
     },
     {
       provide: VALIDATOR_SERVICE,
@@ -173,6 +179,7 @@ import {
     TOKEN_COUNTER,
     USAGE_TRACKER,
     GRADING_JUDGE_SERVICE,
+    GRADING_THRESHOLD_SERVICE,
     LLM_PRICING_SERVICE,
     LLM_ASSIGNMENT_SERVICE,
     LLM_RESOLVER_SERVICE,

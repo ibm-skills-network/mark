@@ -31,8 +31,8 @@ import {
 } from "../../llm/llm.constants";
 
 interface AdminSessionRequest extends Request {
-  adminSession: {
-    email: string;
+  userSession: {
+    userId: string;
     role: string;
     sessionToken: string;
   };
@@ -151,7 +151,7 @@ export class LLMAssignmentController {
         featureKey,
         modelKey,
         priority,
-        assignedBy: request.adminSession.email,
+        assignedBy: request.userSession.userId,
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         metadata,
       };
@@ -165,7 +165,7 @@ export class LLMAssignmentController {
         data: {
           featureKey,
           modelKey,
-          assignedBy: request.adminSession.email,
+          assignedBy: request.userSession.userId,
           assignedAt: new Date().toISOString(),
         },
       };
@@ -193,7 +193,7 @@ export class LLMAssignmentController {
     try {
       const success = await this.assignmentService.removeFeatureAssignment(
         featureKey,
-        request.adminSession.email,
+        request.userSession.userId,
       );
 
       if (!success) {
@@ -208,7 +208,7 @@ export class LLMAssignmentController {
         message: `Successfully removed model assignment for feature ${featureKey}`,
         data: {
           featureKey,
-          removedBy: request.adminSession.email,
+          removedBy: request.userSession.userId,
           removedAt: new Date().toISOString(),
         },
       };
@@ -360,19 +360,29 @@ export class LLMAssignmentController {
       );
     }
 
+    // Validate each assignment has required fields
+    for (const assignment of assignments) {
+      if (!assignment.featureKey || !assignment.modelKey) {
+        throw new HttpException(
+          "Each assignment must have featureKey and modelKey",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     try {
       const assignmentRequests: AssignmentRequest[] = assignments.map(
         (assignment) => ({
           featureKey: assignment.featureKey,
           modelKey: assignment.modelKey,
           priority: assignment.priority,
-          assignedBy: request.adminSession.email,
+          assignedBy: request.userSession.userId,
         }),
       );
 
       const results = await this.assignmentService.bulkUpdateAssignments(
         assignmentRequests,
-        request.adminSession.email,
+        request.userSession.userId,
       );
 
       return {
@@ -382,13 +392,15 @@ export class LLMAssignmentController {
           successful: results.success,
           failed: results.failed,
           errors: results.errors,
-          assignedBy: request.adminSession.email,
+          assignedBy: request.userSession.userId,
           assignedAt: new Date().toISOString(),
         },
       };
-    } catch {
+    } catch (error) {
       throw new HttpException(
-        "Failed to perform bulk assignment",
+        `Failed to process bulk assignments: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -401,7 +413,7 @@ export class LLMAssignmentController {
   async resetToDefaults(@Req() request: AdminSessionRequest) {
     try {
       const resetCount = await this.assignmentService.resetToDefaults(
-        request.adminSession.email,
+        request.userSession.userId,
       );
 
       return {
@@ -409,7 +421,7 @@ export class LLMAssignmentController {
         message: `Successfully reset ${resetCount} features to default models`,
         data: {
           resetCount,
-          resetBy: request.adminSession.email,
+          resetBy: request.userSession.userId,
           resetAt: new Date().toISOString(),
         },
       };

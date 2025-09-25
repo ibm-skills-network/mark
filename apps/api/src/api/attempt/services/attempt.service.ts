@@ -4,20 +4,7 @@
 import { Injectable } from "@nestjs/common";
 import { GradingJob, ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
-import {
-  catchError,
-  concatWith,
-  defer,
-  finalize,
-  from,
-  interval,
-  map,
-  Observable,
-  of,
-  Subject,
-  switchMap,
-  takeWhile,
-} from "rxjs";
+import { catchError, Observable, of, Subject } from "rxjs";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
@@ -257,7 +244,7 @@ export class AttemptServiceV2 {
   }
 
   /**
-   * Get grading job status stream
+   * Get grading job status stream with improved reliability
    */
   getGradingJobStatusStream(gradingJobId: number): Observable<MessageEvent> {
     if (!this.gradingJobStreams.has(gradingJobId)) {
@@ -271,37 +258,198 @@ export class AttemptServiceV2 {
       );
     }
 
-    return of(null).pipe(
-      map(() => {
-        return {
-          type: "update",
-          data: { message: "Connecting to grading job status stream..." },
-        } as MessageEvent;
-      }),
-      concatWith(
-        defer(() => from(this.getInitialGradingJobStatus(gradingJobId))),
-        interval(1000).pipe(
-          switchMap(() => from(this.pollGradingJobStatus(gradingJobId))),
-          takeWhile((event) => {
-            const status = (event as { data?: { status?: string } })?.data
+    let lastUpdateTime = Date.now();
+    let heartbeatInterval: NodeJS.Timeout;
+    let isStreamActive = true;
+
+    // Enhanced stream with heartbeat and intelligent polling
+    return new Observable<MessageEvent>((subscriber) => {
+      console.log(`Starting enhanced stream for grading job ${gradingJobId}`);
+
+      // Send initial connection message
+      subscriber.next({
+        type: "update",
+        data: JSON.stringify({
+          message: "Connected to grading service...",
+          timestamp: new Date().toISOString(),
+          connectionId: `${gradingJobId}-${Date.now()}`,
+        }),
+      } as MessageEvent);
+
+      // Start heartbeat mechanism
+      heartbeatInterval = setInterval(() => {
+        if (isStreamActive && Date.now() - lastUpdateTime > 15_000) {
+          subscriber.next({
+            type: "heartbeat",
+            data: JSON.stringify({
+              heartbeat: true,
+              timestamp: new Date().toISOString(),
+              jobId: gradingJobId,
+            }),
+          } as MessageEvent);
+        }
+      }, 10_000); // Heartbeat every 10 seconds
+
+      // Get initial status
+      this.getInitialGradingJobStatus(gradingJobId)
+        .then((initialEvent) => {
+          if (initialEvent && isStreamActive) {
+            lastUpdateTime = Date.now();
+            subscriber.next(initialEvent);
+          }
+        })
+        .catch((error) => {
+          console.error(
+            `Failed to get initial status for job ${gradingJobId}:`,
+            error,
+          );
+          subscriber.next({
+            type: "error",
+            data: JSON.stringify({
+              error: "Failed to get initial job status",
+              retryable: true,
+              timestamp: new Date().toISOString(),
+            }),
+          } as MessageEvent);
+        });
+
+      // Intelligent polling with backoff
+      let pollInterval = 2000; // Start with 2 second polling
+      let consecutiveErrors = 0;
+      const maxPollInterval = 15_000; // Max 15 seconds between polls
+
+      const pollJob = async () => {
+        if (!isStreamActive) return;
+
+        try {
+          const statusEvent = await this.pollGradingJobStatus(gradingJobId);
+
+          if (statusEvent && isStreamActive) {
+            lastUpdateTime = Date.now();
+            consecutiveErrors = 0;
+            pollInterval = Math.max(2000, pollInterval - 1000); // Decrease interval on success
+
+            subscriber.next(statusEvent);
+
+            const status = (statusEvent as { data?: { status?: string } })?.data
               ?.status;
-            return status !== "Completed" && status !== "Failed";
-          }, true),
-        ),
-        statusSubject.asObservable(),
-      ),
-      finalize(() => {
-        console.log(`Stream closed for grading job ${gradingJobId}`);
+
+            if (status === "Completed" || status === "Failed") {
+              console.log(
+                `Grading job ${gradingJobId} finished with status: ${status}`,
+              );
+              isStreamActive = false;
+
+              // Send final completion event
+              setTimeout(() => {
+                subscriber.next({
+                  type: "finalize",
+                  data: JSON.stringify({
+                    status: "Stream completed",
+                    finalStatus: status,
+                    timestamp: new Date().toISOString(),
+                  }),
+                } as MessageEvent);
+                subscriber.complete();
+              }, 500);
+              return;
+            }
+          }
+        } catch (error) {
+          consecutiveErrors++;
+          pollInterval = Math.min(maxPollInterval, pollInterval + 2000); // Increase interval on error
+
+          console.error(
+            `Poll error for job ${gradingJobId} (attempt ${consecutiveErrors}):`,
+            error,
+          );
+
+          if (consecutiveErrors >= 3) {
+            subscriber.next({
+              type: "error",
+              data: JSON.stringify({
+                error: "Multiple polling failures detected",
+                consecutiveErrors,
+                nextRetryIn: pollInterval,
+                timestamp: new Date().toISOString(),
+              }),
+            } as MessageEvent);
+          }
+
+          // If too many consecutive errors, consider the job failed
+          if (consecutiveErrors >= 10) {
+            console.error(
+              `Too many consecutive errors for job ${gradingJobId}, terminating stream`,
+            );
+            isStreamActive = false;
+            subscriber.error(
+              new Error(
+                `Job ${gradingJobId} monitoring failed after ${consecutiveErrors} consecutive errors`,
+              ),
+            );
+            return;
+          }
+        }
+
+        if (isStreamActive) {
+          setTimeout(() => void pollJob(), pollInterval);
+        }
+      };
+
+      // Start polling after a short delay
+      setTimeout(() => void pollJob(), 1000);
+
+      // Listen to manual status updates
+      const statusSubscription = statusSubject.asObservable().subscribe({
+        next: (event) => {
+          if (isStreamActive) {
+            lastUpdateTime = Date.now();
+            subscriber.next(event);
+          }
+        },
+        error: (error) => {
+          console.error(`Status subject error for job ${gradingJobId}:`, error);
+          if (isStreamActive) {
+            subscriber.next({
+              type: "error",
+              data: JSON.stringify({
+                error: "Internal status update failed",
+                details: error instanceof Error ? error.message : String(error),
+                timestamp: new Date().toISOString(),
+              }),
+            } as MessageEvent);
+          }
+        },
+      });
+
+      // Cleanup function
+      return () => {
+        console.log(
+          `Cleaning up enhanced stream for grading job ${gradingJobId}`,
+        );
+        isStreamActive = false;
+
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+        }
+
+        statusSubscription.unsubscribe();
         void this.cleanupGradingJobStream(gradingJobId);
-      }),
+      };
+    }).pipe(
       catchError((error: Error) => {
-        console.error(`Stream error for grading job ${gradingJobId}:`, error);
+        console.error(
+          `Critical stream error for grading job ${gradingJobId}:`,
+          error,
+        );
         return of({
           type: "error",
-          data: {
-            error: error.message,
-            done: true,
-          },
+          data: JSON.stringify({
+            error: "Stream connection failed",
+            details: error.message,
+            timestamp: new Date().toISOString(),
+            jobId: gradingJobId,
+          }),
         } as MessageEvent);
       }),
     );
@@ -333,35 +481,68 @@ export class AttemptServiceV2 {
   }
 
   /**
-   * Poll grading job status
+   * Poll grading job status with enhanced error handling
    */
   private async pollGradingJobStatus(
     gradingJobId: number,
   ): Promise<MessageEvent | null> {
-    const job = await this.getGradingJob(gradingJobId);
+    try {
+      const job = await this.getGradingJob(gradingJobId);
 
-    if (!job) {
-      return null;
+      if (!job) {
+        console.warn(`Grading job ${gradingJobId} not found during polling`);
+        return {
+          type: "error",
+          data: JSON.stringify({
+            error: "Grading job not found",
+            jobId: gradingJobId,
+            timestamp: new Date().toISOString(),
+            retryable: false,
+          }),
+        } as MessageEvent;
+      }
+
+      let messageType = "update";
+      if (job.status === "Completed") {
+        messageType = "finalize";
+      } else if (job.status === "Failed") {
+        messageType = "error";
+      }
+
+      let parsedResult: any;
+      try {
+        parsedResult = job.result
+          ? JSON.parse(job.result as string)
+          : undefined;
+      } catch (parseError) {
+        console.warn(
+          `Failed to parse job result for ${gradingJobId}:`,
+          parseError,
+        );
+        parsedResult = {
+          error: "Result parsing failed",
+          rawResult: job.result,
+        };
+      }
+
+      return {
+        type: messageType,
+        data: JSON.stringify({
+          timestamp: new Date().toISOString(),
+          status: job.status,
+          progress: job.progress || "Processing...",
+          percentage: job.percentage || 0,
+          result: parsedResult,
+          jobId: gradingJobId,
+          done: job.status === "Completed" || job.status === "Failed",
+        }),
+      } as MessageEvent;
+    } catch (error) {
+      console.error(`Failed to poll grading job ${gradingJobId}:`, error);
+      throw new Error(
+        `Database error while polling job ${gradingJobId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
-
-    let messageType = "update";
-    if (job.status === "Completed") {
-      messageType = "finalize";
-    } else if (job.status === "Failed") {
-      messageType = "error";
-    }
-
-    return {
-      type: messageType,
-      data: {
-        timestamp: new Date().toISOString(),
-        status: job.status,
-        progress: job.progress,
-        percentage: job.percentage || 0,
-        result: job.result ? JSON.parse(job.result as string) : undefined,
-        done: job.status === "Completed" || job.status === "Failed",
-      },
-    } as unknown as MessageEvent;
   }
 
   /**

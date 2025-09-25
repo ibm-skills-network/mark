@@ -251,6 +251,7 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
         severity,
         screenshot,
         assignmentId: initialData?.assignmentId,
+        attemptId: attemptId,
       });
 
       // Reset form and close modal

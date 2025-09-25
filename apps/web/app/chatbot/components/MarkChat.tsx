@@ -58,6 +58,7 @@ import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { NotificationsPanel } from "./NotificationPanel";
 import { getUserNotifications, markNotificationAsRead } from "@/lib/author";
+import { useNotificationSSE, type Notification } from "@/lib/notificationSSE";
 
 interface ScreenshotDropzoneProps {
   file: File | null | undefined;
@@ -279,121 +280,6 @@ const SettingsPanel = ({
       </div>
     </motion.div>
   );
-};
-
-const ContextIndicators = ({
-  contextReady,
-  userRole,
-  authorContext,
-  learnerContext,
-  activeQuestion,
-  currentChatId,
-}) => {
-  if (!contextReady) return null;
-
-  const commonIndicators = (
-    <span
-      className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-        userRole === "author"
-          ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-          : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-      }`}
-    >
-      {userRole === "author" ? "Author Mode" : "Learner Mode"}
-    </span>
-  );
-
-  const chatSessionIndicator = currentChatId ? (
-    <Tippy content="Active chat session">
-      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 flex items-center gap-1">
-        <ClockIcon className="w-3 h-3" />
-        Chat Active
-      </span>
-    </Tippy>
-  ) : null;
-
-  if (userRole === "learner") {
-    const assignmentMeta = learnerContext.assignmentMeta;
-    const attemptsRemaining = learnerContext.attemptsRemaining;
-
-    return (
-      <>
-        {commonIndicators}
-        {chatSessionIndicator}
-        <span
-          className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-            learnerContext.isFeedbackMode
-              ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
-              : learnerContext.isGradedAssignment
-                ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-          }`}
-        >
-          {learnerContext.isFeedbackMode
-            ? "Feedback Review"
-            : learnerContext.isGradedAssignment
-              ? "Graded Assignment"
-              : "Practice Mode"}
-        </span>
-
-        {assignmentMeta?.name && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 truncate max-w-[120px]">
-            {assignmentMeta.name}
-          </span>
-        )}
-
-        {attemptsRemaining !== undefined && attemptsRemaining >= 0 && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
-            {attemptsRemaining}{" "}
-            {attemptsRemaining === 1 ? "attempt" : "attempts"} left
-          </span>
-        )}
-
-        {activeQuestion && learnerContext.questions && (
-          <Tippy
-            content={`Currently focused on Question ${
-              learnerContext.questions.findIndex(
-                (q) => q.id === activeQuestion,
-              ) + 1
-            }`}
-          >
-            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 flex items-center gap-1 cursor-help">
-              <ChatBubbleOvalLeftEllipsisIcon className="w-3 h-3" />
-              {`Q${
-                learnerContext.questions.findIndex(
-                  (q) => q.id === activeQuestion,
-                ) + 1
-              }`}
-            </span>
-          </Tippy>
-        )}
-      </>
-    );
-  } else {
-    const assignmentMeta = authorContext.assignmentMeta;
-    return (
-      <>
-        {commonIndicators}
-        {chatSessionIndicator}
-        {authorContext.focusedQuestionId && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
-            Question Focus
-          </span>
-        )}
-        {assignmentMeta?.name && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 truncate max-w-[120px]">
-            {assignmentMeta.name}
-          </span>
-        )}
-        {assignmentMeta?.questionCount !== undefined && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-            {assignmentMeta.questionCount}{" "}
-            {assignmentMeta.questionCount === 1 ? "question" : "questions"}
-          </span>
-        )}
-      </>
-    );
-  }
 };
 
 const QuestionSelector = ({
@@ -1026,11 +912,12 @@ export const MarkChat = () => {
   const handleCheckReports = useCallback(() => {
     setShowReports(true);
   }, []);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [sseConnected, setSseConnected] = useState(false);
   const [notificationCheckInterval, setNotificationCheckInterval] =
-    useState(null);
+    useState<NodeJS.Timeout | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 }); // Real-time position during drag
   const [isDragging, setIsDragging] = useState(false);
@@ -1283,7 +1170,42 @@ export const MarkChat = () => {
     resetHelpOffer,
   ]);
 
-  const loadNotifications = useCallback(async () => {
+  // SSE setup for real-time notifications
+  const notificationSSE = useNotificationSSE({
+    onInitial: (initialNotifications) => {
+      setNotifications(initialNotifications);
+      setUnreadNotifications(
+        initialNotifications.filter((n) => !n.read).length,
+      );
+    },
+    onNew: (notification) => {
+      setNotifications((prev) => [notification, ...prev]);
+      if (!notification.read) {
+        setUnreadNotifications((prev) => prev + 1);
+      }
+    },
+    onRead: (notificationId) => {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
+      );
+      setUnreadNotifications((prev) => Math.max(0, prev - 1));
+    },
+    onConnect: () => {
+      setSseConnected(true);
+    },
+    onDisconnect: () => {
+      setSseConnected(false);
+    },
+    onError: (error) => {
+      console.error("Notification SSE error:", error);
+      setSseConnected(false);
+      // Fallback to polling if SSE fails
+      loadNotificationsFallback();
+    },
+  });
+
+  // Fallback function for when SSE fails
+  const loadNotificationsFallback = useCallback(async () => {
     if (!user?.userId) return;
 
     try {
@@ -1292,6 +1214,9 @@ export const MarkChat = () => {
       setUnreadNotifications(data.filter((n) => !n.read).length);
     } catch (error) {}
   }, [user?.userId]);
+
+  // Alias for backward compatibility (use SSE primarily, fallback when needed)
+  const loadNotifications = loadNotificationsFallback;
 
   const markNotificationRead = useCallback(async (notificationId) => {
     try {
@@ -1351,27 +1276,25 @@ export const MarkChat = () => {
 
   useEffect(() => {
     if (user?.userId) {
-      loadNotifications();
+      // Connect to SSE for real-time notifications
+      notificationSSE.connect();
 
-      if (!notificationCheckInterval) {
-        const intervalId = setInterval(loadNotifications, 30000);
-        setNotificationCheckInterval(intervalId);
-      }
+      // Load initial notifications as fallback
+      loadNotifications();
 
       return () => {
-        if (notificationCheckInterval) {
-          clearInterval(notificationCheckInterval);
-          setNotificationCheckInterval(null);
-        }
+        // Disconnect SSE when component unmounts or user changes
+        notificationSSE.disconnect();
       };
     }
-  }, [user?.userId, loadNotifications, notificationCheckInterval]);
+  }, [user?.userId, loadNotifications]);
 
   useEffect(() => {
-    if (isOpen && user?.userId) {
+    if (isOpen && user?.userId && !sseConnected) {
+      // Only load notifications manually if SSE is not connected
       loadNotifications();
     }
-  }, [isOpen, user?.userId, loadNotifications]);
+  }, [isOpen, user?.userId, loadNotifications, sseConnected]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
   const checkForIssueStatusQuery = (message: string): boolean | number => {
@@ -2253,7 +2176,7 @@ Please help me with this.`;
             headers: {
               Cookie: document.cookie,
             },
-            credentials: "include",
+            credentials: "include", // pragma: allowlist secret
             body: formData,
           });
 
@@ -2783,18 +2706,6 @@ Please help me with this.`;
                   />
                 )}
               </AnimatePresence>
-
-              {/* Context indicators */}
-              <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                <ContextIndicators
-                  contextReady={contextReady}
-                  userRole={userRole}
-                  authorContext={authorContext}
-                  learnerContext={learnerContext}
-                  activeQuestion={activeQuestion}
-                  currentChatId={currentChatId}
-                />
-              </div>
 
               {/* Messages area */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-950 relative">

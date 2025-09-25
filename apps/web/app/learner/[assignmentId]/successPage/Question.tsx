@@ -484,17 +484,16 @@ const Question: FC<Props> = ({
   const questionResponse = questionResponses?.[0];
 
   const learnerResponse: LearnerResponseType =
+    (learnerChoices && learnerChoices.length > 0
+      ? learnerChoices
+      : undefined) ??
     learnerTextResponse ??
     learnerFileResponse ??
     learnerUrlResponse ??
     learnerAnswerChoice ??
-    (learnerChoices && learnerChoices.length > 0
-      ? learnerChoices
-      : undefined) ??
     (questionResponse?.learnerResponse
       ? parseLearnerResponse(questionResponse.learnerResponse)
       : undefined);
-
   const renderLearnerAnswer = () => {
     if (
       type === "TEXT" &&

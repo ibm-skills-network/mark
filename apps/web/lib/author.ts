@@ -25,6 +25,7 @@ interface Notification {
   createdAt: string;
   read: boolean;
   metadata: string | null;
+  userId: string;
 }
 /**
  * Fetches user notifications from the backend.
@@ -315,7 +316,7 @@ export function subscribeToJobStatus(
 
         timeoutId = setTimeout(
           () => handleError("Job processing timeout"),
-          300000,
+          3000000,
         );
       };
 

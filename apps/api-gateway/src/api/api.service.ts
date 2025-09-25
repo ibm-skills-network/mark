@@ -107,7 +107,7 @@ export class ApiService {
         path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers: outgoingHeaders,
-        timeout: 300_000, // 5 minutes
+        timeout: 600_000, // 10 minutes
       };
 
       const proxyRequest = httpModule.request(
@@ -165,8 +165,8 @@ export class ApiService {
       proxyRequest.on("timeout", () => {
         this.logger.error("SSE proxy request timeout");
         proxyRequest.destroy();
-        if (!clientResponse.headersSent) {
-          clientResponse.status(504).json({ error: "Gateway timeout" });
+        if (!clientResponse.writableEnded) {
+          clientResponse.end();
         }
         reject(new Error("SSE proxy request timeout"));
       });

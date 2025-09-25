@@ -3,6 +3,7 @@ import { IsEnum, IsNumber, IsOptional, IsString } from "class-validator";
 export enum UploadType {
   AUTHOR = "author",
   LEARNER = "learner",
+  LEARNER_PROD = "learner-prod",
   DEBUG = "debug",
 }
 
