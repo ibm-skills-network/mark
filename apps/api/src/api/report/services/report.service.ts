@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 import {
+  HttpException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -16,6 +18,7 @@ import {
   UserRole,
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
+import { AdminEmailService } from "src/auth/services/admin-email.service";
 import { PrismaService } from "src/prisma.service";
 import { ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
@@ -51,10 +54,31 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly filesService: FilesService,
     private readonly notificationsService: NotificationsService,
+    private readonly adminEmailService: AdminEmailService,
   ) {}
   private getPrivateKey(): string {
     const raw = process.env.GITHUB_APP_PRIVATE_KEY || "";
-    const processed = raw.includes("\\n") ? raw.replaceAll("\\n", "\n") : raw;
+
+    // Handle different possible formats
+    let processed = raw.trim();
+
+    // If the key contains literal \n strings, convert them to actual newlines
+    if (processed.includes("\\n")) {
+      processed = processed.replaceAll("\\n", "\n");
+    }
+
+    // Ensure proper PEM format
+    if (!processed.startsWith("-----BEGIN")) {
+      throw new InternalServerErrorException(
+        "Invalid private key format: missing BEGIN marker",
+      );
+    }
+    if (!processed.endsWith("-----")) {
+      throw new InternalServerErrorException(
+        "Invalid private key format: missing END marker",
+      );
+    }
+
     return processed;
   }
 
@@ -76,6 +100,7 @@ export class ReportsService {
         privateKey,
         { algorithm: "RS256" },
       );
+
       return token;
     } catch (error) {
       console.error("Failed to create JWT:", error);
@@ -781,10 +806,10 @@ export class ReportsService {
       },
     });
     if (recentReports.length > 5) {
-      return {
-        message:
-          "You have reported too many issues in the last 24 hours. Please try again later.",
-      };
+      throw new HttpException(
+        "You have reported too many issues in the last 24 hours. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     let screenshotUrl: string | undefined;
@@ -803,7 +828,6 @@ export class ReportsService {
           );
 
           screenshotUrl = screenshotKey;
-          console.log("Screenshot uploaded successfully:", screenshotUrl);
         } else {
           console.warn(
             "IBM_COS_DEBUG_BUCKET not configured, skipping screenshot upload",
@@ -811,7 +835,6 @@ export class ReportsService {
         }
       } catch (uploadError) {
         console.error("Failed to upload screenshot:", uploadError);
-        // Continue with report creation even if screenshot upload fails
       }
     }
 
@@ -849,21 +872,17 @@ ${isProduction ? "PROD" : "DEV"}] [${role}] ${issueSeverity.toUpperCase()} ${
 ${description}
 `;
 
-    // Include screenshot if provided (either from additionalDetails or uploaded file)
     const finalScreenshotUrl =
       screenshotUrl || additionalDetails?.screenshotUrl;
     if (finalScreenshotUrl && typeof finalScreenshotUrl === "string") {
-      // Get environment variable for IBM COS debug bucket
       const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
       const cosEndpoint = process.env.IBM_COS_ENDPOINT;
 
-      // If we uploaded the screenshot (screenshotUrl is set) or it's a full bucket path
       if (
         cosEndpoint &&
         debugBucket &&
         (screenshotUrl || finalScreenshotUrl.includes(debugBucket))
       ) {
-        // Construct full IBM COS URL for the screenshot
         const fullScreenshotUrl = screenshotUrl
           ? `${cosEndpoint}/${debugBucket}/${screenshotUrl}`
           : `${cosEndpoint}/${debugBucket}/${finalScreenshotUrl}`;
@@ -1170,7 +1189,11 @@ A new related issue has been created: #${issue.number}
             : undefined,
         isDuplicate,
       };
-    } catch {
+    } catch (error) {
+      console.error(
+        "[REPORT DEBUG] GitHub issue creation failed in main try block:",
+        error,
+      );
       try {
         const reportData: {
           duplicateOfReportId: number | null;
@@ -2539,8 +2562,6 @@ ${description}
             },
           },
         );
-
-        console.log(`Screenshot added to GitHub issue #${report.issueNumber}`);
       } catch (error) {
         console.error(`Error adding screenshot to GitHub issue:`, error);
       }

@@ -28,7 +28,7 @@ import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
 import GradingProgressModal from "./GradingProgressModal";
@@ -140,7 +140,7 @@ function LearnerHeader() {
     }
   };
 
-  const CheckNoFlaggedQuestions = () => {
+  const CheckNoFlaggedQuestions = useCallback(() => {
     const flaggedQuestions = questions.filter((q) => q.status === "flagged");
     if (flaggedQuestions.length > 0) {
       setToggleWarning(true);
@@ -152,7 +152,7 @@ function LearnerHeader() {
         setToggleWarning(true);
       }
     }
-  };
+  }, [questions]);
 
   const handleCloseModal = () => {
     setToggleWarning(false);
@@ -176,7 +176,7 @@ function LearnerHeader() {
     });
   };
 
-  async function handleSubmitAssignment() {
+  const handleSubmitAssignment = useCallback(async () => {
     let responsesForQuestions: QuestionAttemptRequestWithId[] = [];
     try {
       responsesForQuestions = questions.map((q) => ({
@@ -308,7 +308,24 @@ function LearnerHeader() {
       }, 2000);
       return;
     }
-  }
+  }, [
+    questions,
+    role,
+    userPreferedLanguage,
+    assignmentId,
+    activeAttemptId,
+    authorQuestions,
+    authorAssignmentDetails,
+    setTotalPointsEarned,
+    setTotalPointsPossible,
+    setGrade,
+    setShowSubmissionFeedback,
+    setQuestion,
+    clearGithubStore,
+    clearLearnerAnswers,
+    router,
+    gradingProgress
+  ]);
 
   useEffect(() => {
     if (userPreferedLanguage && !isInQuestionPage && !isSuccessPage) {
@@ -316,71 +333,158 @@ function LearnerHeader() {
     }
   }, [userPreferedLanguage]);
 
+  // Listen for custom submit event from question navigation
+  useEffect(() => {
+    const handleSubmitEvent = () => {
+      CheckNoFlaggedQuestions();
+    };
+
+    window.addEventListener('triggerAssignmentSubmission', handleSubmitEvent);
+
+    return () => {
+      window.removeEventListener('triggerAssignmentSubmission', handleSubmitEvent);
+    };
+  }, [CheckNoFlaggedQuestions]);
+
   return (
     <>
-      <header className="border-b border-gray-300 w-full px-6 py-6 flex justify-between h-[100px]">
-        <div className="flex">
-          <div className="flex justify-center gap-x-6 items-center">
+      <header className="border-b border-gray-300 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
+        {/* Mobile Layout */}
+        <div className="flex flex-col gap-3 sm:hidden">
+          {/* Top row: Icon + Title */}
+          <div className="flex items-center gap-3">
             <SNIcon />
-            <Title className="text-lg font-semibold">
+            <Title className="text-base font-semibold truncate flex-1">
               {assignmentDetails?.name || "Untitled Assignment"}
             </Title>
           </div>
-        </div>
 
-        <div className="flex items-center gap-x-4">
-          {!isSuccessPage && role === "learner" && (
-            <Dropdown
-              items={languages.map((lang) => ({
-                label: getLanguageName(lang),
-                value: lang,
-              }))}
-              selectedItem={userPreferedLanguage}
-              setSelectedItem={handleChangeLanguage}
-              placeholder="Select language"
-            />
-          )}
-          {isAttemptPage || isInQuestionPage ? (
-            <Button
-              className="btn-tertiary"
-              onClick={() => router.push(`/learner/${assignmentId}`)}
-            >
-              Return to Assignment Details
-            </Button>
-          ) : null}
-          {isInQuestionPage ? (
-            <div className="relative group">
-              <Button
-                disabled={buttonStatus.disabled}
-                className="disabled:opacity-70 btn-secondary"
-                onClick={CheckNoFlaggedQuestions}
-              >
-                {submitting && !gradingProgress.isOpen ? (
-                  <Spinner className="w-8" />
-                ) : (
-                  "Submit assignment"
-                )}
-              </Button>
-              {buttonStatus.reason && (
-                <div className="absolute top-full mt-2 left-1/8 transform -translate-x-1/4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-                  <div className="bg-gray-800 text-white text-sm rounded-md px-3 py-2 whitespace-nowrap">
-                    {buttonStatus.reason}
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-800"></div>
-                  </div>
+          {/* Bottom row: Actions */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-1">
+              {!isSuccessPage && role === "learner" && (
+                <div className="flex-1 max-w-[140px]">
+                  <Dropdown
+                    items={languages.map((lang) => ({
+                      label: getLanguageName(lang),
+                      value: lang,
+                    }))}
+                    selectedItem={userPreferedLanguage}
+                    setSelectedItem={handleChangeLanguage}
+                    placeholder="Language"
+                  />
                 </div>
               )}
+              {isAttemptPage || isInQuestionPage ? (
+                <Button
+                  className="btn-tertiary text-xs px-3 py-2"
+                  onClick={() => router.push(`/learner/${assignmentId}`)}
+                >
+                  Back
+                </Button>
+              ) : null}
             </div>
+
+            {isInQuestionPage ? (
+              <div className="relative group">
+                <Button
+                  disabled={buttonStatus.disabled}
+                  className="disabled:opacity-70 btn-secondary text-sm px-4 py-2"
+                  onClick={CheckNoFlaggedQuestions}
+                >
+                  {submitting && !gradingProgress.isOpen ? (
+                    <Spinner className="w-6" />
+                  ) : (
+                    "Submit"
+                  )}
+                </Button>
+                {buttonStatus.reason && (
+                  <div className="absolute top-full mt-2 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                    <div className="bg-gray-800 text-white text-xs rounded-md px-3 py-2 whitespace-nowrap max-w-[200px]">
+                      {buttonStatus.reason}
+                      <div className="absolute bottom-full right-4 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-800"></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          {returnUrl && pathname.includes("successPage") ? (
+            <Link
+              href={returnUrl}
+              className="px-4 py-2 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center justify-center gap-2 text-sm"
+            >
+              Return to Course
+            </Link>
           ) : null}
         </div>
 
-        {returnUrl && pathname.includes("successPage") ? (
-          <Link
-            href={returnUrl}
-            className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center gap-2"
-          >
-            Return to Course
-          </Link>
-        ) : null}
+        {/* Desktop Layout */}
+        <div className="hidden sm:flex justify-between items-center h-full">
+          <div className="flex">
+            <div className="flex justify-center gap-x-6 items-center">
+              <SNIcon />
+              <Title className="text-lg font-semibold">
+                {assignmentDetails?.name || "Untitled Assignment"}
+              </Title>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-x-4">
+            {!isSuccessPage && role === "learner" && (
+              <Dropdown
+                items={languages.map((lang) => ({
+                  label: getLanguageName(lang),
+                  value: lang,
+                }))}
+                selectedItem={userPreferedLanguage}
+                setSelectedItem={handleChangeLanguage}
+                placeholder="Select language"
+              />
+            )}
+            {isAttemptPage || isInQuestionPage ? (
+              <Button
+                className="btn-tertiary"
+                onClick={() => router.push(`/learner/${assignmentId}`)}
+              >
+                Return to Assignment Details
+              </Button>
+            ) : null}
+            {isInQuestionPage ? (
+              <div className="relative group">
+                <Button
+                  disabled={buttonStatus.disabled}
+                  className="disabled:opacity-70 btn-secondary"
+                  onClick={CheckNoFlaggedQuestions}
+                >
+                  {submitting && !gradingProgress.isOpen ? (
+                    <Spinner className="w-8" />
+                  ) : (
+                    "Submit assignment"
+                  )}
+                </Button>
+                {buttonStatus.reason && (
+                  <div className="absolute top-full mt-2 left-1/8 transform -translate-x-1/4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                    <div className="bg-gray-800 text-white text-sm rounded-md px-3 py-2 whitespace-nowrap">
+                      {buttonStatus.reason}
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-800"></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          {returnUrl && pathname.includes("successPage") ? (
+            <Link
+              href={returnUrl}
+              className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center gap-2"
+            >
+              Return to Course
+            </Link>
+          ) : null}
+        </div>
 
         <WarningAlert
           isOpen={toggleWarning}

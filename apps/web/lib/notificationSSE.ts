@@ -16,6 +16,7 @@ export interface NotificationSSECallbacks {
   onInitial: (notifications: Notification[]) => void;
   onNew: (notification: Notification) => void;
   onRead: (notificationId: number) => void;
+  onReadAll: () => void;
   onError: (error: Error) => void;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -25,8 +26,8 @@ export class NotificationSSEClient {
   private eventSource: EventSource | null = null;
   private callbacks: NotificationSSECallbacks;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000; // Start with 1 second
+  private reconnectInterval = 300000; // 5 minutes in milliseconds
+  private reconnectTimer: NodeJS.Timeout | null = null;
   private isConnected = false;
   private shouldReconnect = true;
 
@@ -53,7 +54,10 @@ export class NotificationSSEClient {
       this.eventSource.onopen = () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        this.reconnectDelay = 1000;
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
         this.callbacks.onConnect();
       };
 
@@ -70,6 +74,9 @@ export class NotificationSSEClient {
               break;
             case "read":
               this.callbacks.onRead(data.notificationId);
+              break;
+            case "read-all":
+              this.callbacks.onReadAll();
               break;
             case "heartbeat":
               // Keep connection alive - no action needed
@@ -90,39 +97,37 @@ export class NotificationSSEClient {
         this.isConnected = false;
         this.callbacks.onDisconnect();
 
-        if (
-          this.shouldReconnect &&
-          this.reconnectAttempts < this.maxReconnectAttempts
-        ) {
-          this.reconnectAttempts++;
-          const delay = Math.min(
-            this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
-            30000,
-          );
-
-          setTimeout(() => {
-            if (this.shouldReconnect) {
-              this.connect();
-            }
-          }, delay);
-        } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          this.callbacks.onError(
-            new Error("Max reconnection attempts reached"),
-          );
+        if (this.shouldReconnect) {
+          this.scheduleReconnect();
         }
       };
     } catch (error) {
-      this.callbacks.onError(
-        new Error(
-          `Failed to create SSE connection: ${error instanceof Error ? error.message : "Unknown error"}`,
-        ),
-      );
+      if (this.shouldReconnect) {
+        this.scheduleReconnect();
+      }
     }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
+    this.reconnectTimer = setTimeout(() => {
+      if (this.shouldReconnect) {
+        this.connect();
+      }
+    }, this.reconnectInterval);
   }
 
   disconnect(): void {
     this.shouldReconnect = false;
     this.isConnected = false;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     if (this.eventSource) {
       this.eventSource.close();
@@ -149,9 +154,8 @@ export function useNotificationSSE(
     onInitial: callbacks.onInitial || (() => {}),
     onNew: callbacks.onNew || (() => {}),
     onRead: callbacks.onRead || (() => {}),
-    onError:
-      callbacks.onError ||
-      ((error) => console.error("Notification SSE error:", error)),
+    onReadAll: callbacks.onReadAll || (() => {}),
+    onError: callbacks.onError || (() => {}),
     onConnect: callbacks.onConnect || (() => {}),
     onDisconnect: callbacks.onDisconnect || (() => {}),
   });

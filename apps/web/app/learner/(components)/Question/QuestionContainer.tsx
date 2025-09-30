@@ -16,6 +16,7 @@ import {
   LanguageIcon,
   TagIcon as OutlineTagIcon,
   ArrowRightIcon,
+  PaperAirplaneIcon,
 } from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
 import { AnimatePresence, motion } from "framer-motion";
@@ -236,39 +237,44 @@ function Component(props: Props) {
         }
       }}
       className={cn(
-        "flex bg-white rounded flex-col gap-y-4 p-6 relative shadow hover:shadow-md border ",
+        "flex bg-white rounded flex-col gap-y-4 p-4 sm:p-6 relative shadow hover:shadow-md border ",
         className,
         `${activeQuestionNumber === questionNumber ? "border-violet-600" : ""}`,
       )}
     >
-      <div className="flex justify-between items-center pb-4 border-b">
-        <div className="flex items-center gap-x-2">
-          <p className="text-gray-700 text-xl font-semibold">
+      <div className="flex flex-col sm:flex-row sm:justify-between gap-3 sm:gap-0 sm:items-center pb-4 border-b">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-x-2">
+          <p className="text-gray-700 text-lg sm:text-xl font-semibold">
             Question {questionNumber}
           </p>
-          <span className="text-md text-gray-600">|</span>
-          <span className="text-md text-gray-600">{questionTypeText}</span>
+          <div className="flex items-center gap-x-2">
+            <span className="hidden sm:inline text-md text-gray-600">|</span>
+            <span className="text-sm sm:text-md text-gray-600 bg-gray-100 px-2 py-1 rounded-md sm:bg-transparent sm:px-0 sm:py-0">
+              {questionTypeText}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-x-2">
+        <div className="flex items-center justify-between sm:justify-start gap-x-2">
           <button
             className="text-gray-600 font-medium flex items-center group gap-x-2 hover:text-violet-600 transition"
             onClick={handleFlaggingQuestion}
           >
             <Bookmark questionStatus={questionStatus} />
+            <span className="text-sm sm:hidden">Flag</span>
           </button>
-          <span className="text-md text-violet-600 bg-violet-100 rounded-md px-2 py-1">
+          <span className="text-sm sm:text-md text-violet-600 bg-violet-100 rounded-md px-2 py-1">
             {question.totalPoints} points
           </span>
         </div>
       </div>
 
       {/* Question header with language toggle for all types */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between gap-3">
         <div className="flex-grow">
           {/* Original Question */}
           <div className="mb-2">
             <MarkdownViewer
-              className="text-gray-800 px-2 border-gray-300"
+              className="text-gray-800 px-2 border-gray-300 text-sm sm:text-base"
               id={`question-${question.id}-original`}
             >
               {question.translations?.[userPreferedLanguage]?.translatedText ??
@@ -290,12 +296,17 @@ function Component(props: Props) {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-x-2 ml-4">
-          <LanguageIcon
-            className={`h-6 w-6 ${
-              translationOn ? "text-violet-600" : "text-gray-600"
-            }`}
-          />
+        <div className="flex items-center justify-between sm:justify-start gap-x-3 pt-2 sm:pt-0 border-t sm:border-t-0 sm:ml-4">
+          <div className="flex items-center gap-2">
+            <LanguageIcon
+              className={`h-5 w-5 sm:h-6 sm:w-6 ${
+                translationOn ? "text-violet-600" : "text-gray-600"
+              }`}
+            />
+            <span className="text-sm text-gray-600 sm:hidden">
+              Translation
+            </span>
+          </div>
           <button
             type="button"
             onClick={toggleTranslation}
@@ -347,14 +358,14 @@ function Component(props: Props) {
                   </div>
                 )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12 relative">
+              <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-12 relative">
                 {/* Arrow indicator - only on desktop */}
                 <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
                   <ArrowRightIcon className="w-6 h-6 text-black" />
                 </div>
 
                 {/* Original Language Column */}
-                <div className="space-y-3 lg:pr-6">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-gray-200 pb-2">
                     <span className="text-sm font-medium text-gray-700">
                       {userPreferedLanguageName || "Original"}
@@ -363,30 +374,28 @@ function Component(props: Props) {
                       Original
                     </span>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-4 flex flex-col">
-                    <div className="flex-grow">
-                      <RenderQuestion
-                        questionType={question.type}
-                        question={{
-                          ...question,
-                          choices: question?.choices?.map((choice, index) =>
-                            question.translations?.[userPreferedLanguage]
-                              ?.translatedChoices
-                              ? question.translations[userPreferedLanguage]
-                                  .translatedChoices[index]
-                              : choice,
-                          ),
-                        }}
-                      />
-                    </div>
+                  <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                    <RenderQuestion
+                      questionType={question.type}
+                      question={{
+                        ...question,
+                        choices: question?.choices?.map((choice, index) =>
+                          question.translations?.[userPreferedLanguage]
+                            ?.translatedChoices
+                            ? question.translations[userPreferedLanguage]
+                                .translatedChoices[index]
+                            : choice,
+                        ),
+                      }}
+                    />
                   </div>
                 </div>
 
                 {/* Translated Language Column */}
-                <div className="space-y-3 lg:pl-6 border-t lg:border-t-0 pt-4 lg:pt-0 mt-4 lg:mt-0">
-                  <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                <div className="space-y-3 border-t lg:border-t-0 pt-4 lg:pt-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-2">
                     <select
-                      className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
+                      className="text-sm font-medium border border-gray-300 rounded px-2 py-1 bg-white"
                       value={question.selectedLanguage}
                       onChange={(e) => handleLanguageChange(e.target.value)}
                     >
@@ -396,40 +405,38 @@ function Component(props: Props) {
                         </option>
                       ))}
                     </select>
-                    <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
+                    <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600 self-start sm:self-auto">
                       Translation
                     </span>
                   </div>
                   {loadingTranslation ? (
-                    <div className="flex items-center justify-center py-8 min-h-[200px]">
+                    <div className="flex items-center justify-center py-8 min-h-[120px] sm:min-h-[200px]">
                       <div className="text-center">
-                        <div className="animate-pulse text-violet-600 mb-2">
+                        <div className="animate-pulse text-violet-600 mb-2 text-sm">
                           {currentWord}...
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-xs sm:text-sm text-gray-500">
                           Loading translation
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-violet-50 rounded-lg p-4 flex flex-col">
-                      <div className="flex-grow">
-                        <RenderQuestion
-                          questionType={question.type}
-                          question={{
-                            ...question,
-                            choices: question?.choices?.map((choice, index) =>
-                              question.translations?.[
-                                getLanguageCode(question.selectedLanguage)
-                              ]?.translatedChoices
-                                ? question.translations[
-                                    getLanguageCode(question.selectedLanguage)
-                                  ].translatedChoices[index]
-                                : choice,
-                            ),
-                          }}
-                        />
-                      </div>
+                    <div className="bg-violet-50 rounded-lg p-3 sm:p-4">
+                      <RenderQuestion
+                        questionType={question.type}
+                        question={{
+                          ...question,
+                          choices: question?.choices?.map((choice, index) =>
+                            question.translations?.[
+                              getLanguageCode(question.selectedLanguage)
+                            ]?.translatedChoices
+                              ? question.translations[
+                                  getLanguageCode(question.selectedLanguage)
+                                ].translatedChoices[index]
+                              : choice,
+                          ),
+                        }}
+                      />
                     </div>
                   )}
                 </div>
@@ -493,29 +500,45 @@ function Component(props: Props) {
       )}
 
       {questionDisplay === "ONE_PER_PAGE" && (
-        <div className="flex justify-between">
+        <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 border-t border-gray-200">
           <button
             onClick={() => setActiveQuestionNumber(questionNumber - 1)}
             disabled={questionNumber === 1}
-            className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 font-medium flex items-center group gap-x-2 hover:text-violet-600 transition"
+            className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
           >
             <ArrowLongLeftIcon
               strokeWidth={2}
-              className="w-5 h-5 transition-transform group-hover:-translate-x-1"
+              className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
             />
-            Previous Question
+            <span className="text-sm sm:text-base">Previous Question</span>
           </button>
-          <button
-            onClick={() => setActiveQuestionNumber(questionNumber + 1)}
-            disabled={questionNumber === lastQuestionNumber}
-            className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 font-medium flex items-center group gap-x-2 hover:text-violet-600 transition"
-          >
-            Next Question
-            <ArrowLongRightIcon
-              strokeWidth={2}
-              className="w-5 h-5 transition-transform group-hover:translate-x-1"
-            />
-          </button>
+          {questionNumber === lastQuestionNumber ? (
+            <button
+              onClick={() => {
+                // Dispatch a custom event to trigger submission
+                const submitEvent = new CustomEvent('triggerAssignmentSubmission');
+                window.dispatchEvent(submitEvent);
+              }}
+              className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md"
+            >
+              <span className="text-sm sm:text-base">Submit Assignment</span>
+              <PaperAirplaneIcon
+                strokeWidth={2}
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1"
+              />
+            </button>
+          ) : (
+            <button
+              onClick={() => setActiveQuestionNumber(questionNumber + 1)}
+              className="text-gray-600 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
+            >
+              <span className="text-sm sm:text-base">Next Question</span>
+              <ArrowLongRightIcon
+                strokeWidth={2}
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1"
+              />
+            </button>
+          )}
         </div>
       )}
     </section>

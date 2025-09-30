@@ -32,8 +32,8 @@ export class NotificationsController {
   }
 
   @Post("mark-read/:id")
-  async markNotificationRead(@Param("id") id: number) {
-    return this.notificationsService.markNotificationRead(id);
+  async markNotificationRead(@Param("id") id: string) {
+    return this.notificationsService.markNotificationRead(Number(id));
   }
 
   @Get("stream")

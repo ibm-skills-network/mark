@@ -68,7 +68,15 @@ export class ReportingService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.message || `HTTP error ${response.status}`);
+        const errorMessage =
+          errorData?.message || `HTTP error ${response.status}`;
+
+        // Handle rate limiting specifically
+        if (response.status === 429) {
+          throw new Error(errorMessage);
+        }
+
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -82,10 +90,25 @@ export class ReportingService {
         reportId: data.reportId,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      // For rate limiting, show the specific message from the server
+      if (
+        errorMessage.includes("too many issues") ||
+        errorMessage.includes("24 hours")
+      ) {
+        return {
+          success: false,
+          content: errorMessage,
+          error: errorMessage,
+        };
+      }
+
       return {
         success: false,
         content: `There was an error submitting your issue report, but we've recorded it locally. Please try again later.`,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }

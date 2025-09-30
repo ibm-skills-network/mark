@@ -895,6 +895,22 @@ export const MarkChat = () => {
     type: null,
     data: null,
   });
+  const [dismissedActions, setDismissedActions] = useState(new Set());
+
+  const generateActionKey = useCallback((type, context) => {
+    const baseKey = `${type}-${context.assignmentId || 'general'}`;
+    return baseKey;
+  }, []);
+
+  const dismissAction = useCallback((type, context) => {
+    const key = generateActionKey(type, context);
+    setDismissedActions(prev => {
+      const newSet = new Set(prev);
+      newSet.add(key);
+      return newSet;
+    });
+    setSpecialActions({ show: false, type: null, data: null });
+  }, [generateActionKey]);
 
   const [user, setUser] = useState(null);
   const [currentChatId, setCurrentChatId] = useState(null);
@@ -923,6 +939,19 @@ export const MarkChat = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [hasMoved, setHasMoved] = useState(false);
   const [isDocked, setIsDocked] = useState(false);
+  const [dragStartPosition, setDragStartPosition] = useState({ x: 0, y: 0 });
+  const [dragStartTime, setDragStartTime] = useState(0);
+  const [touchStartTime, setTouchStartTime] = useState(0);
+  const [touchStartPosition, setTouchStartPosition] = useState({ x: 0, y: 0 });
+  const [isTouching, setIsTouching] = useState(false);
+
+  const isMobileDevice = useCallback(() => {
+    return typeof window !== 'undefined' && (
+      'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0 ||
+      window.innerWidth < 768
+    );
+  }, []);
 
   // Motion sickness tracking
   const [motionData, setMotionData] = useState({
@@ -997,8 +1026,11 @@ export const MarkChat = () => {
     }
   }, [constrainToViewport]);
 
-  const handleDragStart = useCallback(() => {
+  const handleDragStart = useCallback((e, data) => {
     setHasMoved(false);
+    setIsDragging(false); // Reset dragging state
+    setDragStartPosition({ x: data.x, y: data.y });
+    setDragStartTime(Date.now());
     setMotionData((prev) => ({
       ...prev,
       dragCount: prev.dragCount + 1,
@@ -1010,7 +1042,22 @@ export const MarkChat = () => {
 
   const handleDrag = useCallback(
     (e, data) => {
-      if (!hasMoved) {
+      // Calculate distance from start position
+      const distanceFromStart = Math.sqrt(
+        Math.pow(data.x - dragStartPosition.x, 2) +
+        Math.pow(data.y - dragStartPosition.y, 2)
+      );
+
+      // Calculate time elapsed since drag start
+      const timeElapsed = Date.now() - dragStartTime;
+
+      const MOBILE_DRAG_THRESHOLD = 25;
+      const DESKTOP_DRAG_THRESHOLD = 5;
+      const MIN_DRAG_TIME = 200;
+
+      const dragThreshold = isMobileDevice() ? MOBILE_DRAG_THRESHOLD : DESKTOP_DRAG_THRESHOLD;
+
+      if (!hasMoved && distanceFromStart > dragThreshold && timeElapsed > MIN_DRAG_TIME) {
         setHasMoved(true);
         setIsDragging(true);
       }
@@ -1063,7 +1110,7 @@ export const MarkChat = () => {
         };
       });
     },
-    [hasMoved, sayMotionSick],
+    [hasMoved, sayMotionSick, dragStartPosition, dragStartTime, isMobileDevice],
   );
 
   const handleDragStop = useCallback(
@@ -1143,24 +1190,88 @@ export const MarkChat = () => {
     [hasMoved, sayExcited],
   );
 
-  const handleChatToggle = useCallback(() => {
-    if (!isDragging) {
-      // If Mark just offered help, auto-populate the chat with a helpful message
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobileDevice()) return;
+
+    const touch = e.touches[0];
+    setIsTouching(true);
+    setTouchStartTime(Date.now());
+    setTouchStartPosition({ x: touch.clientX, y: touch.clientY });
+  }, [isMobileDevice]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isMobileDevice() || !isTouching) return;
+
+    const touch = e.touches[0];
+    const distanceMoved = Math.sqrt(
+      Math.pow(touch.clientX - touchStartPosition.x, 2) +
+      Math.pow(touch.clientY - touchStartPosition.y, 2)
+    );
+
+    if (distanceMoved > 20) {
+      setIsTouching(false);
+    }
+  }, [isMobileDevice, isTouching, touchStartPosition]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!isMobileDevice() || !isTouching) return;
+
+    const touchDuration = Date.now() - touchStartTime;
+    const isQuickTap = touchDuration < 200;
+
+    if (isQuickTap && !isDragging && !hasMoved) {
+      e.preventDefault();
+      e.stopPropagation();
+
       if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
         const helpMessage = getChatMessage();
-
-        // Set the user input to the generated message
         setUserInput(helpMessage);
-
-        // Dismiss any active speech bubble
         dismissBubble();
         resetHelpOffer();
       }
+      toggleChatbot();
+    }
 
+    setIsTouching(false);
+  }, [
+    isMobileDevice,
+    isTouching,
+    touchStartTime,
+    isDragging,
+    hasMoved,
+    behaviorData.shouldOfferHelp,
+    behaviorData.helpReason,
+    getChatMessage,
+    setUserInput,
+    dismissBubble,
+    resetHelpOffer,
+    toggleChatbot,
+  ]);
+
+  const handleChatToggle = useCallback(() => {
+    let shouldToggle: boolean;
+
+    if (isMobileDevice()) {
+      const tapDuration = Date.now() - dragStartTime;
+      const isQuickTap = tapDuration < 300;
+      shouldToggle = isQuickTap || !isDragging;
+    } else {
+      shouldToggle = !isDragging;
+    }
+
+    if (shouldToggle) {
+      if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
+        const helpMessage = getChatMessage();
+        setUserInput(helpMessage);
+        dismissBubble();
+        resetHelpOffer();
+      }
       toggleChatbot();
     }
   }, [
     isDragging,
+    isMobileDevice,
+    dragStartTime,
     toggleChatbot,
     behaviorData.shouldOfferHelp,
     behaviorData.helpReason,
@@ -1527,14 +1638,17 @@ export const MarkChat = () => {
           lowerInput.match(/score(?:.+?)wrong/) ||
           lowerInput.match(/grade(?:.+?)incorrect/))
       ) {
-        setSpecialActions({
-          show: true,
-          type: "regrade",
-          data: {
-            assignmentId: learnerContext.assignmentId,
-            attemptId: learnerContext.activeAttemptId,
-          },
-        });
+        const actionKey = generateActionKey("regrade", { assignmentId: learnerContext.assignmentId });
+        if (!dismissedActions.has(actionKey)) {
+          setSpecialActions({
+            show: true,
+            type: "regrade",
+            data: {
+              assignmentId: learnerContext.assignmentId,
+              attemptId: learnerContext.activeAttemptId,
+            },
+          });
+        }
       } else if (
         lowerInput.includes("issue") ||
         lowerInput.includes("problem with") ||
@@ -1547,11 +1661,14 @@ export const MarkChat = () => {
         lowerInput.match(/can't(?:.+?)load/) ||
         lowerInput.match(/won't(?:.+?)display/)
       ) {
-        setSpecialActions({
-          show: true,
-          type: "report",
-          data: { assignmentId: learnerContext.assignmentId },
-        });
+        const actionKey = generateActionKey("report", { assignmentId: learnerContext.assignmentId });
+        if (!dismissedActions.has(actionKey)) {
+          setSpecialActions({
+            show: true,
+            type: "report",
+            data: { assignmentId: learnerContext.assignmentId },
+          });
+        }
       } else if (
         lowerInput.includes("feedback") ||
         lowerInput.includes("improve") ||
@@ -1614,7 +1731,7 @@ export const MarkChat = () => {
         setSpecialActions({ show: false, type: null, data: null });
       }
     },
-    [learnerContext],
+    [learnerContext, generateActionKey, dismissedActions],
   );
 
   const checkForAuthorSpecialActions = useCallback((input) => {
@@ -2045,14 +2162,14 @@ export const MarkChat = () => {
         learnerContext.assignmentId || "this assignment"
       }. The problem I'm experiencing is...`;
       setUserInput(reportPrompt);
-      setSpecialActions({ show: false, type: null, data: null });
+      dismissAction("report", { assignmentId: learnerContext.assignmentId });
       textareaRef.current?.focus();
     } catch (error) {
       toast.error(
         "There was a problem setting up the issue report. Please try again.",
       );
     }
-  }, [learnerContext]);
+  }, [learnerContext, dismissAction]);
 
   const handleCreateQuestion = useCallback((type) => {
     let createPrompt = "";
@@ -2138,7 +2255,9 @@ Please help me with this.`;
   const handleReportPreview = useCallback(
     async (action, value) => {
       if (action === "cancel") {
-        setSpecialActions({ show: false, type: null, data: null });
+        // When user cancels, dismiss the action so it doesn't reappear
+        const actionData = specialActions.data || {};
+        dismissAction(specialActions.type, { assignmentId: actionData.assignmentId });
         return;
       }
 
@@ -2157,7 +2276,7 @@ Please help me with this.`;
           formData.append(
             "assignmentId",
             reportData.assignmentId?.toString() ??
-              learnerContext?.assignmentId.toString() ??
+              learnerContext?.assignmentId?.toString() ??
               authorContext?.activeAssignmentId?.toString() ??
               "0",
           );
@@ -2199,7 +2318,8 @@ Please help me with this.`;
             timestamp: new Date().toISOString(),
           });
 
-          setSpecialActions({ show: false, type: null, data: null });
+          // Dismiss the action so it doesn't reappear after successful submission
+          dismissAction("report", { assignmentId: reportData.assignmentId });
           setReportPreviewModal({ isOpen: false, type: "report", data: null });
 
           if (reportData.screenshot) {
@@ -2227,7 +2347,7 @@ Please help me with this.`;
         }));
       }
     },
-    [specialActions],
+    [specialActions, dismissAction],
   );
 
   const handleClientExecution = useCallback((toolCall) => {
@@ -2564,7 +2684,10 @@ Please help me with this.`;
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={handleChatToggle}
-                className={`p-3 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 cursor-move ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className={`p-3 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 ${isMobileDevice() ? 'cursor-pointer' : 'cursor-move'} ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
               >
                 {MarkFace ? (
                   <Image
@@ -2594,41 +2717,45 @@ Please help me with this.`;
         {isChatbotOpen && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: "25vw", opacity: 1 }}
+            animate={{
+              width: typeof window !== "undefined" && window.innerWidth < 768 ? "100vw" : "25vw",
+              opacity: 1
+            }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}
-            className="h-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden font-sans"
+            className="h-full bg-white dark:bg-gray-900 shadow-2xl border-l md:border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden font-sans relative z-[9999]"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-between p-3 md:p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center space-x-2 md:space-x-3">
                 {MarkFace && (
                   <Image
                     src={MarkFace}
                     alt="Mark AI Assistant"
-                    width={32}
-                    height={32}
+                    width={28}
+                    height={28}
+                    className="md:w-8 md:h-8"
                   />
                 )}
                 <div>
-                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                  <h2 className="font-semibold text-gray-900 dark:text-white text-sm md:text-base">
                     Mark AI Assistant
                   </h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 hidden md:block">
                     Your AI learning companion
                   </p>
                 </div>
               </div>
               <button
                 onClick={toggleChatbot}
-                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-1.5 md:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
-                <XMarkIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                <XMarkIcon className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
 
             {/* Action buttons bar */}
-            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between p-2 md:p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <div className="flex space-x-2">
                 <button
                   onClick={() => setShowChatHistory(true)}

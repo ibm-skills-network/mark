@@ -78,6 +78,7 @@ export class NotificationsService {
     userId: string,
     onNewNotification: (notification: any) => void,
     onMarkRead: (notificationId: number) => void,
+    onMarkAllRead?: () => void,
   ): () => void {
     const subscription: NotificationSubscription = {
       userId,
@@ -97,8 +98,16 @@ export class NotificationsService {
       onMarkRead(notificationId);
     };
 
+    const markAllReadListener = () => {
+      if (onMarkAllRead) onMarkAllRead();
+    };
+
     this.eventEmitter.on(`notification:new:${userId}`, newNotificationListener);
     this.eventEmitter.on(`notification:read:${userId}`, markReadListener);
+    this.eventEmitter.on(
+      `notification:read-all:${userId}`,
+      markAllReadListener,
+    );
 
     // Return cleanup function
     return () => {
@@ -108,6 +117,10 @@ export class NotificationsService {
         newNotificationListener,
       );
       this.eventEmitter.off(`notification:read:${userId}`, markReadListener);
+      this.eventEmitter.off(
+        `notification:read-all:${userId}`,
+        markAllReadListener,
+      );
     };
   }
 }

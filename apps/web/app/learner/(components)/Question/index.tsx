@@ -161,19 +161,19 @@ function QuestionPage(props: Props) {
   return (
     <div
       className={cn(
-        "bg-gray-50 flex-grow min-h-0 grid gap-4",
+        "bg-gray-50 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
         tips
-          ? "grid-cols-1 md:grid-cols-[260px_1fr_265px]"
-          : "grid-cols-1 md:grid-cols-[260px_1fr]",
+          ? "md:grid-cols-[260px_1fr_265px]"
+          : "md:grid-cols-[260px_1fr]",
       )}
     >
-      <div className="rounded-md h-auto pt-6 px-4 w-full md:w-auto">
+      <div className="md:rounded-md h-auto pt-3 md:pt-6 px-3 md:px-4 w-full md:w-auto border-b md:border-b-0 bg-white md:bg-transparent">
         <Overview questions={questionsStore} />
       </div>
 
       <div
-        className={`flex flex-col gap-y-5 py-6 overflow-y-auto pl-4 h-full ${
-          tips ? "pr-4" : "pr-14"
+        className={`flex flex-col gap-y-3 md:gap-y-5 py-3 md:py-6 overflow-y-auto px-3 md:pl-4 h-full ${
+          tips ? "md:pr-4" : "md:pr-14"
         }`}
       >
         {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
@@ -207,7 +207,7 @@ function QuestionPage(props: Props) {
             )}
       </div>
       {tips && (
-        <div className="rounded-md h-auto pt-6 w-full md:w-auto">
+        <div className="md:rounded-md h-auto pt-3 md:pt-6 px-3 md:px-0 w-full md:w-auto border-t md:border-t-0 bg-white md:bg-transparent">
           <TipsView />
         </div>
       )}

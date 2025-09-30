@@ -5,6 +5,7 @@ import {
   Controller,
   DefaultValuePipe,
   Get,
+  Headers,
   Injectable,
   Param,
   ParseIntPipe,
@@ -155,7 +156,6 @@ export class ReportsController {
         userEmail: request.userSession?.userId,
       },
     };
-    console.log("Reporting issue:", reportDto);
     return this.reportsService.reportIssue(
       reportDto,
       request.userSession,
