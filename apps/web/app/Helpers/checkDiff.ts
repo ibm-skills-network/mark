@@ -131,7 +131,7 @@ export function useChangesSummary(): string {
     const originalQuestions = originalAssignment.questions || [];
     const currentQuestions = questions || [];
 
-    const addedQuestions = currentQuestions.filter(
+    const addedQuestions = currentQuestions?.filter(
       (question) =>
         !originalQuestions.some((origQ) => origQ.id === question?.id),
     );

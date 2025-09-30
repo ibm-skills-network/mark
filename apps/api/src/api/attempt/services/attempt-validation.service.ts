@@ -1,10 +1,15 @@
 import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import {
+  IN_COOLDOWN_PERIOD,
   IN_PROGRESS_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
-  IN_COOLDOWN_PERIOD,
   TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-
 } from "src/api/assignment/attempt/api-exceptions/exceptions";
 import {
   GetAssignmentResponseDto,

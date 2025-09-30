@@ -76,28 +76,33 @@ const Component: FC<Props> = () => {
           </p>
         )}
       </div>
-      <div className="flex flex-col gap-y-1">
-        <label htmlFor="cooldown-period" className="text-gray-600 flex gap-x-1">
-          How long do learners have to wait before making another attempt?
-          <Tooltip content="The number of times a student can submit this assignment before they have to wait to retake it">
-            <InformationCircleIcon className="w-5 inline-block text-gray-500" />
-          </Tooltip>
-        </label>
-        <Dropdown<number>
-          id="cooldown-period"
-          items={defaultCoolDownTimes}
-          selectedItem={retakeAttemptCoolDownMinutes}
-          setSelectedItem={setRetakeAttemptCoolDownMinutes}
-        />
-        {errors.retakeAttemptCoolDownMinutes && (
-          <p
-            className="text-red-500 text-sm"
-            id={`error-${errors.retakeAttemptCoolDownMinutes}`}
+      {attemptsBeforeCoolDown > 0 && (
+        <div className="flex flex-col gap-y-1">
+          <label
+            htmlFor="cooldown-period"
+            className="text-gray-600 flex gap-x-1"
           >
-            {errors.retakeAttemptCoolDownMinutes}
-          </p>
-        )}
-      </div>
+            How long do learners have to wait before making another attempt?
+            <Tooltip content="The number of times a student can submit this assignment before they have to wait to retake it">
+              <InformationCircleIcon className="w-5 inline-block text-gray-500" />
+            </Tooltip>
+          </label>
+          <Dropdown<number>
+            id="cooldown-period"
+            items={defaultCoolDownTimes}
+            selectedItem={retakeAttemptCoolDownMinutes}
+            setSelectedItem={setRetakeAttemptCoolDownMinutes}
+          />
+          {errors.retakeAttemptCoolDownMinutes && (
+            <p
+              className="text-red-500 text-sm"
+              id={`error-${errors.retakeAttemptCoolDownMinutes}`}
+            >
+              {errors.retakeAttemptCoolDownMinutes}
+            </p>
+          )}
+        </div>
+      )}
     </SectionWithTitle>
   );
 };
