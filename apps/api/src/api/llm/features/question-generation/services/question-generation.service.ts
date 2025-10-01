@@ -250,10 +250,11 @@ export class QuestionGenerationService implements IQuestionGenerationService {
         this.logger.debug(
           `Generating questions for assignment ID: ${assignmentId}`,
         );
-        const response = await this.promptProcessor.processPrompt(
+        const response = await this.promptProcessor.processPromptForFeature(
           prompt,
           assignmentId,
           AIUsageType.ASSIGNMENT_GENERATION,
+          "question_generation",
         );
 
         // Parse response
@@ -854,7 +855,7 @@ FORMAT INSTRUCTIONS:
     
     {formatInstructions}
     `;
-    const response = await this.promptProcessor.processPrompt(
+    const response = await this.promptProcessor.processPromptForFeature(
       new PromptTemplate({
         template,
         inputVariables: [],
@@ -867,6 +868,7 @@ FORMAT INSTRUCTIONS:
       }),
       assignmentId,
       AIUsageType.ASSIGNMENT_GENERATION,
+      "question_generation",
     );
     const parsedResponse = await parser.parse(response);
     if (parsedResponse.scoring) {
@@ -2167,10 +2169,11 @@ FORMAT INSTRUCTIONS:
 
     while (attemptsLeft > 0 && !success) {
       try {
-        response = await this.promptProcessor.processPrompt(
+        response = await this.promptProcessor.processPromptForFeature(
           prompt,
           assignmentId,
           AIUsageType.ASSIGNMENT_GENERATION,
+          "question_generation",
         );
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -2327,7 +2330,7 @@ FORMAT INSTRUCTIONS:
 
     while (attemptsLeft > 0 && !success) {
       try {
-        response = await this.promptProcessor.processPrompt(
+        response = await this.promptProcessor.processPromptForFeature(
           new PromptTemplate({
             template,
             inputVariables: [],
@@ -2338,6 +2341,7 @@ FORMAT INSTRUCTIONS:
           }),
           assignmentId,
           AIUsageType.ASSIGNMENT_GENERATION,
+          "question_generation",
         );
 
         const parsedResponse = await parser.parse(response);

@@ -4,6 +4,7 @@ import { S3Service } from "../files/services/s3.service";
 import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
 import { Gpt5NanoLlmService } from "./core/services/gpt5-nano-llm.service";
+import { GptOss120bLlmService } from "./core/services/gpt-oss-120b-llm-service";
 import { LLMAssignmentService } from "./core/services/llm-assignment.service";
 import { LLMPricingService } from "./core/services/llm-pricing.service";
 import { LLMResolverService } from "./core/services/llm-resolver.service";
@@ -63,6 +64,7 @@ import {
     Gpt5LlmService,
     Gpt5MiniLlmService,
     Gpt5NanoLlmService,
+    GptOss120bLlmService,
     // LlamaLlmService,
     LlmRouter,
     {
@@ -74,9 +76,10 @@ import {
         p4: Gpt5LlmService,
         p5: Gpt5MiniLlmService,
         p6: Gpt5NanoLlmService,
-        // p7: LlamaLlmService,
+        p7: GptOss120bLlmService,
+        // p8: LlamaLlmService,
       ) => {
-        return [p1, p2, p3, p4, p5, p6];
+        return [p1, p2, p3, p4, p5, p6, p7];
       },
       inject: [
         OpenAiLlmService,
@@ -85,6 +88,7 @@ import {
         Gpt5LlmService,
         Gpt5MiniLlmService,
         Gpt5NanoLlmService,
+        GptOss120bLlmService,
         // LlamaLlmService,
       ],
     },

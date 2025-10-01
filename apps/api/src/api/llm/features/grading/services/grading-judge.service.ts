@@ -139,10 +139,11 @@ export class GradingJudgeService implements IGradingJudgeService {
       );
 
       const response = await this.processWithTimeout(
-        this.promptProcessor.processPrompt(
+        this.promptProcessor.processPromptForFeature(
           prompt,
           input.assignmentId,
           AIUsageType.GRADING_VALIDATION,
+          "content_moderation",
           selectedModel,
         ),
         this.maxJudgeTimeout,

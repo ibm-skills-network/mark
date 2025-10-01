@@ -242,7 +242,7 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
@@ -361,7 +361,7 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
@@ -430,7 +430,7 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
@@ -792,7 +792,7 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
