@@ -152,11 +152,10 @@ export class PresentationGradingService implements IPresentationGradingService {
     });
 
     // Process the prompt through the LLM
-    const response = await this.promptProcessor.processPromptForFeature(
+    const response = await this.promptProcessor.processPrompt(
       prompt,
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
-      "presentation_grading",
     );
 
     try {
@@ -266,11 +265,10 @@ ${parsedResponse.guidance}
 
     try {
       // Process the prompt through the LLM
-      const response = await this.promptProcessor.processPromptForFeature(
+      const response = await this.promptProcessor.processPrompt(
         prompt,
         assignmentId,
         AIUsageType.LIVE_RECORDING_FEEDBACK,
-        "live_recording_feedback",
       );
 
       // Parse the response

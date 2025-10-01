@@ -107,9 +107,7 @@ export class UrlGradingService implements IUrlGradingService {
       );
     } catch (retryError) {
       this.logger.error(
-        `All URL grading LLM retry attempts failed: ${
-          retryError instanceof Error ? retryError.message : String(retryError)
-        }`,
+        `All URL grading LLM retry attempts failed: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
       );
       return this.createFallbackUrlResponse(
         totalPoints,
@@ -214,11 +212,10 @@ export class UrlGradingService implements IUrlGradingService {
       try {
         this.logger.debug(`URL grading LLM attempt ${attempt}/${maxRetries}`);
 
-        const response = await this.promptProcessor.processPromptForFeature(
+        const response = await this.promptProcessor.processPrompt(
           prompt,
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
-          "url_grading",
         );
 
         // Check if response is valid
@@ -232,10 +229,7 @@ export class UrlGradingService implements IUrlGradingService {
         }
 
         this.logger.warn(
-          `URL grading LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(
-            0,
-            100,
-          )}..."`,
+          `URL grading LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(0, 100)}..."`,
         );
         lastError = new Error(
           `Invalid LLM response: ${response?.slice(0, 100)}`,
@@ -263,11 +257,7 @@ export class UrlGradingService implements IUrlGradingService {
       throw lastError || new Error("All URL grading LLM attempts failed");
     } catch (fallbackError) {
       this.logger.error(
-        `URL grading fallback also failed: ${
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : String(fallbackError)
-        }`,
+        `URL grading fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
       );
       throw lastError || new Error("All URL grading LLM attempts failed");
     }

@@ -41,10 +41,6 @@ export class PromptProcessorService implements IPromptProcessor {
         featureKey,
         fallbackModel,
       );
-      console.log(
-        `Processing prompt for feature ${featureKey} with model ${llm.key}`,
-      );
-
       return await this._processPromptWithProvider(
         prompt,
         assignmentId,
@@ -72,7 +68,6 @@ export class PromptProcessorService implements IPromptProcessor {
   ): Promise<string> {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4o");
-
       return await this._processPromptWithProvider(
         prompt,
         assignmentId,
@@ -151,21 +146,18 @@ export class PromptProcessorService implements IPromptProcessor {
       throw formatError;
     }
 
-    try {
-      const result = await llm.invoke([new HumanMessage(input)]);
-      const response = this.cleanResponse(result.content);
-      await this.usageTracker.trackUsage(
-        assignmentId,
-        usageType,
-        result.tokenUsage.input,
-        result.tokenUsage.output,
-        llm.key,
-      );
+    const result = await llm.invoke([new HumanMessage(input)]);
+    const response = this.cleanResponse(result.content);
 
-      return response;
-    } catch (error) {
-      console.log("The issue is:", error);
-    }
+    await this.usageTracker.trackUsage(
+      assignmentId,
+      usageType,
+      result.tokenUsage.input,
+      result.tokenUsage.output,
+      llm.key,
+    );
+
+    return response;
   }
 
   /**

@@ -5,14 +5,14 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { TOKEN_COUNTER } from "../../llm.constants";
 import {
-  IMultimodalLlmProvider,
+  ILlmProvider,
   LlmRequestOptions,
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 
 @Injectable()
-export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
+export class Gpt4VisionPreviewLlmService implements ILlmProvider {
   private readonly logger: Logger;
   static readonly DEFAULT_MODEL = "gpt-4.1-mini";
   readonly key = "gpt-4.1-mini";

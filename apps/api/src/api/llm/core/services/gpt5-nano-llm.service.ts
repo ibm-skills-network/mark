@@ -5,7 +5,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { TOKEN_COUNTER } from "../../llm.constants";
 import {
-  IMultimodalLlmProvider,
+  ILlmProvider,
   LlmRequestOptions,
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
@@ -17,7 +17,7 @@ import { ITokenCounter } from "../interfaces/token-counter.interface";
  * cost-effectiveness, ideal for basic text processing and quick responses.
  */
 @Injectable()
-export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
+export class Gpt5NanoLlmService implements ILlmProvider {
   private readonly logger: Logger;
   static readonly DEFAULT_MODEL = "gpt-5-nano";
   readonly key = "gpt-5-nano";

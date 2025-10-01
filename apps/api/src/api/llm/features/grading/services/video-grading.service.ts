@@ -95,11 +95,10 @@ export class VideoPresentationGradingService
       },
     });
 
-    const response = await this.promptProcessor.processPromptForFeature(
+    const response = await this.promptProcessor.processPrompt(
       prompt,
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
-      "video_grading",
     );
 
     try {

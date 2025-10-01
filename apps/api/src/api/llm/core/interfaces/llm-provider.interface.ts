@@ -24,9 +24,7 @@ export interface ILlmProvider {
     options?: LlmRequestOptions,
   ): Promise<LlmResponse>;
   readonly key: string;
-}
 
-export interface IMultimodalLlmProvider extends ILlmProvider {
   /**
    * Send a request with image content to the LLM
    */

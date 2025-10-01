@@ -182,9 +182,7 @@ export class FileGradingService implements IFileGradingService {
       );
     } catch (retryError) {
       this.logger.error(
-        `All LLM retry attempts failed: ${
-          retryError instanceof Error ? retryError.message : String(retryError)
-        }`,
+        `All LLM retry attempts failed: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
       );
       return this.createFallbackResponse(
         maxTotalPoints,
@@ -300,11 +298,10 @@ export class FileGradingService implements IFileGradingService {
           `LLM attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
         );
 
-        const response = await this.promptProcessor.processPromptForFeature(
+        const response = await this.promptProcessor.processPrompt(
           prompt,
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
-          "file_grading",
           primaryModel,
         );
 
@@ -319,10 +316,7 @@ export class FileGradingService implements IFileGradingService {
         }
 
         this.logger.warn(
-          `LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(
-            0,
-            100,
-          )}..."`,
+          `LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(0, 100)}..."`,
         );
         lastError = new Error(
           `Invalid LLM response: ${response?.slice(0, 100)}`,
@@ -350,11 +344,10 @@ export class FileGradingService implements IFileGradingService {
         `Primary model ${primaryModel} failed after ${maxRetries} attempts, trying fallback model ${fallbackModel}`,
       );
 
-      const response = await this.promptProcessor.processPromptForFeature(
+      const response = await this.promptProcessor.processPrompt(
         prompt,
         assignmentId,
         AIUsageType.ASSIGNMENT_GRADING,
-        "file_grading",
         fallbackModel,
       );
 
@@ -368,11 +361,7 @@ export class FileGradingService implements IFileGradingService {
       );
     } catch (fallbackError) {
       this.logger.error(
-        `Fallback model also failed: ${
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : String(fallbackError)
-        }`,
+        `Fallback model also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
       );
     }
 

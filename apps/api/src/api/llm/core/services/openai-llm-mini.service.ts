@@ -5,7 +5,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { TOKEN_COUNTER } from "../../llm.constants";
 import {
-  IMultimodalLlmProvider,
+  ILlmProvider,
   LlmRequestOptions,
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
@@ -16,7 +16,7 @@ import { ITokenCounter } from "../interfaces/token-counter.interface";
  * Usage is identical to the full-size OpenAiLlmService.
  */
 @Injectable()
-export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
+export class OpenAiLlmMiniService implements ILlmProvider {
   private readonly logger: Logger;
   static readonly DEFAULT_MODEL = "gpt-4o-mini";
   readonly key = "gpt-4o-mini";
