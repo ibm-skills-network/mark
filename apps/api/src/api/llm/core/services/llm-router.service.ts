@@ -1,15 +1,15 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ALL_LLM_PROVIDERS, LLM_RESOLVER_SERVICE } from "../../llm.constants";
-import { ILlmProvider } from "../interfaces/llm-provider.interface";
+import { IMultimodalLlmProvider } from "../interfaces/llm-provider.interface";
 import { LLMResolverService } from "./llm-resolver.service";
 
 @Injectable()
 export class LlmRouter {
   private readonly logger = new Logger(LlmRouter.name);
-  private readonly map: Map<string, ILlmProvider>;
+  private readonly map: Map<string, IMultimodalLlmProvider>;
 
   constructor(
-    @Inject(ALL_LLM_PROVIDERS) providers: ILlmProvider[],
+    @Inject(ALL_LLM_PROVIDERS) providers: IMultimodalLlmProvider[],
     @Inject(LLM_RESOLVER_SERVICE)
     private readonly resolverService: LLMResolverService,
   ) {
@@ -17,14 +17,14 @@ export class LlmRouter {
   }
 
   /** Return provider by key, or throw if it doesn't exist */
-  get(key: string): ILlmProvider {
+  get(key: string): IMultimodalLlmProvider {
     const found = this.map.get(key);
     if (!found) throw new Error(`No LLM provider registered for key "${key}"`);
     return found;
   }
 
   /** Get provider for a specific AI feature (uses dynamic assignment) */
-  async getForFeature(featureKey: string): Promise<ILlmProvider> {
+  async getForFeature(featureKey: string): Promise<IMultimodalLlmProvider> {
     try {
       const assignedModelKey =
         await this.resolverService.resolveModelForFeature(featureKey);
@@ -62,7 +62,7 @@ export class LlmRouter {
   async getForFeatureWithFallback(
     featureKey: string,
     fallbackModelKey = "gpt-4o-mini",
-  ): Promise<ILlmProvider> {
+  ): Promise<IMultimodalLlmProvider> {
     try {
       const assignedModelKey =
         await this.resolverService.getModelKeyWithFallback(
@@ -90,7 +90,7 @@ export class LlmRouter {
   }
 
   /** Convenience default (first registered) */
-  getDefault(): ILlmProvider {
+  getDefault(): IMultimodalLlmProvider {
     return this.map.values().next().value;
   }
 

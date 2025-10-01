@@ -118,10 +118,12 @@ export class RubricService implements IRubricService {
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.QUESTION_GENERATION,
+        "rubric_generation",
+        "gpt-4o-mini",
       );
 
       let parsed:
@@ -517,10 +519,11 @@ export class RubricService implements IRubricService {
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.QUESTION_GENERATION,
+        "rubric_generation",
       );
 
       let parsed:
