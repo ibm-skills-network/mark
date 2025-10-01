@@ -33,6 +33,23 @@ import {
 } from "@heroicons/react/24/solid";
 import { QuestionAuthorStore } from "@/config/types";
 import ExportModal, { ExportOptions } from "../../(components)/ExportModal";
+import { omit } from "../../../../lib/utils";
+
+const CONFIG_KEYS_TO_OMIT = [
+  "errors",
+  "updatedAt",
+  "id",
+  "name",
+  "introduction",
+  "instructions",
+  "gradingCriteriaOverview",
+  "type",
+  "questionOrder",
+  "published",
+  "languageCode",
+  "currentVersionId",
+  "questions",
+];
 
 // Helper function to determine if a validation error is question-related
 const isQuestionRelatedValidationError = (message: string): boolean => {
@@ -744,31 +761,7 @@ function Component() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false);
 
-  const [
-    graded,
-    allotedTimeMinutes,
-    timeEstimateMinutes,
-    numAttempts,
-    attemptsBeforeCoolDown,
-    retakeAttemptCoolDownMinutes,
-    passingGrade,
-    displayOrder,
-    questionDisplay,
-    numberOfQuestionsPerAttempt,
-    strictTimeLimit,
-  ] = useAssignmentConfig((state) => [
-    state.graded,
-    state.allotedTimeMinutes,
-    state.timeEstimateMinutes,
-    state.numAttempts,
-    state.attemptsBeforeCoolDown,
-    state.retakeAttemptCoolDownMinutes,
-    state.passingGrade,
-    state.displayOrder,
-    state.questionDisplay,
-    state.numberOfQuestionsPerAttempt,
-    state.strictTimeLimit,
-  ]);
+  const assignmentConfig = useAssignmentConfig((state) => state);
 
   const [
     introduction,
@@ -1124,19 +1117,7 @@ function Component() {
       }
 
       if (exportOptions.includeConfig) {
-        exportData.config = {
-          graded,
-          allotedTimeMinutes,
-          timeEstimateMinutes,
-          numAttempts,
-          attemptsBeforeCoolDown,
-          retakeAttemptCoolDownMinutes,
-          passingGrade,
-          displayOrder,
-          questionDisplay,
-          numberOfQuestionsPerAttempt,
-          strictTimeLimit,
-        };
+        exportData.config = omit(assignmentConfig, CONFIG_KEYS_TO_OMIT);
       }
 
       if (exportOptions.includeFeedbackConfig) {
@@ -1698,7 +1679,7 @@ function Component() {
                     <ChangeComparison
                       label="Assignment Type"
                       before={originalAssignment.graded ? "Graded" : "Practice"}
-                      after={graded ? "Graded" : "Practice"}
+                      after={assignmentConfig.graded ? "Graded" : "Practice"}
                       onNavigate={() =>
                         router.push(`/author/${activeAssignmentId}/config`)
                       }
@@ -1714,8 +1695,8 @@ function Component() {
                           : "No time limit"
                       }
                       after={
-                        allotedTimeMinutes
-                          ? `${allotedTimeMinutes} minutes`
+                        assignmentConfig.allotedTimeMinutes
+                          ? `${assignmentConfig.allotedTimeMinutes} minutes`
                           : "No time limit"
                       }
                     />
@@ -1730,8 +1711,8 @@ function Component() {
                           : "Not set"
                       }
                       after={
-                        timeEstimateMinutes
-                          ? `${timeEstimateMinutes} minutes`
+                        assignmentConfig.timeEstimateMinutes
+                          ? `${assignmentConfig.timeEstimateMinutes} minutes`
                           : "Not set"
                       }
                     />
@@ -1745,7 +1726,11 @@ function Component() {
                           ? "Unlimited"
                           : originalAssignment.numAttempts
                       }
-                      after={numAttempts === -1 ? "Unlimited" : numAttempts}
+                      after={
+                        assignmentConfig.numAttempts === -1
+                          ? "Unlimited"
+                          : assignmentConfig.numAttempts
+                      }
                     />
                   )}
 
@@ -1753,7 +1738,7 @@ function Component() {
                     <ChangeComparison
                       label="Number of Attempts Before Cooldown Period"
                       before={originalAssignment.attemptsBeforeCoolDown}
-                      after={attemptsBeforeCoolDown}
+                      after={assignmentConfig.attemptsBeforeCoolDown}
                     />
                   )}
 
@@ -1761,7 +1746,7 @@ function Component() {
                     <ChangeComparison
                       label="Number of Minutes Learners Must Wait Between Attempts"
                       before={originalAssignment.retakeAttemptCoolDownMinutes}
-                      after={retakeAttemptCoolDownMinutes}
+                      after={assignmentConfig.retakeAttemptCoolDownMinutes}
                     />
                   )}
 
@@ -1769,7 +1754,7 @@ function Component() {
                     <ChangeComparison
                       label="Passing Grade"
                       before={`${originalAssignment.passingGrade}%`}
-                      after={`${passingGrade}%`}
+                      after={`${assignmentConfig.passingGrade}%`}
                     />
                   )}
 
@@ -1777,7 +1762,7 @@ function Component() {
                     <ChangeComparison
                       label="Display Order"
                       before={originalAssignment.displayOrder}
-                      after={displayOrder}
+                      after={assignmentConfig.displayOrder}
                     />
                   )}
 
@@ -1788,7 +1773,10 @@ function Component() {
                         /_/g,
                         " ",
                       )}
-                      after={questionDisplay?.replace(/_/g, " ")}
+                      after={assignmentConfig.questionDisplay?.replace(
+                        /_/g,
+                        " ",
+                      )}
                     />
                   )}
 
@@ -1796,7 +1784,7 @@ function Component() {
                     <ChangeComparison
                       label="Questions Per Attempt"
                       before={originalAssignment.numberOfQuestionsPerAttempt}
-                      after={numberOfQuestionsPerAttempt}
+                      after={assignmentConfig.numberOfQuestionsPerAttempt}
                       type="number"
                     />
                   )}
