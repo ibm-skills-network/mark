@@ -27,6 +27,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
+import { SuccessPageDataDto } from "../../attempt/dto/success-page-data.dto";
 import {
   GRADE_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
@@ -60,7 +61,7 @@ export class AttemptControllerV1 {
   private logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
-    private readonly attemptService: AttemptServiceV1,
+    private readonly attemptService: AttemptServiceV1
   ) {
     this.logger = parentLogger.child({ context: AttemptControllerV1.name });
   }
@@ -80,11 +81,11 @@ export class AttemptControllerV1 {
   @ApiResponse({ status: 403 })
   createAssignmentAttempt(
     @Param("assignmentId") assignmentId: number,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<BaseAssignmentAttemptResponseDto> {
     return this.attemptService.createAssignmentAttempt(
       Number(assignmentId),
-      request.userSession,
+      request.userSession
     );
   }
 
@@ -96,11 +97,11 @@ export class AttemptControllerV1 {
   @ApiResponse({ status: 403 })
   listAssignmentAttempts(
     @Param("assignmentId") assignmentId: number,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<AssignmentAttemptResponseDto[]> {
     return this.attemptService.listAssignmentAttempts(
       Number(assignmentId),
-      request.userSession,
+      request.userSession
     );
   }
 
@@ -112,11 +113,11 @@ export class AttemptControllerV1 {
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
-    @Query("lang") lang?: string,
+    @Query("lang") lang?: string
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
       Number(assignmentAttemptId),
-      lang,
+      lang
     );
   }
 
@@ -127,10 +128,10 @@ export class AttemptControllerV1 {
   @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
   @ApiResponse({ status: 403 })
   getLearnerAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptId: number,
+    @Param("attemptId") assignmentAttemptId: number
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getLearnerAssignmentAttempt(
-      Number(assignmentAttemptId),
+      Number(assignmentAttemptId)
     );
   }
 
@@ -161,7 +162,7 @@ export class AttemptControllerV1 {
     @Param("assignmentId") assignmentId: number,
     @Body()
     learnerUpdateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const authCookie: string = request?.cookies?.authentication as string;
     const gradingCallbackRequired =
@@ -173,7 +174,7 @@ export class AttemptControllerV1 {
       learnerUpdateAssignmentAttemptDto,
       authCookie,
       gradingCallbackRequired,
-      request,
+      request
     );
   }
 
@@ -188,14 +189,14 @@ export class AttemptControllerV1 {
     @Param("assignmentId") assignmentId: string,
     @Param("attemptId") attemptId: string,
     @Body() body: { feedback: AssignmentFeedbackDto },
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<AssignmentFeedbackResponseDto> {
     const feedbackDto = body.feedback;
     return this.attemptService.submitFeedback(
       Number(assignmentId),
       Number(attemptId),
       feedbackDto,
-      request.userSession,
+      request.userSession
     );
   }
 
@@ -208,12 +209,12 @@ export class AttemptControllerV1 {
   getFeedback(
     @Param("assignmentId") assignmentId: string,
     @Param("attemptId") attemptId: string,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<AssignmentFeedbackDto> {
     return this.attemptService.getFeedback(
       Number(assignmentId),
       Number(attemptId),
-      request.userSession,
+      request.userSession
     );
   }
 
@@ -227,13 +228,13 @@ export class AttemptControllerV1 {
     @Param("assignmentId") assignmentId: string,
     @Param("attemptId") attemptId: string,
     @Body() body: { regradingRequest: RegradingRequestDto },
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<AssignmentFeedbackResponseDto> {
     return this.attemptService.processRegradingRequest(
       Number(assignmentId),
       Number(attemptId),
       body.regradingRequest,
-      request.userSession,
+      request.userSession
     );
   }
 
@@ -246,12 +247,12 @@ export class AttemptControllerV1 {
   getRegradingStatus(
     @Param("assignmentId") assignmentId: string,
     @Param("attemptId") attemptId: string,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<RegradingStatusResponseDto> {
     return this.attemptService.getRegradingStatus(
       Number(assignmentId),
       Number(attemptId),
-      request.userSession,
+      request.userSession
     );
   }
 
@@ -274,7 +275,7 @@ export class AttemptControllerV1 {
     @Param("attemptId") attemptId: number,
     @Param("assignmentId") assignmentId: number,
     @Body() body: ReportRequestDTO,
-    @Req() request: UserSessionRequest,
+    @Req() request: UserSessionRequest
   ): Promise<{ message: string }> {
     const { issueType, description } = body;
 
@@ -297,7 +298,7 @@ export class AttemptControllerV1 {
       Number(attemptId),
       issueType,
       description,
-      userId,
+      userId
     );
 
     return { message: "Report submitted successfully" };

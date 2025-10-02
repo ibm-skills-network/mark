@@ -867,7 +867,7 @@ export function VersionTreeView({ assignmentId }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         <div className="flex-1 p-6 overflow-y-auto">
           <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-20">
             {/* Header */}

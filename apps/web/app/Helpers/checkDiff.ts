@@ -73,7 +73,7 @@ export function useChangesSummary(): string {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   } = useAssignmentFeedbackConfig();
 
   const changesSummary = useMemo(() => {
@@ -115,8 +115,8 @@ export function useChangesSummary(): string {
 
     if (
       !safeCompare(
-        showCorrectAnswer,
-        originalAssignment.showCorrectAnswer ?? true,
+        correctAnswerVisibility,
+        originalAssignment.correctAnswerVisibility ?? "ALWAYS",
       )
     )
       diffs.push("Changed correct answer visibility.");

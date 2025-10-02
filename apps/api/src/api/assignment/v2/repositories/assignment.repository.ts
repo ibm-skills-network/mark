@@ -42,7 +42,7 @@ export class AssignmentRepository {
 
   async findById(
     id: number,
-    userSession?: UserSession,
+    userSession?: UserSession
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession?.role === UserRole.LEARNER;
 
@@ -88,7 +88,7 @@ export class AssignmentRepository {
    */
 
   async findAllForUser(
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentResponseDto[]> {
     // If user is an author, only show assignments they've authored
     if (userSession.role === UserRole.AUTHOR) {
@@ -130,6 +130,7 @@ export class AssignmentRepository {
    * @returns Updated assignment
    */
   async update(id: number, data: Partial<Assignment>): Promise<Assignment> {
+    console.log("Updating assignment with ID:", data);
     try {
       return await this.prisma.assignment.update({
         where: { id },
@@ -142,7 +143,7 @@ export class AssignmentRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error updating assignment ${id}: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       throw error;
     }
@@ -171,7 +172,7 @@ export class AssignmentRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error replacing assignment ${id}: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       throw error;
     }
@@ -186,10 +187,10 @@ export class AssignmentRepository {
   private processAssignmentData(
     rawAssignment: Assignment & {
       questions: (Question & { variants: QuestionVariant[] })[];
-    },
+    }
   ): Assignment & { questions: QuestionDto[] } {
     const assignment = JSON.parse(
-      JSON.stringify(rawAssignment),
+      JSON.stringify(rawAssignment)
     ) as Assignment & { questions: QuestionDto[] };
 
     const questions = Array.isArray(assignment.questions)
@@ -205,7 +206,7 @@ export class AssignmentRepository {
           scoring: this.parseJsonField<ScoringDto>(q.scoring),
           choices: this.parseJsonField<Choice[]>(q.choices),
           videoPresentationConfig: this.parseJsonField<VideoPresentationConfig>(
-            q.videoPresentationConfig,
+            q.videoPresentationConfig
           ),
         };
 
@@ -232,7 +233,7 @@ export class AssignmentRepository {
       filteredQuestions.sort(
         (a, b) =>
           assignment.questionOrder.indexOf(a.id) -
-          assignment.questionOrder.indexOf(b.id),
+          assignment.questionOrder.indexOf(b.id)
       );
     }
 
@@ -257,7 +258,7 @@ export class AssignmentRepository {
           error instanceof Error ? error.stack : "No stack trace";
         this.logger.error(
           `Error parsing JSON field: ${errorMessage}`,
-          errorStack,
+          errorStack
         );
         return undefined;
       }

@@ -12,7 +12,8 @@
     "seed:update": {},
     "lint:staged": {},
     "dev": {
-      "cache": false
+      "cache": false,
+      "persistent": true
     },
     "test": {
       "outputs": ["coverage/**"],

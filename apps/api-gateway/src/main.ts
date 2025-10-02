@@ -9,10 +9,13 @@ import { AppModule } from "./app.module";
 import { winstonOptions } from "./logger/config";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    cors: false,
-    logger: WinstonModule.createLogger(winstonOptions),
-  });
+  const logger = WinstonModule.createLogger(winstonOptions);
+
+  try {
+    const app = await NestFactory.create(AppModule, {
+      cors: false,
+      logger,
+    });
   app.use(json({ limit: "1000mb" }));
   app.use(urlencoded({ limit: "1000mb", extended: true }));
   app.setGlobalPrefix("api", {
@@ -39,6 +42,16 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  await app.listen(process.env.API_GATEWAY_PORT ?? 3000);
+  const port = process.env.API_GATEWAY_PORT ?? 3000;
+  await app.listen(port, '0.0.0.0');
+
+  logger.log(`🚀 API Gateway is running on port ${port}`);
+  logger.log(`📚 API Documentation available at http://localhost:${port}/api`);
+
+  } catch (error) {
+    logger.error('❌ Failed to start API Gateway:', error);
+    process.exit(1);
+  }
 }
+
 void bootstrap();

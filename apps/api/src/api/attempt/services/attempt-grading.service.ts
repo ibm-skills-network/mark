@@ -12,14 +12,14 @@ export class AttemptGradingService {
    */
   calculateGradeForAuthor(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    totalPossiblePoints: number,
+    totalPossiblePoints: number
   ): { grade: number; totalPointsEarned: number } {
     if (successfulQuestionResponses.length === 0) {
       return { grade: 0, totalPointsEarned: 0 };
     }
 
     const totalPointsEarned = this.calculateTotalPointsEarned(
-      successfulQuestionResponses,
+      successfulQuestionResponses
     );
     const grade =
       totalPossiblePoints > 0 ? totalPointsEarned / totalPossiblePoints : 0;
@@ -35,13 +35,13 @@ export class AttemptGradingService {
    */
   calculateGradeForLearner(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    totalPossiblePoints: number,
+    totalPossiblePoints: number
   ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
     if (successfulQuestionResponses.length === 0) {
       return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
     }
     const totalPointsEarned = this.calculateTotalPointsEarned(
-      successfulQuestionResponses,
+      successfulQuestionResponses
     );
     const grade =
       totalPossiblePoints > 0 ? totalPointsEarned / totalPossiblePoints : 0;
@@ -57,7 +57,7 @@ export class AttemptGradingService {
    */
   constructFeedbacksForQuestions(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: Assignment,
+    assignment: Assignment
   ) {
     return successfulQuestionResponses.map((feedbackForQuestion) => {
       const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
@@ -75,11 +75,11 @@ export class AttemptGradingService {
    * @returns Total points earned
    */
   private calculateTotalPointsEarned(
-    responses: CreateQuestionResponseAttemptResponseDto[],
+    responses: CreateQuestionResponseAttemptResponseDto[]
   ): number {
     return responses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
-      0,
+      0
     );
   }
 }

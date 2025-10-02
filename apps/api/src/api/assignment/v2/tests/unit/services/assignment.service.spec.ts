@@ -363,7 +363,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         showQuestionScore: false,
         showSubmissionFeedback: false,
         showQuestions: false,
-        showCorrectAnswer: false,
+        correctAnswerVisibility: "NEVER",
       };
 
       expect(

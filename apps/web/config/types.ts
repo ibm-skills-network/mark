@@ -216,7 +216,7 @@ export type AuthorAssignmentState = {
   showQuestionScore: boolean;
   showSubmissionFeedback: boolean;
   showQuestions: boolean;
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
   updatedAt: number;
   numberOfQuestionsPerAttempt?: number;
 };
@@ -560,7 +560,7 @@ export type FeedbackData = {
   showQuestions: boolean;
 
   showAssignmentScore: boolean;
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
   updatedAt: number | undefined;
 };
 
@@ -583,7 +583,7 @@ export type ReplaceAssignmentRequest = {
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
-  showCorrectAnswer?: boolean;
+  correctAnswerVisibility?: CorrectAnswerVisibility;
   updatedAt: number;
   questionVariationNumber?: number;
   versionDescription?: string;
@@ -626,7 +626,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   showAssignmentScore?: boolean;
   showQuestions?: boolean;
   showQuestionScore?: boolean;
-  showCorrectAnswer?: boolean;
+  correctAnswerVisibility?: CorrectAnswerVisibility;
   comments?: string;
   preferredLanguage?: string;
 }
@@ -648,7 +648,7 @@ export interface AssignmentDetails {
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
-  showCorrectAnswer?: boolean;
+  correctAnswerVisibility?: CorrectAnswerVisibility;
   numberOfQuestionsPerAttempt?: number;
 }
 
@@ -661,7 +661,7 @@ export interface AssignmentDetailsLocal extends AssignmentDetails {
   showAssignmentScore: boolean;
   showQuestionScore: boolean;
   showSubmissionFeedback: boolean;
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 }
 
 export type BaseBackendResponse = {
@@ -690,6 +690,8 @@ export type LearnerAssignmentState =
   | "completed";
 
 export type VerbosityLevels = "Full" | "Partial" | "None" | "Custom";
+
+export type CorrectAnswerVisibility = "NEVER" | "ALWAYS" | "ON_PASS";
 export type VerbosityState = {
   verbosity: VerbosityLevels;
   loading: boolean;

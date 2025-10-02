@@ -796,14 +796,14 @@ function Component() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
-    state.showCorrectAnswer,
+    state.correctAnswerVisibility,
   ]);
 
   const router = useRouter();
@@ -844,7 +844,7 @@ function Component() {
       showAssignmentScore: filteredChanges.some((c) =>
         c.includes("Changed assignment score visibility"),
       ),
-      showCorrectAnswer: filteredChanges.some((c) =>
+      correctAnswerVisibility: filteredChanges.some((c) =>
         c.includes("Changed correct answer visibility"),
       ),
       questionOrder: filteredChanges.some((c) =>
