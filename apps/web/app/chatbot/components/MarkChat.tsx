@@ -898,19 +898,22 @@ export const MarkChat = () => {
   const [dismissedActions, setDismissedActions] = useState(new Set());
 
   const generateActionKey = useCallback((type, context) => {
-    const baseKey = `${type}-${context.assignmentId || 'general'}`;
+    const baseKey = `${type}-${context.assignmentId || "general"}`;
     return baseKey;
   }, []);
 
-  const dismissAction = useCallback((type, context) => {
-    const key = generateActionKey(type, context);
-    setDismissedActions(prev => {
-      const newSet = new Set(prev);
-      newSet.add(key);
-      return newSet;
-    });
-    setSpecialActions({ show: false, type: null, data: null });
-  }, [generateActionKey]);
+  const dismissAction = useCallback(
+    (type, context) => {
+      const key = generateActionKey(type, context);
+      setDismissedActions((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(key);
+        return newSet;
+      });
+      setSpecialActions({ show: false, type: null, data: null });
+    },
+    [generateActionKey],
+  );
 
   const [user, setUser] = useState(null);
   const [currentChatId, setCurrentChatId] = useState(null);
@@ -946,10 +949,11 @@ export const MarkChat = () => {
   const [isTouching, setIsTouching] = useState(false);
 
   const isMobileDevice = useCallback(() => {
-    return typeof window !== 'undefined' && (
-      'ontouchstart' in window ||
-      navigator.maxTouchPoints > 0 ||
-      window.innerWidth < 768
+    return (
+      typeof window !== "undefined" &&
+      ("ontouchstart" in window ||
+        navigator.maxTouchPoints > 0 ||
+        window.innerWidth < 768)
     );
   }, []);
 
@@ -1026,26 +1030,29 @@ export const MarkChat = () => {
     }
   }, [constrainToViewport]);
 
-  const handleDragStart = useCallback((e, data) => {
-    setHasMoved(false);
-    setIsDragging(false); // Reset dragging state
-    setDragStartPosition({ x: data.x, y: data.y });
-    setDragStartTime(Date.now());
-    setMotionData((prev) => ({
-      ...prev,
-      dragCount: prev.dragCount + 1,
-      dragStartTime: Date.now(),
-      lastPosition: dragPosition,
-      totalDistance: 0,
-    }));
-  }, [dragPosition]);
+  const handleDragStart = useCallback(
+    (e, data) => {
+      setHasMoved(false);
+      setIsDragging(false); // Reset dragging state
+      setDragStartPosition({ x: data.x, y: data.y });
+      setDragStartTime(Date.now());
+      setMotionData((prev) => ({
+        ...prev,
+        dragCount: prev.dragCount + 1,
+        dragStartTime: Date.now(),
+        lastPosition: dragPosition,
+        totalDistance: 0,
+      }));
+    },
+    [dragPosition],
+  );
 
   const handleDrag = useCallback(
     (e, data) => {
       // Calculate distance from start position
       const distanceFromStart = Math.sqrt(
         Math.pow(data.x - dragStartPosition.x, 2) +
-        Math.pow(data.y - dragStartPosition.y, 2)
+          Math.pow(data.y - dragStartPosition.y, 2),
       );
 
       // Calculate time elapsed since drag start
@@ -1055,9 +1062,15 @@ export const MarkChat = () => {
       const DESKTOP_DRAG_THRESHOLD = 5;
       const MIN_DRAG_TIME = 200;
 
-      const dragThreshold = isMobileDevice() ? MOBILE_DRAG_THRESHOLD : DESKTOP_DRAG_THRESHOLD;
+      const dragThreshold = isMobileDevice()
+        ? MOBILE_DRAG_THRESHOLD
+        : DESKTOP_DRAG_THRESHOLD;
 
-      if (!hasMoved && distanceFromStart > dragThreshold && timeElapsed > MIN_DRAG_TIME) {
+      if (
+        !hasMoved &&
+        distanceFromStart > dragThreshold &&
+        timeElapsed > MIN_DRAG_TIME
+      ) {
         setHasMoved(true);
         setIsDragging(true);
       }
@@ -1190,63 +1203,72 @@ export const MarkChat = () => {
     [hasMoved, sayExcited],
   );
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isMobileDevice()) return;
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isMobileDevice()) return;
 
-    const touch = e.touches[0];
-    setIsTouching(true);
-    setTouchStartTime(Date.now());
-    setTouchStartPosition({ x: touch.clientX, y: touch.clientY });
-  }, [isMobileDevice]);
+      const touch = e.touches[0];
+      setIsTouching(true);
+      setTouchStartTime(Date.now());
+      setTouchStartPosition({ x: touch.clientX, y: touch.clientY });
+    },
+    [isMobileDevice],
+  );
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isMobileDevice() || !isTouching) return;
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isMobileDevice() || !isTouching) return;
 
-    const touch = e.touches[0];
-    const distanceMoved = Math.sqrt(
-      Math.pow(touch.clientX - touchStartPosition.x, 2) +
-      Math.pow(touch.clientY - touchStartPosition.y, 2)
-    );
+      const touch = e.touches[0];
+      const distanceMoved = Math.sqrt(
+        Math.pow(touch.clientX - touchStartPosition.x, 2) +
+          Math.pow(touch.clientY - touchStartPosition.y, 2),
+      );
 
-    if (distanceMoved > 20) {
-      setIsTouching(false);
-    }
-  }, [isMobileDevice, isTouching, touchStartPosition]);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!isMobileDevice() || !isTouching) return;
-
-    const touchDuration = Date.now() - touchStartTime;
-    const isQuickTap = touchDuration < 200;
-
-    if (isQuickTap && !isDragging && !hasMoved) {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
-        const helpMessage = getChatMessage();
-        setUserInput(helpMessage);
-        dismissBubble();
-        resetHelpOffer();
+      if (distanceMoved > 20) {
+        setIsTouching(false);
       }
-      toggleChatbot();
-    }
+    },
+    [isMobileDevice, isTouching, touchStartPosition],
+  );
 
-    setIsTouching(false);
-  }, [
-    isMobileDevice,
-    isTouching,
-    touchStartTime,
-    isDragging,
-    hasMoved,
-    behaviorData.shouldOfferHelp,
-    behaviorData.helpReason,
-    getChatMessage,
-    setUserInput,
-    dismissBubble,
-    resetHelpOffer,
-    toggleChatbot,
-  ]);
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isMobileDevice() || !isTouching) return;
+
+      const touchDuration = Date.now() - touchStartTime;
+      const isQuickTap = touchDuration < 200;
+
+      if (isQuickTap && !isDragging && !hasMoved) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
+          const helpMessage = getChatMessage();
+          setUserInput(helpMessage);
+          dismissBubble();
+          resetHelpOffer();
+        }
+        toggleChatbot();
+      }
+
+      setIsTouching(false);
+    },
+    [
+      isMobileDevice,
+      isTouching,
+      touchStartTime,
+      isDragging,
+      hasMoved,
+      behaviorData.shouldOfferHelp,
+      behaviorData.helpReason,
+      getChatMessage,
+      setUserInput,
+      dismissBubble,
+      resetHelpOffer,
+      toggleChatbot,
+    ],
+  );
 
   const handleChatToggle = useCallback(() => {
     let shouldToggle: boolean;
@@ -1638,7 +1660,9 @@ export const MarkChat = () => {
           lowerInput.match(/score(?:.+?)wrong/) ||
           lowerInput.match(/grade(?:.+?)incorrect/))
       ) {
-        const actionKey = generateActionKey("regrade", { assignmentId: learnerContext.assignmentId });
+        const actionKey = generateActionKey("regrade", {
+          assignmentId: learnerContext.assignmentId,
+        });
         if (!dismissedActions.has(actionKey)) {
           setSpecialActions({
             show: true,
@@ -1661,7 +1685,9 @@ export const MarkChat = () => {
         lowerInput.match(/can't(?:.+?)load/) ||
         lowerInput.match(/won't(?:.+?)display/)
       ) {
-        const actionKey = generateActionKey("report", { assignmentId: learnerContext.assignmentId });
+        const actionKey = generateActionKey("report", {
+          assignmentId: learnerContext.assignmentId,
+        });
         if (!dismissedActions.has(actionKey)) {
           setSpecialActions({
             show: true,
@@ -2257,7 +2283,9 @@ Please help me with this.`;
       if (action === "cancel") {
         // When user cancels, dismiss the action so it doesn't reappear
         const actionData = specialActions.data || {};
-        dismissAction(specialActions.type, { assignmentId: actionData.assignmentId });
+        dismissAction(specialActions.type, {
+          assignmentId: actionData.assignmentId,
+        });
         return;
       }
 
@@ -2687,7 +2715,7 @@ Please help me with this.`;
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
-                className={`p-3 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 ${isMobileDevice() ? 'cursor-pointer' : 'cursor-move'} ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
+                className={`p-3 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 ${isMobileDevice() ? "cursor-pointer" : "cursor-move"} ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
               >
                 {MarkFace ? (
                   <Image
@@ -2718,8 +2746,11 @@ Please help me with this.`;
           <motion.div
             initial={{ width: 0, opacity: 0 }}
             animate={{
-              width: typeof window !== "undefined" && window.innerWidth < 768 ? "100vw" : "25vw",
-              opacity: 1
+              width:
+                typeof window !== "undefined" && window.innerWidth < 768
+                  ? "100vw"
+                  : "25vw",
+              opacity: 1,
             }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}

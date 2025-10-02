@@ -162,9 +162,7 @@ function QuestionPage(props: Props) {
     <div
       className={cn(
         "bg-gray-50 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
-        tips
-          ? "md:grid-cols-[260px_1fr_265px]"
-          : "md:grid-cols-[260px_1fr]",
+        tips ? "md:grid-cols-[260px_1fr_265px]" : "md:grid-cols-[260px_1fr]",
       )}
     >
       <div className="md:rounded-md h-auto pt-3 md:pt-6 px-3 md:px-4 w-full md:w-auto border-b md:border-b-0 bg-white md:bg-transparent">
