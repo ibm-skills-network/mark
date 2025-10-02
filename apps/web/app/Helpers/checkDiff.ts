@@ -438,6 +438,8 @@ export function useChangesSummary(): string {
     questionDisplay,
     questionVariationNumber,
     numAttempts,
+    attemptsBeforeCoolDown,
+    retakeAttemptCoolDownMinutes,
     passingGrade,
     timeEstimateMinutes,
     allotedTimeMinutes,

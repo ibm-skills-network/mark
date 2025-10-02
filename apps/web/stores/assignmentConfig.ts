@@ -121,17 +121,11 @@ export const useAssignmentConfig = createWithEqualityFn<
           if (!state.numAttempts || state.numAttempts < -1) {
             errors.numAttempts = "Please enter a valid number of attempts.";
           }
-          if (
-            !state.attemptsBeforeCoolDown ||
-            state.attemptsBeforeCoolDown < -1
-          ) {
+          if (!(state.attemptsBeforeCoolDown >= 0)) {
             errors.attemptsBeforeCoolDown =
               "Please enter a valid number of attempts before a cool down period is required.";
           }
-          if (
-            !state.retakeAttemptCoolDownMinutes ||
-            state.retakeAttemptCoolDownMinutes < 0
-          ) {
+          if (!(state.retakeAttemptCoolDownMinutes >= 0)) {
             errors.retakeAttemptCoolDownMinutes =
               "Please enter a valid number for the amount of time for a cooldown period in minutes";
           }

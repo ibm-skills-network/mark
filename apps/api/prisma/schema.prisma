@@ -265,6 +265,8 @@ model AssignmentVersion {
   instructions            String?                         /// Instructions for this version
   gradingCriteriaOverview String?                         /// Grading criteria for this version
   timeEstimateMinutes     Int?                            /// Time estimate for this version
+  attemptsBeforeCoolDown  Int?                            @default(1) /// How many attempts someone has before they have to go through a cooldown period, cooldown starts after first attempt
+  retakeAttemptCoolDownMinutes Int?                       @default(5) /// How long before someone can make another attempt, defaulted to 5 minutes
   type                    AssignmentType                  /// Type of assignment
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed
@@ -598,6 +600,8 @@ model AssignmentDraft {
   instructions            String?                         /// Instructions for this draft
   gradingCriteriaOverview String?                         /// Grading criteria for this draft
   timeEstimateMinutes     Int?                            /// Time estimate for this draft
+  attemptsBeforeCoolDown  Int?                            @default(1) /// How many attempts someone has before they have to go through a cooldown period, cooldown starts after first attempt
+  retakeAttemptCoolDownMinutes Int?                       @default(5) /// How long before someone can make another attempt, defaulted to 5 minutes
   type                    AssignmentType                  /// Type of assignment
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed

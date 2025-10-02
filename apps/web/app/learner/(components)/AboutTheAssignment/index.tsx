@@ -300,19 +300,19 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 <div className="sm:hidden">
                   <BeginTheAssignmentButton
                     className="w-full"
-                    assignmentState={assignmentState}
-                    assignmentId={id}
-                    role={role}
-                    attemptsLeft={attemptsLeft}
+                    disabled={isCooldown || buttonDisabled}
+                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    label={buttonLabel}
+                    href={url}
                   />
                 </div>
                 <div className="hidden sm:block">
                   <BeginTheAssignmentButton
                     className="w-auto"
-                    assignmentState={assignmentState}
-                    assignmentId={id}
-                    role={role}
-                    attemptsLeft={attemptsLeft}
+                    disabled={isCooldown || buttonDisabled}
+                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    label={buttonLabel}
+                    href={url}
                   />
                 </div>
               </div>
@@ -409,10 +409,10 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
           <div className="flex justify-center mt-6">
             <BeginTheAssignmentButton
               className="w-full sm:w-auto"
-              assignmentState={assignmentState}
-              assignmentId={id}
-              role={role}
-              attemptsLeft={attemptsLeft}
+              disabled={isCooldown || buttonDisabled}
+              message={isCooldown ? cooldownMessage : buttonMessage}
+              label={buttonLabel}
+              href={url}
             />
           </div>
         </div>

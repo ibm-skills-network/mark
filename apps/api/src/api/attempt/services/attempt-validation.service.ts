@@ -102,12 +102,12 @@ export class AttemptValidationService {
         );
       }
 
-      const attemptsBeforeCooldown = assignment.attemptsBeforeCoolDown ?? 1;
+      const attemptsBeforeCoolDown = assignment.attemptsBeforeCoolDown ?? 1;
       const cooldownMinutes = assignment.retakeAttemptCoolDownMinutes ?? 0;
 
       if (
-        attemptsBeforeCooldown > 0 &&
-        totalAttempts >= attemptsBeforeCooldown
+        attemptsBeforeCoolDown > 0 &&
+        totalAttempts >= attemptsBeforeCoolDown
       ) {
         const lastAttemptTime = new Date(
           lastSubmittedAttempt.expiresAt,

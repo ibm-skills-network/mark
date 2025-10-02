@@ -20,9 +20,9 @@ const BeginTheAssignment: React.FC<Props> = (props) => {
   const setUserPreferedLanguage = useLearnerStore(
     (state) => state.setUserPreferedLanguage,
   );
-  const handleClick = () => {
-    setUserPreferedLanguage(userPreferedLanguage);
+  const MoveToQuestionPage = () => {
     if (!disabled) {
+      setUserPreferedLanguage(userPreferedLanguage);
       window.location.href = href;
     }
   };
@@ -33,7 +33,7 @@ const BeginTheAssignment: React.FC<Props> = (props) => {
         <Button
           className="group flex items-center justify-center w-full sm:w-auto gap-x-2 disabled:opacity-50 text-center bg-violet-500 text-white px-4 py-2 rounded-md"
           disabled={disabled}
-          onClick={handleClick}
+          onClick={MoveToQuestionPage}
         >
           {label} the Assignment
           <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />

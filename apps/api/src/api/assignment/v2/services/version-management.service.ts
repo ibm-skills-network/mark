@@ -24,6 +24,7 @@ import {
 import { Logger } from "winston";
 import { PrismaService } from "../../../../prisma.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
+import { assign } from "nodemailer/lib/shared";
 
 export interface CreateVersionDto {
   versionNumber?: string;
@@ -302,6 +303,8 @@ export class VersionManagementService {
           type: assignment.type,
           graded: assignment.graded,
           numAttempts: assignment.numAttempts,
+          attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           attemptsPerTimeRange: assignment.attemptsPerTimeRange,
           attemptsTimeRangeHours: assignment.attemptsTimeRangeHours,
@@ -506,6 +509,8 @@ export class VersionManagementService {
       type: version.type,
       graded: version.graded,
       numAttempts: version.numAttempts,
+      attemptsBeforeCoolDown: version.attemptsBeforeCoolDown,
+      retakeAttemptCoolDownMinutes: version.retakeAttemptCoolDownMinutes,
       allotedTimeMinutes: version.allotedTimeMinutes,
       attemptsPerTimeRange: version.attemptsPerTimeRange,
       attemptsTimeRangeHours: version.attemptsTimeRangeHours,
@@ -607,6 +612,8 @@ export class VersionManagementService {
             type: versionToRestore.type,
             graded: versionToRestore.graded,
             numAttempts: versionToRestore.numAttempts,
+            attemptsBeforeCoolDown: versionToRestore.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes: versionToRestore.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: versionToRestore.allotedTimeMinutes,
             attemptsPerTimeRange: versionToRestore.attemptsPerTimeRange,
             attemptsTimeRangeHours: versionToRestore.attemptsTimeRangeHours,
@@ -1056,6 +1063,8 @@ export class VersionManagementService {
           type: assignment.type,
           graded: assignment.graded,
           numAttempts: assignment.numAttempts,
+          attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           attemptsPerTimeRange: assignment.attemptsPerTimeRange,
           attemptsTimeRangeHours: assignment.attemptsTimeRangeHours,
@@ -1363,6 +1372,8 @@ export class VersionManagementService {
           type: assignment.type,
           graded: assignment.graded,
           numAttempts: assignment.numAttempts,
+          attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           attemptsPerTimeRange: assignment.attemptsPerTimeRange,
           attemptsTimeRangeHours: assignment.attemptsTimeRangeHours,
@@ -1457,6 +1468,8 @@ export class VersionManagementService {
     type: string;
     graded: boolean;
     numAttempts: number | null;
+    attemptsBeforeCoolDown: number | null;
+    retakeAttemptCoolDownMinutes: number | null;
     allotedTimeMinutes: number | null;
     passingGrade: number | null;
     displayOrder: string | null;
@@ -1499,6 +1512,8 @@ export class VersionManagementService {
       type: latestDraft.type,
       graded: latestDraft.graded,
       numAttempts: latestDraft.numAttempts,
+      attemptsBeforeCoolDown: latestDraft.attemptsBeforeCoolDown,
+      retakeAttemptCoolDownMinutes: latestDraft.retakeAttemptCoolDownMinutes,
       allotedTimeMinutes: latestDraft.allotedTimeMinutes,
       passingGrade: latestDraft.passingGrade,
       displayOrder: latestDraft.displayOrder,
@@ -1595,6 +1610,8 @@ export class VersionManagementService {
             type: sourceVersion.type,
             graded: sourceVersion.graded,
             numAttempts: sourceVersion.numAttempts,
+            attemptsBeforeCoolDown: sourceVersion.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes: sourceVersion.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: sourceVersion.allotedTimeMinutes,
             attemptsPerTimeRange: sourceVersion.attemptsPerTimeRange,
             attemptsTimeRangeHours: sourceVersion.attemptsTimeRangeHours,
@@ -2055,6 +2072,10 @@ export class VersionManagementService {
             graded: draftData.assignmentData.graded ?? assignment.graded,
             numAttempts:
               draftData.assignmentData.numAttempts ?? assignment.numAttempts,
+            attemptsBeforeCoolDown:
+              draftData.assignmentData.attemptsBeforeCoolDown ?? assignment.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes:
+              draftData.assignmentData.retakeAttemptCoolDownMinutes ?? assignment.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes:
               draftData.assignmentData.allotedTimeMinutes ??
               assignment.allotedTimeMinutes,
