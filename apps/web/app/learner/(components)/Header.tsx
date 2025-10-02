@@ -324,7 +324,7 @@ function LearnerHeader() {
     clearGithubStore,
     clearLearnerAnswers,
     router,
-    gradingProgress
+    gradingProgress,
   ]);
 
   useEffect(() => {
@@ -339,10 +339,13 @@ function LearnerHeader() {
       CheckNoFlaggedQuestions();
     };
 
-    window.addEventListener('triggerAssignmentSubmission', handleSubmitEvent);
+    window.addEventListener("triggerAssignmentSubmission", handleSubmitEvent);
 
     return () => {
-      window.removeEventListener('triggerAssignmentSubmission', handleSubmitEvent);
+      window.removeEventListener(
+        "triggerAssignmentSubmission",
+        handleSubmitEvent,
+      );
     };
   }, [CheckNoFlaggedQuestions]);
 

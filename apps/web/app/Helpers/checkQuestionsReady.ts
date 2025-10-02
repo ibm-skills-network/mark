@@ -300,6 +300,24 @@ export const useQuestionsAreReadyToBePublished = (
         isValid = false;
       }
       if (
+        assignmentConfig.attemptsBeforeCoolDown == null ||
+        assignmentConfig.attemptsBeforeCoolDown < -1
+      ) {
+        message = `Please enter a valid number of attempts before cooldown period.`;
+        debugLog(message);
+        step = 3;
+        isValid = false;
+      }
+      if (
+        assignmentConfig.retakeAttemptCoolDownMinutes == null ||
+        assignmentConfig.retakeAttemptCoolDownMinutes < -1
+      ) {
+        message = `Please enter a valid number of minutes for the cooldown period.`;
+        debugLog(message);
+        step = 3;
+        isValid = false;
+      }
+      if (
         assignmentConfig.passingGrade == null ||
         assignmentConfig.passingGrade <= 0 ||
         assignmentConfig.passingGrade > 100

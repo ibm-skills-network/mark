@@ -1528,12 +1528,12 @@ export class AttemptServiceV1 {
         );
       }
 
-      const attemptsBeforeCooldown = assignment.attemptsBeforeCoolDown ?? 1;
+      const attemptsBeforeCoolDown = assignment.attemptsBeforeCoolDown ?? 1;
       const cooldownMinutes = assignment.retakeAttemptCoolDownMinutes ?? 0;
 
       if (
-        attemptsBeforeCooldown > 0 &&
-        totalAttempts >= attemptsBeforeCooldown
+        attemptsBeforeCoolDown > 0 &&
+        totalAttempts >= attemptsBeforeCoolDown
       ) {
         const latestAttempt = attemptsInTimeRange[0];
         if (latestAttempt?.expiresAt) {
