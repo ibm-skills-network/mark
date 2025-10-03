@@ -217,7 +217,7 @@ export class TranslationService {
     const baseQuestion = await this.questionService.findOne(variant.questionId);
 
     return {
-      id: variant.id,
+      id: baseQuestion.id, // Use the original question's ID, not the variant's ID
       question: variant.variantContent,
       type: baseQuestion.type,
       assignmentId: baseQuestion.assignmentId,
@@ -227,7 +227,7 @@ export class TranslationService {
         this.parseJsonField(baseQuestion.scoring)) as ScoringDto,
       choices: (this.parseJsonField(variant.choices) ??
         this.parseJsonField(baseQuestion.choices)) as Choice[],
-      answer: baseQuestion.answer ?? variant.answer,
+      answer: variant.answer ?? baseQuestion.answer,
       alreadyInBackend: true,
       totalPoints: baseQuestion.totalPoints,
       gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
