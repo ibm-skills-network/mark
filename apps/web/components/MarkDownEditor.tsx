@@ -42,7 +42,9 @@ const MarkdownEditor: React.FC<Props> = ({
   useEffect(() => {
     let isMounted = true;
     const initializeQuill = async () => {
+      // Fix: Add client-side check to prevent SSR errors with Quill Editor
       if (
+        typeof window !== "undefined" &&
         typeof document !== "undefined" &&
         quillRef.current &&
         !quillInstance
@@ -56,6 +58,9 @@ const MarkdownEditor: React.FC<Props> = ({
 
         const QuillModule = await import("quill");
         if (!isMounted) return;
+        // Fix: Also check quillRef.current after async operations to prevent race conditions
+        if (!quillRef.current) return;
+        
         const Quill = QuillModule.default;
         const quill = new Quill(quillRef.current, {
           theme: "snow",

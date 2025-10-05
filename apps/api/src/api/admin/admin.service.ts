@@ -2064,6 +2064,9 @@ export class AdminService {
   }
 
   async removeAssignment(id: number): Promise<BaseAssignmentResponseDto> {
+    // Fix: Delete related records in correct order to avoid foreign key constraint violations
+    
+    // Step 1: Delete question responses and attempt-related data
     await this.prisma.questionResponse.deleteMany({
       where: { assignmentAttempt: { assignmentId: id } },
     });
@@ -2074,6 +2077,16 @@ export class AdminService {
 
     await this.prisma.assignmentAttempt.deleteMany({
       where: { assignmentId: id },
+    });
+
+    // Step 2: Delete grading jobs (fixes GradingJob_assignmentId_fkey constraint)
+    await this.prisma.gradingJob.deleteMany({
+      where: { assignmentId: id },
+    });
+
+    // Step 3: Delete grading audits (fixes GradingAudit_questionId_fkey constraint)
+    await this.prisma.gradingAudit.deleteMany({
+      where: { question: { assignmentId: id } },
     });
 
     await this.prisma.assignmentGroup.deleteMany({
@@ -2100,10 +2113,12 @@ export class AdminService {
       where: { assignmentId: id },
     });
 
+    // Step 4: Delete questions (after grading audits are deleted)
     await this.prisma.question.deleteMany({
       where: { assignmentId: id },
     });
 
+    // Step 5: Verify assignment exists before final deletion
     const assignmentExists = await this.prisma.assignment.findUnique({
       where: { id },
       select: { id: true, name: true, type: true },
@@ -2113,6 +2128,7 @@ export class AdminService {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
+    // Step 6: Finally delete the assignment
     await this.prisma.assignment.delete({
       where: { id },
     });

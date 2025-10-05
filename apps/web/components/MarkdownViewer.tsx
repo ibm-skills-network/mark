@@ -41,10 +41,14 @@ const MarkdownViewer: FC<Props> = (props) => {
       setQuillInstance(null);
     }
 
-    if (quillRef.current) {
+    // Fix: Add client-side check to prevent SSR errors with Quill Editor
+    if (quillRef.current && typeof window !== 'undefined') {
       window.hljs = hljs;
 
       void import("quill").then((QuillModule) => {
+        // Fix: Re-check quillRef.current after async import to prevent race conditions
+        if (!quillRef.current) return;
+        
         const Quill = QuillModule.default;
 
         const quill = new Quill(quillRef.current, {

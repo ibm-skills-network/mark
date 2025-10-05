@@ -15,7 +15,8 @@ import {
 import { getLiveRecordingFeedback } from "@/lib/talkToBackend";
 import { useLearnerStore, useVideoRecorderStore } from "@/stores/learner";
 
-const ffmpeg = new FFmpeg();
+// Fix: Remove global FFmpeg initialization to prevent SSR errors
+// FFmpeg will be initialized inside useVideoProcessor hook
 
 /** ------------------------------------------------------------------
  * HOOK #1: Manage camera stream, recording, and a manual timer
@@ -122,8 +123,23 @@ const useVideoRecorder = (onRecordingComplete: (blob: Blob) => void) => {
  * ------------------------------------------------------------------ */
 const useVideoProcessor = () => {
   const [processing, setProcessing] = useState(false);
+  const [ffmpeg, setFfmpeg] = useState<any>(null);
+
+  // Fix: Initialize FFmpeg only on client-side to prevent SSR errors
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import('@ffmpeg/ffmpeg').then(({ FFmpeg }) => {
+        const ffmpegInstance = new FFmpeg();
+        setFfmpeg(ffmpegInstance);
+      });
+    }
+  }, []);
 
   const extractAudio = async (videoBlob: Blob) => {
+    if (!ffmpeg) {
+      throw new Error('FFmpeg not initialized - client-side only');
+    }
+
     try {
       await ffmpeg.writeFile("input.webm", await fetchFile(videoBlob));
 
@@ -166,6 +182,10 @@ const useVideoProcessor = () => {
     text: string;
     segments: TranscriptSegment[];
   }> => {
+    if (!ffmpeg) {
+      throw new Error('FFmpeg not initialized - client-side only');
+    }
+
     setProcessing(true);
     try {
       if (!ffmpeg.loaded) {
@@ -537,23 +557,7 @@ export default function PresentationGrader({
 
   const [currentRecordingTime, setCurrentRecordingTime] = useState(0);
 
-  useEffect(() => {
-    const loadFFmpeg = async () => {
-      if (!ffmpeg.loaded) {
-        await ffmpeg.load({
-          coreURL: await toBlobURL(
-            "/ffmpeg-core/ffmpeg-core.js",
-            "text/javascript",
-          ),
-          wasmURL: await toBlobURL(
-            "/ffmpeg-core/ffmpeg-core.wasm",
-            "application/wasm",
-          ),
-        });
-      }
-    };
-    void loadFFmpeg();
-  }, []);
+  // Fix: Remove duplicate FFmpeg loading - already handled in useVideoProcessor hook
 
   useEffect(() => {
     setCachedEvaluation(null);

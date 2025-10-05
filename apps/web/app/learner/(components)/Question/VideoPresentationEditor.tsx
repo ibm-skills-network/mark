@@ -1,3 +1,5 @@
+"use client"; // Fix: Force client-side rendering to prevent FFmpeg SSR errors
+
 import { transcribeAudio } from "@/app/Helpers/transcribeAudio";
 import {
   QuestionStore,
@@ -115,7 +117,8 @@ const extractAudio = async (ffmpeg: FFmpeg, videoBlob: Blob): Promise<Blob> => {
   }
 };
 
-const ffmpeg = new FFmpeg();
+// Fix: Remove global FFmpeg initialization to prevent SSR errors
+// FFmpeg will be initialized inside component useEffect
 
 interface VideoPresentationEditorProps {
   question: QuestionStore;
@@ -134,8 +137,20 @@ const VideoPresentationEditor = ({
 
   const targetTime = config?.targetTime ?? 0;
 
+  // Fix: Initialize FFmpeg only on client-side to prevent SSR errors
+  const [ffmpeg, setFfmpeg] = useState<any>(null);
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
   const [processSlides, setProcessSlides] = useState(false);
+
+  // Fix: Client-side FFmpeg initialization
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import('@ffmpeg/ffmpeg').then(({ FFmpeg }) => {
+        const ffmpegInstance = new FFmpeg();
+        setFfmpeg(ffmpegInstance);
+      });
+    }
+  }, []);
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoURL, setVideoURL] = useState("");
