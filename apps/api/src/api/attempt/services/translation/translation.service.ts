@@ -129,6 +129,39 @@ export class TranslationService {
       }
     }
 
+    // Add English (original) content to the translation map
+    // English content is not stored as translations but as original content
+    for (const question of assignmentQuestions) {
+      const questionKey = `question-${question.id}`;
+      if (!translationMap.has(questionKey)) {
+        translationMap.set(questionKey, {});
+      }
+      const questionMapEntry = translationMap.get(questionKey);
+      if (questionMapEntry && !questionMapEntry.en) {
+        questionMapEntry.en = {
+          translatedText: question.question,
+          translatedChoices: question.choices,
+        };
+      }
+    }
+
+    // Add English content for variants
+    for (const qv of assignmentAttempt.questionVariants) {
+      if (qv.questionVariant) {
+        const variantKey = `variant-${qv.questionVariant.id}`;
+        if (!translationMap.has(variantKey)) {
+          translationMap.set(variantKey, {});
+        }
+        const variantMapEntry = translationMap.get(variantKey);
+        if (variantMapEntry && !variantMapEntry.en) {
+          variantMapEntry.en = {
+            translatedText: qv.questionVariant.variantContent || "",
+            translatedChoices: qv.questionVariant.choices,
+          };
+        }
+      }
+    }
+
     return translationMap;
   }
 

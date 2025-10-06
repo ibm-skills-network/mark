@@ -130,6 +130,7 @@ export class AttemptSubmissionService {
         ? await Promise.all(
             assignmentWithActiveVersion.currentVersion.questionVersions.map(
               async (qv) => {
+                // Fetch variants from the original question if questionId exists
                 let variants: QuestionVariant[] = [];
                 if (qv.questionId) {
                   const originalQuestion =
@@ -145,10 +146,10 @@ export class AttemptSubmissionService {
                 }
 
                 return {
-                  id: qv.questionId || qv.id,
+                  id: qv.questionId || qv.id, // Use questionId if available, fallback to qv.id
                   question: qv.question,
                   type: qv.type,
-                  assignmentId: assignmentId,
+                  assignmentId: assignmentId, // Set from parameter since QuestionVersion doesn't have this
                   totalPoints: qv.totalPoints,
                   maxWords: qv.maxWords,
                   maxCharacters: qv.maxCharacters,
