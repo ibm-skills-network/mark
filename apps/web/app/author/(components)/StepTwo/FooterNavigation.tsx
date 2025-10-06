@@ -12,7 +12,11 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export const FooterNavigation = () => {
+interface Props {
+  onNext?: () => void;
+}
+
+export const FooterNavigation = ({ onNext }: Props = {}) => {
   const router = useRouter();
   const [activeAssignmentId] = useAuthorStore((state) => [
     state.activeAssignmentId,
@@ -31,6 +35,8 @@ export const FooterNavigation = () => {
     const isAssignmentConfigValid = validateAssignmentConfig();
 
     if (isAssignmentConfigValid) {
+      // Call onNext callback before navigation to cleanup beforeunload
+      onNext?.();
       router.push(`/author/${activeAssignmentId}/review`);
     } else {
       // Check if error is on current page

@@ -172,9 +172,14 @@ const AuthorQuestionsPage: FC<Props> = ({
   defaultQuestionRetries,
 }) => {
   const router = useRouter();
-  useBeforeUnload(
+  const { hide: hideBeforeUnload, show: showBeforeUnload } = useBeforeUnload(
     "Are you sure you want to leave this page? You will lose any unsaved changes.",
   );
+  
+  // Enable beforeunload protection when component mounts
+  useEffect(() => {
+    showBeforeUnload();
+  }, [showBeforeUnload]);
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
     state.focusedQuestionId,
     state.setFocusedQuestionId,
@@ -1267,7 +1272,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         {/* next button */}
         {questions.length > 0 && (
           <div className="col-span-4 md:col-span-8 lg:col-span-12 md:col-start-3 md:col-end-11 lg:col-start-3 lg:col-end-11 row-start-3 flex flex-col justify-end mb-10">
-            <FooterNavigation nextStep="config" />
+            <FooterNavigation nextStep="config" onNext={hideBeforeUnload} />
           </div>
         )}
 

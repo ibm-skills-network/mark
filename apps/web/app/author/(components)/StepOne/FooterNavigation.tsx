@@ -24,12 +24,14 @@ interface Props extends ComponentPropsWithoutRef<"nav"> {
   assignmentId?: string;
   nextStep?: string;
   currentStepId?: number;
+  onNext?: () => void;
 }
 
 export const FooterNavigation: FC<Props> = ({
   assignmentId,
   nextStep = "config",
   currentStepId = 1, // Assuming this is used on questions page by default
+  onNext,
 }) => {
   const router = useRouter();
   const [activeAssignmentId, questions] = useAuthorStore((state) => [
@@ -147,6 +149,9 @@ export const FooterNavigation: FC<Props> = ({
       }
       return;
     }
+    
+    // Call onNext callback before navigation to cleanup beforeunload
+    onNext?.();
     router.push(`/author/${activeAssignmentId}/${nextStep}`);
   };
 
