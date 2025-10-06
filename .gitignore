@@ -65,6 +65,7 @@ dev.env
 dev.op.env
 .env.merged
 .env.op.local
+.env*.local
 
 *.env
 .env.local
