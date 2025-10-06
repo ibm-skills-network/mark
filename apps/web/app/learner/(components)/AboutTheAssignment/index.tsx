@@ -44,9 +44,13 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
           )}
         </button>
       </div>
-      <div className={`px-4 sm:px-6 py-4 transition-all duration-300 ${
-        isCollapsed ? 'max-h-0 opacity-0 py-0 sm:max-h-none sm:opacity-100 sm:py-4 overflow-hidden' : 'max-h-none opacity-100'
-      }`}>
+      <div
+        className={`px-4 sm:px-6 py-4 transition-all duration-300 ${
+          isCollapsed
+            ? "max-h-0 opacity-0 py-0 sm:max-h-none sm:opacity-100 sm:py-4 overflow-hidden"
+            : "max-h-none opacity-100"
+        }`}
+      >
         <MarkdownViewer className="text-gray-600 text-sm sm:text-base">
           {content || `No ${title.toLowerCase()} provided.`}
         </MarkdownViewer>
@@ -222,7 +226,11 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
               <button
                 onClick={() => setIsAboutCollapsed(!isAboutCollapsed)}
                 className="sm:hidden flex items-center text-gray-600 hover:text-gray-800 transition-colors"
-                aria-label={isAboutCollapsed ? "Expand about section" : "Collapse about section"}
+                aria-label={
+                  isAboutCollapsed
+                    ? "Expand about section"
+                    : "Collapse about section"
+                }
               >
                 {isAboutCollapsed ? (
                   <ChevronDownIcon className="w-5 h-5" />
@@ -231,45 +239,53 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 )}
               </button>
             </div>
-            <div className={`transition-all duration-300 ${
-              isAboutCollapsed ? 'max-h-0 opacity-0 overflow-hidden sm:max-h-none sm:opacity-100' : 'max-h-none opacity-100'
-            }`}>
+            <div
+              className={`transition-all duration-300 ${
+                isAboutCollapsed
+                  ? "max-h-0 opacity-0 overflow-hidden sm:max-h-none sm:opacity-100"
+                  : "max-h-none opacity-100"
+              }`}
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 p-4 sm:p-6">
-              <div className="flex flex-col gap-1 text-gray-600">
-                <span className="font-semibold text-sm">Assignment type</span>
-                <span className="text-sm">{graded ? "Graded" : "Practice"}</span>
+                <div className="flex flex-col gap-1 text-gray-600">
+                  <span className="font-semibold text-sm">Assignment type</span>
+                  <span className="text-sm">
+                    {graded ? "Graded" : "Practice"}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 text-gray-600">
+                  <span className="font-semibold text-sm">Time Limit</span>
+                  <span className="text-sm">
+                    {allotedTimeMinutes
+                      ? `${allotedTimeMinutes} minutes`
+                      : "Unlimited"}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 text-gray-600">
+                  <span className="font-semibold text-sm">Estimated Time</span>
+                  <span className="text-sm">
+                    {timeEstimateMinutes
+                      ? `${timeEstimateMinutes} minutes`
+                      : "Not provided"}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 text-gray-600">
+                  <span className="font-semibold text-sm">
+                    Assignment attempts
+                  </span>
+                  <span className="text-sm">
+                    {numAttempts === -1
+                      ? "Unlimited"
+                      : `${attemptsLeft} attempt${
+                          attemptsLeft > 1 ? "s" : ""
+                        } left`}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 text-gray-600">
+                  <span className="font-semibold text-sm">Passing Grade</span>
+                  <span className="text-sm">{passingGrade}%</span>
+                </div>
               </div>
-              <div className="flex flex-col gap-1 text-gray-600">
-                <span className="font-semibold text-sm">Time Limit</span>
-                <span className="text-sm">
-                  {allotedTimeMinutes
-                    ? `${allotedTimeMinutes} minutes`
-                    : "Unlimited"}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1 text-gray-600">
-                <span className="font-semibold text-sm">Estimated Time</span>
-                <span className="text-sm">
-                  {timeEstimateMinutes
-                    ? `${timeEstimateMinutes} minutes`
-                    : "Not provided"}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1 text-gray-600">
-                <span className="font-semibold text-sm">Assignment attempts</span>
-                <span className="text-sm">
-                  {numAttempts === -1
-                    ? "Unlimited"
-                    : `${attemptsLeft} attempt${
-                        attemptsLeft > 1 ? "s" : ""
-                      } left`}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1 text-gray-600">
-                <span className="font-semibold text-sm">Passing Grade</span>
-                <span className="text-sm">{passingGrade}%</span>
-              </div>
-            </div>
               <div className="border-t border-gray-200 px-4 sm:px-6 py-4">
                 <MarkdownViewer className="text-gray-600 text-sm sm:text-base">
                   {introduction}
@@ -307,8 +323,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 We recommend you experience our assignment in
                 <strong> English </strong>
                 as it's the original language. However, if you would like to
-                continue learning in your chosen language please be aware that our
-                translations are AI generated and may contain some inaccuracies.
+                continue learning in your chosen language please be aware that
+                our translations are AI generated and may contain some
+                inaccuracies.
               </p>
               <p className="text-gray-600 text-sm sm:text-base">
                 You will be able to switch your language at any time during the

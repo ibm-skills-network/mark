@@ -1,6 +1,7 @@
 /* eslint-disable */
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
+import { apiClient } from "./api-client";
 import type {
   Assignment,
   BaseBackendResponse,
@@ -76,21 +77,11 @@ export async function generateUploadUrl(
 ): Promise<UploadResponse> {
   const url = `${getBaseApiPath("v1")}/files/upload`;
 
-  const res = await fetch(url, {
-    method: "POST",
+  return (await apiClient.post(url, uploadRequest, {
     headers: {
-      "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
     },
-    body: JSON.stringify(uploadRequest),
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to generate upload URL");
-  }
-
-  return (await res.json()) as UploadResponse;
+  })) as UploadResponse;
 }
 
 /**
@@ -102,18 +93,11 @@ export async function getPublicFileUrl(
 ): Promise<{ presignedUrl: string }> {
   const url = `${getBaseApiPath("v1")}/files/public-url?key=${encodeURIComponent(key)}`;
 
-  const res = await fetch(url, {
+  return (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to generate public file URL");
-  }
-
-  return (await res.json()) as { presignedUrl: string };
+  })) as { presignedUrl: string };
 }
 
 /**
@@ -225,24 +209,11 @@ export async function createFolder(
 ): Promise<{ success: boolean; folder: { name: string; path: string } }> {
   const url = `${getBaseApiPath("v1")}/files/folder`;
 
-  const res = await fetch(url, {
-    method: "POST",
+  return (await apiClient.post(url, folderRequest, {
     headers: {
-      "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
     },
-    body: JSON.stringify(folderRequest),
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to create folder");
-  }
-
-  return (await res.json()) as {
-    success: boolean;
-    folder: { name: string; path: string };
-  };
+  })) as { success: boolean; folder: { name: string; path: string } };
 }
 
 /**
@@ -298,18 +269,11 @@ export async function getFileDownload(
 ): Promise<FileAccessResponse> {
   const url = `${getBaseApiPath("v1")}/files/download?fileId=${encodeURIComponent(fileId)}&uploadType=${uploadType}`;
 
-  const res = await fetch(url, {
+  return (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get file download URL");
-  }
-
-  return (await res.json()) as FileAccessResponse;
+  })) as FileAccessResponse;
 }
 
 /**
@@ -330,18 +294,11 @@ export async function listFiles(
 
   const url = `${getBaseApiPath("v1")}/files?${params.toString()}`;
 
-  const res = await fetch(url, {
+  return (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to list files");
-  }
-
-  return (await res.json()) as FileResponse[];
+  })) as FileResponse[];
 }
 
 /**
@@ -364,18 +321,11 @@ export async function listEmptyFolders(
 
   const url = `${getBaseApiPath("v1")}/files/empty-folders?${params.toString()}`;
 
-  const res = await fetch(url, {
+  return (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to list empty folders");
-  }
-
-  return (await res.json()) as string[];
+  })) as string[];
 }
 
 /**
@@ -405,19 +355,11 @@ export async function deleteFile(
     throw new Error("Either fileId or key must be provided");
   }
 
-  const res = await fetch(url, {
-    method: "DELETE",
+  return (await apiClient.delete(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to delete file");
-  }
-
-  return (await res.json()) as { success: boolean; message: string };
+  })) as { success: boolean; message: string };
 }
 
 /**
@@ -434,19 +376,11 @@ export async function deleteFolder(
 
   const url = `${getBaseApiPath("v1")}/files/folder?${params.toString()}`;
 
-  const res = await fetch(url, {
-    method: "DELETE",
+  return (await apiClient.delete(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to delete folder");
-  }
-
-  return (await res.json()) as {
+  })) as {
     success: boolean;
     message: string;
     deletedCount?: number;
@@ -462,21 +396,11 @@ export async function moveFile(
 ): Promise<{ success: boolean; message: string; newKey: string }> {
   const url = `${getBaseApiPath("v1")}/files/move`;
 
-  const res = await fetch(url, {
-    method: "PUT",
+  return (await apiClient.put(url, moveRequest, {
     headers: {
-      "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
     },
-    body: JSON.stringify(moveRequest),
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to move file");
-  }
-
-  return (await res.json()) as {
+  })) as {
     success: boolean;
     message: string;
     newKey: string;
@@ -492,21 +416,11 @@ export async function renameFile(
 ): Promise<{ success: boolean; message: string; newKey: string }> {
   const url = `${getBaseApiPath("v1")}/files/rename`;
 
-  const res = await fetch(url, {
-    method: "PUT",
+  return (await apiClient.put(url, renameRequest, {
     headers: {
-      "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
     },
-    body: JSON.stringify(renameRequest),
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to rename file");
-  }
-
-  return (await res.json()) as {
+  })) as {
     success: boolean;
     message: string;
     newKey: string;
@@ -589,22 +503,11 @@ export async function getFileAccess(
 
   const url = `${getBaseApiPath("v1")}/files/access?${params.toString()}`;
 
-  const res = await fetch(url, {
+  return (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get file access");
-  }
-
-  const result = (await res.json()) as FileAccessInfo;
-
-  return result;
+  })) as FileAccessInfo;
 }
 
 /**
@@ -621,20 +524,11 @@ export async function getFileContent(
 
   const url = `${getBaseApiPath("v1")}/files/content?${params.toString()}`;
 
-  const res = await fetch(url, {
+  return (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get file content");
-  }
-
-  return (await res.json()) as FileContentResponse;
+  })) as FileContentResponse;
 }
 
 /**
@@ -945,7 +839,7 @@ interface Report {
 export async function getReportsForUser(cookies?: string): Promise<Report[]> {
   const url = `${getBaseApiPath("v1")}/reports/user`;
 
-  const res = await fetch(url, {
+  const res = await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
@@ -968,8 +862,7 @@ export async function getOrCreateTodayChat(
 ): Promise<Chat> {
   const url = `${getApiRoutes().chats}/today`;
 
-  const res = await fetch(url, {
-    method: "POST",
+  const res = await apiClient.post(url, {
     headers: {
       "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
@@ -997,7 +890,7 @@ export async function getChatById(
 ): Promise<Chat> {
   const url = `${getApiRoutes().chats}/${chatId}`;
 
-  const res = await fetch(url, {
+  const res = await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
@@ -1020,7 +913,7 @@ export async function getUserChats(
 ): Promise<Chat[]> {
   const url = `${getApiRoutes().chats}/user/${userId}`;
 
-  const res = await fetch(url, {
+  const res = await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
@@ -1046,9 +939,7 @@ export async function addMessageToChat(
 ): Promise<ChatMessage> {
   const url = `${getApiRoutes().chats}/${chatId}/messages`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    credentials: "include",
+  const res = await apiClient.post(url, {
     headers: {
       "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
@@ -1782,21 +1673,12 @@ export async function getAssignment(
     ? `${getApiRoutes().assignments}/${id}?lang=${userPreferedLanguage}`
     : `${getApiRoutes().assignments}/${id}`;
 
-  const res = await fetch(url, {
+  const responseBody = (await apiClient.get(url, {
     headers: {
       "Cache-Control": "no-cache",
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
-
-  const responseBody = (await res.json()) as GetAssignmentResponse &
-    BaseBackendResponse;
-
-  if (!res.ok) {
-    throw new Error(
-      responseBody.message || `Request failed with status ${res.status}`,
-    );
-  }
+  })) as GetAssignmentResponse & BaseBackendResponse;
 
   const { success: _success, ...remainingData } = responseBody;
 

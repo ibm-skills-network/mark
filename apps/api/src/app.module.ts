@@ -17,6 +17,7 @@ import { HealthModule } from "./health/health.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
+import { DataTransformMiddleware } from "./middleware/data-transform.middleware";
 import { routes } from "./routes";
 
 @Module({
@@ -36,7 +37,7 @@ import { routes } from "./routes";
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(LoggerMiddleware)
+      .apply(DataTransformMiddleware, LoggerMiddleware)
       .forRoutes({ path: "*", method: RequestMethod.ALL })
       .apply(UserSessionMiddleware)
       .forRoutes(

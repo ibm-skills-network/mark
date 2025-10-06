@@ -58,13 +58,17 @@ function Overview({ questions }: Props) {
       {expiresAt ? (
         <Timer />
       ) : (
-        <div className="text-gray-600 leading-tight text-sm md:text-base">No time limit</div>
+        <div className="text-gray-600 leading-tight text-sm md:text-base">
+          No time limit
+        </div>
       )}
 
       <hr className="border-gray-300 -mx-3 md:-mx-4" />
 
       <div className="flex items-center justify-between">
-        <h3 className="text-gray-600 leading-tight text-sm md:text-base font-medium">Questions</h3>
+        <h3 className="text-gray-600 leading-tight text-sm md:text-base font-medium">
+          Questions
+        </h3>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="md:hidden flex items-center text-gray-600 hover:text-gray-800 transition-colors"
@@ -78,9 +82,13 @@ function Overview({ questions }: Props) {
         </button>
       </div>
 
-      <div className={`grid gap-2 grid-cols-[repeat(auto-fill,minmax(32px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(35px,1fr))] overflow-y-auto overflow-x-hidden scrollbar-hide transition-all duration-300 ${
-        isCollapsed ? 'max-h-0 opacity-0 md:max-h-none md:opacity-100' : 'max-h-[120px] opacity-100 md:max-h-none'
-      }`}>
+      <div
+        className={`grid gap-2 grid-cols-[repeat(auto-fill,minmax(32px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(35px,1fr))] overflow-y-auto overflow-x-hidden scrollbar-hide transition-all duration-300 ${
+          isCollapsed
+            ? "max-h-0 opacity-0 md:max-h-none md:opacity-100"
+            : "max-h-[120px] opacity-100 md:max-h-none"
+        }`}
+      >
         {questions.map((question: QuestionStore, index) => (
           <button
             key={index}

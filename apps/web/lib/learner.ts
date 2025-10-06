@@ -20,6 +20,7 @@ import type {
 } from "@config/types";
 import { toast } from "sonner";
 import { submitReportAuthor } from "@/lib/talkToBackend";
+import { apiClient } from "./api-client";
 
 /**
  * Creates a attempt for a given assignment.
@@ -33,8 +34,7 @@ export async function createAttempt(
 ): Promise<number | undefined | "no more attempts"> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
+    const res = await apiClient.post(endpointURL, {
       headers: {
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
@@ -105,7 +105,7 @@ export async function getCompletedAttempt(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/completed`;
 
   try {
-    const res = await fetch(endpointURL, {
+    const res = await apiClient.get(endpointURL, {
       headers: {
         ...(cookies ? { Cookie: cookies } : {}),
       },
@@ -134,8 +134,7 @@ export async function submitQuestion(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
+    const res = await apiClient.post(endpointURL, {
       headers: {
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
@@ -723,20 +722,11 @@ export async function getCurrentAssignmentVersion(
     // which automatically returns the current active version
     const endpointURL = `${getApiRoutes().assignments}/${assignmentId}`;
 
-    const res = await fetch(endpointURL, {
-      method: "GET",
+    return await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to fetch assignment");
-    }
-
-    return await res.json();
   } catch (err) {
     console.error("Error fetching current assignment version:", err);
     return undefined;

@@ -16,6 +16,7 @@ import type {
   REPORT_TYPE,
   Scoring,
 } from "@config/types";
+import { apiClient } from "./api-client";
 
 interface Notification {
   id: number;
@@ -37,20 +38,11 @@ export async function getUserNotifications(
   cookies?: string,
 ): Promise<Notification[]> {
   try {
-    const res = await fetch(`${getBaseApiPath("v1")}/notifications/user`, {
-      method: "GET",
+    return await apiClient.get(`${getBaseApiPath("v1")}/notifications/user`, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      const errorBody = await res.json();
-      throw new Error(errorBody.message || "Failed to fetch notifications");
-    }
-
-    return await res.json();
   } catch (err) {
     return [];
   }
@@ -66,25 +58,14 @@ export async function getUnreadNotificationCount(
   cookies?: string,
 ): Promise<{ count: number }> {
   try {
-    const res = await fetch(
+    return await apiClient.get(
       `${getBaseApiPath("v1")}/notifications/user/unread`,
       {
-        method: "GET",
         headers: {
-          "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
       },
     );
-
-    if (!res.ok) {
-      const errorBody = await res.json();
-      throw new Error(
-        errorBody.message || "Failed to fetch unread notification count",
-      );
-    }
-
-    return await res.json();
   } catch (err) {
     return { count: 0 };
   }
@@ -101,23 +82,15 @@ export async function markNotificationAsRead(
   cookies?: string,
 ): Promise<boolean> {
   try {
-    const res = await fetch(
+    await apiClient.post(
       `${getBaseApiPath("v1")}/notifications/mark-read/${notificationId}`,
+      {},
       {
-        method: "POST",
         headers: {
-          "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
       },
     );
-
-    if (!res.ok) {
-      const errorBody = await res.json();
-      throw new Error(
-        errorBody.message || "Failed to mark notification as read",
-      );
-    }
 
     return true;
   } catch (err) {
@@ -136,23 +109,15 @@ export async function markAllNotificationsAsRead(
   cookies?: string,
 ): Promise<boolean> {
   try {
-    const res = await fetch(
+    await apiClient.post(
       `${getBaseApiPath("v1")}/notifications/mark-all-read/${userId}`,
+      {},
       {
-        method: "POST",
         headers: {
-          "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
       },
     );
-
-    if (!res.ok) {
-      const errorBody = await res.json();
-      throw new Error(
-        errorBody.message || "Failed to mark all notifications as read",
-      );
-    }
 
     return true;
   } catch (err) {
@@ -168,19 +133,16 @@ export async function replaceAssignment(
   cookies?: string,
 ): Promise<boolean> {
   try {
-    const res = await fetch(getApiRoutes().assignments + `/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    const response = await apiClient.put(
+      getApiRoutes().assignments + `/${id}`,
+      data,
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to replace assignment");
-    }
-    const { success, error } = (await res.json()) as BaseBackendResponse;
+    );
+    const { success, error } = response as BaseBackendResponse;
     if (!success) {
       throw new Error(error);
     }
@@ -199,19 +161,16 @@ export async function updateAssignment(
   cookies?: string,
 ): Promise<boolean> {
   try {
-    const res = await fetch(getApiRoutes().assignments + `/${id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    const response = await apiClient.patch(
+      getApiRoutes().assignments + `/${id}`,
+      data,
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to update assignment");
-    }
-    const { success, error } = (await res.json()) as BaseBackendResponse;
+    );
+    const { success, error } = response as BaseBackendResponse;
     if (!success) {
       throw new Error(error);
     }
@@ -236,19 +195,12 @@ export async function createQuestion(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/questions`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
+    const response = await apiClient.post(endpointURL, question, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(question),
     });
-
-    if (!res.ok) {
-      throw new Error("Failed to create question");
-    }
-    const { success, error, id } = (await res.json()) as BaseBackendResponse;
+    const { success, error, id } = response as BaseBackendResponse;
     if (!success) {
       throw new Error(error);
     }
@@ -406,21 +358,11 @@ export async function publishAssignment(
     ...updatedAssignment,
   };
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
+    const { jobId, message } = (await apiClient.put(endpointURL, payload, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to start publishing job");
-    }
-
-    const { jobId, message } = (await res.json()) as {
+    })) as {
       jobId: number;
       message: string;
     };
@@ -445,19 +387,11 @@ export async function replaceQuestion(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/questions/${questionId}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
+    const { success, error, id } = (await apiClient.put(endpointURL, question, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(question),
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to update question");
-    }
-    const { success, error, id } = (await res.json()) as BaseBackendResponse;
+    })) as BaseBackendResponse;
     if (!success) {
       throw new Error(error);
     }
@@ -480,28 +414,20 @@ export async function generateQuestionVariant(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/question/generate-variant`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-      body: JSON.stringify({
+    const { success, error, questions } = (await apiClient.post(
+      endpointURL,
+      {
         questions: questionsFromFrontend,
         questionVariationNumber,
-      }),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(
-        errorBody.message || "Failed to generate question variant",
-      );
-    }
-    const { success, error, questions } =
-      (await res.json()) as BaseBackendResponse & {
-        questions: QuestionAuthorStore[];
-      };
+      },
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      },
+    )) as BaseBackendResponse & {
+      questions: QuestionAuthorStore[];
+    };
 
     if (!success) {
       throw new Error(error);
@@ -524,20 +450,15 @@ export async function generateRubric(
 ): Promise<Scoring | Choice[]> {
   const endpointURL = `${getApiRoutes().rubric}/${assignmentId}/questions/create-marking-rubric`;
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    const rubric = (await apiClient.post(
+      endpointURL,
+      { question, rubricIndex },
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify({ question, rubricIndex }),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to generate rubric");
-    }
-    const rubric = (await res.json()) as Scoring | Choice[];
+    )) as Scoring | Choice[];
     return rubric;
   } catch (err) {
     return undefined;
@@ -555,20 +476,15 @@ export async function expandMarkingRubric(
   const endpointURL = `${getApiRoutes().rubric}/${assignmentId}/questions/expand-marking-rubric`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    const rubric = (await apiClient.post(
+      endpointURL,
+      { question },
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify({ question }),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to generate rubric");
-    }
-    const rubric = (await res.json()) as QuestionAuthorStore;
+    )) as QuestionAuthorStore;
     return rubric;
   } catch (err) {
     return undefined;
@@ -586,18 +502,11 @@ export async function deleteQuestion(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/questions/${questionId}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "DELETE",
+    const { success, error } = (await apiClient.delete(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to delete question");
-    }
-    const { success, error } = (await res.json()) as BaseBackendResponse;
+    })) as BaseBackendResponse;
     if (!success) {
       throw new Error(error);
     }
@@ -618,16 +527,11 @@ export async function getAttempts(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
 
   try {
-    const res = await fetch(endpointURL, {
+    const attempts = (await apiClient.get(endpointURL, {
       headers: {
         ...(cookies ? { Cookie: cookies } : {}),
       },
-    });
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to fetch attempts");
-    }
-    const attempts = (await res.json()) as AssignmentAttempt[];
+    })) as AssignmentAttempt[];
     return attempts;
   } catch (err) {
     return undefined;
@@ -642,31 +546,19 @@ export async function uploadFiles(
   cookies?: string,
 ): Promise<{ success: boolean; jobId?: number }> {
   const endpointURL = `${getApiRoutes().assignments}/${payload.assignmentId}/generate-questions`;
-  const TIMEOUT = 1000000;
 
   try {
-    const res = (await Promise.race([
-      fetch(endpointURL, {
-        method: "POST",
+    const data = (await apiClient.post(
+      endpointURL,
+      { ...payload },
+      {
         headers: {
-          "Content-Type": "application/json",
           Connection: "keep-alive",
           KeepAlive: "timeout=1000000",
           ...(cookies ? { Cookie: cookies } : {}),
         },
-        body: JSON.stringify({ ...payload }),
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Request timed out")), TIMEOUT),
-      ),
-    ])) as Response;
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to upload files");
-    }
-
-    const data = (await res.json()) as {
+      },
+    )) as {
       success: boolean;
       jobId?: number;
     };
@@ -700,34 +592,22 @@ export async function getJobStatus(
     }
   | undefined
 > {
-  const { retries = 2, timeoutMs = 10_000 } = opts;
+  const { retries = 2 } = opts;
   const endpointURL = `${getApiRoutes().assignments}/jobs/${jobId}/status`;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), timeoutMs);
-
     try {
-      const res = await fetch(endpointURL, {
-        signal: abort.signal,
+      return (await apiClient.get(endpointURL, {
         headers: {
-          "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
-      });
-
-      clearTimeout(timer);
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      return (await res.json()) as {
+      })) as {
         status: string;
         progress: string;
         progressPercentage: string;
         questions?: QuestionAuthorStore[];
       };
     } catch (err) {
-      clearTimeout(timer);
       if (attempt === retries) return undefined;
       await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
     }
@@ -744,35 +624,18 @@ export async function submitReportAuthor(
   cookies?: string,
 ): Promise<{ success: boolean } | undefined> {
   try {
-    const response:
-      | Response
-      | {
-          status: number;
-          message: string;
-        } = await fetch(
+    return (await apiClient.post(
       `${getApiRoutes().assignments}/${assignmentId}/report`,
       {
-        method: "POST",
+        issueType,
+        description,
+      },
+      {
         headers: {
-          "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
-        body: JSON.stringify({
-          issueType,
-          description,
-        }),
       },
-    );
-
-    if (response.status === 422) {
-      throw new Error(
-        "You have reached the maximum number of reports allowed in a 24-hour period.",
-      );
-    } else if (!response.ok) {
-      throw new Error("Failed to submit report");
-    }
-
-    return (await response.json()) as { success: boolean };
+    )) as { success: boolean };
   } catch (error: unknown) {
     if (error instanceof Error) {
       throw error;
@@ -875,21 +738,12 @@ export async function deleteVersion(
   cookies?: string,
 ): Promise<boolean> {
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/${versionId}`;
-  const res = await fetch(endpointURL, {
-    method: "DELETE",
-    credentials: "include",
+
+  await apiClient.delete(endpointURL, {
     headers: {
-      "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
     },
   });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(
-      `HTTP ${res.status}: ${errorText || "Failed to delete version"}`,
-    );
-  }
 
   return true;
 }
@@ -908,30 +762,11 @@ export async function createAssignmentVersion(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      credentials: "include",
+    return (await apiClient.post(endpointURL, versionData, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(versionData),
-    });
-
-    if (!res.ok) {
-      const errorBody = await res.json();
-
-      // For conflict errors (409), include the full response data
-      if (res.status === 409) {
-        const error = new Error(errorBody.message || "Version conflict");
-        (error as any).response = { status: res.status, data: errorBody };
-        throw error;
-      }
-
-      throw new Error(errorBody.message || "Failed to create version");
-    }
-
-    return (await res.json()) as VersionSummary;
+    })) as VersionSummary;
   } catch (err: any) {
     console.error("Error creating assignment version:", err);
     // Re-throw error with response data intact for proper handling
@@ -954,30 +789,12 @@ export async function listAssignmentVersions(
 ): Promise<VersionSummary[]> {
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions`;
   try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
+    const data = (await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error("❌ API Error Response:", res.status, errorText);
-      try {
-        const errorBody = JSON.parse(errorText);
-        throw new Error(errorBody.message || "Failed to fetch versions");
-      } catch {
-        throw new Error(
-          `HTTP ${res.status}: ${errorText || "Failed to fetch versions"}`,
-        );
-      }
-    }
-
-    const data = await res.json();
-    return data as VersionSummary[];
+    })) as VersionSummary[];
+    return data;
   } catch (err) {
     console.error("💥 Error fetching assignment versions:", err);
     return [];
@@ -999,29 +816,11 @@ export async function getAssignmentVersion(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/${versionId}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
+    const versionData = await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error("❌ Get version API error:", res.status, errorText);
-      try {
-        const errorBody = JSON.parse(errorText);
-        throw new Error(errorBody.message || "Failed to get version data");
-      } catch {
-        throw new Error(
-          `HTTP ${res.status}: ${errorText || "Failed to get version data"}`,
-        );
-      }
-    }
-
-    const versionData = await res.json();
     return versionData;
   } catch (err) {
     console.error("💥 Error getting assignment version:", err);
@@ -1043,22 +842,11 @@ export async function saveDraft(
 ): Promise<DraftSummary | undefined> {
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts`;
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      credentials: "include",
+    return (await apiClient.post(endpointURL, draftData, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(draftData),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to save draft");
-    }
-
-    return (await res.json()) as DraftSummary;
+    })) as DraftSummary;
   } catch (err) {
     console.error("Error saving draft:", err);
     return undefined;
@@ -1082,22 +870,11 @@ export async function updateDraft(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts/${draftId}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
-      credentials: "include",
+    return (await apiClient.put(endpointURL, draftData, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(draftData),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to update draft");
-    }
-
-    return (await res.json()) as DraftSummary;
+    })) as DraftSummary;
   } catch (err) {
     console.error("Error updating draft:", err);
     return undefined;
@@ -1117,21 +894,11 @@ export async function listUserDrafts(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
+    return (await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to list drafts");
-    }
-
-    return (await res.json()) as DraftSummary[];
+    })) as DraftSummary[];
   } catch (err) {
     console.error("Error listing drafts:", err);
     return [];
@@ -1151,25 +918,15 @@ export async function getLatestDraft(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts/latest`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
+    return await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      if (res.status === 404) {
-        return null; // No draft found
-      }
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to get latest draft");
+  } catch (err: any) {
+    if (err.status === 404) {
+      return null; // No draft found
     }
-
-    return await res.json();
-  } catch (err) {
     console.error("Error getting latest draft:", err);
     return null;
   }
@@ -1190,21 +947,11 @@ export async function getDraft(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts/${draftId}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
+    return await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to get draft");
-    }
-
-    return await res.json();
   } catch (err) {
     console.error("Error getting draft:", err);
     return undefined;
@@ -1226,19 +973,11 @@ export async function deleteDraft(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts/${draftId}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "DELETE",
-      credentials: "include",
+    await apiClient.delete(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to delete draft");
-    }
 
     return true;
   } catch (err) {
@@ -1262,22 +1001,11 @@ export async function autoSaveAssignment(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/auto-save`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      credentials: "include",
+    return (await apiClient.post(endpointURL, autoSaveData, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(autoSaveData),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to auto-save");
-    }
-
-    return (await res.json()) as VersionSummary;
+    })) as VersionSummary;
   } catch (err) {
     console.error("Error auto-saving assignment:", err);
     return undefined;
@@ -1301,22 +1029,11 @@ export async function restoreAssignmentVersion(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/${versionId}/restore`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
-      credentials: "include",
+    return (await apiClient.put(endpointURL, restoreOptions, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(restoreOptions),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to restore version");
-    }
-
-    return (await res.json()) as VersionSummary;
+    })) as VersionSummary;
   } catch (err) {
     console.error("Error restoring assignment version:", err);
     return undefined;
@@ -1338,21 +1055,15 @@ export async function activateAssignmentVersion(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/${versionId}/activate`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    return (await apiClient.put(
+      endpointURL,
+      {},
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to activate version");
-    }
-
-    return (await res.json()) as VersionSummary;
+    )) as VersionSummary;
   } catch (err) {
     console.error("Error activating assignment version:", err);
     return undefined;
@@ -1370,21 +1081,15 @@ export async function publishVersionById(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/${versionId}/publish`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    return (await apiClient.put(
+      endpointURL,
+      {},
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to publish version");
-    }
-
-    return (await res.json()) as VersionSummary;
+    )) as VersionSummary;
   } catch (err) {
     console.error("Error publishing version:", err);
     return undefined;
@@ -1406,22 +1111,11 @@ export async function compareAssignmentVersions(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/compare`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      credentials: "include",
+    return (await apiClient.post(endpointURL, compareData, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(compareData),
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to compare versions");
-    }
-
-    return (await res.json()) as VersionComparison;
+    })) as VersionComparison;
   } catch (err) {
     console.error("Error comparing assignment versions:", err);
     return undefined;
@@ -1441,21 +1135,11 @@ export async function getAssignmentVersionHistory(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/history`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
+    return (await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to fetch version history");
-    }
-
-    return (await res.json()) as any[];
+    })) as any[];
   } catch (err) {
     console.error("Error fetching version history:", err);
     return [];
@@ -1475,25 +1159,15 @@ export async function getUserLatestDraft(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/draft/latest`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
+    return await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      if (res.status === 404) {
-        return null; // No draft found
-      }
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to fetch latest draft");
+  } catch (err: any) {
+    if (err.status === 404) {
+      return null; // No draft found
     }
-
-    return await res.json();
-  } catch (err) {
     console.error("Error fetching latest draft:", err);
     return null;
   }
@@ -1511,24 +1185,15 @@ export async function updateVersionDescription(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/${versionId}/description`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    return (await apiClient.put(
+      endpointURL,
+      { versionDescription },
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify({ versionDescription }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(
-        `HTTP ${res.status}: ${errorText || "Failed to update version description"}`,
-      );
-    }
-
-    return (await res.json()) as VersionSummary;
+    )) as VersionSummary;
   } catch (err) {
     console.error("Error updating version description:", err);
     return undefined;
@@ -1550,24 +1215,11 @@ export async function createDraftVersion(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/draft`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      credentials: "include",
+    return (await apiClient.post(endpointURL, draftData, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      body: JSON.stringify(draftData),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(
-        `HTTP ${res.status}: ${errorText || "Failed to create draft version"}`,
-      );
-    }
-
-    return (await res.json()) as VersionSummary;
+    })) as VersionSummary;
   } catch (err) {
     console.error("Error creating draft version:", err);
     return undefined;
@@ -1591,24 +1243,15 @@ export async function updateVersionNumber(
   const endpointURL = `${getApiRoutes().versions}/${assignmentId}/versions/${versionId}/version-number`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PUT",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    return (await apiClient.put(
+      endpointURL,
+      { versionNumber: newVersionNumber },
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify({ versionNumber: newVersionNumber }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(
-        `HTTP ${res.status}: ${errorText || "Failed to update version number"}`,
-      );
-    }
-
-    return (await res.json()) as VersionSummary;
+    )) as VersionSummary;
   } catch (err) {
     console.error("Error updating version number:", err);
     throw err;
