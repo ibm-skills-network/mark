@@ -12,10 +12,15 @@ interface SingleRubric {
 
 interface LearnerRubricTableProps {
   rubrics: SingleRubric[];
+  showRubrics: boolean;
   showPoints: boolean;
 }
 
-function LearnerRubricTable({ rubrics, showPoints }: LearnerRubricTableProps) {
+function LearnerRubricTable({
+  rubrics,
+  showRubrics,
+  showPoints,
+}: LearnerRubricTableProps) {
   if (!rubrics || rubrics.length === 0) return null;
 
   return (
@@ -25,39 +30,41 @@ function LearnerRubricTable({ rubrics, showPoints }: LearnerRubricTableProps) {
           <h4 className="text-gray-700 text-md font-semibold">
             Sub Question {i + 1}: {rubric.rubricQuestion}
           </h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border border-gray-300 overflow-hidden">
-              <thead className="bg-gray-100 border-b border-gray-300">
-                <tr>
-                  <th className="p-2 text-gray-700 font-semibold">
-                    Description
-                  </th>
-                  {showPoints && (
-                    <th className="p-2 text-gray-700 font-semibold text-center">
-                      Points
+          {showRubrics && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border border-gray-300 overflow-hidden">
+                <thead className="bg-gray-100 border-b border-gray-300">
+                  <tr>
+                    <th className="p-2 text-gray-700 font-semibold">
+                      Description
                     </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {rubric.criteria.map((criterion, index) => (
-                  <tr
-                    key={index}
-                    className="border-b border-gray-300 last:border-0"
-                  >
-                    <td className="p-2 text-gray-600 max-w-sm text-wrap overflow-hidden">
-                      {criterion.description}
-                    </td>
                     {showPoints && (
-                      <td className="p-2 text-gray-600 text-center">
-                        {criterion.points}
-                      </td>
+                      <th className="p-2 text-gray-700 font-semibold text-center">
+                        Points
+                      </th>
                     )}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rubric.criteria.map((criterion, index) => (
+                    <tr
+                      key={index}
+                      className="border-b border-gray-300 last:border-0"
+                    >
+                      <td className="p-2 text-gray-600 max-w-sm text-wrap overflow-hidden">
+                        {criterion.description}
+                      </td>
+                      {showPoints && (
+                        <td className="p-2 text-gray-600 text-center">
+                          {criterion.points}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       ))}
     </div>

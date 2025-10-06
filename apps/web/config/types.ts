@@ -235,6 +235,7 @@ export type UpdateQuestionStateParams = {
   randomizedChoices?: boolean;
   maxWordCount?: number;
   questionTitle?: string;
+  showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
   //if the points will be shown in the rubric
   showPoints?: boolean;
@@ -358,6 +359,7 @@ export type Scoring = {
   type: "CRITERIA_BASED" | "LOSS_PER_MISTAKE" | "AI_GRADED";
   rubrics?: Rubric[];
   criteria?: Criteria[];
+  showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
   showPoints?: boolean;
 };

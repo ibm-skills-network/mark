@@ -143,11 +143,18 @@ const Question: FC<QuestionProps> = ({
     params: UpdateQuestionStateParams,
     variantMode = false,
   ) => {
+    //if showSubQuestionsToLearner is undefined, use false as default
+    const showSubQuestions =
+      params.showSubQuestionsToLearner !== undefined
+        ? params.showSubQuestionsToLearner
+        : (question.scoring?.showSubQuestionsToLearner ?? false);
+
     //if showRubricsToLearner is undefined, use false as default
-    const showRubrics =
-      params.showRubricsToLearner !== undefined
+    const showRubrics = showSubQuestions
+      ? params.showRubricsToLearner !== undefined
         ? params.showRubricsToLearner
-        : (question.scoring?.showRubricsToLearner ?? false);
+        : (question.scoring?.showRubricsToLearner ?? false)
+      : false;
 
     //if showRubrics is false, showPoints uses false as default
     const showPoints = showRubrics
@@ -177,6 +184,7 @@ const Question: FC<QuestionProps> = ({
         updatedData.maxCharacters = params.maxCharacters;
       }
 
+      updatedData.scoring.showSubQuestionsToLearner = showSubQuestions;
       updatedData.scoring.showRubricsToLearner = showRubrics;
       updatedData.scoring.showPoints = showPoints;
 
@@ -203,6 +211,7 @@ const Question: FC<QuestionProps> = ({
           params.randomizedChoices ?? question.randomizedChoices,
         scoring: {
           type: "CRITERIA_BASED",
+          showSubQuestionsToLearner: showSubQuestions,
           showPoints: showPoints,
           showRubricsToLearner: showRubrics,
           rubrics: params.rubrics
@@ -1001,6 +1010,9 @@ const Question: FC<QuestionProps> = ({
             questionFromParent={question}
             variantMode={false}
             responseType={question.responseType ?? ("OTHER" as const)}
+            showSubQuestionsToLearner={
+              question.scoring?.showSubQuestionsToLearner
+            }
             showRubricsToLearner={question.scoring?.showRubricsToLearner}
             showPoints={question.scoring?.showPoints}
           />
