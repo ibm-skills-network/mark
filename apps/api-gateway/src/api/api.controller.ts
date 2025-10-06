@@ -134,27 +134,6 @@ export class ApiController {
     );
   }
 
-  // Special handling for notification SSE endpoints
-  @Get("notifications/stream")
-  @UseGuards(DynamicJwtCookieAuthGuard)
-  @ApiOperation({ summary: "Stream notifications" })
-  async handleNotificationStream(
-    @Req() request: UserSessionRequest,
-    @Res() response: Response,
-  ) {
-    const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
-      DownstreamService.MARK_API,
-      request,
-    );
-
-    // Forward as SSE
-    await this.apiService.forwardSSERequest(
-      request,
-      response,
-      endpoint,
-      extraHeaders,
-    );
-  }
   @All("/*")
   @UseGuards(DynamicJwtCookieAuthGuard)
   @ApiOperation({ summary: "Handle API requests for the Mark API" })
