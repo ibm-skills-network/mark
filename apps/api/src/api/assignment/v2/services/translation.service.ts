@@ -90,7 +90,7 @@ export class TranslationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmFacadeService: LlmFacadeService,
-    private readonly jobStatusService: JobStatusServiceV2
+    private readonly jobStatusService: JobStatusServiceV2,
   ) {
     this.languageTranslation =
       process.env.ENABLE_TRANSLATION.toString().toLowerCase() === "true" ||
@@ -120,7 +120,7 @@ export class TranslationService {
     items: T[],
     batchProcessor: (item: T) => Promise<boolean>,
     batchSize = this.MAX_BATCH_SIZE,
-    _concurrencyLimit = this.CONCURRENCY_LIMIT
+    _concurrencyLimit = this.CONCURRENCY_LIMIT,
   ): Promise<BatchProcessResult> {
     const results: BatchProcessResult = { success: 0, failure: 0, dropped: 0 };
     const chunks: T[][] = [];
@@ -135,7 +135,7 @@ export class TranslationService {
       const processingPromises = chunk.map((item) =>
         this.limiter
           .schedule({ expiration: 15_000, priority: 5 }, () =>
-            batchProcessor(item)
+            batchProcessor(item),
           )
           .catch((error) => {
             const errorMessage =
@@ -146,16 +146,16 @@ export class TranslationService {
               results.failure++;
             }
             return false;
-          })
+          }),
       );
 
       const chunkResults = await Promise.all(processingPromises);
 
       results.success += chunkResults.filter(
-        (result) => result === true
+        (result) => result === true,
       ).length;
       results.failure += chunkResults.filter(
-        (result) => result === false
+        (result) => result === false,
       ).length;
 
       if (chunkIndex < chunks.length - 1) {
@@ -197,7 +197,7 @@ export class TranslationService {
     try {
       const detectedLang = await this.llmFacadeService.getLanguageCode(
         text,
-        assignmentId
+        assignmentId,
       );
       return detectedLang && detectedLang !== "unknown" ? detectedLang : "en";
     } catch {
@@ -247,14 +247,14 @@ export class TranslationService {
     for (const question of questions) {
       // Check question translations
       const questionTranslations = question.translations.filter(
-        (t) => t.variantId === null
+        (t) => t.variantId === null,
       );
       const questionLanguages = new Set(
-        questionTranslations.map((t) => t.languageCode)
+        questionTranslations.map((t) => t.languageCode),
       );
 
       const missingQuestionLangs = supportedLanguages.filter(
-        (lang) => !questionLanguages.has(lang)
+        (lang) => !questionLanguages.has(lang),
       );
 
       if (missingQuestionLangs.length > 0) {
@@ -268,14 +268,14 @@ export class TranslationService {
       // Check variant translations
       for (const variant of question.variants) {
         const variantTranslations = question.translations.filter(
-          (t) => t.variantId === variant.id
+          (t) => t.variantId === variant.id,
         );
         const variantLanguages = new Set(
-          variantTranslations.map((t) => t.languageCode)
+          variantTranslations.map((t) => t.languageCode),
         );
 
         const missingVariantLangs = supportedLanguages.filter(
-          (lang) => !variantLanguages.has(lang)
+          (lang) => !variantLanguages.has(lang),
         );
 
         if (missingVariantLangs.length > 0) {
@@ -302,7 +302,7 @@ export class TranslationService {
    * @returns True if basic validation passes
    */
   async quickValidateAssignmentTranslations(
-    assignmentId: number
+    assignmentId: number,
   ): Promise<boolean> {
     try {
       // Just check if we have recent translations (created in last 24 hours)
@@ -331,7 +331,7 @@ export class TranslationService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Error in quick translation validation: ${errorMessage}`
+        `Error in quick translation validation: ${errorMessage}`,
       );
       return true; // Default to assuming it's okay
     }
@@ -394,7 +394,7 @@ export class TranslationService {
         if (textToCheck) {
           const detectedLanguage = await this.llmFacadeService.getLanguageCode(
             textToCheck,
-            assignmentId
+            assignmentId,
           );
 
           if (detectedLanguage && detectedLanguage !== "unknown") {
@@ -418,7 +418,7 @@ export class TranslationService {
               mismatchedLanguages.push(translation.languageCode);
               this.logger.warn(
                 `Language mismatch detected for assignment ${assignmentId}: ` +
-                  `Expected ${translation.languageCode}, but detected ${detectedLanguage}`
+                  `Expected ${translation.languageCode}, but detected ${detectedLanguage}`,
               );
             }
           }
@@ -446,7 +446,7 @@ export class TranslationService {
         // Batch language detection for all translation texts
         const textsToCheck = translations
           .filter((t): t is typeof t & { translatedText: string } =>
-            Boolean(t.translatedText)
+            Boolean(t.translatedText),
           )
           .map((t) => t.translatedText);
 
@@ -454,7 +454,7 @@ export class TranslationService {
           const detectedLanguages =
             await this.llmFacadeService.batchGetLanguageCodes(
               textsToCheck,
-              assignmentId
+              assignmentId,
             );
 
           let textIndex = 0;
@@ -477,7 +477,7 @@ export class TranslationService {
                   this.logger.warn(
                     `Language mismatch in question/variant translation: ` +
                       `Expected ${translation.languageCode}, detected ${detectedLanguage} ` +
-                      `(Question: ${translation.questionId}, Variant: ${translation.variantId})`
+                      `(Question: ${translation.questionId}, Variant: ${translation.variantId})`,
                   );
                 }
               }
@@ -495,7 +495,7 @@ export class TranslationService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Error validating language consistency: ${errorMessage}`
+        `Error validating language consistency: ${errorMessage}`,
       );
       return {
         isConsistent: true, // Default to consistent on error
@@ -515,7 +515,7 @@ export class TranslationService {
    */
   async isLanguageAvailable(
     assignmentId: number,
-    languageCode: string
+    languageCode: string,
   ): Promise<boolean> {
     // English is always available
     if (languageCode.toLowerCase() === "en") {
@@ -590,7 +590,7 @@ export class TranslationService {
         counts.RECEIVED > 50
       ) {
         this.logger.warn(
-          `Potential bottleneck issue detected: ${counts.RUNNING} running, ${counts.DONE} completed, ${counts.RECEIVED} received`
+          `Potential bottleneck issue detected: ${counts.RUNNING} running, ${counts.DONE} completed, ${counts.RECEIVED} received`,
         );
         this.resetLimiter();
         return;
@@ -598,7 +598,7 @@ export class TranslationService {
 
       if (counts.QUEUED > 500) {
         this.logger.warn(
-          `High queue load: ${counts.QUEUED} jobs queued. Reducing accepting rate.`
+          `High queue load: ${counts.QUEUED} jobs queued. Reducing accepting rate.`,
         );
         this.limiter.updateSettings({ maxConcurrent: 5 });
 
@@ -620,7 +620,7 @@ export class TranslationService {
   private resetLimiter(): void {
     try {
       this.logger.warn(
-        "Resetting bottleneck limiter due to potential stalled state"
+        "Resetting bottleneck limiter due to potential stalled state",
       );
 
       void this.limiter.stop({ dropWaitingJobs: false }).then(() => {
@@ -651,14 +651,14 @@ export class TranslationService {
    */
   async applyTranslationsToAssignment(
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
-    languageCode: string
+    languageCode: string,
   ): Promise<void> {
     if (!assignment) return;
 
     try {
       const originalLanguage = await this.llmFacadeService.getLanguageCode(
         assignment.introduction || "en",
-        assignment.id
+        assignment.id,
       );
 
       if (languageCode === originalLanguage) return;
@@ -666,7 +666,7 @@ export class TranslationService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `Error detecting language: ${errorMessage}. Continuing with translation anyway.`
+        `Error detecting language: ${errorMessage}. Continuing with translation anyway.`,
       );
     }
 
@@ -708,7 +708,7 @@ export class TranslationService {
     startPercentage: number,
     endPercentage: number,
     stage: string,
-    languageCount: number
+    languageCount: number,
   ): ProgressTracker {
     return {
       jobId,
@@ -730,7 +730,7 @@ export class TranslationService {
     tracker: ProgressTracker | undefined,
     currentLanguage: string,
     currentItem?: string | number,
-    additionalInfo?: string
+    additionalInfo?: string,
   ): Promise<void> {
     if (!tracker) {
       return;
@@ -748,7 +748,7 @@ export class TranslationService {
 
     const combinedProgress = languageProgress * 0.3 + itemProgress * 0.7;
     const currentPercentage = Math.floor(
-      tracker.startPercentage + progressRange * combinedProgress
+      tracker.startPercentage + progressRange * combinedProgress,
     );
 
     let progressMessage = `${tracker.currentStage}: ${currentLanguage}`;
@@ -775,7 +775,7 @@ export class TranslationService {
     operationName: string,
     translationFunction: () => Promise<T>,
     maxAttempts = this.MAX_RETRY_ATTEMPTS,
-    _jobId?: number
+    _jobId?: number,
   ): Promise<T> {
     let attempts = 0;
     const operationId = `${operationName}-${Date.now()}`;
@@ -789,8 +789,8 @@ export class TranslationService {
           setTimeout(() => {
             reject(
               new Error(
-                `Operation ${operationName} timed out after ${this.OPERATION_TIMEOUT}ms`
-              )
+                `Operation ${operationName} timed out after ${this.OPERATION_TIMEOUT}ms`,
+              ),
             );
           }, this.OPERATION_TIMEOUT);
         });
@@ -815,7 +815,7 @@ export class TranslationService {
 
         if (attempts >= maxAttempts) {
           this.logger.error(
-            `Failed ${operationName} after ${maxAttempts} attempts: ${errorMessage}`
+            `Failed ${operationName} after ${maxAttempts} attempts: ${errorMessage}`,
           );
 
           // Track persistently stuck operations
@@ -832,7 +832,7 @@ export class TranslationService {
           : this.RETRY_DELAY_BASE;
         const jitter = Math.random() * 200;
         await new Promise((resolve) =>
-          setTimeout(resolve, baseDelay * attempts + jitter)
+          setTimeout(resolve, baseDelay * attempts + jitter),
         );
       }
     }
@@ -849,7 +849,7 @@ export class TranslationService {
 
     if (this.stuckOperations.size >= this.MAX_STUCK_OPERATIONS) {
       this.logger.warn(
-        `Too many stuck operations (${this.stuckOperations.size}), resetting limiter`
+        `Too many stuck operations (${this.stuckOperations.size}), resetting limiter`,
       );
       this.resetLimiter();
       this.stuckOperations.clear();
@@ -907,7 +907,7 @@ export class TranslationService {
 
     for (const jobId of expiredJobs) {
       this.logger.warn(
-        `Job ${jobId} exceeded timeout (${this.JOB_TIMEOUT}ms), cancelling`
+        `Job ${jobId} exceeded timeout (${this.JOB_TIMEOUT}ms), cancelling`,
       );
       void this.cancelJob(jobId).then(() => this.cleanupCancelledJob(jobId));
     }
@@ -917,7 +917,7 @@ export class TranslationService {
    * Mark a language as completed in the progress tracker
    */
   private incrementLanguageCompleted(
-    tracker: ProgressTracker | undefined
+    tracker: ProgressTracker | undefined,
   ): void {
     if (!tracker) {
       return;
@@ -940,7 +940,7 @@ export class TranslationService {
    */
   private setCurrentItemIndex(
     tracker: ProgressTracker | undefined,
-    index: number
+    index: number,
   ): void {
     if (!tracker) {
       return;
@@ -959,7 +959,7 @@ export class TranslationService {
   async retranslateAssignmentForLanguages(
     assignmentId: number,
     languageCodes: string[],
-    jobId?: number
+    jobId?: number,
   ): Promise<void> {
     if (languageCodes.length === 0) {
       return;
@@ -967,8 +967,8 @@ export class TranslationService {
 
     this.logger.log(
       `Force retranslating assignment ${assignmentId} for languages: ${languageCodes.join(
-        ", "
-      )}`
+        ", ",
+      )}`,
     );
 
     // Delete existing translations for the specified languages
@@ -1002,7 +1002,7 @@ export class TranslationService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with id ${assignmentId} not found`
+        `Assignment with id ${assignmentId} not found`,
       );
     }
 
@@ -1014,7 +1014,7 @@ export class TranslationService {
           10,
           30,
           "Retranslating assignment metadata",
-          languageCodes.length
+          languageCodes.length,
         )
       : undefined;
 
@@ -1024,7 +1024,7 @@ export class TranslationService {
         try {
           await this.translateAssignmentToLanguage(
             assignment as unknown as GetAssignmentResponseDto,
-            lang
+            lang,
           );
           if (progressTracker) {
             this.incrementLanguageCompleted(progressTracker);
@@ -1034,13 +1034,13 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to retranslate assignment to ${lang}: ${errorMessage}`
+            `Failed to retranslate assignment to ${lang}: ${errorMessage}`,
           );
           return false;
         }
       },
       10, // Smaller batch size for targeted retranslation
-      25 // Lower concurrency
+      25, // Lower concurrency
     );
 
     // Get all questions and variants
@@ -1069,7 +1069,7 @@ export class TranslationService {
     const totalItems =
       questions.reduce(
         (accumulator, q) => accumulator + 1 + q.variants.length,
-        0
+        0,
       ) * languageCodes.length;
 
     for (const question of questions) {
@@ -1083,9 +1083,9 @@ export class TranslationService {
           question.choices as unknown as Choice[],
           await this.llmFacadeService.getLanguageCode(
             question.question,
-            assignmentId
+            assignmentId,
           ),
-          lang
+          lang,
         );
         processedItems++;
 
@@ -1111,9 +1111,9 @@ export class TranslationService {
             variant.choices as unknown as Choice[],
             await this.llmFacadeService.getLanguageCode(
               variant.variantContent,
-              assignmentId
+              assignmentId,
             ),
-            lang
+            lang,
           );
           processedItems++;
 
@@ -1140,8 +1140,8 @@ export class TranslationService {
 
     this.logger.log(
       `Completed retranslation for assignment ${assignmentId}, languages: ${languageCodes.join(
-        ", "
-      )}`
+        ", ",
+      )}`,
     );
   }
 
@@ -1155,7 +1155,7 @@ export class TranslationService {
   async translateAssignment(
     assignmentId: number,
     jobId?: number,
-    progressRange?: { start: number; end: number }
+    progressRange?: { start: number; end: number },
   ): Promise<void> {
     if (!this.languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
@@ -1198,7 +1198,7 @@ export class TranslationService {
         });
       }
       throw new NotFoundException(
-        `Assignment with id ${assignmentId} not found`
+        `Assignment with id ${assignmentId} not found`,
       );
     }
 
@@ -1223,7 +1223,7 @@ export class TranslationService {
           start + Math.floor(range * 0.2),
           start + Math.floor(range * 0.9),
           "Translating assignment",
-          supportedLanguages.length
+          supportedLanguages.length,
         )
       : undefined;
 
@@ -1234,7 +1234,7 @@ export class TranslationService {
           // Check for job cancellation
           if (jobId && this.isJobCancelled(jobId)) {
             this.logger.warn(
-              `Job ${jobId} cancelled, stopping translation for ${lang}`
+              `Job ${jobId} cancelled, stopping translation for ${lang}`,
             );
             return false;
           }
@@ -1244,7 +1244,7 @@ export class TranslationService {
               progressTracker,
               getLanguageNameFromCode(lang),
               undefined,
-              "Translating"
+              "Translating",
             );
           }
 
@@ -1252,7 +1252,7 @@ export class TranslationService {
             `translateAssignment-${assignmentId}-${lang}`,
             () => this.translateAssignmentToLanguage(assignment, lang),
             this.MAX_RETRY_ATTEMPTS,
-            jobId
+            jobId,
           );
 
           if (progressTracker) {
@@ -1261,7 +1261,7 @@ export class TranslationService {
               progressTracker,
               getLanguageNameFromCode(lang),
               undefined,
-              "Completed"
+              "Completed",
             );
           }
 
@@ -1270,13 +1270,13 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to translate assignment to ${lang}: ${errorMessage}`
+            `Failed to translate assignment to ${lang}: ${errorMessage}`,
           );
           return false;
         }
       },
       this.MAX_BATCH_SIZE,
-      this.CONCURRENCY_LIMIT
+      this.CONCURRENCY_LIMIT,
     );
 
     if (jobId) {
@@ -1288,7 +1288,7 @@ export class TranslationService {
     }
 
     this.logger.log(
-      `Assignment #${assignmentId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`
+      `Assignment #${assignmentId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
 
     // Clean up job tracking
@@ -1311,7 +1311,7 @@ export class TranslationService {
     questionId: number,
     question: QuestionDto,
     jobId: number,
-    forceRetranslation = false
+    forceRetranslation = false,
   ): Promise<void> {
     const hasValidJobId = jobId && jobId > 0;
 
@@ -1340,21 +1340,21 @@ export class TranslationService {
     try {
       const detectedLang = await this.llmFacadeService.getLanguageCode(
         normalizedText,
-        assignmentId
+        assignmentId,
       );
       if (detectedLang && detectedLang !== "unknown") {
         questionLang = detectedLang;
       }
     } catch {
       this.logger.warn(
-        `Language detection failed for question #${questionId}, using English as fallback`
+        `Language detection failed for question #${questionId}, using English as fallback`,
       );
     }
 
     await this.jobStatusService.updateJobStatus(jobId, {
       status: "In Progress",
       progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
-        questionLang
+        questionLang,
       )}. Preparing translations...`,
       percentage: 15,
     });
@@ -1367,7 +1367,7 @@ export class TranslationService {
       20,
       95,
       `Translating Question #${questionId}`,
-      supportedLanguages.length
+      supportedLanguages.length,
     );
 
     // Only delete existing translations if content has changed or forced
@@ -1389,10 +1389,10 @@ export class TranslationService {
       });
 
       const existingLanguages = new Set(
-        existingTranslations.map((t) => t.languageCode)
+        existingTranslations.map((t) => t.languageCode),
       );
       const missingLanguages = supportedLanguages.filter(
-        (lang) => !existingLanguages.has(lang)
+        (lang) => !existingLanguages.has(lang),
       );
 
       if (missingLanguages.length === 0) {
@@ -1415,7 +1415,7 @@ export class TranslationService {
               undefined,
               lang === questionLang
                 ? "Storing original content"
-                : "Checking for existing translation"
+                : "Checking for existing translation",
             );
           }
 
@@ -1426,7 +1426,7 @@ export class TranslationService {
             normalizedText,
             normalizedChoices,
             questionLang,
-            lang
+            lang,
           );
 
           if (progressTracker) {
@@ -1437,7 +1437,7 @@ export class TranslationService {
               undefined,
               lang === questionLang
                 ? "Original stored ✓"
-                : "Translation completed ✓"
+                : "Translation completed ✓",
             );
           }
 
@@ -1446,13 +1446,13 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to translate question ${questionId} to ${lang}: ${errorMessage}`
+            `Failed to translate question ${questionId} to ${lang}: ${errorMessage}`,
           );
           return false;
         }
       },
       this.MAX_BATCH_SIZE,
-      this.CONCURRENCY_LIMIT
+      this.CONCURRENCY_LIMIT,
     );
 
     // Question translation complete - parent job will handle final status updates
@@ -1462,7 +1462,7 @@ export class TranslationService {
     }
 
     this.logger.log(
-      `Question #${questionId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`
+      `Question #${questionId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
   }
 
@@ -1482,7 +1482,7 @@ export class TranslationService {
     variantId: number,
     variant: VariantDto,
     jobId: number,
-    forceRetranslation = false
+    forceRetranslation = false,
   ): Promise<void> {
     const hasValidJobId = jobId && jobId > 0;
 
@@ -1518,10 +1518,10 @@ export class TranslationService {
 
       const supportedLanguages = getAllLanguageCodes() ?? ["en"];
       const existingLanguages = new Set(
-        existingTranslations.map((t) => t.languageCode)
+        existingTranslations.map((t) => t.languageCode),
       );
       const missingLanguages = supportedLanguages.filter(
-        (lang) => !existingLanguages.has(lang)
+        (lang) => !existingLanguages.has(lang),
       );
 
       if (missingLanguages.length === 0) {
@@ -1534,14 +1534,14 @@ export class TranslationService {
     try {
       const detectedLang = await this.llmFacadeService.getLanguageCode(
         normalizedText,
-        assignmentId
+        assignmentId,
       );
       if (detectedLang && detectedLang !== "unknown") {
         variantLang = detectedLang;
       }
     } catch {
       this.logger.warn(
-        `Language detection failed for variant #${variantId}, using English as fallback`
+        `Language detection failed for variant #${variantId}, using English as fallback`,
       );
     }
 
@@ -1553,7 +1553,7 @@ export class TranslationService {
       20,
       95,
       `Translating Variant #${variantId}`,
-      supportedLanguages.length
+      supportedLanguages.length,
     );
 
     // Only delete existing translations if content has changed (forceRetranslation = true)
@@ -1577,7 +1577,7 @@ export class TranslationService {
               undefined,
               lang === variantLang
                 ? "Storing original content"
-                : "Checking for existing translation"
+                : "Checking for existing translation",
             );
           }
 
@@ -1588,7 +1588,7 @@ export class TranslationService {
             normalizedText,
             normalizedChoices,
             variantLang,
-            lang
+            lang,
           );
 
           if (progressTracker) {
@@ -1599,7 +1599,7 @@ export class TranslationService {
               undefined,
               lang === variantLang
                 ? "Original stored ✓"
-                : "Translation completed ✓"
+                : "Translation completed ✓",
             );
           }
 
@@ -1608,13 +1608,13 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to translate variant ${variantId} to ${lang}: ${errorMessage}`
+            `Failed to translate variant ${variantId} to ${lang}: ${errorMessage}`,
           );
           return false;
         }
       },
       this.MAX_BATCH_SIZE,
-      this.CONCURRENCY_LIMIT
+      this.CONCURRENCY_LIMIT,
     );
 
     // Variant translation complete - parent job will handle final status updates
@@ -1624,7 +1624,7 @@ export class TranslationService {
     }
 
     this.logger.log(
-      `Variant #${variantId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`
+      `Variant #${variantId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
   }
 
@@ -1637,7 +1637,7 @@ export class TranslationService {
    */
   private async translateAssignmentToLanguage(
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
-    lang: string
+    lang: string,
   ): Promise<void> {
     try {
       const existingTranslation =
@@ -1649,14 +1649,14 @@ export class TranslationService {
         ? this.updateExistingAssignmentTranslation(
             assignment,
             existingTranslation as unknown as IExistingTranslation,
-            lang
+            lang,
           )
         : this.createNewAssignmentTranslation(assignment, lang));
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to translate assignment ${assignment.id} to ${lang}: ${errorMessage}`
+        `Failed to translate assignment ${assignment.id} to ${lang}: ${errorMessage}`,
       );
       throw error;
     }
@@ -1673,7 +1673,7 @@ export class TranslationService {
   private async updateExistingAssignmentTranslation(
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
     existingTranslation: IExistingTranslation,
-    lang: string
+    lang: string,
   ): Promise<void> {
     const updatedData: Prisma.AssignmentTranslationUpdateInput = {};
     const translationPromises: Array<Promise<void>> = [];
@@ -1690,7 +1690,7 @@ export class TranslationService {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to translate name: ${errorMessage}`);
-          })
+          }),
       );
     }
 
@@ -1709,9 +1709,9 @@ export class TranslationService {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             this.logger.error(
-              `Failed to translate instructions: ${errorMessage}`
+              `Failed to translate instructions: ${errorMessage}`,
             );
-          })
+          }),
       );
     }
 
@@ -1725,7 +1725,7 @@ export class TranslationService {
           .translateText(
             assignment.gradingCriteriaOverview,
             lang,
-            assignment.id
+            assignment.id,
           )
           .then((translated) => {
             updatedData.translatedGradingCriteriaOverview = translated;
@@ -1736,9 +1736,9 @@ export class TranslationService {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             this.logger.error(
-              `Failed to translate grading criteria: ${errorMessage}`
+              `Failed to translate grading criteria: ${errorMessage}`,
             );
-          })
+          }),
       );
     }
 
@@ -1757,9 +1757,9 @@ export class TranslationService {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             this.logger.error(
-              `Failed to translate introduction: ${errorMessage}`
+              `Failed to translate introduction: ${errorMessage}`,
             );
-          })
+          }),
       );
     }
 
@@ -1782,7 +1782,7 @@ export class TranslationService {
    */
   private async createNewAssignmentTranslation(
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
-    lang: string
+    lang: string,
   ): Promise<void> {
     const translationPromises: Array<Promise<any>> = [];
     const translatedData: Record<string, string> = {};
@@ -1810,11 +1810,11 @@ export class TranslationService {
               const errorMessage =
                 error instanceof Error ? error.message : String(error);
               this.logger.error(
-                `Failed to translate ${field}: ${errorMessage}`
+                `Failed to translate ${field}: ${errorMessage}`,
               );
               translatedData[field] = source;
               return { field, translated: source };
-            })
+            }),
         );
       } else {
         translatedData[field] = "";
@@ -1863,7 +1863,7 @@ export class TranslationService {
           ? translationError.message
           : String(translationError);
       this.logger.warn(
-        `Skipping assignment translation creation for ${lang} due to translation failure for assignment ${assignment.id}: ${errorMessage}`
+        `Skipping assignment translation creation for ${lang} due to translation failure for assignment ${assignment.id}: ${errorMessage}`,
       );
       // Don't create assignment translation for this language
       throw translationError;
@@ -1893,7 +1893,7 @@ export class TranslationService {
     originalText: string,
     originalChoices: Choice[] | null,
     sourceLanguage: string,
-    targetLanguage: string
+    targetLanguage: string,
   ): Promise<void> {
     // Check if we need to reuse existing translation
     // Only reuse if it's from the same assignment (context-aware)
@@ -1989,8 +1989,8 @@ export class TranslationService {
           this.llmFacadeService.generateQuestionTranslation(
             assignmentId,
             originalText,
-            targetLanguage
-          )
+            targetLanguage,
+          ),
       )
         .then((result) => {
           translatedText = result;
@@ -2000,10 +2000,10 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to translate question text: ${errorMessage}`
+            `Failed to translate question text: ${errorMessage}`,
           );
           return originalText;
-        })
+        }),
     );
 
     // Translate the choices if they exist
@@ -2015,8 +2015,8 @@ export class TranslationService {
             this.llmFacadeService.generateChoicesTranslation(
               originalChoices,
               assignmentId,
-              targetLanguage
-            )
+              targetLanguage,
+            ),
         )
           .then((result) => {
             translatedChoices = result;
@@ -2027,7 +2027,7 @@ export class TranslationService {
               error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to translate choices: ${errorMessage}`);
             return originalChoices;
-          })
+          }),
       );
     }
 
@@ -2063,7 +2063,7 @@ export class TranslationService {
         }
         // If record exists now, silently continue (race condition resolved)
         this.logger.debug(
-          `Translation record already exists for question ${questionId} in ${targetLanguage} (race condition resolved)`
+          `Translation record already exists for question ${questionId} in ${targetLanguage} (race condition resolved)`,
         );
       }
     } catch (translationError) {
@@ -2072,7 +2072,7 @@ export class TranslationService {
       this.logger.warn(
         `Skipping translation record creation for ${targetLanguage} due to translation failure for question ${questionId}${
           variantId ? ` variant ${variantId}` : ""
-        }`
+        }`,
       );
       throw translationError;
     }

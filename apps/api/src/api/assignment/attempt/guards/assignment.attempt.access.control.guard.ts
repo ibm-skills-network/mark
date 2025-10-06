@@ -13,7 +13,10 @@ import { PrismaService } from "../../../../database/prisma.service";
 
 @Injectable()
 export class AssignmentAttemptAccessControlGuard implements CanActivate {
-  constructor(private reflector: Reflector, private prisma: PrismaService) {}
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
@@ -66,13 +69,13 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
         });
         if (userId.userId !== suspeciousUserId) {
           throw new NotFoundException(
-            "Attempt not found or not owned by the user"
+            "Attempt not found or not owned by the user",
           );
         }
       }
 
       queries.push(
-        this.prisma.assignmentAttempt.findFirst({ where: whereClause })
+        this.prisma.assignmentAttempt.findFirst({ where: whereClause }),
       );
     }
 
@@ -85,7 +88,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
             id: questionId,
             assignmentId: assignmentId,
           },
-        })
+        }),
       );
     }
 
@@ -107,7 +110,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
 
     if (questionIdString && !questionInAssignment) {
       throw new NotFoundException(
-        "Question not found within the specified assignment"
+        "Question not found within the specified assignment",
       );
     }
 

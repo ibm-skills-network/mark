@@ -89,12 +89,12 @@ export class PrismaService
         this.retryCount++;
         this.logger.error(
           `Database connection failed. Retry ${this.retryCount}/${this.maxRetries}`,
-          error
+          error,
         );
 
         if (this.retryCount === this.maxRetries) {
           throw new Error(
-            "Failed to connect to database after maximum retries"
+            "Failed to connect to database after maximum retries",
           );
         }
 

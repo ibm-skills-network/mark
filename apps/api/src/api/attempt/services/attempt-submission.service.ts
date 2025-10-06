@@ -64,18 +64,18 @@ export class AttemptSubmissionService {
     private readonly questionResponseService: QuestionResponseService,
     private readonly translationService: TranslationService,
     private readonly questionVariantService: QuestionVariantService,
-    private readonly httpService: HttpService
+    private readonly httpService: HttpService,
   ) {}
   /**
    * Creates a new assignment attempt
    */
   async createAssignmentAttempt(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<BaseAssignmentAttemptResponseDto> {
     const assignment = await this.assignmentRepository.findById(
       assignmentId,
-      userSession
+      userSession,
     );
 
     await this.validationService.validateNewAttempt(assignment, userSession);
@@ -102,12 +102,12 @@ export class AttemptSubmissionService {
             },
           },
         },
-      }
+      },
     );
 
     if (!assignmentWithActiveVersion) {
       throw new NotFoundException(
-        `Assignment with Id ${assignmentId} not found.`
+        `Assignment with Id ${assignmentId} not found.`,
       );
     }
 
@@ -148,7 +148,7 @@ export class AttemptSubmissionService {
               videoPresentationConfig:
                 qv.videoPresentationConfig as unknown as VideoPresentationConfig,
               liveRecordingConfig: qv.liveRecordingConfig as object,
-            })
+            }),
           )
         : ((assignmentWithActiveVersion?.questions || []).map((q) => ({
             ...q,
@@ -173,11 +173,11 @@ export class AttemptSubmissionService {
       const shuffledQuestions = questions.sort(() => Math.random() - 0.5);
       const selectedQuestions = shuffledQuestions.slice(
         0,
-        assignment.numberOfQuestionsPerAttempt
+        assignment.numberOfQuestionsPerAttempt,
       );
       if (selectedQuestions.length < assignment.numberOfQuestionsPerAttempt) {
         throw new NotFoundException(
-          `Not enough questions available for the assignment with Id ${assignmentId}.`
+          `Not enough questions available for the assignment with Id ${assignmentId}.`,
         );
       }
       questions.length = 0; // clear the original questions array
@@ -217,16 +217,16 @@ export class AttemptSubmissionService {
         typeof q.randomizedChoices === "boolean"
           ? q.randomizedChoices
           : typeof q.randomizedChoices === "string"
-          ? q.randomizedChoices === "true"
-          : false,
+            ? q.randomizedChoices === "true"
+            : false,
       videoPresentationConfig:
         this.parseJsonValue<VideoPresentationConfig | null>(
           q.videoPresentationConfig,
-          null
+          null,
         ),
       liveRecordingConfig: this.parseJsonValue<Record<string, unknown> | null>(
         q.liveRecordingConfig,
-        null
+        null,
       ),
     }));
 
@@ -241,7 +241,7 @@ export class AttemptSubmissionService {
 
     await this.questionVariantService.createAttemptQuestionVariants(
       assignmentAttempt.id,
-      orderedQuestions
+      orderedQuestions,
     );
 
     return {
@@ -260,7 +260,7 @@ export class AttemptSubmissionService {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>
+    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role } = request.userSession;
     if (role === UserRole.LEARNER) {
@@ -271,17 +271,17 @@ export class AttemptSubmissionService {
         authCookie,
         gradingCallbackRequired,
         request,
-        progressCallback
+        progressCallback,
       );
     } else if (role === UserRole.AUTHOR) {
       return this.updateAuthorAttempt(
         assignmentId,
         updateDto,
-        progressCallback
+        progressCallback,
       );
     } else {
       throw new NotFoundException(
-        `User with role ${role} cannot update assignment attempts.`
+        `User with role ${role} cannot update assignment attempts.`,
       );
     }
   }
@@ -289,7 +289,7 @@ export class AttemptSubmissionService {
    * Gets a learner assignment attempt with all details needed for display
    */
   async getLearnerAssignmentAttempt(
-    attemptId: number
+    attemptId: number,
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -308,7 +308,7 @@ export class AttemptSubmissionService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${attemptId} not found.`
+        `AssignmentAttempt with Id ${attemptId} not found.`,
       );
     }
 
@@ -355,7 +355,7 @@ export class AttemptSubmissionService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with Id ${assignmentAttempt.assignmentId} not found.`
+        `Assignment with Id ${assignmentAttempt.assignmentId} not found.`,
       );
     }
 
@@ -366,8 +366,8 @@ export class AttemptSubmissionService {
         typeof question.answer === "boolean"
           ? String(question.answer)
           : question.answer !== null && question.answer !== undefined
-          ? String(question.answer)
-          : undefined;
+            ? String(question.answer)
+            : undefined;
 
       const randomizedChoicesValue: string =
         typeof question.randomizedChoices === "string"
@@ -397,7 +397,7 @@ export class AttemptSubmissionService {
         videoPresentationConfig:
           this.parseJsonValue<VideoPresentationConfig | null>(
             question.videoPresentationConfig,
-            null
+            null,
           ),
         liveRecordingConfig: this.parseJsonValue<Record<
           string,
@@ -444,7 +444,7 @@ export class AttemptSubmissionService {
           ...assignment,
         },
         this.prisma,
-        assignmentAttempt.preferredLanguage || undefined
+        assignmentAttempt.preferredLanguage || undefined,
       );
 
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
@@ -467,7 +467,7 @@ export class AttemptSubmissionService {
    */
   async getAssignmentAttempt(
     attemptId: number,
-    language?: string
+    language?: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
     const normalizedLanguage = this.getNormalizedLanguage(language);
 
@@ -494,7 +494,7 @@ export class AttemptSubmissionService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${attemptId} not found.`
+        `AssignmentAttempt with Id ${attemptId} not found.`,
       );
     }
 
@@ -552,7 +552,7 @@ export class AttemptSubmissionService {
     const translations =
       await this.translationService.getTranslationsForAttempt(
         assignmentAttempt,
-        questionsForTranslation
+        questionsForTranslation,
       );
 
     const formattedAttempt: AssignmentAttemptWithRelations = {
@@ -587,7 +587,7 @@ export class AttemptSubmissionService {
         formattedAttempt,
         assignment as unknown as UpdateAssignmentQuestionsDto,
         translations,
-        normalizedLanguage
+        normalizedLanguage,
       );
 
     this.removeSensitiveData(finalQuestions, assignment);
@@ -614,7 +614,7 @@ export class AttemptSubmissionService {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>
+    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       // Report initial progress
@@ -636,7 +636,7 @@ export class AttemptSubmissionService {
 
       if (!assignmentAttempt) {
         throw new NotFoundException(
-          `AssignmentAttempt with Id ${attemptId} not found.`
+          `AssignmentAttempt with Id ${attemptId} not found.`,
         );
       }
 
@@ -655,7 +655,7 @@ export class AttemptSubmissionService {
         await this.translationService.preTranslateQuestions(
           updateDto.responsesForQuestions,
           assignmentAttempt,
-          updateDto.language
+          updateDto.language,
         );
 
       updateDto.preTranslatedQuestions = preTranslatedQuestions;
@@ -682,7 +682,7 @@ export class AttemptSubmissionService {
           updateDto.language,
           updateDto.authorQuestions,
           updateDto.authorAssignmentDetails,
-          updateDto.preTranslatedQuestions
+          updateDto.preTranslatedQuestions,
         );
 
       if (progressCallback) {
@@ -692,7 +692,7 @@ export class AttemptSubmissionService {
       let totalPossiblePoints = 0;
       for (const response of successfulQuestionResponses) {
         const question = assignment.questions.find(
-          (q) => q.id === response.questionId
+          (q) => q.id === response.questionId,
         );
         totalPossiblePoints += question?.totalPoints || 0;
       }
@@ -700,7 +700,7 @@ export class AttemptSubmissionService {
       const { grade, totalPointsEarned } =
         this.gradingService.calculateGradeForLearner(
           successfulQuestionResponses,
-          totalPossiblePoints
+          totalPossiblePoints,
         );
 
       if (gradingCallbackRequired) {
@@ -711,7 +711,7 @@ export class AttemptSubmissionService {
           grade,
           authCookie,
           assignmentId,
-          request.userSession.userId
+          request.userSession.userId,
         );
       }
 
@@ -722,7 +722,7 @@ export class AttemptSubmissionService {
       const result = await this.updateAssignmentAttemptInDb(
         attemptId,
         updateDto,
-        grade
+        grade,
       );
 
       if (progressCallback) {
@@ -742,7 +742,7 @@ export class AttemptSubmissionService {
         feedbacksForQuestions:
           this.gradingService.constructFeedbacksForQuestions(
             successfulQuestionResponses,
-            assignment
+            assignment,
           ),
       };
     } catch (error) {
@@ -761,7 +761,7 @@ export class AttemptSubmissionService {
   private async updateAuthorAttempt(
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>
+    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {
@@ -791,7 +791,7 @@ export class AttemptSubmissionService {
           assignmentId,
           updateDto.language,
           updateDto.authorQuestions,
-          updateDto.authorAssignmentDetails
+          updateDto.authorAssignmentDetails,
         );
 
       if (progressCallback) {
@@ -801,7 +801,7 @@ export class AttemptSubmissionService {
       let totalPossiblePoints = 0;
       for (const response of successfulQuestionResponses) {
         const question = assignment.questions.find(
-          (q) => q.id === response.questionId
+          (q) => q.id === response.questionId,
         );
         totalPossiblePoints += question?.totalPoints || 0;
       }
@@ -809,7 +809,7 @@ export class AttemptSubmissionService {
       const { grade, totalPointsEarned } =
         this.gradingService.calculateGradeForAuthor(
           successfulQuestionResponses,
-          totalPossiblePoints
+          totalPossiblePoints,
         );
 
       if (progressCallback) {
@@ -829,7 +829,7 @@ export class AttemptSubmissionService {
         feedbacksForQuestions:
           this.gradingService.constructFeedbacksForQuestions(
             successfulQuestionResponses,
-            assignment
+            assignment,
           ),
       };
     } catch (error) {
@@ -846,7 +846,7 @@ export class AttemptSubmissionService {
    * Handle an expired attempt
    */
   private async handleExpiredAttempt(
-    attemptId: number
+    attemptId: number,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     await this.prisma.assignmentAttempt.update({
       where: { id: attemptId },
@@ -880,7 +880,7 @@ export class AttemptSubmissionService {
     grade: number,
     authCookie: string,
     assignmentId: number,
-    userId: string
+    userId: string,
   ): Promise<void> {
     const userAttempts = await this.prisma.assignmentAttempt.findMany({
       where: {
@@ -912,7 +912,7 @@ export class AttemptSubmissionService {
   private async updateAssignmentAttemptInDb(
     attemptId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    grade: number
+    grade: number,
   ) {
     const {
       responsesForQuestions,
@@ -939,7 +939,7 @@ export class AttemptSubmissionService {
    */
   private async sendGradeToLtiGateway(
     grade: number,
-    authCookie: string
+    authCookie: string,
   ): Promise<void> {
     try {
       const ltiGatewayResponse = await this.httpService
@@ -950,7 +950,7 @@ export class AttemptSubmissionService {
             headers: {
               Cookie: `authentication=${authCookie}`,
             },
-          }
+          },
         )
         .toPromise();
 
@@ -963,7 +963,7 @@ export class AttemptSubmissionService {
           ? error.message
           : "An unknown error occurred while sending the grade to the LTI gateway.";
       throw new InternalServerErrorException(
-        `${GRADE_SUBMISSION_EXCEPTION}: ${errorMessage}`
+        `${GRADE_SUBMISSION_EXCEPTION}: ${errorMessage}`,
       );
     }
   }
@@ -972,7 +972,7 @@ export class AttemptSubmissionService {
    * Calculate the expiration date for an attempt
    */
   private calculateAttemptExpiresAt(
-    assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto
+    assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
   ): Date | null {
     if (
       assignment.allotedTimeMinutes !== undefined &&
@@ -988,7 +988,7 @@ export class AttemptSubmissionService {
    */
   private getOrderedQuestions(
     questions: QuestionDto[],
-    assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto
+    assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
   ): QuestionDto[] {
     const orderedQuestions = [...questions];
 
@@ -1001,7 +1001,7 @@ export class AttemptSubmissionService {
       orderedQuestions.sort(
         (a, b) =>
           assignment.questionOrder.indexOf(a.id) -
-          assignment.questionOrder.indexOf(b.id)
+          assignment.questionOrder.indexOf(b.id),
       );
     }
 
@@ -1039,16 +1039,16 @@ export class AttemptSubmissionService {
         typeof q.randomizedChoices === "boolean"
           ? q.randomizedChoices
           : typeof q.randomizedChoices === "string"
-          ? q.randomizedChoices === "true"
-          : false,
+            ? q.randomizedChoices === "true"
+            : false,
       videoPresentationConfig:
         this.parseJsonValue<VideoPresentationConfig | null>(
           q.videoPresentationConfig,
-          null
+          null,
         ),
       liveRecordingConfig: this.parseJsonValue<Record<string, unknown> | null>(
         q.liveRecordingConfig,
-        null
+        null,
       ),
     }));
   }
@@ -1079,7 +1079,7 @@ export class AttemptSubmissionService {
       showQuestionScore?: boolean;
       showQuestions?: boolean;
       showCorrectAnswer?: boolean;
-    }
+    },
   ): void {
     if (assignment.showAssignmentScore === false) {
       assignmentAttempt.grade = null;
@@ -1116,7 +1116,7 @@ export class AttemptSubmissionService {
     questions: AttemptQuestionDto[],
     assignment: {
       showCorrectAnswer?: boolean;
-    }
+    },
   ): void {
     for (const question of questions) {
       if (!question.scoring?.showRubricsToLearner) {
@@ -1153,7 +1153,7 @@ export class AttemptSubmissionService {
         typeof question.randomizedChoices === "string"
       ) {
         const randomizedArray = JSON.parse(
-          question.randomizedChoices
+          question.randomizedChoices,
         ) as Array<{
           points?: number;
           isCorrect?: boolean;

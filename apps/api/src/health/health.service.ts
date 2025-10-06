@@ -24,7 +24,7 @@ export class HealthService {
   constructor(
     private readonly health: HealthCheckService,
     private readonly disk: DiskHealthIndicator,
-    private readonly databaseHealthIndicator: DatabaseHealthIndicator
+    private readonly databaseHealthIndicator: DatabaseHealthIndicator,
   ) {}
 
   /**

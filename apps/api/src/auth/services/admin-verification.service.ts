@@ -96,7 +96,7 @@ export class AdminVerificationService {
    * Verify admin session token and return user info
    */
   async verifyAdminSession(
-    sessionToken: string
+    sessionToken: string,
   ): Promise<{ email: string; role: "admin" | "author" } | null> {
     const session = await this.prisma.adminSession.findFirst({
       where: {

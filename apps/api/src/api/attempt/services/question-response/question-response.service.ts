@@ -39,7 +39,7 @@ export class QuestionResponseService {
     private readonly questionService: QuestionService,
     private readonly localizationService: LocalizationService,
     private readonly gradingFactoryService: GradingFactoryService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({
       context: QuestionResponseService.name,
@@ -57,7 +57,7 @@ export class QuestionResponseService {
     language: string,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
-    preTranslatedQuestions?: Map<number, QuestionDto>
+    preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
@@ -69,13 +69,13 @@ export class QuestionResponseService {
           language,
           authorQuestions,
           assignmentDetails,
-          preTranslatedQuestions
+          preTranslatedQuestions,
         );
-      }
+      },
     );
 
     const questionResponses = await Promise.allSettled(
-      questionResponsesPromise
+      questionResponsesPromise,
     );
 
     const successfulResponses = questionResponses
@@ -85,7 +85,7 @@ export class QuestionResponseService {
     const failedResponses = questionResponses
       .filter(
         (response): response is PromiseRejectedResult =>
-          response.status === "rejected"
+          response.status === "rejected",
       )
       .map((response) => {
         if (typeof response.reason === "string") {
@@ -100,8 +100,8 @@ export class QuestionResponseService {
     if (failedResponses.length > 0) {
       throw new BadRequestException(
         `Failed to process some question responses: ${failedResponses.join(
-          ", "
-        )}`
+          ", ",
+        )}`,
       );
     }
 
@@ -119,7 +119,7 @@ export class QuestionResponseService {
     language: string,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
-    preTranslatedQuestions?: Map<number, QuestionDto>
+    preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const questionId = createQuestionResponseAttemptRequestDto.id;
 
@@ -136,13 +136,13 @@ export class QuestionResponseService {
         questionId,
         assignmentAttemptId,
         assignmentId,
-        preTranslatedQuestions
+        preTranslatedQuestions,
       ));
     } else if (role === UserRole.AUTHOR) {
       ({ question, assignmentContext } = this.getAuthorQuestion(
         questionId,
         authorQuestions,
-        assignmentDetails
+        assignmentDetails,
       ));
     } else {
       throw new BadRequestException(`Unsupported user role: ${role}`);
@@ -159,7 +159,7 @@ export class QuestionResponseService {
           questionId,
           learnerResponse,
           responseDto,
-          role
+          role,
         );
       }
 
@@ -190,7 +190,7 @@ export class QuestionResponseService {
         ({ responseDto, learnerResponse } = await this.handleLinkFileQuestion(
           question,
           createQuestionResponseAttemptRequestDto,
-          gradingContext
+          gradingContext,
         ));
       } else {
         const startTime = Date.now();
@@ -207,7 +207,7 @@ export class QuestionResponseService {
 
         const gradingStrategy = this.gradingFactoryService.getStrategy(
           question.type,
-          question.responseType
+          question.responseType,
         );
 
         if (!gradingStrategy) {
@@ -217,7 +217,7 @@ export class QuestionResponseService {
             responseType: question.responseType,
           });
           throw new BadRequestException(
-            `No grading strategy found for question type: ${question.type}`
+            `No grading strategy found for question type: ${question.type}`,
           );
         }
 
@@ -232,7 +232,7 @@ export class QuestionResponseService {
         this.logger.debug("Validating response", { questionId });
         const isValid = await gradingStrategy.validateResponse(
           question,
-          createQuestionResponseAttemptRequestDto
+          createQuestionResponseAttemptRequestDto,
         );
 
         if (!isValid) {
@@ -242,14 +242,14 @@ export class QuestionResponseService {
             strategyName: gradingStrategy.constructor.name,
           });
           throw new BadRequestException(
-            `Invalid response for question ID ${questionId}: ${createQuestionResponseAttemptRequestDto.language}`
+            `Invalid response for question ID ${questionId}: ${createQuestionResponseAttemptRequestDto.language}`,
           );
         }
 
         // Extract learner response
         this.logger.debug("Extracting learner response", { questionId });
         learnerResponse = await gradingStrategy.extractLearnerResponse(
-          createQuestionResponseAttemptRequestDto
+          createQuestionResponseAttemptRequestDto,
         );
 
         // Grade the response
@@ -261,7 +261,7 @@ export class QuestionResponseService {
         responseDto = await gradingStrategy.gradeResponse(
           question,
           learnerResponse,
-          gradingContext
+          gradingContext,
         );
 
         if (!responseDto) {
@@ -270,7 +270,7 @@ export class QuestionResponseService {
             strategyName: gradingStrategy.constructor.name,
           });
           throw new BadRequestException(
-            `Failed to grade response for question ID ${questionId}`
+            `Failed to grade response for question ID ${questionId}`,
           );
         }
 
@@ -300,7 +300,7 @@ export class QuestionResponseService {
       });
 
       throw new BadRequestException(
-        `Failed to process question response: ${errorMessage}`
+        `Failed to process question response: ${errorMessage}`,
       );
     }
 
@@ -311,7 +311,7 @@ export class QuestionResponseService {
         questionId,
         learnerResponse,
         responseDto,
-        role
+        role,
       );
     }
 
@@ -327,14 +327,14 @@ export class QuestionResponseService {
   private async handleLinkFileQuestion(
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
-    gradingContext: GradingContext
+    gradingContext: GradingContext,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: any;
   }> {
     if (requestDto.learnerUrlResponse) {
       const urlGradingStrategy = this.gradingFactoryService.getStrategy(
-        QuestionType.URL
+        QuestionType.URL,
       );
       const url = requestDto.learnerUrlResponse;
       const rawUrl = this.convertGitHubUrlToRaw(url);
@@ -343,48 +343,46 @@ export class QuestionResponseService {
       }
       const isValid = await urlGradingStrategy.validateResponse(
         question,
-        requestDto
+        requestDto,
       );
       if (!isValid) {
         throw new BadRequestException(
-          `Invalid URL response for question ID ${question.id}: ${requestDto.language}`
+          `Invalid URL response for question ID ${question.id}: ${requestDto.language}`,
         );
       }
-      const learnerResponse = await urlGradingStrategy.extractLearnerResponse(
-        requestDto
-      );
+      const learnerResponse =
+        await urlGradingStrategy.extractLearnerResponse(requestDto);
       const responseDto = await urlGradingStrategy.gradeResponse(
         question,
         learnerResponse,
-        gradingContext
+        gradingContext,
       );
       return { responseDto, learnerResponse };
     } else if (requestDto.learnerFileResponse) {
       const fileGradingStrategy = this.gradingFactoryService.getStrategy(
-        QuestionType.UPLOAD
+        QuestionType.UPLOAD,
       );
       const isValid = await fileGradingStrategy.validateResponse(
         question,
-        requestDto
+        requestDto,
       );
       if (!isValid) {
         throw new BadRequestException(
-          `Invalid file response for question ID ${question.id}: ${requestDto.language}`
+          `Invalid file response for question ID ${question.id}: ${requestDto.language}`,
         );
       }
-      const learnerResponse = await fileGradingStrategy.extractLearnerResponse(
-        requestDto
-      );
+      const learnerResponse =
+        await fileGradingStrategy.extractLearnerResponse(requestDto);
       const responseDto = await fileGradingStrategy.gradeResponse(
         question,
         learnerResponse,
-        gradingContext
+        gradingContext,
       );
       return { responseDto, learnerResponse };
     }
 
     throw new BadRequestException(
-      "Expected a file-based or URL-based response, but did not receive one."
+      "Expected a file-based or URL-based response, but did not receive one.",
     );
   }
 
@@ -396,7 +394,7 @@ export class QuestionResponseService {
     questionId: number,
     learnerResponse: any,
     responseDto: CreateQuestionResponseAttemptResponseDto,
-    role: UserRole
+    role: UserRole,
   ): Promise<void> {
     try {
       const result = await this.prisma.questionResponse.create({
@@ -419,7 +417,7 @@ export class QuestionResponseService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       throw new InternalServerErrorException(
-        `Failed to save question response: ${errorMessage}`
+        `Failed to save question response: ${errorMessage}`,
       );
     }
   }
@@ -431,7 +429,7 @@ export class QuestionResponseService {
     questionId: number,
     assignmentAttemptId: number,
     assignmentId: number,
-    preTranslatedQuestions?: Map<number, QuestionDto>
+    preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<{
     question: QuestionDto;
     assignmentContext: {
@@ -444,7 +442,7 @@ export class QuestionResponseService {
       const assignmentContext = await this.getAssignmentContext(
         assignmentId,
         questionId,
-        assignmentAttemptId
+        assignmentAttemptId,
       );
       return { question, assignmentContext };
     }
@@ -463,12 +461,12 @@ export class QuestionResponseService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
       );
     }
 
     const variantMapping = assignmentAttempt.questionVariants.find(
-      (qv) => qv.questionId === questionId
+      (qv) => qv.questionId === questionId,
     );
 
     let question: QuestionDto;
@@ -506,7 +504,7 @@ export class QuestionResponseService {
     const assignmentContext = await this.getAssignmentContext(
       assignmentId,
       questionId,
-      assignmentAttemptId
+      assignmentAttemptId,
     );
 
     return { question, assignmentContext };
@@ -518,7 +516,7 @@ export class QuestionResponseService {
   private getAuthorQuestion(
     questionId: number,
     authorQuestions: QuestionDto[],
-    assignmentDetails: any
+    assignmentDetails: any,
   ): {
     question: QuestionDto;
     assignmentContext: {
@@ -530,7 +528,7 @@ export class QuestionResponseService {
 
     if (!question) {
       throw new NotFoundException(
-        `Question with ID ${questionId} not found in author questions.`
+        `Question with ID ${questionId} not found in author questions.`,
       );
     }
 
@@ -548,7 +546,7 @@ export class QuestionResponseService {
   private async getAssignmentContext(
     assignmentId: number,
     questionId: number,
-    assignmentAttemptId: number
+    assignmentAttemptId: number,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
@@ -560,7 +558,7 @@ export class QuestionResponseService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with ID ${assignmentId} not found.`
+        `Assignment with ID ${assignmentId} not found.`,
       );
     }
 
@@ -641,7 +639,7 @@ export class QuestionResponseService {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             console.error(
-              `Error fetching URL content for question ${contextQuestion.id}: ${errorMessage}`
+              `Error fetching URL content for question ${contextQuestion.id}: ${errorMessage}`,
             );
           }
         }
@@ -652,7 +650,7 @@ export class QuestionResponseService {
           questionId: contextQuestion.id,
           questionType: contextQuestion.type,
         };
-      })
+      }),
     );
 
     return {
@@ -677,7 +675,7 @@ export class QuestionResponseService {
    * Check if a response is empty
    */
   private isEmptyResponse(
-    requestDto: CreateQuestionResponseAttemptRequestDto
+    requestDto: CreateQuestionResponseAttemptRequestDto,
   ): boolean {
     return (
       (!requestDto.learnerFileResponse ||
@@ -707,7 +705,7 @@ export class QuestionResponseService {
     const noResponseFeedback = new GeneralFeedbackDto();
     noResponseFeedback.feedback = this.localizationService.getLocalizedString(
       "noResponse",
-      language
+      language,
     );
 
     responseDto.feedback = [noResponseFeedback];
@@ -740,7 +738,7 @@ export class QuestionResponseService {
    */
   private convertGitHubUrlToRaw(url: string): string | null {
     const match = url.match(
-      /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/
+      /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
     );
     if (!match) {
       return null;
@@ -753,7 +751,7 @@ export class QuestionResponseService {
    * Fetch content from a URL
    */
   private async fetchUrlContent(
-    url: string
+    url: string,
   ): Promise<{ body: string; isFunctional: boolean }> {
     const MAX_CONTENT_SIZE = 100_000;
     try {
@@ -775,7 +773,7 @@ export class QuestionResponseService {
         } else {
           try {
             const repoMatch = url.match(
-              /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/
+              /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/,
             );
             if (repoMatch) {
               const [, user, repo] = repoMatch;
@@ -793,9 +791,8 @@ export class QuestionResponseService {
               } catch {
                 try {
                   const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
-                  const masterReadmeResponse = await axios.get<string>(
-                    masterReadmeUrl
-                  );
+                  const masterReadmeResponse =
+                    await axios.get<string>(masterReadmeUrl);
                   if (masterReadmeResponse.status === 200) {
                     let body = masterReadmeResponse.data;
                     if (body.length > MAX_CONTENT_SIZE) {
@@ -835,7 +832,7 @@ export class QuestionResponseService {
             const $ = cheerio.load(response.data);
 
             $(
-              "script, style, noscript, iframe, noembed, embed, object"
+              "script, style, noscript, iframe, noembed, embed, object",
             ).remove();
 
             let content = "";
@@ -849,7 +846,7 @@ export class QuestionResponseService {
               }
 
               const fileList = $(
-                "div.js-details-container div.js-navigation-container tr.js-navigation-item"
+                "div.js-details-container div.js-navigation-container tr.js-navigation-item",
               );
               if (fileList.length > 0) {
                 content += "Repository Files:\n";

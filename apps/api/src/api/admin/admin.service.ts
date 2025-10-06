@@ -41,7 +41,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(LLM_PRICING_SERVICE)
-    private readonly llmPricingService: LLMPricingService
+    private readonly llmPricingService: LLMPricingService,
   ) {}
 
   /**
@@ -83,7 +83,7 @@ export class AdminService {
     const cacheKey = `insights:${assignmentId}`;
     this.insightsCache.delete(cacheKey);
     this.logger.debug(
-      `Invalidated insights cache for assignment ${assignmentId}`
+      `Invalidated insights cache for assignment ${assignmentId}`,
     );
   }
 
@@ -123,7 +123,7 @@ export class AdminService {
     // Calculate average score
     const totalGrades = attempts.reduce(
       (sum, attempt) => sum + (attempt.grade || 0),
-      0
+      0,
     );
     const averageScore =
       attempts.length > 0 ? (totalGrades / attempts.length) * 100 : 0;
@@ -143,7 +143,7 @@ export class AdminService {
     // Calculate completion rate
     const totalAttempts = attempts.length;
     const completedAttempts = attempts.filter(
-      (attempt) => attempt.submitted
+      (attempt) => attempt.submitted,
     ).length;
     const completionRate =
       totalAttempts > 0 ? (completedAttempts / totalAttempts) * 100 : 0;
@@ -194,13 +194,13 @@ export class AdminService {
     const questionBreakdown = assignment.questions.map((question) => {
       const responses = attempts.flatMap((attempt) =>
         attempt.questionResponses.filter(
-          (response) => response.questionId === question.id
-        )
+          (response) => response.questionId === question.id,
+        ),
       );
 
       const totalPoints = responses.reduce(
         (sum, response) => sum + response.points,
-        0
+        0,
       );
       const averageScore =
         responses.length > 0
@@ -208,7 +208,7 @@ export class AdminService {
           : 0;
 
       const incorrectResponses = responses.filter(
-        (response) => response.points < question.totalPoints
+        (response) => response.points < question.totalPoints,
       );
       const incorrectRate =
         responses.length > 0
@@ -265,7 +265,7 @@ export class AdminService {
     } catch (error) {
       this.logger.error(
         `Error fetching attempts for assignment ${assignmentId}:`,
-        error
+        error,
       );
       return [];
     }
@@ -277,7 +277,7 @@ export class AdminService {
   async precomputePopularInsights(): Promise<void> {
     try {
       this.logger.log(
-        "Starting precomputation of insights for popular assignments"
+        "Starting precomputation of insights for popular assignments",
       );
 
       // Find the most accessed assignments in the last 7 days
@@ -300,7 +300,7 @@ export class AdminService {
       });
 
       this.logger.log(
-        `Found ${popularAssignments.length} popular assignments to precompute`
+        `Found ${popularAssignments.length} popular assignments to precompute`,
       );
 
       // Create a mock admin session for precomputation
@@ -326,18 +326,18 @@ export class AdminService {
               // This will compute and cache the insights
               await this.getDetailedAssignmentInsights(
                 adminSession,
-                assignment.assignmentId
+                assignment.assignmentId,
               );
               this.logger.debug(
-                `Precomputed insights for assignment ${assignment.assignmentId}`
+                `Precomputed insights for assignment ${assignment.assignmentId}`,
               );
             } catch (error) {
               this.logger.warn(
                 `Failed to precompute insights for assignment ${assignment.assignmentId}:`,
-                error
+                error,
               );
             }
-          })
+          }),
         );
 
         // Add a small delay between batches
@@ -347,7 +347,7 @@ export class AdminService {
       }
 
       this.logger.log(
-        `Completed precomputation of insights for ${popularAssignments.length} assignments`
+        `Completed precomputation of insights for ${popularAssignments.length} assignments`,
       );
     } catch (error) {
       this.logger.error("Error during insights precomputation:", error);
@@ -364,7 +364,7 @@ export class AdminService {
       createdAt: Date;
       usageType?: string;
       modelKey?: string;
-    }>
+    }>,
   ): Promise<{
     totalCost: number;
     costBreakdown: {
@@ -408,7 +408,7 @@ export class AdminService {
       if (!modelKey) {
         // Log warning for missing model key - this shouldn't happen with new records
         this.logger.warn(
-          `Missing model key for usage record from ${usage.createdAt.toISOString()}, falling back based on usage type`
+          `Missing model key for usage record from ${usage.createdAt.toISOString()}, falling back based on usage type`,
         );
 
         // Fallback logic for older records without model key stored
@@ -436,7 +436,7 @@ export class AdminService {
           usage.tokensIn,
           usage.tokensOut,
           usage.createdAt,
-          usage.usageType // Pass usage type for upscaling-aware calculations
+          usage.usageType, // Pass usage type for upscaling-aware calculations
         );
 
       if (costBreakdown) {
@@ -463,15 +463,15 @@ export class AdminService {
           costBreakdown.outputTokenPrice * 1_000_000;
         const calculationSteps = {
           inputCalculation: `${usage.tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
-            2
+            2,
           )}/1M tokens = $${costBreakdown.inputCost.toFixed(8)}`,
           outputCalculation: `${usage.tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
-            2
+            2,
           )}/1M tokens = $${costBreakdown.outputCost.toFixed(8)}`,
           totalCalculation: `$${costBreakdown.inputCost.toFixed(
-            8
+            8,
           )} + $${costBreakdown.outputCost.toFixed(
-            8
+            8,
           )} = $${costBreakdown.totalCost.toFixed(8)}`,
         };
 
@@ -492,7 +492,7 @@ export class AdminService {
       } else {
         // Enhanced fallback with proper logging and transparency
         this.logger.error(
-          `No pricing found for ${modelKey} at ${usage.createdAt.toISOString()}, using emergency fallback`
+          `No pricing found for ${modelKey} at ${usage.createdAt.toISOString()}, using emergency fallback`,
         );
 
         const fallbackPrices: Record<
@@ -517,13 +517,13 @@ export class AdminService {
         const outputPricePerMillion = prices.output * 1_000_000;
         const calculationSteps = {
           inputCalculation: `${usage.tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
-            2
+            2,
           )}/1M tokens = $${inputCost.toFixed(8)} (fallback)`,
           outputCalculation: `${usage.tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
-            2
+            2,
           )}/1M tokens = $${outputCost.toFixed(8)} (fallback)`,
           totalCalculation: `$${inputCost.toFixed(8)} + $${outputCost.toFixed(
-            8
+            8,
           )} = $${fallbackCost.toFixed(8)} (fallback)`,
         };
 
@@ -555,7 +555,7 @@ export class AdminService {
    * Helper method to get author activity insights
    */
   private async getAuthorActivity(
-    assignmentAuthors: { userId: string; createdAt: Date }[]
+    assignmentAuthors: { userId: string; createdAt: Date }[],
   ) {
     if (!assignmentAuthors || assignmentAuthors.length === 0) {
       return {
@@ -566,7 +566,7 @@ export class AdminService {
     }
 
     const authorIds = assignmentAuthors.map(
-      (author: { userId: string }) => author.userId
+      (author: { userId: string }) => author.userId,
     );
 
     // Get all assignments by these authors to understand their activity
@@ -609,7 +609,7 @@ export class AdminService {
     const validAssignmentIds = authorAssignments
       .map((a) => a.id)
       .filter(
-        (id) => id !== null && id !== undefined && typeof id === "number"
+        (id) => id !== null && id !== undefined && typeof id === "number",
       );
 
     const recentActivity =
@@ -633,21 +633,23 @@ export class AdminService {
     // Analyze author contributions
     const authorStats = authorIds.map((authorId) => {
       const authoredAssignments = authorAssignments.filter((assignment) =>
-        assignment.AssignmentAuthor.some((author) => author.userId === authorId)
+        assignment.AssignmentAuthor.some(
+          (author) => author.userId === authorId,
+        ),
       );
 
       const totalAssignments = authoredAssignments.length;
       const totalQuestions = authoredAssignments.reduce(
         (sum, assignment) => sum + assignment._count.questions,
-        0
+        0,
       );
       const totalAIUsage = authoredAssignments.reduce(
         (sum, assignment) => sum + assignment._count.AIUsage,
-        0
+        0,
       );
       const totalFeedback = authoredAssignments.reduce(
         (sum, assignment) => sum + assignment._count.AssignmentFeedback,
-        0
+        0,
       );
 
       // Calculate total attempts from attempt counts
@@ -659,8 +661,8 @@ export class AdminService {
       // Get recent activity for this author
       const authorRecentActivity = recentActivity.filter((attempt) =>
         authoredAssignments.some(
-          (assignment) => assignment.id === attempt.assignmentId
-        )
+          (assignment) => assignment.id === attempt.assignmentId,
+        ),
       );
 
       return {
@@ -682,11 +684,11 @@ export class AdminService {
         joinedAt:
           assignmentAuthors.find(
             (author: { userId: string; createdAt: Date }) =>
-              author.userId === authorId
+              author.userId === authorId,
           )?.createdAt || new Date(),
         isActiveContributor: totalAssignments >= 3,
         activityScore: Math.round(
-          totalAssignments * 2 + totalQuestions * 0.5 + totalAttempts * 0.1
+          totalAssignments * 2 + totalQuestions * 0.5 + totalAttempts * 0.1,
         ),
       };
     });
@@ -698,18 +700,18 @@ export class AdminService {
     const activityInsights = [];
     const totalAuthors = authorStats.length;
     const activeAuthors = authorStats.filter(
-      (author) => author.isActiveContributor
+      (author) => author.isActiveContributor,
     ).length;
     const mostActiveAuthor = authorStats[0];
 
     if (totalAuthors > 1) {
       activityInsights.push(
-        `This assignment has ${totalAuthors} contributing authors`
+        `This assignment has ${totalAuthors} contributing authors`,
       );
 
       if (activeAuthors > 0) {
         activityInsights.push(
-          `${activeAuthors} of ${totalAuthors} authors are active contributors (3+ assignments)`
+          `${activeAuthors} of ${totalAuthors} authors are active contributors (3+ assignments)`,
         );
       }
 
@@ -717,17 +719,17 @@ export class AdminService {
         activityInsights.push(
           `Most active contributor: ${String(mostActiveAuthor.userId)} with ${
             mostActiveAuthor.totalAssignments
-          } assignments`
+          } assignments`,
         );
       }
     } else if (totalAuthors === 1) {
       const singleAuthor = authorStats[0];
       activityInsights.push(
-        `Single author assignment by ${String(singleAuthor.userId)}`
+        `Single author assignment by ${String(singleAuthor.userId)}`,
       );
       if (singleAuthor.totalAssignments > 1) {
         activityInsights.push(
-          `Author has created ${singleAuthor.totalAssignments} total assignments`
+          `Author has created ${singleAuthor.totalAssignments} total assignments`,
         );
       }
     }
@@ -741,7 +743,7 @@ export class AdminService {
 
   async cloneAssignment(
     id: number,
-    groupId: string
+    groupId: string,
   ): Promise<BaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: id },
@@ -882,7 +884,7 @@ export class AdminService {
   }
   async addAssignmentToGroup(
     assignmentId: number,
-    groupId: string
+    groupId: string,
   ): Promise<AdminAddAssignmentToGroupResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -890,7 +892,7 @@ export class AdminService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with Id ${assignmentId} not found.`
+        `Assignment with Id ${assignmentId} not found.`,
       );
     }
 
@@ -939,7 +941,7 @@ export class AdminService {
   }
 
   async createAssignment(
-    createAssignmentRequestDto: AdminCreateAssignmentRequestDto
+    createAssignmentRequestDto: AdminCreateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.create({
       data: {
@@ -992,7 +994,7 @@ export class AdminService {
 
   async updateAssignment(
     id: number,
-    updateAssignmentDto: AdminUpdateAssignmentRequestDto
+    updateAssignmentDto: AdminUpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -1009,7 +1011,7 @@ export class AdminService {
 
   async replaceAssignment(
     id: number,
-    updateAssignmentDto: AdminReplaceAssignmentRequestDto
+    updateAssignmentDto: AdminReplaceAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -1028,7 +1030,7 @@ export class AdminService {
     adminSession: UserSession,
     page: number,
     limit: number,
-    search?: string
+    search?: string,
   ) {
     const isAdmin = adminSession.role === UserRole.ADMIN;
     const skip = (page - 1) * limit;
@@ -1123,10 +1125,10 @@ export class AdminService {
           }),
         ]).then(([totalStats, submittedStats]) => {
           const totalStatsMap = new Map(
-            totalStats.map((s) => [s.assignmentId, s._count.id])
+            totalStats.map((s) => [s.assignmentId, s._count.id]),
           );
           const submittedStatsMap = new Map(
-            submittedStats.map((s) => [s.assignmentId, s])
+            submittedStats.map((s) => [s.assignmentId, s]),
           );
 
           return { totalStatsMap, submittedStatsMap };
@@ -1141,7 +1143,7 @@ export class AdminService {
               select: { userId: true },
             });
             return { assignmentId, uniqueUsersCount: uniqueUsers.length };
-          })
+          }),
         ),
 
         // Get feedback statistics in one query
@@ -1162,7 +1164,7 @@ export class AdminService {
 
     const { totalStatsMap, submittedStatsMap } = attemptStats;
     const uniqueLearnersMap = new Map(
-      uniqueLearnersStats.map((s) => [s.assignmentId, s.uniqueUsersCount])
+      uniqueLearnersStats.map((s) => [s.assignmentId, s.uniqueUsersCount]),
     );
     const feedbackMap = new Map(feedbackStats.map((s) => [s.assignmentId, s]));
     // const questionMap = new Map(questionStats.map(s => [s.assignmentId, s]));
@@ -1202,21 +1204,21 @@ export class AdminService {
           if (completionRate < 70) {
             performanceInsights.push(
               `Low completion rate (${Math.round(
-                completionRate
-              )}%) - consider reducing difficulty`
+                completionRate,
+              )}%) - consider reducing difficulty`,
             );
           }
           if (averageGrade > 85) {
             performanceInsights.push(
               `High average grade (${Math.round(
-                averageGrade
-              )}%) - learners are doing well`
+                averageGrade,
+              )}%) - learners are doing well`,
             );
           } else if (averageGrade < 60) {
             performanceInsights.push(
               `Low average grade (${Math.round(
-                averageGrade
-              )}%) - may need clearer instructions`
+                averageGrade,
+              )}%) - may need clearer instructions`,
             );
           }
         }
@@ -1252,7 +1254,7 @@ export class AdminService {
             })),
           },
         };
-      })
+      }),
     );
 
     return {
@@ -1268,7 +1270,7 @@ export class AdminService {
 
   async getDashboardStats(
     adminSession: UserSession & { userId?: string },
-    filters?: DashboardFilters
+    filters?: DashboardFilters,
   ) {
     const isAdmin = adminSession.role === UserRole.ADMIN;
 
@@ -1598,7 +1600,7 @@ export class AdminService {
 
   async getDetailedAssignmentInsights(
     adminSession: UserSession,
-    assignmentId: number
+    assignmentId: number,
   ) {
     try {
       // Check cache first
@@ -1646,7 +1648,7 @@ export class AdminService {
 
       if (!assignment) {
         throw new NotFoundException(
-          `Assignment with ID ${assignmentId} not found or access denied`
+          `Assignment with ID ${assignmentId} not found or access denied`,
         );
       }
 
@@ -1674,7 +1676,7 @@ export class AdminService {
       } catch (error) {
         this.logger.error(
           `Error fetching attempt statistics for assignment ${assignmentId}:`,
-          error
+          error,
         );
         // Use fallback values (already initialized above)
       }
@@ -1730,7 +1732,7 @@ export class AdminService {
               } catch (error) {
                 this.logger.error(
                   `Error fetching response statistics for question ${question.id}:`,
-                  error
+                  error,
                 );
                 // Use fallback values (already initialized above)
               }
@@ -1739,7 +1741,7 @@ export class AdminService {
                 totalResponses > 0 ? (correctCount / totalResponses) * 100 : 0;
 
               let insight = `${Math.round(
-                correctPercentage
+                correctPercentage,
               )}% of learners answered correctly`;
               if (correctPercentage < 50) {
                 insight += ` - consider reviewing this question`;
@@ -1759,7 +1761,7 @@ export class AdminService {
                   languageCode: t.languageCode,
                 })),
               };
-            })
+            }),
           );
           questionInsights.push(...batchResults);
 
@@ -1770,7 +1772,7 @@ export class AdminService {
         } catch (error) {
           this.logger.error(
             `Error processing question batch starting at index ${index}:`,
-            error
+            error,
           );
           // Continue with empty results for this batch to prevent total failure
           const fallbackResults = batch.map((question) => ({
@@ -1816,7 +1818,7 @@ export class AdminService {
 
       // Get author information and activity analysis
       const authorActivity = await this.getAuthorActivity(
-        assignment.AssignmentAuthor
+        assignment.AssignmentAuthor,
       );
 
       const aiUsageWithCost = assignment.AIUsage.map((usage, index) => {
@@ -1854,7 +1856,7 @@ export class AdminService {
 
       // Calculate average rating
       const ratings = assignment.AssignmentFeedback.map(
-        (f) => f.assignmentRating
+        (f) => f.assignmentRating,
       ).filter((r) => r !== null);
       const averageRating =
         ratings.length > 0
@@ -1864,7 +1866,7 @@ export class AdminService {
       // Calculate total points for assignment
       const totalPoints = assignment.questions.reduce(
         (sum, q) => sum + q.totalPoints,
-        0
+        0,
       );
 
       // Cost breakdown from historical pricing data
@@ -1883,22 +1885,22 @@ export class AdminService {
         if (completionRate < 70) {
           performanceInsights.push(
             `Low completion rate (${Math.round(
-              completionRate
-            )}%) - consider reducing difficulty`
+              completionRate,
+            )}%) - consider reducing difficulty`,
           );
         }
         if (averageGrade > 85) {
           performanceInsights.push(
             `High average grade (${Math.round(
-              averageGrade
-            )}%) - learners are doing well`
+              averageGrade,
+            )}%) - learners are doing well`,
           );
         }
         if (averageGrade < 60) {
           performanceInsights.push(
             `Low average grade (${Math.round(
-              averageGrade
-            )}%) - may need clearer instructions`
+              averageGrade,
+            )}%) - may need clearer instructions`,
           );
         }
       }
@@ -1967,38 +1969,38 @@ export class AdminService {
           summary: {
             totalInputTokens: costData.detailedBreakdown.reduce(
               (sum, d) => sum + d.tokensIn,
-              0
+              0,
             ),
             totalOutputTokens: costData.detailedBreakdown.reduce(
               (sum, d) => sum + d.tokensOut,
-              0
+              0,
             ),
             totalInputCost:
               Math.round(
                 costData.detailedBreakdown.reduce(
                   (sum, d) => sum + d.inputCost,
-                  0
-                ) * 100_000_000
+                  0,
+                ) * 100_000_000,
               ) / 100_000_000,
             totalOutputCost:
               Math.round(
                 costData.detailedBreakdown.reduce(
                   (sum, d) => sum + d.outputCost,
-                  0
-                ) * 100_000_000
+                  0,
+                ) * 100_000_000,
               ) / 100_000_000,
             averageInputPrice:
               costData.detailedBreakdown.length > 0
                 ? costData.detailedBreakdown.reduce(
                     (sum, d) => sum + d.inputTokenPrice,
-                    0
+                    0,
                   ) / costData.detailedBreakdown.length
                 : 0,
             averageOutputPrice:
               costData.detailedBreakdown.length > 0
                 ? costData.detailedBreakdown.reduce(
                     (sum, d) => sum + d.outputTokenPrice,
-                    0
+                    0,
                   ) / costData.detailedBreakdown.length
                 : 0,
             // eslint-disable-next-line unicorn/no-array-reduce
@@ -2008,7 +2010,7 @@ export class AdminService {
                   (accumulator[detail.modelKey] || 0) + detail.totalCost;
                 return accumulator;
               },
-              {} as Record<string, number>
+              {} as Record<string, number>,
             ),
             usageTypeDistribution: {
               grading: Math.round(costData.costBreakdown.grading * 100) / 100,
@@ -2035,7 +2037,7 @@ export class AdminService {
     } catch (error) {
       this.logger.error(
         `Error getting detailed assignment insights for assignment ${assignmentId}:`,
-        error
+        error,
       );
 
       // Return a safe fallback response
@@ -2126,7 +2128,7 @@ export class AdminService {
   async executeQuickAction(
     adminSession: { email: string; role: UserRole; userId?: string },
     action: string,
-    limit = 10
+    limit = 10,
   ) {
     const isAdmin = adminSession.role === UserRole.ADMIN;
 
@@ -2169,14 +2171,14 @@ export class AdminService {
       case "assignments-with-lowest-ratings": {
         return await this.getAssignmentsWithLowestRatings(
           assignmentWhere,
-          limit
+          limit,
         );
       }
 
       case "recent-high-activity": {
         return await this.getRecentHighActivityAssignments(
           assignmentWhere,
-          limit
+          limit,
         );
       }
 
@@ -2221,7 +2223,7 @@ export class AdminService {
     const assignmentsWithCost = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsage
+          assignment.AIUsage,
         );
 
         // Get attempt count separately
@@ -2239,7 +2241,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -2252,7 +2254,7 @@ export class AdminService {
 
   private async getTopAssignmentsByAttempts(
     assignmentWhere: any,
-    limit: number
+    limit: number,
   ) {
     // First get assignments with basic info
     const assignments = await this.prisma.assignment.findMany({
@@ -2297,7 +2299,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -2310,7 +2312,7 @@ export class AdminService {
 
   private async getTopAssignmentsByLearners(
     assignmentWhere: any,
-    limit: number
+    limit: number,
   ) {
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
@@ -2336,7 +2338,7 @@ export class AdminService {
 
         const uniqueLearners = new Set(attempts.map((a) => a.userId)).size;
         const completedLearners = new Set(
-          attempts.filter((a) => a.submitted).map((a) => a.userId)
+          attempts.filter((a) => a.submitted).map((a) => a.userId),
         ).size;
 
         return {
@@ -2351,7 +2353,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -2364,14 +2366,14 @@ export class AdminService {
 
   private async getMostExpensiveAssignments(
     assignmentWhere: any,
-    limit: number
+    limit: number,
   ) {
     return await this.getTopAssignmentsByCost(assignmentWhere, limit);
   }
 
   private async getAssignmentsWithMostReports(
     assignmentWhere: any,
-    limit: number
+    limit: number,
   ) {
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
@@ -2400,12 +2402,12 @@ export class AdminService {
         });
 
         const openReports = assignment.Report.filter(
-          (r: any) => r.status === "OPEN"
+          (r: any) => r.status === "OPEN",
         ).length;
         const recentReports = assignment.Report.filter(
           (r: any) =>
             new Date(r.createdAt) >
-            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
         ).length;
 
         return {
@@ -2419,7 +2421,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -2432,7 +2434,7 @@ export class AdminService {
 
   private async getHighestRatedAssignments(
     assignmentWhere: any,
-    limit: number
+    limit: number,
   ) {
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
@@ -2459,7 +2461,7 @@ export class AdminService {
         });
 
         const ratings = assignment.AssignmentFeedback.map(
-          (f: any) => f.assignmentRating
+          (f: any) => f.assignmentRating,
         ).filter((r: any) => r !== null && r !== undefined) as number[];
 
         const averageRating =
@@ -2468,7 +2470,7 @@ export class AdminService {
             : 0;
 
         const aiRatings = assignment.AssignmentFeedback.map(
-          (f: any) => f.aiGradingRating
+          (f: any) => f.aiGradingRating,
         ).filter((r: any) => r !== null && r !== undefined) as number[];
 
         const averageAiRating =
@@ -2488,7 +2490,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -2502,11 +2504,11 @@ export class AdminService {
 
   private async getAssignmentsWithLowestRatings(
     assignmentWhere: any,
-    limit: number
+    limit: number,
   ) {
     const result = await this.getHighestRatedAssignments(
       assignmentWhere,
-      limit * 2
+      limit * 2,
     );
     return {
       title: `${limit} Assignments with Lowest Ratings`,
@@ -2518,7 +2520,7 @@ export class AdminService {
 
   private async getRecentHighActivityAssignments(
     assignmentWhere: any,
-    limit: number
+    limit: number,
   ) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -2565,10 +2567,10 @@ export class AdminService {
         });
 
         const uniqueRecentUsers = new Set(
-          recentAttempts.map((a: any) => a.userId)
+          recentAttempts.map((a: any) => a.userId),
         ).size;
         const recentCompletions = recentAttempts.filter(
-          (a: any) => a.submitted
+          (a: any) => a.submitted,
         ).length;
 
         return {
@@ -2582,7 +2584,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -2617,7 +2619,7 @@ export class AdminService {
     const assignmentsWithCostPerLearner = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsage
+          assignment.AIUsage,
         );
 
         const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -2642,7 +2644,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -2679,7 +2681,7 @@ export class AdminService {
 
         const uniqueUsers = new Set(attempts.map((a: any) => a.userId)).size;
         const completedUsers = new Set(
-          attempts.filter((a: any) => a.submitted).map((a: any) => a.userId)
+          attempts.filter((a: any) => a.submitted).map((a: any) => a.userId),
         ).size;
         const completionRate =
           uniqueUsers > 0 ? (completedUsers / uniqueUsers) * 100 : 0;
@@ -2695,7 +2697,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      })
+      }),
     );
 
     return {

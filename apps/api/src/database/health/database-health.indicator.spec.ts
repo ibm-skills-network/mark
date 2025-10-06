@@ -33,7 +33,7 @@ describe("DatabaseHealthIndicator", () => {
 
     indicator = new DatabaseHealthIndicator(
       prismaService as any,
-      circuitBreaker as any
+      circuitBreaker as any,
     );
   });
 
@@ -69,7 +69,7 @@ describe("DatabaseHealthIndicator", () => {
     const status = getStatus(result);
     expect(status.status).toBe("down");
     expect(status.message).toBe(
-      "Database connection lost and reconnection failed"
+      "Database connection lost and reconnection failed",
     );
     expect(status.error).toBe("reconnect failed");
   });

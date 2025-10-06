@@ -78,9 +78,9 @@ export class JobStatusServiceV2 {
             const status = (event as { data?: { status?: string } })?.data
               ?.status;
             return status !== "Completed" && status !== "Failed";
-          }, true)
+          }, true),
         ),
-        statusSubject.asObservable()
+        statusSubject.asObservable(),
       ),
       finalize(() => {
         this.logger.log(`Stream closed for job ${jobId}`);
@@ -89,7 +89,7 @@ export class JobStatusServiceV2 {
       catchError((error: Error) => {
         this.logger.error(
           `Stream error for job ${jobId}: ${error.message}`,
-          error.stack
+          error.stack,
         );
         return of({
           type: "error",
@@ -98,7 +98,7 @@ export class JobStatusServiceV2 {
             done: true,
           },
         } as MessageEvent);
-      })
+      }),
     );
   }
 
@@ -184,12 +184,12 @@ export class JobStatusServiceV2 {
   async updateJobStatus(
     jobId: number,
     statusUpdate: JobStatus,
-    isPublishJob = true
+    isPublishJob = true,
   ): Promise<void> {
     try {
       const timestamp = new Date().toISOString();
       this.logger.log(
-        `[${timestamp}] Updating job #${jobId} status: ${statusUpdate.status} - ${statusUpdate.progress} (${statusUpdate.percentage}%)`
+        `[${timestamp}] Updating job #${jobId} status: ${statusUpdate.status} - ${statusUpdate.progress} (${statusUpdate.percentage}%)`,
       );
 
       const sanitizedProgress = statusUpdate.progress
@@ -239,15 +239,15 @@ export class JobStatusServiceV2 {
 
           if (attempt >= maxRetries) {
             this.logger.error(
-              `Failed to update job #${jobId} status after ${maxRetries} attempts: ${errorMessage}`
+              `Failed to update job #${jobId} status after ${maxRetries} attempts: ${errorMessage}`,
             );
           } else {
             this.logger.warn(
-              `Failed to update job #${jobId} status (attempt ${attempt}/${maxRetries}): ${errorMessage}`
+              `Failed to update job #${jobId} status (attempt ${attempt}/${maxRetries}): ${errorMessage}`,
             );
 
             await new Promise((resolve) =>
-              setTimeout(resolve, 100 * Math.pow(2, attempt))
+              setTimeout(resolve, 100 * Math.pow(2, attempt)),
             );
           }
         }
@@ -262,7 +262,7 @@ export class JobStatusServiceV2 {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Error in updateJobStatus for job #${jobId}: ${errorMessage}`
+        `Error in updateJobStatus for job #${jobId}: ${errorMessage}`,
       );
 
       const errorStatus: JobStatus = {
@@ -338,7 +338,7 @@ export class JobStatusServiceV2 {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Error emitting status update for job #${jobId}: ${errorMessage}`
+        `Error emitting status update for job #${jobId}: ${errorMessage}`,
       );
     }
   }

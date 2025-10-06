@@ -86,7 +86,7 @@ describe("VariantRepository", () => {
       prismaService.questionVariant.findMany.mockRejectedValue(error);
 
       await expect(variantRepository.findByQuestionId(1)).rejects.toThrow(
-        error
+        error,
       );
     });
   });
@@ -99,7 +99,7 @@ describe("VariantRepository", () => {
 
       const mockCreatedVariant = createMockQuestionVariant({ questionId });
       prismaService.questionVariant.create.mockResolvedValue(
-        mockCreatedVariant
+        mockCreatedVariant,
       );
 
       jest
@@ -146,7 +146,7 @@ describe("VariantRepository", () => {
       prismaService.questionVariant.create.mockRejectedValue(error);
 
       await expect(
-        variantRepository.create(dataWithQuestionId)
+        variantRepository.create(dataWithQuestionId),
       ).rejects.toThrow(error);
     });
   });
@@ -163,7 +163,7 @@ describe("VariantRepository", () => {
         questionId,
       });
       prismaService.questionVariant.update.mockResolvedValue(
-        mockUpdatedVariant
+        mockUpdatedVariant,
       );
 
       jest
@@ -184,7 +184,7 @@ describe("VariantRepository", () => {
 
       const result = await variantRepository.update(
         variantId,
-        dataWithQuestionId
+        dataWithQuestionId,
       );
 
       expect(prismaService.questionVariant.update).toHaveBeenCalledWith({
@@ -206,7 +206,7 @@ describe("VariantRepository", () => {
       prismaService.questionVariant.update.mockRejectedValue(error);
 
       await expect(
-        variantRepository.update(variantId, dataWithQuestionId)
+        variantRepository.update(variantId, dataWithQuestionId),
       ).rejects.toThrow(error);
     });
   });
@@ -236,7 +236,7 @@ describe("VariantRepository", () => {
       prismaService.questionVariant.updateMany.mockRejectedValue(error);
 
       await expect(variantRepository.markAsDeleted(variantIds)).rejects.toThrow(
-        error
+        error,
       );
     });
   });
@@ -300,7 +300,7 @@ describe("VariantRepository", () => {
       prismaService.$transaction.mockRejectedValue(error);
 
       await expect(variantRepository.createMany(variantDtos)).rejects.toThrow(
-        error
+        error,
       );
     });
   });
@@ -360,7 +360,7 @@ describe("VariantRepository", () => {
         const nonJsonString = "test string";
 
         const result = (variantRepository as any).prepareJsonField(
-          nonJsonString
+          nonJsonString,
         );
 
         expect(result).toBe('"test string"');
@@ -400,7 +400,7 @@ describe("VariantRepository", () => {
         const invalidJsonString = "not valid json";
 
         const result = (variantRepository as any).parseJsonField(
-          invalidJsonString
+          invalidJsonString,
         );
 
         expect(result).toBeUndefined();
@@ -418,7 +418,7 @@ describe("VariantRepository", () => {
     describe("prepareVariantCreateData", () => {
       it("should throw an error for invalid input", () => {
         expect(() =>
-          (variantRepository as any).prepareVariantCreateData(null)
+          (variantRepository as any).prepareVariantCreateData(null),
         ).toThrow("Invalid variant data");
       });
 
@@ -429,7 +429,9 @@ describe("VariantRepository", () => {
         };
 
         expect(() =>
-          (variantRepository as any).prepareVariantCreateData(invalidVariantDto)
+          (variantRepository as any).prepareVariantCreateData(
+            invalidVariantDto,
+          ),
         ).toThrow("Variant content is required");
       });
 
@@ -447,7 +449,7 @@ describe("VariantRepository", () => {
           });
 
         const result = (variantRepository as any).prepareVariantCreateData(
-          dataWithQuestionId
+          dataWithQuestionId,
         );
 
         expect(result).toEqual({
@@ -479,8 +481,8 @@ describe("VariantRepository", () => {
 
         expect(() =>
           (variantRepository as any).prepareVariantCreateData(
-            dataWithQuestionId
-          )
+            dataWithQuestionId,
+          ),
         ).toThrow(error);
       });
     });
@@ -488,7 +490,7 @@ describe("VariantRepository", () => {
     describe("prepareVariantUpdateData", () => {
       it("should throw an error for invalid input", () => {
         expect(() =>
-          (variantRepository as any).prepareVariantUpdateData(null)
+          (variantRepository as any).prepareVariantUpdateData(null),
         ).toThrow("Invalid variant data");
       });
 
@@ -499,7 +501,9 @@ describe("VariantRepository", () => {
         };
 
         expect(() =>
-          (variantRepository as any).prepareVariantUpdateData(invalidVariantDto)
+          (variantRepository as any).prepareVariantUpdateData(
+            invalidVariantDto,
+          ),
         ).toThrow("Variant content is required");
       });
 
@@ -515,7 +519,7 @@ describe("VariantRepository", () => {
           });
 
         const result = (variantRepository as any).prepareVariantUpdateData(
-          variantDto
+          variantDto,
         );
 
         expect(result).toEqual({
@@ -540,7 +544,7 @@ describe("VariantRepository", () => {
           });
 
         expect(() =>
-          (variantRepository as any).prepareVariantUpdateData(variantDto)
+          (variantRepository as any).prepareVariantUpdateData(variantDto),
         ).toThrow(error);
       });
     });

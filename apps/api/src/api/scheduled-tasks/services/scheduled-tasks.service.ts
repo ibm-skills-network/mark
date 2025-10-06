@@ -30,7 +30,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
   constructor(
     private prismaService: PrismaService,
     @Inject(LLM_PRICING_SERVICE) private llmPricingService: LLMPricingService,
-    private adminService: AdminService
+    private adminService: AdminService,
   ) {}
 
   /**
@@ -54,7 +54,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
   async migrateExistingAuthors(): Promise<void> {
     this.logger.log(
-      "Starting scheduled task: Migrate existing authors to AssignmentAuthor table"
+      "Starting scheduled task: Migrate existing authors to AssignmentAuthor table",
     );
 
     try {
@@ -74,7 +74,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       });
 
       this.logger.log(
-        `Found ${reportAuthors.length} potential authors from Report table`
+        `Found ${reportAuthors.length} potential authors from Report table`,
       );
 
       // Find authors from AIUsage table
@@ -95,7 +95,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       });
 
       this.logger.log(
-        `Found ${aiUsageAuthors.length} potential authors from AIUsage table`
+        `Found ${aiUsageAuthors.length} potential authors from AIUsage table`,
       );
 
       // Find authors from Job table
@@ -108,7 +108,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       });
 
       this.logger.log(
-        `Found ${jobAuthors.length} potential authors from Job table`
+        `Found ${jobAuthors.length} potential authors from Job table`,
       );
 
       // Find authors from publishJob table
@@ -158,12 +158,12 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
             self.findIndex(
               (a) =>
                 a.userId === author.userId &&
-                a.assignmentId === author.assignmentId
-            )
+                a.assignmentId === author.assignmentId,
+            ),
       );
 
       this.logger.log(
-        `Processing ${uniqueAuthors.length} unique author-assignment pairs`
+        `Processing ${uniqueAuthors.length} unique author-assignment pairs`,
       );
 
       // Use batch upsert for better performance
@@ -171,7 +171,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
 
       this.logger.log(
         `Completed scheduled task: Created ${results.created} new authors, ` +
-          `updated ${results.updated} existing, skipped ${results.skipped} invalid entries`
+          `updated ${results.updated} existing, skipped ${results.skipped} invalid entries`,
       );
     } catch (error) {
       this.logger.error("Error in migrateExistingAuthors:", error);
@@ -186,7 +186,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    * @returns {Promise<{created: number, updated: number, skipped: number}>}
    */
   private async batchUpsertAuthors(
-    authors: Array<{ userId: string; assignmentId: number }>
+    authors: Array<{ userId: string; assignmentId: number }>,
   ): Promise<{ created: number; updated: number; skipped: number }> {
     let created = 0;
     let updated = 0;
@@ -242,17 +242,17 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
             if (error.code === "P2002") {
               // This shouldn't happen with upsert, but log it
               this.logger.debug(
-                `Unexpected duplicate for assignment ${author.assignmentId}, user ${author.userId}`
+                `Unexpected duplicate for assignment ${author.assignmentId}, user ${author.userId}`,
               );
             } else if (error.code === "P2003") {
               // Foreign key constraint failed
               this.logger.debug(
-                `Invalid reference for assignment ${author.assignmentId} or user ${author.userId}`
+                `Invalid reference for assignment ${author.assignmentId} or user ${author.userId}`,
               );
             } else {
               this.logger.error(
                 `Failed to upsert author for assignment ${author.assignmentId}:`,
-                error
+                error,
               );
             }
             skipped++;
@@ -272,7 +272,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    * @returns {Promise<number>} Number of created records
    */
   private async bulkCreateAuthors(
-    authors: Array<{ userId: string; assignmentId: number }>
+    authors: Array<{ userId: string; assignmentId: number }>,
   ): Promise<number> {
     try {
       const result = await this.prismaService.assignmentAuthor.createMany({
@@ -312,7 +312,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         isDeleteAll
           ? "Delete ALL drafts"
           : `Cleanup old drafts (${daysOld} days old)`
-      }`
+      }`,
     );
 
     try {
@@ -355,7 +355,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       this.logger.log(
         `Found ${oldDrafts.length} ${
           isDeleteAll ? "drafts" : `drafts older than ${daysOld} days`
-        }`
+        }`,
       );
 
       if (oldDrafts.length === 0) {
@@ -365,7 +365,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
           cutoffDate: isDeleteAll
             ? "ALL"
             : new Date(
-                Date.now() - daysOld * 24 * 60 * 60 * 1000
+                Date.now() - daysOld * 24 * 60 * 60 * 1000,
               ).toISOString(),
         };
       }
@@ -374,7 +374,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       for (const draft of oldDrafts) {
         this.logger.log(
           `Deleting draft: ID=${draft.id}, Name="${draft.draftName}", ` +
-            `User=${draft.userId}, Created=${draft.createdAt.toISOString()}`
+            `User=${draft.userId}, Created=${draft.createdAt.toISOString()}`,
         );
       }
 
@@ -382,13 +382,13 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       const deletedDrafts = await this.prismaService.assignmentDraft.deleteMany(
         {
           where: whereCondition,
-        }
+        },
       );
 
       this.logger.log(
         `Completed task: Deleted ${deletedDrafts.count} ${
           isDeleteAll ? "drafts (ALL)" : "old drafts"
-        }`
+        }`,
       );
 
       return {
@@ -422,21 +422,20 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         return;
       }
 
-      const updatedCount = await this.llmPricingService.updatePricingHistory(
-        currentPricing
-      );
+      const updatedCount =
+        await this.llmPricingService.updatePricingHistory(currentPricing);
 
       this.logger.log(
-        `Completed scheduled task: Updated pricing for ${updatedCount} models`
+        `Completed scheduled task: Updated pricing for ${updatedCount} models`,
       );
 
       const stats = await this.llmPricingService.getPricingStatistics();
       this.logger.log(
         `Pricing statistics: ${JSON.stringify(
-          stats.totalModels
+          stats.totalModels,
         )} models, ${JSON.stringify(
-          stats.activePricingRecords
-        )} active pricing records`
+          stats.activePricingRecords,
+        )} active pricing records`,
       );
     } catch (error) {
       this.logger.error("Error in updateLLMPricing:", error);
@@ -463,7 +462,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     this.logger.log(
       `Manual cleanup of old drafts requested${
         daysOld === undefined ? "" : ` (${daysOld} days old)`
-      }`
+      }`,
     );
     return await this.cleanupOldDrafts(daysOld);
   }
@@ -477,7 +476,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
   @Cron(CronExpression.EVERY_3_HOURS)
   async precomputeInsights(): Promise<void> {
     this.logger.log(
-      "Starting scheduled task: Precompute insights for popular assignments"
+      "Starting scheduled task: Precompute insights for popular assignments",
     );
 
     try {

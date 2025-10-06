@@ -93,7 +93,7 @@ describe("AssignmentRepository", () => {
 
       const result = await repository.findById(
         assignmentId,
-        sampleAuthorSession
+        sampleAuthorSession,
       );
 
       expect(result).toBeDefined();
@@ -151,7 +151,7 @@ describe("AssignmentRepository", () => {
 
       const result = await repository.findById(
         assignmentId,
-        sampleLearnerSession
+        sampleLearnerSession,
       );
 
       expect(result).toBeDefined();
@@ -169,7 +169,7 @@ describe("AssignmentRepository", () => {
         .mockResolvedValue(null);
 
       await expect(repository.findById(assignmentId)).rejects.toThrow(
-        NotFoundException
+        NotFoundException,
       );
       expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
         where: { id: assignmentId },
@@ -244,7 +244,7 @@ describe("AssignmentRepository", () => {
 
       const result = (await repository.findById(
         assignmentId,
-        sampleAuthorSession
+        sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
       expect(result.questions).toBeDefined();
@@ -306,7 +306,7 @@ describe("AssignmentRepository", () => {
 
       const result = (await repository.findById(
         assignmentId,
-        sampleAuthorSession
+        sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
       expect(result.questions).toBeDefined();
@@ -407,7 +407,7 @@ describe("AssignmentRepository", () => {
       jest.spyOn(repository["logger"], "error").mockImplementation(jest.fn());
 
       await expect(repository.update(assignmentId, updateData)).rejects.toThrow(
-        mockError
+        mockError,
       );
       expect(repository["logger"].error).toHaveBeenCalled();
     });
@@ -470,7 +470,7 @@ describe("AssignmentRepository", () => {
       jest.spyOn(repository["logger"], "error").mockImplementation(jest.fn());
 
       await expect(
-        repository.replace(assignmentId, replaceData)
+        repository.replace(assignmentId, replaceData),
       ).rejects.toThrow(mockError);
       expect(repository["logger"].error).toHaveBeenCalled();
     });

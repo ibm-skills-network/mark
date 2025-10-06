@@ -126,7 +126,7 @@ export class AssignmentControllerV2 {
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
     private readonly prisma: PrismaService,
-    private readonly adminService: AdminService
+    private readonly adminService: AdminService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV2.name });
   }
@@ -156,7 +156,7 @@ export class AssignmentControllerV2 {
   async getAssignment(
     @Param("id", ParseIntPipe) id: number,
     @Req() request: UserSessionRequest,
-    @Query("lang") lang?: string
+    @Query("lang") lang?: string,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     return this.assignmentService.getAssignment(id, request.userSession, lang);
   }
@@ -173,7 +173,7 @@ export class AssignmentControllerV2 {
     description: "List assignments scoped to the user's role",
   })
   async listAssignments(
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<AssignmentResponseDto[]> {
     return this.assignmentService.listAssignments(request.userSession);
   }
@@ -194,11 +194,11 @@ export class AssignmentControllerV2 {
   updateAssignment(
     @Param("id", ParseIntPipe) id: number,
     @Body(new ValidationPipe({ transform: true }))
-    updateAssignmentRequestDto: UpdateAssignmentRequestDto
+    updateAssignmentRequestDto: UpdateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.updateAssignment(
       id,
-      updateAssignmentRequestDto
+      updateAssignmentRequestDto,
     );
   }
 
@@ -211,7 +211,7 @@ export class AssignmentControllerV2 {
   @Sse()
   async sendPublishJobStatus(
     @Param("jobId", ParseIntPipe) jobId: number,
-    @Req() request: Request
+    @Req() request: Request,
   ): Promise<Observable<MessageEvent>> {
     const job = await this.prisma.publishJob.findUnique({
       where: { id: jobId },
@@ -253,12 +253,12 @@ export class AssignmentControllerV2 {
     @Param("id", ParseIntPipe) id: number,
     @Body(new ValidationPipe({ transform: true }))
     updatedAssignment: UpdateAssignmentQuestionsDto,
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<{ jobId: number; message: string }> {
     return this.assignmentService.publishAssignment(
       id,
       updatedAssignment,
-      request.userSession.userId
+      request.userSession.userId,
     );
   }
 
@@ -282,11 +282,11 @@ export class AssignmentControllerV2 {
   async generateQuestionVariant(
     @Param("id", ParseIntPipe) id: number,
     @Body(new ValidationPipe({ transform: true }))
-    generateQuestionVariantDto: GenerateQuestionVariantDto
+    generateQuestionVariantDto: GenerateQuestionVariantDto,
   ): Promise<BaseAssignmentResponseDto & { questions?: QuestionDto[] }> {
     return this.questionService.generateQuestionVariants(
       id,
-      generateQuestionVariantDto
+      generateQuestionVariantDto,
     );
   }
 
@@ -311,7 +311,7 @@ export class AssignmentControllerV2 {
     },
   })
   async getAvailableLanguages(
-    @Param("id", ParseIntPipe) id: number
+    @Param("id", ParseIntPipe) id: number,
   ): Promise<{ languages: string[] }> {
     const languages = await this.assignmentService.getAvailableLanguages(id);
     return { languages };
@@ -333,11 +333,11 @@ export class AssignmentControllerV2 {
   replaceAssignment(
     @Param("id", ParseIntPipe) id: number,
     @Body(new ValidationPipe({ transform: true }))
-    replaceAssignmentRequestDto: ReplaceAssignmentRequestDto
+    replaceAssignmentRequestDto: ReplaceAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
     return this.assignmentService.replaceAssignment(
       id,
-      replaceAssignmentRequestDto
+      replaceAssignmentRequestDto,
     );
   }
 
@@ -402,13 +402,13 @@ export class AssignmentControllerV2 {
   async submitReport(
     @Param("assignmentId", ParseIntPipe) assignmentId: number,
     @Body(new ValidationPipe({ transform: true })) body: ReportRequestDTO,
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<{ message: string }> {
     await this.reportService.createReport(
       assignmentId,
       body.issueType,
       body.description,
-      request.userSession.userId
+      request.userSession.userId,
     );
 
     return { message: "Report submitted successfully" };
@@ -444,12 +444,12 @@ export class AssignmentControllerV2 {
     @Param("assignmentId", ParseIntPipe) assignmentId: number,
     @Body(new ValidationPipe({ transform: true }))
     payload: QuestionGenerationPayload,
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<{ message: string; jobId: number }> {
     return this.questionService.generateQuestions(
       assignmentId,
       payload,
-      request.userSession.userId
+      request.userSession.userId,
     );
   }
 
@@ -472,13 +472,13 @@ export class AssignmentControllerV2 {
     @Req() request: UserSessionRequest,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query("search") search?: string
+    @Query("search") search?: string,
   ): Promise<AssignmentAnalyticsResponse> {
     return await this.adminService.getAssignmentAnalytics(
       request.userSession,
       page,
       limit,
-      search
+      search,
     );
   }
 }

@@ -35,12 +35,12 @@ export class QuestionService {
     private readonly variantRepository: VariantRepository,
     private readonly translationService: TranslationService,
     private readonly llmFacadeService: LlmFacadeService,
-    private readonly jobStatusService: JobStatusServiceV2
+    private readonly jobStatusService: JobStatusServiceV2,
   ) {}
 
   async getQuestionsForAssignment(
     assignmentId: number,
-    useCache = false
+    useCache = false,
   ): Promise<QuestionDto[]> {
     if (useCache && this.questionCache.has(assignmentId)) {
       const cachedQuestions = this.questionCache.get(assignmentId);
@@ -48,16 +48,15 @@ export class QuestionService {
       return [];
     }
 
-    const questions = await this.questionRepository.findByAssignmentId(
-      assignmentId
-    );
+    const questions =
+      await this.questionRepository.findByAssignmentId(assignmentId);
     this.questionCache.set(assignmentId, questions);
     return questions;
   }
 
   async generateQuestionVariants(
     assignmentId: number,
-    generateVariantDto: GenerateQuestionVariantDto
+    generateVariantDto: GenerateQuestionVariantDto,
   ): Promise<BaseAssignmentResponseDto & { questions?: QuestionDto[] }> {
     const { questions, questionVariationNumber } = generateVariantDto;
 
@@ -70,18 +69,18 @@ export class QuestionService {
         const requiredVariants = this.calculateRequiredVariants(
           questions.length,
           question.variants.length,
-          questionVariationNumber
+          questionVariationNumber,
         );
 
         if (requiredVariants <= 0) return;
 
         const newVariants = await this.generateVariantsFromQuestion(
           question,
-          requiredVariants
+          requiredVariants,
         );
 
         this.addVariantsToQuestion(question, newVariants);
-      })
+      }),
     );
 
     return {
@@ -103,7 +102,7 @@ export class QuestionService {
     questions: QuestionDto[],
     jobId?: number,
     progressCallback?: (progress: number) => Promise<void>,
-    forceTranslation = false
+    forceTranslation = false,
   ): Promise<void> {
     const INITIAL_SETUP_RANGE = { start: 0, end: 10 };
     const QUESTION_PROCESSING_RANGE = { start: 10, end: 90 };
@@ -128,7 +127,7 @@ export class QuestionService {
     try {
       await updateProgress(
         INITIAL_SETUP_RANGE.start,
-        "Retrieving existing questions"
+        "Retrieving existing questions",
       );
 
       const existingQuestions =
@@ -139,23 +138,23 @@ export class QuestionService {
       const frontendToBackendIdMap = new Map<number, number>();
       const newQuestionIds = new Set(questions.map((q) => q.id));
       const questionsToDelete = existingQuestions.filter(
-        (q) => !newQuestionIds.has(q.id)
+        (q) => !newQuestionIds.has(q.id),
       );
 
       if (questionsToDelete.length > 0) {
         await updateProgress(
           8,
-          `Removing ${questionsToDelete.length} deleted questions`
+          `Removing ${questionsToDelete.length} deleted questions`,
         );
 
         await this.questionRepository.markAsDeleted(
-          questionsToDelete.map((q) => q.id)
+          questionsToDelete.map((q) => q.id),
         );
       }
 
       await updateProgress(
         INITIAL_SETUP_RANGE.end,
-        "Setup completed, processing questions"
+        "Setup completed, processing questions",
       );
 
       const totalQuestions = questions.length;
@@ -172,13 +171,13 @@ export class QuestionService {
 
         await updateProgress(
           questionStartProgress + progressPerQuestion * 0.1,
-          `Processing question ${index + 1} of ${totalQuestions}`
+          `Processing question ${index + 1} of ${totalQuestions}`,
         );
 
         const backendId =
           frontendToBackendIdMap.get(questionDto.id) || questionDto.id;
         const existingQuestion = existingQuestions.find(
-          (q) => q.id === backendId
+          (q) => q.id === backendId,
         );
 
         if (
@@ -187,7 +186,7 @@ export class QuestionService {
         ) {
           await updateProgress(
             questionStartProgress + progressPerQuestion * 0.2,
-            `Validating question ${index + 1} content`
+            `Validating question ${index + 1} content`,
           );
 
           await this.applyGuardRails(questionDto);
@@ -195,7 +194,7 @@ export class QuestionService {
 
         await updateProgress(
           questionStartProgress + progressPerQuestion * 0.3,
-          `Updating question ${index + 1} in database`
+          `Updating question ${index + 1} in database`,
         );
 
         const upsertedQuestion = await this.questionRepository.upsert({
@@ -224,7 +223,7 @@ export class QuestionService {
         // Always translate the original question (with variantId: null)
         await updateProgress(
           questionStartProgress + progressPerQuestion * 0.5,
-          `Translating question ${index + 1}`
+          `Translating question ${index + 1}`,
         );
 
         await this.translationService.translateQuestion(
@@ -232,14 +231,14 @@ export class QuestionService {
           upsertedQuestion.id,
           questionDto,
           jobId || 0, // Use main job or fallback
-          true // Force retranslation on every publish
+          true, // Force retranslation on every publish
         );
 
         const variantCount = questionDto.variants?.length || 0;
         if (variantCount > 0) {
           await updateProgress(
             questionStartProgress + progressPerQuestion * 0.8,
-            `Processing ${variantCount} variants for question ${index + 1}`
+            `Processing ${variantCount} variants for question ${index + 1}`,
           );
 
           await this.processVariantsForQuestion(
@@ -249,25 +248,25 @@ export class QuestionService {
             existingQuestion?.variants || [],
             jobId,
             // checkVariantsChanged || forceTranslation
-            true // Always force translation for variants
+            true, // Always force translation for variants
           );
         }
 
         await updateProgress(
           questionEndProgress,
-          `Question ${index + 1} completed`
+          `Question ${index + 1} completed`,
         );
       }
 
       // Final cleanup
       await updateProgress(
         FINAL_CLEANUP_RANGE.start,
-        "Finalizing question processing"
+        "Finalizing question processing",
       );
 
       await updateProgress(
         FINAL_CLEANUP_RANGE.end,
-        "Question processing completed successfully"
+        "Question processing completed successfully",
       );
     } catch (error) {
       const errorMessage =
@@ -293,10 +292,10 @@ export class QuestionService {
     if (!choices1 || !choices2) return false;
     if (choices1.length !== choices2.length) return false;
     const sortedChoices1 = [...choices1].sort(
-      (a, b) => (a.id || 0) - (b.id || 0)
+      (a, b) => (a.id || 0) - (b.id || 0),
     );
     const sortedChoices2 = [...choices2].sort(
-      (a, b) => (a.id || 0) - (b.id || 0)
+      (a, b) => (a.id || 0) - (b.id || 0),
     );
     for (const [index, c1] of sortedChoices1.entries()) {
       const c2 = sortedChoices2[index];
@@ -317,7 +316,7 @@ export class QuestionService {
    */
   private checkVariantsForChanges(
     existingVariants: VariantDto[],
-    newVariants: VariantDto[]
+    newVariants: VariantDto[],
   ): boolean {
     if (existingVariants.length !== newVariants.length) {
       return true;
@@ -340,7 +339,7 @@ export class QuestionService {
   async generateQuestions(
     assignmentId: number,
     payload: QuestionGenerationPayload,
-    userId: string
+    userId: string,
   ): Promise<{ message: string; jobId: number }> {
     this.validateQuestionGenerationPayload(payload);
 
@@ -352,14 +351,14 @@ export class QuestionService {
       payload.assignmentType,
       payload.questionsToGenerate,
       payload.fileContents,
-      payload.learningObjectives
+      payload.learningObjectives,
     ).catch((error: unknown) => {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Question generation failed: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
     });
 
@@ -378,14 +377,14 @@ export class QuestionService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with ID ${assignmentId} not found`
+        `Assignment with ID ${assignmentId} not found`,
       );
     }
 
     const questionOrder = assignment.questionOrder || [];
 
     const sortedQuestions = [...assignment.questions].sort(
-      (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id)
+      (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id),
     );
 
     const questionsForGradingContext = sortedQuestions.map((q) => ({
@@ -396,7 +395,7 @@ export class QuestionService {
     const gradingContextMap =
       await this.llmFacadeService.generateQuestionGradingContext(
         questionsForGradingContext,
-        assignmentId
+        assignmentId,
       );
 
     const updates = Object.entries(gradingContextMap).map(
@@ -404,7 +403,7 @@ export class QuestionService {
         this.prisma.question.update({
           where: { id: Number(questionId) },
           data: { gradingContextQuestionIds: contextIds },
-        })
+        }),
     );
 
     await Promise.all(updates);
@@ -415,7 +414,7 @@ export class QuestionService {
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: EnhancedQuestionsToGenerate,
     files?: { filename: string; content: string }[],
-    learningObjectives?: string
+    learningObjectives?: string,
   ): Promise<void> {
     try {
       let content = "";
@@ -427,7 +426,7 @@ export class QuestionService {
             status: "In Progress",
             progress: "Mark is organizing the notes merging file contents.",
           },
-          false
+          false,
         );
 
         content = files.map((file) => file.content).join("\n");
@@ -438,7 +437,7 @@ export class QuestionService {
             status: "In Progress",
             progress: "Mark is proofreading the content sanitizing material.",
           },
-          false
+          false,
         );
 
         content = this.llmFacadeService.sanitizeContent(content);
@@ -450,7 +449,7 @@ export class QuestionService {
           status: "In Progress",
           progress: "Mark is thinking generating questions.",
         },
-        false
+        false,
       );
 
       const llmResponse = await this.llmFacadeService.processMergedContent(
@@ -458,7 +457,7 @@ export class QuestionService {
         assignmentType,
         questionsToGenerate,
         content,
-        learningObjectives
+        learningObjectives,
       );
 
       await this.jobStatusService.updateJobStatus(
@@ -469,7 +468,7 @@ export class QuestionService {
             "Mark has prepared the questions. Job completed successfully.",
           result: llmResponse,
         },
-        false
+        false,
       );
     } catch (error: unknown) {
       const errorMessage =
@@ -477,7 +476,7 @@ export class QuestionService {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error processing job ID ${jobId}: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
 
       await this.jobStatusService.updateJobStatus(
@@ -486,13 +485,13 @@ export class QuestionService {
           status: "Failed",
           progress: "Mark hit a snag, we are sorry for the inconvenience",
         },
-        false
+        false,
       );
     }
   }
 
   private validateQuestionGenerationPayload(
-    payload: QuestionGenerationPayload
+    payload: QuestionGenerationPayload,
   ): void {
     const {
       fileContents,
@@ -503,7 +502,7 @@ export class QuestionService {
 
     if (!fileContents && !learningObjectives) {
       throw new BadRequestException(
-        "Either file contents or learning objectives are required"
+        "Either file contents or learning objectives are required",
       );
     }
 
@@ -522,7 +521,7 @@ export class QuestionService {
 
     if (totalQuestions <= 0) {
       throw new BadRequestException(
-        "At least one question type must be selected with a count greater than 0"
+        "At least one question type must be selected with a count greater than 0",
       );
     }
 
@@ -557,7 +556,7 @@ export class QuestionService {
     variants: VariantDto[],
     existingVariants: VariantDto[],
     jobId?: number,
-    forceTranslation = false
+    forceTranslation = false,
   ): Promise<void> {
     const existingVariantsMap = new Map<string, VariantDto>();
     const existingVariantsIdMap = new Map<number, VariantDto>();
@@ -569,7 +568,7 @@ export class QuestionService {
 
     const newVariantContents = new Set(variants.map((v) => v.variantContent));
     const variantsToDelete = existingVariants.filter(
-      (v) => !newVariantContents.has(v.variantContent)
+      (v) => !newVariantContents.has(v.variantContent),
     );
 
     if (variantsToDelete.length > 0 && jobId) {
@@ -579,7 +578,7 @@ export class QuestionService {
       });
 
       await this.variantRepository.markAsDeleted(
-        variantsToDelete.map((v) => v.id)
+        variantsToDelete.map((v) => v.id),
       );
     }
 
@@ -624,7 +623,7 @@ export class QuestionService {
       if (existingVariant) {
         const updatedVariant = await this.variantRepository.update(
           existingVariant.id,
-          variantData
+          variantData,
         );
 
         if (jobId) {
@@ -651,7 +650,7 @@ export class QuestionService {
           updatedVariant as unknown as VariantDto,
           jobId || 0, // Use 0 as fallback jobId for non-job contexts
           // contentChanged // Force retranslation only if content changed
-          true // Always force translation for existing variants
+          true, // Always force translation for existing variants
         );
       } else {
         const newVariant = await this.variantRepository.create(variantData);
@@ -672,7 +671,7 @@ export class QuestionService {
           newVariant.id,
           newVariant as unknown as VariantDto,
           jobId || 0, // Use 0 as fallback jobId for non-job contexts
-          true // Always force translation for new variants
+          true, // Always force translation for new variants
         );
       }
     }
@@ -680,7 +679,7 @@ export class QuestionService {
 
   private async generateVariantsFromQuestion(
     question: QuestionDto,
-    numberOfVariants: number
+    numberOfVariants: number,
   ): Promise<VariantDto[]> {
     try {
       if (!question) {
@@ -693,7 +692,7 @@ export class QuestionService {
         question.type,
         question.assignmentId,
         question.choices,
-        question.variants
+        question.variants,
       );
 
       return variants.map((variant) => ({
@@ -714,7 +713,7 @@ export class QuestionService {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error generating variants: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
       throw new BadRequestException("Failed to generate question variants");
     }
@@ -722,7 +721,7 @@ export class QuestionService {
 
   private addVariantsToQuestion(
     question: QuestionDto,
-    newVariants: VariantDto[]
+    newVariants: VariantDto[],
   ): void {
     if (!Array.isArray(question.variants)) {
       question.variants = [];
@@ -745,7 +744,7 @@ export class QuestionService {
   private calculateRequiredVariants(
     totalQuestions: number,
     currentVariants: number,
-    targetVariants: number
+    targetVariants: number,
   ): number {
     return totalQuestions > 1
       ? Math.max(0, targetVariants - currentVariants)
@@ -754,12 +753,12 @@ export class QuestionService {
 
   private async applyGuardRails(question: QuestionDto): Promise<void> {
     const isValid = await this.llmFacadeService.applyGuardRails(
-      JSON.stringify(question)
+      JSON.stringify(question),
     );
 
     if (!isValid) {
       throw new BadRequestException(
-        "Question validation failed due to inappropriate or unacceptable content"
+        "Question validation failed due to inappropriate or unacceptable content",
       );
     }
   }

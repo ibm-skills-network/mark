@@ -51,7 +51,7 @@ export class AppModule implements NestModule {
         { path: "/v1/files*", method: RequestMethod.ALL },
         { path: "/v1/admin*", method: RequestMethod.ALL },
         { path: "/v2/assignments/*", method: RequestMethod.ALL },
-        { path: "/v1/admin-dashboard/*", method: RequestMethod.GET }
+        { path: "/v1/admin-dashboard/*", method: RequestMethod.GET },
       );
   }
 }

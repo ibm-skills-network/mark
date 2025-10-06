@@ -192,7 +192,7 @@ async function bootstrap() {
      */
     logger.log("Application bootstrap completed successfully");
     logger.log(
-      `Swagger documentation available at: http://localhost:${port}/api`
+      `Swagger documentation available at: http://localhost:${port}/api`,
     );
     logger.log(`Health check endpoints:`);
     logger.log(`  - http://localhost:${port}/health`);

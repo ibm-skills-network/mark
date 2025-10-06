@@ -20,7 +20,7 @@ import { PrismaService } from "../prisma.service";
 export class DatabaseHealthIndicator extends HealthIndicator {
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly circuitBreaker: DatabaseCircuitBreakerService
+    private readonly circuitBreaker: DatabaseCircuitBreakerService,
   ) {
     super();
   }
@@ -35,7 +35,7 @@ export class DatabaseHealthIndicator extends HealthIndicator {
   async checkDatabase(key: string): Promise<HealthIndicatorResult> {
     try {
       const isHealthy = await this.circuitBreaker.execute(() =>
-        this.prismaService.isHealthy()
+        this.prismaService.isHealthy(),
       );
 
       if (!isHealthy) {

@@ -114,16 +114,16 @@ export class AttemptQuestionsMapper {
     questions: EnhancedAttemptQuestionDto[],
     assignment: AssignmentForMapping,
     prisma: PrismaService,
-    language?: string
+    language?: string,
   ): Promise<AssignmentAttemptQuestions[]> {
     const questionOrder: number[] = assignmentAttempt.questionOrder?.length
       ? assignmentAttempt.questionOrder
       : assignment.questionOrder?.length
-      ? assignment.questionOrder
-      : questions.map((q) => q.id);
+        ? assignment.questionOrder
+        : questions.map((q) => q.id);
 
     const questionById = new Map<number, EnhancedAttemptQuestionDto>(
-      questions.map((q) => [q.id, q])
+      questions.map((q) => [q.id, q]),
     );
 
     const questionVariantsArray = assignmentAttempt.questionVariants ?? [];
@@ -168,7 +168,7 @@ export class AttemptQuestionsMapper {
       .filter((q): q is EnhancedAttemptQuestionDto => q !== null);
 
     const questionVariantsMap = new Map<number, EnhancedAttemptQuestionDto>(
-      questionsWithVariants.map((question) => [question.id, question])
+      questionsWithVariants.map((question) => [question.id, question]),
     );
 
     const mergedQuestions = questions.map((originalQ) => {
@@ -181,7 +181,7 @@ export class AttemptQuestionsMapper {
 
     const questionsWithResponses = this.constructQuestionsWithResponses(
       mergedQuestions,
-      assignmentAttempt.questionResponses
+      assignmentAttempt.questionResponses,
     );
 
     const finalQuestions = questionOrder
@@ -208,7 +208,7 @@ export class AttemptQuestionsMapper {
     assignmentAttempt: AssignmentAttemptWithRelations,
     assignment: UpdateAssignmentQuestionsDto,
     translations: Map<string, Record<string, TranslatedContent>>,
-    language: string
+    language: string,
   ): Promise<EnhancedAttemptQuestionDto[]> {
     const questionOrder =
       assignmentAttempt.questionOrder || assignment.questionOrder || [];
@@ -219,7 +219,7 @@ export class AttemptQuestionsMapper {
       .map((qv) => {
         const variant = qv.questionVariant;
         const originalQ = assignment.questions.find(
-          (q) => q.id === qv.questionId
+          (q) => q.id === qv.questionId,
         );
 
         if (!originalQ) return null;
@@ -260,14 +260,14 @@ export class AttemptQuestionsMapper {
           variantTranslation || questionTranslation || translationFallback;
 
         const baseChoices = this.parseChoices(
-          variant ? variant.choices || originalQ.choices : originalQ.choices
+          variant ? variant.choices || originalQ.choices : originalQ.choices,
         );
 
         let finalChoices = baseChoices || [];
 
         if (qv.randomizedChoices) {
           const randomizedChoicesArray = this.parseChoices(
-            qv.randomizedChoices
+            qv.randomizedChoices,
           );
 
           const permutation = randomizedChoicesArray
@@ -281,7 +281,7 @@ export class AttemptQuestionsMapper {
             .filter((index) => index !== -1);
 
           const orderedBaseChoices = permutation.map(
-            (index) => baseChoices[index]
+            (index) => baseChoices[index],
           );
 
           if (orderedBaseChoices.length === baseChoices.length) {
@@ -291,12 +291,12 @@ export class AttemptQuestionsMapper {
           this.reorderTranslatedChoices(
             variantTranslations,
             permutation,
-            baseChoices
+            baseChoices,
           );
           this.reorderTranslatedChoices(
             questionTranslations,
             permutation,
-            baseChoices
+            baseChoices,
           );
         }
 
@@ -312,8 +312,8 @@ export class AttemptQuestionsMapper {
           Array.isArray(primaryTranslation.translatedChoices)
             ? (primaryTranslation.translatedChoices as unknown as ExtendedChoice[])
             : this.parseChoices(
-                primaryTranslation.translatedChoices || finalChoices
-              )
+                primaryTranslation.translatedChoices || finalChoices,
+              ),
         );
 
         const sanitizedTranslations =
@@ -344,7 +344,7 @@ export class AttemptQuestionsMapper {
 
     const questionsWithoutVariants = assignment.questions
       .filter(
-        (q) => !questionVariantsArray.some((qv) => qv.questionId === q.id)
+        (q) => !questionVariantsArray.some((qv) => qv.questionId === q.id),
       )
       .map((originalQ) => {
         const questionKey = `question-${originalQ.id}`;
@@ -357,7 +357,7 @@ export class AttemptQuestionsMapper {
         const sanitizedChoices = this.sanitizeChoicesForDisplay(
           translationForLanguage?.translatedChoices
             ? this.parseChoices(translationForLanguage.translatedChoices)
-            : this.parseChoices(originalQ.choices)
+            : this.parseChoices(originalQ.choices),
         );
 
         const sanitizedTranslations =
@@ -404,7 +404,7 @@ export class AttemptQuestionsMapper {
    * @returns A new array with only id and choice properties
    */
   private static sanitizeChoicesForDisplay(
-    choices: Choice[] | undefined | null | string
+    choices: Choice[] | undefined | null | string,
   ): { id: number | null; choice: string }[] {
     if (!choices || typeof choices === "string") return [];
 
@@ -423,7 +423,7 @@ export class AttemptQuestionsMapper {
    * @returns A new translations object with sanitized choices
    */
   private static sanitizeTranslationsChoices(
-    translations: Record<string, TranslatedContent>
+    translations: Record<string, TranslatedContent>,
   ): Record<string, TranslatedContent> {
     const sanitizedTranslations: Record<string, TranslatedContent> = {};
 
@@ -434,7 +434,7 @@ export class AttemptQuestionsMapper {
           ? (this.sanitizeChoicesForDisplay(
               Array.isArray(content.translatedChoices)
                 ? (content.translatedChoices as unknown as ExtendedChoice[])
-                : this.parseChoices(content.translatedChoices)
+                : this.parseChoices(content.translatedChoices),
             ) as ExtendedChoice[])
           : null,
       };
@@ -448,7 +448,7 @@ export class AttemptQuestionsMapper {
    */
   private static constructQuestionsWithResponses(
     questions: EnhancedAttemptQuestionDto[],
-    questionResponses: QuestionResponse[]
+    questionResponses: QuestionResponse[],
   ): AssignmentAttemptQuestions[] {
     return questions.map((question) => {
       const correspondingResponses = questionResponses
@@ -493,7 +493,7 @@ export class AttemptQuestionsMapper {
   private static async applyTranslations(
     questions: AssignmentAttemptQuestions[],
     prisma: PrismaService,
-    language: string
+    language: string,
   ): Promise<void> {
     for (const question of questions) {
       const translation: Translation | null = await (question.variantId
@@ -575,7 +575,7 @@ export class AttemptQuestionsMapper {
   private static reorderTranslatedChoices(
     translations: Record<string, TranslatedContent>,
     permutation: number[],
-    originalChoices: ExtendedChoice[]
+    originalChoices: ExtendedChoice[],
   ): void {
     for (const lang in translations) {
       const translationObject = translations[lang];
@@ -588,7 +588,7 @@ export class AttemptQuestionsMapper {
         const origTranslatedChoices =
           translationObject.translatedChoices as unknown as ExtendedChoice[];
         const reorderedTranslatedChoices = permutation.map(
-          (index) => origTranslatedChoices[index]
+          (index) => origTranslatedChoices[index],
         );
 
         translationObject.translatedChoices = reorderedTranslatedChoices;

@@ -45,7 +45,7 @@ export class LLMAssignmentService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => LLM_RESOLVER_SERVICE))
-    private readonly resolverService: LLMResolverService
+    private readonly resolverService: LLMResolverService,
   ) {}
 
   /**
@@ -122,13 +122,13 @@ export class LLMAssignmentService {
 
     if (feature.defaultModelKey) {
       this.logger.debug(
-        `Using default model ${feature.defaultModelKey} for feature ${featureKey}`
+        `Using default model ${feature.defaultModelKey} for feature ${featureKey}`,
       );
       return feature.defaultModelKey;
     }
 
     this.logger.warn(
-      `No model assigned to feature ${featureKey} and no default model`
+      `No model assigned to feature ${featureKey} and no default model`,
     );
     return null;
   }
@@ -224,13 +224,13 @@ export class LLMAssignmentService {
       this.logger.log(
         `Assigned model ${modelKey} to feature ${featureKey} by ${
           assignedBy || "system"
-        }`
+        }`,
       );
       return true;
     } catch (error) {
       this.logger.error(
         `Failed to assign model ${modelKey} to feature ${featureKey}:`,
-        error
+        error,
       );
       throw error;
     }
@@ -241,7 +241,7 @@ export class LLMAssignmentService {
    */
   async removeFeatureAssignment(
     featureKey: string,
-    assignedBy?: string
+    assignedBy?: string,
   ): Promise<boolean> {
     try {
       const feature = await this.prisma.aIFeature.findUnique({
@@ -270,13 +270,13 @@ export class LLMAssignmentService {
       this.logger.log(
         `Removed model assignment for feature ${featureKey} by ${
           assignedBy || "system"
-        }`
+        }`,
       );
       return result.count > 0;
     } catch (error) {
       this.logger.error(
         `Failed to remove assignment for feature ${featureKey}:`,
-        error
+        error,
       );
       throw error;
     }
@@ -358,7 +358,7 @@ export class LLMAssignmentService {
           displayName: model?.displayName || "Unknown",
           featureCount: usage._count.featureId,
         };
-      })
+      }),
     );
 
     return {
@@ -375,7 +375,7 @@ export class LLMAssignmentService {
    */
   async bulkUpdateAssignments(
     assignments: AssignmentRequest[],
-    assignedBy?: string
+    assignedBy?: string,
   ): Promise<{ success: number; failed: number; errors: string[] }> {
     const results = { success: 0, failed: 0, errors: [] as string[] };
 
@@ -391,13 +391,13 @@ export class LLMAssignmentService {
         results.errors.push(
           `${assignment.featureKey}: ${
             error instanceof Error ? error.message : "Unknown error"
-          }`
+          }`,
         );
       }
     }
 
     this.logger.log(
-      `Bulk update completed: ${results.success} success, ${results.failed} failed`
+      `Bulk update completed: ${results.success} success, ${results.failed} failed`,
     );
     return results;
   }
@@ -426,7 +426,7 @@ export class LLMAssignmentService {
       } catch (error) {
         this.logger.error(
           `Failed to reset feature ${feature.featureKey}:`,
-          error
+          error,
         );
       }
     }

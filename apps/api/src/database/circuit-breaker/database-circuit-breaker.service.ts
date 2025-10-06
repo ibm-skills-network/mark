@@ -54,7 +54,7 @@ export class DatabaseCircuitBreakerService {
         this.logger.log("Circuit breaker transitioned to HALF_OPEN");
       } else {
         throw new Error(
-          "Circuit breaker is OPEN - database operations blocked"
+          "Circuit breaker is OPEN - database operations blocked",
         );
       }
     }

@@ -39,7 +39,7 @@ export class JobStatusServiceV1 {
     progress: string,
     status = "In Progress",
     result?: unknown,
-    percentage?: number
+    percentage?: number,
   ) {
     if (this.jobStatusSubjects.has(jobId)) {
       const update = {

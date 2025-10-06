@@ -76,7 +76,7 @@ describe("PrismaService", () => {
     jest.spyOn(service as any, "delay").mockResolvedValue();
 
     await expect(service.onModuleInit()).rejects.toThrow(
-      "Failed to connect to database after maximum retries"
+      "Failed to connect to database after maximum retries",
     );
     expect(service.$connect).toHaveBeenCalledTimes(5);
   });

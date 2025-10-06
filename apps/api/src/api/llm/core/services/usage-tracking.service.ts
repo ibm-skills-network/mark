@@ -11,7 +11,7 @@ export class UsageTrackerService implements IUsageTracker {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: UsageTrackerService.name });
   }
@@ -25,12 +25,12 @@ export class UsageTrackerService implements IUsageTracker {
     usageType: AIUsageType,
     tokensIn: number,
     tokensOut: number,
-    modelKey?: string
+    modelKey?: string,
   ): Promise<void> {
     try {
       const assignmentIdToDatabase = Number(assignmentId);
       console.log(
-        `Tracking usage for assignment ID: ${assignmentIdToDatabase}, usage type: ${usageType}, tokens in: ${tokensIn}, tokens out: ${tokensOut}`
+        `Tracking usage for assignment ID: ${assignmentIdToDatabase}, usage type: ${usageType}, tokens in: ${tokensIn}, tokens out: ${tokensOut}`,
       );
       const assignmentExists = await this.prisma.assignment.findUnique({
         where: { id: assignmentIdToDatabase },
@@ -39,7 +39,7 @@ export class UsageTrackerService implements IUsageTracker {
       if (!assignmentExists) {
         throw new HttpException(
           `Assignment with ID ${assignmentIdToDatabase} does not exist`,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -70,7 +70,7 @@ export class UsageTrackerService implements IUsageTracker {
       });
 
       this.logger.debug(
-        `Tracked usage for assignment ${assignmentIdToDatabase}: ${tokensIn} in, ${tokensOut} out (${usageType})`
+        `Tracked usage for assignment ${assignmentIdToDatabase}: ${tokensIn} in, ${tokensOut} out (${usageType})`,
       );
     } catch (error) {
       if (error instanceof HttpException) {
@@ -78,11 +78,11 @@ export class UsageTrackerService implements IUsageTracker {
       }
 
       this.logger.error(
-        `Failed to track AI usage: ${(error as Error).message}`
+        `Failed to track AI usage: ${(error as Error).message}`,
       );
       throw new HttpException(
         "Failed to track AI usage",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

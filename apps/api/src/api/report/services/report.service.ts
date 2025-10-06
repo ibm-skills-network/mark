@@ -54,7 +54,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly filesService: FilesService,
     private readonly notificationsService: NotificationsService,
-    private readonly adminEmailService: AdminEmailService
+    private readonly adminEmailService: AdminEmailService,
   ) {}
   private getPrivateKey(): string {
     const raw = process.env.GITHUB_APP_PRIVATE_KEY || "";
@@ -70,12 +70,12 @@ export class ReportsService {
     // Ensure proper PEM format
     if (!processed.startsWith("-----BEGIN")) {
       throw new InternalServerErrorException(
-        "Invalid private key format: missing BEGIN marker"
+        "Invalid private key format: missing BEGIN marker",
       );
     }
     if (!processed.endsWith("-----")) {
       throw new InternalServerErrorException(
-        "Invalid private key format: missing END marker"
+        "Invalid private key format: missing END marker",
       );
     }
 
@@ -98,7 +98,7 @@ export class ReportsService {
           iss: appId,
         },
         privateKey,
-        { algorithm: "RS256" }
+        { algorithm: "RS256" },
       );
 
       return token;
@@ -121,7 +121,7 @@ export class ReportsService {
     const repo = process.env.GITHUB_REPO;
     if (!owner || !repo) {
       throw new InternalServerErrorException(
-        "GITHUB_OWNER or GITHUB_REPO missing"
+        "GITHUB_OWNER or GITHUB_REPO missing",
       );
     }
 
@@ -136,7 +136,7 @@ export class ReportsService {
             Accept: "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
           },
-        }
+        },
       );
       // data.id is the installation id
       this.ghInstallationIdCache = Number(data.id);
@@ -148,7 +148,7 @@ export class ReportsService {
         console.error("Response data:", error.response?.data);
       }
       throw new InternalServerErrorException(
-        "Failed to get GitHub App installation ID"
+        "Failed to get GitHub App installation ID",
       );
     }
   }
@@ -172,7 +172,7 @@ export class ReportsService {
             Accept: "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
           },
-        }
+        },
       );
 
       const token = data.token as string;
@@ -187,7 +187,7 @@ export class ReportsService {
         console.error("Response data:", error.response?.data);
       }
       throw new InternalServerErrorException(
-        "Failed to get GitHub App installation token"
+        "Failed to get GitHub App installation token",
       );
     }
   }
@@ -362,7 +362,7 @@ export class ReportsService {
   private async createGithubIssue(
     title: string,
     body: string,
-    labels: string[] = []
+    labels: string[] = [],
   ): Promise<{ number: number; [key: string]: any }> {
     const githubOwner = process.env.GITHUB_OWNER;
     const githubRepo = process.env.GITHUB_REPO;
@@ -376,8 +376,8 @@ export class ReportsService {
       console.error("Missing GitHub configuration:", missingConfig);
       throw new InternalServerErrorException(
         `GitHub repository configuration or token missing: ${missingConfig.join(
-          ", "
-        )}`
+          ", ",
+        )}`,
       );
     }
 
@@ -406,14 +406,14 @@ export class ReportsService {
         const status = error.response?.status;
 
         throw new InternalServerErrorException(
-          `Failed to create GitHub issue (${status}): ${errorMessage}`
+          `Failed to create GitHub issue (${status}): ${errorMessage}`,
         );
       } else {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         console.error("Non-HTTP error:", errorMessage);
         throw new InternalServerErrorException(
-          `Failed to create GitHub issue: ${errorMessage}`
+          `Failed to create GitHub issue: ${errorMessage}`,
         );
       }
     }
@@ -430,7 +430,7 @@ export class ReportsService {
     const token = await this.getInstallationToken();
     if (!githubOwner || !githubRepo || !token) {
       throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing"
+        "GitHub repository configuration or token missing",
       );
     }
 
@@ -443,7 +443,7 @@ export class ReportsService {
             Accept: "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
           },
-        }
+        },
       );
 
       const issue = response.data as {
@@ -459,20 +459,20 @@ export class ReportsService {
 
       if (issue.state === "closed") {
         const isDuplicate = issue.labels.some((label) =>
-          label.name.toLowerCase().includes("duplicate")
+          label.name.toLowerCase().includes("duplicate"),
         );
 
         const isWontFix = issue.labels.some(
           (label) =>
             label.name.toLowerCase().includes("wontfix") ||
             label.name.toLowerCase().includes("won't fix") ||
-            label.name.toLowerCase().includes("not planned")
+            label.name.toLowerCase().includes("not planned"),
         );
 
         const isInvalid = issue.labels.some(
           (label) =>
             label.name.toLowerCase().includes("invalid") ||
-            label.name.toLowerCase().includes("not reproducible")
+            label.name.toLowerCase().includes("not reproducible"),
         );
 
         if (isDuplicate) {
@@ -500,7 +500,7 @@ export class ReportsService {
           (label: { name: string }) =>
             label.name === "in progress" ||
             label.name === "in-progress" ||
-            label.name === "working"
+            label.name === "working",
         );
 
         if (inProgressLabel) {
@@ -592,11 +592,11 @@ export class ReportsService {
       ]);
 
       const filteredTokens1 = tokens1.filter(
-        (token) => token.length > 2 && !stopWords.has(token)
+        (token) => token.length > 2 && !stopWords.has(token),
       );
 
       const filteredTokens2 = tokens2.filter(
-        (token) => token.length > 2 && !stopWords.has(token)
+        (token) => token.length > 2 && !stopWords.has(token),
       );
 
       if (filteredTokens1.length === 0 || filteredTokens2.length === 0) {
@@ -672,7 +672,7 @@ export class ReportsService {
     description: string,
     issueType: ReportType,
     assignmentId?: number,
-    excludeReportId?: number
+    excludeReportId?: number,
   ): Promise<
     Array<{
       id: number;
@@ -728,7 +728,7 @@ export class ReportsService {
     const scoredMatches = potentialMatches.map((report) => {
       let similarity = this.calculateTextSimilarity(
         description,
-        report.description
+        report.description,
       );
 
       if (assignmentId && report.assignmentId === assignmentId) {
@@ -760,7 +760,7 @@ export class ReportsService {
       attemptId?: number;
       userId?: string;
     },
-    screenshot?: Express.Multer.File
+    screenshot?: Express.Multer.File,
   ): Promise<{
     message: string;
     issueNumber?: number;
@@ -808,7 +808,7 @@ export class ReportsService {
     if (recentReports.length > 5) {
       throw new HttpException(
         "You have reported too many issues in the last 24 hours. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
+        HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
@@ -824,13 +824,13 @@ export class ReportsService {
           await this.filesService.directUpload(
             screenshot,
             debugBucket,
-            screenshotKey
+            screenshotKey,
           );
 
           screenshotUrl = screenshotKey;
         } else {
           console.warn(
-            "IBM_COS_DEBUG_BUCKET not configured, skipping screenshot upload"
+            "IBM_COS_DEBUG_BUCKET not configured, skipping screenshot upload",
           );
         }
       } catch (uploadError) {
@@ -843,7 +843,7 @@ export class ReportsService {
     const similarReports = await this.findSimilarReports(
       description,
       mappedIssueType,
-      assignmentId
+      assignmentId,
     );
 
     const potentialDuplicate = similarReports.find((r) => r.similarity > 0.85);
@@ -934,7 +934,7 @@ Screenshot Key: \`${finalScreenshotUrl}\`
 
         if (!githubOwner || !githubRepo || !token) {
           throw new InternalServerErrorException(
-            "GitHub repository configuration or token missing"
+            "GitHub repository configuration or token missing",
           );
         }
 
@@ -982,7 +982,7 @@ Screenshot Key: \`${screenshotUrl}\`
               Accept: "application/vnd.github+json",
               "X-GitHub-Api-Version": "2022-11-28",
             },
-          }
+          },
         );
 
         const issueResponse = await axios.get(
@@ -993,7 +993,7 @@ Screenshot Key: \`${screenshotUrl}\`
               Accept: "application/vnd.github+json",
               "X-GitHub-Api-Version": "2022-11-28",
             },
-          }
+          },
         );
 
         issue = issueResponse.data as {
@@ -1044,7 +1044,7 @@ A new related issue has been created: #${issue.number}
                 Accept: "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
               },
-            }
+            },
           );
         }
       } else {
@@ -1077,10 +1077,10 @@ A new related issue has been created: #${issue.number}
             parentReport.closureReason === "wontfix"
               ? "This issue was closed as it won't be implemented or fixed."
               : parentReport.closureReason === "invalid"
-              ? "This issue was closed as it was deemed invalid or not reproducible."
-              : parentReport.closureReason === "duplicate"
-              ? "This issue was closed as a duplicate of another issue."
-              : "This issue was resolved.";
+                ? "This issue was closed as it was deemed invalid or not reproducible."
+                : parentReport.closureReason === "duplicate"
+                  ? "This issue was closed as a duplicate of another issue."
+                  : "This issue was resolved.";
         }
       }
 
@@ -1192,7 +1192,7 @@ A new related issue has been created: #${issue.number}
     } catch (error) {
       console.error(
         "[REPORT DEBUG] GitHub issue creation failed in main try block:",
-        error
+        error,
       );
       try {
         const reportData: {
@@ -1341,10 +1341,10 @@ A new related issue has been created: #${issue.number}
           related.id === report.duplicateOfReportId
             ? "parent"
             : related.id === report.relatedToReportId
-            ? "related"
-            : related.duplicateOfReportId === reportId
-            ? "duplicate"
-            : "related",
+              ? "related"
+              : related.duplicateOfReportId === reportId
+                ? "duplicate"
+                : "related",
       }));
     }
 
@@ -1352,7 +1352,7 @@ A new related issue has been created: #${issue.number}
       report.description,
       report.issueType,
       report.assignmentId,
-      reportId
+      reportId,
     );
 
     return similarReports.map((similar) => ({
@@ -1382,7 +1382,7 @@ A new related issue has been created: #${issue.number}
                 report.id,
                 status,
                 statusMessage,
-                closureReason
+                closureReason,
               );
             }
             if (
@@ -1427,7 +1427,7 @@ A new related issue has been created: #${issue.number}
           } catch (error) {
             console.error(
               `Error syncing GitHub issue status for report ID ${report.id}:`,
-              error
+              error,
             );
           }
         }
@@ -1495,7 +1495,7 @@ A new related issue has been created: #${issue.number}
         }
 
         return report;
-      })
+      }),
     );
 
     return updatedReports;
@@ -1561,7 +1561,7 @@ A new related issue has been created: #${issue.number}
       } catch (error) {
         console.error(
           `Error syncing GitHub issue status for report ID ${report.id}:`,
-          error
+          error,
         );
       }
     }
@@ -1681,7 +1681,7 @@ A new related issue has been created: #${issue.number}
 
     if (!githubOwner || !githubRepo || !token) {
       throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing"
+        "GitHub repository configuration or token missing",
       );
     }
 
@@ -1694,7 +1694,7 @@ A new related issue has been created: #${issue.number}
             Accept: "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
           },
-        }
+        },
       );
 
       const issue = issueResponse.data as {
@@ -1709,20 +1709,20 @@ A new related issue has been created: #${issue.number}
 
       if (issue.state === "closed" && issue.closed_at) {
         const isDuplicate = issue.labels.some((label) =>
-          label.name.toLowerCase().includes("duplicate")
+          label.name.toLowerCase().includes("duplicate"),
         );
 
         const isWontFix = issue.labels.some(
           (label) =>
             label.name.toLowerCase().includes("wontfix") ||
             label.name.toLowerCase().includes("won't fix") ||
-            label.name.toLowerCase().includes("not planned")
+            label.name.toLowerCase().includes("not planned"),
         );
 
         const isInvalid = issue.labels.some(
           (label) =>
             label.name.toLowerCase().includes("invalid") ||
-            label.name.toLowerCase().includes("not reproducible")
+            label.name.toLowerCase().includes("not reproducible"),
         );
 
         if (isDuplicate) {
@@ -1742,7 +1742,7 @@ A new related issue has been created: #${issue.number}
               Authorization: `token ${token}`,
               Accept: "application/vnd.github.v3+json",
             },
-          }
+          },
         );
 
         const comments = commentsResponse.data as Array<{
@@ -1753,7 +1753,7 @@ A new related issue has been created: #${issue.number}
 
         const sortedComments = comments.sort(
           (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         );
 
         const closingComment = sortedComments.find((comment) => {
@@ -1794,13 +1794,13 @@ A new related issue has been created: #${issue.number}
             closureReason === "duplicate"
               ? "This issue was closed as a duplicate of another issue."
               : closureReason === "wontfix"
-              ? "This issue was closed as it won't be implemented or fixed."
-              : "This issue was closed as it was deemed invalid or not reproducible.";
+                ? "This issue was closed as it won't be implemented or fixed."
+                : "This issue was closed as it was deemed invalid or not reproducible.";
 
           if (developerComment) {
             statusMessage += ` Developer comment: ${developerComment.slice(
               0,
-              100
+              100,
             )}${developerComment.length > 100 ? "..." : ""}`;
           }
         }
@@ -1809,7 +1809,7 @@ A new related issue has been created: #${issue.number}
           (label: { name: string }) =>
             label.name === "in progress" ||
             label.name === "in-progress" ||
-            label.name === "working"
+            label.name === "working",
         );
 
         if (inProgressLabel) {
@@ -1847,7 +1847,7 @@ A new related issue has been created: #${issue.number}
                 report.id,
                 status,
                 statusMessage,
-                closureReason
+                closureReason,
               );
             }
 
@@ -1865,10 +1865,10 @@ A new related issue has been created: #${issue.number}
                 report.id,
                 status,
                 statusMessage,
-                closureReason
+                closureReason,
               );
             }
-          })
+          }),
         );
       }
 
@@ -1890,7 +1890,7 @@ A new related issue has been created: #${issue.number}
     parentReportId: number,
     status: ReportStatus,
     statusMessage: string,
-    closureReason?: string
+    closureReason?: string,
   ) {
     const duplicateReports = await this.prisma.report.findMany({
       where: {
@@ -1941,7 +1941,7 @@ A new related issue has been created: #${issue.number}
         report.id,
         status,
         updatedStatusMessage,
-        closureReason
+        closureReason,
       );
     }
   }
@@ -1951,7 +1951,7 @@ A new related issue has been created: #${issue.number}
     status: ReportStatus,
     statusMessage?: string,
     resolution?: string,
-    userComment?: string
+    userComment?: string,
   ) {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -2021,7 +2021,7 @@ A new related issue has been created: #${issue.number}
       reportId,
       status,
       updateData.statusMessage,
-      closureReason
+      closureReason,
     );
 
     if (report.issueNumber) {
@@ -2066,17 +2066,17 @@ A new related issue has been created: #${issue.number}
                   Accept: "application/vnd.github+json",
                   "X-GitHub-Api-Version": "2022-11-28",
                 },
-              }
+              },
             );
 
             const commentMessage =
               closureReason === "duplicate"
                 ? "This issue is being closed as a duplicate."
                 : closureReason === "wontfix"
-                ? "This issue is being closed as it won't be fixed or implemented."
-                : closureReason === "invalid"
-                ? "This issue is being closed as it was deemed invalid or not reproducible."
-                : "This issue has been resolved.";
+                  ? "This issue is being closed as it won't be fixed or implemented."
+                  : closureReason === "invalid"
+                    ? "This issue is being closed as it was deemed invalid or not reproducible."
+                    : "This issue has been resolved.";
 
             await axios.post(
               `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${report.issueNumber}/comments`,
@@ -2090,7 +2090,7 @@ A new related issue has been created: #${issue.number}
                   Authorization: `token ${token}`,
                   Accept: "application/vnd.github.v3+json",
                 },
-              }
+              },
             );
           } else {
             await axios.patch(
@@ -2103,7 +2103,7 @@ A new related issue has been created: #${issue.number}
                   Authorization: `token ${token}`,
                   Accept: "application/vnd.github.v3+json",
                 },
-              }
+              },
             );
 
             if (status === ReportStatus.IN_PROGRESS) {
@@ -2114,7 +2114,7 @@ A new related issue has been created: #${issue.number}
                     Authorization: `token ${token}`,
                     Accept: "application/vnd.github.v3+json",
                   },
-                }
+                },
               );
 
               const issueData = issueResponse.data as {
@@ -2134,7 +2134,7 @@ A new related issue has been created: #${issue.number}
                       Authorization: `token ${token}`,
                       Accept: "application/vnd.github.v3+json",
                     },
-                  }
+                  },
                 );
               }
 
@@ -2150,7 +2150,7 @@ A new related issue has been created: #${issue.number}
                     Authorization: `token ${token}`,
                     Accept: "application/vnd.github.v3+json",
                   },
-                }
+                },
               );
 
               if (resolution) {
@@ -2164,7 +2164,7 @@ A new related issue has been created: #${issue.number}
                       Authorization: `token ${token}`,
                       Accept: "application/vnd.github.v3+json",
                     },
-                  }
+                  },
                 );
               }
             }
@@ -2173,7 +2173,7 @@ A new related issue has been created: #${issue.number}
       } catch (error) {
         console.error(
           `Error updating GitHub issue #${report.issueNumber}:`,
-          error
+          error,
         );
       }
     }
@@ -2183,7 +2183,7 @@ A new related issue has been created: #${issue.number}
         reportId,
         status,
         statusMessage || this.getDefaultStatusMessage(status),
-        closureReason
+        closureReason,
       );
 
       if (report.duplicateOfReportId) {
@@ -2202,7 +2202,7 @@ A new related issue has been created: #${issue.number}
             report.duplicateOfReportId,
             status,
             `This issue has been resolved as part of resolving a duplicate issue.`,
-            resolution
+            resolution,
           );
         }
       }
@@ -2214,7 +2214,7 @@ A new related issue has been created: #${issue.number}
   async addCommentToReport(
     reportId: number,
     userId: string,
-    comment: string
+    comment: string,
   ): Promise<{ message: string; report: any }> {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -2260,13 +2260,13 @@ A new related issue has been created: #${issue.number}
                 Accept: "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
               },
-            }
+            },
           );
         }
       } catch (error) {
         console.error(
           `Error adding comment to GitHub issue #${report.issueNumber}:`,
-          error
+          error,
         );
       }
     }
@@ -2281,7 +2281,7 @@ A new related issue has been created: #${issue.number}
     reportId: number,
     newStatus: ReportStatus,
     statusMessage: string,
-    closureReason?: string
+    closureReason?: string,
   ): Promise<void> {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -2300,21 +2300,21 @@ A new related issue has been created: #${issue.number}
       newStatus === ReportStatus.RESOLVED
         ? "Resolved"
         : newStatus === ReportStatus.CLOSED
-        ? "Closed"
-        : newStatus === ReportStatus.IN_PROGRESS
-        ? "In Progress"
-        : "Updated";
+          ? "Closed"
+          : newStatus === ReportStatus.IN_PROGRESS
+            ? "In Progress"
+            : "Updated";
 
     const reasonText = closureReason
       ? closureReason === "fixed"
         ? " (Issue Fixed)"
         : closureReason === "wontfix"
-        ? " (Won't Fix)"
-        : closureReason === "duplicate"
-        ? " (Marked as Duplicate)"
-        : closureReason === "invalid"
-        ? " (Not Reproducible/Invalid)"
-        : ""
+          ? " (Won't Fix)"
+          : closureReason === "duplicate"
+            ? " (Marked as Duplicate)"
+            : closureReason === "invalid"
+              ? " (Not Reproducible/Invalid)"
+              : ""
       : "";
 
     await this.notificationsService.createNotification(
@@ -2331,7 +2331,7 @@ A new related issue has been created: #${issue.number}
         issueNumber: report.issueNumber,
         statusMessage,
         closureReason,
-      }
+      },
     );
   }
   /**
@@ -2341,7 +2341,7 @@ A new related issue has been created: #${issue.number}
     reportId: number,
     newStatus: ReportStatus,
     statusMessage: string,
-    closureReason?: string
+    closureReason?: string,
   ): Promise<void> {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -2413,7 +2413,7 @@ A new related issue has been created: #${issue.number}
     userEmail?: string,
     portalName?: string,
     userId?: string,
-    assignmentId?: number
+    assignmentId?: number,
   ): Promise<{ message: string; reportId?: number }> {
     try {
       await this.floService.sendFeedback(title, description, {
@@ -2515,7 +2515,7 @@ ${description}
     reportId: number,
     screenshotUrl: string,
     userId: string,
-    bucket?: string
+    bucket?: string,
   ) {
     // Find the report and verify the user owns it
     const report = await this.prisma.report.findUnique({
@@ -2560,7 +2560,7 @@ ${description}
               Authorization: `token ${token}`,
               Accept: "application/vnd.github.v3+json",
             },
-          }
+          },
         );
       } catch (error) {
         console.error(`Error adding screenshot to GitHub issue:`, error);

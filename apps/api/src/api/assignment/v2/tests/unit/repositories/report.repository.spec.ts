@@ -109,7 +109,7 @@ describe("ReportService", () => {
         .mockResolvedValue(null);
 
       await expect(
-        service.createReport(assignmentId, issueType, description, userId)
+        service.createReport(assignmentId, issueType, description, userId),
       ).rejects.toThrow(NotFoundException);
       expect(prismaService.report.create).not.toHaveBeenCalled();
     });
@@ -121,7 +121,7 @@ describe("ReportService", () => {
       const userId = "user123";
 
       await expect(
-        service.createReport(assignmentId, issueType, description, userId)
+        service.createReport(assignmentId, issueType, description, userId),
       ).rejects.toThrow(BadRequestException);
       expect(prismaService.assignment.findUnique).not.toHaveBeenCalled();
       expect(prismaService.report.create).not.toHaveBeenCalled();
@@ -134,7 +134,7 @@ describe("ReportService", () => {
       const userId = "user123";
 
       await expect(
-        service.createReport(assignmentId, issueType, description, userId)
+        service.createReport(assignmentId, issueType, description, userId),
       ).rejects.toThrow(BadRequestException);
       expect(prismaService.assignment.findUnique).not.toHaveBeenCalled();
       expect(prismaService.report.create).not.toHaveBeenCalled();
@@ -147,7 +147,7 @@ describe("ReportService", () => {
       const userId = "";
 
       await expect(
-        service.createReport(assignmentId, issueType, description, userId)
+        service.createReport(assignmentId, issueType, description, userId),
       ).rejects.toThrow(BadRequestException);
       expect(prismaService.assignment.findUnique).not.toHaveBeenCalled();
       expect(prismaService.report.create).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe("ReportService", () => {
           issueType,
           description,
           reporterId: userId,
-        })
+        }),
       );
 
       jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
@@ -177,7 +177,7 @@ describe("ReportService", () => {
         .mockResolvedValue(recentReports);
 
       await expect(
-        service.createReport(assignmentId, issueType, description, userId)
+        service.createReport(assignmentId, issueType, description, userId),
       ).rejects.toThrow(UnprocessableEntityException);
       expect(prismaService.report.create).not.toHaveBeenCalled();
     });
@@ -190,11 +190,11 @@ describe("ReportService", () => {
       const userId = "user123";
 
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service
+        service,
       );
 
       expect(() =>
-        validateReportInputs(issueType, description, userId)
+        validateReportInputs(issueType, description, userId),
       ).not.toThrow();
     });
 
@@ -204,11 +204,11 @@ describe("ReportService", () => {
       const userId = "user123";
 
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service
+        service,
       );
 
       expect(() =>
-        validateReportInputs(issueType, description, userId)
+        validateReportInputs(issueType, description, userId),
       ).toThrow(BadRequestException);
     });
 
@@ -218,11 +218,11 @@ describe("ReportService", () => {
       const userId = "user123";
 
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service
+        service,
       );
 
       expect(() =>
-        validateReportInputs(issueType, description, userId)
+        validateReportInputs(issueType, description, userId),
       ).toThrow(BadRequestException);
     });
 
@@ -232,11 +232,11 @@ describe("ReportService", () => {
       const userId = "user123";
 
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service
+        service,
       );
 
       expect(() =>
-        validateReportInputs(issueType, description, userId)
+        validateReportInputs(issueType, description, userId),
       ).toThrow(BadRequestException);
     });
 
@@ -246,11 +246,11 @@ describe("ReportService", () => {
       const userId = "";
 
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service
+        service,
       );
 
       expect(() =>
-        validateReportInputs(issueType, description, userId)
+        validateReportInputs(issueType, description, userId),
       ).toThrow(BadRequestException);
     });
   });
@@ -304,7 +304,7 @@ describe("ReportService", () => {
       const checkRateLimit = (service as any).checkRateLimit.bind(service);
 
       await expect(checkRateLimit(userId)).rejects.toThrow(
-        UnprocessableEntityException
+        UnprocessableEntityException,
       );
       expect(prismaService.report.findMany).toHaveBeenCalled();
     });

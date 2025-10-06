@@ -35,7 +35,7 @@ export class NotificationsService {
     // Emit event for real-time updates
     this.eventEmitter.emit(
       `notification:read:${notification.userId}`,
-      numberId
+      numberId,
     );
 
     return notification;
@@ -52,7 +52,7 @@ export class NotificationsService {
     type: string,
     title: string,
     message: string,
-    metadata?: any
+    metadata?: any,
   ) {
     const notification = await this.prisma.userNotification.create({
       data: {
@@ -78,7 +78,7 @@ export class NotificationsService {
     userId: string,
     onNewNotification: (notification: any) => void,
     onMarkRead: (notificationId: number) => void,
-    onMarkAllRead?: () => void
+    onMarkAllRead?: () => void,
   ): () => void {
     const subscription: NotificationSubscription = {
       userId,
@@ -106,7 +106,7 @@ export class NotificationsService {
     this.eventEmitter.on(`notification:read:${userId}`, markReadListener);
     this.eventEmitter.on(
       `notification:read-all:${userId}`,
-      markAllReadListener
+      markAllReadListener,
     );
 
     // Return cleanup function
@@ -114,12 +114,12 @@ export class NotificationsService {
       this.subscriptions.delete(subscriptionId);
       this.eventEmitter.off(
         `notification:new:${userId}`,
-        newNotificationListener
+        newNotificationListener,
       );
       this.eventEmitter.off(`notification:read:${userId}`, markReadListener);
       this.eventEmitter.off(
         `notification:read-all:${userId}`,
-        markAllReadListener
+        markAllReadListener,
       );
     };
   }

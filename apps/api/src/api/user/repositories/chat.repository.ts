@@ -17,7 +17,7 @@ export class ChatRepository {
   async createChat(
     userId: string,
     assignmentId?: number,
-    title?: string
+    title?: string,
   ): Promise<Chat> {
     return this.prisma.chat.create({
       data: {
@@ -34,7 +34,7 @@ export class ChatRepository {
    */
   async findChatById(
     chatId: string,
-    includeMessages = false
+    includeMessages = false,
   ): Promise<
     | (Chat & {
         messages?: ChatMessage[];
@@ -95,7 +95,7 @@ export class ChatRepository {
    */
   async findActiveChatForToday(
     userId: string,
-    assignmentId?: number
+    assignmentId?: number,
   ): Promise<(Chat & { messages: ChatMessage[] }) | null> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -160,7 +160,7 @@ export class ChatRepository {
     chatId: string,
     role: ChatRole,
     content: string,
-    toolCalls?: Prisma.JsonValue
+    toolCalls?: Prisma.JsonValue,
   ): Promise<ChatMessage> {
     await this.updateChatActivity(chatId);
 
@@ -182,7 +182,7 @@ export class ChatRepository {
   async getMessages(
     chatId: string,
     limit = 100,
-    offset = 0
+    offset = 0,
   ): Promise<ChatMessage[]> {
     return this.prisma.chatMessage.findMany({
       where: {
@@ -215,7 +215,7 @@ export class ChatRepository {
   async searchMessages(
     chatId: string,
     searchTerm: string,
-    limit = 100
+    limit = 100,
   ): Promise<ChatMessage[]> {
     return this.prisma.chatMessage.findMany({
       where: {

@@ -73,7 +73,7 @@ import {
         p3: Gpt4VisionPreviewLlmService,
         p4: Gpt5LlmService,
         p5: Gpt5MiniLlmService,
-        p6: Gpt5NanoLlmService
+        p6: Gpt5NanoLlmService,
         // p7: LlamaLlmService,
       ) => {
         return [p1, p2, p3, p4, p5, p6];

@@ -66,6 +66,8 @@ dev.op.env
 .env.merged
 .env.op.local
 .env*.local
+# mock that shouldnt change
+*/mock.jwt.cookie.auth.guard.ts
 
 *.env
 .env.local

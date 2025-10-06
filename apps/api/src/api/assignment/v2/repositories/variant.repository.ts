@@ -51,7 +51,7 @@ export class VariantRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error fetching variants for question ${questionId}: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
       throw error;
     }
@@ -64,7 +64,7 @@ export class VariantRepository {
    * @returns Created variant
    */
   async create(
-    data: VariantDto & { questionId: number }
+    data: VariantDto & { questionId: number },
   ): Promise<QuestionVariant> {
     try {
       const createData = this.prepareVariantCreateData(data);
@@ -91,7 +91,7 @@ export class VariantRepository {
    */
   async update(
     id: number,
-    data: VariantDto & { questionId: number }
+    data: VariantDto & { questionId: number },
   ): Promise<QuestionVariant> {
     try {
       const updateData = this.prepareVariantUpdateData(data);
@@ -107,7 +107,7 @@ export class VariantRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error updating variant ${id}: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
       throw error;
     }
@@ -133,7 +133,7 @@ export class VariantRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error marking variants as deleted: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
       throw error;
     }
@@ -146,7 +146,7 @@ export class VariantRepository {
    * @returns Array of created variants
    */
   async createMany(
-    variants: (VariantDto & { questionId: number })[]
+    variants: (VariantDto & { questionId: number })[],
   ): Promise<QuestionVariant[]> {
     if (variants.length === 0) return [];
 
@@ -155,7 +155,7 @@ export class VariantRepository {
         variants.map((variantData) => {
           const createData = this.prepareVariantCreateData(variantData);
           return this.prisma.questionVariant.create({ data: createData });
-        })
+        }),
       );
     } catch (error: unknown) {
       const errorMessage =
@@ -164,7 +164,7 @@ export class VariantRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error in bulk variant creation: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
       throw error;
     }
@@ -177,7 +177,7 @@ export class VariantRepository {
    * @returns Properly formatted create input for Prisma
    */
   private prepareVariantCreateData(
-    data: VariantDto & { questionId: number }
+    data: VariantDto & { questionId: number },
   ): Prisma.QuestionVariantCreateInput {
     if (!data) {
       throw new Error("Invalid variant data");
@@ -206,7 +206,7 @@ export class VariantRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error preparing variant create data: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
       throw error;
     }
@@ -219,7 +219,7 @@ export class VariantRepository {
    * @returns Properly formatted update input for Prisma
    */
   private prepareVariantUpdateData(
-    data: VariantDto
+    data: VariantDto,
   ): Prisma.QuestionVariantUpdateInput {
     if (!data) {
       throw new Error("Invalid variant data");
@@ -245,7 +245,7 @@ export class VariantRepository {
         error instanceof Error ? error.stack : "No stack trace";
       this.logger.error(
         `Error preparing variant update data: ${errorMessage}`,
-        errorStack
+        errorStack,
       );
       throw error;
     }
@@ -307,7 +307,7 @@ export class VariantRepository {
    * @returns Variant DTO with parsed fields
    */
   mapToVariantDto(
-    variant: QuestionVariant
+    variant: QuestionVariant,
   ): VariantDto & { questionId: number } {
     return {
       id: variant.id,

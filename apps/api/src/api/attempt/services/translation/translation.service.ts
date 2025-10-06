@@ -23,7 +23,7 @@ export type VariantMapping = {
 export class TranslationService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly questionService: QuestionService
+    private readonly questionService: QuestionService,
   ) {}
 
   /**
@@ -38,7 +38,7 @@ export class TranslationService {
     assignmentAttempt: AssignmentAttempt & {
       questionVariants: VariantMapping[];
     },
-    language?: string
+    language?: string,
   ): Promise<Map<number, QuestionDto>> {
     if (!language || language === "en") {
       return new Map<number, QuestionDto>();
@@ -49,7 +49,7 @@ export class TranslationService {
     for (const response of responsesForQuestions) {
       const questionId: number = response.id;
       const variantMapping = assignmentAttempt.questionVariants.find(
-        (qv) => qv.questionId === questionId
+        (qv) => qv.questionId === questionId,
       );
 
       let question: QuestionDto;
@@ -62,7 +62,7 @@ export class TranslationService {
       question = await this.applyTranslationToQuestion(
         question,
         language,
-        variantMapping
+        variantMapping,
       );
 
       preTranslatedQuestions.set(questionId, question);
@@ -81,7 +81,7 @@ export class TranslationService {
     assignmentAttempt: AssignmentAttempt & {
       questionVariants: VariantMapping[];
     },
-    assignmentQuestions: QuestionDto[]
+    assignmentQuestions: QuestionDto[],
   ): Promise<Map<string, Record<string, TranslatedContent>>> {
     const questionIds = assignmentQuestions.map((q) => q.id);
     const variantIds = assignmentAttempt.questionVariants
@@ -142,7 +142,7 @@ export class TranslationService {
   async applyTranslationToQuestion(
     question: QuestionDto,
     language: string,
-    variantMapping?: VariantMapping
+    variantMapping?: VariantMapping,
   ): Promise<QuestionDto> {
     if (!language || language === "en") {
       return question;
@@ -189,7 +189,7 @@ export class TranslationService {
         if (typeof translation.translatedChoices === "string") {
           try {
             question.choices = JSON.parse(
-              translation.translatedChoices
+              translation.translatedChoices,
             ) as Choice[];
           } catch {
             question.choices = [];
@@ -210,7 +210,7 @@ export class TranslationService {
    * @returns A question DTO
    */
   private async getQuestionFromVariant(
-    variantMapping: VariantMapping
+    variantMapping: VariantMapping,
   ): Promise<QuestionDto> {
     const variant = variantMapping.questionVariant;
 

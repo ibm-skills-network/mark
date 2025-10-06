@@ -15,7 +15,10 @@ import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class ChatAccessControlGuard implements CanActivate {
-  constructor(private reflector: Reflector, private prisma: PrismaService) {}
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -57,7 +60,7 @@ export class ChatAccessControlGuard implements CanActivate {
         if (chat.assignmentId) {
           const assignmentAccess = await this.checkAssignmentAccess(
             chat.assignmentId,
-            userSession.groupId
+            userSession.groupId,
           );
 
           if (!assignmentAccess) {
@@ -93,7 +96,7 @@ export class ChatAccessControlGuard implements CanActivate {
       if (body && body.assignmentId) {
         const assignmentAccess = await this.checkAssignmentAccess(
           body.assignmentId,
-          userSession.groupId
+          userSession.groupId,
         );
 
         if (!assignmentAccess) {
@@ -109,7 +112,7 @@ export class ChatAccessControlGuard implements CanActivate {
 
   private async checkAssignmentAccess(
     assignmentId: number,
-    groupId: string
+    groupId: string,
   ): Promise<boolean> {
     if (!groupId) return false;
 

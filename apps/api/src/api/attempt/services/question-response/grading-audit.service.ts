@@ -32,7 +32,7 @@ export class GradingAuditService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({
       context: GradingAuditService.name,
@@ -89,7 +89,7 @@ export class GradingAuditService {
             gradingStrategy: record.gradingStrategy,
             // Don't log full payloads in error to avoid log spam
           },
-        }
+        },
       );
 
       // TODO: Consider adding alerting/monitoring for audit failures
@@ -105,7 +105,7 @@ export class GradingAuditService {
    */
   async getGradingHistoryForQuestion(
     questionId: number,
-    limit = 10
+    limit = 10,
   ): Promise<any[]> {
     return this.prisma.gradingAudit.findMany({
       where: { questionId },
@@ -298,7 +298,7 @@ export class GradingAuditService {
         ([date, count]) => ({
           date,
           count: count,
-        })
+        }),
       );
 
       // Calculate average points (this would need to parse response payloads)
@@ -368,11 +368,11 @@ export class GradingAuditService {
 
       if (stats.totalGradings === 0) {
         this.logger.warn(
-          "⚠️  NO GRADING AUDIT RECORDS FOUND - Grading may not be working or strategies are not calling recordGrading"
+          "⚠️  NO GRADING AUDIT RECORDS FOUND - Grading may not be working or strategies are not calling recordGrading",
         );
       } else {
         this.logger.info(
-          "✅ Grading architecture is actively being used and recorded"
+          "✅ Grading architecture is actively being used and recorded",
         );
       }
     } catch (error) {

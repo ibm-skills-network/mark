@@ -11,12 +11,12 @@ describe("DatabaseConnectionMiddleware", () => {
   const createResponse = () =>
     ({
       setHeader: jest.fn(),
-    } as unknown as Response);
+    }) as unknown as Response;
 
   const createRequest = (path: string) =>
     ({
       path,
-    } as unknown as Request);
+    }) as unknown as Request;
 
   beforeEach(() => {
     prismaService = {
@@ -27,13 +27,13 @@ describe("DatabaseConnectionMiddleware", () => {
       execute: jest
         .fn()
         .mockImplementation(async (operation: () => Promise<unknown>) =>
-          operation()
+          operation(),
         ),
     };
 
     middleware = new DatabaseConnectionMiddleware(
       prismaService as any,
-      circuitBreaker as any
+      circuitBreaker as any,
     );
   });
 
@@ -43,7 +43,7 @@ describe("DatabaseConnectionMiddleware", () => {
     await middleware.use(
       createRequest("/health/liveness"),
       createResponse(),
-      next
+      next,
     );
 
     expect(next).toHaveBeenCalledTimes(1);
@@ -56,7 +56,7 @@ describe("DatabaseConnectionMiddleware", () => {
     await middleware.use(
       createRequest("/api/resource"),
       createResponse(),
-      next
+      next,
     );
 
     expect(circuitBreaker.execute).toHaveBeenCalledTimes(1);
@@ -74,7 +74,7 @@ describe("DatabaseConnectionMiddleware", () => {
 
     expect(response.setHeader).toHaveBeenCalledWith(
       "X-Database-Status",
-      "degraded"
+      "degraded",
     );
     expect(next).toHaveBeenCalledTimes(1);
   });

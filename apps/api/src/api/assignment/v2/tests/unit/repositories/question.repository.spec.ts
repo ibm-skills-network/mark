@@ -48,7 +48,7 @@ describe("QuestionRepository", () => {
           provide: QuestionRepository,
           useFactory: () => {
             const repo = new QuestionRepository(
-              mockPrismaService as unknown as PrismaService
+              mockPrismaService as unknown as PrismaService,
             );
 
             (repo as any).logger = mockLogger;
@@ -123,7 +123,7 @@ describe("QuestionRepository", () => {
         .mockResolvedValue(
           mockQuestions as Awaited<
             ReturnType<typeof prismaService.question.findMany>
-          >
+          >,
         );
 
       const mapToQuestionDtoSpy = jest
@@ -138,10 +138,10 @@ describe("QuestionRepository", () => {
                   createMockVariantDto({
                     id: v.id || 101,
                     variantContent: v.variantContent || "Variant content",
-                  })
+                  }),
                 )
               : [],
-          })
+          }),
         );
 
       const result = await repository.findByAssignmentId(assignmentId);
@@ -179,12 +179,12 @@ describe("QuestionRepository", () => {
           } catch (error: unknown) {
             if (error instanceof Error) {
               mockLogger.error(
-                `Error fetching questions for assignment ${id}: ${error.message}`
+                `Error fetching questions for assignment ${id}: ${error.message}`,
               );
               throw error;
             } else {
               mockLogger.error(
-                `Unknown error fetching questions for assignment ${id}`
+                `Unknown error fetching questions for assignment ${id}`,
               );
               throw new Error("Unknown error");
             }
@@ -192,7 +192,7 @@ describe("QuestionRepository", () => {
         });
 
       await expect(repository.findByAssignmentId(assignmentId)).rejects.toThrow(
-        mockError
+        mockError,
       );
       expect(mockLogger.error).toHaveBeenCalled();
     });
@@ -290,7 +290,7 @@ describe("QuestionRepository", () => {
       delete questionDto.id;
 
       await expect(repository.upsert(questionDto)).rejects.toThrow(
-        "Question ID is required for upsert operation"
+        "Question ID is required for upsert operation",
       );
     });
 
@@ -311,7 +311,7 @@ describe("QuestionRepository", () => {
         } catch (error) {
           if (error instanceof Error) {
             mockLogger.error(
-              `Error upserting question ${dto.id}: ${error.message}`
+              `Error upserting question ${dto.id}: ${error.message}`,
             );
           } else {
             mockLogger.error(`Unknown error upserting question ${dto.id}`);
@@ -362,7 +362,7 @@ describe("QuestionRepository", () => {
         } catch (error) {
           if (error instanceof Error) {
             mockLogger.error(
-              `Error marking questions as deleted: ${error.message}`
+              `Error marking questions as deleted: ${error.message}`,
             );
           } else {
             mockLogger.error("Unknown error marking questions as deleted");
@@ -372,7 +372,7 @@ describe("QuestionRepository", () => {
       });
 
       await expect(repository.markAsDeleted(questionIds)).rejects.toThrow(
-        mockError
+        mockError,
       );
       expect(mockLogger.error).toHaveBeenCalled();
     });
@@ -466,7 +466,7 @@ describe("QuestionRepository", () => {
         .mockReturnValue(
           JSON.stringify([
             { id: 1, choice: "Choice", isCorrect: true, points: 10 },
-          ])
+          ]),
         );
 
       const result = await repository.createMany(questionDtos);
@@ -530,7 +530,7 @@ describe("QuestionRepository", () => {
         .mockReturnValue(
           JSON.stringify([
             { id: 1, choice: "Choice", isCorrect: true, points: 10 },
-          ])
+          ]),
         );
 
       const result = await repository.createMany(questionDtos);
@@ -566,7 +566,7 @@ describe("QuestionRepository", () => {
         } catch (error) {
           if (error instanceof Error) {
             mockLogger.error(
-              `Error in bulk question creation: ${error.message}`
+              `Error in bulk question creation: ${error.message}`,
             );
           } else {
             mockLogger.error("Unknown error in bulk question creation");
@@ -576,7 +576,7 @@ describe("QuestionRepository", () => {
       });
 
       await expect(repository.createMany(questionDtos)).rejects.toThrow(
-        mockError
+        mockError,
       );
       expect(mockLogger.error).toHaveBeenCalled();
     });
@@ -640,7 +640,7 @@ describe("QuestionRepository", () => {
       expect(result.variants).toBeDefined();
       expect(result.variants?.length).toBe(1);
       expect(result.variants?.[0].variantContent).toBe(
-        "What is the capital city of France?"
+        "What is the capital city of France?",
       );
       expect(Array.isArray(result.variants?.[0].choices)).toBe(true);
     });
@@ -781,7 +781,7 @@ describe("QuestionRepository", () => {
           } catch (error: unknown) {
             if (error instanceof Error) {
               mockLogger.error(
-                `Error preparing question data: ${error.message}`
+                `Error preparing question data: ${error.message}`,
               );
             } else {
               mockLogger.error("Unknown error preparing question data");
@@ -791,7 +791,7 @@ describe("QuestionRepository", () => {
         });
 
       expect(() => repository["prepareQuestionData"](questionData)).toThrow(
-        mockError
+        mockError,
       );
       expect(mockLogger.error).toHaveBeenCalled();
     });

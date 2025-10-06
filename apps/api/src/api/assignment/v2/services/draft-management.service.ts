@@ -61,13 +61,13 @@ export class DraftManagementService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "DraftManagementService" });
   }
 
   private parseDisplayOrder(
-    value: any
+    value: any,
   ): AssignmentQuestionDisplayOrder | undefined {
     if (value === "DEFINED" || value === "RANDOM") {
       return value as AssignmentQuestionDisplayOrder;
@@ -85,7 +85,7 @@ export class DraftManagementService {
   async saveDraft(
     assignmentId: number,
     saveDraftDto: SaveDraftDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<DraftSummary> {
     this.logger.info(`Saving draft for assignment ${assignmentId}`, {
       userId: userSession.userId,
@@ -149,7 +149,7 @@ export class DraftManagementService {
             assignment.displayOrder,
           questionDisplay:
             this.parseQuestionDisplay(
-              saveDraftDto.assignmentData?.questionDisplay
+              saveDraftDto.assignmentData?.questionDisplay,
             ) ?? assignment.questionDisplay,
           numberOfQuestionsPerAttempt:
             saveDraftDto.assignmentData?.numberOfQuestionsPerAttempt ??
@@ -184,7 +184,7 @@ export class DraftManagementService {
         {
           draftId: assignmentDraft.id,
           userId: userSession.userId,
-        }
+        },
       );
 
       return {
@@ -202,7 +202,7 @@ export class DraftManagementService {
   async updateDraft(
     draftId: number,
     saveDraftDto: SaveDraftDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<DraftSummary> {
     this.logger.info(`Updating draft ${draftId}`, {
       userId: userSession.userId,
@@ -265,12 +265,12 @@ export class DraftManagementService {
         }),
         ...(saveDraftDto.assignmentData?.displayOrder !== undefined && {
           displayOrder: this.parseDisplayOrder(
-            saveDraftDto.assignmentData.displayOrder
+            saveDraftDto.assignmentData.displayOrder,
           ),
         }),
         ...(saveDraftDto.assignmentData?.questionDisplay !== undefined && {
           questionDisplay: this.parseQuestionDisplay(
-            saveDraftDto.assignmentData.questionDisplay
+            saveDraftDto.assignmentData.questionDisplay,
           ),
         }),
         ...(saveDraftDto.assignmentData?.numberOfQuestionsPerAttempt !==
@@ -317,7 +317,7 @@ export class DraftManagementService {
 
   async listUserDrafts(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<DraftSummary[]> {
     // Verify assignment access
     // await this.verifyAssignmentAccess(assignmentId, userSession);
@@ -344,7 +344,7 @@ export class DraftManagementService {
 
   async getDraft(
     draftId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<{
     id: number;
     name: string;
@@ -445,7 +445,7 @@ export class DraftManagementService {
 
   async getLatestDraft(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<{
     id: number;
     name: string;
@@ -496,7 +496,7 @@ export class DraftManagementService {
 
   private async verifyAssignmentAccess(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ) {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -509,7 +509,7 @@ export class DraftManagementService {
 
     if (userSession.role === UserRole.AUTHOR) {
       const hasAccess = assignment.AssignmentAuthor.some(
-        (author) => author.userId === userSession.userId
+        (author) => author.userId === userSession.userId,
       );
       if (!hasAccess) {
         throw new NotFoundException("Assignment not found");

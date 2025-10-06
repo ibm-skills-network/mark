@@ -18,7 +18,7 @@ export class ReportService {
     assignmentId: number,
     issueType: ReportType,
     description: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     this.validateReportInputs(issueType, description, userId);
 
@@ -46,7 +46,7 @@ export class ReportService {
   private validateReportInputs(
     issueType: ReportType,
     description: string,
-    userId: string
+    userId: string,
   ): void {
     if (!issueType || !description) {
       throw new BadRequestException("Issue type and description are required");
@@ -74,7 +74,7 @@ export class ReportService {
 
     if (recentReports.length >= 5) {
       throw new UnprocessableEntityException(
-        "You have reached the maximum number of reports allowed in a 24-hour period."
+        "You have reached the maximum number of reports allowed in a 24-hour period.",
       );
     }
   }

@@ -90,15 +90,14 @@ describe("QuestionService", () => {
         createMockQuestionDto({ id: 2 }, QuestionType.MULTIPLE_CORRECT),
       ];
       questionRepository.findByAssignmentId.mockResolvedValue(
-        expectedQuestions
+        expectedQuestions,
       );
 
-      const result = await questionService.getQuestionsForAssignment(
-        assignmentId
-      );
+      const result =
+        await questionService.getQuestionsForAssignment(assignmentId);
 
       expect(questionRepository.findByAssignmentId).toHaveBeenCalledWith(
-        assignmentId
+        assignmentId,
       );
       expect(result).toEqual(expectedQuestions);
     });
@@ -110,7 +109,7 @@ describe("QuestionService", () => {
       const question1 = createMockQuestionDto({ id: 1 });
       const question2 = createMockQuestionDto(
         { id: 2 },
-        QuestionType.MULTIPLE_CORRECT
+        QuestionType.MULTIPLE_CORRECT,
       );
 
       const generateVariantDto: GenerateQuestionVariantDto = {
@@ -129,12 +128,12 @@ describe("QuestionService", () => {
         }),
       ];
       llmFacadeService.generateQuestionRewordings.mockResolvedValue(
-        mockVariants
+        mockVariants,
       );
 
       const result = await questionService.generateQuestionVariants(
         assignmentId,
-        generateVariantDto
+        generateVariantDto,
       );
 
       expect(result.id).toEqual(assignmentId);
@@ -143,7 +142,7 @@ describe("QuestionService", () => {
       expect(result.questions).toHaveLength(2);
       expect(result.questions[0].variants).toBeDefined();
       expect(llmFacadeService.generateQuestionRewordings).toHaveBeenCalledTimes(
-        2
+        2,
       );
     });
 
@@ -170,13 +169,13 @@ describe("QuestionService", () => {
 
       const result = await questionService.generateQuestionVariants(
         assignmentId,
-        generateVariantDto
+        generateVariantDto,
       );
 
       expect(result.id).toEqual(assignmentId);
       expect(result.success).toBe(true);
       expect(
-        llmFacadeService.generateQuestionRewordings
+        llmFacadeService.generateQuestionRewordings,
       ).not.toHaveBeenCalled();
     });
 
@@ -195,7 +194,7 @@ describe("QuestionService", () => {
         ];
 
         questionRepository.findByAssignmentId.mockResolvedValue(
-          existingQuestions
+          existingQuestions,
         );
 
         questionRepository.upsert.mockResolvedValue(questions[0]);
@@ -203,11 +202,11 @@ describe("QuestionService", () => {
         await questionService.processQuestionsForPublishing(
           assignmentId,
           questions,
-          jobId
+          jobId,
         );
 
         expect(questionRepository.findByAssignmentId).toHaveBeenCalledWith(
-          assignmentId
+          assignmentId,
         );
         expect(questionRepository.markAsDeleted).toHaveBeenCalledWith([3]);
 
@@ -238,7 +237,7 @@ describe("QuestionService", () => {
         await questionService.processQuestionsForPublishing(
           assignmentId,
           [updatedQuestion],
-          jobId
+          jobId,
         );
 
         expect(llmFacadeService.applyGuardRails).toHaveBeenCalled();
@@ -257,7 +256,7 @@ describe("QuestionService", () => {
         await questionService.processQuestionsForPublishing(
           assignmentId,
           [question],
-          jobId
+          jobId,
         );
 
         expect(translationService.translateQuestion).toHaveBeenCalledWith(
@@ -265,7 +264,7 @@ describe("QuestionService", () => {
           question.id,
           question,
           jobId,
-          true // questionContentChanged should be true for unchanged content - will retranslate
+          true, // questionContentChanged should be true for unchanged content - will retranslate
         );
       });
 
@@ -290,7 +289,7 @@ describe("QuestionService", () => {
         await questionService.processQuestionsForPublishing(
           assignmentId,
           [updatedQuestion],
-          jobId
+          jobId,
         );
 
         expect(translationService.translateQuestion).toHaveBeenCalledWith(
@@ -298,7 +297,7 @@ describe("QuestionService", () => {
           updatedQuestion.id,
           updatedQuestion,
           jobId,
-          true // questionContentChanged should be true - will force retranslation
+          true, // questionContentChanged should be true - will force retranslation
         );
       });
     });
@@ -319,12 +318,12 @@ describe("QuestionService", () => {
         const result = await questionService.generateQuestions(
           assignmentId,
           payload,
-          userId
+          userId,
         );
 
         expect(jobStatusService.createJob).toHaveBeenCalledWith(
           assignmentId,
-          userId
+          userId,
         );
         expect(result).toEqual({
           message: "Question generation started",
@@ -345,8 +344,8 @@ describe("QuestionService", () => {
           questionService.generateQuestions(
             assignmentId,
             invalidPayload,
-            userId
-          )
+            userId,
+          ),
         ).rejects.toThrow(BadRequestException);
       });
 
@@ -373,8 +372,8 @@ describe("QuestionService", () => {
           questionService.generateQuestions(
             assignmentId,
             invalidPayload,
-            userId
-          )
+            userId,
+          ),
         ).rejects.toThrow(BadRequestException);
       });
     });
@@ -398,7 +397,7 @@ describe("QuestionService", () => {
 
         prismaService.assignment.findUnique.mockResolvedValue(mockAssignment);
         llmFacadeService.generateQuestionGradingContext.mockResolvedValue(
-          mockGradingContext
+          mockGradingContext,
         );
         prismaService.question.update.mockResolvedValue({});
 
@@ -414,13 +413,13 @@ describe("QuestionService", () => {
         });
 
         expect(
-          llmFacadeService.generateQuestionGradingContext
+          llmFacadeService.generateQuestionGradingContext,
         ).toHaveBeenCalledWith(
           expect.arrayContaining([
             { id: 1, questionText: "Question 1" },
             { id: 2, questionText: "Question 2" },
           ]),
-          assignmentId
+          assignmentId,
         );
 
         expect(prismaService.question.update).toHaveBeenCalledTimes(2);
@@ -431,7 +430,7 @@ describe("QuestionService", () => {
         prismaService.assignment.findUnique.mockResolvedValue(null);
 
         await expect(
-          questionService.updateQuestionGradingContext(assignmentId)
+          questionService.updateQuestionGradingContext(assignmentId),
         ).rejects.toThrow(NotFoundException);
       });
     });
@@ -460,7 +459,7 @@ describe("QuestionService", () => {
 
           const result = (questionService as any).areChoicesEqual(
             choices1,
-            choices2
+            choices2,
           );
 
           expect(result).toBe(true);
@@ -503,7 +502,7 @@ describe("QuestionService", () => {
 
           const result = (questionService as any).areChoicesEqual(
             choices1,
-            choices2
+            choices2,
           );
 
           expect(result).toBe(false);
@@ -513,7 +512,7 @@ describe("QuestionService", () => {
           expect((questionService as any).areChoicesEqual()).toBe(true);
           expect((questionService as any).areChoicesEqual([])).toBe(false);
           expect((questionService as any).areChoicesEqual(undefined, [])).toBe(
-            false
+            false,
           );
         });
       });
@@ -531,7 +530,7 @@ describe("QuestionService", () => {
 
           const result = (questionService as any).checkVariantsForChanges(
             existingVariants,
-            newVariants
+            newVariants,
           );
 
           expect(result).toBe(true);
@@ -554,7 +553,7 @@ describe("QuestionService", () => {
 
           const result = (questionService as any).checkVariantsForChanges(
             existingVariants,
-            newVariants
+            newVariants,
           );
 
           expect(result).toBe(true);
@@ -567,7 +566,7 @@ describe("QuestionService", () => {
 
           const result = (questionService as any).checkVariantsForChanges(
             existingVariants,
-            newVariants
+            newVariants,
           );
 
           expect(result).toBe(false);
@@ -579,7 +578,7 @@ describe("QuestionService", () => {
           const result = (questionService as any).calculateRequiredVariants(
             1,
             1,
-            3
+            3,
           );
 
           expect(result).toBe(3);
@@ -589,7 +588,7 @@ describe("QuestionService", () => {
           const result = (questionService as any).calculateRequiredVariants(
             2,
             1,
-            3
+            3,
           );
 
           expect(result).toBe(2);
@@ -599,7 +598,7 @@ describe("QuestionService", () => {
           const result = (questionService as any).calculateRequiredVariants(
             2,
             4,
-            3
+            3,
           );
 
           expect(result).toBe(0);
@@ -614,7 +613,7 @@ describe("QuestionService", () => {
           await (questionService as any).applyGuardRails(question);
 
           expect(llmFacadeService.applyGuardRails).toHaveBeenCalledWith(
-            expect.any(String)
+            expect.any(String),
           );
         });
 
@@ -623,7 +622,7 @@ describe("QuestionService", () => {
           llmFacadeService.applyGuardRails.mockResolvedValue(false);
 
           await expect(
-            (questionService as any).applyGuardRails(question)
+            (questionService as any).applyGuardRails(question),
           ).rejects.toThrow(BadRequestException);
         });
       });

@@ -11,7 +11,7 @@ async function createInitialVersions() {
 
   try {
     console.log(
-      "Starting to create initial versions for existing assignments..."
+      "Starting to create initial versions for existing assignments...",
     );
 
     const alreadyMigrated = await prisma.assignmentVersion.count();
@@ -36,7 +36,7 @@ async function createInitialVersions() {
     });
 
     console.log(
-      `Found ${assignmentsWithoutVersions.length} assignments without versions`
+      `Found ${assignmentsWithoutVersions.length} assignments without versions`,
     );
 
     let createdCount = 0;
@@ -45,7 +45,7 @@ async function createInitialVersions() {
       try {
         await prisma.$transaction(async (tx) => {
           console.log(
-            `Creating version 1 for assignment "${assignment.name}" (ID: ${assignment.id})`
+            `Creating version 1 for assignment "${assignment.name}" (ID: ${assignment.id})`,
           );
 
           // Create the initial version (version 1)
@@ -127,19 +127,19 @@ async function createInitialVersions() {
 
           createdCount++;
           console.log(
-            `✅ Created version 1 for assignment "${assignment.name}" with ${assignment.questions.length} questions`
+            `✅ Created version 1 for assignment "${assignment.name}" with ${assignment.questions.length} questions`,
           );
         });
       } catch (error) {
         console.error(
           `❌ Failed to create version for assignment "${assignment.name}" (ID: ${assignment.id}):`,
-          error
+          error,
         );
       }
     }
 
     console.log(
-      `\n🎉 Successfully created initial versions for ${createdCount} assignments`
+      `\n🎉 Successfully created initial versions for ${createdCount} assignments`,
     );
 
     // Verify the results

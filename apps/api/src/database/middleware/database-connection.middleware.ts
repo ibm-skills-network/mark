@@ -22,7 +22,7 @@ export class DatabaseConnectionMiddleware implements NestMiddleware {
 
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly circuitBreaker: DatabaseCircuitBreakerService
+    private readonly circuitBreaker: DatabaseCircuitBreakerService,
   ) {}
 
   /**
@@ -37,7 +37,7 @@ export class DatabaseConnectionMiddleware implements NestMiddleware {
   async use(
     request: Request,
     response: Response,
-    next: NextFunction
+    next: NextFunction,
   ): Promise<void> {
     if (request.path.includes("/health")) {
       return next();
