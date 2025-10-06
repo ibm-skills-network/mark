@@ -6,7 +6,7 @@ import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserRole } from "../../../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../../../prisma.service";
+import { PrismaService } from "../../../../../database/prisma.service";
 import { VersionManagementService } from "../version-management.service";
 
 describe("VersionManagementService", () => {
@@ -97,7 +97,7 @@ describe("VersionManagementService", () => {
 
       mockPrismaService.assignment.findUnique.mockResolvedValue(mockAssignment);
       mockPrismaService.assignmentVersion.findMany.mockResolvedValue(
-        mockVersions,
+        mockVersions
       );
 
       const result = await service.listVersions(1);
@@ -113,7 +113,7 @@ describe("VersionManagementService", () => {
       mockPrismaService.assignment.findUnique.mockResolvedValue(null);
 
       await expect(service.listVersions(999)).rejects.toThrow(
-        NotFoundException,
+        NotFoundException
       );
     });
   });
@@ -134,14 +134,14 @@ describe("VersionManagementService", () => {
       };
 
       mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(
-        mockVersion,
+        mockVersion
       );
 
       const result = await service.getVersion(1, 1);
 
       expect(result).toEqual(mockVersion);
       expect(
-        mockPrismaService.assignmentVersion.findUnique,
+        mockPrismaService.assignmentVersion.findUnique
       ).toHaveBeenCalledWith({
         where: { id: 1, assignmentId: 1 },
         include: { questionVersions: { orderBy: { displayOrder: "asc" } } },
@@ -152,7 +152,7 @@ describe("VersionManagementService", () => {
       mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(null);
 
       await expect(service.getVersion(1, 999)).rejects.toThrow(
-        NotFoundException,
+        NotFoundException
       );
     });
   });
@@ -174,7 +174,7 @@ describe("VersionManagementService", () => {
       // Access private method for testing
       const result = (service as any).compareAssignmentData(
         fromVersion,
-        toVersion,
+        toVersion
       );
 
       expect(result).toHaveLength(2);
@@ -205,7 +205,7 @@ describe("VersionManagementService", () => {
 
       const result = (service as any).compareAssignmentData(
         fromVersion,
-        toVersion,
+        toVersion
       );
 
       expect(result).toHaveLength(1);
@@ -231,7 +231,7 @@ describe("VersionManagementService", () => {
 
       const result = (service as any).compareQuestionData(
         fromQuestions,
-        toQuestions,
+        toQuestions
       );
 
       const addedChanges = result.filter((c: any) => c.changeType === "added");
@@ -253,11 +253,11 @@ describe("VersionManagementService", () => {
 
       const result = (service as any).compareQuestionData(
         fromQuestions,
-        toQuestions,
+        toQuestions
       );
 
       const removedChanges = result.filter(
-        (c: any) => c.changeType === "removed",
+        (c: any) => c.changeType === "removed"
       );
       expect(removedChanges).toHaveLength(1);
       expect(removedChanges[0]).toMatchObject({
@@ -278,11 +278,11 @@ describe("VersionManagementService", () => {
 
       const result = (service as any).compareQuestionData(
         fromQuestions,
-        toQuestions,
+        toQuestions
       );
 
       const modifiedChanges = result.filter(
-        (c: any) => c.changeType === "modified",
+        (c: any) => c.changeType === "modified"
       );
       expect(modifiedChanges).toHaveLength(2); // question text and totalPoints
 
@@ -293,7 +293,7 @@ describe("VersionManagementService", () => {
           fromValue: "Old Question",
           toValue: "New Question",
           changeType: "modified",
-        }),
+        })
       );
 
       expect(modifiedChanges).toContainEqual(
@@ -303,7 +303,7 @@ describe("VersionManagementService", () => {
           fromValue: 5,
           toValue: 10,
           changeType: "modified",
-        }),
+        })
       );
     });
   });

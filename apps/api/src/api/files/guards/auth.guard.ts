@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -22,7 +22,7 @@ export class AuthGuard implements CanActivate {
     }
 
     console.log(
-      `AuthGuard: Checking access for assignment ID ${assignmentId} and group ID ${userSession.groupId}`,
+      `AuthGuard: Checking access for assignment ID ${assignmentId} and group ID ${userSession.groupId}`
     );
     if (!userSession || !userSession.groupId) {
       throw new ForbiddenException("User session or group ID is missing");
@@ -45,7 +45,7 @@ export class AuthGuard implements CanActivate {
     console.log(
       `AuthGuard: Found assignmentGroup: ${
         assignmentGroup ? "exists" : "not found"
-      }, assignment: ${assignment ? "exists" : "not found"}`,
+      }, assignment: ${assignment ? "exists" : "not found"}`
     );
     if (!assignment) {
       throw new NotFoundException("Assignment not found");

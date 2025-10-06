@@ -2,7 +2,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { PricingSource } from "@prisma/client";
 import * as cheerio from "cheerio";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import { LLM_RESOLVER_SERVICE } from "../../llm.constants";
 import { LLMResolverService } from "./llm-resolver.service";
 
@@ -53,7 +53,7 @@ function dollarsPerTokenFromPerMillion(perMillionUSD: number): number {
  */
 async function extractFromStructuredData(
   $: cheerio.CheerioAPI,
-  logger: Logger,
+  logger: Logger
 ): Promise<ExtractResult[]> {
   const results: ExtractResult[] = [];
 
@@ -87,7 +87,7 @@ async function extractFromStructuredData(
 
     // Look for data attributes on pricing elements
     const pricingElements = $(
-      "[data-model-name], [data-pricing], .pricing-card, .model-card",
+      "[data-model-name], [data-pricing], .pricing-card, .model-card"
     );
     pricingElements.each((i, elem) => {
       const $elem = $(elem);
@@ -128,7 +128,7 @@ async function extractFromStructuredData(
  */
 async function extractFromPricingTables(
   $: cheerio.CheerioAPI,
-  logger: Logger,
+  logger: Logger
 ): Promise<ExtractResult[]> {
   const results: ExtractResult[] = [];
 
@@ -164,7 +164,7 @@ async function extractFromPricingTables(
 
     // Look for card-based layouts
     const cards = $(
-      '.card, .pricing-card, .model-card, [class*="pricing"], [class*="model"]',
+      '.card, .pricing-card, .model-card, [class*="pricing"], [class*="model"]'
     );
     cards.each((i, card) => {
       const $card = $(card);
@@ -198,7 +198,7 @@ async function extractFromPricingTables(
  */
 async function extractFromTextPatterns(
   $: cheerio.CheerioAPI,
-  logger: Logger,
+  logger: Logger
 ): Promise<ExtractResult[]> {
   const results: ExtractResult[] = [];
 
@@ -421,7 +421,7 @@ function extractPricesFromElement($elem: any): {
  */
 async function extractWithAggressivePatterns(
   $: cheerio.CheerioAPI,
-  logger: Logger,
+  logger: Logger
 ): Promise<ExtractResult[]> {
   const results: ExtractResult[] = [];
 
@@ -468,7 +468,7 @@ async function extractWithAggressivePatterns(
             });
 
             logger.log(
-              `Aggressive pattern found gpt-4o: $${inputPrice}/$${outputPrice} per million`,
+              `Aggressive pattern found gpt-4o: $${inputPrice}/$${outputPrice} per million`
             );
             break; // Only take the first reasonable match
           }
@@ -514,7 +514,7 @@ async function extractWithAggressivePatterns(
                 });
 
                 logger.log(
-                  `Aggressive pattern found gpt-4o-mini: $${inputPrice}/$${outputPrice} per million`,
+                  `Aggressive pattern found gpt-4o-mini: $${inputPrice}/$${outputPrice} per million`
                 );
                 break;
               }
@@ -577,7 +577,7 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
 
     if (!res.ok) {
       logger.warn(
-        `OpenAI pricing page returned status ${res.status}: ${res.statusText}`,
+        `OpenAI pricing page returned status ${res.status}: ${res.statusText}`
       );
       return [];
     }
@@ -592,7 +592,7 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
     results = await extractFromStructuredData($, logger);
     if (results.length > 0) {
       logger.log(
-        `Successfully extracted ${results.length} models from structured data`,
+        `Successfully extracted ${results.length} models from structured data`
       );
       return results;
     }
@@ -601,7 +601,7 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
     results = await extractFromPricingTables($, logger);
     if (results.length > 0) {
       logger.log(
-        `Successfully extracted ${results.length} models from pricing tables`,
+        `Successfully extracted ${results.length} models from pricing tables`
       );
       return results;
     }
@@ -610,7 +610,7 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
     results = await extractFromTextPatterns($, logger);
     if (results.length > 0) {
       logger.log(
-        `Successfully extracted ${results.length} models from text patterns`,
+        `Successfully extracted ${results.length} models from text patterns`
       );
       return results;
     }
@@ -619,7 +619,7 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
     results = await extractWithAggressivePatterns($, logger);
     if (results.length > 0) {
       logger.log(
-        `Successfully extracted ${results.length} models using aggressive patterns`,
+        `Successfully extracted ${results.length} models using aggressive patterns`
       );
       return results;
     }
@@ -636,7 +636,7 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
  * Single entry point for web scraping a model's pricing with retry logic.
  */
 async function resolveOneModelFromWeb(
-  modelKey: string,
+  modelKey: string
 ): Promise<ExtractResult | null> {
   const logger = new Logger("LLMPricingScraper");
   const maxRetries = 3;
@@ -645,7 +645,7 @@ async function resolveOneModelFromWeb(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       logger.log(
-        `Attempting to scrape pricing for ${modelKey} (attempt ${attempt}/${maxRetries})`,
+        `Attempting to scrape pricing for ${modelKey} (attempt ${attempt}/${maxRetries})`
       );
       const allPricing = await scrapeAllPricingFromOpenAI();
       const result = allPricing.find((p) => p.modelKey === modelKey) || null;
@@ -659,14 +659,14 @@ async function resolveOneModelFromWeb(
         const delay =
           baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000; // Exponential backoff with jitter
         logger.warn(
-          `Model ${modelKey} not found in scraped data, retrying in ${delay}ms...`,
+          `Model ${modelKey} not found in scraped data, retrying in ${delay}ms...`
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     } catch (error) {
       logger.error(
         `Error scraping pricing for ${modelKey} (attempt ${attempt}):`,
-        error,
+        error
       );
 
       if (attempt < maxRetries) {
@@ -678,7 +678,7 @@ async function resolveOneModelFromWeb(
   }
 
   logger.warn(
-    `Failed to scrape pricing for ${modelKey} after ${maxRetries} attempts`,
+    `Failed to scrape pricing for ${modelKey} after ${maxRetries} attempts`
   );
   return null;
 }
@@ -695,7 +695,7 @@ export class LLMPricingService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(LLM_RESOLVER_SERVICE)
-    private readonly llmResolverService: LLMResolverService,
+    private readonly llmResolverService: LLMResolverService
   ) {}
 
   /**
@@ -728,7 +728,7 @@ export class LLMPricingService {
    */
   async fetchCurrentPricing(): Promise<ModelPricing[]> {
     this.logger.log(
-      "Fetching current pricing from OpenAI website via web scraping",
+      "Fetching current pricing from OpenAI website via web scraping"
     );
 
     try {
@@ -741,7 +741,7 @@ export class LLMPricingService {
       });
 
       this.logger.log(
-        `Found ${openaiModels.length} OpenAI models to fetch pricing for`,
+        `Found ${openaiModels.length} OpenAI models to fetch pricing for`
       );
 
       // Use cached pricing data to reduce API calls
@@ -749,7 +749,7 @@ export class LLMPricingService {
 
       if (scrapedPricing.length === 0) {
         this.logger.warn(
-          "No pricing data scraped, falling back to manual pricing",
+          "No pricing data scraped, falling back to manual pricing"
         );
         return this.getFallbackPricingForAllModels();
       }
@@ -760,7 +760,7 @@ export class LLMPricingService {
       // Match scraped data with database models
       for (const model of openaiModels) {
         const scrapedModel = scrapedPricing.find(
-          (p) => p.modelKey === model.modelKey,
+          (p) => p.modelKey === model.modelKey
         );
 
         if (scrapedModel) {
@@ -779,7 +779,7 @@ export class LLMPricingService {
 
           modelsWithPricing.add(model.modelKey);
           this.logger.log(
-            `Successfully fetched pricing for ${model.modelKey}: input=$${scrapedModel.inputPerToken}, output=$${scrapedModel.outputPerToken}`,
+            `Successfully fetched pricing for ${model.modelKey}: input=$${scrapedModel.inputPerToken}, output=$${scrapedModel.outputPerToken}`
           );
         } else {
           // Try fallback pricing for this specific model
@@ -787,7 +787,7 @@ export class LLMPricingService {
           if (fallbackPricing) {
             currentPricing.push(fallbackPricing);
             this.logger.warn(
-              `Using fallback pricing for ${model.modelKey} (not available on OpenAI website yet)`,
+              `Using fallback pricing for ${model.modelKey} (not available on OpenAI website yet)`
             );
           } else {
             this.logger.error(`No pricing found for model ${model.modelKey}`);
@@ -800,7 +800,7 @@ export class LLMPricingService {
           modelsWithPricing.size
         } from scraping, ${
           currentPricing.length - modelsWithPricing.size
-        } from fallback)`,
+        } from fallback)`
       );
       return currentPricing;
     } catch (error) {
@@ -809,7 +809,7 @@ export class LLMPricingService {
       // Return fallback pricing for known models to prevent complete failure
       const fallbackPricing = this.getFallbackPricingForAllModels();
       this.logger.warn(
-        `Returning fallback pricing for ${fallbackPricing.length} models due to scraping failure`,
+        `Returning fallback pricing for ${fallbackPricing.length} models due to scraping failure`
       );
       return fallbackPricing;
     }
@@ -931,7 +931,7 @@ export class LLMPricingService {
 
         if (existingPricing) {
           this.logger.debug(
-            `Pricing for ${pricing.modelKey} unchanged within last 24h`,
+            `Pricing for ${pricing.modelKey} unchanged within last 24h`
           );
           continue;
         }
@@ -961,13 +961,13 @@ export class LLMPricingService {
         });
 
         this.logger.log(
-          `Updated pricing for ${pricing.modelKey}: input=$${pricing.inputTokenPrice}, output=$${pricing.outputTokenPrice}`,
+          `Updated pricing for ${pricing.modelKey}: input=$${pricing.inputTokenPrice}, output=$${pricing.outputTokenPrice}`
         );
         updatedCount++;
       } catch (error) {
         this.logger.error(
           `Failed to update pricing for ${pricing.modelKey}:`,
-          error,
+          error
         );
       }
     }
@@ -981,7 +981,7 @@ export class LLMPricingService {
    */
   async getPricingAtDate(
     modelKey: string,
-    date: Date,
+    date: Date
   ): Promise<ModelPricing | null> {
     const model = await this.prisma.lLMModel.findUnique({
       where: { modelKey },
@@ -1027,7 +1027,7 @@ export class LLMPricingService {
 
       if (pricing) {
         this.logger.debug(
-          `Using future pricing for ${modelKey} at ${date.toISOString()}: effective ${pricing.effectiveDate.toISOString()}`,
+          `Using future pricing for ${modelKey} at ${date.toISOString()}: effective ${pricing.effectiveDate.toISOString()}`
         );
       }
     }
@@ -1048,7 +1048,7 @@ export class LLMPricingService {
 
       if (pricing) {
         this.logger.debug(
-          `Using latest available pricing for ${modelKey} at ${date.toISOString()}: effective ${pricing.effectiveDate.toISOString()}`,
+          `Using latest available pricing for ${modelKey} at ${date.toISOString()}: effective ${pricing.effectiveDate.toISOString()}`
         );
       }
     }
@@ -1112,7 +1112,7 @@ export class LLMPricingService {
     inputTokens: number,
     outputTokens: number,
     usageDate: Date,
-    usageType?: string,
+    usageType?: string
   ): Promise<CostBreakdown | null> {
     // Use the new upscaling-aware calculation method
     return await this.calculateCostWithUpscaling(
@@ -1120,7 +1120,7 @@ export class LLMPricingService {
       inputTokens,
       outputTokens,
       usageDate,
-      usageType,
+      usageType
     );
   }
 
@@ -1190,7 +1190,7 @@ export class LLMPricingService {
     globalFactor?: number,
     usageFactors?: { [usageType: string]: number },
     reason?: string,
-    appliedBy?: string,
+    appliedBy?: string
   ): Promise<{
     updatedModels: number;
     oldUpscaling: any;
@@ -1201,8 +1201,8 @@ export class LLMPricingService {
 
     this.logger.log(
       `Applying price upscaling: globalFactor=${globalFactor}, usageFactors=${JSON.stringify(
-        usageFactors,
-      )}, reason=${reason}`,
+        usageFactors
+      )}, reason=${reason}`
     );
 
     try {
@@ -1242,7 +1242,7 @@ export class LLMPricingService {
       });
 
       this.logger.log(
-        `Price upscaling applied successfully. Will affect ${modelsCount} models.`,
+        `Price upscaling applied successfully. Will affect ${modelsCount} models.`
       );
 
       return {
@@ -1279,7 +1279,7 @@ export class LLMPricingService {
    */
   async removePriceUpscaling(
     reason?: string,
-    removedBy?: string,
+    removedBy?: string
   ): Promise<boolean> {
     try {
       const activeUpscaling = await this.prisma.lLMPriceUpscaling.findFirst({
@@ -1321,7 +1321,7 @@ export class LLMPricingService {
     inputTokens: number,
     outputTokens: number,
     usageDate: Date,
-    usageType?: string,
+    usageType?: string
   ): Promise<CostBreakdown | null> {
     // Get base pricing
     const basePricing = await this.getPricingAtDate(modelKey, usageDate);

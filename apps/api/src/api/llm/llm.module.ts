@@ -1,5 +1,5 @@
 import { Global, Module } from "@nestjs/common";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { S3Service } from "../files/services/s3.service";
 import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
@@ -73,7 +73,7 @@ import {
         p3: Gpt4VisionPreviewLlmService,
         p4: Gpt5LlmService,
         p5: Gpt5MiniLlmService,
-        p6: Gpt5NanoLlmService,
+        p6: Gpt5NanoLlmService
         // p7: LlamaLlmService,
       ) => {
         return [p1, p2, p3, p4, p5, p6];

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { PrismaService } from "../../prisma.service";
+import { PrismaService } from "../../database/prisma.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminService } from "./admin.service";
 

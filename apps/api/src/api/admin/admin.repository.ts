@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Assignment, AssignmentAttempt } from "@prisma/client";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { RegradingRequestDto } from "../assignment/attempt/dto/assignment-attempt/feedback.request.dto";
 
 @Injectable()

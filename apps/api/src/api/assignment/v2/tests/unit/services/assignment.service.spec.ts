@@ -13,7 +13,7 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/v2/services/question.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockAssignmentRepository,
   createMockAssignmentResponseDto,
@@ -95,10 +95,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       expect(response).toEqual(mockAssignment);
       expect(assignmentRepository.findById).toHaveBeenCalledWith(
         1,
-        sampleLearnerSession,
+        sampleLearnerSession
       );
       expect(
-        translationService.applyTranslationsToAssignment,
+        translationService.applyTranslationsToAssignment
       ).not.toHaveBeenCalled();
     });
 
@@ -111,10 +111,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       expect(response).toEqual(mockAssignment);
       expect(assignmentRepository.findById).toHaveBeenCalledWith(
         1,
-        sampleAuthorSession,
+        sampleAuthorSession
       );
       expect(
-        translationService.applyTranslationsToAssignment,
+        translationService.applyTranslationsToAssignment
       ).not.toHaveBeenCalled();
     });
 
@@ -125,7 +125,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       await service.getAssignment(1, sampleAuthorSession, "fr");
 
       expect(
-        translationService.applyTranslationsToAssignment,
+        translationService.applyTranslationsToAssignment
       ).toHaveBeenCalledWith(mockAssignment, "fr");
     });
   });
@@ -139,7 +139,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
       expect(response).toEqual(list);
       expect(assignmentRepository.findAllForUser).toHaveBeenCalledWith(
-        sampleAuthorSession,
+        sampleAuthorSession
       );
     });
   });
@@ -158,7 +158,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       expect(assignmentRepository.update).toHaveBeenCalledWith(1, dto);
       expect(translationService.translateAssignment).toHaveBeenCalledWith(1);
       expect(questionService.updateQuestionGradingContext).toHaveBeenCalledWith(
-        1,
+        1
       );
     });
 
@@ -182,7 +182,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       await service.updateAssignment(1, dto);
 
       expect(questionService.updateQuestionGradingContext).toHaveBeenCalledWith(
-        1,
+        1
       );
     });
   });
@@ -223,7 +223,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
       expect(jobStatusService.createPublishJob).toHaveBeenCalledWith(
         1,
-        "author-123",
+        "author-123"
       );
       expect(spy).toHaveBeenCalledWith(1, 1, dto, "author-123");
       expect(response).toEqual({ jobId: 1, message: "Publishing started" });
@@ -249,10 +249,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       const dto = createMockUpdateAssignmentQuestionsDto();
 
       jest
-        .spyOn<
-          any,
-          any
-        >(service as any, "haveTranslatableAssignmentFieldsChanged")
+        .spyOn<any, any>(
+          service as any,
+          "haveTranslatableAssignmentFieldsChanged"
+        )
         .mockReturnValue(true);
       jest
         .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
@@ -262,32 +262,32 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         jobId,
         assignmentId,
         dto,
-        "author-123",
+        "author-123"
       );
 
       expect(
-        questionService.processQuestionsForPublishing,
+        questionService.processQuestionsForPublishing
       ).toHaveBeenCalledWith(
         assignmentId,
         dto.questions,
         expect.anything(),
-        expect.anything(),
+        expect.anything()
       );
       expect(translationService.translateAssignment).toHaveBeenCalledWith(
         assignmentId,
         jobId,
-        expect.anything(),
+        expect.anything()
       );
       expect(questionService.updateQuestionGradingContext).toHaveBeenCalledWith(
-        assignmentId,
+        assignmentId
       );
       expect(assignmentRepository.update).toHaveBeenCalledWith(
         assignmentId,
-        expect.objectContaining({ published: true }),
+        expect.objectContaining({ published: true })
       );
       expect(jobStatusService.updateJobStatus).toHaveBeenCalledWith(
         jobId,
-        expect.objectContaining({ status: "Completed" }),
+        expect.objectContaining({ status: "Completed" })
       );
     });
   });
@@ -301,10 +301,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
 
     jest
-      .spyOn<
-        any,
-        any
-      >(service as any, "haveTranslatableAssignmentFieldsChanged")
+      .spyOn<any, any>(
+        service as any,
+        "haveTranslatableAssignmentFieldsChanged"
+      )
       .mockReturnValue(false);
     jest
       .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
@@ -319,7 +319,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       jobId,
       assignmentId,
       dto,
-      "author-123",
+      "author-123"
     );
 
     expect(translationService.translateAssignment).not.toHaveBeenCalled();
@@ -337,7 +337,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       const dto = createMockUpdateAssignmentDto(patch);
 
       expect(
-        service["haveTranslatableAssignmentFieldsChanged"](existing, dto),
+        service["haveTranslatableAssignmentFieldsChanged"](existing, dto)
       ).toBe(true);
     });
 
@@ -369,8 +369,8 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       expect(
         service["haveTranslatableAssignmentFieldsChanged"](
           existingAssignment,
-          dto,
-        ),
+          dto
+        )
       ).toBe(false);
     });
   });
@@ -383,7 +383,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         createMockQuestionDto({ id: 2 }, QuestionType.MULTIPLE_CORRECT),
       ];
       expect(service["haveQuestionContentsChanged"](existing, updated)).toBe(
-        true,
+        true
       );
     });
 
@@ -391,7 +391,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       const existing = [createMockQuestionDto()];
       const updated = [createMockQuestionDto({ question: "Different text" })];
       expect(service["haveQuestionContentsChanged"](existing, updated)).toBe(
-        true,
+        true
       );
     });
 
@@ -401,7 +401,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         createMockQuestionDto({}, QuestionType.MULTIPLE_CORRECT),
       ];
       expect(service["haveQuestionContentsChanged"](existing, updated)).toBe(
-        true,
+        true
       );
     });
 
@@ -417,7 +417,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         .mockReturnValue(false);
 
       expect(service["haveQuestionContentsChanged"](existing, updated)).toBe(
-        true,
+        true
       );
     });
 
@@ -449,7 +449,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         .mockReturnValue(true);
 
       expect(service["haveQuestionContentsChanged"](existing, updated)).toBe(
-        true,
+        true
       );
     });
 
@@ -470,7 +470,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         .mockReturnValue(false);
 
       expect(service["haveQuestionContentsChanged"](existing, updated)).toBe(
-        false,
+        false
       );
     });
   });
@@ -486,8 +486,8 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       return expect(
         service["safeStringCompare"](
           a,
-          b as string | number | boolean | null | undefined,
-        ),
+          b as string | number | boolean | null | undefined
+        )
       ).toBe(expected);
     });
   });

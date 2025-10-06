@@ -5,7 +5,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import fetch, { Response } from "node-fetch";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 
 @Injectable()
 export class GithubService {
@@ -23,7 +23,7 @@ export class GithubService {
       throw new BadRequestException("Assignment ID is required");
     }
     return Promise.resolve(
-      `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUrl}&scope=repo`,
+      `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUrl}&scope=repo`
     );
   }
   async exchangeCodeForToken(code: string, userId: string): Promise<string> {
@@ -38,7 +38,7 @@ export class GithubService {
 
     if (!clientId || !clientSecret) {
       throw new BadRequestException(
-        "GitHub client ID or client secret is missing",
+        "GitHub client ID or client secret is missing"
       );
     }
 
@@ -55,7 +55,7 @@ export class GithubService {
           client_secret: clientSecret,
           code,
         }).toString(),
-      },
+      }
     );
 
     interface GitHubTokenResponse {
@@ -67,13 +67,13 @@ export class GithubService {
       (await response.json()) as GitHubTokenResponse;
     if (!response.ok) {
       throw new BadRequestException(
-        data.error || "Failed to retrieve GitHub access token",
+        data.error || "Failed to retrieve GitHub access token"
       );
     }
 
     if (!data.access_token) {
       throw new BadRequestException(
-        data.error || "Access token not returned from GitHub",
+        data.error || "Access token not returned from GitHub"
       );
     }
     try {
@@ -104,7 +104,7 @@ export class GithubService {
     } catch {
       throw new HttpException(
         "Database error",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
 

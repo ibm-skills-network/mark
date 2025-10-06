@@ -3,7 +3,7 @@ import { Module } from "@nestjs/common";
 import { AdminService } from "src/api/admin/admin.service";
 import { LlmModule } from "src/api/llm/llm.module";
 import { AdminVerificationService } from "src/auth/services/admin-verification.service";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { AssignmentControllerV2 } from "../controllers/assignment.controller";
 import { DraftManagementController } from "../controllers/draft-management.controller";
 import { VersionManagementController } from "../controllers/version-management.controller";

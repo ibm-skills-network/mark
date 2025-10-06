@@ -2,7 +2,7 @@
 import { Injectable } from "@nestjs/common";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "src/api/assignment/question/dto/create.update.question.request.dto";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 
 @Injectable()
 export class QuestionVariantService {
@@ -15,7 +15,7 @@ export class QuestionVariantService {
    */
   async createAttemptQuestionVariants(
     attemptId: number,
-    questions: QuestionDto[],
+    questions: QuestionDto[]
   ): Promise<void> {
     const attemptQuestionVariantsData = questions.map((question) => {
       const variants = question.variants || [];
@@ -23,7 +23,7 @@ export class QuestionVariantService {
       const questionAndVariants = [undefined, ...variants];
 
       const randomIndex = Math.floor(
-        Math.random() * questionAndVariants.length,
+        Math.random() * questionAndVariants.length
       );
       const chosenVariant = questionAndVariants[randomIndex];
 
@@ -34,12 +34,12 @@ export class QuestionVariantService {
         variantId = chosenVariant.id ?? null;
         randomizedChoices = this.maybeShuffleChoices(
           this.getChoices(chosenVariant.choices),
-          chosenVariant.randomizedChoices === true,
+          chosenVariant.randomizedChoices === true
         );
       } else {
         randomizedChoices = this.maybeShuffleChoices(
           this.getChoices(question.choices),
-          question.randomizedChoices === true,
+          question.randomizedChoices === true
         );
       }
 
@@ -64,7 +64,7 @@ export class QuestionVariantService {
    */
   private maybeShuffleChoices(
     choices: Choice[] | string | null | undefined,
-    shouldShuffle: boolean,
+    shouldShuffle: boolean
   ): string | null {
     if (!choices) return null;
 

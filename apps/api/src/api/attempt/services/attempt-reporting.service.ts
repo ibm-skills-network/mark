@@ -4,7 +4,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { ReportType } from "@prisma/client";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptReportingService {
@@ -23,7 +23,7 @@ export class AttemptReportingService {
     attemptId: number,
     issueType: ReportType,
     description: string,
-    userId: string,
+    userId: string
   ): Promise<void> {
     const assignmentExists = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -53,7 +53,7 @@ export class AttemptReportingService {
 
     if (reports.length >= 5) {
       throw new UnprocessableEntityException(
-        "You have reached the maximum number of reports allowed in a 24-hour period.",
+        "You have reached the maximum number of reports allowed in a 24-hour period."
       );
     }
 

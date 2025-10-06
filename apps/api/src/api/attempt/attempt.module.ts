@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { PrismaService } from "../../prisma.service";
+import { PrismaService } from "../../database/prisma.service";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
 import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";

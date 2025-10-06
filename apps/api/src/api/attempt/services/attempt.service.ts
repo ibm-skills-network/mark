@@ -25,7 +25,7 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -40,7 +40,7 @@ export class AttemptServiceV2 {
     private readonly feedbackService: AttemptFeedbackService,
     private readonly regradingService: AttemptRegradingService,
     private readonly reportingService: AttemptReportingService,
-    private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobStatusService: JobStatusServiceV2
   ) {}
 
   /**
@@ -50,7 +50,7 @@ export class AttemptServiceV2 {
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<{ gradingJobId: number; message: string }> {
     // Create a grading job without attemptId for author preview
     const gradingJob = await this.prisma.gradingJob.create({
@@ -77,7 +77,7 @@ export class AttemptServiceV2 {
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<{ gradingJobId: number; message: string }> {
     // Create a grading job in the database
     const gradingJob = await this.prisma.gradingJob.create({
@@ -104,7 +104,7 @@ export class AttemptServiceV2 {
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<void> {
     try {
       // Update job status to processing
@@ -128,7 +128,7 @@ export class AttemptServiceV2 {
             progress,
             percentage: percentage || 0,
           });
-        },
+        }
       );
 
       // Update job status to completed
@@ -160,7 +160,7 @@ export class AttemptServiceV2 {
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<void> {
     try {
       await this.updateGradingJobStatus(gradingJobId, {
@@ -182,7 +182,7 @@ export class AttemptServiceV2 {
             progress,
             percentage,
           });
-        },
+        }
       );
 
       // Update job status to completed
@@ -224,7 +224,7 @@ export class AttemptServiceV2 {
       progress: string;
       percentage?: number;
       result?: any;
-    },
+    }
   ): Promise<void> {
     await this.prisma.gradingJob.update({
       where: { id: gradingJobId },
@@ -254,7 +254,7 @@ export class AttemptServiceV2 {
     const statusSubject = this.gradingJobStreams.get(gradingJobId);
     if (!statusSubject) {
       throw new Error(
-        `Grading job status stream for jobId ${gradingJobId} not found.`,
+        `Grading job status stream for jobId ${gradingJobId} not found.`
       );
     }
 
@@ -301,7 +301,7 @@ export class AttemptServiceV2 {
         .catch((error) => {
           console.error(
             `Failed to get initial status for job ${gradingJobId}:`,
-            error,
+            error
           );
           subscriber.next({
             type: "error",
@@ -336,7 +336,7 @@ export class AttemptServiceV2 {
 
             if (status === "Completed" || status === "Failed") {
               console.log(
-                `Grading job ${gradingJobId} finished with status: ${status}`,
+                `Grading job ${gradingJobId} finished with status: ${status}`
               );
               isStreamActive = false;
 
@@ -361,7 +361,7 @@ export class AttemptServiceV2 {
 
           console.error(
             `Poll error for job ${gradingJobId} (attempt ${consecutiveErrors}):`,
-            error,
+            error
           );
 
           if (consecutiveErrors >= 3) {
@@ -379,13 +379,13 @@ export class AttemptServiceV2 {
           // If too many consecutive errors, consider the job failed
           if (consecutiveErrors >= 10) {
             console.error(
-              `Too many consecutive errors for job ${gradingJobId}, terminating stream`,
+              `Too many consecutive errors for job ${gradingJobId}, terminating stream`
             );
             isStreamActive = false;
             subscriber.error(
               new Error(
-                `Job ${gradingJobId} monitoring failed after ${consecutiveErrors} consecutive errors`,
-              ),
+                `Job ${gradingJobId} monitoring failed after ${consecutiveErrors} consecutive errors`
+              )
             );
             return;
           }
@@ -425,7 +425,7 @@ export class AttemptServiceV2 {
       // Cleanup function
       return () => {
         console.log(
-          `Cleaning up enhanced stream for grading job ${gradingJobId}`,
+          `Cleaning up enhanced stream for grading job ${gradingJobId}`
         );
         isStreamActive = false;
 
@@ -440,7 +440,7 @@ export class AttemptServiceV2 {
       catchError((error: Error) => {
         console.error(
           `Critical stream error for grading job ${gradingJobId}:`,
-          error,
+          error
         );
         return of({
           type: "error",
@@ -451,7 +451,7 @@ export class AttemptServiceV2 {
             jobId: gradingJobId,
           }),
         } as MessageEvent);
-      }),
+      })
     );
   }
 
@@ -459,7 +459,7 @@ export class AttemptServiceV2 {
    * Get initial grading job status
    */
   private async getInitialGradingJobStatus(
-    gradingJobId: number,
+    gradingJobId: number
   ): Promise<MessageEvent> {
     const job = await this.getGradingJob(gradingJobId);
 
@@ -484,7 +484,7 @@ export class AttemptServiceV2 {
    * Poll grading job status with enhanced error handling
    */
   private async pollGradingJobStatus(
-    gradingJobId: number,
+    gradingJobId: number
   ): Promise<MessageEvent | null> {
     try {
       const job = await this.getGradingJob(gradingJobId);
@@ -517,7 +517,7 @@ export class AttemptServiceV2 {
       } catch (parseError) {
         console.warn(
           `Failed to parse job result for ${gradingJobId}:`,
-          parseError,
+          parseError
         );
         parsedResult = {
           error: "Result parsing failed",
@@ -540,7 +540,9 @@ export class AttemptServiceV2 {
     } catch (error) {
       console.error(`Failed to poll grading job ${gradingJobId}:`, error);
       throw new Error(
-        `Database error while polling job ${gradingJobId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Database error while polling job ${gradingJobId}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
     }
   }
@@ -555,7 +557,7 @@ export class AttemptServiceV2 {
       progress: string;
       percentage?: number;
       result?: any;
-    },
+    }
   ): void {
     const subject = this.gradingJobStreams.get(gradingJobId);
     if (subject) {
@@ -609,13 +611,13 @@ export class AttemptServiceV2 {
     assignmentId: number,
     attemptId: number,
     feedbackDto: AssignmentFeedbackDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentFeedbackResponseDto> {
     return this.feedbackService.submitFeedback(
       assignmentId,
       attemptId,
       feedbackDto,
-      userSession,
+      userSession
     );
   }
   async updateAssignmentAttemptWithSSE(
@@ -625,7 +627,7 @@ export class AttemptServiceV2 {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
-    response: ExpressResponse,
+    response: ExpressResponse
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     // Send periodic heartbeat to keep connection alive
     const heartbeatInterval = setInterval(() => {
@@ -639,7 +641,7 @@ export class AttemptServiceV2 {
         updateDto,
         authCookie,
         gradingCallbackRequired,
-        request,
+        request
       );
 
       clearInterval(heartbeatInterval);
@@ -656,12 +658,12 @@ export class AttemptServiceV2 {
   async getFeedback(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentFeedbackDto> {
     return this.feedbackService.getFeedback(
       assignmentId,
       attemptId,
-      userSession,
+      userSession
     );
   }
 
@@ -672,13 +674,13 @@ export class AttemptServiceV2 {
     assignmentId: number,
     attemptId: number,
     regradingRequestDto: RegradingRequestDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<RequestRegradingResponseDto> {
     return this.regradingService.processRegradingRequest(
       assignmentId,
       attemptId,
       regradingRequestDto,
-      userSession,
+      userSession
     );
   }
 
@@ -688,12 +690,12 @@ export class AttemptServiceV2 {
   async getRegradingStatus(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<RegradingStatusResponseDto> {
     return this.regradingService.getRegradingStatus(
       assignmentId,
       attemptId,
-      userSession,
+      userSession
     );
   }
 
@@ -702,7 +704,7 @@ export class AttemptServiceV2 {
    */
   async listAssignmentAttempts(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentAttemptResponseDto[]> {
     return this.prisma.assignmentAttempt.findMany({
       where:
@@ -717,11 +719,11 @@ export class AttemptServiceV2 {
    */
   async createAssignmentAttempt(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<BaseAssignmentAttemptResponseDto> {
     return this.submissionService.createAssignmentAttempt(
       assignmentId,
-      userSession,
+      userSession
     );
   }
 
@@ -734,7 +736,7 @@ export class AttemptServiceV2 {
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     gradingCallbackRequired: boolean,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     return this.submissionService.updateAssignmentAttempt(
       attemptId,
@@ -742,7 +744,7 @@ export class AttemptServiceV2 {
       updateDto,
       authCookie,
       gradingCallbackRequired,
-      request,
+      request
     );
   }
 
@@ -750,7 +752,7 @@ export class AttemptServiceV2 {
    * Get a learner assignment attempt
    */
   async getLearnerAssignmentAttempt(
-    attemptId: number,
+    attemptId: number
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.submissionService.getLearnerAssignmentAttempt(attemptId);
   }
@@ -760,7 +762,7 @@ export class AttemptServiceV2 {
    */
   async getAssignmentAttempt(
     attemptId: number,
-    language?: string,
+    language?: string
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.submissionService.getAssignmentAttempt(attemptId, language);
   }
@@ -773,14 +775,14 @@ export class AttemptServiceV2 {
     attemptId: number,
     issueType: ReportType,
     description: string,
-    userId: string,
+    userId: string
   ): Promise<void> {
     return this.reportingService.createReport(
       assignmentId,
       attemptId,
       issueType,
       description,
-      userId,
+      userId
     );
   }
 }

@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable, Logger } from "@nestjs/common";
 import { Prisma, Question, QuestionVariant } from "@prisma/client";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   Choice,
   QuestionDto,
@@ -58,7 +58,7 @@ export class QuestionRepository {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error fetching questions for assignment ${assignmentId}: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       throw error;
     }
@@ -89,7 +89,7 @@ export class QuestionRepository {
         choices: this.prepareJsonField(questionData.choices),
         scoring: this.prepareJsonField(questionData.scoring),
         videoPresentationConfig: this.prepareJsonField(
-          questionData.videoPresentationConfig,
+          questionData.videoPresentationConfig
         ),
         liveRecordingConfig: questionData.liveRecordingConfig,
         gradingContextQuestionIds: questionData.gradingContextQuestionIds,
@@ -109,7 +109,7 @@ export class QuestionRepository {
         choices: this.prepareJsonField(questionData.choices),
         scoring: this.prepareJsonField(questionData.scoring),
         videoPresentationConfig: this.prepareJsonField(
-          questionData.videoPresentationConfig,
+          questionData.videoPresentationConfig
         ),
         liveRecordingConfig: questionData.liveRecordingConfig,
         gradingContextQuestionIds: questionData.gradingContextQuestionIds,
@@ -132,7 +132,7 @@ export class QuestionRepository {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error upserting question: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       throw error;
     }
@@ -157,7 +157,7 @@ export class QuestionRepository {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error marking questions as deleted: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       throw error;
     }
@@ -192,7 +192,7 @@ export class QuestionRepository {
           const choices = this.prepareJsonField(questionData.choices);
           const scoring = this.prepareJsonField(questionData.scoring);
           const videoPresentationConfig = this.prepareJsonField(
-            questionData.videoPresentationConfig,
+            questionData.videoPresentationConfig
           );
 
           const translationsData =
@@ -210,12 +210,12 @@ export class QuestionRepository {
                       translatedText: t.translatedText,
                       untranslatedText: t.untranslatedText,
                       translatedChoices: this.prepareJsonField(
-                        t.translatedChoices,
+                        t.translatedChoices
                       ),
                       untranslatedChoices: this.prepareJsonField(
-                        t.untranslatedChoices,
+                        t.untranslatedChoices
                       ),
-                    }),
+                    })
                   ),
                 }
               : undefined;
@@ -240,7 +240,7 @@ export class QuestionRepository {
           };
 
           return this.prisma.question.create({ data });
-        }),
+        })
       );
     } catch (error: unknown) {
       const errorMessage =
@@ -248,7 +248,7 @@ export class QuestionRepository {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error in bulk question creation: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       throw error;
     }
@@ -261,7 +261,7 @@ export class QuestionRepository {
    * @returns Question DTO
    */
   private mapToQuestionDto(
-    question: Question & { variants?: QuestionVariant[] },
+    question: Question & { variants?: QuestionVariant[] }
   ): QuestionDto {
     try {
       const processedVariants: VariantDto[] = question.variants
@@ -279,7 +279,7 @@ export class QuestionRepository {
         choices: this.parseJsonField<Choice[]>(question.choices),
         scoring: this.parseJsonField<ScoringDto>(question.scoring),
         videoPresentationConfig: this.parseJsonField<VideoPresentationConfig>(
-          question.videoPresentationConfig,
+          question.videoPresentationConfig
         ),
         variants: processedVariants,
         alreadyInBackend: true,
@@ -290,7 +290,7 @@ export class QuestionRepository {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error mapping question ${question.id} to DTO: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
 
       return {
@@ -330,7 +330,7 @@ export class QuestionRepository {
    * @returns Formatted question data for database
    */
   private prepareQuestionData(
-    questionData: Omit<QuestionDto, "id" | "variants">,
+    questionData: Omit<QuestionDto, "id" | "variants">
   ): Prisma.QuestionUpdateInput {
     try {
       return {
@@ -338,7 +338,7 @@ export class QuestionRepository {
         choices: this.prepareJsonField(questionData.choices),
         scoring: this.prepareJsonField(questionData.scoring),
         videoPresentationConfig: this.prepareJsonField(
-          questionData.videoPresentationConfig,
+          questionData.videoPresentationConfig
         ),
       };
     } catch (error: unknown) {
@@ -347,7 +347,7 @@ export class QuestionRepository {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Error preparing question data: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       throw error;
     }

@@ -11,7 +11,7 @@ import {
   RequestRegradingResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/feedback.request.dto";
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptRegradingService {
@@ -29,7 +29,7 @@ export class AttemptRegradingService {
     assignmentId: number,
     attemptId: number,
     regradingRequestDto: RegradingRequestDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<RequestRegradingResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -37,19 +37,19 @@ export class AttemptRegradingService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `Assignment attempt with ID ${attemptId} not found.`,
+        `Assignment attempt with ID ${attemptId} not found.`
       );
     }
 
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
-        "Assignment ID does not match the attempt.",
+        "Assignment ID does not match the attempt."
       );
     }
 
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
-        "You do not have permission to request regrading for this attempt.",
+        "You do not have permission to request regrading for this attempt."
       );
     }
 
@@ -71,7 +71,7 @@ export class AttemptRegradingService {
             regradingStatus: RegradingStatus.PENDING,
             updatedAt: new Date(),
           },
-        },
+        }
       );
 
       return {
@@ -106,7 +106,7 @@ export class AttemptRegradingService {
   async getRegradingStatus(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<RegradingStatusResponseDto> {
     const regradingRequest = await this.prisma.regradingRequest.findFirst({
       where: {
@@ -118,7 +118,7 @@ export class AttemptRegradingService {
 
     if (!regradingRequest) {
       throw new NotFoundException(
-        `Regrading request for assignment ${assignmentId} and attempt ${attemptId} not found.`,
+        `Regrading request for assignment ${assignmentId} and attempt ${attemptId} not found.`
       );
     }
 

@@ -8,7 +8,7 @@
 /* eslint-disable unicorn/no-null */
 import { Test, TestingModule } from "@nestjs/testing";
 import { firstValueFrom } from "rxjs";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockJob,
   createMockPrismaService,
@@ -82,7 +82,7 @@ describe("JobStatusServiceV2", () => {
 
       const result = await jobStatusService.createPublishJob(
         assignmentId,
-        userId,
+        userId
       );
 
       expect(prismaService.publishJob.create).toHaveBeenCalledWith({
@@ -190,7 +190,7 @@ describe("JobStatusServiceV2", () => {
 
         expect(subject.complete).toHaveBeenCalled();
         expect((jobStatusService as any).jobStatusStreams.has(jobId)).toBe(
-          false,
+          false
         );
       });
 
@@ -455,7 +455,7 @@ describe("JobStatusServiceV2", () => {
               progress: statusUpdate.progress,
               percentage: statusUpdate.percentage,
             }),
-          }),
+          })
         );
       });
 
@@ -488,7 +488,7 @@ describe("JobStatusServiceV2", () => {
               status: "Completed",
               done: true,
             }),
-          }),
+          })
         );
         expect(subject.next).toHaveBeenNthCalledWith(
           2,
@@ -497,7 +497,7 @@ describe("JobStatusServiceV2", () => {
             data: expect.objectContaining({
               finalStatus: "Completed",
             }),
-          }),
+          })
         );
         expect(subject.next).toHaveBeenNthCalledWith(
           3,
@@ -506,7 +506,7 @@ describe("JobStatusServiceV2", () => {
             data: expect.objectContaining({
               message: "Stream completed",
             }),
-          }),
+          })
         );
 
         jest.advanceTimersByTime(1000);
@@ -540,7 +540,7 @@ describe("JobStatusServiceV2", () => {
               status: "Failed",
               done: true,
             }),
-          }),
+          })
         );
 
         jest.useRealTimers();
@@ -568,8 +568,8 @@ describe("JobStatusServiceV2", () => {
 
         expect(jobStatusService["logger"].error).toHaveBeenCalledWith(
           expect.stringContaining(
-            `Error emitting status update for job #${jobId}`,
-          ),
+            `Error emitting status update for job #${jobId}`
+          )
         );
       });
 

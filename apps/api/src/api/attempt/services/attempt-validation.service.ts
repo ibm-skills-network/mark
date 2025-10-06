@@ -10,7 +10,7 @@ import {
   LearnerGetAssignmentResponseDto,
 } from "src/api/assignment/dto/get.assignment.response.dto";
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptValidationService {
@@ -23,7 +23,7 @@ export class AttemptValidationService {
    */
   async validateNewAttempt(
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<void> {
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
@@ -55,7 +55,7 @@ export class AttemptValidationService {
     const ongoingAttempts = attempts.filter(
       (sub) =>
         !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null),
+        (sub.expiresAt >= new Date() || sub.expiresAt === null)
     );
 
     if (ongoingAttempts.length > 0) {
@@ -64,7 +64,7 @@ export class AttemptValidationService {
 
     const attemptsInTimeRange = attempts.filter(
       (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
+        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date()
     );
 
     if (
@@ -72,19 +72,19 @@ export class AttemptValidationService {
       attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
     ) {
       throw new UnprocessableEntityException(
-        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
       );
     }
 
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,
-        assignment.id,
+        assignment.id
       );
 
       if (attemptCount >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE
         );
       }
     }
@@ -109,7 +109,7 @@ export class AttemptValidationService {
     const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
     if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
       throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE
       );
     }
   }
@@ -120,11 +120,11 @@ export class AttemptValidationService {
    * @returns The time range start date
    */
   private calculateTimeRangeStartDate(
-    assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
+    assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto
   ): Date {
     if (assignment.attemptsTimeRangeHours) {
       return new Date(
-        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000,
+        Date.now() - assignment.attemptsTimeRangeHours * 60 * 60 * 1000
       );
     }
     return new Date();
@@ -138,7 +138,7 @@ export class AttemptValidationService {
    */
   private async countUserAttempts(
     userId: string,
-    assignmentId: number,
+    assignmentId: number
   ): Promise<number> {
     return this.prisma.assignmentAttempt.count({
       where: {

@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
@@ -39,7 +39,7 @@ export class AssignmentServiceV2 {
     private readonly versionManagementService: VersionManagementService,
     private readonly jobStatusService: JobStatusServiceV2,
     private readonly prisma: PrismaService,
-    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
+    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
   }
@@ -56,17 +56,17 @@ export class AssignmentServiceV2 {
   async getAssignment(
     assignmentId: number,
     userSession: UserSession,
-    languageCode?: string,
+    languageCode?: string
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const assignment = await this.assignmentRepository.findById(
       assignmentId,
-      userSession,
+      userSession
     );
 
     if (languageCode) {
       await this.translationService.applyTranslationsToAssignment(
         assignment,
-        languageCode,
+        languageCode
       );
     }
 
@@ -81,7 +81,7 @@ export class AssignmentServiceV2 {
    */
 
   async listAssignments(
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentResponseDto[]> {
     return this.assignmentRepository.findAllForUser(userSession);
   }
@@ -96,13 +96,13 @@ export class AssignmentServiceV2 {
 
   async updateAssignment(
     id: number,
-    updateDto: UpdateAssignmentRequestDto,
+    updateDto: UpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const existingAssignment = await this.assignmentRepository.findById(id);
 
     const shouldTranslate = this.shouldTranslateAssignment(
       existingAssignment,
-      updateDto,
+      updateDto
     );
 
     const result = await this.assignmentRepository.update(id, updateDto);
@@ -130,7 +130,7 @@ export class AssignmentServiceV2 {
    */
   async replaceAssignment(
     id: number,
-    replaceDto: ReplaceAssignmentRequestDto,
+    replaceDto: ReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.assignmentRepository.replace(id, replaceDto);
 
@@ -161,14 +161,14 @@ export class AssignmentServiceV2 {
   async publishAssignment(
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
-    userId: string,
+    userId: string
   ): Promise<{ jobId: number; message: string }> {
     this.logger.info(
-      `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
+      `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`
     );
     const job = await this.jobStatusService.createPublishJob(
       assignmentId,
-      userId,
+      userId
     );
 
     this.startPublishingProcess(job.id, assignmentId, updateDto, userId).catch(
@@ -181,7 +181,7 @@ export class AssignmentServiceV2 {
           status: "Failed",
           progress: `Error: ${errorMessage}`,
         });
-      },
+      }
     );
 
     return {
@@ -193,7 +193,7 @@ export class AssignmentServiceV2 {
     jobId: number,
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
-    userId: string,
+    userId: string
   ): Promise<void> {
     try {
       // Progress allocation:
@@ -209,13 +209,14 @@ export class AssignmentServiceV2 {
         percentage: 5,
       });
 
-      const existingAssignment =
-        await this.assignmentRepository.findById(assignmentId);
+      const existingAssignment = await this.assignmentRepository.findById(
+        assignmentId
+      );
 
       const assignmentTranslatableFieldsChanged =
         this.haveTranslatableAssignmentFieldsChanged(
           existingAssignment,
-          updateDto,
+          updateDto
         );
 
       await this.assignmentRepository.update(assignmentId, {
@@ -263,7 +264,7 @@ export class AssignmentServiceV2 {
         this.logger.warn(
           `Failed to store assignment author: ${
             error instanceof Error ? error.message : "Unknown error"
-          }`,
+          }`
         );
       }
 
@@ -281,7 +282,7 @@ export class AssignmentServiceV2 {
 
         questionContentChanged = this.haveQuestionContentsChanged(
           existingQuestions,
-          updateDto.questions,
+          updateDto.questions
         );
 
         await this.jobStatusService.updateJobStatus(jobId, {
@@ -303,7 +304,7 @@ export class AssignmentServiceV2 {
               progress: `Processing questions: ${childProgress}% complete`,
               percentage: Math.floor(mappedProgress),
             });
-          },
+          }
         );
       }
 
@@ -348,12 +349,12 @@ export class AssignmentServiceV2 {
           } else {
             // Only do expensive validation if quick check fails
             this.logger.warn(
-              `Quick validation failed for assignment ${assignmentId}, running full validation`,
+              `Quick validation failed for assignment ${assignmentId}, running full validation`
             );
 
             const languageValidation =
               await this.translationService.validateAssignmentLanguageConsistency(
-                assignmentId,
+                assignmentId
               );
 
             if (languageValidation.isConsistent) {
@@ -365,8 +366,8 @@ export class AssignmentServiceV2 {
             } else {
               this.logger.warn(
                 `Language consistency issues detected for assignment ${assignmentId}: ${languageValidation.mismatchedLanguages.join(
-                  ", ",
-                )}`,
+                  ", "
+                )}`
               );
 
               // Language mismatch detected - force retranslation for affected languages
@@ -379,7 +380,7 @@ export class AssignmentServiceV2 {
               await this.translationService.retranslateAssignmentForLanguages(
                 assignmentId,
                 languageValidation.mismatchedLanguages,
-                jobId,
+                jobId
               );
 
               await this.jobStatusService.updateJobStatus(jobId, {
@@ -408,13 +409,13 @@ export class AssignmentServiceV2 {
 
       const translationCompleteness =
         await this.translationService.ensureTranslationCompleteness(
-          assignmentId,
+          assignmentId
         );
 
       if (!translationCompleteness.isComplete) {
         this.logger.warn(
           `Missing translations detected for assignment ${assignmentId}. Attempting to fix...`,
-          { missingTranslations: translationCompleteness.missingTranslations },
+          { missingTranslations: translationCompleteness.missingTranslations }
         );
 
         // Attempt to fix missing translations
@@ -427,12 +428,12 @@ export class AssignmentServiceV2 {
                 missing.variantId
                   ? `variant ${missing.variantId}`
                   : `question ${missing.questionId}`
-              }: ${missing.missingLanguages.join(", ")}`,
+              }: ${missing.missingLanguages.join(", ")}`
             );
           } catch (error) {
             this.logger.error(
               `Failed to fix missing translation for question ${missing.questionId}`,
-              error,
+              error
             );
           }
         }
@@ -469,7 +470,7 @@ export class AssignmentServiceV2 {
         `Found ${updatedQuestions.length} questions after processing for assignment ${assignmentId}`,
         {
           questionIds: updatedQuestions.map((q) => q.id),
-        },
+        }
       );
 
       // Create a new version when publishing - AFTER questions are processed and committed
@@ -481,7 +482,7 @@ export class AssignmentServiceV2 {
 
       try {
         this.logger.info(
-          `Managing version after question processing - found ${updatedQuestions.length} questions`,
+          `Managing version after question processing - found ${updatedQuestions.length} questions`
         );
 
         const userSession = {
@@ -494,7 +495,7 @@ export class AssignmentServiceV2 {
         const existingDraft =
           await this.versionManagementService.getUserLatestDraft(
             assignmentId,
-            userSession,
+            userSession
           );
 
         // Check for recently created unpublished versions (to prevent duplicates from frontend)
@@ -513,7 +514,7 @@ export class AssignmentServiceV2 {
           const draftVersionId = existingDraft._draftVersionId;
           this.logger.info(
             `Found existing draft version, publishing it instead of creating new version`,
-            { draftVersionId },
+            { draftVersionId }
           );
 
           // Update the existing draft with current content first
@@ -533,13 +534,13 @@ export class AssignmentServiceV2 {
                 `Published version - ${new Date().toLocaleDateString()}`,
               versionNumber: updateDto.versionNumber,
             },
-            userSession,
+            userSession
           );
 
           // Then publish the updated draft
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
-            draftVersionId,
+            draftVersionId
           );
         } else if (
           latestVersion &&
@@ -552,20 +553,20 @@ export class AssignmentServiceV2 {
             {
               versionId: latestVersion.id,
               versionNumber: latestVersion.versionNumber,
-            },
+            }
           );
 
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
-            latestVersion.id,
+            latestVersion.id
           );
         } else if (!existingDraft && updateDto.published) {
           // No existing draft and no unpublished version - create new version directly
           this.logger.info(
-            `No existing draft or unpublished version found, creating new version directly`,
+            `No existing draft or unpublished version found, creating new version directly`
           );
           this.logger.info(
-            `UpdateDto contains versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
+            `UpdateDto contains versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`
           );
 
           versionResult = await this.versionManagementService.createVersion(
@@ -578,7 +579,7 @@ export class AssignmentServiceV2 {
               isDraft: false, // Create as published directly
               shouldActivate: true,
             },
-            userSession,
+            userSession
           );
         } else {
           // Create or update draft version (not publishing)
@@ -600,7 +601,7 @@ export class AssignmentServiceV2 {
                 `Draft - ${new Date().toLocaleDateString()}`,
               versionNumber: updateDto.versionNumber,
             },
-            userSession,
+            userSession
           );
         }
 
@@ -611,7 +612,7 @@ export class AssignmentServiceV2 {
             isDraft: versionResult.isDraft,
             isActive: versionResult.isActive,
             published: versionResult.published,
-          },
+          }
         );
       } catch (versionError) {
         // Log the full error details
@@ -627,7 +628,7 @@ export class AssignmentServiceV2 {
             assignmentId,
             userId,
             questionsFound: updatedQuestions.length,
-          },
+          }
         );
       }
 
@@ -646,7 +647,7 @@ export class AssignmentServiceV2 {
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Publishing process failed: ${errorMessage}`,
-        errorStack,
+        errorStack
       );
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "Failed",
@@ -658,7 +659,7 @@ export class AssignmentServiceV2 {
 
   private safeStringCompare = (
     string1: string | null | undefined,
-    string2: string | null | undefined,
+    string2: string | null | undefined
   ): boolean => {
     const normalizedString1 =
       string1 === null || string1 === undefined ? "" : String(string1);
@@ -674,11 +675,11 @@ export class AssignmentServiceV2 {
     existingAssignment:
       | GetAssignmentResponseDto
       | LearnerGetAssignmentResponseDto,
-    updateDto: UpdateAssignmentRequestDto | UpdateAssignmentQuestionsDto,
+    updateDto: UpdateAssignmentRequestDto | UpdateAssignmentQuestionsDto
   ): boolean {
     if (existingAssignment.graded !== updateDto.graded) {
       this.logger.debug(
-        "Graded status changed, but this doesn't trigger translation",
+        "Graded status changed, but this doesn't trigger translation"
       );
     }
 
@@ -692,7 +693,7 @@ export class AssignmentServiceV2 {
       updateDto.instructions !== null &&
       !this.safeStringCompare(
         existingAssignment.instructions,
-        updateDto.instructions,
+        updateDto.instructions
       );
 
     const introductionChanged =
@@ -700,7 +701,7 @@ export class AssignmentServiceV2 {
       updateDto.introduction !== null &&
       !this.safeStringCompare(
         existingAssignment.introduction,
-        updateDto.introduction,
+        updateDto.introduction
       );
 
     const gradingCriteriaChanged =
@@ -708,7 +709,7 @@ export class AssignmentServiceV2 {
       updateDto.gradingCriteriaOverview !== null &&
       !this.safeStringCompare(
         existingAssignment.gradingCriteriaOverview,
-        updateDto.gradingCriteriaOverview,
+        updateDto.gradingCriteriaOverview
       );
     if (
       nameChanged ||
@@ -738,17 +739,17 @@ export class AssignmentServiceV2 {
    */
   private haveQuestionContentsChanged(
     existingQuestions: QuestionDto[],
-    updatedQuestions: QuestionDto[],
+    updatedQuestions: QuestionDto[]
   ): boolean {
     if (existingQuestions.length !== updatedQuestions.length) {
       this.logger.debug(
-        `Question count changed: ${existingQuestions.length} → ${updatedQuestions.length}`,
+        `Question count changed: ${existingQuestions.length} → ${updatedQuestions.length}`
       );
       return true;
     }
 
     this.logger.debug(
-      `Comparing ${existingQuestions.length} questions for content changes`,
+      `Comparing ${existingQuestions.length} questions for content changes`
     );
 
     const existingQuestionsMap = new Map<number, QuestionDto>();
@@ -781,7 +782,7 @@ export class AssignmentServiceV2 {
       if (
         !this.safeStringCompare(
           updatedQuestion.question,
-          existingQuestion.question,
+          existingQuestion.question
         )
       ) {
         this.logger.debug(`Question #${updatedQuestion.id} text changed`);
@@ -790,14 +791,14 @@ export class AssignmentServiceV2 {
 
       if (updatedQuestion.type !== existingQuestion.type) {
         this.logger.debug(
-          `Question #${updatedQuestion.id} type changed: ${existingQuestion.type} → ${updatedQuestion.type}`,
+          `Question #${updatedQuestion.id} type changed: ${existingQuestion.type} → ${updatedQuestion.type}`
         );
         return true;
       }
 
       const choicesEqual = this.areChoicesEqual(
         updatedQuestion.choices,
-        existingQuestion.choices,
+        existingQuestion.choices
       );
       if (!choicesEqual) {
         this.logger.debug(`Question #${updatedQuestion.id} choices changed`);
@@ -807,7 +808,7 @@ export class AssignmentServiceV2 {
       const variantsChanged = this.haveVariantsChanged(
         existingQuestion.variants,
         updatedQuestion.variants,
-        updatedQuestion.id,
+        updatedQuestion.id
       );
 
       if (variantsChanged) {
@@ -817,13 +818,13 @@ export class AssignmentServiceV2 {
 
       if (updatedQuestion.totalPoints !== existingQuestion.totalPoints) {
         this.logger.debug(
-          `Question #${updatedQuestion.id} points changed: ${existingQuestion.totalPoints} → ${updatedQuestion.totalPoints} (non-translatable)`,
+          `Question #${updatedQuestion.id} points changed: ${existingQuestion.totalPoints} → ${updatedQuestion.totalPoints} (non-translatable)`
         );
       }
 
       if (updatedQuestion.maxWords !== existingQuestion.maxWords) {
         this.logger.debug(
-          `Question #${updatedQuestion.id} maxWords changed: ${existingQuestion.maxWords} → ${updatedQuestion.maxWords} (non-translatable)`,
+          `Question #${updatedQuestion.id} maxWords changed: ${existingQuestion.maxWords} → ${updatedQuestion.maxWords} (non-translatable)`
         );
       }
     }
@@ -838,7 +839,7 @@ export class AssignmentServiceV2 {
   private haveVariantsChanged(
     variants1?: VariantDto[],
     variants2?: VariantDto[],
-    questionId?: number,
+    questionId?: number
   ): boolean {
     const logPrefix = questionId
       ? `Question #${questionId} variants: `
@@ -846,28 +847,28 @@ export class AssignmentServiceV2 {
 
     if (!variants1 && !variants2) {
       this.logger.debug(
-        `${logPrefix}Both variant arrays are null/undefined (no change)`,
+        `${logPrefix}Both variant arrays are null/undefined (no change)`
       );
       return false;
     }
 
     if (!variants1 || !variants2) {
       this.logger.debug(
-        `${logPrefix}One variant array is null/undefined (change detected)`,
+        `${logPrefix}One variant array is null/undefined (change detected)`
       );
       return true;
     }
 
     if (variants1.length !== variants2.length) {
       this.logger.debug(
-        `${logPrefix}Variant count changed: ${variants1.length} → ${variants2.length}`,
+        `${logPrefix}Variant count changed: ${variants1.length} → ${variants2.length}`
       );
       return true;
     }
 
     if (variants1.length === 0) {
       this.logger.debug(
-        `${logPrefix}Both variant arrays are empty (no change)`,
+        `${logPrefix}Both variant arrays are empty (no change)`
       );
       return false;
     }
@@ -875,10 +876,10 @@ export class AssignmentServiceV2 {
     this.logger.debug(`${logPrefix}Comparing ${variants1.length} variants`);
 
     const sortedVariants1 = [...variants1].sort(
-      (a, b) => (a.id || 0) - (b.id || 0),
+      (a, b) => (a.id || 0) - (b.id || 0)
     );
     const sortedVariants2 = [...variants2].sort(
-      (a, b) => (a.id || 0) - (b.id || 0),
+      (a, b) => (a.id || 0) - (b.id || 0)
     );
 
     for (const [index, v1] of sortedVariants1.entries()) {
@@ -887,7 +888,7 @@ export class AssignmentServiceV2 {
       this.logger.debug(`${logPrefix}Comparing variant #${index + 1}:
       Content: "${v1.variantContent.slice(
         0,
-        30,
+        30
       )}..." → "${v2.variantContent.slice(0, 30)}..."
       Choices Count: ${v1.choices?.length || 0} → ${v2.choices?.length || 0}
     `);
@@ -916,10 +917,10 @@ export class AssignmentServiceV2 {
     if (!choices1 || !choices2) return false;
     if (choices1.length !== choices2.length) return false;
     const sortedChoices1 = [...choices1].sort(
-      (a, b) => (a.id || 0) - (b.id || 0),
+      (a, b) => (a.id || 0) - (b.id || 0)
     );
     const sortedChoices2 = [...choices2].sort(
-      (a, b) => (a.id || 0) - (b.id || 0),
+      (a, b) => (a.id || 0) - (b.id || 0)
     );
     for (const [index, c1] of sortedChoices1.entries()) {
       const c2 = sortedChoices2[index];
@@ -947,7 +948,7 @@ export class AssignmentServiceV2 {
     existingAssignment:
       | GetAssignmentResponseDto
       | LearnerGetAssignmentResponseDto,
-    updateDto: UpdateAssignmentRequestDto,
+    updateDto: UpdateAssignmentRequestDto
   ): boolean {
     return (
       (updateDto.name && updateDto.name !== existingAssignment.name) ||

@@ -1,7 +1,7 @@
 import * as crypto from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { isAdminEmail } from "src/config/admin-emails";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 
 @Injectable()
 export class AdminVerificationService {
@@ -96,7 +96,7 @@ export class AdminVerificationService {
    * Verify admin session token and return user info
    */
   async verifyAdminSession(
-    sessionToken: string,
+    sessionToken: string
   ): Promise<{ email: string; role: "admin" | "author" } | null> {
     const session = await this.prisma.adminSession.findFirst({
       where: {

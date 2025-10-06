@@ -7,7 +7,7 @@ import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
 import { Logger } from "winston";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import {
   CriteriaDto,
   ScoringDto,
@@ -67,7 +67,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
   ) {
     this.logger = parentLogger.child({
       context: GradingConsistencyService.name,
@@ -91,7 +91,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
   generateResponseHash(
     response: string,
     questionId: number,
-    questionType: QuestionType,
+    questionType: QuestionType
   ): string {
     try {
       // Normalize the response for comparison
@@ -119,7 +119,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
     questionId: number,
     responseHash: string,
     currentResponse: string,
-    questionType: QuestionType,
+    questionType: QuestionType
   ): Promise<ConsistencyCheck> {
     try {
       // Check cache first
@@ -161,10 +161,10 @@ export class GradingConsistencyService implements OnModuleDestroy {
       for (const grading of recentGradings) {
         try {
           const requestData = this.safeJsonParse<ParsedRequestPayload>(
-            grading.requestPayload,
+            grading.requestPayload
           );
           const responseData = this.safeJsonParse<ParsedResponsePayload>(
-            grading.responsePayload,
+            grading.responsePayload
           );
 
           if (!requestData || !responseData) continue;
@@ -178,7 +178,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
             this.isSimilarResponse(
               currentResponse,
               previousResponse,
-              questionType,
+              questionType
             )
           ) {
             const deviationPercentage = 0; // Will be calculated when current grade is known
@@ -194,7 +194,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
         } catch (error) {
           this.logger.debug(
             `Error parsing grading record ${grading.id}:`,
-            error,
+            error
           );
         }
       }
@@ -221,7 +221,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
     points: number,
     maxPoints: number,
     feedback: string,
-    rubricScores?: RubricScore[],
+    rubricScores?: RubricScore[]
   ): Promise<void> {
     try {
       const record: GradingRecord = {
@@ -246,7 +246,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
    */
   validateRubricScores(
     rubricScores: RubricScore[],
-    scoringCriteria: ScoringDto,
+    scoringCriteria: ScoringDto
   ): RubricValidationResult {
     const issues: string[] = [];
     const corrections: RubricScore[] = [];
@@ -263,14 +263,14 @@ export class GradingConsistencyService implements OnModuleDestroy {
     // Ensure we have scores for all rubrics
     if (rubricScores.length !== scoringCriteria.rubrics.length) {
       issues.push(
-        `Rubric count mismatch: ${rubricScores.length} scores for ${scoringCriteria.rubrics.length} rubrics`,
+        `Rubric count mismatch: ${rubricScores.length} scores for ${scoringCriteria.rubrics.length} rubrics`
       );
     }
 
     // Validate each rubric score
     const maxIndex = Math.min(
       rubricScores.length,
-      scoringCriteria.rubrics.length,
+      scoringCriteria.rubrics.length
     );
     for (let index = 0; index < maxIndex; index++) {
       const score = rubricScores[index];
@@ -303,7 +303,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
         issues.push(
           `Invalid points ${currentPoints} for rubric "${
             score.rubricQuestion || "Unknown"
-          }"`,
+          }"`
         );
 
         let closestValid = validPoints[0];
@@ -356,12 +356,12 @@ export class GradingConsistencyService implements OnModuleDestroy {
       for (const grading of recentGradings) {
         try {
           const response = this.safeJsonParse<ParsedResponsePayload>(
-            grading.responsePayload,
+            grading.responsePayload
           );
           if (!response) continue;
 
           const percentage = Math.round(
-            ((response.totalPoints || 0) / (response.maxPoints || 1)) * 100,
+            ((response.totalPoints || 0) / (response.maxPoints || 1)) * 100
           );
           scores.push(percentage);
 
@@ -383,7 +383,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
         scores.length > 0
           ? scores.reduce(
               (sum, score) => sum + Math.pow(score - averageScore, 2),
-              0,
+              0
             ) / scores.length
           : 0;
 
@@ -411,7 +411,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
    */
   private normalizeResponse(
     response: string,
-    questionType: QuestionType,
+    questionType: QuestionType
   ): string {
     if (!response || typeof response !== "string") {
       return "";
@@ -483,7 +483,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
   private isSimilarResponse(
     response1: string,
     response2: string,
-    questionType: QuestionType,
+    questionType: QuestionType
   ): boolean {
     if (!response1 || !response2) {
       return false;
@@ -559,7 +559,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
     // Create a 2D array for dynamic programming
     const dp: number[][] = Array.from({ length: m + 1 }, () =>
       // eslint-disable-next-line unicorn/no-new-array
-      new Array<number>(n + 1).fill(0),
+      new Array<number>(n + 1).fill(0)
     );
 
     // Initialize first row and column
@@ -580,7 +580,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
               Math.min(
                 dp[index - 1][index_],
                 dp[index][index_ - 1],
-                dp[index - 1][index_ - 1],
+                dp[index - 1][index_ - 1]
               );
       }
     }
@@ -607,7 +607,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
    */
   private async atomicCacheUpdate(
     cacheKey: string,
-    record: GradingRecord,
+    record: GradingRecord
   ): Promise<void> {
     // Wait for any existing operation on this key
     const existingLock = this.cacheLocks.get(cacheKey);
@@ -632,7 +632,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
    */
   private async performCacheUpdate(
     cacheKey: string,
-    record: GradingRecord,
+    record: GradingRecord
   ): Promise<void> {
     const existing = this.gradingCache.get(cacheKey) || [];
     existing.push(record);
@@ -675,7 +675,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
       for (const [key, records] of this.gradingCache.entries()) {
         // Remove old records
         const filteredRecords = records.filter(
-          (record) => now - record.timestamp.getTime() < maxAge,
+          (record) => now - record.timestamp.getTime() < maxAge
         );
 
         if (filteredRecords.length === 0) {
@@ -690,13 +690,13 @@ export class GradingConsistencyService implements OnModuleDestroy {
         const sortedKeys = [...this.gradingCache.keys()].sort();
         const keysToRemove = sortedKeys.slice(
           0,
-          sortedKeys.length - this.maxCacheSize,
+          sortedKeys.length - this.maxCacheSize
         );
         for (const key of keysToRemove) this.gradingCache.delete(key);
       }
 
       this.logger.debug(
-        `Cache cleanup completed. Current size: ${this.gradingCache.size}`,
+        `Cache cleanup completed. Current size: ${this.gradingCache.size}`
       );
     } catch (error) {
       this.logger.error("Error during cache cleanup:", error);

@@ -9,7 +9,7 @@ import {
   AssignmentFeedbackResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/feedback.request.dto";
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptFeedbackService {
@@ -27,7 +27,7 @@ export class AttemptFeedbackService {
     assignmentId: number,
     attemptId: number,
     feedbackDto: AssignmentFeedbackDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentFeedbackResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -35,19 +35,19 @@ export class AttemptFeedbackService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `Assignment attempt with ID ${attemptId} not found.`,
+        `Assignment attempt with ID ${attemptId} not found.`
       );
     }
 
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
-        "Assignment ID does not match the attempt.",
+        "Assignment ID does not match the attempt."
       );
     }
 
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
-        "You do not have permission to submit feedback for this attempt.",
+        "You do not have permission to submit feedback for this attempt."
       );
     }
 
@@ -111,7 +111,7 @@ export class AttemptFeedbackService {
   async getFeedback(
     assignmentId: number,
     attemptId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<AssignmentFeedbackDto> {
     const feedback = await this.prisma.assignmentFeedback.findFirst({
       where: {

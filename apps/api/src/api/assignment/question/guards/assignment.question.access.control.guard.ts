@@ -6,14 +6,11 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 
 @Injectable()
 export class AssignmentQuestionAccessControlGuard implements CanActivate {
-  constructor(
-    private reflector: Reflector,
-    private prisma: PrismaService,
-  ) {}
+  constructor(private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
@@ -42,7 +39,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
             id: questionId,
             assignmentId,
           },
-        }),
+        })
       );
     }
 
@@ -60,7 +57,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
 
     if (questionId && !questionInAssignment) {
       throw new NotFoundException(
-        "Question not found within the specified assignment",
+        "Question not found within the specified assignment"
       );
     }
 

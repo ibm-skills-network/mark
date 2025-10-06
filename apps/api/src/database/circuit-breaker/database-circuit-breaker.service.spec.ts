@@ -27,7 +27,7 @@ describe('DatabaseCircuitBreakerService', () => {
   it('opens the circuit after reaching the failure threshold and blocks new executions', async () => {
     const failingOperation = jest.fn().mockRejectedValue(new Error('DB down'));
 
-    for (let i = 0; i < 5; i++) {
+    for (let index = 0; index < 5; index++) {
       await expect(service.execute(failingOperation)).rejects.toThrow('DB down');
     }
 
@@ -41,7 +41,7 @@ describe('DatabaseCircuitBreakerService', () => {
   it('transitions from OPEN to HALF_OPEN and back to CLOSED after successive successes', async () => {
     const failingOperation = jest.fn().mockRejectedValue(new Error('DB down'));
 
-    for (let i = 0; i < 5; i++) {
+    for (let index = 0; index < 5; index++) {
       await expect(service.execute(failingOperation)).rejects.toThrow('DB down');
     }
 

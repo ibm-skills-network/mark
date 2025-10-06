@@ -1,12 +1,12 @@
-import { Test } from '@nestjs/testing';
-import { DatabaseModule } from './database.module';
-import { PrismaService } from './prisma.service';
-import { DatabaseCircuitBreakerService } from './circuit-breaker/database-circuit-breaker.service';
+import { Test } from "@nestjs/testing";
+import { DatabaseCircuitBreakerService } from "./circuit-breaker/database-circuit-breaker.service";
+import { DatabaseModule } from "./database.module";
+import { PrismaService } from "./prisma.service";
 
-describe('DatabaseModule', () => {
+describe("DatabaseModule", () => {
   const originalDatabaseUrl = process.env.DATABASE_URL;
   const fallbackDatabaseUrl =
-    originalDatabaseUrl ?? 'postgresql://user:pass@localhost:5432/test';
+    originalDatabaseUrl ?? "postgresql://user:pass@localhost:5432/test"; // pragma: allowlist secret
 
   beforeAll(() => {
     process.env.DATABASE_URL = fallbackDatabaseUrl;
@@ -20,13 +20,13 @@ describe('DatabaseModule', () => {
     }
   });
 
-  it('provides PrismaService and DatabaseCircuitBreakerService', async () => {
-    const moduleRef = await Test.createTestingModule({
+  it("provides PrismaService and DatabaseCircuitBreakerService", async () => {
+    const moduleReference = await Test.createTestingModule({
       imports: [DatabaseModule],
     }).compile();
 
-    const prisma = moduleRef.get(PrismaService);
-    const circuitBreaker = moduleRef.get(DatabaseCircuitBreakerService);
+    const prisma = moduleReference.get(PrismaService);
+    const circuitBreaker = moduleReference.get(DatabaseCircuitBreakerService);
 
     expect(prisma).toBeInstanceOf(PrismaService);
     expect(circuitBreaker).toBeInstanceOf(DatabaseCircuitBreakerService);

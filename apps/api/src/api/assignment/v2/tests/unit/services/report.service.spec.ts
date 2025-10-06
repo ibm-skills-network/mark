@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { ReportType } from "@prisma/client";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockAssignment,
   createMockPrismaService,
@@ -53,7 +53,7 @@ describe("ReportService", () => {
 
     it("should create a report successfully", async () => {
       (prismaService.assignment.findUnique as jest.Mock).mockResolvedValueOnce(
-        createMockAssignment(),
+        createMockAssignment()
       );
       (prismaService.report.findMany as jest.Mock).mockResolvedValueOnce([]);
 
@@ -63,7 +63,7 @@ describe("ReportService", () => {
         reportParameters.assignmentId,
         reportParameters.issueType,
         reportParameters.description,
-        reportParameters.userId,
+        reportParameters.userId
       );
 
       expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
@@ -92,7 +92,7 @@ describe("ReportService", () => {
 
     it("should throw NotFoundException when assignment does not exist", async () => {
       (prismaService.assignment.findUnique as jest.Mock).mockResolvedValueOnce(
-        null,
+        null
       );
 
       await expect(
@@ -100,8 +100,8 @@ describe("ReportService", () => {
           reportParameters.assignmentId,
           reportParameters.issueType,
           reportParameters.description,
-          reportParameters.userId,
-        ),
+          reportParameters.userId
+        )
       ).rejects.toThrow(NotFoundException);
 
       expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
@@ -111,7 +111,7 @@ describe("ReportService", () => {
 
     it("should throw UnprocessableEntityException when rate limit is exceeded", async () => {
       (prismaService.assignment.findUnique as jest.Mock).mockResolvedValueOnce(
-        createMockAssignment(),
+        createMockAssignment()
       );
 
       (prismaService.report.findMany as jest.Mock).mockResolvedValueOnce([
@@ -127,8 +127,8 @@ describe("ReportService", () => {
           reportParameters.assignmentId,
           reportParameters.issueType,
           reportParameters.description,
-          reportParameters.userId,
-        ),
+          reportParameters.userId
+        )
       ).rejects.toThrow(UnprocessableEntityException);
 
       expect(prismaService.report.findMany).toHaveBeenCalledWith({
@@ -145,7 +145,7 @@ describe("ReportService", () => {
   describe("validateReportInputs", () => {
     it("should throw BadRequestException when issue type is missing", () => {
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service,
+        service
       );
 
       expect(() => {
@@ -155,7 +155,7 @@ describe("ReportService", () => {
 
     it("should throw BadRequestException when description is missing", () => {
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service,
+        service
       );
 
       expect(() => {
@@ -165,7 +165,7 @@ describe("ReportService", () => {
 
     it("should throw BadRequestException when issue type is invalid", () => {
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service,
+        service
       );
 
       expect(() => {
@@ -175,7 +175,7 @@ describe("ReportService", () => {
 
     it("should throw BadRequestException when user ID is invalid", () => {
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service,
+        service
       );
 
       expect(() => {
@@ -185,7 +185,7 @@ describe("ReportService", () => {
 
     it("should not throw when all inputs are valid", () => {
       const validateReportInputs = (service as any).validateReportInputs.bind(
-        service,
+        service
       );
 
       expect(() => {
@@ -216,7 +216,7 @@ describe("ReportService", () => {
 
       const checkRateLimit = (service as any).checkRateLimit.bind(service);
       await expect(checkRateLimit("user-123")).rejects.toThrow(
-        UnprocessableEntityException,
+        UnprocessableEntityException
       );
     });
   });

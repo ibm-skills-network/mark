@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { PassportModule } from "@nestjs/passport";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { AuthModule } from "../../auth/auth.module";
 import { LlmModule } from "../llm/llm.module";

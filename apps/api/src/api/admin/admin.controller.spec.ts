@@ -1,6 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { AdminVerificationService } from "../../auth/services/admin-verification.service";
-import { PrismaService } from "../../prisma.service";
+import { PrismaService } from "../../database/prisma.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminController } from "./admin.controller";
 import { AdminRepository } from "./admin.repository";
