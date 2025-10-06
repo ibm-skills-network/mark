@@ -11,7 +11,20 @@ import { AuthModule } from "./auth/auth.module";
 import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { winstonOptions } from "./logger/config";
 
-instana();
+instana({
+  level: "warn",
+  tracing: {
+    stackTraceLength: 20,
+    http: {
+      captureAsyncContext: true,
+      extraHttpHeadersToCapture: [
+        "user-agent",
+        "x-request-id",
+        "x-correlation-id",
+      ],
+    },
+  },
+});
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     cors: false,
