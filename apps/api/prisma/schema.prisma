@@ -6,7 +6,6 @@ generator client {
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
-// prisma/schema.prisma
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -90,7 +89,7 @@ model Job {
   progress    String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  result       Json?    // Add this field to store generated questions
+  result       Json?    
 }
 model GradingJob {
   id           Int      @id @default(autoincrement())
@@ -122,7 +121,7 @@ model publishJob {
   percentage  Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  result       Json?    // Add this field to store generated questions
+  result       Json?    
 }
 /// This model tracks the AI usage for each assignment and usage type
 model AIUsage {
@@ -196,7 +195,6 @@ enum ChatRole {
   SYSTEM
 }
 
-/// The Group model represents a particular group of assignments (having the same groupID)
 model Group {
   id          String            @unique /// Unique ID of the course
   assignments AssignmentGroup[] /// The list of assignments associated with this group
@@ -212,7 +210,6 @@ model AssignmentGroup {
   @@id([assignmentId, groupId]) /// Unique identifier for the relationship
 }
 
-/// The Assignment model represents a particular assignment
 model Assignment {
   id                      Int                             @id @default(autoincrement()) /// Unique identifier for the assignment
   name                    String /// Name of the assignment
@@ -528,7 +525,6 @@ model Report {
   
   similarityScore     Float?         // Similarity score (0-1) with the parent report
 }
-// Add to schema.prisma
 model UserNotification {
   id          Int      @id @default(autoincrement())
   userId      String

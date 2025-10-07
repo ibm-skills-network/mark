@@ -16,40 +16,42 @@ async function bootstrap() {
       cors: false,
       logger,
     });
-  app.use(json({ limit: "1000mb" }));
-  app.use(urlencoded({ limit: "1000mb", extended: true }));
-  app.setGlobalPrefix("api", {
-    exclude: ["health", "health/liveness", "health/readiness"],
-  });
+    app.use(json({ limit: "1000mb" }));
+    app.use(urlencoded({ limit: "1000mb", extended: true }));
+    app.setGlobalPrefix("api", {
+      exclude: ["health", "health/liveness", "health/readiness"],
+    });
 
-  app.enableVersioning({
-    type: VersioningType.URI,
-  });
+    app.enableVersioning({
+      type: VersioningType.URI,
+    });
 
-  app.use(helmet());
+    app.use(helmet());
 
-  app.use(cookieParser());
+    app.use(cookieParser());
 
-  const config = new DocumentBuilder()
-    .setTitle("API")
-    .setDescription("API Description")
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("api", app, document, {
-    customSiteTitle: "API Docs",
-    customCss: ".swagger-ui .topbar .topbar-wrapper { display: none; }",
-  });
+    const config = new DocumentBuilder()
+      .setTitle("API")
+      .setDescription("API Description")
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup("api", app, document, {
+      customSiteTitle: "API Docs",
+      customCss: ".swagger-ui .topbar .topbar-wrapper { display: none; }",
+    });
 
-  app.enableShutdownHooks();
+    app.enableShutdownHooks();
 
-  const port = process.env.API_GATEWAY_PORT ?? 3000;
-  await app.listen(port, '0.0.0.0');
+    const port = process.env.API_GATEWAY_PORT ?? 3000;
+    await app.listen(port, "0.0.0.0");
 
-  logger.log(`🚀 API Gateway is running on port ${port}`);
-  logger.log(`📚 API Documentation available at http://localhost:${port}/api`);
-
+    logger.log(`🚀 API Gateway is running on port ${port}`);
+    logger.log(
+      `📚 API Documentation available at http://localhost:${port}/api`,
+    );
   } catch (error) {
-    logger.error('❌ Failed to start API Gateway:', error);
+    logger.error("❌ Failed to start API Gateway:", error);
+    // eslint-disable-next-line unicorn/no-process-exit
     process.exit(1);
   }
 }

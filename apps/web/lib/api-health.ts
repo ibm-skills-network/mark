@@ -2,7 +2,8 @@
  * API Health Check and Connection Utilities
  */
 
-const API_GATEWAY_HOST = process.env.API_GATEWAY_HOST || 'http://localhost:8000';
+const API_GATEWAY_HOST =
+  process.env.API_GATEWAY_HOST || "http://localhost:8000";
 
 /**
  * Check if API Gateway is healthy
@@ -10,12 +11,12 @@ const API_GATEWAY_HOST = process.env.API_GATEWAY_HOST || 'http://localhost:8000'
 export async function checkApiHealth(): Promise<boolean> {
   try {
     const response = await fetch(`${API_GATEWAY_HOST}/health`, {
-      method: 'GET',
+      method: "GET",
       signal: AbortSignal.timeout(5000), // 5 second timeout
     });
     return response.ok;
   } catch (error) {
-    console.warn('API health check failed:', error);
+    console.warn("API health check failed:", error);
     return false;
   }
 }
@@ -31,20 +32,26 @@ export async function waitForApiReady(maxRetries = 30): Promise<boolean> {
     const isHealthy = await checkApiHealth();
 
     if (isHealthy) {
-      console.log('✅ API Gateway is ready');
+      console.log("✅ API Gateway is ready");
       return true;
     }
 
     retries++;
-    console.log(`⏳ API Gateway not ready, retry ${retries}/${maxRetries} in ${delay}ms`);
+    console.log(
+      `⏳ API Gateway not ready, retry ${retries}/${maxRetries} in ${delay}ms`,
+    );
 
-    await new Promise(resolve => setTimeout(resolve, delay));
+    await new Promise((resolve) => setTimeout(resolve, delay));
 
     // Exponential backoff with max 5 seconds
     delay = Math.min(delay * 1.2, 5000);
   }
 
-  console.error('❌ API Gateway failed to become ready after', maxRetries, 'retries');
+  console.error(
+    "❌ API Gateway failed to become ready after",
+    maxRetries,
+    "retries",
+  );
   return false;
 }
 
@@ -54,7 +61,7 @@ export async function waitForApiReady(maxRetries = 30): Promise<boolean> {
 export async function apiRequestWithRetry(
   url: string,
   options: RequestInit = {},
-  maxRetries = 3
+  maxRetries = 3,
 ): Promise<Response> {
   let lastError: Error;
 
@@ -75,12 +82,18 @@ export async function apiRequestWithRetry(
       lastError = error as Error;
 
       // Don't retry on certain errors
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        console.warn(`API request failed on attempt ${attempt}:`, error.message);
+      if (
+        error instanceof TypeError &&
+        error.message.includes("Failed to fetch")
+      ) {
+        console.warn(
+          `API request failed on attempt ${attempt}:`,
+          error.message,
+        );
 
         if (attempt < maxRetries) {
           const delay = attempt * 1000; // Linear backoff
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
       }
@@ -90,5 +103,5 @@ export async function apiRequestWithRetry(
     }
   }
 
-  throw lastError!;
+  throw lastError;
 }
