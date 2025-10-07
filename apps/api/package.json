@@ -78,7 +78,7 @@
     "natural": "^8.0.1",
     "nest-winston": "^1.9.2",
     "node-xlsx": "^0.24.0",
-    "nodemailer": "^7.0.5",
+    "nodemailer": "^7.0.7",
     "octonode": "^0.10.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
