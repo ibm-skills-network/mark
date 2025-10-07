@@ -1105,40 +1105,6 @@ export async function updateDraft(
 }
 
 /**
- * Lists all user drafts for an assignment
- * @param assignmentId The assignment ID
- * @param cookies Optional cookies for authentication
- * @returns Array of draft summaries or empty array on error
- */
-export async function listUserDrafts(
-  assignmentId: number,
-  cookies?: string,
-): Promise<DraftSummary[]> {
-  const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts`;
-
-  try {
-    const res = await fetch(endpointURL, {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to list drafts");
-    }
-
-    return (await res.json()) as DraftSummary[];
-  } catch (err) {
-    console.error("Error listing drafts:", err);
-    return [];
-  }
-}
-
-/**
  * Gets user's latest draft for an assignment
  * @param assignmentId The assignment ID
  * @param cookies Optional cookies for authentication

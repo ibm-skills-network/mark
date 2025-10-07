@@ -146,37 +146,6 @@ export function useVersionControl() {
     [createVersion, loadVersions],
   );
 
-  const saveDraftWithToast = useCallback(
-    async (versionDescription?: string) => {
-      try {
-        const newDraft = await saveDraft(versionDescription);
-
-        if (newDraft) {
-          toast.success("Draft saved successfully!");
-
-          // Refresh drafts after successful save to ensure UI is up to date
-          try {
-            // Import and call loadDrafts dynamically to avoid initialization order issues
-            const { listUserDrafts } = await import("@/lib/author");
-            const userDrafts = await listUserDrafts(activeAssignmentId);
-            setDrafts(userDrafts || []);
-          } catch (refreshError) {
-            // Silently handle refresh error
-          }
-
-          return newDraft;
-        } else {
-          toast.error("Failed to save draft. Please try again.");
-          return undefined;
-        }
-      } catch (error) {
-        toast.error("An error occurred while saving the draft.");
-        return undefined;
-      }
-    },
-    [saveDraft, activeAssignmentId, setDrafts],
-  );
-
   const restoreVersionWithToast = useCallback(
     async (versionId: number, createAsNewVersion?: boolean) => {
       try {
@@ -257,26 +226,6 @@ export function useVersionControl() {
     },
     [checkoutVersion],
   );
-
-  // Simplified loadDrafts function
-  const loadDrafts = useCallback(async () => {
-    if (!activeAssignmentId) {
-      return;
-    }
-
-    setIsLoadingDrafts(true);
-    setDraftsLoadFailed(false);
-
-    try {
-      const { listUserDrafts } = await import("@/lib/author");
-      const userDrafts = await listUserDrafts(activeAssignmentId);
-      setDrafts(userDrafts || []);
-    } catch (error) {
-      setDraftsLoadFailed(true);
-    } finally {
-      setIsLoadingDrafts(false);
-    }
-  }, [activeAssignmentId]);
 
   const loadDraft = useCallback(
     async (draftId: number) => {
@@ -452,69 +401,15 @@ export function useVersionControl() {
     }
   };
 
-  // Auto-load versions and drafts when component mounts
+  // Auto-load versions when assignment changes - moved to store level to prevent multiple calls
   useEffect(() => {
-    if (
-      versions.length === 0 &&
-      !isLoadingVersions &&
-      !versionsLoadFailed &&
-      !hasAttemptedLoadVersions &&
-      activeAssignmentId
-    ) {
+    if (activeAssignmentId && !hasAttemptedLoadVersions) {
+      // Use store's loadVersions which has built-in protection against concurrent calls
       loadVersions().catch(() => {
         // Handle error silently
       });
     }
-  }, [
-    activeAssignmentId,
-    hasAttemptedLoadVersions,
-    versions.length,
-    isLoadingVersions,
-    versionsLoadFailed,
-    loadVersions,
-  ]);
-
-  // Simplified draft loading with minimal dependencies
-  useEffect(() => {
-    let isCancelled = false;
-
-    // Simple condition: only load if we have an assignment ID and haven't attempted yet
-    if (activeAssignmentId && !hasAttemptedLoadDrafts) {
-      const loadDrafts = async () => {
-        if (isCancelled) return;
-
-        // Set states directly without complex logic
-        setIsLoadingDrafts(true);
-        setHasAttemptedLoadDrafts(true);
-        setDraftsLoadFailed(false);
-
-        try {
-          const { listUserDrafts } = await import("@/lib/author");
-          const userDrafts = await listUserDrafts(activeAssignmentId);
-
-          if (isCancelled) {
-            return;
-          }
-
-          setDrafts(userDrafts || []);
-        } catch (error) {
-          if (!isCancelled) {
-            setDraftsLoadFailed(true);
-          }
-        } finally {
-          if (!isCancelled) {
-            setIsLoadingDrafts(false);
-          }
-        }
-      };
-
-      void loadDrafts();
-    }
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [activeAssignmentId, hasAttemptedLoadDrafts]); // Minimal dependencies
+  }, [activeAssignmentId, hasAttemptedLoadVersions, loadVersions]);
 
   // Reset draft state when assignment changes
   useEffect(() => {
@@ -598,10 +493,7 @@ export function useVersionControl() {
     setHasAttemptedLoadDrafts(false);
     setDraftsLoadFailed(false);
     setDrafts([]);
-
-    // Trigger reload by calling loadDrafts
-    await loadDrafts();
-  }, [activeAssignmentId, loadDrafts]);
+  }, [activeAssignmentId]);
 
   // Simplified debug functions
   const debugForceStateRefresh = useCallback(() => {
@@ -647,7 +539,6 @@ export function useVersionControl() {
     // Actions
     loadVersions,
     createVersion: createVersionWithToast,
-    saveDraft: saveDraftWithToast,
     restoreVersion: restoreVersionWithToast,
     activateVersion: activateVersionWithToast,
     compareVersions: compareVersionsWithToast,
@@ -658,7 +549,6 @@ export function useVersionControl() {
     updateExistingVersion: updateExistingVersionWithToast,
 
     // Draft Actions
-    loadDrafts,
     loadDraft,
     deleteDraft,
     forceRefreshDrafts,

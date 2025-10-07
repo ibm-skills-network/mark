@@ -214,7 +214,6 @@ export class AttemptQuestionsMapper {
       assignmentAttempt.questionOrder || assignment.questionOrder || [];
 
     const questionVariantsArray = assignmentAttempt.questionVariants ?? [];
-
     const processedQuestions = questionVariantsArray
       .map((qv) => {
         const variant = qv.questionVariant;
@@ -232,32 +231,15 @@ export class AttemptQuestionsMapper {
             ? translations.get(variantKey) || {}
             : {};
 
+        console.log("variantTranslations", variantTranslations);
+
         const questionTranslations = translations.has(questionKey)
           ? translations.get(questionKey) || {}
           : {};
 
-        const translationFallback: TranslatedContent = {
-          translatedText: variant
-            ? variant.variantContent || originalQ.question
-            : originalQ.question,
-          translatedChoices: (() => {
-            const rawChoices = variant
-              ? variant.choices || originalQ.choices
-              : originalQ.choices;
-            if (typeof rawChoices === "string") {
-              return rawChoices;
-            }
-            if (Array.isArray(rawChoices)) {
-              return rawChoices as ExtendedChoice[];
-            }
-            return;
-          })(),
-        };
-
         const variantTranslation = variantTranslations[language];
         const questionTranslation = questionTranslations[language];
-        const primaryTranslation =
-          variantTranslation || questionTranslation || translationFallback;
+        const primaryTranslation = variantTranslation || questionTranslation;
 
         const baseChoices = this.parseChoices(
           variant ? variant.choices || originalQ.choices : originalQ.choices,
@@ -318,10 +300,9 @@ export class AttemptQuestionsMapper {
 
         const sanitizedTranslations =
           this.sanitizeTranslationsChoices(mergedTranslations);
-
         return {
           id: originalQ.id,
-          question: primaryTranslation.translatedText || originalQ.question,
+          question: primaryTranslation.translatedText,
           choices: sanitizedChoices,
           translations: sanitizedTranslations,
           maxWords: variant?.maxWords ?? originalQ?.maxWords,

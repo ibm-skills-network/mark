@@ -139,7 +139,8 @@ describe("VersionManagementService", () => {
 
       const result = await service.getVersion(1, 1);
 
-      expect(result).toEqual(mockVersion);
+      expect(result).toMatchObject(mockVersion);
+      expect(result.questionVersions[0].variants).toEqual([]);
       expect(
         mockPrismaService.assignmentVersion.findUnique,
       ).toHaveBeenCalledWith({
