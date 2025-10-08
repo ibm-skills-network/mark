@@ -56,9 +56,6 @@ import { useUserBehaviorMonitor } from "../../../hooks/useUserBehaviorMonitor";
 import { useDropzone } from "react-dropzone";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
-import { NotificationsPanel } from "./NotificationPanel";
-import { getUserNotifications, markNotificationAsRead } from "@/lib/author";
-import { useNotificationSSE, type Notification } from "@/lib/notificationSSE";
 
 interface ScreenshotDropzoneProps {
   file: File | null | undefined;
@@ -931,12 +928,6 @@ export const MarkChat = () => {
   const handleCheckReports = useCallback(() => {
     setShowReports(true);
   }, []);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [sseConnected, setSseConnected] = useState(false);
-  const [notificationCheckInterval, setNotificationCheckInterval] =
-    useState<NodeJS.Timeout | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 }); // Real-time position during drag
   const [isDragging, setIsDragging] = useState(false);
@@ -1302,132 +1293,6 @@ export const MarkChat = () => {
     dismissBubble,
     resetHelpOffer,
   ]);
-
-  // SSE setup for real-time notifications
-  const notificationSSE = useNotificationSSE({
-    onInitial: (initialNotifications) => {
-      setNotifications(initialNotifications);
-      setUnreadNotifications(
-        initialNotifications.filter((n) => !n.read).length,
-      );
-    },
-    onNew: (notification) => {
-      setNotifications((prev) => [notification, ...prev]);
-      if (!notification.read) {
-        setUnreadNotifications((prev) => prev + 1);
-      }
-    },
-    onRead: (notificationId) => {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
-      );
-      setUnreadNotifications((prev) => Math.max(0, prev - 1));
-    },
-    onConnect: () => {
-      setSseConnected(true);
-    },
-    onDisconnect: () => {
-      setSseConnected(false);
-    },
-    onError: (error) => {
-      console.error("Notification SSE error:", error);
-      setSseConnected(false);
-      // Fallback to polling if SSE fails
-      loadNotificationsFallback();
-    },
-  });
-
-  // Fallback function for when SSE fails
-  const loadNotificationsFallback = useCallback(async () => {
-    if (!user?.userId) return;
-
-    try {
-      const data = await getUserNotifications();
-      setNotifications(data);
-      setUnreadNotifications(data.filter((n) => !n.read).length);
-    } catch (error) {}
-  }, [user?.userId]);
-
-  // Alias for backward compatibility (use SSE primarily, fallback when needed)
-  const loadNotifications = loadNotificationsFallback;
-
-  const markNotificationRead = useCallback(async (notificationId) => {
-    try {
-      const success = await markNotificationAsRead(notificationId);
-
-      if (success) {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
-        );
-        setUnreadNotifications((prev) => Math.max(0, prev - 1));
-      }
-    } catch (error) {}
-  }, []);
-  const handleNotificationClick = useCallback(
-    (notification) => {
-      try {
-        let metadata: {
-          issueNumber?: string;
-          newStatus?: string;
-        };
-
-        try {
-          metadata = JSON.parse(notification.metadata || "{}");
-        } catch (e) {}
-
-        if (notification.type === "ISSUE_STATUS_CHANGE") {
-          setShowNotifications(false);
-
-          if (!isOpen) {
-            toggleChat();
-          }
-
-          setTimeout(() => {
-            useMarkChatStore.getState().addMessage({
-              id: `user-${Date.now()}`,
-              role: "user",
-              content: `What's the status of issue #${metadata.issueNumber || ""}?`,
-              timestamp: new Date().toISOString(),
-            });
-
-            setTimeout(() => {
-              useMarkChatStore.getState().addMessage({
-                id: `assistant-${Date.now()}`,
-                role: "assistant",
-                content: `I see that issue #${metadata.issueNumber || ""} has been ${metadata.newStatus || "updated"}.\n\n${notification.message}\n\nWould you like to see more details about this issue?`,
-                timestamp: new Date().toISOString(),
-              });
-            }, 500);
-          }, 300);
-
-          // markNotificationRead(notification.id);
-        }
-      } catch (error) {}
-    },
-    [isOpen, toggleChat, markNotificationRead],
-  );
-
-  useEffect(() => {
-    if (user?.userId) {
-      // Connect to SSE for real-time notifications
-      notificationSSE.connect();
-
-      // Load initial notifications as fallback
-      loadNotifications();
-
-      return () => {
-        // Disconnect SSE when component unmounts or user changes
-        notificationSSE.disconnect();
-      };
-    }
-  }, [user?.userId, loadNotifications]);
-
-  useEffect(() => {
-    if (isOpen && user?.userId && !sseConnected) {
-      // Only load notifications manually if SSE is not connected
-      loadNotifications();
-    }
-  }, [isOpen, user?.userId, loadNotifications, sseConnected]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
   const checkForIssueStatusQuery = (message: string): boolean | number => {
@@ -1902,46 +1767,6 @@ export const MarkChat = () => {
           timestamp: new Date().toISOString(),
         });
         setUserInput("");
-
-        if (typeof issueCheck === "number") {
-          const issueNumber = issueCheck;
-          const relevantNotification = notifications.find((n) => {
-            try {
-              const metadata = JSON.parse(n.metadata || "{}");
-              return metadata.issueNumber === issueNumber;
-            } catch (e) {
-              return false;
-            }
-          });
-
-          setTimeout(() => {
-            if (relevantNotification) {
-              handleNotificationClick(relevantNotification);
-            } else {
-              useMarkChatStore.getState().addMessage({
-                id: `assistant-${Date.now()}`,
-                role: "assistant",
-                content: `I'll check the status of issue #${issueNumber} for you. Let me show you your reported issues.`,
-                timestamp: new Date().toISOString(),
-              });
-
-              setTimeout(() => setShowReports(true), 800);
-            }
-          }, 500);
-        } else {
-          setTimeout(() => {
-            useMarkChatStore.getState().addMessage({
-              id: `assistant-${Date.now()}`,
-              role: "assistant",
-              content:
-                "I'm showing your reported issues now. You can view the status of each issue and any updates from our team.",
-              timestamp: new Date().toISOString(),
-            });
-
-            setTimeout(() => setShowReports(true), 800);
-          }, 500);
-        }
-        return;
       }
       try {
         setHistory((prev) => [...prev, userInput]);
@@ -2096,8 +1921,6 @@ export const MarkChat = () => {
       userInput,
       context,
       messages,
-      notifications,
-      // handleNotificationClick,
       setShowReports,
       userRole,
       isRecording,
@@ -2729,11 +2552,6 @@ Please help me with this.`;
                 ) : (
                   <ChatBubbleLeftRightIcon className="w-7 h-7 pointer-events-none" />
                 )}
-                {unreadNotifications > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center pointer-events-none">
-                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                  </span>
-                )}
               </motion.button>
             </div>
           </Draggable>
@@ -2810,19 +2628,6 @@ Please help me with this.`;
                 >
                   <CogIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 </button>
-                <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors relative"
-                  title="Notifications"
-                >
-                  <BellIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                  {unreadNotifications > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                    </span>
-                  )}
-                </button>
-                {/* handleCheckReports */}
               </div>
               <button
                 onClick={handleCheckReports}
@@ -2850,17 +2655,6 @@ Please help me with this.`;
                     handleSwitchQuestion={handleSwitchQuestion}
                     darkMode={darkMode}
                     setDarkMode={setDarkMode}
-                  />
-                )}
-                {showNotifications && (
-                  <NotificationsPanel
-                    notifications={notifications}
-                    onMarkRead={markNotificationRead}
-                    onClickNotification={(notification) => {
-                      markNotificationRead(notification.id);
-                      setShowNotifications(false);
-                    }}
-                    onClose={() => setShowNotifications(false)}
                   />
                 )}
               </AnimatePresence>

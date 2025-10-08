@@ -11,7 +11,6 @@ import {
   ChatBubbleBottomCenterTextIcon,
 } from "@heroicons/react/24/outline";
 import { getReportsForUser } from "@/lib/shared";
-import { getUserNotifications } from "@/lib/author";
 
 interface Report {
   id: string;
@@ -47,39 +46,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
   const [sortField, setSortField] = useState<SortField>("updatedAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [reportsWithNotifications, setReportsWithNotifications] = useState<
-    Record<string, number>
-  >({});
-
-  // Fetch unread notifications per report
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        const notifications = await getUserNotifications(userId);
-        const byReport: Record<string, number> = {};
-        notifications.forEach((n) => {
-          if (!n.read && n.type === "ISSUE_STATUS_CHANGE") {
-            try {
-              const { reportId } = JSON.parse(n.metadata || "{}") as {
-                reportId?: string;
-                [key: string]: any;
-              };
-              if (reportId) byReport[reportId] = (byReport[reportId] || 0) + 1;
-            } catch {
-              console.error(
-                "Failed to parse notification metadata",
-                n.metadata,
-              );
-            }
-          }
-        });
-        setReportsWithNotifications(byReport);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    if (userId) void fetchNotifications();
-  }, [userId]);
 
   // Fetch the list of reports
   const fetchReports = async () => {
@@ -459,11 +425,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
                               ? ` #${report.issueNumber}`
                               : ""}
                           </span>
-                          {reportsWithNotifications[report.id] && (
-                            <span className="bg-purple-500 text-white text-xs rounded-full px-2 py-0.5">
-                              New
-                            </span>
-                          )}
                           {report.comments && (
                             <ChatBubbleBottomCenterTextIcon
                               className="w-4 h-4 text-purple-500"
