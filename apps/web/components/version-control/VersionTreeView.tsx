@@ -127,11 +127,9 @@ export function VersionTreeView({ assignmentId }: Props) {
     currentVersion,
     formatVersionAge,
     hasUnsavedChanges,
-    saveDraft,
     drafts,
     loadDraft,
     activateVersion,
-    // Favorite version functionality
     toggleFavoriteVersion,
     isVersionFavorite,
     getFavoriteVersions,
@@ -538,8 +536,6 @@ export function VersionTreeView({ assignmentId }: Props) {
   // Modal handlers for unsaved changes
   const handleSaveAndProceed = async () => {
     try {
-      await saveDraft();
-
       if (pendingAction) {
         await proceedWithNodeClick(
           pendingAction.version,

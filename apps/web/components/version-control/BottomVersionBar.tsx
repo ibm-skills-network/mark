@@ -104,7 +104,6 @@ export function BottomVersionBar() {
     checkoutVersion,
     formatVersionAge,
     hasUnsavedChanges,
-    saveDraft,
     createVersion,
     updateExistingVersion,
     drafts,
@@ -183,8 +182,6 @@ export function BottomVersionBar() {
 
   const handleSaveAndProceed = async () => {
     try {
-      await saveDraft();
-
       if (pendingAction) {
         if (
           pendingAction.type === "checkout" &&
@@ -568,148 +565,6 @@ export function BottomVersionBar() {
                         </motion.button>
                       );
                     })}
-                  </div>
-                </div>
-              </Dropdown>
-            </div>
-
-            {/* Drafts Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setDraftsOpen(!draftsOpen);
-                  setVersionsOpen(false);
-                }}
-                className="group flex items-center space-x-3 px-4 py-2.5 rounded-xl hover:bg-white/60 transition-all duration-200 border border-gray-200/60 hover:border-orange-300/60 hover:shadow-md backdrop-blur-sm bg-white/40"
-              >
-                <div className="p-1.5 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
-                  <FileText className="h-4 w-4 text-orange-600" />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-medium text-gray-700">
-                    Private Drafts
-                  </span>
-                  <span
-                    className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      isLoadingDrafts
-                        ? "bg-blue-100 text-blue-700 animate-pulse"
-                        : draftsLoadFailed
-                          ? "bg-red-100 text-red-700"
-                          : "bg-orange-100 text-orange-700"
-                    }`}
-                  >
-                    {(() => {
-                      const result = isLoadingDrafts
-                        ? "Loading..."
-                        : draftsLoadFailed
-                          ? "Error"
-                          : drafts?.length || 0;
-                      return result;
-                    })()}
-                  </span>
-                </div>
-                <ChevronUp
-                  className={`h-4 w-4 text-gray-400 transition-all duration-200 group-hover:text-orange-500 ${
-                    draftsOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              <Dropdown
-                isOpen={draftsOpen}
-                onClose={() => setDraftsOpen(false)}
-                width="450px"
-              >
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-1.5 bg-orange-100 rounded-lg">
-                        <FileText className="h-4 w-4 text-orange-600" />
-                      </div>
-                      <h3 className="font-semibold text-gray-900">
-                        Draft Versions
-                      </h3>
-                    </div>
-                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
-                      {drafts?.length || 0} drafts
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 max-h-72 pb-14 overflow-y-auto custom-scrollbar">
-                    {drafts && drafts.length > 0 ? (
-                      drafts.map((draft, index) => (
-                        <motion.button
-                          key={draft.id}
-                          onClick={() => handleDraftSelect(draft.id)}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          whileHover={{ scale: 1.01, y: -1 }}
-                          whileTap={{ scale: 0.99 }}
-                          className="w-full p-4 rounded-xl border border-orange-200/60 hover:border-orange-300 hover:bg-gradient-to-r hover:from-orange-50/50 hover:to-amber-50/30 text-left transition-all duration-200 group relative overflow-hidden hover:shadow-sm"
-                        >
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-orange-50/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                          <div className="relative flex items-start justify-between">
-                            <div className="flex items-start space-x-3 min-w-0 flex-1">
-                              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-orange-400 to-amber-500 mt-2 flex-shrink-0 shadow-sm" />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center space-x-2 mb-2">
-                                  <span className="font-semibold text-gray-900 truncate">
-                                    {`Draft ${drafts.length - index}`}
-                                  </span>
-                                </div>
-                                <div className="text-sm text-gray-600 mb-2 line-clamp-2">
-                                  {draft.draftName || (
-                                    <span className="italic text-gray-400">
-                                      No description provided
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-3 text-xs text-gray-500">
-                                    <div className="flex items-center space-x-1">
-                                      <Clock className="h-3 w-3" />
-                                      <span>
-                                        {formatVersionAge(draft.createdAt)}
-                                      </span>
-                                    </div>
-                                    {draft.createdBy && (
-                                      <div className="flex items-center space-x-1">
-                                        <User className="h-3 w-3" />
-                                        <span className="truncate max-w-20">
-                                          {draft.createdBy}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {draft.questionsCount && (
-                                    <div className="flex items-center space-x-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
-                                      <Activity className="h-3 w-3" />
-                                      <span>
-                                        {draft.questionsCount} questions
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </motion.button>
-                      ))
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <div className="p-4 bg-gray-50 rounded-2xl mx-auto w-fit mb-4">
-                          <FileText className="h-8 w-8 mx-auto text-gray-300" />
-                        </div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">
-                          No drafts yet
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          Save your work as drafts while you iterate
-                        </p>
-                      </div>
-                    )}
                   </div>
                 </div>
               </Dropdown>

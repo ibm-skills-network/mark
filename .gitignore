@@ -66,6 +66,10 @@ dev.op.env
 .env.merged
 .env.op.local
 
+# manifest files
+face_expresstion_model-weights_manifest.json
+tiny_face_detector_model-weights_manifest.json
+
 *.env
 .env.local
 
