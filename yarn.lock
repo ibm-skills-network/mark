@@ -1946,9 +1946,9 @@
     zod "^3.25.32"
 
 "@langchain/openai@^0.6.9":
-  version "0.6.11"
-  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.6.11.tgz#a3a804148b347bbcfdd864ed3ad86cafba2f67b1"
-  integrity sha512-BkaudQTLsmdt9mF6tn6CrsK2TEFKk4EhAWYkouGTy/ljJIH/p2Nz9awIOGdrQiQt6AJ5mvKGupyVqy3W/jim2Q==
+  version "0.6.14"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.6.14.tgz#09f7370870804a9f0558a063af1957babfd593ad"
+  integrity sha512-SM/xJOFDxT9NN/07fvhNB5dgAsIOQaLhmANxrRlSQ7Qs1zImMrzOvq+/5JP/ifpC/YxcgEnt4dblKVqvNU/C5A==
   dependencies:
     js-tiktoken "^1.0.12"
     openai "5.12.2"
