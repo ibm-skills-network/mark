@@ -261,6 +261,7 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
 };
 
 interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
+  showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
   showPoints?: boolean;
   questionId: number;
@@ -291,6 +292,7 @@ interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
 }
 
 const QuestionWrapper: FC<QuestionWrapperProps> = ({
+  showSubQuestionsToLearner,
   showRubricsToLearner,
   showPoints,
   questionId,
@@ -864,41 +866,79 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               Rubric
             </p>
           </div>
-          {/* the section for 2 buttons */}
+          {/* the section for 3 buttons */}
           <div className="flex lg:flex-row flex-col gap-2">
             <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
               <span className="text-gray-600 typography-body">
-                Show Rubrics to Learner
+                Show Sub-Questions to Learner
               </span>
               <Tooltip
-                content="Show rubrics to learners"
+                content="Show sub-questions to learners"
                 className="flex items-center"
               >
                 <button
                   type="button"
                   onClick={() =>
                     handleUpdateQuestionState({
-                      showRubricsToLearner: !showRubricsToLearner,
+                      showSubQuestionsToLearner: !showSubQuestionsToLearner,
                     })
                   }
                   className={cn(
                     "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                    showRubricsToLearner ? "bg-violet-600" : "bg-gray-200",
+                    showSubQuestionsToLearner ? "bg-violet-600" : "bg-gray-200",
                   )}
                   role="switch"
-                  aria-checked={showRubricsToLearner}
+                  aria-checked={showSubQuestionsToLearner}
                 >
                   <span
                     aria-hidden="true"
                     className={cn(
                       "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                      showRubricsToLearner ? "translate-x-5" : "translate-x-0",
+                      showSubQuestionsToLearner
+                        ? "translate-x-5"
+                        : "translate-x-0",
                     )}
                   />
                 </button>
               </Tooltip>
             </div>
-            {showRubricsToLearner && (
+            {showSubQuestionsToLearner && (
+              <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
+                <span className="text-gray-600 typography-body">
+                  Show Rubrics to Learner
+                </span>
+                <Tooltip
+                  content="Show rubrics to learners"
+                  className="flex items-center"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleUpdateQuestionState({
+                        showRubricsToLearner: !showRubricsToLearner,
+                      })
+                    }
+                    className={cn(
+                      "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                      showRubricsToLearner ? "bg-violet-600" : "bg-gray-200",
+                    )}
+                    role="switch"
+                    aria-checked={showRubricsToLearner}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                        showRubricsToLearner
+                          ? "translate-x-5"
+                          : "translate-x-0",
+                      )}
+                    />
+                  </button>
+                </Tooltip>
+              </div>
+            )}
+            {showSubQuestionsToLearner && showRubricsToLearner && (
               <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
                 <span className="text-gray-600 typography-body">
                   Display Rubric Points to Learners

@@ -96,6 +96,14 @@ export class ScoringDto {
   rubrics: RubricDto[];
 
   @ApiProperty({
+    description: "Show sub-questions to the learner",
+    type: Boolean,
+  })
+  @IsBoolean()
+  @IsOptional()
+  showSubQuestionsToLearner?: boolean;
+
+  @ApiProperty({
     description: "Show rubric to the learner",
     type: Boolean,
   })
@@ -687,6 +695,14 @@ export class AttemptScoringDto {
   })
   @IsString()
   type: string;
+
+  @ApiPropertyOptional({
+    description: "Whether sub-questions are shown to the learner",
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showSubQuestionsToLearner?: boolean;
 
   @ApiPropertyOptional({
     description: "Whether rubrics are shown to the learner",
