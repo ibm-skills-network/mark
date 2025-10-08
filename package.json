@@ -82,7 +82,7 @@
     "papaparse": "^5.4.1",
     "pdfjs-dist": "^4.7.76",
     "prismjs": "1.30.0",
-    "puppeteer": "^23.9.0",
+    "puppeteer": "^24.0.0",
     "react": "^19.0.0",
     "react-circular-progressbar": "^2.1.0",
     "react-confetti": "^6.1.0",
