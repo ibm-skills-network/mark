@@ -29,102 +29,6 @@ interface Notification {
   userId: string;
 }
 /**
- * Fetches user notifications from the backend.
- * @param userId The ID of the user to fetch notifications for
- * @param cookies Optional cookies string for authenticated requests
- * @returns An array of notifications or empty array on error
- */
-export async function getUserNotifications(
-  cookies?: string,
-): Promise<Notification[]> {
-  try {
-    return await apiClient.get(`${getBaseApiPath("v1")}/notifications/user`, {
-      headers: {
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    });
-  } catch (err) {
-    return [];
-  }
-}
-
-/**
- * Fetches the count of unread notifications for a user.
- * @param userId The ID of the user to fetch unread count for
- * @param cookies Optional cookies string for authenticated requests
- * @returns Object containing the unread count or 0 on error
- */
-export async function getUnreadNotificationCount(
-  cookies?: string,
-): Promise<{ count: number }> {
-  try {
-    return await apiClient.get(
-      `${getBaseApiPath("v1")}/notifications/user/unread`,
-      {
-        headers: {
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
-      },
-    );
-  } catch (err) {
-    return { count: 0 };
-  }
-}
-
-/**
- * Marks a notification as read.
- * @param notificationId The ID of the notification to mark as read
- * @param cookies Optional cookies string for authenticated requests
- * @returns True if successful, false otherwise
- */
-export async function markNotificationAsRead(
-  notificationId: number,
-  cookies?: string,
-): Promise<boolean> {
-  try {
-    await apiClient.post(
-      `${getBaseApiPath("v1")}/notifications/mark-read/${notificationId}`,
-      {},
-      {
-        headers: {
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
-      },
-    );
-
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
-
-/**
- * Marks all notifications for a user as read.
- * @param userId The ID of the user whose notifications should be marked as read
- * @param cookies Optional cookies string for authenticated requests
- * @returns True if successful, false otherwise
- */
-export async function markAllNotificationsAsRead(
-  userId: string,
-  cookies?: string,
-): Promise<boolean> {
-  try {
-    await apiClient.post(
-      `${getBaseApiPath("v1")}/notifications/mark-all-read/${userId}`,
-      {},
-      {
-        headers: {
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
-      },
-    );
-
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
-/**
  * Calls the backend to modify an assignment.
  */
 export async function replaceAssignment(
@@ -878,30 +782,6 @@ export async function updateDraft(
   } catch (err) {
     console.error("Error updating draft:", err);
     return undefined;
-  }
-}
-
-/**
- * Lists all user drafts for an assignment
- * @param assignmentId The assignment ID
- * @param cookies Optional cookies for authentication
- * @returns Array of draft summaries or empty array on error
- */
-export async function listUserDrafts(
-  assignmentId: number,
-  cookies?: string,
-): Promise<DraftSummary[]> {
-  const endpointURL = `${getApiRoutes().versions}/${assignmentId}/drafts`;
-
-  try {
-    return (await apiClient.get(endpointURL, {
-      headers: {
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    })) as DraftSummary[];
-  } catch (err) {
-    console.error("Error listing drafts:", err);
-    return [];
   }
 }
 

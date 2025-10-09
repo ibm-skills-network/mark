@@ -60,12 +60,13 @@ function Component(props: Props) {
   const checkToShowRubric = () => {
     if (
       ["TEXT", "UPLOAD", "LINk_FILE", "URL"].includes(question.type) &&
-      question.scoring.showRubricsToLearner &&
+      question.scoring.showSubQuestionsToLearner &&
       question.scoring?.rubrics
     )
       return true;
     else return false;
   };
+  const showRubrics = question.scoring?.showRubricsToLearner ?? false;
   const showPoints = question.scoring?.showPoints ?? false;
   // Get the questionStatus directly from the store
   const questionStatus = getQuestionStatusById
@@ -328,6 +329,7 @@ function Component(props: Props) {
       {checkToShowRubric() && (
         <ShowHideRubric
           rubrics={question.scoring.rubrics}
+          showRubrics={showRubrics}
           showPoints={showPoints}
         />
       )}

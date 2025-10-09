@@ -223,6 +223,8 @@ export class AssignmentServiceV2 {
         instructions: updateDto.instructions,
         gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
         numAttempts: updateDto.numAttempts,
+        attemptsBeforeCoolDown: updateDto.attemptsBeforeCoolDown,
+        retakeAttemptCoolDownMinutes: updateDto.retakeAttemptCoolDownMinutes,
         passingGrade: updateDto.passingGrade,
         displayOrder: updateDto.displayOrder,
         graded: updateDto.graded,

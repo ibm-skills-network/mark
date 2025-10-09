@@ -69,6 +69,26 @@ export class ReplaceAssignmentRequestDto {
 
   @ApiProperty({
     description:
+      "The number of attempts before learners must wait for some period of time to retry (null means never waiting to retry)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  attemptsBeforeCoolDown: number | null;
+
+  @ApiProperty({
+    description:
+      "The amount of time learners must wait to retry in minutes (null means right away)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  retakeAttemptCoolDownMinutes: number | null;
+
+  @ApiProperty({
+    description:
       "The allotted time for the assignment. (null means unlimited time)",
     type: Number,
     required: false,

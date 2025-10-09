@@ -28,6 +28,8 @@ export interface SaveDraftDto {
     type: string;
     graded: boolean;
     numAttempts: number;
+    attemptsBeforeCoolDown: number;
+    retakeAttemptCoolDownMinutes: number;
     allotedTimeMinutes: number;
     attemptsPerTimeRange: number;
     attemptsTimeRangeHours: number;
@@ -61,13 +63,13 @@ export class DraftManagementService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
+    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger
   ) {
     this.logger = parentLogger.child({ context: "DraftManagementService" });
   }
 
   private parseDisplayOrder(
-    value: any,
+    value: any
   ): AssignmentQuestionDisplayOrder | undefined {
     if (value === "DEFINED" || value === "RANDOM") {
       return value as AssignmentQuestionDisplayOrder;
@@ -85,7 +87,7 @@ export class DraftManagementService {
   async saveDraft(
     assignmentId: number,
     saveDraftDto: SaveDraftDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<DraftSummary> {
     this.logger.info(`Saving draft for assignment ${assignmentId}`, {
       userId: userSession.userId,
@@ -132,6 +134,12 @@ export class DraftManagementService {
           graded: saveDraftDto.assignmentData?.graded ?? assignment.graded,
           numAttempts:
             saveDraftDto.assignmentData?.numAttempts ?? assignment.numAttempts,
+          attemptsBeforeCoolDown:
+            saveDraftDto.assignmentData?.attemptsBeforeCoolDown ??
+            assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes:
+            saveDraftDto.assignmentData?.retakeAttemptCoolDownMinutes ??
+            assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes:
             saveDraftDto.assignmentData?.allotedTimeMinutes ??
             assignment.allotedTimeMinutes,
@@ -149,7 +157,7 @@ export class DraftManagementService {
             assignment.displayOrder,
           questionDisplay:
             this.parseQuestionDisplay(
-              saveDraftDto.assignmentData?.questionDisplay,
+              saveDraftDto.assignmentData?.questionDisplay
             ) ?? assignment.questionDisplay,
           numberOfQuestionsPerAttempt:
             saveDraftDto.assignmentData?.numberOfQuestionsPerAttempt ??
@@ -184,7 +192,7 @@ export class DraftManagementService {
         {
           draftId: assignmentDraft.id,
           userId: userSession.userId,
-        },
+        }
       );
 
       return {
@@ -202,7 +210,7 @@ export class DraftManagementService {
   async updateDraft(
     draftId: number,
     saveDraftDto: SaveDraftDto,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<DraftSummary> {
     this.logger.info(`Updating draft ${draftId}`, {
       userId: userSession.userId,
@@ -248,6 +256,16 @@ export class DraftManagementService {
         ...(saveDraftDto.assignmentData?.numAttempts !== undefined && {
           numAttempts: saveDraftDto.assignmentData.numAttempts,
         }),
+        ...(saveDraftDto.assignmentData?.attemptsBeforeCoolDown !==
+          undefined && {
+          attemptsBeforeCoolDown:
+            saveDraftDto.assignmentData.attemptsBeforeCoolDown,
+        }),
+        ...(saveDraftDto.assignmentData?.retakeAttemptCoolDownMinutes !==
+          undefined && {
+          retakeAttemptCoolDownMinutes:
+            saveDraftDto.assignmentData.retakeAttemptCoolDownMinutes,
+        }),
         ...(saveDraftDto.assignmentData?.allotedTimeMinutes !== undefined && {
           allotedTimeMinutes: saveDraftDto.assignmentData.allotedTimeMinutes,
         }),
@@ -265,12 +283,12 @@ export class DraftManagementService {
         }),
         ...(saveDraftDto.assignmentData?.displayOrder !== undefined && {
           displayOrder: this.parseDisplayOrder(
-            saveDraftDto.assignmentData.displayOrder,
+            saveDraftDto.assignmentData.displayOrder
           ),
         }),
         ...(saveDraftDto.assignmentData?.questionDisplay !== undefined && {
           questionDisplay: this.parseQuestionDisplay(
-            saveDraftDto.assignmentData.questionDisplay,
+            saveDraftDto.assignmentData.questionDisplay
           ),
         }),
         ...(saveDraftDto.assignmentData?.numberOfQuestionsPerAttempt !==
@@ -317,7 +335,7 @@ export class DraftManagementService {
 
   async listUserDrafts(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<DraftSummary[]> {
     // Verify assignment access
     // await this.verifyAssignmentAccess(assignmentId, userSession);
@@ -344,7 +362,7 @@ export class DraftManagementService {
 
   async getDraft(
     draftId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<{
     id: number;
     name: string;
@@ -355,6 +373,8 @@ export class DraftManagementService {
     type: string;
     graded: boolean;
     numAttempts: number;
+    attemptsBeforeCoolDown: number;
+    retakeAttemptCoolDownMinutes: number;
     allotedTimeMinutes: number;
     attemptsPerTimeRange: number;
     attemptsTimeRangeHours: number;
@@ -397,6 +417,8 @@ export class DraftManagementService {
       type: draft.type,
       graded: draft.graded,
       numAttempts: draft.numAttempts,
+      attemptsBeforeCoolDown: draft.attemptsBeforeCoolDown,
+      retakeAttemptCoolDownMinutes: draft.retakeAttemptCoolDownMinutes,
       allotedTimeMinutes: draft.allotedTimeMinutes,
       attemptsPerTimeRange: draft.attemptsPerTimeRange,
       attemptsTimeRangeHours: draft.attemptsTimeRangeHours,
@@ -445,7 +467,7 @@ export class DraftManagementService {
 
   async getLatestDraft(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ): Promise<{
     id: number;
     name: string;
@@ -456,6 +478,8 @@ export class DraftManagementService {
     type: string;
     graded: boolean;
     numAttempts: number;
+    attemptsBeforeCoolDown: number;
+    retakeAttemptCoolDownMinutes: number;
     allotedTimeMinutes: number;
     attemptsPerTimeRange: number;
     attemptsTimeRangeHours: number;
@@ -496,7 +520,7 @@ export class DraftManagementService {
 
   private async verifyAssignmentAccess(
     assignmentId: number,
-    userSession: UserSession,
+    userSession: UserSession
   ) {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -509,7 +533,7 @@ export class DraftManagementService {
 
     if (userSession.role === UserRole.AUTHOR) {
       const hasAccess = assignment.AssignmentAuthor.some(
-        (author) => author.userId === userSession.userId,
+        (author) => author.userId === userSession.userId
       );
       if (!hasAccess) {
         throw new NotFoundException("Assignment not found");

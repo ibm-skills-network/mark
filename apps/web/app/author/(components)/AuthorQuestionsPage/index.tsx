@@ -1020,6 +1020,14 @@ const AuthorQuestionsPage: FC<Props> = ({
             configStore.setNumAttempts(assignmentData.config.numAttempts);
             settingsUpdated = true;
           }
+          if (assignmentData.config.attemptsBeforeCoolDown !== undefined) {
+            configStore.setAttemptsBeforeCoolDown(assignmentData.config.attemptsBeforeCoolDown);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.retakeAttemptCoolDownMinutes !== undefined) {
+            configStore.setRetakeAttemptCoolDownMinutes(assignmentData.config.retakeAttemptCoolDownMinutes);
+            settingsUpdated = true;
+          }
           if (assignmentData.config.allotedTimeMinutes !== undefined) {
             configStore.setAllotedTimeMinutes(
               assignmentData.config.allotedTimeMinutes,

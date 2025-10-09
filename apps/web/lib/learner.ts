@@ -31,7 +31,7 @@ import { apiClient } from "./api-client";
 export async function createAttempt(
   assignmentId: number,
   cookies?: string,
-): Promise<number | undefined | "no more attempts"> {
+): Promise<number | undefined | "no more attempts" | "in cooldown period"> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
   try {
     const res = await apiClient.post(endpointURL, {
@@ -40,11 +40,14 @@ export async function createAttempt(
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
+    console.log("result: ", res);
     if (!res.ok) {
+      console.log("result status: ", res.status);
       const errorBody = (await res.json()) as { message: string };
+      console.log("error: ", errorBody);
       if (res.status === 422) {
         return "no more attempts";
-      }
+      } else if (res.status === 429) return "in cooldown period";
       throw new Error(errorBody.message || "Failed to create attempt");
     }
     const { success, error, id } = (await res.json()) as BaseBackendResponse;

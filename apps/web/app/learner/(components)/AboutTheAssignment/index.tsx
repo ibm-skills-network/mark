@@ -97,6 +97,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     allotedTimeMinutes,
     timeEstimateMinutes,
     numAttempts = -1,
+    attemptsBeforeCoolDown = 1,
+    retakeAttemptCoolDownMinutes = 5,
     passingGrade,
     name = "Untitled",
     id,
@@ -141,9 +143,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       : getAssignmentState(attempts, numAttempts);
 
   const attemptsLeft =
-    (numAttempts ?? -1) === -1
-      ? Infinity
-      : Math.max(0, numAttempts - attempts.length);
+    numAttempts === -1 ? Infinity : Math.max(0, numAttempts - attempts.length);
 
   const latestAttempt = attempts?.reduce((latest, attempt) => {
     if (!latest) return attempt;
@@ -155,9 +155,80 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     }
     return latest;
   }, null);
-  const latestAttemptDate = latestAttempt
-    ? new Date(latestAttempt.createdAt).toLocaleString()
-    : "No attempts yet";
+
+  const attemptsCount = attempts.length;
+  const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
+  const [isCooldown, setIsCooldown] = useState(false);
+
+  useEffect(() => {
+    if (
+      !latestAttempt ||
+      attemptsBeforeCoolDown <= 0 ||
+      (attemptsLeft > 0 && attemptsCount < attemptsBeforeCoolDown) ||
+      attemptsLeft === 0
+    ) {
+      setCooldownMessage(null);
+      setIsCooldown(false);
+      return;
+    }
+
+    const finishedAt = new Date(latestAttempt?.expiresAt).getTime();
+    const cooldownMs = retakeAttemptCoolDownMinutes * 60_000;
+    const nextEligibleAt = finishedAt + cooldownMs;
+
+    function updateCountdown() {
+      const remainingMs = nextEligibleAt - Date.now();
+
+      if (remainingMs <= 0) {
+        setCooldownMessage(null);
+        setIsCooldown(false);
+        return;
+      }
+
+      setIsCooldown(true);
+
+      const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+      let remainder = remainingMs % (24 * 60 * 60 * 1000);
+      const hours = Math.floor(remainder / (60 * 60 * 1000));
+      remainder %= 60 * 60 * 1000;
+      const minutes = Math.floor(remainder / 60000);
+      const seconds = Math.floor((remainder % 60000) / 1000);
+
+      const parts = [];
+      if (days) parts.push(`${days}d`);
+      if (hours) parts.push(`${hours}h`);
+      if (minutes) parts.push(`${minutes}m`);
+      if (seconds) parts.push(`${seconds}s`);
+
+      setCooldownMessage(`Please wait ${parts.join(" ")} before retrying`);
+    }
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [
+    latestAttempt,
+    attemptsLeft,
+    attemptsCount,
+    attemptsBeforeCoolDown,
+    retakeAttemptCoolDownMinutes,
+  ]);
+
+  useEffect(() => {
+    if (!userPreferedLanguage || languageModalTriggered) {
+      setToggleLanguageSelectionModal(true);
+    }
+  }, [userPreferedLanguage, languageModalTriggered]);
+  useEffect(() => {
+    async function fetchLanguages() {
+      setIsLoading(true);
+      const supportedLanguages = await getSupportedLanguages(assignmentId);
+      setLanguages(supportedLanguages);
+      setIsLoading(false);
+    }
+    void fetchLanguages();
+  }, [assignmentId]);
+
   const handleConfirm = () => {
     if (selectedLanguage) {
       router.replace(`${pathname}?lang=${selectedLanguage}`, undefined);
@@ -173,6 +244,37 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     setLanguageModalTriggered(false);
     setToggleLanguageSelectionModal(false);
   };
+
+  const url =
+    role === "learner"
+      ? `/learner/${assignmentId}/questions`
+      : `/learner/${assignmentId}/questions?authorMode=true`;
+
+  const buttonLabel = assignmentState === "in-progress" ? "Resume" : "Begin";
+  let buttonMessage = "";
+  let buttonDisabled = false;
+
+  if (!role) {
+    buttonDisabled = true;
+    buttonMessage = "You must be signed in with a role to begin.";
+  } else if (role === "learner" && assignmentState === "not-published") {
+    buttonDisabled = true;
+    buttonMessage = "The assignment is not published yet.";
+  } else if (attemptsLeft === 0) {
+    buttonDisabled = true;
+    buttonMessage =
+      "Maximum attempts reached, contact the author to request more.";
+  } else if (isCooldown && cooldownMessage) {
+    buttonDisabled = true;
+    buttonMessage = cooldownMessage;
+  } else {
+    buttonMessage = `Click to ${assignmentState === "in-progress" ? "Resume" : "Begin"}`;
+  }
+
+  const latestAttemptDate = latestAttempt
+    ? new Date(latestAttempt.createdAt).toLocaleString()
+    : "No attempts yet";
+
   return (
     <>
       <main className="flex-1 py-6 sm:py-12 px-4 sm:px-6 bg-gray-50 overflow-auto">
@@ -199,22 +301,27 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 <div className="sm:hidden">
                   <BeginTheAssignmentButton
                     className="w-full"
-                    assignmentState={assignmentState}
-                    assignmentId={id}
-                    role={role}
-                    attemptsLeft={attemptsLeft}
+                    disabled={isCooldown || buttonDisabled}
+                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    label={buttonLabel}
+                    href={url}
                   />
                 </div>
                 <div className="hidden sm:block">
                   <BeginTheAssignmentButton
                     className="w-auto"
-                    assignmentState={assignmentState}
-                    assignmentId={id}
-                    role={role}
-                    attemptsLeft={attemptsLeft}
+                    disabled={isCooldown || buttonDisabled}
+                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    label={buttonLabel}
+                    href={url}
                   />
                 </div>
               </div>
+              {isCooldown && cooldownMessage && (
+                <span className="text-red-600 font-semibold">
+                  ({cooldownMessage})
+                </span>
+              )}
             </div>
           </div>
 
@@ -303,10 +410,10 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
           <div className="flex justify-center mt-6">
             <BeginTheAssignmentButton
               className="w-full sm:w-auto"
-              assignmentState={assignmentState}
-              assignmentId={id}
-              role={role}
-              attemptsLeft={attemptsLeft}
+              disabled={isCooldown || buttonDisabled}
+              message={isCooldown ? cooldownMessage : buttonMessage}
+              label={buttonLabel}
+              href={url}
             />
           </div>
         </div>

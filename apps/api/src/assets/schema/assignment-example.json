@@ -5,6 +5,8 @@
   "type": "AI_GRADED",
   "graded": true,
   "numAttempts": 5,
+  "attemptsBeforeCoolDown": 1,
+  "retakeAttemptCoolDownMinutes": 5,
   "allotedTimeMinutes": 60,
   "attemptsPerTimeRange": 5,
   "attemptsTimeRangeHours": 2,

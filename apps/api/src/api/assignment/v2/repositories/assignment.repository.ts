@@ -1,15 +1,10 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
-import {
-  Assignment,
-  AssignmentQuestionDisplayOrder,
-  Question,
-  QuestionVariant,
-} from "@prisma/client";
+import { Assignment, Question, QuestionVariant } from "@prisma/client";
 import {
   UserRole,
   UserSession,
-} from "src/auth/interfaces/user.session.interface";
-import { PrismaService } from "src/prisma.service";
+} from "../../../../auth/interfaces/user.session.interface";
+import { PrismaService } from "../../../../prisma.service";
 import {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
@@ -23,22 +18,74 @@ import {
   VideoPresentationConfig,
 } from "../../dto/update.questions.request.dto";
 
-/**
- * Repository for Assignment data access operations
- */
+/** Fields we want to merge from activeVersion → assignment → defaults */
+const FIELDS = [
+  "name",
+  "introduction",
+  "instructions",
+  "gradingCriteriaOverview",
+  "timeEstimateMinutes",
+  "attemptsBeforeCoolDown",
+  "retakeAttemptCoolDownMinutes",
+  "type",
+  "graded",
+  "numAttempts",
+  "allotedTimeMinutes",
+  "attemptsPerTimeRange",
+  "attemptsTimeRangeHours",
+  "passingGrade",
+  "displayOrder",
+  "questionDisplay",
+  "numberOfQuestionsPerAttempt",
+  "published",
+  "showAssignmentScore",
+  "showQuestionScore",
+  "showSubmissionFeedback",
+  "showQuestions",
+  "languageCode",
+] as const;
+
+type FieldKey = (typeof FIELDS)[number];
+
+/** Typed defaults for overlapping fields */
+const DEFAULTS: Partial<Record<FieldKey, unknown>> = {
+  attemptsBeforeCoolDown: 1,
+  retakeAttemptCoolDownMinutes: 5,
+  passingGrade: 50,
+  questionDisplay: "ONE_PER_PAGE",
+  graded: false,
+  numAttempts: -1,
+  showAssignmentScore: true,
+  showQuestionScore: true,
+  showSubmissionFeedback: true,
+  showQuestions: true,
+};
+
+/** Safe coalescer */
+function prefer<T>(...vals: Array<T | null | undefined>): T | null {
+  for (const v of vals) if (v !== undefined && v !== null) return v;
+  return null;
+}
+
+/** Merge whitelisted fields from primary → secondary → defaults */
+function mergeFields(
+  keys: readonly FieldKey[],
+  primary?: Partial<Record<FieldKey, unknown>>,
+  secondary?: Partial<Record<FieldKey, unknown>>,
+  defaults?: Partial<Record<FieldKey, unknown>>,
+): Partial<Record<FieldKey, unknown>> {
+  const out: Partial<Record<FieldKey, unknown>> = {};
+  for (const k of keys) {
+    out[k] = prefer(primary?.[k], secondary?.[k], defaults?.[k]);
+  }
+  return out;
+}
+
 @Injectable()
 export class AssignmentRepository {
   private readonly logger = new Logger(AssignmentRepository.name);
 
   constructor(private readonly prisma: PrismaService) {}
-
-  /**
-   * Find assignment by ID with related data
-   *
-   * @param id - Assignment ID
-   * @param userSession - Optional user session for role-based access
-   * @returns Assignment data formatted based on user role
-   */
 
   async findById(
     id: number,
@@ -49,7 +96,15 @@ export class AssignmentRepository {
     const result = await this.prisma.assignment.findUnique({
       where: { id },
       include: {
+        currentVersion: { include: { questionVersions: true } },
+        versions: {
+          where: { isActive: true },
+          include: { questionVersions: true },
+          orderBy: { id: "desc" },
+          take: 1,
+        },
         questions: {
+          where: { isDeleted: false },
           include: { variants: true },
         },
       },
@@ -59,7 +114,66 @@ export class AssignmentRepository {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
-    const processedAssignment = this.processAssignmentData(result);
+    const activeVersion =
+      (result.currentVersion?.isActive ? result.currentVersion : null) ??
+      (result.versions?.length ? result.versions[0] : null);
+
+    let processedAssignment: Assignment & { questions: QuestionDto[] };
+
+    if (activeVersion) {
+      const mappedQuestions: (Question & { variants: QuestionVariant[] })[] = [
+        ...(activeVersion.questionVersions ?? []),
+      ]
+        .sort((a, b) => {
+          const ao = a.displayOrder ?? 0;
+          const bo = b.displayOrder ?? 0;
+          return ao === bo ? a.id - b.id : ao - bo;
+        })
+        .map((qv) => {
+          const legacy = qv.questionId
+            ? result.questions.find((q) => q.id === qv.questionId)
+            : undefined;
+
+          const q: Question & { variants: QuestionVariant[] } = {
+            id: qv.questionId ?? -qv.id,
+            assignmentId: result.id,
+            isDeleted: false,
+            totalPoints: qv.totalPoints,
+            type: qv.type,
+            responseType: qv.responseType ?? null,
+            question: qv.question,
+            maxWords: qv.maxWords ?? null,
+            scoring: qv.scoring ?? null,
+            choices: qv.choices ?? null,
+            randomizedChoices: qv.randomizedChoices ?? null,
+            answer: qv.answer ?? null,
+            gradingContextQuestionIds: qv.gradingContextQuestionIds ?? [],
+            maxCharacters: qv.maxCharacters ?? null,
+            videoPresentationConfig: qv.videoPresentationConfig ?? null,
+            liveRecordingConfig: qv.liveRecordingConfig ?? null,
+            variants: legacy?.variants ?? [],
+          };
+          return q;
+        });
+
+      const merged = mergeFields(FIELDS, activeVersion, result, DEFAULTS);
+
+      const composed: Assignment & {
+        questions: (Question & { variants: QuestionVariant[] })[];
+      } = {
+        ...(result as Assignment),
+        ...(merged as Partial<Assignment>),
+        questionOrder:
+          (activeVersion.questionOrder?.length
+            ? activeVersion.questionOrder
+            : result.questionOrder) ?? [],
+        questions: mappedQuestions,
+      };
+
+      processedAssignment = this.processAssignmentData(composed);
+    } else {
+      processedAssignment = this.processAssignmentData(result);
+    }
 
     if (isLearner) {
       return {
@@ -76,7 +190,7 @@ export class AssignmentRepository {
         processedAssignment.questions?.map((q) => ({
           ...q,
           alreadyInBackend: true,
-        })) || [],
+        })) ?? [],
     } as unknown as GetAssignmentResponseDto;
   }
 
@@ -282,7 +396,9 @@ export class AssignmentRepository {
       allotedTimeMinutes: undefined,
       attemptsPerTimeRange: undefined,
       attemptsTimeRangeHours: undefined,
-      displayOrder: undefined as unknown as AssignmentQuestionDisplayOrder,
+      attemptsBeforeCoolDown: undefined,
+      retakeAttemptCoolDownMinutes: undefined,
+      displayOrder: undefined,
     };
   }
 }

@@ -78,6 +78,8 @@ export function analyzeChanges(
     "numberOfQuestionsPerAttempt",
     "timeLimit",
     "title",
+    "attemptsBeforeCoolDown",
+    "retakeAttemptCoolDownMinutes",
   ];
 
   comparison.assignmentChanges.forEach((change) => {

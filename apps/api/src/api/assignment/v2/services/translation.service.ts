@@ -1080,7 +1080,7 @@ export class TranslationService {
           question.id,
           null,
           question.question,
-          question.choices as unknown as Choice[],
+          question.choices,
           await this.llmFacadeService.getLanguageCode(
             question.question,
             assignmentId,
@@ -1108,7 +1108,7 @@ export class TranslationService {
             question.id,
             variant.id,
             variant.variantContent,
-            variant.choices as unknown as Choice[],
+            variant.choices,
             await this.llmFacadeService.getLanguageCode(
               variant.variantContent,
               assignmentId,
@@ -1891,10 +1891,30 @@ export class TranslationService {
     questionId: number,
     variantId: number | null,
     originalText: string,
-    originalChoices: Choice[] | null,
+    originalChoices: Choice[] | null | string | any,
     sourceLanguage: string,
     targetLanguage: string,
   ): Promise<void> {
+    // Parse originalChoices if it's a string (from database JSON)
+    let parsedChoices: Choice[] | null = null;
+    if (originalChoices) {
+      if (typeof originalChoices === "string") {
+        try {
+          parsedChoices = JSON.parse(originalChoices) as Choice[];
+        } catch (error) {
+          this.logger.error(`Failed to parse choices JSON: ${String(error)}`);
+          parsedChoices = null;
+        }
+      } else if (Array.isArray(originalChoices)) {
+        parsedChoices = originalChoices as Choice[];
+      } else {
+        // Handle case where originalChoices is some other type
+        this.logger.warn(
+          `Unexpected type for originalChoices: ${typeof originalChoices}`,
+        );
+        parsedChoices = null;
+      }
+    }
     // Check if we need to reuse existing translation
     // Only reuse if it's from the same assignment (context-aware)
     // const existingTranslation = await this.prisma.translation.findFirst({
@@ -1952,7 +1972,7 @@ export class TranslationService {
             variantId,
             languageCode: targetLanguage,
             untranslatedText: originalText,
-            untranslatedChoices: this.prepareJsonValue(originalChoices),
+            untranslatedChoices: this.prepareJsonValue(parsedChoices),
             translatedText: originalText,
             translatedChoices: this.prepareJsonValue(originalChoices),
           },
@@ -1979,7 +1999,7 @@ export class TranslationService {
     // Different language - translate it
     const translationPromises: Array<Promise<any>> = [];
     let translatedText: string = originalText;
-    let translatedChoices: Choice[] | null = originalChoices;
+    let translatedChoices: Choice[] | null = parsedChoices;
 
     // Translate the text
     translationPromises.push(
@@ -2007,13 +2027,17 @@ export class TranslationService {
     );
 
     // Translate the choices if they exist
-    if (originalChoices) {
+    if (
+      parsedChoices &&
+      Array.isArray(parsedChoices) &&
+      parsedChoices.length > 0
+    ) {
       translationPromises.push(
         this.executeWithOptimizedRetry(
           `translateChoices-${questionId}-${targetLanguage}`,
           () =>
             this.llmFacadeService.generateChoicesTranslation(
-              originalChoices,
+              parsedChoices,
               assignmentId,
               targetLanguage,
             ),
@@ -2026,7 +2050,7 @@ export class TranslationService {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to translate choices: ${errorMessage}`);
-            return originalChoices;
+            return parsedChoices;
           }),
       );
     }
@@ -2042,7 +2066,7 @@ export class TranslationService {
             variantId,
             languageCode: targetLanguage,
             untranslatedText: originalText,
-            untranslatedChoices: this.prepareJsonValue(originalChoices),
+            untranslatedChoices: this.prepareJsonValue(parsedChoices),
             translatedText,
             translatedChoices: this.prepareJsonValue(translatedChoices),
           },

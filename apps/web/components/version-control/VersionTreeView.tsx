@@ -127,11 +127,9 @@ export function VersionTreeView({ assignmentId }: Props) {
     currentVersion,
     formatVersionAge,
     hasUnsavedChanges,
-    saveDraft,
     drafts,
     loadDraft,
     activateVersion,
-    // Favorite version functionality
     toggleFavoriteVersion,
     isVersionFavorite,
     getFavoriteVersions,
@@ -538,8 +536,6 @@ export function VersionTreeView({ assignmentId }: Props) {
   // Modal handlers for unsaved changes
   const handleSaveAndProceed = async () => {
     try {
-      await saveDraft();
-
       if (pendingAction) {
         await proceedWithNodeClick(
           pendingAction.version,
@@ -1425,6 +1421,36 @@ export function VersionTreeView({ assignmentId }: Props) {
                                         selectedVersionDetails ||
                                         selectedVersion
                                       ).numAttempts ?? "Unlimited")}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
+                                  Attempts Before Cooldown Period:
+                                </span>
+                                <span className="font-medium text-gray-900">
+                                  {(selectedVersionDetails || selectedVersion)
+                                    .attemptsBeforeCoolDown === 0
+                                    ? "Never wait"
+                                    : ((
+                                        selectedVersionDetails ||
+                                        selectedVersion
+                                      ).attemptsBeforeCoolDown ?? "")}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
+                                  Time Learners Wait Between Attempts (Minutes):
+                                </span>
+                                <span className="font-medium text-gray-900">
+                                  {(selectedVersionDetails || selectedVersion)
+                                    .attemptsBeforeCoolDown === 0 ||
+                                  (selectedVersionDetails || selectedVersion)
+                                    .retakeAttemptCoolDownMinutes === 0
+                                    ? "Never wait"
+                                    : ((
+                                        selectedVersionDetails ||
+                                        selectedVersion
+                                      ).retakeAttemptCoolDownMinutes ?? "")}
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
