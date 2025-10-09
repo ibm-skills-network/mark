@@ -1,4 +1,7 @@
-import { DataTransformer, TransformConfig } from '@/app/Helpers/data-transformer';
+import {
+  DataTransformer,
+  TransformConfig,
+} from "@/app/Helpers/data-transformer";
 
 interface APIClientConfig {
   baseURL?: string;
@@ -27,7 +30,7 @@ export class APIClient {
   private timeout: number;
 
   constructor(config: APIClientConfig = {}) {
-    this.baseURL = config.baseURL || '';
+    this.baseURL = config.baseURL || "";
     this.autoTransform = config.autoTransform ?? true;
     this.transformConfig = config.transformConfig || {};
     this.defaultHeaders = config.defaultHeaders || {};
@@ -38,35 +41,47 @@ export class APIClient {
    * Make GET request with automatic response transformation
    */
   async get<T = any>(url: string, options: RequestOptions = {}): Promise<T> {
-    return this.request<T>('GET', url, undefined, options);
+    return this.request<T>("GET", url, undefined, options);
   }
 
   /**
    * Make POST request with automatic request/response transformation
    */
-  async post<T = any>(url: string, data?: any, options: RequestOptions = {}): Promise<T> {
-    return this.request<T>('POST', url, data, options);
+  async post<T = any>(
+    url: string,
+    data?: any,
+    options: RequestOptions = {},
+  ): Promise<T> {
+    return this.request<T>("POST", url, data, options);
   }
 
   /**
    * Make PUT request with automatic request/response transformation
    */
-  async put<T = any>(url: string, data?: any, options: RequestOptions = {}): Promise<T> {
-    return this.request<T>('PUT', url, data, options);
+  async put<T = any>(
+    url: string,
+    data?: any,
+    options: RequestOptions = {},
+  ): Promise<T> {
+    return this.request<T>("PUT", url, data, options);
   }
 
   /**
    * Make PATCH request with automatic request/response transformation
    */
-  async patch<T = any>(url: string, data?: any, options: RequestOptions = {}): Promise<T> {
-    return this.request<T>('PATCH', url, data, options);
+  async patch<T = any>(
+    url: string,
+    data?: any,
+    options: RequestOptions = {},
+  ): Promise<T> {
+    return this.request<T>("PATCH", url, data, options);
   }
 
   /**
    * Make DELETE request
    */
   async delete<T = any>(url: string, options: RequestOptions = {}): Promise<T> {
-    return this.request<T>('DELETE', url, undefined, options);
+    return this.request<T>("DELETE", url, undefined, options);
   }
 
   /**
@@ -76,17 +91,20 @@ export class APIClient {
     method: string,
     url: string,
     data?: any,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
   ): Promise<T> {
     const {
       headers = {},
       transformRequest = this.autoTransform,
       transformResponse = this.autoTransform,
       transformConfig,
-      signal
+      signal,
     } = options;
 
-    const finalTransformConfig = { ...this.transformConfig, ...transformConfig };
+    const finalTransformConfig = {
+      ...this.transformConfig,
+      ...transformConfig,
+    };
     const fullURL = this.buildURL(url);
 
     let requestBody: string | undefined;
@@ -98,9 +116,9 @@ export class APIClient {
     }
 
     const requestHeaders = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...this.defaultHeaders,
-      ...headers
+      ...headers,
     };
 
     const controller = new AbortController();
@@ -111,7 +129,7 @@ export class APIClient {
         method,
         headers: requestHeaders,
         body: requestBody,
-        signal: signal || controller.signal
+        signal: signal || controller.signal,
       });
 
       clearTimeout(timeoutId);
@@ -120,7 +138,7 @@ export class APIClient {
         throw new APIError(
           `HTTP ${response.status}: ${response.statusText}`,
           response.status,
-          response.statusText
+          response.statusText,
         );
       }
 
@@ -129,12 +147,11 @@ export class APIClient {
       return transformResponse
         ? DataTransformer.decodeFromAPI(responseData)
         : responseData;
-
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new APIError('Request timeout', 408, 'Request Timeout');
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new APIError("Request timeout", 408, "Request Timeout");
       }
 
       throw error;
@@ -145,10 +162,10 @@ export class APIClient {
    * Build full URL from base URL and endpoint
    */
   private buildURL(url: string): string {
-    if (url.startsWith('http')) {
+    if (url.startsWith("http")) {
       return url;
     }
-    return `${this.baseURL}${url.startsWith('/') ? '' : '/'}${url}`;
+    return `${this.baseURL}${url.startsWith("/") ? "" : "/"}${url}`;
   }
 
   /**
@@ -156,9 +173,18 @@ export class APIClient {
    */
   updateConfig(config: Partial<APIClientConfig>): void {
     if (config.baseURL !== undefined) this.baseURL = config.baseURL;
-    if (config.autoTransform !== undefined) this.autoTransform = config.autoTransform;
-    if (config.transformConfig) this.transformConfig = { ...this.transformConfig, ...config.transformConfig };
-    if (config.defaultHeaders) this.defaultHeaders = { ...this.defaultHeaders, ...config.defaultHeaders };
+    if (config.autoTransform !== undefined)
+      this.autoTransform = config.autoTransform;
+    if (config.transformConfig)
+      this.transformConfig = {
+        ...this.transformConfig,
+        ...config.transformConfig,
+      };
+    if (config.defaultHeaders)
+      this.defaultHeaders = {
+        ...this.defaultHeaders,
+        ...config.defaultHeaders,
+      };
     if (config.timeout !== undefined) this.timeout = config.timeout;
   }
 
@@ -172,7 +198,7 @@ export class APIClient {
       transformConfig: this.transformConfig,
       defaultHeaders: this.defaultHeaders,
       timeout: this.timeout,
-      ...config
+      ...config,
     });
   }
 }
@@ -184,10 +210,10 @@ export class APIError extends Error {
   constructor(
     message: string,
     public status: number,
-    public statusText: string
+    public statusText: string,
   ) {
     super(message);
-    this.name = 'APIError';
+    this.name = "APIError";
   }
 }
 
@@ -195,12 +221,18 @@ export class APIError extends Error {
  * Default API client instance
  */
 export const apiClient = new APIClient({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || '',
-  autoTransform: true,  // Frontend handles encoding requests and decoding responses
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "",
+  autoTransform: true, // Frontend handles encoding requests and decoding responses
   transformConfig: {
-    fields: ['introduction', 'instructions', 'gradingCriteriaOverview', 'question', 'content'],
-    deep: true
-  }
+    fields: [
+      "introduction",
+      "instructions",
+      "gradingCriteriaOverview",
+      "question",
+      "content",
+    ],
+    deep: true,
+  },
 });
 
 /**

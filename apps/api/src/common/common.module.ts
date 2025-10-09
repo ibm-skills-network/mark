@@ -1,6 +1,6 @@
-import { Module, Global } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { DataTransformInterceptor } from './interceptors/data-transform.interceptor';
+import { Module, Global } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
+import { DataTransformInterceptor } from "./interceptors/data-transform.interceptor";
 
 /**
  * Global module for common functionality including data transformation

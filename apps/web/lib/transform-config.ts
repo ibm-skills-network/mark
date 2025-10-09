@@ -1,4 +1,4 @@
-import { TransformConfig } from '@/app/Helpers/data-transformer';
+import { TransformConfig } from "@/app/Helpers/data-transformer";
 
 /**
  * Global configuration for data transformation
@@ -17,22 +17,28 @@ export interface GlobalTransformConfig {
  */
 const DEFAULT_CONFIG: GlobalTransformConfig = {
   enabled: true,
-  debugMode: process.env.NODE_ENV === 'development',
-  performanceLogging: process.env.NODE_ENV === 'development',
+  debugMode: process.env.NODE_ENV === "development",
+  performanceLogging: process.env.NODE_ENV === "development",
   apiConfig: {
-    fields: ['introduction', 'instructions', 'gradingCriteriaOverview', 'question', 'content'],
-    exclude: ['id', 'createdAt', 'updatedAt'],
-    deep: true
+    fields: [
+      "introduction",
+      "instructions",
+      "gradingCriteriaOverview",
+      "question",
+      "content",
+    ],
+    exclude: ["id", "createdAt", "updatedAt"],
+    deep: true,
   },
   storageConfig: {
-    fields: ['introduction', 'instructions', 'gradingCriteriaOverview'],
+    fields: ["introduction", "instructions", "gradingCriteriaOverview"],
     deep: false,
-    compressionLevel: 'light'
+    compressionLevel: "light",
   },
   formConfig: {
-    exclude: ['id', 'createdAt', 'updatedAt', 'userId'],
-    deep: false
-  }
+    exclude: ["id", "createdAt", "updatedAt", "userId"],
+    deep: false,
+  },
 };
 
 /**
@@ -110,7 +116,7 @@ class TransformConfigManager {
    * Notify all listeners of configuration changes
    */
   private notifyListeners(): void {
-    this.listeners.forEach(listener => listener(this.config));
+    this.listeners.forEach((listener) => listener(this.config));
   }
 
   /**
@@ -128,15 +134,16 @@ class TransformConfigManager {
     const envConfig: Partial<GlobalTransformConfig> = {};
 
     if (process.env.NEXT_PUBLIC_TRANSFORM_ENABLED !== undefined) {
-      envConfig.enabled = process.env.NEXT_PUBLIC_TRANSFORM_ENABLED === 'true';
+      envConfig.enabled = process.env.NEXT_PUBLIC_TRANSFORM_ENABLED === "true";
     }
 
     if (process.env.NEXT_PUBLIC_TRANSFORM_DEBUG !== undefined) {
-      envConfig.debugMode = process.env.NEXT_PUBLIC_TRANSFORM_DEBUG === 'true';
+      envConfig.debugMode = process.env.NEXT_PUBLIC_TRANSFORM_DEBUG === "true";
     }
 
     if (process.env.NEXT_PUBLIC_TRANSFORM_PERFORMANCE_LOGGING !== undefined) {
-      envConfig.performanceLogging = process.env.NEXT_PUBLIC_TRANSFORM_PERFORMANCE_LOGGING === 'true';
+      envConfig.performanceLogging =
+        process.env.NEXT_PUBLIC_TRANSFORM_PERFORMANCE_LOGGING === "true";
     }
 
     if (Object.keys(envConfig).length > 0) {
@@ -153,6 +160,6 @@ export const transformConfig = new TransformConfigManager();
 /**
  * Initialize configuration on module load
  */
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   transformConfig.loadFromEnvironment();
 }
