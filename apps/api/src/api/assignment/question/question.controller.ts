@@ -44,7 +44,7 @@ export class QuestionController {
   private logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
-    private readonly questionService: QuestionService
+    private readonly questionService: QuestionService,
   ) {
     this.logger = parentLogger.child({ context: QuestionController.name });
   }
@@ -61,11 +61,11 @@ export class QuestionController {
   @ApiResponse({ status: 403 })
   createQuestion(
     @Param("assignmentId") assignmentId: number,
-    @Body() createQuestionRequestDto: CreateUpdateQuestionRequestDto
+    @Body() createQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     return this.questionService.create(
       Number(assignmentId),
-      createQuestionRequestDto
+      createQuestionRequestDto,
     );
   }
 
@@ -92,12 +92,12 @@ export class QuestionController {
   updateQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
-    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     return this.questionService.update(
       Number(assignmentId),
       Number(id),
-      updateQuestionRequestDto
+      updateQuestionRequestDto,
     );
   }
 
@@ -114,12 +114,12 @@ export class QuestionController {
   replaceQuestion(
     @Param("assignmentId") assignmentId: number,
     @Param("id") id: number,
-    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto
+    @Body() updateQuestionRequestDto: CreateUpdateQuestionRequestDto,
   ): Promise<BaseQuestionResponseDto> {
     return this.questionService.replace(
       Number(assignmentId),
       Number(id),
-      updateQuestionRequestDto
+      updateQuestionRequestDto,
     );
   }
 
@@ -147,13 +147,13 @@ export class QuestionController {
       question: QuestionDto;
       rubricIndex: number;
     },
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<ScoringDto | Choice[]> {
     const { question, rubricIndex } = body;
     return await this.questionService.createMarkingRubric(
       question,
       request.userSession.assignmentId,
-      rubricIndex
+      rubricIndex,
     );
   }
 
@@ -170,12 +170,12 @@ export class QuestionController {
     body: {
       question: QuestionDto;
     },
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<QuestionDto> {
     const { question } = body;
     return await this.questionService.expandMarkingRubric(
       question,
-      request.userSession.assignmentId
+      request.userSession.assignmentId,
     );
   }
 
@@ -194,7 +194,7 @@ export class QuestionController {
     @Body()
     body: {
       liveRecordingData: LearnerLiveRecordingFeedback;
-    }
+    },
   ): Promise<{ feedback: string }> {
     const { liveRecordingData } = body;
 
@@ -203,7 +203,7 @@ export class QuestionController {
     }
     return this.questionService.getLiveRecordingFeedback(
       liveRecordingData,
-      Number(assignmentId)
+      Number(assignmentId),
     );
   }
   @Post(":id/translations")
@@ -224,7 +224,7 @@ export class QuestionController {
       selectedLanguage: string;
       selectedLanguageCode: string;
     },
-    @Req() request: UserSessionRequest
+    @Req() request: UserSessionRequest,
   ): Promise<{
     translatedQuestion: string;
     translatedChoices?: Choice[] | { id: number | null; choice: string }[];
@@ -233,7 +233,7 @@ export class QuestionController {
     const { userSession } = request;
 
     const question = await this.questionService.findOneForTranslation(
-      Number(questionId)
+      Number(questionId),
     );
 
     const { translatedQuestion, translatedChoices } =
@@ -241,7 +241,7 @@ export class QuestionController {
         question.assignmentId,
         question,
         selectedLanguageCode,
-        selectedLanguage
+        selectedLanguage,
       );
 
     if (userSession.role === UserRole.LEARNER) {

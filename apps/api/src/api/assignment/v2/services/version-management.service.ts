@@ -92,7 +92,7 @@ export class VersionManagementService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "VersionManagementService" });
   }
@@ -137,14 +137,14 @@ export class VersionManagementService {
   async createVersion(
     assignmentId: number,
     createVersionDto: CreateVersionDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     this.logger.info(
       `🚀 CREATE VERSION: Starting for assignment ${assignmentId}`,
       {
         createVersionDto,
         userId: userSession.userId,
-      }
+      },
     );
 
     // Log the key decision factors
@@ -178,7 +178,7 @@ export class VersionManagementService {
     // If no legacy questions found, this might be a new assignment created through version control
     if (assignment.questions.length === 0) {
       this.logger.warn(
-        `No legacy questions found for assignment ${assignmentId}. Creating version with empty questions.`
+        `No legacy questions found for assignment ${assignmentId}. Creating version with empty questions.`,
       );
     }
 
@@ -190,7 +190,7 @@ export class VersionManagementService {
       const semanticVersionRegex = /^\d+\.\d+\.\d+(?:-rc\d+)?$/;
       if (!semanticVersionRegex.test(createVersionDto.versionNumber)) {
         throw new BadRequestException(
-          "Version number must follow semantic versioning format (e.g., '1.0.0' or '1.0.0-rc1')"
+          "Version number must follow semantic versioning format (e.g., '1.0.0' or '1.0.0-rc1')",
         );
       }
       versionNumber = createVersionDto.versionNumber;
@@ -230,13 +230,13 @@ export class VersionManagementService {
           versionId: createVersionDto.versionId,
           versionNumber: createVersionDto.versionNumber,
           versionDescription: createVersionDto.versionDescription,
-        }
+        },
       );
       return await this.updateExistingVersion(
         assignmentId,
         createVersionDto.versionId,
         createVersionDto,
-        userSession
+        userSession,
       );
     }
 
@@ -257,13 +257,13 @@ export class VersionManagementService {
       if (createVersionDto.updateExisting) {
         // Update existing version instead of creating new one (fallback to version number lookup)
         this.logger.info(
-          `Updating existing version ${existingVersion.id} found by version number ${finalVersionNumber}`
+          `Updating existing version ${existingVersion.id} found by version number ${finalVersionNumber}`,
         );
         return await this.updateExistingVersion(
           assignmentId,
           existingVersion.id,
           createVersionDto,
-          userSession
+          userSession,
         );
       } else {
         // Return a special response indicating the version exists
@@ -333,7 +333,7 @@ export class VersionManagementService {
 
       // Create question versions
       this.logger.info(
-        `Creating ${assignment.questions.length} question versions for assignment version ${assignmentVersion.id}`
+        `Creating ${assignment.questions.length} question versions for assignment version ${assignmentVersion.id}`,
       );
 
       for (const [index, question] of assignment.questions.entries()) {
@@ -361,12 +361,12 @@ export class VersionManagementService {
         this.logger.debug(
           `Created question version ${questionVersion.id} for question ${
             question.id
-          } (${question.question.slice(0, 50)}...)`
+          } (${question.question.slice(0, 50)}...)`,
         );
       }
 
       this.logger.info(
-        `Successfully created all ${assignment.questions.length} question versions`
+        `Successfully created all ${assignment.questions.length} question versions`,
       );
 
       // Update current version if should activate
@@ -407,7 +407,7 @@ export class VersionManagementService {
           originalVersionNumber: wasAutoIncremented
             ? originalVersionNumber
             : undefined,
-        }
+        },
       );
 
       return {
@@ -463,7 +463,7 @@ export class VersionManagementService {
 
   async getVersion(
     assignmentId: number,
-    versionId: number
+    versionId: number,
   ): Promise<
     AssignmentVersion & {
       questionVersions: any[];
@@ -489,7 +489,7 @@ export class VersionManagementService {
           questionId: qv.questionId,
           question: qv.question?.slice(0, 50) + "...",
         })),
-      }
+      },
     );
 
     // Fetch variants for each question that has a questionId
@@ -584,7 +584,7 @@ export class VersionManagementService {
   async saveDraft(
     assignmentId: number,
     saveDraftDto: SaveDraftDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     this.logger.info(`Saving draft for assignment ${assignmentId}`, {
       userId: userSession.userId,
@@ -608,13 +608,13 @@ export class VersionManagementService {
   async restoreVersion(
     assignmentId: number,
     restoreVersionDto: RestoreVersionDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     this.logger.info(
       `Restoring version ${restoreVersionDto.versionId} for assignment ${assignmentId}`,
       {
         userId: userSession.userId,
-      }
+      },
     );
 
     const versionToRestore = await this.prisma.assignmentVersion.findUnique({
@@ -631,7 +631,7 @@ export class VersionManagementService {
         // Create new version from restored data
         const nextVersionNumber = await this.getNextVersionNumber(
           assignmentId,
-          tx
+          tx,
         );
 
         const restoredVersion = await tx.assignmentVersion.create({
@@ -732,13 +732,13 @@ export class VersionManagementService {
             assignmentId,
             restoreVersionDto.versionId,
             userSession,
-            tx
+            tx,
           );
         } else {
           // For regular versions, check if published before activation
           if (!versionToRestore.published) {
             throw new BadRequestException(
-              `Version ${versionToRestore.versionNumber} cannot be activated because it has not been published yet. Please publish the version first before activating it.`
+              `Version ${versionToRestore.versionNumber} cannot be activated because it has not been published yet. Please publish the version first before activating it.`,
             );
           }
 
@@ -787,7 +787,7 @@ export class VersionManagementService {
 
   async publishVersion(
     assignmentId: number,
-    versionId: number
+    versionId: number,
   ): Promise<VersionSummary> {
     const version = await this.prisma.assignmentVersion.findUnique({
       where: { id: versionId, assignmentId },
@@ -796,13 +796,13 @@ export class VersionManagementService {
 
     if (!version) {
       throw new NotFoundException(
-        `Version with ID ${versionId} not found for assignment ${assignmentId}`
+        `Version with ID ${versionId} not found for assignment ${assignmentId}`,
       );
     }
 
     if (version.published) {
       throw new BadRequestException(
-        `Version ${version.versionNumber} is already published`
+        `Version ${version.versionNumber} is already published`,
       );
     }
 
@@ -824,7 +824,7 @@ export class VersionManagementService {
       if (existingPublishedVersion) {
         // Auto-increment patch version to resolve conflict
         const versionMatch = publishedVersionNumber.match(
-          /^(\d+)\.(\d+)\.(\d+)$/
+          /^(\d+)\.(\d+)\.(\d+)$/,
         );
         if (versionMatch) {
           const [, major, minor, patch] = versionMatch;
@@ -847,11 +847,11 @@ export class VersionManagementService {
 
           publishedVersionNumber = newVersionNumber;
           this.logger.info(
-            `Resolved version conflict by incrementing patch: ${version.versionNumber} → ${publishedVersionNumber}`
+            `Resolved version conflict by incrementing patch: ${version.versionNumber} → ${publishedVersionNumber}`,
           );
         } else {
           throw new ConflictException(
-            `Published version ${publishedVersionNumber} already exists and version format is not recognizable.`
+            `Published version ${publishedVersionNumber} already exists and version format is not recognizable.`,
           );
         }
       }
@@ -881,7 +881,7 @@ export class VersionManagementService {
     this.logger.info(
       `Successfully published version: ${originalVersionNumber} → ${publishedVersionNumber}${
         wasAutoIncremented ? " (auto-incremented)" : ""
-      }`
+      }`,
     );
 
     return {
@@ -904,7 +904,7 @@ export class VersionManagementService {
 
   async compareVersions(
     assignmentId: number,
-    compareDto: CompareVersionsDto
+    compareDto: CompareVersionsDto,
   ): Promise<VersionComparison> {
     const [fromVersion, toVersion] = await Promise.all([
       this.prisma.assignmentVersion.findUnique({
@@ -923,11 +923,11 @@ export class VersionManagementService {
 
     const assignmentChanges = this.compareAssignmentData(
       fromVersion,
-      toVersion
+      toVersion,
     );
     const questionChanges = this.compareQuestionData(
       fromVersion.questionVersions,
-      toVersion.questionVersions
+      toVersion.questionVersions,
     );
 
     return {
@@ -975,7 +975,7 @@ export class VersionManagementService {
   // Private helper methods
   private async updateExistingDraft(
     draftId: number,
-    saveDraftDto: SaveDraftDto
+    saveDraftDto: SaveDraftDto,
   ): Promise<VersionSummary> {
     return await this.prisma.$transaction(async (tx) => {
       const updatedDraft = await tx.assignmentVersion.update({
@@ -1058,7 +1058,7 @@ export class VersionManagementService {
     assignmentId: number,
     versionId: number,
     updateData: CreateVersionDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     this.logger.info(
       `🔄 UPDATE EXISTING VERSION: Starting update for version ${versionId} on assignment ${assignmentId}`,
@@ -1067,7 +1067,7 @@ export class VersionManagementService {
         assignmentId,
         updateData,
         userId: userSession.userId,
-      }
+      },
     );
 
     // Get current assignment data
@@ -1175,7 +1175,7 @@ export class VersionManagementService {
       });
 
       this.logger.info(
-        `✅ UPDATE EXISTING VERSION: Successfully updated version ${updatedVersion.versionNumber} (ID: ${updatedVersion.id}) for assignment ${assignmentId}`
+        `✅ UPDATE EXISTING VERSION: Successfully updated version ${updatedVersion.versionNumber} (ID: ${updatedVersion.id}) for assignment ${assignmentId}`,
       );
 
       return {
@@ -1194,7 +1194,7 @@ export class VersionManagementService {
 
   private async getNextVersionNumber(
     assignmentId: number,
-    tx: any
+    tx: any,
   ): Promise<string> {
     const lastVersion = await tx.assignmentVersion.findFirst({
       where: { assignmentId },
@@ -1240,8 +1240,8 @@ export class VersionManagementService {
             from[field] === null
               ? "added"
               : to[field] === null
-              ? "removed"
-              : "modified",
+                ? "removed"
+                : "modified",
         });
       }
     }
@@ -1253,7 +1253,7 @@ export class VersionManagementService {
 
     // Create maps for easier comparison
     const fromMap = new Map(
-      fromQuestions.map((q) => [q.questionId || q.id, q])
+      fromQuestions.map((q) => [q.questionId || q.id, q]),
     );
     const toMap = new Map(toQuestions.map((q) => [q.questionId || q.id, q]));
 
@@ -1323,7 +1323,7 @@ export class VersionManagementService {
 
   private async verifyAssignmentAccess(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ) {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -1336,7 +1336,7 @@ export class VersionManagementService {
 
     if (userSession.role === UserRole.AUTHOR) {
       const hasAccess = assignment.AssignmentAuthor.some(
-        (author) => author.userId === userSession.userId
+        (author) => author.userId === userSession.userId,
       );
       if (!hasAccess) {
         throw new NotFoundException("Assignment not found");
@@ -1347,7 +1347,7 @@ export class VersionManagementService {
   private async createDraftVersion(
     assignmentId: number,
     saveDraftDto: SaveDraftDto,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     // Get the base assignment for reference
     const assignment = await this.prisma.assignment.findUnique({
@@ -1374,7 +1374,7 @@ export class VersionManagementService {
           if (rcMatch) {
             const baseVersion = lastVersion.versionNumber.replace(
               /-rc\d+$/,
-              ""
+              "",
             );
             const rcNumber = Number.parseInt(rcMatch[1], 10) + 1;
             nextVersionNumber = `${baseVersion}-rc${rcNumber}`;
@@ -1492,7 +1492,7 @@ export class VersionManagementService {
 
   async getUserLatestDraft(
     assignmentId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<{
     questions: any[];
     _isDraftVersion: boolean;
@@ -1593,13 +1593,13 @@ export class VersionManagementService {
     assignmentId: number,
     versionId: number,
     questionIds: number[],
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     this.logger.info(
       `Restoring deleted questions ${questionIds.join(
-        ", "
+        ", ",
       )} from version ${versionId} for assignment ${assignmentId}`,
-      { userId: userSession.userId }
+      { userId: userSession.userId },
     );
 
     // await this.verifyAssignmentAccess(assignmentId, userSession);
@@ -1636,7 +1636,7 @@ export class VersionManagementService {
         // Create a new draft version
         const nextVersionNumber = await this.getNextVersionNumber(
           assignmentId,
-          tx
+          tx,
         );
         targetDraft = await tx.assignmentVersion.create({
           data: {
@@ -1721,7 +1721,7 @@ export class VersionManagementService {
       });
 
       this.logger.info(
-        `Successfully restored ${questionIds.length} questions from version ${versionId} to draft ${targetDraft.id}`
+        `Successfully restored ${questionIds.length} questions from version ${versionId} to draft ${targetDraft.id}`,
       );
 
       return {
@@ -1742,7 +1742,7 @@ export class VersionManagementService {
     assignmentId: number,
     versionId: number,
     versionDescription: string,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     this.logger.info(`Updating version description for version ${versionId}`, {
       assignmentId,
@@ -1772,7 +1772,7 @@ export class VersionManagementService {
     });
 
     this.logger.info(
-      `Successfully updated version description for version ${versionId}`
+      `Successfully updated version description for version ${versionId}`,
     );
 
     return {
@@ -1792,7 +1792,7 @@ export class VersionManagementService {
     assignmentId: number,
     versionId: number,
     versionNumber: string,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     this.logger.info(`Updating version number for version ${versionId}`, {
       assignmentId,
@@ -1824,7 +1824,7 @@ export class VersionManagementService {
 
     if (existingVersion) {
       throw new BadRequestException(
-        `Version number "${versionNumber}" already exists for this assignment`
+        `Version number "${versionNumber}" already exists for this assignment`,
       );
     }
 
@@ -1838,7 +1838,7 @@ export class VersionManagementService {
     });
 
     this.logger.info(
-      `Successfully updated version number for version ${versionId} to ${versionNumber}`
+      `Successfully updated version number for version ${versionId} to ${versionNumber}`,
     );
 
     return {
@@ -1857,7 +1857,7 @@ export class VersionManagementService {
   async deleteVersion(
     assignmentId: number,
     versionId: number,
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<void> {
     this.logger.info(
       `Deleting version ${versionId} for assignment ${assignmentId}`,
@@ -1865,7 +1865,7 @@ export class VersionManagementService {
         assignmentId,
         versionId,
         userId: userSession.userId,
-      }
+      },
     );
 
     // First, verify the version exists and belongs to the assignment
@@ -1915,7 +1915,7 @@ export class VersionManagementService {
     assignmentId: number,
     rcVersionId: number,
     userSession: UserSession,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<VersionSummary> {
     const prisma = tx || this.prisma;
 
@@ -1925,7 +1925,7 @@ export class VersionManagementService {
         assignmentId,
         rcVersionId,
         userId: userSession.userId,
-      }
+      },
     );
 
     // Get the RC version
@@ -1978,7 +1978,7 @@ export class VersionManagementService {
 
         finalVersionNumber = newVersionNumber;
         this.logger.info(
-          `Resolved version conflict by incrementing patch: ${rcVersion.versionNumber} → ${finalVersionNumber}`
+          `Resolved version conflict by incrementing patch: ${rcVersion.versionNumber} → ${finalVersionNumber}`,
         );
       }
     }
@@ -2060,7 +2060,7 @@ export class VersionManagementService {
       assignmentData: Assignment;
       questionsData?: Question[];
     },
-    userSession: UserSession
+    userSession: UserSession,
   ): Promise<VersionSummary> {
     // Verify assignment access
     const assignment = await this.prisma.assignment.findUnique({
@@ -2082,7 +2082,7 @@ export class VersionManagementService {
 
     if (existingVersion) {
       throw new ConflictException(
-        `Version ${draftData.versionNumber} already exists for this assignment`
+        `Version ${draftData.versionNumber} already exists for this assignment`,
       );
     }
 

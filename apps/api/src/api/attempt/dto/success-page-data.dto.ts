@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty } from "@nestjs/swagger";
 
 export class SuccessPageQuestionDto {
   @ApiProperty()
@@ -67,7 +67,7 @@ export class SuccessPageDataDto {
   showSubmissionFeedback: boolean;
 
   @ApiProperty()
-  correctAnswerVisibility: 'NEVER' | 'ALWAYS' | 'ON_PASS';
+  correctAnswerVisibility: "NEVER" | "ALWAYS" | "ON_PASS";
 
   @ApiProperty()
   comments?: string; // Instructor comments

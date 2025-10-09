@@ -612,7 +612,7 @@ const toJsonValue = (value: unknown): Prisma.JsonValue => {
  */
 export const createMockQuestion = (
   overrides: Partial<Question> = {},
-  questionType: QuestionType = QuestionType.SINGLE_CORRECT
+  questionType: QuestionType = QuestionType.SINGLE_CORRECT,
 ): Question => {
   const baseQuestion: Question = {
     id: 1,
@@ -673,7 +673,7 @@ export const createMockQuestion = (
  */
 export const createMockQuestionDto = (
   overrides: Partial<QuestionDto> = {},
-  questionType: QuestionType = QuestionType.SINGLE_CORRECT
+  questionType: QuestionType = QuestionType.SINGLE_CORRECT,
 ): QuestionDto => {
   const baseQuestionDto: QuestionDto = {
     id: 1,
@@ -735,7 +735,7 @@ export const createMockQuestionDto = (
 export const createMockQuestionVariant = (
   overrides: Partial<QuestionVariant> = {},
   questionId = 1,
-  variantType: VariantType = VariantType.REWORDED
+  variantType: VariantType = VariantType.REWORDED,
 ): QuestionVariant => {
   const baseVariant: QuestionVariant = {
     id: 101,
@@ -765,7 +765,7 @@ export const createMockQuestionVariant = (
 export const createMockVariantDto = (
   overrides: Partial<VariantDto> = {},
   _questionId = 1,
-  variantType: VariantType = VariantType.REWORDED
+  variantType: VariantType = VariantType.REWORDED,
 ): VariantDto => {
   const baseVariantDto: VariantDto = {
     id: 101,
@@ -792,7 +792,7 @@ export const createMockVariantDto = (
 export const createReactQuestionDto = (
   type: QuestionType,
   id: number = Math.floor(Math.random() * 1_000_000_000),
-  overrides: Partial<QuestionDto> = {}
+  overrides: Partial<QuestionDto> = {},
 ): QuestionDto => {
   const baseQuestion: Partial<QuestionDto> = {
     id,
@@ -940,7 +940,7 @@ export const createReactQuestionDto = (
  * Pass a partial object to override only the fields you care about.
  */
 export const createMockAssignment = (
-  overrides: Partial<Assignment> = {}
+  overrides: Partial<Assignment> = {},
 ): Assignment => ({
   id: 1,
   name: "Sample Assignment",
@@ -981,7 +981,7 @@ export const createMockGetAssignmentResponseDto = (
   questions: Question[] = [
     createMockQuestion(),
     createMockQuestion({ id: 2 }, QuestionType.MULTIPLE_CORRECT),
-  ]
+  ],
 ): GetAssignmentResponseDto => {
   const assignment = createMockAssignment();
 
@@ -997,7 +997,7 @@ export const createMockGetAssignmentResponseDto = (
  * Create a sample LearnerGetAssignmentResponseDto with sane defaults
  */
 export const createMockLearnerGetAssignmentResponseDto = (
-  overrides: Partial<LearnerGetAssignmentResponseDto> = {}
+  overrides: Partial<LearnerGetAssignmentResponseDto> = {},
 ): LearnerGetAssignmentResponseDto => {
   const assignment = createMockAssignment();
 
@@ -1013,7 +1013,7 @@ export const createMockLearnerGetAssignmentResponseDto = (
  * Create a sample AssignmentResponseDto with sane defaults
  */
 export const createMockAssignmentResponseDto = (
-  overrides: Partial<AssignmentResponseDto> = {}
+  overrides: Partial<AssignmentResponseDto> = {},
 ): AssignmentResponseDto => {
   const assignment = createMockAssignment();
 
@@ -1027,7 +1027,7 @@ export const createMockAssignmentResponseDto = (
  * Create a sample BaseAssignmentResponseDto with sane defaults
  */
 export const createMockBaseAssignmentResponseDto = (
-  overrides: Partial<BaseAssignmentResponseDto> = {}
+  overrides: Partial<BaseAssignmentResponseDto> = {},
 ): BaseAssignmentResponseDto => {
   return {
     id: 1,
@@ -1042,7 +1042,7 @@ export const createMockBaseAssignmentResponseDto = (
  * but you can override any subset of properties.
  */
 export const createMockUpdateAssignmentDto = (
-  overrides: Partial<UpdateAssignmentRequestDto> = {}
+  overrides: Partial<UpdateAssignmentRequestDto> = {},
 ): UpdateAssignmentRequestDto => ({
   name: "Updated Assignment",
   introduction: "New intro",
@@ -1074,7 +1074,7 @@ export const createMockUpdateAssignmentDto = (
  * Create a sample ReplaceAssignmentRequestDto with sane defaults
  */
 export const createMockReplaceAssignmentDto = (
-  overrides: Partial<ReplaceAssignmentRequestDto> = {}
+  overrides: Partial<ReplaceAssignmentRequestDto> = {},
 ): ReplaceAssignmentRequestDto => ({
   introduction: "Completely new introduction",
   instructions: "Completely new instructions",
@@ -1099,7 +1099,7 @@ export const createMockReplaceAssignmentDto = (
  */
 export const createMockUpdateAssignmentQuestionsDto = (
   overrides: Partial<UpdateAssignmentQuestionsDto> = {},
-  includeQuestions = true
+  includeQuestions = true,
 ): UpdateAssignmentQuestionsDto => {
   const baseDto: UpdateAssignmentQuestionsDto = {
     name: "Updated Assignment with Questions",
@@ -1147,7 +1147,7 @@ export const createMockUpdateAssignmentQuestionsDto = (
  */
 export const createMockAssignmentAttempt = (
   overrides: Partial<AssignmentAttempt> = {},
-  isCompleted = false
+  isCompleted = false,
 ): AssignmentAttempt => {
   const baseAttempt: AssignmentAttempt = {
     id: 1,
@@ -1175,7 +1175,7 @@ export const createMockAssignmentAttempt = (
 export const createMockQuestionResponse = (
   overrides: Partial<QuestionResponse> = {},
   questionId = 1,
-  isGraded = true
+  isGraded = true,
 ): QuestionResponse => {
   const baseResponse: QuestionResponse = {
     id: 1,
@@ -1205,7 +1205,7 @@ export const createMockQuestionResponse = (
  */
 export const createMockJob = (
   overrides: Partial<Job> = {},
-  status = "Pending"
+  status = "Pending",
 ): Job => {
   const baseJob: Job = {
     id: 1,
@@ -1235,7 +1235,7 @@ export const createMockJob = (
  */
 export const createMockTranslation = (
   overrides: Partial<Translation> = {},
-  languageCode = "fr"
+  languageCode = "fr",
 ): Translation => {
   const baseTranslation: Translation = {
     id: 1,
@@ -1246,8 +1246,8 @@ export const createMockTranslation = (
       languageCode === "fr"
         ? "Quelle est la capitale de la France?"
         : languageCode === "es"
-        ? "¿Cuál es la capital de Francia?"
-        : "What is the capital of France?",
+          ? "¿Cuál es la capital de Francia?"
+          : "What is the capital of France?",
     untranslatedText: "What is the capital of France?",
     translatedChoices: JSON.stringify([
       {
@@ -1256,8 +1256,8 @@ export const createMockTranslation = (
           languageCode === "fr"
             ? "Paris"
             : languageCode === "es"
-            ? "París"
-            : "Paris",
+              ? "París"
+              : "Paris",
       },
       {
         ...sampleChoiceB,
@@ -1265,8 +1265,8 @@ export const createMockTranslation = (
           languageCode === "fr"
             ? "Londres"
             : languageCode === "es"
-            ? "Londres"
-            : "London",
+              ? "Londres"
+              : "London",
       },
       {
         ...sampleChoiceC,
@@ -1274,8 +1274,8 @@ export const createMockTranslation = (
           languageCode === "fr"
             ? "Berlin"
             : languageCode === "es"
-            ? "Berlín"
-            : "Berlin",
+              ? "Berlín"
+              : "Berlin",
       },
     ]),
     untranslatedChoices: JSON.stringify([
@@ -1297,7 +1297,7 @@ export const createMockTranslation = (
  */
 export const createMockAssignmentTranslation = (
   overrides: Partial<AssignmentTranslation> = {},
-  languageCode = "fr"
+  languageCode = "fr",
 ): AssignmentTranslation => {
   const baseAssignmentTranslation: AssignmentTranslation = {
     id: 1,
@@ -1311,26 +1311,26 @@ export const createMockAssignmentTranslation = (
       languageCode === "fr"
         ? "Exemple de devoir"
         : languageCode === "es"
-        ? "Ejemplo de tarea"
-        : "Sample Assignment",
+          ? "Ejemplo de tarea"
+          : "Sample Assignment",
     translatedIntroduction:
       languageCode === "fr"
         ? "Texte d'introduction"
         : languageCode === "es"
-        ? "Texto introductorio"
-        : "Intro text",
+          ? "Texto introductorio"
+          : "Intro text",
     translatedInstructions:
       languageCode === "fr"
         ? "Faites le travail"
         : languageCode === "es"
-        ? "Haz el trabajo"
-        : "Do the work",
+          ? "Haz el trabajo"
+          : "Do the work",
     translatedGradingCriteriaOverview:
       languageCode === "fr"
         ? "Chaque question = 1pt"
         : languageCode === "es"
-        ? "Cada pregunta = 1pt"
-        : "Each question = 1pt",
+          ? "Cada pregunta = 1pt"
+          : "Each question = 1pt",
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -1346,7 +1346,7 @@ export const createMockAssignmentTranslation = (
  */
 export const createMockFeedbackTranslation = (
   overrides: Partial<FeedbackTranslation> = {},
-  languageCode = "fr"
+  languageCode = "fr",
 ): FeedbackTranslation => {
   const baseFeedbackTranslation: FeedbackTranslation = {
     id: 1,
@@ -1365,16 +1365,16 @@ export const createMockFeedbackTranslation = (
             "3": "C'est la capitale de l'Allemagne, pas de la France.",
           })
         : languageCode === "es"
-        ? JSON.stringify({
-            "1": "¡Correcto!",
-            "2": "Incorrecto. París es la capital de Francia.",
-            "3": "Esa es la capital de Alemania, no de Francia.",
-          })
-        : JSON.stringify({
-            "1": "Correct!",
-            "2": "Incorrect. Paris is the capital of France.",
-            "3": "That's the capital of Germany, not France.",
-          }),
+          ? JSON.stringify({
+              "1": "¡Correcto!",
+              "2": "Incorrecto. París es la capital de Francia.",
+              "3": "Esa es la capital de Alemania, no de Francia.",
+            })
+          : JSON.stringify({
+              "1": "Correct!",
+              "2": "Incorrect. Paris is the capital of France.",
+              "3": "That's the capital of Germany, not France.",
+            }),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -1390,7 +1390,7 @@ export const createMockFeedbackTranslation = (
  */
 export const createMockReport = (
   overrides: Partial<Report> = {},
-  issueType: ReportType = ReportType.BUG
+  issueType: ReportType = ReportType.BUG,
 ): Report => {
   const baseReport: Report = {
     id: 1,
@@ -1423,7 +1423,7 @@ export const createMockReport = (
  * Create a sample AssignmentFeedback with sane defaults
  */
 export const createMockAssignmentFeedback = (
-  overrides: Partial<AssignmentFeedback> = {}
+  overrides: Partial<AssignmentFeedback> = {},
 ): AssignmentFeedback => {
   const baseFeedback: AssignmentFeedback = {
     id: 1,
@@ -1453,7 +1453,7 @@ export const createMockAssignmentFeedback = (
  */
 export const createMockRegradingRequest = (
   overrides: Partial<RegradingRequest> = {},
-  status: RegradingStatus = RegradingStatus.PENDING
+  status: RegradingStatus = RegradingStatus.PENDING,
 ): RegradingRequest => {
   const baseRequest: RegradingRequest = {
     id: 1,
@@ -1476,7 +1476,7 @@ export const createMockRegradingRequest = (
  * Create a sample QuestionGenerationPayload with sane defaults
  */
 export const createMockQuestionGenerationPayload = (
-  overrides: Partial<QuestionGenerationPayload> = {}
+  overrides: Partial<QuestionGenerationPayload> = {},
 ): QuestionGenerationPayload => {
   const basePayload: QuestionGenerationPayload = {
     assignmentId: 1,
@@ -1669,7 +1669,7 @@ export const createMockQuestionRepository = () => ({
   mapToQuestionDto: jest
     .fn()
     .mockImplementation((question: { id: number }) =>
-      createMockQuestionDto({ id: question.id })
+      createMockQuestionDto({ id: question.id }),
     ),
   parseJsonField: jest
     .fn()
@@ -1726,7 +1726,7 @@ export const createMockVariantRepository = () => ({
   mapToVariantDto: jest
     .fn()
     .mockImplementation((variant: { id: number }) =>
-      createMockVariantDto({ id: variant.id })
+      createMockVariantDto({ id: variant.id }),
     ),
   parseJsonField: jest
     .fn()
@@ -1853,7 +1853,7 @@ export const createMockLlmFacadeService = () => ({
   translateText: jest
     .fn()
     .mockImplementation((text: string) =>
-      Promise.resolve(`Translated: ${text}`)
+      Promise.resolve(`Translated: ${text}`),
     ),
   generateQuestionRewordings: jest.fn().mockResolvedValue([
     {
@@ -1876,7 +1876,7 @@ export const createMockLlmFacadeService = () => ({
   generateQuestionTranslation: jest
     .fn()
     .mockImplementation((_assignmentId: number, text: string) =>
-      Promise.resolve(`Translated: ${text}`)
+      Promise.resolve(`Translated: ${text}`),
     ),
   generateChoicesTranslation: jest.fn().mockResolvedValue([
     { ...sampleChoiceA, choice: "Translated choice A" },
