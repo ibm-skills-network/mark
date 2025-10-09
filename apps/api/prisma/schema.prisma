@@ -235,8 +235,8 @@ model Assignment {
   showAssignmentScore     Boolean                         @default(true) /// Should the assignment score be shown to the learner after its submission
   showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
-  showQuestions           Boolean                         @default(true) /// Should the questions be shown to the learner
-  showCorrectAnswer       Boolean                         @default(true) /// Should the correct answer be shown to the learner after its submission
+  showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
+  correctAnswerVisibility CorrectAnswerVisibility        @default(ALWAYS) /// When should correct answers be shown to learners
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
   languageCode            String?                         /// The language code for the assignment
   currentVersionId        Int?                            /// The ID of the current active version
