@@ -31,7 +31,6 @@ export function VersionControlTab() {
     versionsLoadFailed,
     loadVersions,
     createVersion,
-    saveDraft,
     checkoutVersion,
     activateVersion,
     formatVersionAge,
@@ -41,7 +40,6 @@ export function VersionControlTab() {
     drafts,
     isLoadingDrafts,
     draftsLoadFailed,
-    loadDrafts,
     loadDraft,
     deleteDraft,
     hasUnsavedChanges,
@@ -79,26 +77,6 @@ export function VersionControlTab() {
       }
     } finally {
       setIsCreatingVersion(false);
-    }
-  };
-
-  const handleCreateDraft = async () => {
-    if (!draftName.trim()) {
-      toast.error("Please enter a draft name");
-      return;
-    }
-
-    setIsCreatingDraft(true);
-    try {
-      const newDraft = await saveDraft(draftName);
-      if (newDraft) {
-        setIsCreateDraftModalOpen(false);
-        setDraftName("");
-        toast.success("Draft saved successfully!");
-        await loadDrafts(); // Reload drafts
-      }
-    } finally {
-      setIsCreatingDraft(false);
     }
   };
 
@@ -445,42 +423,6 @@ export function VersionControlTab() {
                 disabled={isCreatingVersion || !versionDescription.trim()}
               >
                 {isCreatingVersion ? "Creating..." : "Create Version"}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Create Draft Modal */}
-      {isCreateDraftModalOpen && (
-        <Modal
-          onClose={() => setIsCreateDraftModalOpen(false)}
-          Title="Save as Draft"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Draft Name
-              </label>
-              <Input
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                placeholder="Enter a name for this draft..."
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setIsCreateDraftModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateDraft}
-                disabled={isCreatingDraft || !draftName.trim()}
-              >
-                {isCreatingDraft ? "Saving..." : "Save Draft"}
               </Button>
             </div>
           </div>

@@ -15,7 +15,6 @@ import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
-import { DraftData } from "@/hooks/useVersionControl";
 import { DraftSummary, VersionSummary } from "@/lib/author";
 import { config } from "process";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
@@ -99,6 +98,26 @@ export type OptionalQuestion = {
 };
 
 export type AuthorActions = {
+  parseJsonField: (field: any, fieldName: string, defaultValue?: any) => any;
+  updateConfigStores: (versionData: any) => Promise<void>;
+  processQuestionVersion: (
+    questionVersion: any,
+    index: number,
+    versionData: any,
+    parseJsonField: (field: any, fieldName: string, defaultValue?: any) => any,
+    processVariant: (
+      variant: any,
+      parseJsonField: (
+        field: any,
+        fieldName: string,
+        defaultValue?: any,
+      ) => any,
+    ) => any,
+  ) => any;
+  processVariant: (
+    variant: any,
+    parseJsonField: (field: any, fieldName: string, defaultValue?: any) => any,
+  ) => any;
   setOriginalAssignment: (assignment: any) => void;
   setLearningObjectives: (learningObjectives: string) => void;
   setFilesUploaded: (filesUploaded: AuthorFileUploads[]) => void;
@@ -993,11 +1012,6 @@ export const useAuthorStore = createWithEqualityFn<
               hasUnsavedChanges: true,
             };
           });
-
-          const newState = useAuthorStore.getState();
-          const updatedQuestion = newState.questions.find(
-            (q) => q.id === questionId,
-          );
         },
         setCriterias: (questionId, rubricIndex, criterias) => {
           set((state) => ({
@@ -1133,11 +1147,6 @@ export const useAuthorStore = createWithEqualityFn<
               };
             }
           });
-
-          const newState = useAuthorStore.getState();
-          const updatedQuestion = newState.questions.find(
-            (q) => q.id === questionId,
-          );
         },
         toggleRandomizedChoicesMode: (
           questionId: number,
@@ -1600,11 +1609,6 @@ export const useAuthorStore = createWithEqualityFn<
               hasUnsavedChanges: true,
             };
           });
-
-          const newState = useAuthorStore.getState();
-          const updatedQuestion = newState.questions.find(
-            (q) => q.id === questionId,
-          );
         },
 
         editVariant: (questionId, variantId, updatedData) =>
@@ -1656,11 +1660,6 @@ export const useAuthorStore = createWithEqualityFn<
               hasUnsavedChanges: true,
             };
           });
-
-          const newState = useAuthorStore.getState();
-          const updatedQuestion = newState.questions.find(
-            (q) => q.id === questionId,
-          );
         },
 
         setQuestionOrder: (order) => {
@@ -1709,11 +1708,16 @@ export const useAuthorStore = createWithEqualityFn<
           return Object.keys(errors).length === 0;
         },
 
-        // Version control action implementations
         loadVersions: async () => {
           const state = get();
 
           if (!state.activeAssignmentId) {
+            return;
+          }
+
+          // Prevent concurrent loadVersions calls
+          if (state.isLoadingVersions) {
+            console.log("🔄 LoadVersions already in progress, skipping...");
             return;
           }
 
@@ -1733,7 +1737,6 @@ export const useAuthorStore = createWithEqualityFn<
             const currentVersion = versions.find((v) => v.isActive);
             const currentState = get();
 
-            // Preserve existing checked-out version if it still exists in the new version list
             let checkedOutVersion = currentVersion;
             if (currentState.checkedOutVersion) {
               const existingCheckedOut = versions.find(
@@ -1741,7 +1744,6 @@ export const useAuthorStore = createWithEqualityFn<
               );
               if (existingCheckedOut) {
                 checkedOutVersion = existingCheckedOut;
-              } else {
               }
             }
 
@@ -1756,6 +1758,180 @@ export const useAuthorStore = createWithEqualityFn<
             console.error("💥 Error loading versions in store:", error);
             set({ isLoadingVersions: false, versionsLoadFailed: true });
           }
+        },
+
+        parseJsonField: (
+          field: any,
+          fieldName: string,
+          defaultValue: any = null,
+        ) => {
+          if (!field) return defaultValue;
+
+          try {
+            if (
+              field === "[object Object]" ||
+              (typeof field === "string" &&
+                !field.trim().startsWith("{") &&
+                !field.trim().startsWith("["))
+            ) {
+              console.warn(`Invalid JSON format for ${fieldName}:`, field);
+              return defaultValue;
+            }
+            return typeof field === "string" ? JSON.parse(field) : field;
+          } catch (error) {
+            console.error(`Failed to parse ${fieldName}:`, field, error);
+            return defaultValue;
+          }
+        },
+
+        processVariant: (
+          variant: any,
+          parseJsonField: (
+            field: any,
+            fieldName: string,
+            defaultValue?: any,
+          ) => any,
+        ) => ({
+          ...variant,
+          choices: parseJsonField(variant.choices, "variant choices", []),
+          scoring: parseJsonField(variant.scoring, "variant scoring", null),
+        }),
+
+        processQuestionVersion: (
+          questionVersion: any,
+          index: number,
+          versionData: any,
+          parseJsonField: (
+            field: any,
+            fieldName: string,
+            defaultValue?: any,
+          ) => any,
+          processVariant: (
+            variant: any,
+            parseJsonField: (
+              field: any,
+              fieldName: string,
+              defaultValue?: any,
+            ) => any,
+          ) => any,
+        ) => {
+          const question = {
+            id: questionVersion.questionId,
+            type: questionVersion.type,
+            responseType: questionVersion.responseType,
+            question: questionVersion.question,
+            maxWords: questionVersion.maxWords,
+            maxCharacters: questionVersion.maxCharacters,
+            totalPoints: questionVersion.totalPoints,
+            answer: questionVersion.answer,
+            choices: parseJsonField(
+              questionVersion.choices,
+              "question choices",
+              [],
+            ),
+            scoring: parseJsonField(
+              questionVersion.scoring,
+              "question scoring",
+              null,
+            ),
+            randomizedChoices: questionVersion.randomizedChoices,
+            gradingContextQuestionIds:
+              questionVersion.gradingContextQuestionIds || [],
+            videoPresentationConfig: questionVersion.videoPresentationConfig,
+            liveRecordingConfig: questionVersion.liveRecordingConfig,
+            displayOrder: questionVersion.displayOrder,
+          };
+
+          return {
+            ...question,
+            alreadyInBackend: true,
+            assignmentId: versionData.assignmentId,
+            variants: (questionVersion.variants || []).map((variant: any) =>
+              processVariant(variant, parseJsonField),
+            ),
+            scoring: question.scoring || {
+              type: "CRITERIA_BASED",
+              rubrics: [],
+            },
+            index: index + 1,
+            answer: question.answer ?? false,
+            createdAt: questionVersion.createdAt,
+            updatedAt: questionVersion.createdAt,
+            maxWords: question.maxWords || null,
+            maxCharacters: question.maxCharacters || null,
+          };
+        },
+
+        updateConfigStores: async (versionData: any) => {
+          const { useAssignmentConfig } = await import(
+            "@/stores/assignmentConfig"
+          );
+          const { useAssignmentFeedbackConfig } = await import(
+            "@/stores/assignmentFeedbackConfig"
+          );
+
+          const assignmentConfigState = useAssignmentConfig.getState();
+          const feedbackConfigState = useAssignmentFeedbackConfig.getState();
+
+          useAssignmentConfig.getState().setAssignmentConfigStore({
+            graded:
+              versionData.graded !== undefined
+                ? versionData.graded
+                : assignmentConfigState.graded,
+            numAttempts:
+              versionData.numAttempts !== undefined
+                ? versionData.numAttempts
+                : assignmentConfigState.numAttempts,
+            attemptsBeforeCoolDown:
+              versionData.attemptsBeforeCoolDown !== undefined
+                ? versionData.attemptsBeforeCoolDown
+                : assignmentConfigState.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes:
+              versionData.retakeAttemptCoolDownMinutes !== undefined
+                ? versionData.retakeAttemptCoolDownMinutes
+                : assignmentConfigState.retakeAttemptCoolDownMinutes,
+            passingGrade:
+              versionData.passingGrade !== undefined
+                ? versionData.passingGrade
+                : assignmentConfigState.passingGrade,
+            timeEstimateMinutes:
+              versionData.timeEstimateMinutes !== undefined
+                ? versionData.timeEstimateMinutes
+                : assignmentConfigState.timeEstimateMinutes,
+            allotedTimeMinutes:
+              versionData.allotedTimeMinutes !== undefined
+                ? versionData.allotedTimeMinutes
+                : assignmentConfigState.allotedTimeMinutes,
+            displayOrder:
+              versionData.displayOrder !== undefined
+                ? versionData.displayOrder
+                : assignmentConfigState.displayOrder,
+            questionDisplay:
+              versionData.questionDisplay !== undefined
+                ? versionData.questionDisplay
+                : assignmentConfigState.questionDisplay,
+          });
+
+          useAssignmentFeedbackConfig
+            .getState()
+            .setAssignmentFeedbackConfigStore({
+              showAssignmentScore:
+                versionData.showAssignmentScore !== undefined
+                  ? versionData.showAssignmentScore
+                  : feedbackConfigState.showAssignmentScore,
+              showQuestionScore:
+                versionData.showQuestionScore !== undefined
+                  ? versionData.showQuestionScore
+                  : feedbackConfigState.showQuestionScore,
+              showSubmissionFeedback:
+                versionData.showSubmissionFeedback !== undefined
+                  ? versionData.showSubmissionFeedback
+                  : feedbackConfigState.showSubmissionFeedback,
+              showQuestions:
+                versionData.showQuestions !== undefined
+                  ? versionData.showQuestions
+                  : feedbackConfigState.showQuestions,
+            });
         },
 
         checkoutVersion: async (versionId: number) => {
@@ -1779,225 +1955,52 @@ export const useAuthorStore = createWithEqualityFn<
               versionId,
             );
 
-            if (versionData) {
-              // Process the version data the same way we do for regular assignments
-              const { decodeFields } = await import("@/app/Helpers/decoder");
-              const { mergeData } = await import("@/lib/utils");
-              const { stripHtml } = await import("@/app/Helpers/strippers");
+            if (!versionData) return false;
 
-              // Decode base64 fields
-              const decodedFields = decodeFields({
-                introduction: versionData.introduction,
-                instructions: versionData.instructions,
-                gradingCriteriaOverview: versionData.gradingCriteriaOverview,
-              });
+            // Decode base64 fields
+            const { decodeFields } = await import("@/app/Helpers/decoder");
+            const decodedFields = decodeFields({
+              introduction: versionData.introduction,
+              instructions: versionData.instructions,
+              gradingCriteriaOverview: versionData.gradingCriteriaOverview,
+            });
 
-              const decodedVersionData = {
-                ...versionData,
-                ...decodedFields,
-              };
+            const decodedVersionData = { ...versionData, ...decodedFields };
 
-              // Apply the same processing as regular assignments
-              const processedVersionData = await import(
-                "@/app/author/(components)/Header"
-              ).then((module) => {
-                // Get the fixScoringAndDecode function from the header component
-                return decodedVersionData; // For now, we'll handle this separately
-              });
+            // Process questions using helper functions
+            const rawQuestions = versionData.questionVersions || [];
+            const {
+              parseJsonField,
+              processVariant,
+              processQuestionVersion,
+              updateConfigStores,
+            } = get();
 
-              // Process questions if they exist - they come in questionVersions array
-              const rawQuestions = versionData.questionVersions || [];
-              const processedQuestions =
-                rawQuestions.map((questionVersion: any, index: number) => {
-                  // Extract the base question data from questionVersion
-                  const question = {
-                    id: questionVersion.questionId,
-                    type: questionVersion.type,
-                    responseType: questionVersion.responseType,
-                    question: questionVersion.question, // Already decoded in API response
-                    maxWords: questionVersion.maxWords,
-                    maxCharacters: questionVersion.maxCharacters,
-                    totalPoints: questionVersion.totalPoints,
-                    answer: questionVersion.answer,
-                    choices: questionVersion.choices
-                      ? (() => {
-                          try {
-                            // Check if it's valid JSON and not "[object Object]"
-                            if (
-                              questionVersion.choices === "[object Object]" ||
-                              (typeof questionVersion.choices === "string" &&
-                                !questionVersion.choices
-                                  .trim()
-                                  .startsWith("{") &&
-                                !questionVersion.choices.trim().startsWith("["))
-                            ) {
-                              console.warn(
-                                "Invalid JSON format for question choices:",
-                                questionVersion.choices,
-                              );
-                              return [];
-                            }
-                            return typeof questionVersion.choices === "string"
-                              ? JSON.parse(questionVersion.choices)
-                              : questionVersion.choices;
-                          } catch (error) {
-                            console.error(
-                              "Failed to parse question choices:",
-                              questionVersion.choices,
-                              error,
-                            );
-                            return [];
-                          }
-                        })()
-                      : null,
-                    scoring: questionVersion.scoring
-                      ? (() => {
-                          try {
-                            // Check if it's valid JSON and not "[object Object]"
-                            if (
-                              questionVersion.scoring === "[object Object]" ||
-                              (typeof questionVersion.scoring === "string" &&
-                                !questionVersion.scoring
-                                  .trim()
-                                  .startsWith("{") &&
-                                !questionVersion.scoring.trim().startsWith("["))
-                            ) {
-                              console.warn(
-                                "Invalid JSON format for question scoring:",
-                                questionVersion.scoring,
-                              );
-                              return null;
-                            }
-                            return typeof questionVersion.scoring === "string"
-                              ? JSON.parse(questionVersion.scoring)
-                              : questionVersion.scoring;
-                          } catch (error) {
-                            console.error(
-                              "Failed to parse question scoring:",
-                              questionVersion.scoring,
-                              error,
-                            );
-                            return null;
-                          }
-                        })()
-                      : null,
-                    randomizedChoices: questionVersion.randomizedChoices,
-                    gradingContextQuestionIds:
-                      questionVersion.gradingContextQuestionIds || [],
-                    videoPresentationConfig:
-                      questionVersion.videoPresentationConfig,
-                    liveRecordingConfig: questionVersion.liveRecordingConfig,
-                    displayOrder: questionVersion.displayOrder,
-                  };
+            const processedQuestions = rawQuestions.map(
+              (questionVersion: any, index: number) =>
+                processQuestionVersion(
+                  questionVersion,
+                  index,
+                  versionData,
+                  parseJsonField,
+                  processVariant,
+                ),
+            );
 
-                  // Convert the new questionVersion format to the expected question format
-                  const processedQuestion = {
-                    ...question,
-                    alreadyInBackend: true,
-                    assignmentId: versionData.assignmentId, // Add assignmentId
-                    variants: [], // questionVersions don't have variants in the same way
-                    scoring: question.scoring || {
-                      type: "CRITERIA_BASED",
-                      rubrics: [],
-                    },
-                    index: index + 1,
-                    // Add additional fields that the frontend expects
-                    answer: question.answer ?? false, // Use provided answer or default
-                    createdAt: questionVersion.createdAt,
-                    updatedAt: questionVersion.createdAt,
-                    // Ensure all required fields are present for UI compatibility
-                    maxWords: question.maxWords || null,
-                    maxCharacters: question.maxCharacters || null,
-                  };
+            set({
+              name: decodedVersionData.name,
+              introduction: decodedVersionData.introduction,
+              instructions: decodedVersionData.instructions,
+              gradingCriteriaOverview:
+                decodedVersionData.gradingCriteriaOverview,
+              questions: processedQuestions,
+              checkedOutVersion: versionToCheckout,
+              hasUnsavedChanges: false,
+            });
 
-                  return processedQuestion;
-                }) || [];
+            await updateConfigStores(versionData);
 
-              set({
-                name: decodedVersionData.name,
-                introduction: decodedVersionData.introduction,
-                instructions: decodedVersionData.instructions,
-                gradingCriteriaOverview:
-                  decodedVersionData.gradingCriteriaOverview,
-                questions: processedQuestions,
-                checkedOutVersion: versionToCheckout,
-                hasUnsavedChanges: false,
-              });
-              const { useAssignmentConfig } = await import(
-                "@/stores/assignmentConfig"
-              );
-              const { useAssignmentFeedbackConfig } = await import(
-                "@/stores/assignmentFeedbackConfig"
-              );
-
-              useAssignmentConfig.getState().setAssignmentConfigStore({
-                graded:
-                  versionData.graded !== undefined
-                    ? versionData.graded
-                    : useAssignmentConfig.getState().graded,
-                numAttempts:
-                  versionData.numAttempts !== undefined
-                    ? versionData.numAttempts
-                    : useAssignmentConfig.getState().numAttempts,
-                attemptsBeforeCoolDown:
-                  versionData.attemptsBeforeCoolDown !== undefined
-                    ? versionData.attemptsBeforeCoolDown
-                    : useAssignmentConfig.getState().attemptsBeforeCoolDown,
-                retakeAttemptCoolDownMinutes:
-                  versionData.retakeAttemptCoolDownMinutes !== undefined
-                    ? versionData.retakeAttemptCoolDownMinutes
-                    : useAssignmentConfig.getState()
-                        .retakeAttemptCoolDownMinutes,
-                passingGrade:
-                  versionData.passingGrade !== undefined
-                    ? versionData.passingGrade
-                    : useAssignmentConfig.getState().passingGrade,
-                timeEstimateMinutes:
-                  versionData.timeEstimateMinutes !== undefined
-                    ? versionData.timeEstimateMinutes
-                    : useAssignmentConfig.getState().timeEstimateMinutes,
-                allotedTimeMinutes:
-                  versionData.allotedTimeMinutes !== undefined
-                    ? versionData.allotedTimeMinutes
-                    : useAssignmentConfig.getState().allotedTimeMinutes,
-                displayOrder:
-                  versionData.displayOrder !== undefined
-                    ? versionData.displayOrder
-                    : useAssignmentConfig.getState().displayOrder,
-                questionDisplay:
-                  versionData.questionDisplay !== undefined
-                    ? versionData.questionDisplay
-                    : useAssignmentConfig.getState().questionDisplay,
-              });
-
-              useAssignmentFeedbackConfig
-                .getState()
-                .setAssignmentFeedbackConfigStore({
-                  showAssignmentScore:
-                    versionData.showAssignmentScore !== undefined
-                      ? versionData.showAssignmentScore
-                      : useAssignmentFeedbackConfig.getState()
-                          .showAssignmentScore,
-                  showQuestionScore:
-                    versionData.showQuestionScore !== undefined
-                      ? versionData.showQuestionScore
-                      : useAssignmentFeedbackConfig.getState()
-                          .showQuestionScore,
-                  showSubmissionFeedback:
-                    versionData.showSubmissionFeedback !== undefined
-                      ? versionData.showSubmissionFeedback
-                      : useAssignmentFeedbackConfig.getState()
-                          .showSubmissionFeedback,
-                  showQuestions:
-                    versionData.showQuestions !== undefined
-                      ? versionData.showQuestions
-                      : useAssignmentFeedbackConfig.getState().showQuestions,
-                });
-
-              return true;
-            }
-
-            return false;
+            return true;
           } catch (error) {
             console.error("💥 Error checking out version:", error);
             return false;
@@ -2006,9 +2009,9 @@ export const useAuthorStore = createWithEqualityFn<
 
         createVersion: async (
           versionDescription?: string,
-          isDraft: boolean = false,
+          isDraft = false,
           versionNumber?: string,
-          updateExisting: boolean = false,
+          updateExisting = false,
           versionId?: number,
         ) => {
           const state = get();
@@ -2270,7 +2273,7 @@ export const useAuthorStore = createWithEqualityFn<
 
         restoreVersion: async (
           versionId: number,
-          createAsNewVersion: boolean = false,
+          createAsNewVersion = false,
         ) => {
           const state = get();
           if (!state.activeAssignmentId) {
@@ -2574,7 +2577,7 @@ export const useAuthorStore = createWithEqualityFn<
             const currentFavorites = [...state.favoriteVersions];
             const isFavorite = currentFavorites.includes(versionId);
 
-            let newFavorites;
+            let newFavorites: number[];
             if (isFavorite) {
               // Remove from favorites
               newFavorites = currentFavorites.filter((id) => id !== versionId);
@@ -2645,8 +2648,12 @@ export const useAuthorStore = createWithEqualityFn<
           ? localStorage
           : {
               getItem: () => null,
-              setItem: () => {},
-              removeItem: () => {},
+              setItem: () => {
+                // No-op for server-side
+              },
+              removeItem: () => {
+                // No-op for server-side
+              },
             },
       ),
       partialize(state) {

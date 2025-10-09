@@ -491,6 +491,55 @@ export class VersionManagementService {
       },
     );
 
+    // Fetch variants for each question that has a questionId
+    const questionVersionsWithVariants = await Promise.all(
+      version.questionVersions.map(async (qv) => {
+        let variants = [];
+        if (qv.questionId) {
+          const originalQuestion = await this.prisma.question.findUnique({
+            where: { id: qv.questionId },
+            include: {
+              variants: {
+                where: { isDeleted: false },
+              },
+            },
+          });
+          variants = originalQuestion?.variants || [];
+        }
+
+        return {
+          id: qv.id,
+          questionId: qv.questionId,
+          totalPoints: qv.totalPoints,
+          type: qv.type,
+          responseType: qv.responseType,
+          question: qv.question,
+          maxWords: qv.maxWords,
+          scoring: qv.scoring,
+          choices: qv.choices,
+          randomizedChoices: qv.randomizedChoices,
+          answer: qv.answer,
+          gradingContextQuestionIds: qv.gradingContextQuestionIds,
+          maxCharacters: qv.maxCharacters,
+          videoPresentationConfig: qv.videoPresentationConfig,
+          liveRecordingConfig: qv.liveRecordingConfig,
+          displayOrder: qv.displayOrder,
+          variants: variants.map((v) => ({
+            id: v.id,
+            variantContent: v.variantContent,
+            choices: v.choices,
+            scoring: v.scoring,
+            maxWords: v.maxWords,
+            maxCharacters: v.maxCharacters,
+            variantType: v.variantType,
+            randomizedChoices: v.randomizedChoices,
+            isDeleted: v.isDeleted,
+            answer: v.answer,
+          })),
+        };
+      }),
+    );
+
     // Transform the response to match the expected format
     return {
       id: version.id,
@@ -525,25 +574,8 @@ export class VersionManagementService {
       showSubmissionFeedback: version.showSubmissionFeedback,
       showQuestions: version.showQuestions,
       languageCode: version.languageCode,
-      // Transform questionVersions to the expected questions format
-      questionVersions: version.questionVersions.map((qv) => ({
-        id: qv.id,
-        questionId: qv.questionId,
-        totalPoints: qv.totalPoints,
-        type: qv.type,
-        responseType: qv.responseType,
-        question: qv.question,
-        maxWords: qv.maxWords,
-        scoring: qv.scoring,
-        choices: qv.choices,
-        randomizedChoices: qv.randomizedChoices,
-        answer: qv.answer,
-        gradingContextQuestionIds: qv.gradingContextQuestionIds,
-        maxCharacters: qv.maxCharacters,
-        videoPresentationConfig: qv.videoPresentationConfig,
-        liveRecordingConfig: qv.liveRecordingConfig,
-        displayOrder: qv.displayOrder,
-      })),
+      // Use the enhanced questionVersions with variants
+      questionVersions: questionVersionsWithVariants,
     };
   }
 
@@ -613,7 +645,8 @@ export class VersionManagementService {
             graded: versionToRestore.graded,
             numAttempts: versionToRestore.numAttempts,
             attemptsBeforeCoolDown: versionToRestore.attemptsBeforeCoolDown,
-            retakeAttemptCoolDownMinutes: versionToRestore.retakeAttemptCoolDownMinutes,
+            retakeAttemptCoolDownMinutes:
+              versionToRestore.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: versionToRestore.allotedTimeMinutes,
             attemptsPerTimeRange: versionToRestore.attemptsPerTimeRange,
             attemptsTimeRangeHours: versionToRestore.attemptsTimeRangeHours,
@@ -1611,7 +1644,8 @@ export class VersionManagementService {
             graded: sourceVersion.graded,
             numAttempts: sourceVersion.numAttempts,
             attemptsBeforeCoolDown: sourceVersion.attemptsBeforeCoolDown,
-            retakeAttemptCoolDownMinutes: sourceVersion.retakeAttemptCoolDownMinutes,
+            retakeAttemptCoolDownMinutes:
+              sourceVersion.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: sourceVersion.allotedTimeMinutes,
             attemptsPerTimeRange: sourceVersion.attemptsPerTimeRange,
             attemptsTimeRangeHours: sourceVersion.attemptsTimeRangeHours,
@@ -2073,9 +2107,11 @@ export class VersionManagementService {
             numAttempts:
               draftData.assignmentData.numAttempts ?? assignment.numAttempts,
             attemptsBeforeCoolDown:
-              draftData.assignmentData.attemptsBeforeCoolDown ?? assignment.attemptsBeforeCoolDown,
+              draftData.assignmentData.attemptsBeforeCoolDown ??
+              assignment.attemptsBeforeCoolDown,
             retakeAttemptCoolDownMinutes:
-              draftData.assignmentData.retakeAttemptCoolDownMinutes ?? assignment.retakeAttemptCoolDownMinutes,
+              draftData.assignmentData.retakeAttemptCoolDownMinutes ??
+              assignment.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes:
               draftData.assignmentData.allotedTimeMinutes ??
               assignment.allotedTimeMinutes,

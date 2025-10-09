@@ -1750,6 +1750,22 @@ function Component() {
                     />
                   )}
 
+                  {changes.attemptsBeforeCoolDown && (
+                    <ChangeComparison
+                      label="Number of Attempts Before Cooldown Period"
+                      before={originalAssignment.attemptsBeforeCoolDown}
+                      after={changes.attemptsBeforeCoolDown}
+                    />
+                  )}
+
+                  {changes.retakeAttemptCoolDownMinutes && (
+                    <ChangeComparison
+                      label="Number of Minutes Learners Must Wait Between Attempts"
+                      before={originalAssignment.retakeAttemptCoolDownMinutes}
+                      after={changes.retakeAttemptCoolDownMinutes}
+                    />
+                  )}
+
                   {changes.passingGrade && (
                     <ChangeComparison
                       label="Passing Grade"
