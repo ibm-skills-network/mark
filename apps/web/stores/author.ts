@@ -16,7 +16,6 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { DraftSummary, VersionSummary } from "@/lib/author";
-import { config } from "process";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   // version control state
   "versions",
@@ -1882,6 +1881,14 @@ export const useAuthorStore = createWithEqualityFn<
               versionData.numAttempts !== undefined
                 ? versionData.numAttempts
                 : assignmentConfigState.numAttempts,
+            attemptsBeforeCoolDown:
+              versionData.attemptsBeforeCoolDown !== undefined
+                ? versionData.attemptsBeforeCoolDown
+                : assignmentConfigState.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes:
+              versionData.retakeAttemptCoolDownMinutes !== undefined
+                ? versionData.retakeAttemptCoolDownMinutes
+                : assignmentConfigState.retakeAttemptCoolDownMinutes,
             passingGrade:
               versionData.passingGrade !== undefined
                 ? versionData.passingGrade
@@ -1957,45 +1964,27 @@ export const useAuthorStore = createWithEqualityFn<
               gradingCriteriaOverview: versionData.gradingCriteriaOverview,
             });
 
-              useAssignmentConfig.getState().setAssignmentConfigStore({
-                graded:
-                  versionData.graded !== undefined
-                    ? versionData.graded
-                    : useAssignmentConfig.getState().graded,
-                numAttempts:
-                  versionData.numAttempts !== undefined
-                    ? versionData.numAttempts
-                    : useAssignmentConfig.getState().numAttempts,
-                attemptsBeforeCoolDown:
-                  versionData.attemptsBeforeCoolDown !== undefined
-                    ? versionData.attemptsBeforeCoolDown
-                    : useAssignmentConfig.getState().attemptsBeforeCoolDown,
-                retakeAttemptCoolDownMinutes:
-                  versionData.retakeAttemptCoolDownMinutes !== undefined
-                    ? versionData.retakeAttemptCoolDownMinutes
-                    : useAssignmentConfig.getState()
-                        .retakeAttemptCoolDownMinutes,
-                passingGrade:
-                  versionData.passingGrade !== undefined
-                    ? versionData.passingGrade
-                    : useAssignmentConfig.getState().passingGrade,
-                timeEstimateMinutes:
-                  versionData.timeEstimateMinutes !== undefined
-                    ? versionData.timeEstimateMinutes
-                    : useAssignmentConfig.getState().timeEstimateMinutes,
-                allotedTimeMinutes:
-                  versionData.allotedTimeMinutes !== undefined
-                    ? versionData.allotedTimeMinutes
-                    : useAssignmentConfig.getState().allotedTimeMinutes,
-                displayOrder:
-                  versionData.displayOrder !== undefined
-                    ? versionData.displayOrder
-                    : useAssignmentConfig.getState().displayOrder,
-                questionDisplay:
-                  versionData.questionDisplay !== undefined
-                    ? versionData.questionDisplay
-                    : useAssignmentConfig.getState().questionDisplay,
-              });
+            const decodedVersionData = { ...versionData, ...decodedFields };
+
+            // Process questions using helper functions
+            const rawQuestions = versionData.questionVersions || [];
+            const {
+              parseJsonField,
+              processVariant,
+              processQuestionVersion,
+              updateConfigStores,
+            } = get();
+
+            const processedQuestions = rawQuestions.map(
+              (questionVersion: any, index: number) =>
+                processQuestionVersion(
+                  questionVersion,
+                  index,
+                  versionData,
+                  parseJsonField,
+                  processVariant,
+                ),
+            );
 
             set({
               name: decodedVersionData.name,
