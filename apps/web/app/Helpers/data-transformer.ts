@@ -2,7 +2,7 @@ export interface TransformConfig {
   fields?: string[];
   exclude?: string[];
   deep?: boolean;
-  compressionLevel?: 'none' | 'light' | 'heavy';
+  compressionLevel?: "none" | "light" | "heavy";
 }
 
 export interface TransformMetadata {
@@ -13,13 +13,19 @@ export interface TransformMetadata {
   fields: string[];
 }
 
-const transformCache = new Map<string, { data: any; metadata: TransformMetadata; expiry: number }>();
+const transformCache = new Map<
+  string,
+  { data: any; metadata: TransformMetadata; expiry: number }
+>();
 const CACHE_TTL = 5 * 60 * 1000;
 
 /**
  * Smart encoding that automatically detects content type and applies appropriate transformation
  */
-export function smartEncode(data: any, config: TransformConfig = {}): { data: any; metadata: TransformMetadata } {
+export function smartEncode(
+  data: any,
+  config: TransformConfig = {},
+): { data: any; metadata: TransformMetadata } {
   const startTime = performance.now();
   const originalSize = JSON.stringify(data).length;
 
@@ -29,7 +35,7 @@ export function smartEncode(data: any, config: TransformConfig = {}): { data: an
     return { data: cached.data, metadata: cached.metadata };
   }
 
-  const transformedData = transformData(data, config, 'encode');
+  const transformedData = transformData(data, config, "encode");
   const encodedSize = JSON.stringify(transformedData).length;
 
   const metadata: TransformMetadata = {
@@ -37,18 +43,20 @@ export function smartEncode(data: any, config: TransformConfig = {}): { data: an
     encodedSize,
     compressionRatio: originalSize > 0 ? encodedSize / originalSize : 1,
     timestamp: Date.now(),
-    fields: extractTransformedFields(data, config)
+    fields: extractTransformedFields(data, config),
   };
 
   transformCache.set(cacheKey, {
     data: transformedData,
     metadata,
-    expiry: Date.now() + CACHE_TTL
+    expiry: Date.now() + CACHE_TTL,
   });
 
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     const processingTime = performance.now() - startTime;
-    console.log(`🔧 Encoding performance: ${processingTime.toFixed(2)}ms, compression: ${(metadata.compressionRatio * 100).toFixed(1)}%`);
+    console.log(
+      `🔧 Encoding performance: ${processingTime.toFixed(2)}ms, compression: ${(metadata.compressionRatio * 100).toFixed(1)}%`,
+    );
   }
 
   return { data: transformedData, metadata };
@@ -60,21 +68,21 @@ export function smartEncode(data: any, config: TransformConfig = {}): { data: an
 export function smartDecode(data: any, config: TransformConfig = {}): any {
   const startTime = performance.now();
 
-  const cacheKey = generateCacheKey(data, config, 'decode');
+  const cacheKey = generateCacheKey(data, config, "decode");
   const cached = transformCache.get(cacheKey);
   if (cached && cached.expiry > Date.now()) {
     return cached.data;
   }
 
-  const decodedData = transformData(data, config, 'decode');
+  const decodedData = transformData(data, config, "decode");
 
   transformCache.set(cacheKey, {
     data: decodedData,
     metadata: {} as TransformMetadata,
-    expiry: Date.now() + CACHE_TTL
+    expiry: Date.now() + CACHE_TTL,
   });
 
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     const processingTime = performance.now() - startTime;
     console.log(`🔍 Decoding performance: ${processingTime.toFixed(2)}ms`);
   }
@@ -85,13 +93,17 @@ export function smartDecode(data: any, config: TransformConfig = {}): any {
 /**
  * Core transformation logic for encoding and decoding operations
  */
-function transformData(data: any, config: TransformConfig, operation: 'encode' | 'decode'): any {
-  if (!data || typeof data !== 'object') {
+function transformData(
+  data: any,
+  config: TransformConfig,
+  operation: "encode" | "decode",
+): any {
+  if (!data || typeof data !== "object") {
     return data;
   }
 
   if (Array.isArray(data)) {
-    return data.map(item => transformData(item, config, operation));
+    return data.map((item) => transformData(item, config, operation));
   }
 
   const result: any = {};
@@ -104,8 +116,9 @@ function transformData(data: any, config: TransformConfig, operation: 'encode' |
     }
 
     if (shouldTransformField(key, value, fields)) {
-      result[key] = operation === 'encode' ? encodeValue(value) : decodeValue(value);
-    } else if (deep && value && typeof value === 'object') {
+      result[key] =
+        operation === "encode" ? encodeValue(value) : decodeValue(value);
+    } else if (deep && value && typeof value === "object") {
       result[key] = transformData(value, config, operation);
     } else {
       result[key] = value;
@@ -118,12 +131,18 @@ function transformData(data: any, config: TransformConfig, operation: 'encode' |
 /**
  * Determine if a field should be transformed based on configuration and content
  */
-function shouldTransformField(key: string, value: any, fields?: string[]): boolean {
+function shouldTransformField(
+  key: string,
+  value: any,
+  fields?: string[],
+): boolean {
   if (fields && fields.length > 0) {
     return fields.includes(key);
   }
 
-  return typeof value === 'string' && value.length > 10 && !isAlreadyEncoded(value);
+  return (
+    typeof value === "string" && value.length > 10 && !isAlreadyEncoded(value)
+  );
 }
 
 /**
@@ -143,13 +162,13 @@ function isAlreadyEncoded(value: string): boolean {
  * Encode a single value with optional compression for large strings
  */
 function encodeValue(value: any): string {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     value = JSON.stringify(value);
   }
 
   const encoder = new TextEncoder();
   const encoded = encoder.encode(value);
-  const base64 = btoa(String.fromCharCode(...encoded));
+  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
 
   if (value.length > 1000) {
     return compressAndEncode(value);
@@ -162,12 +181,12 @@ function encodeValue(value: any): string {
  * Decode a single value handling both compressed and standard encoding
  */
 function decodeValue(value: any): any {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return value;
   }
 
   try {
-    if (value.startsWith('comp:')) {
+    if (value.startsWith("comp:")) {
       return decompressAndDecode(value);
     }
 
@@ -179,7 +198,7 @@ function decodeValue(value: any): any {
       return decoded;
     }
   } catch (error) {
-    console.warn('Failed to decode value:', error);
+    console.warn("Failed to decode value:", error);
     return value;
   }
 }
@@ -188,7 +207,7 @@ function decodeValue(value: any): any {
  * Compress large strings before encoding
  */
 function compressAndEncode(value: string): string {
-  return 'comp:' + btoa(value);
+  return "comp:" + btoa(value);
 }
 
 /**
@@ -202,23 +221,33 @@ function decompressAndDecode(value: string): string {
 /**
  * Generate unique cache key for transformation operations
  */
-function generateCacheKey(data: any, config: TransformConfig, operation?: string): string {
+function generateCacheKey(
+  data: any,
+  config: TransformConfig,
+  operation?: string,
+): string {
   const configHash = JSON.stringify(config);
-  const dataHash = typeof data === 'string' ? data.substring(0, 50) : JSON.stringify(data).substring(0, 50);
-  return `${operation || 'transform'}_${btoa(configHash + dataHash)}`;
+  const dataHash =
+    typeof data === "string"
+      ? data.substring(0, 50)
+      : JSON.stringify(data).substring(0, 50);
+  return `${operation || "transform"}_${btoa(configHash + dataHash)}`;
 }
 
 /**
  * Extract list of fields that were transformed
  */
-function extractTransformedFields(data: any, config: TransformConfig): string[] {
+function extractTransformedFields(
+  data: any,
+  config: TransformConfig,
+): string[] {
   const fields: string[] = [];
 
   if (config.fields) {
     return config.fields;
   }
 
-  if (data && typeof data === 'object') {
+  if (data && typeof data === "object") {
     for (const [key, value] of Object.entries(data)) {
       if (shouldTransformField(key, value, config.fields)) {
         fields.push(key);
@@ -242,7 +271,7 @@ export function clearTransformCache(): void {
 export function getCacheStats() {
   return {
     size: transformCache.size,
-    entries: Array.from(transformCache.keys())
+    entries: Array.from(transformCache.keys()),
   };
 }
 
@@ -250,26 +279,42 @@ export function getCacheStats() {
  * High-level API for common transformation use cases
  */
 export const DataTransformer = {
-  encodeForAPI: (data: any) => smartEncode(data, {
-    fields: ['introduction', 'instructions', 'gradingCriteriaOverview', 'question', 'content'],
-    deep: true
-  }),
+  encodeForAPI: (data: any) =>
+    smartEncode(data, {
+      fields: [
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+      ],
+      deep: true,
+    }),
 
-  decodeFromAPI: (data: any) => smartDecode(data, {
-    fields: ['introduction', 'instructions', 'gradingCriteriaOverview', 'question', 'content'],
-    deep: true
-  }),
+  decodeFromAPI: (data: any) =>
+    smartDecode(data, {
+      fields: [
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+      ],
+      deep: true,
+    }),
 
-  encodeFormData: (data: any) => smartEncode(data, {
-    exclude: ['id', 'createdAt', 'updatedAt'],
-    deep: false
-  }),
+  encodeFormData: (data: any) =>
+    smartEncode(data, {
+      exclude: ["id", "createdAt", "updatedAt"],
+      deep: false,
+    }),
 
-  encodeForStorage: (data: any) => smartEncode(data, {
-    compressionLevel: 'heavy',
-    deep: true
-  }),
+  encodeForStorage: (data: any) =>
+    smartEncode(data, {
+      compressionLevel: "heavy",
+      deep: true,
+    }),
 
   clearCache: clearTransformCache,
-  getStats: getCacheStats
+  getStats: getCacheStats,
 };

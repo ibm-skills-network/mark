@@ -79,13 +79,13 @@ export class DataTransformMiddleware implements NestMiddleware {
     try {
       request.body = this.transformData(
         request.body as TransformableData,
-        "decode"
+        "decode",
       );
 
       if (request.query && Object.keys(request.query).length > 0) {
         const transformedQuery = this.transformData(
           request.query as TransformableData,
-          "decode"
+          "decode",
         ) as QueryData;
         request.query = transformedQuery;
       }
@@ -102,25 +102,34 @@ export class DataTransformMiddleware implements NestMiddleware {
 
     response.json = function (data: TransformableData) {
       try {
-        const transformedData = (
+        const middleware = (
           response.locals as {
-            middleware: {
+            middleware?: {
               transformData: (
                 data: TransformableData,
-                operation: TransformOperation
+                operation: TransformOperation,
               ) => TransformableData;
             };
           }
-        ).middleware.transformData(data, "encode");
-        return originalJson.call(this, transformedData);
+        )?.middleware;
+
+        if (middleware) {
+          const transformedData = middleware.transformData(data, "encode");
+          return originalJson.call(
+            this,
+            transformedData,
+          ) as Response<TransformableData>;
+        }
+        return originalJson.call(this, data) as Response<TransformableData>;
       } catch (error) {
         console.error("Error transforming response data:", error);
-        return originalJson.call(this, data);
+        return originalJson.call(this, data) as Response<TransformableData>;
       }
     };
 
     response.locals = {
       ...response.locals,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       middleware: { transformData: this.transformData.bind(this) },
     };
   }
@@ -130,13 +139,13 @@ export class DataTransformMiddleware implements NestMiddleware {
    */
   private transformData(
     data: TransformableData,
-    operation: TransformOperation
+    operation: TransformOperation,
   ): TransformableData {
     if (!data || typeof data !== "object") return data;
 
     if (Array.isArray(data)) {
       return data.map((item) =>
-        this.transformData(item as TransformableData, operation)
+        this.transformData(item as TransformableData, operation),
       ) as unknown as TransformableData;
     }
 
@@ -144,7 +153,7 @@ export class DataTransformMiddleware implements NestMiddleware {
     const { fields, exclude } = this.config;
 
     for (const [key, value] of Object.entries(
-      data as Record<string, unknown>
+      data as Record<string, unknown>,
     )) {
       if (exclude?.includes(key)) {
         result[key] = value;
@@ -172,7 +181,7 @@ export class DataTransformMiddleware implements NestMiddleware {
   private shouldTransformField(
     key: string,
     value: unknown,
-    fields?: string[]
+    fields?: string[],
   ): boolean {
     if (fields && fields.length > 0) {
       return fields.includes(key);
@@ -221,7 +230,7 @@ export class DataTransformMiddleware implements NestMiddleware {
  * Factory function to create middleware with custom configuration
  */
 export function createDataTransformMiddleware(
-  config: TransformConfig = {}
+  config: TransformConfig = {},
 ): typeof DataTransformMiddleware {
   return class ConfiguredDataTransformMiddleware extends DataTransformMiddleware {
     constructor() {

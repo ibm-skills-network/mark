@@ -18,15 +18,18 @@ export interface TransformResult<T = any> {
 /**
  * Smart data encoder that handles various data types and structures
  */
-export function smartEncode<T = any>(data: T, config: TransformConfig = {}): TransformResult<T> {
+export function smartEncode<T = any>(
+  data: T,
+  config: TransformConfig = {},
+): TransformResult<T> {
   const originalSize = JSON.stringify(data).length;
   const transformedFields: string[] = [];
 
   const transformedData = transformDataRecursive(
     data,
     config,
-    'encode',
-    transformedFields
+    "encode",
+    transformedFields,
   ) as T;
 
   const transformedSize = JSON.stringify(transformedData).length;
@@ -37,8 +40,8 @@ export function smartEncode<T = any>(data: T, config: TransformConfig = {}): Tra
       transformedFields,
       originalSize,
       transformedSize,
-      timestamp: Date.now()
-    }
+      timestamp: Date.now(),
+    },
   };
 }
 
@@ -47,38 +50,40 @@ export function smartEncode<T = any>(data: T, config: TransformConfig = {}): Tra
  */
 export function smartDecode<T = any>(data: T, config: TransformConfig = {}): T {
   const transformedFields: string[] = [];
-  return transformDataRecursive(data, config, 'decode', transformedFields) as T;
+  return transformDataRecursive(data, config, "decode", transformedFields) as T;
 }
 
 /**
  * Recursive data transformation for nested objects and arrays
  */
 function transformDataRecursive(
-  data: any,
+  data: unknown,
   config: TransformConfig,
-  operation: 'encode' | 'decode',
+  operation: "encode" | "decode",
   transformedFields: string[],
-  currentPath = ''
-): any {
+  currentPath = "",
+): unknown {
   if (data === null || data === undefined) return data;
 
   if (Array.isArray(data)) {
-    return data.map((item, index) =>
+    return data.map((item: unknown, index: number) =>
       transformDataRecursive(
         item,
         config,
         operation,
         transformedFields,
-        `${currentPath}[${index}]`
-      )
+        `${currentPath}[${index}]`,
+      ),
     );
   }
 
-  if (typeof data === 'object') {
-    const result: any = {};
+  if (data && typeof data === "object") {
+    const result: Record<string, unknown> = {};
     const { fields, exclude, deep = true } = config;
 
-    for (const [key, value] of Object.entries(data)) {
+    for (const [key, value] of Object.entries(
+      data as Record<string, unknown>,
+    )) {
       const fieldPath = currentPath ? `${currentPath}.${key}` : key;
 
       if (exclude?.includes(key) || exclude?.includes(fieldPath)) {
@@ -87,17 +92,16 @@ function transformDataRecursive(
       }
 
       if (shouldTransformField(key, value, fields, fieldPath)) {
-        result[key] = operation === 'encode'
-          ? encodeValue(value)
-          : decodeValue(value);
+        result[key] =
+          operation === "encode" ? encodeValue(value) : decodeValue(value);
         transformedFields.push(fieldPath);
-      } else if (deep && value && typeof value === 'object') {
+      } else if (deep && value && typeof value === "object") {
         result[key] = transformDataRecursive(
           value,
           config,
           operation,
           transformedFields,
-          fieldPath
+          fieldPath,
         );
       } else {
         result[key] = value;
@@ -115,26 +119,28 @@ function transformDataRecursive(
  */
 function shouldTransformField(
   key: string,
-  value: any,
+  value: unknown,
   fields?: string[],
-  fieldPath?: string
+  fieldPath?: string,
 ): boolean {
   if (fields && fields.length > 0) {
     return fields.includes(key) || (fieldPath && fields.includes(fieldPath));
   }
 
-  return typeof value === 'string' && value.length > 10 && !isBase64Encoded(value);
+  return (
+    typeof value === "string" && value.length > 10 && !isBase64Encoded(value)
+  );
 }
 
 /**
  * Check if a string is already Base64 encoded
  */
 function isBase64Encoded(value: string): boolean {
-  if (!value || typeof value !== 'string') return false;
+  if (!value || typeof value !== "string") return false;
 
   try {
-    const decoded = Buffer.from(value, 'base64').toString('utf8');
-    const reencoded = Buffer.from(decoded, 'utf8').toString('base64');
+    const decoded = Buffer.from(value, "base64").toString("utf8");
+    const reencoded = Buffer.from(decoded, "utf8").toString("base64");
     return reencoded === value;
   } catch {
     return false;
@@ -144,27 +150,22 @@ function isBase64Encoded(value: string): boolean {
 /**
  * Encode a single value with type preservation
  */
-function encodeValue(value: any): string {
-  if (value === null || value === undefined) return value;
+function encodeValue(value: unknown): string {
+  if (value === null || value === undefined) return value as string;
 
-  let stringValue: string;
-  if (typeof value === 'string') {
-    stringValue = value;
-  } else {
-    stringValue = JSON.stringify(value);
-  }
+  const stringValue = typeof value === "string" ? value : JSON.stringify(value);
 
-  return Buffer.from(stringValue, 'utf8').toString('base64');
+  return Buffer.from(stringValue, "utf8").toString("base64");
 }
 
 /**
  * Decode a single value with automatic type detection
  */
-function decodeValue(value: any): any {
-  if (!value || typeof value !== 'string') return value;
+function decodeValue(value: unknown): unknown {
+  if (!value || typeof value !== "string") return value;
 
   try {
-    const decoded = Buffer.from(value, 'base64').toString('utf8');
+    const decoded = Buffer.from(value, "base64").toString("utf8");
 
     try {
       return JSON.parse(decoded);
@@ -181,52 +182,79 @@ function decodeValue(value: any): any {
  */
 export function batchEncode<T = any>(
   dataArray: T[],
-  config: TransformConfig = {}
+  config: TransformConfig = {},
 ): TransformResult<T[]> {
-  const results = dataArray.map(data => smartEncode(data, config));
+  const results = dataArray.map((data) => smartEncode(data, config));
 
   return {
-    data: results.map(r => r.data),
+    data: results.map((r) => r.data),
     metadata: {
-      transformedFields: Array.from(new Set(results.flatMap(r => r.metadata.transformedFields))),
-      originalSize: results.reduce((sum, r) => sum + r.metadata.originalSize, 0),
-      transformedSize: results.reduce((sum, r) => sum + r.metadata.transformedSize, 0),
-      timestamp: Date.now()
-    }
+      transformedFields: [
+        ...new Set(results.flatMap((r) => r.metadata.transformedFields)),
+      ],
+      originalSize: results.reduce(
+        (sum, r) => sum + r.metadata.originalSize,
+        0,
+      ),
+      transformedSize: results.reduce(
+        (sum, r) => sum + r.metadata.transformedSize,
+        0,
+      ),
+      timestamp: Date.now(),
+    },
   };
 }
 
 /**
  * Batch decode multiple data objects
  */
-export function batchDecode<T = any>(dataArray: T[], config: TransformConfig = {}): T[] {
-  return dataArray.map(data => smartDecode(data, config));
+export function batchDecode<T = any>(
+  dataArray: T[],
+  config: TransformConfig = {},
+): T[] {
+  return dataArray.map((data) => smartDecode(data, config));
 }
 
 /**
  * Utility functions for common use cases
  */
 export const DataTransformer = {
-  encodeForDatabase: <T>(data: T) => smartEncode(data, {
-    fields: ['introduction', 'instructions', 'gradingCriteriaOverview', 'question', 'content'],
-    deep: true
-  }),
+  encodeForDatabase: <T>(data: T) =>
+    smartEncode(data, {
+      fields: [
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+      ],
+      deep: true,
+    }),
 
-  decodeFromDatabase: <T>(data: T) => smartDecode(data, {
-    fields: ['introduction', 'instructions', 'gradingCriteriaOverview', 'question', 'content'],
-    deep: true
-  }),
+  decodeFromDatabase: <T>(data: T) =>
+    smartDecode(data, {
+      fields: [
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+      ],
+      deep: true,
+    }),
 
-  encodeForAPI: <T>(data: T) => smartEncode(data, {
-    exclude: ['id', 'createdAt', 'updatedAt'],
-    deep: true
-  }),
+  encodeForAPI: <T>(data: T) =>
+    smartEncode(data, {
+      exclude: ["id", "createdAt", "updatedAt"],
+      deep: true,
+    }),
 
-  decodeFromAPI: <T>(data: T) => smartDecode(data, {
-    exclude: ['id', 'createdAt', 'updatedAt'],
-    deep: true
-  }),
+  decodeFromAPI: <T>(data: T) =>
+    smartDecode(data, {
+      exclude: ["id", "createdAt", "updatedAt"],
+      deep: true,
+    }),
 
   batchEncode,
-  batchDecode
+  batchDecode,
 };
