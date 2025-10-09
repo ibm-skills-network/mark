@@ -28,6 +28,12 @@
       "type": "string",
       "enum": ["DEFINED", "RANDOM"]
     },
+    "attemptsBeforeCoolDown": {
+      "type": "integer"
+    },
+    "retakeAttemptCoolDownMinutes": {
+      "type": "integer"
+    },
     "questions": {
       "type": "array",
       "items": {
@@ -79,6 +85,8 @@
     "name",
     "type",
     "numAttempts",
+    "attemptsBeforeCoolDown",
+    "retakeAttemptCoolDownMinutes",
     "allotedTimeMinutes",
     "passingGrade",
     "displayOrder",

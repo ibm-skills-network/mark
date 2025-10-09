@@ -34,6 +34,7 @@ import {
   GRADE_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+  IN_COOLDOWN_PERIOD,
 } from "../assignment/attempt/api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "../assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
@@ -83,6 +84,11 @@ export class AttemptControllerV2 {
     type: String,
     description: MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   })
+  @ApiResponse({
+    status: 429,
+    type: String,
+    description: IN_COOLDOWN_PERIOD,
+  })
   @ApiResponse({ status: 403 })
   createAssignmentAttempt(
     @Param("assignmentId") assignmentId: number,
@@ -104,6 +110,11 @@ export class AttemptControllerV2 {
     status: 422,
     type: String,
     description: MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+  })
+  @ApiResponse({
+    status: 429,
+    type: String,
+    description: IN_COOLDOWN_PERIOD,
   })
   @ApiResponse({
     status: 500,
@@ -177,6 +188,11 @@ export class AttemptControllerV2 {
     status: 422,
     type: String,
     description: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+  })
+  @ApiResponse({
+    status: 429,
+    type: String,
+    description: IN_COOLDOWN_PERIOD,
   })
   @ApiResponse({
     status: 500,

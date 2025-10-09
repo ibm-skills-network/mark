@@ -461,20 +461,49 @@ INSTRUCTIONS:
    * @returns Translated choices with both choice text and feedback translated and validated
    */
   async generateChoicesTranslation(
-    choices: Choice[] | null | undefined,
+    choices: Choice[] | null | undefined | string | any,
     assignmentId: number,
     targetLanguage: string,
   ): Promise<Choice[] | null | undefined> {
-    if (!choices || !Array.isArray(choices) || choices.length === 0) {
+    // Parse choices if they come as a string (from database JSON)
+    let parsedChoices: Choice[] | null = null;
+
+    if (!choices) {
+      this.logger.debug("No choices provided for translation");
+      return null;
+    }
+
+    if (typeof choices === "string") {
+      try {
+        parsedChoices = JSON.parse(choices) as Choice[];
+        this.logger.debug(
+          `Parsed choices from JSON string: ${parsedChoices.length} choices`,
+        );
+      } catch (error) {
+        this.logger.error(`Failed to parse choices JSON: ${String(error)}`);
+        return null;
+      }
+    } else if (Array.isArray(choices)) {
+      parsedChoices = choices as Choice[];
+    } else {
       this.logger.debug(
         `No choices to translate or choices is not an array: ${typeof choices}`,
       );
-      return choices;
+      return null;
+    }
+
+    if (
+      !parsedChoices ||
+      !Array.isArray(parsedChoices) ||
+      parsedChoices.length === 0
+    ) {
+      this.logger.debug("No valid choices to translate after parsing");
+      return parsedChoices;
     }
 
     try {
       this.logger.debug(
-        `Batch translating text for ${choices.length} choices to ${targetLanguage}`,
+        `Batch translating text for ${parsedChoices.length} choices to ${targetLanguage}`,
       );
 
       // Collect all texts for batch language detection
@@ -485,7 +514,7 @@ INSTRUCTIONS:
         textIndex: number;
       }> = [];
 
-      for (const [choiceIndex, choice] of choices.entries()) {
+      for (const [choiceIndex, choice] of parsedChoices.entries()) {
         if (choice.choice) {
           textMap.push({
             choiceIndex,
@@ -516,7 +545,7 @@ INSTRUCTIONS:
 
       // Process translations based on batch results
       const translatedChoices = await Promise.all(
-        choices.map(async (choice, choiceIndex) => {
+        parsedChoices.map(async (choice, choiceIndex) => {
           const translatedChoice = { ...choice };
 
           // Handle choice text
@@ -582,7 +611,7 @@ INSTRUCTIONS:
         }`,
       );
 
-      return choices;
+      return parsedChoices;
     }
   }
 

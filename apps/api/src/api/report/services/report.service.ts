@@ -13,7 +13,6 @@ import axios from "axios";
 import * as jwt from "jsonwebtoken";
 import * as natural from "natural";
 import { FilesService } from "src/api/files/services/files.service";
-import { NotificationsService } from "src/api/user/services/notification.service";
 import {
   UserRole,
   UserSession,
@@ -53,21 +52,17 @@ export class ReportsService {
     private readonly floService: FloService,
     private readonly prisma: PrismaService,
     private readonly filesService: FilesService,
-    private readonly notificationsService: NotificationsService,
     private readonly adminEmailService: AdminEmailService,
   ) {}
   private getPrivateKey(): string {
     const raw = process.env.GITHUB_APP_PRIVATE_KEY || "";
 
-    // Handle different possible formats
     let processed = raw.trim();
 
-    // If the key contains literal \n strings, convert them to actual newlines
     if (processed.includes("\\n")) {
       processed = processed.replaceAll("\\n", "\n");
     }
 
-    // Ensure proper PEM format
     if (!processed.startsWith("-----BEGIN")) {
       throw new InternalServerErrorException(
         "Invalid private key format: missing BEGIN marker",
@@ -2316,23 +2311,6 @@ A new related issue has been created: #${issue.number}
               ? " (Not Reproducible/Invalid)"
               : ""
       : "";
-
-    await this.notificationsService.createNotification(
-      report.reporterId,
-      "ISSUE_STATUS_CHANGE",
-      `Issue #${
-        report.issueNumber || reportId
-      } Status: ${statusText}${reasonText}`,
-      statusMessage || this.getDefaultStatusMessage(newStatus),
-      {
-        reportId,
-        oldStatus: report.status,
-        newStatus,
-        issueNumber: report.issueNumber,
-        statusMessage,
-        closureReason,
-      },
-    );
   }
   /**
    * Track issue status changes and notify users

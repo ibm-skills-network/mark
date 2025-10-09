@@ -12,7 +12,6 @@ import { JobModule } from "./Job/job.module";
 import { LlmModule } from "./llm/llm.module";
 import { ReportsModule } from "./report/report.module";
 import { ChatModule } from "./user/modules/chat.module";
-import { NotificationsModule } from "./user/modules/notification.module";
 
 @Module({
   controllers: [ApiController],
@@ -28,7 +27,6 @@ import { NotificationsModule } from "./user/modules/notification.module";
     JobModule,
     ReportsModule,
     ChatModule,
-    NotificationsModule,
     FilesModule,
   ],
 })

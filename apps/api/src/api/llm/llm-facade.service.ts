@@ -342,11 +342,12 @@ export class LlmFacadeService {
    * Translate choices to a target language
    */
   async generateChoicesTranslation(
-    choices: Choice[],
+    choices: Choice[] | string | any,
     assignmentId: number,
     targetLanguage: string,
-  ): Promise<Choice[]> {
+  ): Promise<Choice[] | null | undefined> {
     return this.translationService.generateChoicesTranslation(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       choices,
       assignmentId,
       targetLanguage,

@@ -30,6 +30,7 @@ import { Roles } from "../../../auth/role/roles.global.guard";
 import { SuccessPageDataDto } from "../../attempt/dto/success-page-data.dto";
 import {
   GRADE_SUBMISSION_EXCEPTION,
+  IN_COOLDOWN_PERIOD,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
 } from "./api-exceptions/exceptions";
@@ -77,6 +78,11 @@ export class AttemptControllerV1 {
     status: 422,
     type: String,
     description: MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+  })
+  @ApiResponse({
+    status: 429,
+    type: String,
+    description: IN_COOLDOWN_PERIOD,
   })
   @ApiResponse({ status: 403 })
   createAssignmentAttempt(
@@ -150,6 +156,11 @@ export class AttemptControllerV1 {
     status: 422,
     type: String,
     description: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+  })
+  @ApiResponse({
+    status: 429,
+    type: String,
+    description: IN_COOLDOWN_PERIOD,
   })
   @ApiResponse({
     status: 500,

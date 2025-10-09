@@ -778,6 +778,7 @@ const Question: FC<Props> = ({
         <ShowHideRubric
           rubrics={scoring?.rubrics}
           className="mb-4"
+          showRubrics={scoring?.showRubricsToLearner}
           showPoints={scoring?.showPoints}
         />
       )}

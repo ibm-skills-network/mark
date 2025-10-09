@@ -36,6 +36,9 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     questionDisplay: assignmentConfigstate.questionDisplay,
     graded: assignmentConfigstate.graded,
     numAttempts: assignmentConfigstate.numAttempts,
+    retakeAttemptCoolDownMinutes:
+      assignmentConfigstate.retakeAttemptCoolDownMinutes,
+    attemptsBeforeCoolDown: assignmentConfigstate.attemptsBeforeCoolDown,
     passingGrade: assignmentConfigstate.passingGrade,
     allotedTimeMinutes: assignmentConfigstate.allotedTimeMinutes,
     timeEstimateMinutes: assignmentConfigstate.timeEstimateMinutes,

@@ -58,6 +58,8 @@ export function useChangesSummary(): string {
     questionDisplay,
     questionVariationNumber,
     numAttempts,
+    attemptsBeforeCoolDown,
+    retakeAttemptCoolDownMinutes,
     passingGrade,
     timeEstimateMinutes,
     allotedTimeMinutes,
@@ -129,7 +131,7 @@ export function useChangesSummary(): string {
     const originalQuestions = originalAssignment.questions || [];
     const currentQuestions = questions || [];
 
-    const addedQuestions = currentQuestions.filter(
+    const addedQuestions = currentQuestions?.filter(
       (question) =>
         !originalQuestions.some((origQ) => origQ.id === question?.id),
     );
@@ -383,6 +385,24 @@ export function useChangesSummary(): string {
       diffs.push("Updated number of attempts.");
     }
 
+    if (
+      !safeCompare(
+        attemptsBeforeCoolDown,
+        originalAssignment.attemptsBeforeCoolDown,
+      )
+    ) {
+      diffs.push("Updated number of attempts before cooldown period.");
+    }
+
+    if (
+      !safeCompare(
+        retakeAttemptCoolDownMinutes,
+        originalAssignment.retakeAttemptCoolDownMinutes,
+      )
+    ) {
+      diffs.push("Updated the cooldown time before retries allowed.");
+    }
+
     if (!safeCompare(passingGrade, originalAssignment.passingGrade)) {
       diffs.push("Modified passing grade.");
     }
@@ -418,6 +438,8 @@ export function useChangesSummary(): string {
     questionDisplay,
     questionVariationNumber,
     numAttempts,
+    attemptsBeforeCoolDown,
+    retakeAttemptCoolDownMinutes,
     passingGrade,
     timeEstimateMinutes,
     allotedTimeMinutes,
