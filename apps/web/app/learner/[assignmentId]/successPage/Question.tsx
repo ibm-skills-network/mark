@@ -33,6 +33,7 @@ interface Props {
   language: string;
   showSubmissionFeedback?: boolean;
   showCorrectAnswer?: boolean;
+  correctAnswerVisibility?: "NEVER" | "ALWAYS" | "ON_PASS";
 }
 
 interface HighestScoreResponseType {
@@ -106,6 +107,7 @@ const Question: FC<Props> = ({
   language = "en",
   showSubmissionFeedback,
   showCorrectAnswer,
+  correctAnswerVisibility,
 }) => {
   const {
     question: questionText,
@@ -483,6 +485,8 @@ const Question: FC<Props> = ({
 
   const questionResponse = questionResponses?.[0];
 
+  const shouldShowHighlighting = correctAnswerVisibility !== "NEVER";
+
   const learnerResponse: LearnerResponseType =
     (learnerChoices && learnerChoices.length > 0
       ? learnerChoices
@@ -504,11 +508,13 @@ const Question: FC<Props> = ({
       return (
         <p
           className={`text-gray-800 w-full ${
-            highestScoreResponse?.points === totalPoints
-              ? "bg-green-50 border border-green-500 rounded p-2"
-              : highestScoreResponse?.points > 0
-                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-                : "bg-red-50 border border-red-700 rounded p-2"
+            shouldShowHighlighting
+              ? highestScoreResponse?.points === totalPoints
+                ? "bg-green-50 border border-green-500 rounded p-2"
+                : highestScoreResponse?.points > 0
+                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                  : "bg-red-50 border border-red-700 rounded p-2"
+              : "bg-gray-50 border border-gray-300 rounded p-2"
           }`}
         >
           <MarkdownViewer className="text-gray-800 ">
@@ -541,11 +547,15 @@ const Question: FC<Props> = ({
         (Array.isArray(learnerResponse) && learnerResponse.length === 0)
       ) {
         return (
-          <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
+          <p
+            className={`text-gray-800 ${shouldShowHighlighting ? "bg-red-50 border border-red-700" : "bg-gray-50 border border-gray-300"} rounded p-2 w-full flex items-center justify-between`}
+          >
             <span className="w-full">
               No answer was provided by the learner.
             </span>
-            <XMarkIcon className="w-5 h-5 text-red-500 ml-2 flex-shrink-0" />
+            {shouldShowHighlighting && (
+              <XMarkIcon className="w-5 h-5 text-red-500 ml-2 flex-shrink-0" />
+            )}
           </p>
         );
       }
@@ -564,12 +574,16 @@ const Question: FC<Props> = ({
               <li
                 key={idx}
                 className={`flex items-start mb-2 px-2 py-2 ${
-                  isSelected && showSubmissionFeedback
-                    ? isCorrect
-                      ? "bg-green-50 border border-green-500 rounded"
-                      : "bg-red-50 border border-red-700 rounded"
-                    : isCorrect && showCorrectAnswer
-                      ? "bg-green-50 border border-green-500 rounded"
+                  shouldShowHighlighting
+                    ? isSelected && showSubmissionFeedback
+                      ? isCorrect
+                        ? "bg-green-50 border border-green-500 rounded"
+                        : "bg-red-50 border border-red-700 rounded"
+                      : isCorrect && showCorrectAnswer
+                        ? "bg-green-50 border border-green-500 rounded"
+                        : ""
+                    : isSelected
+                      ? "bg-gray-50 border border-gray-300 rounded"
                       : ""
                 }`}
               >
@@ -613,10 +627,12 @@ const Question: FC<Props> = ({
                   </div>
 
                   <div className="flex-shrink-0 ml-2">
-                    {isCorrect && showCorrectAnswer && (
-                      <CheckIcon className="w-5 h-5 text-green-500" />
-                    )}
-                    {!isCorrect && isSelected && (
+                    {shouldShowHighlighting &&
+                      isCorrect &&
+                      showCorrectAnswer && (
+                        <CheckIcon className="w-5 h-5 text-green-500" />
+                      )}
+                    {shouldShowHighlighting && !isCorrect && isSelected && (
                       <XMarkIcon className="w-5 h-5 text-red-500" />
                     )}
                   </div>
@@ -630,11 +646,13 @@ const Question: FC<Props> = ({
       return (
         <p
           className={`text-gray-800 w-full ${
-            highestScoreResponse?.points === totalPoints
-              ? "bg-green-50 border border-green-500 rounded p-2"
-              : highestScoreResponse?.points > 0
-                ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-                : "bg-red-50 border border-red-700 rounded p-2"
+            shouldShowHighlighting
+              ? highestScoreResponse?.points === totalPoints
+                ? "bg-green-50 border border-green-500 rounded p-2"
+                : highestScoreResponse?.points > 0
+                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                  : "bg-red-50 border border-red-700 rounded p-2"
+              : "bg-gray-50 border border-gray-300 rounded p-2"
           }`}
         >
           {learnerResponse
@@ -656,11 +674,13 @@ const Question: FC<Props> = ({
         return (
           <p
             className={`text-gray-800 w-full ${
-              highestScoreResponse?.points === totalPoints
-                ? "bg-green-50 border border-green-500 rounded p-2"
-                : highestScoreResponse?.points > 0
-                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-                  : "bg-red-50 border border-red-700 rounded p-2"
+              shouldShowHighlighting
+                ? highestScoreResponse?.points === totalPoints
+                  ? "bg-green-50 border border-green-500 rounded p-2"
+                  : highestScoreResponse?.points > 0
+                    ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                    : "bg-red-50 border border-red-700 rounded p-2"
+                : "bg-gray-50 border border-gray-300 rounded p-2"
             }`}
           >
             Transcript: {transcript}
@@ -722,11 +742,13 @@ const Question: FC<Props> = ({
         return (
           <p
             className={`text-gray-800 w-full ${
-              highestScoreResponse?.points === totalPoints
-                ? "bg-green-50 border border-green-500 rounded p-2"
-                : highestScoreResponse?.points > 0
-                  ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-                  : "bg-red-50 border border-red-700 rounded p-2"
+              shouldShowHighlighting
+                ? highestScoreResponse?.points === totalPoints
+                  ? "bg-green-50 border border-green-500 rounded p-2"
+                  : highestScoreResponse?.points > 0
+                    ? "bg-yellow-50 border border-yellow-500 rounded p-2"
+                    : "bg-red-50 border border-red-700 rounded p-2"
+                : "bg-gray-50 border border-gray-300 rounded p-2"
             }`}
           >
             {learnerResponse}
@@ -734,19 +756,27 @@ const Question: FC<Props> = ({
         );
       } else {
         return (
-          <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
+          <p
+            className={`text-gray-800 ${shouldShowHighlighting ? "bg-red-50 border border-red-700" : "bg-gray-50 border border-gray-300"} rounded p-2 w-full flex items-center justify-between`}
+          >
             <span className="w-full">
               No answer was provided by the learner.
             </span>
-            <XMarkIcon className="w-5 h-5 text-red-500 ml-2 flex-shrink-0" />
+            {shouldShowHighlighting && (
+              <XMarkIcon className="w-5 h-5 text-red-500 ml-2 flex-shrink-0" />
+            )}
           </p>
         );
       }
     } else {
       return (
-        <p className="text-gray-800 bg-red-50 border border-red-700 rounded p-2 w-full flex items-center justify-between">
+        <p
+          className={`text-gray-800 ${shouldShowHighlighting ? "bg-red-50 border border-red-700" : "bg-gray-50 border border-gray-300"} rounded p-2 w-full flex items-center justify-between`}
+        >
           <span className="w-full">No answer was provided by the learner.</span>
-          <XMarkIcon className="w-5 h-5 text-red-500 ml-2 flex-shrink-0" />
+          {shouldShowHighlighting && (
+            <XMarkIcon className="w-5 h-5 text-red-500 ml-2 flex-shrink-0" />
+          )}
         </p>
       );
     }

@@ -1561,6 +1561,29 @@ export function VersionTreeView({ assignmentId }: Props) {
                                     : "Hidden"}
                                 </span>
                               </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
+                                  Correct Answer Visibility:
+                                </span>
+                                <span
+                                  className={`font-medium px-2 py-1 rounded-full text-xs ${
+                                    (selectedVersionDetails || selectedVersion)
+                                      .correctAnswerVisibility === "ALWAYS"
+                                      ? "bg-green-100 text-green-700"
+                                      : (
+                                            selectedVersionDetails ||
+                                            selectedVersion
+                                          ).correctAnswerVisibility === "NEVER"
+                                        ? "bg-red-100 text-red-700"
+                                        : "bg-yellow-100 text-yellow-700"
+                                  }`}
+                                >
+                                  {
+                                    (selectedVersionDetails || selectedVersion)
+                                      .correctAnswerVisibility
+                                  }
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>

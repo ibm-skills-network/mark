@@ -611,6 +611,7 @@ function SuccessPage() {
                   question={question}
                   language={userPreferredLanguage}
                   showSubmissionFeedback={showSubmissionFeedback}
+                  correctAnswerVisibility={correctAnswerVisibility}
                   showCorrectAnswer={(() => {
                     if (correctAnswerVisibility === "NEVER") return false;
                     if (correctAnswerVisibility === "ALWAYS") return true;
