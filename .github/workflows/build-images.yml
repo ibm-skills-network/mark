@@ -145,8 +145,8 @@ jobs:
         run: |
           echo "🔍 SECRETS DETECTION SCAN"
           echo "========================"
-          
-          pip install git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.62.dss
+
+          pip install git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.64.dss
           
           # Run scan and show results
           echo "🔎 Scanning for potential secrets..."

@@ -61,6 +61,8 @@ async function createInitialVersions() {
               type: assignment.type,
               graded: assignment.graded,
               numAttempts: assignment.numAttempts,
+              attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+              retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
               allotedTimeMinutes: assignment.allotedTimeMinutes,
               attemptsPerTimeRange: assignment.attemptsPerTimeRange,
               attemptsTimeRangeHours: assignment.attemptsTimeRangeHours,

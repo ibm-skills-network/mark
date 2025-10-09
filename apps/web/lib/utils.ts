@@ -187,6 +187,13 @@ export const getSubmitButtonStatus = (
 
   return { disabled: false, reason: null };
 };
+
 export const generateTempQuestionId = (): number => {
   return Math.floor(Math.random() * 2e9);
+};
+
+export const omit = (obj: object, keys: string[]): object => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([k]) => !keys.includes(k)),
+  );
 };

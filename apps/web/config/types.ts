@@ -206,6 +206,8 @@ export type AuthorAssignmentState = {
   gradingCriteriaOverview: string;
   graded: boolean;
   numAttempts: number;
+  attemptsBeforeCoolDown: number;
+  retakeAttemptCoolDownMinutes: number;
   allotedTimeMinutes: number;
   timeEstimateMinutes: number;
   passingGrade: number;
@@ -235,6 +237,7 @@ export type UpdateQuestionStateParams = {
   randomizedChoices?: boolean;
   maxWordCount?: number;
   questionTitle?: string;
+  showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
   //if the points will be shown in the rubric
   showPoints?: boolean;
@@ -358,6 +361,7 @@ export type Scoring = {
   type: "CRITERIA_BASED" | "LOSS_PER_MISTAKE" | "AI_GRADED";
   rubrics?: Rubric[];
   criteria?: Criteria[];
+  showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
   showPoints?: boolean;
 };
@@ -540,6 +544,8 @@ export type GradingData = {
   allotedTimeMinutes?: number | undefined;
   passingGrade: number;
   numAttempts?: number;
+  attemptsBeforeCoolDown?: number;
+  retakeAttemptCoolDownMinutes?: number;
   displayOrder?: "DEFINED" | "RANDOM";
   questionDisplay?: QuestionDisplayType;
   questionVariationNumber: number;
@@ -570,6 +576,8 @@ export type ReplaceAssignmentRequest = {
   gradingCriteriaOverview?: string;
   graded: boolean;
   numAttempts?: number;
+  attemptsBeforeCoolDown?: number;
+  retakeAttemptCoolDownMinutes?: number;
   allotedTimeMinutes?: number;
   timeEstimateMinutes?: number;
   passingGrade: number;
@@ -634,6 +642,8 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
 export interface AssignmentDetails {
   allotedTimeMinutes?: number;
   numAttempts?: number;
+  attemptsBeforeCoolDown?: number;
+  retakeAttemptCoolDownMinutes?: number;
   passingGrade?: number;
   name: string;
   questionDisplay?: QuestionDisplayType;

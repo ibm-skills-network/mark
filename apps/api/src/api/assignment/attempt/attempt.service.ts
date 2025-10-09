@@ -47,6 +47,7 @@ import {
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
   TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+  IN_COOLDOWN_PERIOD,
 } from "./api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "./dto/assignment-attempt/base.assignment.attempt.response.dto";
 import {
@@ -1474,6 +1475,7 @@ export class AttemptServiceV1 {
     assignment: LearnerGetAssignmentResponseDto,
     userSession: UserSession,
   ): Promise<void> {
+    const now = new Date();
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
     const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -1483,36 +1485,28 @@ export class AttemptServiceV1 {
         OR: [
           {
             submitted: false,
-            expiresAt: {
-              gte: new Date(),
-            },
+            expiresAt: { gte: now },
           },
           {
             submitted: false,
             expiresAt: undefined,
           },
           {
-            createdAt: {
-              gte: timeRangeStartDate,
-              lte: new Date(),
-            },
+            createdAt: { gte: timeRangeStartDate, lte: now },
           },
         ],
       },
+      orderBy: { createdAt: "desc" },
     });
     const ongoingAttempts = attempts.filter(
-      (sub) =>
-        !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null),
-    );
-
-    const attemptsInTimeRange = attempts.filter(
-      (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
+      (sub) => !sub.submitted && (!sub.expiresAt || sub.expiresAt >= now),
     );
     if (ongoingAttempts.length > 0) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
+    const attemptsInTimeRange = attempts.filter(
+      (sub) => sub.createdAt >= timeRangeStartDate && sub.createdAt <= now,
+    );
 
     if (
       assignment.attemptsPerTimeRange &&
@@ -1523,15 +1517,33 @@ export class AttemptServiceV1 {
       );
     }
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
-      const attemptCount = await this.countUserAttempts(
+      const totalAttempts = await this.countUserAttempts(
         userSession.userId,
         assignment.id,
       );
 
-      if (attemptCount >= assignment.numAttempts) {
+      if (totalAttempts >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
           MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
         );
+      }
+
+      const attemptsBeforeCoolDown = assignment.attemptsBeforeCoolDown ?? 1;
+      const cooldownMinutes = assignment.retakeAttemptCoolDownMinutes ?? 0;
+
+      if (
+        attemptsBeforeCoolDown > 0 &&
+        totalAttempts >= attemptsBeforeCoolDown
+      ) {
+        const latestAttempt = attemptsInTimeRange[0];
+        if (latestAttempt?.expiresAt) {
+          const nextEligibleTime =
+            new Date(latestAttempt.expiresAt).getTime() +
+            cooldownMinutes * 60_000;
+          if (now.getTime() < nextEligibleTime) {
+            throw new UnprocessableEntityException(IN_COOLDOWN_PERIOD);
+          }
+        }
       }
     }
   }

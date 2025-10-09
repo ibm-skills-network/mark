@@ -1425,6 +1425,36 @@ export function VersionTreeView({ assignmentId }: Props) {
                               </div>
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-600">
+                                  Attempts Before Cooldown Period:
+                                </span>
+                                <span className="font-medium text-gray-900">
+                                  {(selectedVersionDetails || selectedVersion)
+                                    .attemptsBeforeCoolDown === 0
+                                    ? "Never wait"
+                                    : ((
+                                        selectedVersionDetails ||
+                                        selectedVersion
+                                      ).attemptsBeforeCoolDown ?? "")}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
+                                  Time Learners Wait Between Attempts (Minutes):
+                                </span>
+                                <span className="font-medium text-gray-900">
+                                  {(selectedVersionDetails || selectedVersion)
+                                    .attemptsBeforeCoolDown === 0 ||
+                                  (selectedVersionDetails || selectedVersion)
+                                    .retakeAttemptCoolDownMinutes === 0
+                                    ? "Never wait"
+                                    : ((
+                                        selectedVersionDetails ||
+                                        selectedVersion
+                                      ).retakeAttemptCoolDownMinutes ?? "")}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
                                   Passing Grade:
                                 </span>
                                 <span className="font-medium text-gray-900">
