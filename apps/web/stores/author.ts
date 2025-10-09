@@ -1930,6 +1930,10 @@ export const useAuthorStore = createWithEqualityFn<
           useAssignmentFeedbackConfig
             .getState()
             .setAssignmentFeedbackConfigStore({
+              correctAnswerVisibility:
+                versionData.correctAnswerVisibility !== undefined
+                  ? versionData.correctAnswerVisibility
+                  : feedbackConfigState.correctAnswerVisibility,
               showAssignmentScore:
                 versionData.showAssignmentScore !== undefined
                   ? versionData.showAssignmentScore
@@ -2009,6 +2013,9 @@ export const useAuthorStore = createWithEqualityFn<
               gradingCriteriaOverview:
                 decodedVersionData.gradingCriteriaOverview,
               questions: processedQuestions,
+              questionOrder:
+                decodedVersionData.questionOrder ||
+                processedQuestions.map((q) => q.id),
               checkedOutVersion: versionToCheckout,
               hasUnsavedChanges: false,
             });

@@ -78,7 +78,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
   }, [setUpdatedAt]);
 
   useEffect(() => {
-    if (questions && focusedQuestionId) {
+    if (questions && focusedQuestionId && questions instanceof Array) {
       const focusedQuestion = questions.find((q) => q.id === focusedQuestionId);
       if (focusedQuestion) {
         setCurrentQuestion(focusedQuestion);

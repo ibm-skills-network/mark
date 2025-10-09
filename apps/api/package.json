@@ -24,7 +24,8 @@
     "test:staged": "jest --bail --findRelatedTests --passWithNoTests --collectCoverage=false",
     "test:watch": "jest --watch",
     "create-initial-versions": "dotenv -e ./dev.env -- ts-node src/scripts/create-initial-versions.ts",
-    "translation-audit": "node dist/src/scripts/translation-audit.js"
+    "translation-audit": "node dist/src/scripts/translation-audit.js",
+    "verify-migration": "dotenv -e ./dev.env -- ts-node scripts/verify-migration.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

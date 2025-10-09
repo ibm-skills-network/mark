@@ -125,6 +125,49 @@ export async function getCompletedAttempt(
 }
 
 /**
+ * Gets unified success page data for an attempt (works for both authors and learners).
+ * @param assignmentId The id of the assignment.
+ * @param attemptId The id of the attempt.
+ * @param authorData Optional author data from Zustand stores (for authors only).
+ * @param cookies Optional cookies for authentication.
+ * @returns Success page data or undefined if error.
+ */
+export async function getSuccessPageData(
+  assignmentId: number,
+  attemptId: number,
+  authorData?: {
+    questions: any[];
+    grade: number;
+    totalPointsEarned: number;
+    totalPointsPossible: number;
+    responses: any[];
+  },
+  cookies?: string,
+): Promise<any | undefined> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/success-page-data`;
+
+  try {
+    const res = await fetch(endpointURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      body: JSON.stringify(authorData || {}),
+    });
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to get success page data");
+    }
+    const data = (await res.json()) as any;
+    return data;
+  } catch (err) {
+    console.error("Error fetching success page data:", err);
+    return undefined;
+  }
+}
+
+/**
  * Submits an answer for a given assignment, attempt, and question.
  */
 export async function submitQuestion(

@@ -110,7 +110,7 @@ export const useUserBehaviorMonitor = (
         context = `working on "${assignmentName}"`;
       }
 
-      if (focusedQuestion && totalQuestions > 0) {
+      if (focusedQuestion && totalQuestions > 0 && contextData.questions) {
         const questionIndex = contextData.questions?.findIndex(
           (q) => q.id === focusedQuestion || q.questionId === focusedQuestion,
         );

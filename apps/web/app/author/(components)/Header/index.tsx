@@ -166,13 +166,13 @@ function AuthorHeader() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
-    state.showCorrectAnswer,
+    state.correctAnswerVisibility,
   ]);
   const role = useAuthorStore((state) => state.role);
 
@@ -286,7 +286,7 @@ function AuthorHeader() {
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
         showQuestionScore: newAssignment.showQuestionScore,
         showAssignmentScore: newAssignment.showAssignmentScore,
-        showCorrectAnswer: newAssignment.showCorrectAnswer,
+        correctAnswerVisibility: newAssignment.correctAnswerVisibility,
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
@@ -524,7 +524,7 @@ function AuthorHeader() {
       showQuestions,
       showQuestionScore,
       showAssignmentScore,
-      showCorrectAnswer,
+      correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)

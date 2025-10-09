@@ -963,7 +963,7 @@ export const createMockAssignment = (
   questionOrder: [1, 2],
   published: false,
   showAssignmentScore: true,
-  showCorrectAnswer: true,
+  correctAnswerVisibility: "ON_PASS",
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
@@ -1066,7 +1066,7 @@ export const createMockUpdateAssignmentDto = (
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
-  showCorrectAnswer: true,
+  correctAnswerVisibility: "ON_PASS",
   ...overrides,
 });
 
@@ -1124,7 +1124,7 @@ export const createMockUpdateAssignmentQuestionsDto = (
     showQuestionScore: true,
     showSubmissionFeedback: true,
     showQuestions: true,
-    showCorrectAnswer: true,
+    correctAnswerVisibility: "ON_PASS",
     versionNumber: "0.0.1",
     versionDescription: "Updated questions version",
     updatedAt: new Date(),

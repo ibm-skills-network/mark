@@ -234,7 +234,7 @@ export class AssignmentServiceV2 {
         showAssignmentScore: updateDto.showAssignmentScore,
         showQuestionScore: updateDto.showQuestionScore,
         showSubmissionFeedback: updateDto.showSubmissionFeedback,
-        showCorrectAnswer: updateDto.showCorrectAnswer,
+        correctAnswerVisibility: updateDto.correctAnswerVisibility,
         timeEstimateMinutes: updateDto.timeEstimateMinutes,
         showQuestions: updateDto.showQuestions,
         numberOfQuestionsPerAttempt: updateDto.numberOfQuestionsPerAttempt,

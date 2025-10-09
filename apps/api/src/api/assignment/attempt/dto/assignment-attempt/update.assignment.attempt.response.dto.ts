@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { CorrectAnswerVisibility } from "@prisma/client";
 import { IsArray, IsOptional } from "class-validator";
 import type { CreateQuestionResponseAttemptResponseDto } from "../question-response/create.question.response.attempt.response.dto";
 import { BaseAssignmentAttemptResponseDto } from "./base.assignment.attempt.response.dto";
@@ -47,7 +48,7 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
     type: Boolean,
     required: false,
   })
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 
   @ApiProperty({
     description: "The total points earned by the learner.",

@@ -231,8 +231,6 @@ export class AttemptQuestionsMapper {
             ? translations.get(variantKey) || {}
             : {};
 
-        console.log("variantTranslations", variantTranslations);
-
         const questionTranslations = translations.has(questionKey)
           ? translations.get(questionKey) || {}
           : {};

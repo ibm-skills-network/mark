@@ -318,6 +318,7 @@ export class VersionManagementService {
           showQuestionScore: assignment.showQuestionScore,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
+          correctAnswerVisibility: assignment.correctAnswerVisibility,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: createVersionDto.isDraft ?? true,
@@ -573,6 +574,7 @@ export class VersionManagementService {
       showQuestionScore: version.showQuestionScore,
       showSubmissionFeedback: version.showSubmissionFeedback,
       showQuestions: version.showQuestions,
+      correctAnswerVisibility: version.correctAnswerVisibility,
       languageCode: version.languageCode,
       // Use the enhanced questionVersions with variants
       questionVersions: questionVersionsWithVariants,
@@ -661,6 +663,7 @@ export class VersionManagementService {
             showQuestionScore: versionToRestore.showQuestionScore,
             showSubmissionFeedback: versionToRestore.showSubmissionFeedback,
             showQuestions: versionToRestore.showQuestions,
+            correctAnswerVisibility: versionToRestore.correctAnswerVisibility,
             languageCode: versionToRestore.languageCode,
             createdBy: userSession.userId,
             isDraft: true, // Restored versions start as drafts
@@ -1110,6 +1113,7 @@ export class VersionManagementService {
           showQuestionScore: assignment.showQuestionScore,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
+          correctAnswerVisibility: assignment.correctAnswerVisibility,
           languageCode: assignment.languageCode,
         },
         include: { _count: { select: { questionVersions: true } } },
@@ -1420,6 +1424,7 @@ export class VersionManagementService {
           showQuestionScore: assignment.showQuestionScore,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
+          correctAnswerVisibility: assignment.correctAnswerVisibility,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: true,
@@ -1514,6 +1519,7 @@ export class VersionManagementService {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    correctAnswerVisibility: string;
     languageCode: string | null;
   }> {
     // await this.verifyAssignmentAccess(assignmentId, userSession);
@@ -1558,6 +1564,7 @@ export class VersionManagementService {
       showQuestionScore: latestDraft.showQuestionScore,
       showSubmissionFeedback: latestDraft.showSubmissionFeedback,
       showQuestions: latestDraft.showQuestions,
+      correctAnswerVisibility: latestDraft.correctAnswerVisibility,
       languageCode: latestDraft.languageCode,
       questions: latestDraft.questionVersions.map((qv) => ({
         id: qv.questionId,
@@ -1660,6 +1667,7 @@ export class VersionManagementService {
             showQuestionScore: sourceVersion.showQuestionScore,
             showSubmissionFeedback: sourceVersion.showSubmissionFeedback,
             showQuestions: sourceVersion.showQuestions,
+            correctAnswerVisibility: sourceVersion.correctAnswerVisibility,
             languageCode: sourceVersion.languageCode,
             createdBy: userSession.userId,
             isDraft: true,
@@ -2151,6 +2159,9 @@ export class VersionManagementService {
               draftData.assignmentData.showQuestions ??
               assignment.showQuestions ??
               true,
+            correctAnswerVisibility:
+              draftData.assignmentData.correctAnswerVisibility ??
+              assignment.correctAnswerVisibility,
             languageCode:
               draftData.assignmentData.languageCode ?? assignment.languageCode,
           },

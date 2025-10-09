@@ -603,67 +603,91 @@ const QuestionChanges = ({
 
   // Check for choices changes (for multiple choice questions)
   if (changeDetails.some((d) => d.includes("Modified choices"))) {
-    changes.push(
-      <div key="choices" className="mb-4">
-        <h6 className="text-sm font-medium text-gray-600 mb-2">Choices</h6>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <MinusIcon className="w-4 h-4 text-red-500" />
-              <span className="text-xs font-medium text-red-600">Before</span>
-            </div>
-            <div className="space-y-2">
-              {originalQuestion.choices?.map((choice: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="p-2 bg-red-50 border border-red-200 rounded text-sm"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="font-medium">Choice {idx + 1}:</span>
-                    <span>{choice.choice || "(empty)"}</span>
-                    {choice.isCorrect && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                        Correct
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-600">
-                      Points: {choice.points}
-                    </span>
+    // Double-check if there are actually meaningful differences
+    const originalChoices = originalQuestion.choices || [];
+    const currentChoices = currentQuestion.choices || [];
+
+    // Only show if there are actual differences in non-empty arrays or meaningful changes
+    const hasActualChanges =
+      originalChoices.length > 0 || currentChoices.length > 0;
+
+    if (hasActualChanges) {
+      changes.push(
+        <div key="choices" className="mb-4">
+          <h6 className="text-sm font-medium text-gray-600 mb-2">Choices</h6>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <MinusIcon className="w-4 h-4 text-red-500" />
+                <span className="text-xs font-medium text-red-600">Before</span>
+              </div>
+              <div className="space-y-2">
+                {originalChoices.length > 0 ? (
+                  originalChoices.map((choice: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="p-2 bg-red-50 border border-red-200 rounded text-sm"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="font-medium">Choice {idx + 1}:</span>
+                        <span>{choice.choice || "(empty)"}</span>
+                        {choice.isCorrect && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                            Correct
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-600">
+                          Points: {choice.points}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded text-sm text-gray-600">
+                    No choices defined
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <PlusIcon className="w-4 h-4 text-green-500" />
+                <span className="text-xs font-medium text-green-600">
+                  After
+                </span>
+              </div>
+              <div className="space-y-2">
+                {currentChoices.length > 0 ? (
+                  currentChoices.map((choice: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="p-2 bg-green-50 border border-green-200 rounded text-sm"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="font-medium">Choice {idx + 1}:</span>
+                        <span>{choice.choice || "(empty)"}</span>
+                        {choice.isCorrect && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                            Correct
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-600">
+                          Points: {choice.points}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-2 bg-green-50 border border-green-200 rounded text-sm text-gray-600">
+                    No choices defined
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <PlusIcon className="w-4 h-4 text-green-500" />
-              <span className="text-xs font-medium text-green-600">After</span>
-            </div>
-            <div className="space-y-2">
-              {currentQuestion.choices?.map((choice: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="p-2 bg-green-50 border border-green-200 rounded text-sm"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="font-medium">Choice {idx + 1}:</span>
-                    <span>{choice.choice || "(empty)"}</span>
-                    {choice.isCorrect && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                        Correct
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-600">
-                      Points: {choice.points}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>,
-    );
+        </div>,
+      );
+    }
   }
 
   // Check for rubric changes
@@ -793,14 +817,14 @@ function Component() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
-    state.showCorrectAnswer,
+    state.correctAnswerVisibility,
   ]);
 
   const router = useRouter();
@@ -841,7 +865,7 @@ function Component() {
       showAssignmentScore: filteredChanges.some((c) =>
         c.includes("Changed assignment score visibility"),
       ),
-      showCorrectAnswer: filteredChanges.some((c) =>
+      correctAnswerVisibility: filteredChanges.some((c) =>
         c.includes("Changed correct answer visibility"),
       ),
       questionOrder: filteredChanges.some((c) =>

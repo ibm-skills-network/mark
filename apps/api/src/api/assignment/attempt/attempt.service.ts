@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import {
   Assignment,
+  CorrectAnswerVisibility,
   Question,
   QuestionType,
   QuestionVariant,
@@ -19,6 +20,10 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
+import {
+  SuccessPageDataDto,
+  SuccessPageQuestionDto,
+} from "src/api/attempt/dto/success-page-data.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
@@ -43,11 +48,11 @@ import { QuestionService } from "../question/question.service";
 import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
+  IN_COOLDOWN_PERIOD,
   IN_PROGRESS_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
   TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-  IN_COOLDOWN_PERIOD,
 } from "./api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "./dto/assignment-attempt/base.assignment.attempt.response.dto";
 import {
@@ -516,7 +521,7 @@ export class AttemptServiceV1 {
           grade: 0,
           showSubmissionFeedback: false,
           showQuestions: false,
-          showCorrectAnswer: false,
+          correctAnswerVisibility: "NEVER",
           feedbacksForQuestions: [],
           message: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
         };
@@ -582,7 +587,11 @@ export class AttemptServiceV1 {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
-        showCorrectAnswer: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
         questions: {
           where: { isDeleted: false },
         },
@@ -640,7 +649,8 @@ export class AttemptServiceV1 {
         grade: assignment.showAssignmentScore ? grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
-        showCorrectAnswer: assignment.showCorrectAnswer,
+        correctAnswerVisibility:
+          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
           assignment as unknown as LearnerGetAssignmentResponseDto,
@@ -661,7 +671,8 @@ export class AttemptServiceV1 {
         showQuestions: assignment.showQuestions,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
-        showCorrectAnswer: assignment.showCorrectAnswer,
+        correctAnswerVisibility:
+          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
           assignment as unknown as LearnerGetAssignmentResponseDto,
@@ -747,7 +758,11 @@ export class AttemptServiceV1 {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
-        showCorrectAnswer: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
       },
     });
 
@@ -880,7 +895,8 @@ export class AttemptServiceV1 {
 
     // Apply visibility settings for correct answers and if learner didnt pass
     if (
-      assignment.showCorrectAnswer === false &&
+      (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+        "NEVER" &&
       assignmentAttempt.grade < assignment.passingGrade
     ) {
       for (const question of finalQuestions) {
@@ -907,7 +923,8 @@ export class AttemptServiceV1 {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
-      showCorrectAnswer: assignment.showCorrectAnswer,
+      correctAnswerVisibility:
+        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
     };
   }
@@ -972,7 +989,11 @@ export class AttemptServiceV1 {
         showAssignmentScore: true,
         showSubmissionFeedback: true,
         showQuestionScore: true,
-        showCorrectAnswer: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
       },
     })) as LearnerGetAssignmentResponseDto;
 
@@ -1154,9 +1175,9 @@ export class AttemptServiceV1 {
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;
-          // Only remove correct answer data if showCorrectAnswer is false
           if (
-            assignment.showCorrectAnswer === false &&
+            (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+              "ON_PASS" &&
             assignmentAttempt.grade < assignment.passingGrade
           ) {
             delete choice.isCorrect;
@@ -1171,9 +1192,9 @@ export class AttemptServiceV1 {
           if (translationObject?.translatedChoices) {
             for (const choice of translationObject.translatedChoices) {
               delete choice.points;
-              // Only remove correct answer data if showCorrectAnswer is false
               if (
-                assignment.showCorrectAnswer === false &&
+                (assignment.currentVersion?.correctAnswerVisibility ||
+                  "NEVER") === "ON_PASS" &&
                 assignmentAttempt.grade < assignment.passingGrade
               ) {
                 delete choice.isCorrect;
@@ -1193,9 +1214,9 @@ export class AttemptServiceV1 {
         ) as Choice[];
         for (const choice of randomizedArray) {
           delete choice.points;
-          // Only remove correct answer data if showCorrectAnswer is false
           if (
-            assignment.showCorrectAnswer === false &&
+            (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+              "ON_PASS" &&
             assignmentAttempt.grade < assignment.passingGrade
           ) {
             delete choice.isCorrect;
@@ -1205,9 +1226,9 @@ export class AttemptServiceV1 {
         question.randomizedChoices = JSON.stringify(randomizedArray);
       }
 
-      // Only remove the answer field if showCorrectAnswer is false
       if (
-        assignment.showCorrectAnswer === false &&
+        (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+          "ON_PASS" &&
         assignmentAttempt.grade < assignment.passingGrade
       ) {
         delete question.answer;
@@ -1228,7 +1249,8 @@ export class AttemptServiceV1 {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
-      showCorrectAnswer: assignment.showCorrectAnswer,
+      correctAnswerVisibility:
+        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
     };
   }
 
