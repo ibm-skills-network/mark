@@ -163,6 +163,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   useEffect(() => {
     if (
       !latestAttempt ||
+      attemptsBeforeCoolDown <= 0 ||
       (attemptsLeft > 0 && attemptsCount < attemptsBeforeCoolDown) ||
       attemptsLeft === 0
     ) {
