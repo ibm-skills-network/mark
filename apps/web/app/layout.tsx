@@ -19,12 +19,8 @@ export const metadata: Metadata = {
   ],
   authors: [
     {
-      name: "Skills Network",
-      url: "https://skills.network",
-    },
-    {
-      name: "Rami Maalouf",
-      url: "https://rami-maalouf.tech",
+      name: "INTELA Education Portal",
+      url: "https://itl-edu.devkln.xyz",
     },
   ],
 };

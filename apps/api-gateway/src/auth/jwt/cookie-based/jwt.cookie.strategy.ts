@@ -28,7 +28,14 @@ export class JwtCookieStrategy extends PassportStrategy(
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: IRequestWithCookies) => {
-          return request?.cookies?.authentication;
+          const token = request?.cookies?.authentication;
+          console.log("🍪 JWT Cookie Strategy - extracting token from cookies:", {
+            cookiesExist: !!request?.cookies,
+            authCookieExists: !!token,
+            tokenLength: token ? token.length : 0,
+            tokenPrefix: token ? token.substring(0, 20) + "..." : "none"
+          });
+          return token;
         },
       ]),
       ignoreExpiration: false,
@@ -38,7 +45,9 @@ export class JwtCookieStrategy extends PassportStrategy(
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validate(payload: IJwtPayload): UserSession {
-    return {
+    console.log("🔍 JWT Cookie Strategy - validating payload:", JSON.stringify(payload, null, 2));
+    
+    const userSession = {
       userId: payload.userID,
       role: payload.role,
       groupId: payload.groupID,
@@ -47,5 +56,8 @@ export class JwtCookieStrategy extends PassportStrategy(
       returnUrl: payload.returnUrl,
       launch_presentation_locale: payload.launch_presentation_locale,
     };
+    
+    console.log("✅ JWT Cookie Strategy - returning userSession:", JSON.stringify(userSession, null, 2));
+    return userSession;
   }
 }

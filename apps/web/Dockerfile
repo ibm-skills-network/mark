@@ -39,6 +39,7 @@ COPY --chown=node:node --from=sourcer $DIR/apps/web/package.json ./package.json
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 COPY --chown=node:node --from=sourcer $DIR/apps/web/public ./public
 COPY --chown=node:node --from=sourcer $DIR/apps/web/entrypoint.sh ./entrypoint.sh
+RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
 ENV NODE_OPTIONS="--require ./node_modules/@instana/collector/src/immediate"
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

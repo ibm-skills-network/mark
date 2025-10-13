@@ -8,7 +8,7 @@ export default async function Home() {
   const headerList = headers();
   const cookie = headerList.get("cookie");
   if (!cookie && process.env.NODE_ENV === "production") {
-    redirect("https://skills.network");
+    redirect("https://itl-edu.devkln.xyz");
   }
   const user = await getUser(cookie);
 
