@@ -219,29 +219,41 @@ export function batchDecode<T = any>(
  * Utility functions for common use cases
  */
 export const DataTransformer = {
-  encodeForDatabase: <T>(data: T) =>
-    smartEncode(data, {
+  encodeForDatabase: <T>(data: T) => {
+    const result = smartEncode(data, {
       fields: [
         "introduction",
         "instructions",
         "gradingCriteriaOverview",
         "question",
         "content",
+        "rubricQuestion",
+        "description",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
       ],
       deep: true,
-    }),
+    });
+    return result;
+  },
 
-  decodeFromDatabase: <T>(data: T) =>
-    smartDecode(data, {
+  decodeFromDatabase: <T>(data: T) => {
+    const result = smartDecode(data, {
       fields: [
         "introduction",
         "instructions",
         "gradingCriteriaOverview",
         "question",
         "content",
+        "rubricQuestion",
+        "description",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
       ],
       deep: true,
-    }),
+    });
+    return result;
+  },
 
   encodeForAPI: <T>(data: T) =>
     smartEncode(data, {

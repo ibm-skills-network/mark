@@ -67,6 +67,10 @@ export class DataTransformInterceptor implements NestInterceptor {
           "gradingCriteriaOverview",
           "question",
           "content",
+          "rubricQuestion",
+          "description",
+          "questions.scoring.rubrics.rubricQuestion",
+          "questions.scoring.rubrics.criteria.description",
         ],
         deep: true,
       };
@@ -113,7 +117,8 @@ export class DataTransformInterceptor implements NestInterceptor {
   private transformResponse(data: unknown, options: TransformOptions): unknown {
     if (!options.encodeResponse || !data) return data;
 
-    return this.transformData(data, options, "encode");
+    const result = this.transformData(data, options, "encode");
+    return result;
   }
 
   /**

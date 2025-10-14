@@ -54,9 +54,6 @@ export function smartEncode(
 
   if (process.env.NODE_ENV === "development") {
     const processingTime = performance.now() - startTime;
-    console.log(
-      `🔧 Encoding performance: ${processingTime.toFixed(2)}ms, compression: ${(metadata.compressionRatio * 100).toFixed(1)}%`,
-    );
   }
 
   return { data: transformedData, metadata };
@@ -84,7 +81,6 @@ export function smartDecode(data: any, config: TransformConfig = {}): any {
 
   if (process.env.NODE_ENV === "development") {
     const processingTime = performance.now() - startTime;
-    console.log(`🔍 Decoding performance: ${processingTime.toFixed(2)}ms`);
   }
 
   return decodedData;
@@ -190,7 +186,13 @@ function decodeValue(value: any): any {
       return decompressAndDecode(value);
     }
 
-    const decoded = atob(value);
+    const binaryString = atob(value);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const decoder = new TextDecoder();
+    const decoded = decoder.decode(bytes);
 
     try {
       return JSON.parse(decoded);
@@ -207,7 +209,10 @@ function decodeValue(value: any): any {
  * Compress large strings before encoding
  */
 function compressAndEncode(value: string): string {
-  return "comp:" + btoa(value);
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(value);
+  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
+  return "comp:" + base64;
 }
 
 /**
@@ -215,7 +220,13 @@ function compressAndEncode(value: string): string {
  */
 function decompressAndDecode(value: string): string {
   const withoutPrefix = value.substring(5);
-  return atob(withoutPrefix);
+  const binaryString = atob(withoutPrefix);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  const decoder = new TextDecoder();
+  return decoder.decode(bytes);
 }
 
 /**
@@ -231,7 +242,13 @@ function generateCacheKey(
     typeof data === "string"
       ? data.substring(0, 50)
       : JSON.stringify(data).substring(0, 50);
-  return `${operation || "transform"}_${btoa(configHash + dataHash)}`;
+
+  // Use TextEncoder to handle Unicode characters properly before base64 encoding
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(configHash + dataHash);
+  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
+
+  return `${operation || "transform"}_${base64}`;
 }
 
 /**
@@ -279,29 +296,41 @@ export function getCacheStats() {
  * High-level API for common transformation use cases
  */
 export const DataTransformer = {
-  encodeForAPI: (data: any) =>
-    smartEncode(data, {
+  encodeForAPI: (data: any) => {
+    const result = smartEncode(data, {
       fields: [
         "introduction",
         "instructions",
         "gradingCriteriaOverview",
         "question",
         "content",
+        "rubricQuestion",
+        "description",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
       ],
       deep: true,
-    }),
+    });
+    return result;
+  },
 
-  decodeFromAPI: (data: any) =>
-    smartDecode(data, {
+  decodeFromAPI: (data: any) => {
+    const result = smartDecode(data, {
       fields: [
         "introduction",
         "instructions",
         "gradingCriteriaOverview",
         "question",
         "content",
+        "rubricQuestion",
+        "description",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
       ],
       deep: true,
-    }),
+    });
+    return result;
+  },
 
   encodeFormData: (data: any) =>
     smartEncode(data, {

@@ -35,6 +35,10 @@ export class DataTransformMiddleware implements NestMiddleware {
       "gradingCriteriaOverview",
       "question",
       "content",
+      "rubricQuestion",
+      "description",
+      "questions.scoring.rubrics.rubricQuestion",
+      "questions.scoring.rubrics.criteria.description",
     ],
     exclude: ["id", "createdAt", "updatedAt"],
     routes: {
