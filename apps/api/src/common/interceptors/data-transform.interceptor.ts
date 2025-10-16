@@ -71,6 +71,8 @@ export class DataTransformInterceptor implements NestInterceptor {
           "description",
           "questions.scoring.rubrics.rubricQuestion",
           "questions.scoring.rubrics.criteria.description",
+          "learnerTextResponse",
+          "learnerChoices",
         ],
         deep: true,
       };

@@ -25,7 +25,6 @@ export class ChatController {
   @Post()
   @UseGuards(ChatAccessControlGuard)
   async createChat(@Body() body: { userId: string; assignmentId?: number }) {
-    console.log("Creating chat for user:", body);
     return this.chatService.createChat(body.userId, body.assignmentId);
   }
 

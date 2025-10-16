@@ -37,9 +37,6 @@ export async function waitForApiReady(maxRetries = 30): Promise<boolean> {
     }
 
     retries++;
-    console.log(
-      `⏳ API Gateway not ready, retry ${retries}/${maxRetries} in ${delay}ms`,
-    );
 
     await new Promise((resolve) => setTimeout(resolve, delay));
 

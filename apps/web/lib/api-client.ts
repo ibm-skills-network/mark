@@ -110,7 +110,7 @@ export class APIClient {
     let requestBody: string | undefined;
     if (data) {
       const processedData = transformRequest
-        ? DataTransformer.encodeForAPI(data).data
+        ? DataTransformer.encodeForAPI(data, finalTransformConfig).data
         : data;
       requestBody = JSON.stringify(processedData);
     }
@@ -145,7 +145,7 @@ export class APIClient {
       const responseData = await response.json();
 
       return transformResponse
-        ? DataTransformer.decodeFromAPI(responseData)
+        ? DataTransformer.decodeFromAPI(responseData, finalTransformConfig)
         : responseData;
     } catch (error) {
       clearTimeout(timeoutId);
@@ -230,6 +230,12 @@ export const apiClient = new APIClient({
       "gradingCriteriaOverview",
       "question",
       "content",
+      "rubricQuestion",
+      "description",
+      "questions.scoring.rubrics.rubricQuestion",
+      "questions.scoring.rubrics.criteria.description",
+      "learnerTextResponse",
+      "learnerChoices",
     ],
     deep: true,
   },

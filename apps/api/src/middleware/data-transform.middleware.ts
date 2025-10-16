@@ -39,6 +39,8 @@ export class DataTransformMiddleware implements NestMiddleware {
       "description",
       "questions.scoring.rubrics.rubricQuestion",
       "questions.scoring.rubrics.criteria.description",
+      "learnerTextResponse",
+      "learnerChoices",
     ],
     exclude: ["id", "createdAt", "updatedAt"],
     routes: {

@@ -231,6 +231,8 @@ export const DataTransformer = {
         "description",
         "questions.scoring.rubrics.rubricQuestion",
         "questions.scoring.rubrics.criteria.description",
+        "learnerTextResponse",
+        "learnerChoices",
       ],
       deep: true,
     });
@@ -249,6 +251,8 @@ export const DataTransformer = {
         "description",
         "questions.scoring.rubrics.rubricQuestion",
         "questions.scoring.rubrics.criteria.description",
+        "learnerTextResponse",
+        "learnerChoices",
       ],
       deep: true,
     });

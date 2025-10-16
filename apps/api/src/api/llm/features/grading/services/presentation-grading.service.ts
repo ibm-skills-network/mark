@@ -161,7 +161,6 @@ export class PresentationGradingService implements IPresentationGradingService {
     try {
       // Parse the LLM output to get points & feedback
       const parsedResponse = await parser.parse(response);
-      console.log("Parsed Response:", parsedResponse);
 
       // Combine the AEEG components into comprehensive feedback
       const aeegFeedback = `

@@ -1730,9 +1730,7 @@ export const useAuthorStore = createWithEqualityFn<
             return;
           }
 
-          // Prevent concurrent loadVersions calls
           if (state.isLoadingVersions) {
-            console.log("🔄 LoadVersions already in progress, skipping...");
             return;
           }
 

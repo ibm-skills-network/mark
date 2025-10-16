@@ -575,7 +575,8 @@ describe("DataTransformer Web App", () => {
       const circularObj: any = { name: "test" };
       circularObj.self = circularObj;
 
-      expect(() => smartEncode(circularObj)).toThrow();
+      const result = smartEncode(circularObj);
+      expect(result.data.self).toBe("[Circular]");
     });
 
     it("should handle very large strings", () => {

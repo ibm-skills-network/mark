@@ -8,9 +8,11 @@ export interface TransformConfig {
 export interface TransformMetadata {
   originalSize: number;
   encodedSize: number;
+  transformedSize: number;
   compressionRatio: number;
   timestamp: number;
   fields: string[];
+  transformedFields?: string[];
 }
 
 const transformCache = new Map<
@@ -26,8 +28,7 @@ export function smartEncode(
   data: any,
   config: TransformConfig = {},
 ): { data: any; metadata: TransformMetadata } {
-  const startTime = performance.now();
-  const originalSize = JSON.stringify(data).length;
+  const originalSize = safeStringify(data).length;
 
   const cacheKey = generateCacheKey(data, config);
   const cached = transformCache.get(cacheKey);
@@ -36,14 +37,17 @@ export function smartEncode(
   }
 
   const transformedData = transformData(data, config, "encode");
-  const encodedSize = JSON.stringify(transformedData).length;
+  const encodedSize = safeStringify(transformedData).length;
 
+  const transformedFields = extractTransformedFields(data, config);
   const metadata: TransformMetadata = {
     originalSize,
     encodedSize,
+    transformedSize: encodedSize,
     compressionRatio: originalSize > 0 ? encodedSize / originalSize : 1,
     timestamp: Date.now(),
-    fields: extractTransformedFields(data, config),
+    fields: transformedFields,
+    transformedFields: transformedFields,
   };
 
   transformCache.set(cacheKey, {
@@ -52,10 +56,6 @@ export function smartEncode(
     expiry: Date.now() + CACHE_TTL,
   });
 
-  if (process.env.NODE_ENV === "development") {
-    const processingTime = performance.now() - startTime;
-  }
-
   return { data: transformedData, metadata };
 }
 
@@ -63,8 +63,6 @@ export function smartEncode(
  * Smart decoding that reverses the encoding process
  */
 export function smartDecode(data: any, config: TransformConfig = {}): any {
-  const startTime = performance.now();
-
   const cacheKey = generateCacheKey(data, config, "decode");
   const cached = transformCache.get(cacheKey);
   if (cached && cached.expiry > Date.now()) {
@@ -79,10 +77,6 @@ export function smartDecode(data: any, config: TransformConfig = {}): any {
     expiry: Date.now() + CACHE_TTL,
   });
 
-  if (process.env.NODE_ENV === "development") {
-    const processingTime = performance.now() - startTime;
-  }
-
   return decodedData;
 }
 
@@ -93,13 +87,20 @@ function transformData(
   data: any,
   config: TransformConfig,
   operation: "encode" | "decode",
+  visited: WeakSet<object> = new WeakSet(),
 ): any {
   if (!data || typeof data !== "object") {
     return data;
   }
 
+  // Check for circular references
+  if (visited.has(data)) {
+    return "[Circular]";
+  }
+  visited.add(data);
+
   if (Array.isArray(data)) {
-    return data.map((item) => transformData(item, config, operation));
+    return data.map((item) => transformData(item, config, operation, visited));
   }
 
   const result: any = {};
@@ -115,7 +116,7 @@ function transformData(
       result[key] =
         operation === "encode" ? encodeValue(value) : decodeValue(value);
     } else if (deep && value && typeof value === "object") {
-      result[key] = transformData(value, config, operation);
+      result[key] = transformData(value, config, operation, visited);
     } else {
       result[key] = value;
     }
@@ -158,6 +159,10 @@ function isAlreadyEncoded(value: string): boolean {
  * Encode a single value with optional compression for large strings
  */
 function encodeValue(value: any): string {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
   if (typeof value !== "string") {
     value = JSON.stringify(value);
   }
@@ -230,6 +235,22 @@ function decompressAndDecode(value: string): string {
 }
 
 /**
+ * Safely stringify data, handling circular references
+ */
+function safeStringify(data: any): string {
+  const seen = new WeakSet();
+  return JSON.stringify(data, (_key, value) => {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+      seen.add(value);
+    }
+    return value;
+  });
+}
+
+/**
  * Generate unique cache key for transformation operations
  */
 function generateCacheKey(
@@ -237,11 +258,11 @@ function generateCacheKey(
   config: TransformConfig,
   operation?: string,
 ): string {
-  const configHash = JSON.stringify(config);
+  const configHash = safeStringify(config);
   const dataHash =
     typeof data === "string"
       ? data.substring(0, 50)
-      : JSON.stringify(data).substring(0, 50);
+      : safeStringify(data).substring(0, 50);
 
   // Use TextEncoder to handle Unicode characters properly before base64 encoding
   const encoder = new TextEncoder();
@@ -296,8 +317,8 @@ export function getCacheStats() {
  * High-level API for common transformation use cases
  */
 export const DataTransformer = {
-  encodeForAPI: (data: any) => {
-    const result = smartEncode(data, {
+  encodeForAPI: (data: any, config?: TransformConfig) => {
+    const defaultConfig = {
       fields: [
         "introduction",
         "instructions",
@@ -308,14 +329,17 @@ export const DataTransformer = {
         "description",
         "questions.scoring.rubrics.rubricQuestion",
         "questions.scoring.rubrics.criteria.description",
+        "learnerTextResponse",
+        "learnerChoices",
       ],
       deep: true,
-    });
+    };
+    const result = smartEncode(data, config || defaultConfig);
     return result;
   },
 
-  decodeFromAPI: (data: any) => {
-    const result = smartDecode(data, {
+  decodeFromAPI: (data: any, config?: TransformConfig) => {
+    const defaultConfig = {
       fields: [
         "introduction",
         "instructions",
@@ -328,7 +352,8 @@ export const DataTransformer = {
         "questions.scoring.rubrics.criteria.description",
       ],
       deep: true,
-    });
+    };
+    const result = smartDecode(data, config || defaultConfig);
     return result;
   },
 
