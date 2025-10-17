@@ -51,6 +51,14 @@ export class AssignmentAttemptResponseDto {
     required: false,
   })
   expiresAt: Date | null;
+
+  @ApiProperty({
+    description: "The DateTime at which the attempt was created",
+    type: Date,
+    example: "2023-12-31T10:00:00Z",
+    required: true,
+  })
+  createdAt: Date;
 }
 
 export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDto {

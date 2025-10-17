@@ -314,7 +314,7 @@ const SaveAndPublishButton: FC<Props> = ({
         fromVersion: {
           ...currentVersion,
           createdAt: currentVersion.createdAt,
-          versionNumber: currentVersion.versionNumber.toString(),
+          versionNumber: currentVersion.versionNumber?.toString(),
         },
         toVersion: {
           ...currentVersion,
@@ -342,7 +342,7 @@ const SaveAndPublishButton: FC<Props> = ({
           ? {
               ...currentVersion,
               createdAt: currentVersion.createdAt,
-              versionNumber: currentVersion.versionNumber.toString(),
+              versionNumber: currentVersion.versionNumber?.toString(),
             }
           : {
               id: 0,

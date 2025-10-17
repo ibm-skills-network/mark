@@ -163,18 +163,24 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   useEffect(() => {
     if (
       !latestAttempt ||
+      !latestAttempt.createdAt ||
       attemptsBeforeCoolDown <= 0 ||
-      (attemptsLeft > 0 && attemptsCount < attemptsBeforeCoolDown) ||
-      attemptsLeft === 0
+      attemptsCount < attemptsBeforeCoolDown ||
+      attemptsLeft === 0 ||
+      retakeAttemptCoolDownMinutes <= 0
     ) {
       setCooldownMessage(null);
       setIsCooldown(false);
       return;
     }
 
-    const finishedAt = new Date(latestAttempt?.expiresAt).getTime();
+    const finishedAt = new Date(
+      latestAttempt?.expiresAt ? latestAttempt.expiresAt : null,
+    ).getTime();
     const cooldownMs = retakeAttemptCoolDownMinutes * 60_000;
-    const nextEligibleAt = finishedAt + cooldownMs;
+    const nextEligibleAt = finishedAt
+      ? finishedAt + cooldownMs
+      : new Date(latestAttempt.createdAt).getTime() + cooldownMs;
 
     function updateCountdown() {
       const remainingMs = nextEligibleAt - Date.now();
@@ -200,7 +206,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       if (minutes) parts.push(`${minutes}m`);
       if (seconds) parts.push(`${seconds}s`);
 
-      setCooldownMessage(`Please wait ${parts.join(" ")} before retrying`);
+      const timeString = parts.length > 0 ? parts.join(" ") : "a moment";
+      setCooldownMessage(`Please wait ${timeString} before retrying`);
     }
 
     updateCountdown();
