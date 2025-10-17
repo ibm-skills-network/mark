@@ -72,7 +72,7 @@
     "isomorphic-dompurify": "^2.16.0",
     "jsonwebtoken": "^9.0.1",
     "langchain": "^0.3.34",
-    "mammoth": "^1.9.1",
+    "mammoth": "^1.11.0",
     "minisearch": "^7.1.2",
     "multer": "^2.0.1",
     "natural": "^8.0.1",

@@ -75,7 +75,7 @@
     "framer-motion": "^11.8.0",
     "jsondiffpatch": "^0.7.2",
     "lottie-react": "^2.4.0",
-    "mammoth": "^1.8.0",
+    "mammoth": "^1.11.0",
     "marked": "^4.0.10",
     "natural": "^8.1.0",
     "next": "^14.2.32",
