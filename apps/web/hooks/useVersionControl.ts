@@ -11,6 +11,8 @@ export interface DraftData {
   questions?: any[];
   graded?: boolean;
   numAttempts?: number;
+  attemptsBeforeCoolDown?: number;
+  retakeAttemptCoolDownMinutes?: number;
   passingGrade?: number;
   timeEstimateMinutes?: number;
   allotedTimeMinutes?: number;
@@ -267,6 +269,14 @@ export function useVersionControl() {
                 typedDraftData.numAttempts !== undefined
                   ? typedDraftData.numAttempts
                   : assignmentConfigStore.numAttempts,
+              attemptsBeforeCoolDown:
+                typedDraftData.attemptsBeforeCoolDown !== undefined
+                  ? typedDraftData.attemptsBeforeCoolDown
+                  : assignmentConfigStore.attemptsBeforeCoolDown,
+              retakeAttemptCoolDownMinutes:
+                typedDraftData.retakeAttemptCoolDownMinutes !== undefined
+                  ? typedDraftData.retakeAttemptCoolDownMinutes
+                  : assignmentConfigStore.retakeAttemptCoolDownMinutes,
               passingGrade:
                 typedDraftData.passingGrade !== undefined
                   ? typedDraftData.passingGrade

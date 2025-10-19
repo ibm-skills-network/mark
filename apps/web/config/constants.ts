@@ -76,18 +76,23 @@ export const stepTwoSections = {
     title: "3. How will learners complete the assignment?",
     required: true,
   },
+  retakes: {
+    title:
+      "4. How long will learners wait until they can retake the assignment after failed attempts?",
+    required: true,
+  },
   feedback: {
-    title: "4. How much feedback should I give students?",
+    title: "5. How much feedback should I give students?",
     description: "Choose what feedback Mark gives to students",
     required: true,
   },
-  order: {
-    title: "6. How should questions be presented to the learner?",
-    required: true,
-  },
   questionDisplay: {
-    title: "5. How should the questions be displayed?",
+    title: "6. How should the questions be displayed?",
     required: false,
+  },
+  order: {
+    title: "7. How should questions be presented to the learner?",
+    required: true,
   },
 } as const;
 

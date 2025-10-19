@@ -5,7 +5,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// prisma/schema.prisma
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -22,6 +21,13 @@ enum AssignmentType {
 enum AssignmentQuestionDisplayOrder {
   DEFINED /// The assignments are displayed in a predefined order
   RANDOM /// The assignments are displayed in a random order
+}
+
+/// This enum defines when correct answers should be visible to learners
+enum CorrectAnswerVisibility {
+  NEVER /// Correct answers are never shown to learners
+  ALWAYS /// Correct answers are always shown after submission
+  ON_PASS /// Correct answers are only shown when learners pass the assignment
 }
 model GradingAudit {
   id                Int           @id @default(autoincrement())
@@ -82,7 +88,7 @@ model Job {
   progress    String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  result       Json?    // Add this field to store generated questions
+  result       Json?    
 }
 model GradingJob {
   id           Int      @id @default(autoincrement())
@@ -114,7 +120,7 @@ model publishJob {
   percentage  Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  result       Json?    // Add this field to store generated questions
+  result       Json?    
 }
 /// This model tracks the AI usage for each assignment and usage type
 model AIUsage {
@@ -188,7 +194,6 @@ enum ChatRole {
   SYSTEM
 }
 
-/// The Group model represents a particular group of assignments (having the same groupID)
 model Group {
   id          String            @unique /// Unique ID of the course
   assignments AssignmentGroup[] /// The list of assignments associated with this group
@@ -204,7 +209,6 @@ model AssignmentGroup {
   @@id([assignmentId, groupId]) /// Unique identifier for the relationship
 }
 
-/// The Assignment model represents a particular assignment
 model Assignment {
   id                      Int                             @id @default(autoincrement()) /// Unique identifier for the assignment
   name                    String /// Name of the assignment
@@ -212,6 +216,8 @@ model Assignment {
   instructions            String? /// Instructions for the assignment
   gradingCriteriaOverview String? /// Grading Criteria for the assignment
   timeEstimateMinutes     Int? /// Estimated time it will take to complete the assignment in minutes
+  attemptsBeforeCoolDown  Int? @default(1) /// How many attempts someone has before they have to go through a cooldown period, cooldown starts after first attempt
+  retakeAttemptCoolDownMinutes Int? @default(5) /// How long before someone can make another attempt, defaulted to 5 minutes
   type                    AssignmentType /// Type of assignment
   graded                  Boolean? @default(false) /// Is the assignment graded or not
   numAttempts             Int? @default(-1) /// Max number of times a learner can attempt the assignment
@@ -230,7 +236,7 @@ model Assignment {
   showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
-  showCorrectAnswer       Boolean                         @default(true) /// Should the correct answer be shown to the learner after its submission
+  correctAnswerVisibility CorrectAnswerVisibility        @default(ALWAYS) /// When should correct answers be shown to learners
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
   languageCode            String?                         /// The language code for the assignment
   currentVersionId        Int?                            /// The ID of the current active version
@@ -262,6 +268,8 @@ model AssignmentVersion {
   instructions            String?                         /// Instructions for this version
   gradingCriteriaOverview String?                         /// Grading criteria for this version
   timeEstimateMinutes     Int?                            /// Time estimate for this version
+  attemptsBeforeCoolDown  Int?                            @default(1) /// How many attempts someone has before they have to go through a cooldown period, cooldown starts after first attempt
+  retakeAttemptCoolDownMinutes Int?                       @default(5) /// How long before someone can make another attempt, defaulted to 5 minutes
   type                    AssignmentType                  /// Type of assignment
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed
@@ -278,6 +286,7 @@ model AssignmentVersion {
   showQuestionScore       Boolean                         @default(true) /// Show question score
   showSubmissionFeedback  Boolean                         @default(true) /// Show submission feedback
   showQuestions           Boolean                         @default(true) /// Show questions
+  correctAnswerVisibility CorrectAnswerVisibility         @default(ALWAYS) /// When to show correct answers to learners
   languageCode            String?                         /// Language code
   createdBy               String                          /// User who created this version
   createdAt               DateTime                        @default(now()) /// When version was created
@@ -519,7 +528,6 @@ model Report {
   
   similarityScore     Float?         // Similarity score (0-1) with the parent report
 }
-// Add to schema.prisma
 model UserNotification {
   id          Int      @id @default(autoincrement())
   userId      String
@@ -595,6 +603,8 @@ model AssignmentDraft {
   instructions            String?                         /// Instructions for this draft
   gradingCriteriaOverview String?                         /// Grading criteria for this draft
   timeEstimateMinutes     Int?                            /// Time estimate for this draft
+  attemptsBeforeCoolDown  Int?                            @default(1) /// How many attempts someone has before they have to go through a cooldown period, cooldown starts after first attempt
+  retakeAttemptCoolDownMinutes Int?                       @default(5) /// How long before someone can make another attempt, defaulted to 5 minutes
   type                    AssignmentType                  /// Type of assignment
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed

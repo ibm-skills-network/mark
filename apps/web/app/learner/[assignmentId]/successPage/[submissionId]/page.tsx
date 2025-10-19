@@ -12,6 +12,7 @@ import {
 import {
   getCompletedAttempt,
   getFeedback,
+  getSuccessPageData,
   getUser,
   submitFeedback,
   submitRegradingRequest,
@@ -56,7 +57,9 @@ function SuccessPage() {
     useState<AssignmentDetails>();
   const [showSubmissionFeedback, setShowSubmissionFeedback] =
     useState<boolean>(false);
-  const [showCorrectAnswer, setShowCorrectAnswer] = useState<boolean>(true);
+  const [correctAnswerVisibility, setCorrectAnswerVisibility] = useState<
+    "NEVER" | "ALWAYS" | "ON_PASS"
+  >("ALWAYS");
   const [zustandShowSubmissionFeedback, zustandShowQuestions] =
     useAssignmentDetails((state) => [
       state.assignmentDetails?.showSubmissionFeedback ?? true,
@@ -120,7 +123,9 @@ function SuccessPage() {
           setShowSubmissionFeedback(
             submissionDetails.showSubmissionFeedback || false,
           );
-          setShowCorrectAnswer(submissionDetails.showCorrectAnswer ?? true);
+          setCorrectAnswerVisibility(
+            submissionDetails.correctAnswerVisibility ?? "ALWAYS",
+          );
           setShowQuestions(submissionDetails.showQuestions);
           setUserPreferredLanguage(submissionDetails.preferredLanguage);
           setGrade(submissionDetails.grade * 100);
@@ -160,8 +165,8 @@ function SuccessPage() {
         setTotalPointsEarned(zustandTotalPointsEarned);
         setTotalPoints(zustandTotalPoints);
         setAssignmentDetails(zustandAssignmentDetails);
-        setShowCorrectAnswer(
-          zustandAssignmentDetails?.showCorrectAnswer ?? true,
+        setCorrectAnswerVisibility(
+          zustandAssignmentDetails?.correctAnswerVisibility ?? "ALWAYS",
         );
         setLoading(false);
       } else {
@@ -606,9 +611,14 @@ function SuccessPage() {
                   question={question}
                   language={userPreferredLanguage}
                   showSubmissionFeedback={showSubmissionFeedback}
-                  showCorrectAnswer={
-                    !showCorrectAnswer && grade >= passingGrade
-                  }
+                  correctAnswerVisibility={correctAnswerVisibility}
+                  showCorrectAnswer={(() => {
+                    if (correctAnswerVisibility === "NEVER") return false;
+                    if (correctAnswerVisibility === "ALWAYS") return true;
+                    if (correctAnswerVisibility === "ON_PASS")
+                      return grade >= passingGrade;
+                    return false;
+                  })()}
                 />
               </motion.div>
             ))}

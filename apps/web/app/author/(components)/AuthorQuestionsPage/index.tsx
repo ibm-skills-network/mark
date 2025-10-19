@@ -419,12 +419,15 @@ const AuthorQuestionsPage: FC<Props> = ({
 
   useEffect(() => {
     const currentQuestionOrder = useAuthorStore.getState().questionOrder;
-    const newQuestionOrder = questions.map((q) => q.id);
+    const questionIds = questions.map((q) => q.id);
 
     if (
-      JSON.stringify(currentQuestionOrder) !== JSON.stringify(newQuestionOrder)
+      !currentQuestionOrder ||
+      currentQuestionOrder.length === 0 ||
+      currentQuestionOrder.some((id) => !questionIds.includes(id)) ||
+      questionIds.some((id) => !currentQuestionOrder.includes(id))
     ) {
-      useAuthorStore.getState().setQuestionOrder(newQuestionOrder);
+      useAuthorStore.getState().setQuestionOrder(questionIds);
     }
   }, [questions]);
 
@@ -1018,6 +1021,20 @@ const AuthorQuestionsPage: FC<Props> = ({
           }
           if (assignmentData.config.numAttempts !== undefined) {
             configStore.setNumAttempts(assignmentData.config.numAttempts);
+            settingsUpdated = true;
+          }
+          if (assignmentData.config.attemptsBeforeCoolDown !== undefined) {
+            configStore.setAttemptsBeforeCoolDown(
+              assignmentData.config.attemptsBeforeCoolDown,
+            );
+            settingsUpdated = true;
+          }
+          if (
+            assignmentData.config.retakeAttemptCoolDownMinutes !== undefined
+          ) {
+            configStore.setRetakeAttemptCoolDownMinutes(
+              assignmentData.config.retakeAttemptCoolDownMinutes,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.config.allotedTimeMinutes !== undefined) {

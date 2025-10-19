@@ -356,6 +356,8 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         timeEstimateMinutes: 0,
         attemptsPerTimeRange: 0,
         attemptsTimeRangeHours: 0,
+        retakeAttemptCoolDownMinutes: 5,
+        attemptsBeforeCoolDown: 1,
         displayOrder: "DEFINED",
         questionDisplay: "ONE_PER_PAGE",
         questionOrder: [],
@@ -363,7 +365,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         showQuestionScore: false,
         showSubmissionFeedback: false,
         showQuestions: false,
-        showCorrectAnswer: false,
+        correctAnswerVisibility: "NEVER",
       };
 
       expect(

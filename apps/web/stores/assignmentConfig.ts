@@ -14,6 +14,10 @@ type GradingDataActions = {
   setQuestionVariationNumber: (questionVariationNumber: number) => void;
   setGraded: (graded: boolean) => void;
   setNumAttempts: (numAttempts: number) => void;
+  setAttemptsBeforeCoolDown: (attemptsBeforeCoolDown: number) => void;
+  setRetakeAttemptCoolDownMinutes: (
+    retakeAttemptCoolDownMinutes: number,
+  ) => void;
   setPassingGrade: (passingGrade: number) => void;
   setTimeEstimateMinutes: (timeEstimateMinutes: number) => void;
   setAllotedTimeMinutes: (allotedTimeMinutes: number) => void;
@@ -35,6 +39,8 @@ export const useAssignmentConfig = createWithEqualityFn<
       withUpdatedAt((set, get) => ({
         errors: {},
         numAttempts: -1,
+        attemptsBeforeCoolDown: 1,
+        retakeAttemptCoolDownMinutes: 1,
         passingGrade: 50,
         displayOrder: "DEFINED",
         strictTimeLimit: false,
@@ -61,6 +67,20 @@ export const useAssignmentConfig = createWithEqualityFn<
         setNumAttempts: (numAttempts) =>
           set({
             numAttempts: numAttempts === undefined ? -1 : numAttempts,
+          }),
+        setAttemptsBeforeCoolDown: (attemptsBeforeCoolDown) =>
+          set({
+            attemptsBeforeCoolDown:
+              attemptsBeforeCoolDown === undefined
+                ? -1
+                : attemptsBeforeCoolDown,
+          }),
+        setRetakeAttemptCoolDownMinutes: (retakeAttemptCoolDownMinutes) =>
+          set({
+            retakeAttemptCoolDownMinutes:
+              retakeAttemptCoolDownMinutes === undefined
+                ? -1
+                : retakeAttemptCoolDownMinutes,
           }),
         setPassingGrade: (passingGrade) => set({ passingGrade }),
         timeEstimateMinutes: undefined,
@@ -101,6 +121,14 @@ export const useAssignmentConfig = createWithEqualityFn<
           if (!state.numAttempts || state.numAttempts < -1) {
             errors.numAttempts = "Please enter a valid number of attempts.";
           }
+          if (!(state.attemptsBeforeCoolDown >= 0)) {
+            errors.attemptsBeforeCoolDown =
+              "Please enter a valid number of attempts before a cool down period is required.";
+          }
+          if (!(state.retakeAttemptCoolDownMinutes >= 0)) {
+            errors.retakeAttemptCoolDownMinutes =
+              "Please enter a valid number for the amount of time for a cooldown period in minutes";
+          }
           if (
             state.passingGrade === undefined ||
             state.passingGrade <= 0 ||
@@ -125,6 +153,8 @@ export const useAssignmentConfig = createWithEqualityFn<
           set(() => ({
             errors: {},
             numAttempts: -1,
+            attemptsBeforeCoolDown: 1,
+            retakeAttemptCoolDownMinutes: 0,
             passingGrade: 50,
             displayOrder: "DEFINED",
             strictTimeLimit: false,

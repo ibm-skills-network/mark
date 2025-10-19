@@ -77,7 +77,6 @@ We follow **semantic conventions** for branches, versions, and PRs:
 ## Prerequisites
 
 Before contributing to this project, ensure the following tools and dependencies are installed:
-Thought for 4 seconds
 
  **IBM's detect-secrets fork**:
 

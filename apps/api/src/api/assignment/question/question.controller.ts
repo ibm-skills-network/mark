@@ -221,20 +221,36 @@ export class QuestionController {
     @Param("id") questionId: number,
     @Body()
     body: {
-      question: QuestionDto;
       selectedLanguage: string;
       selectedLanguageCode: string;
     },
-  ): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
-    const { selectedLanguage, selectedLanguageCode, question } = body;
-    const { assignmentId } = question;
+    @Req() request: UserSessionRequest,
+  ): Promise<{
+    translatedQuestion: string;
+    translatedChoices?: Choice[] | { id: number | null; choice: string }[];
+  }> {
+    const { selectedLanguage, selectedLanguageCode } = body;
+    const { userSession } = request;
+
+    const question = await this.questionService.findOneForTranslation(
+      Number(questionId),
+    );
+
     const { translatedQuestion, translatedChoices } =
       await this.questionService.generateTranslationIfNotExists(
-        assignmentId,
+        question.assignmentId,
         question,
         selectedLanguageCode,
         selectedLanguage,
       );
+
+    if (userSession.role === UserRole.LEARNER) {
+      const safeChoices = translatedChoices?.map((choice) => ({
+        id: choice.id || null,
+        choice: choice.choice,
+      }));
+      return { translatedQuestion, translatedChoices: safeChoices };
+    }
 
     return { translatedQuestion, translatedChoices };
   }

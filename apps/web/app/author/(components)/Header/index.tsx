@@ -138,6 +138,8 @@ function AuthorHeader() {
   ]);
   const [
     numAttempts,
+    retakeAttemptCoolDownMinutes,
+    attemptsBeforeCoolDown,
     passingGrade,
     displayOrder,
     graded,
@@ -148,6 +150,8 @@ function AuthorHeader() {
     numberOfQuestionsPerAttempt,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
+    state.retakeAttemptCoolDownMinutes,
+    state.attemptsBeforeCoolDown,
     state.passingGrade,
     state.displayOrder,
     state.graded,
@@ -162,13 +166,13 @@ function AuthorHeader() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
-    state.showCorrectAnswer,
+    state.correctAnswerVisibility,
   ]);
   const role = useAuthorStore((state) => state.role);
 
@@ -258,6 +262,9 @@ function AuthorHeader() {
 
       useAssignmentConfig.getState().setAssignmentConfigStore({
         numAttempts: newAssignment.numAttempts,
+        retakeAttemptCoolDownMinutes:
+          newAssignment.retakeAttemptCoolDownMinutes,
+        attemptsBeforeCoolDown: newAssignment.attemptsBeforeCoolDown,
         passingGrade: newAssignment.passingGrade,
         displayOrder: newAssignment.displayOrder,
         graded: newAssignment.graded,
@@ -279,7 +286,7 @@ function AuthorHeader() {
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
         showQuestionScore: newAssignment.showQuestionScore,
         showAssignmentScore: newAssignment.showAssignmentScore,
-        showCorrectAnswer: newAssignment.showCorrectAnswer,
+        correctAnswerVisibility: newAssignment.correctAnswerVisibility,
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
@@ -502,6 +509,8 @@ function AuthorHeader() {
     const assignmentData: ReplaceAssignmentRequest = {
       ...encodedFields,
       numAttempts,
+      retakeAttemptCoolDownMinutes,
+      attemptsBeforeCoolDown,
       passingGrade,
       displayOrder,
       graded,
@@ -515,7 +524,7 @@ function AuthorHeader() {
       showQuestions,
       showQuestionScore,
       showAssignmentScore,
-      showCorrectAnswer,
+      correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)

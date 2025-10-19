@@ -98,6 +98,61 @@ export class QuestionService {
     };
   }
 
+  /**
+   * Find a question for translation purposes - returns basic question data without sensitive information
+   */
+  async findOneForTranslation(id: number): Promise<QuestionDto> {
+    if (!id || Number.isNaN(Number(id))) {
+      throw new NotFoundException(`Question with ID ${id} not found`);
+    }
+
+    const result = await this.prisma.question.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        question: true,
+        type: true,
+        assignmentId: true,
+        totalPoints: true,
+        maxWords: true,
+        maxCharacters: true,
+        choices: true,
+        scoring: true,
+        gradingContextQuestionIds: true,
+        responseType: true,
+        isDeleted: true,
+        randomizedChoices: true,
+        videoPresentationConfig: true,
+        liveRecordingConfig: true,
+        // Exclude 'answer' field to prevent exposure of correct answers
+      },
+    });
+
+    if (!result) {
+      throw new NotFoundException(`Question with Id ${id} not found.`);
+    }
+
+    return {
+      ...result,
+      answer: undefined, // Explicitly exclude answer
+      scoring: result.scoring
+        ? (result.scoring as unknown as ScoringDto)
+        : undefined,
+      choices: result.choices
+        ? (result.choices as unknown as Choice[])
+        : undefined,
+      assignmentId: result.assignmentId,
+      videoPresentationConfig: result.videoPresentationConfig
+        ? (result.videoPresentationConfig as unknown as VideoPresentationConfig)
+        : undefined,
+      liveRecordingConfig: result.liveRecordingConfig
+        ? (result.liveRecordingConfig as unknown as object)
+        : undefined,
+      alreadyInBackend: true,
+      success: true,
+    };
+  }
+
   async update(
     assignmentId: number,
     id: number,

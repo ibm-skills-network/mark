@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   AssignmentQuestionDisplayOrder,
+  CorrectAnswerVisibility,
   QuestionDisplay,
   QuestionType,
   ResponseType,
@@ -94,6 +95,14 @@ export class ScoringDto {
   @ValidateNested({ each: true })
   @Type(() => RubricDto)
   rubrics: RubricDto[];
+
+  @ApiProperty({
+    description: "Show sub-questions to the learner",
+    type: Boolean,
+  })
+  @IsBoolean()
+  @IsOptional()
+  showSubQuestionsToLearner?: boolean;
 
   @ApiProperty({
     description: "Show rubric to the learner",
@@ -418,6 +427,26 @@ export class UpdateAssignmentQuestionsDto {
 
   @ApiProperty({
     description:
+      "The number of attempts before learners must wait for some period of time to retry (null means never waiting to retry)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  attemptsBeforeCoolDown: number | null;
+
+  @ApiProperty({
+    description:
+      "The amount of time learners must wait to retry in minutes (null means right away)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  retakeAttemptCoolDownMinutes: number | null;
+
+  @ApiProperty({
+    description:
       "The allotted time for the assignment. (null means unlimited time)",
     type: Number,
     required: false,
@@ -547,8 +576,7 @@ export class UpdateAssignmentQuestionsDto {
     required: false,
   })
   @IsOptional()
-  @IsBoolean()
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 
   @ApiProperty({
     description: "updatedAt",
@@ -687,6 +715,14 @@ export class AttemptScoringDto {
   })
   @IsString()
   type: string;
+
+  @ApiPropertyOptional({
+    description: "Whether sub-questions are shown to the learner",
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showSubQuestionsToLearner?: boolean;
 
   @ApiPropertyOptional({
     description: "Whether rubrics are shown to the learner",

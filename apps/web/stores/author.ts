@@ -16,6 +16,7 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { DraftSummary, VersionSummary } from "@/lib/author";
+import { config } from "process";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   // version control state
   "versions",
@@ -1881,6 +1882,14 @@ export const useAuthorStore = createWithEqualityFn<
               versionData.numAttempts !== undefined
                 ? versionData.numAttempts
                 : assignmentConfigState.numAttempts,
+            attemptsBeforeCoolDown:
+              versionData.attemptsBeforeCoolDown !== undefined
+                ? versionData.attemptsBeforeCoolDown
+                : assignmentConfigState.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes:
+              versionData.retakeAttemptCoolDownMinutes !== undefined
+                ? versionData.retakeAttemptCoolDownMinutes
+                : assignmentConfigState.retakeAttemptCoolDownMinutes,
             passingGrade:
               versionData.passingGrade !== undefined
                 ? versionData.passingGrade
@@ -1906,6 +1915,10 @@ export const useAuthorStore = createWithEqualityFn<
           useAssignmentFeedbackConfig
             .getState()
             .setAssignmentFeedbackConfigStore({
+              correctAnswerVisibility:
+                versionData.correctAnswerVisibility !== undefined
+                  ? versionData.correctAnswerVisibility
+                  : feedbackConfigState.correctAnswerVisibility,
               showAssignmentScore:
                 versionData.showAssignmentScore !== undefined
                   ? versionData.showAssignmentScore
@@ -1985,6 +1998,9 @@ export const useAuthorStore = createWithEqualityFn<
               gradingCriteriaOverview:
                 decodedVersionData.gradingCriteriaOverview,
               questions: processedQuestions,
+              questionOrder:
+                decodedVersionData.questionOrder ||
+                processedQuestions.map((q) => q.id),
               checkedOutVersion: versionToCheckout,
               hasUnsavedChanges: false,
             });
@@ -2069,6 +2085,9 @@ export const useAuthorStore = createWithEqualityFn<
                   ...encodedFields,
                   name: state.name,
                   numAttempts: configData.numAttempts,
+                  attemptsBeforeCoolDown: configData.attemptsBeforeCoolDown,
+                  retakeAttemptCoolDownMinutes:
+                    configData.retakeAttemptCoolDownMinutes,
                   passingGrade: configData.passingGrade,
                   displayOrder: configData.displayOrder,
                   graded: configData.graded,
@@ -2199,6 +2218,9 @@ export const useAuthorStore = createWithEqualityFn<
                 // Assignment configuration
                 graded: assignmentConfig.graded,
                 numAttempts: assignmentConfig.numAttempts,
+                attemptsBeforeCoolDown: assignmentConfig.attemptsBeforeCoolDown,
+                retakeAttemptCoolDownMinutes:
+                  assignmentConfig.retakeAttemptCoolDownMinutes,
                 passingGrade: assignmentConfig.passingGrade,
                 timeEstimateMinutes: assignmentConfig.timeEstimateMinutes,
                 allotedTimeMinutes: assignmentConfig.allotedTimeMinutes,
@@ -2377,6 +2399,12 @@ export const useAuthorStore = createWithEqualityFn<
                       numAttempts:
                         assignment.numAttempts ||
                         assignmentConfigStore.numAttempts,
+                      attemptsBeforeCoolDown:
+                        assignment.attemptsBeforeCoolDown ||
+                        assignmentConfigStore.attemptsBeforeCoolDown,
+                      retakeAttemptCoolDownMinutes:
+                        assignment.retakeAttemptCoolDownMinutes ||
+                        assignmentConfigStore.retakeAttemptCoolDownMinutes,
                       passingGrade:
                         assignment.passingGrade ||
                         assignmentConfigStore.passingGrade,

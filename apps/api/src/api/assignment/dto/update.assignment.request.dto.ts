@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
   AssignmentQuestionDisplayOrder,
+  CorrectAnswerVisibility,
   QuestionDisplay,
 } from "@prisma/client";
 import {
@@ -78,6 +79,26 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsInt()
   numAttempts: number | null;
+
+  @ApiProperty({
+    description:
+      "The number of attempts before learners must wait for some period of time to retry (null means never waiting to retry)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  attemptsBeforeCoolDown: number | null;
+
+  @ApiProperty({
+    description:
+      "The amount of time learners must wait to retry in minutes (null means right away)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  retakeAttemptCoolDownMinutes: number | null;
 
   @ApiProperty({
     description:
@@ -201,12 +222,9 @@ export class UpdateAssignmentRequestDto {
   showSubmissionFeedback: boolean;
 
   @ApiProperty({
-    description:
-      "Should the correct answer be shown to the learner after its submission",
-    type: Boolean,
+    description: "When should correct answers be shown to learners",
     required: false,
   })
   @IsOptional()
-  @IsBoolean()
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 }
