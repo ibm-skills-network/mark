@@ -12,7 +12,7 @@ import {
   ScoringDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
 
 export type VariantMapping = {

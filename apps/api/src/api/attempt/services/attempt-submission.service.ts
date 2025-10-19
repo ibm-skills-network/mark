@@ -45,7 +45,7 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 import {
   AssignmentAttemptWithRelations,
   AttemptQuestionsMapper,

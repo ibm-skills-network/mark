@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { Logger } from "winston";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 import { LearnerLiveRecordingFeedback } from "../attempt/dto/assignment-attempt/types";
 import {
   Choice,

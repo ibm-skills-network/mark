@@ -22,7 +22,7 @@ import {
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
 import { assign } from "nodemailer/lib/shared";
 

@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
-import { PrismaService } from "../../prisma.service";
+import { PrismaService } from "../../database/prisma.service";
 import { AdminService } from "../admin/admin.service";
 import { LlmModule } from "../llm/llm.module";
 import { ScheduledTasksService } from "./services/scheduled-tasks.service";

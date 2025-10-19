@@ -3,7 +3,7 @@ import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   getAllLanguageCodes,
   getLanguageNameFromCode,

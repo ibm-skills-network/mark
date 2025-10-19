@@ -16,7 +16,7 @@ import {
   LearnerGetAssignmentResponseDto,
 } from "src/api/assignment/dto/get.assignment.response.dto";
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptValidationService {

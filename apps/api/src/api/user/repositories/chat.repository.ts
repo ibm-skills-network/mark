@@ -2,7 +2,7 @@
 
 import { Injectable } from "@nestjs/common";
 import { Chat, ChatMessage, ChatRole, Prisma } from "@prisma/client";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 /**
  * Repository for Chat-related database operations

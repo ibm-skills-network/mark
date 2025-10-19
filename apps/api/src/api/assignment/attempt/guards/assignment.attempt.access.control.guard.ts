@@ -9,7 +9,7 @@ import {
   UserRole,
   UserSessionRequest,
 } from "../../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 
 @Injectable()
 export class AssignmentAttemptAccessControlGuard implements CanActivate {

@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable, Logger } from "@nestjs/common";
 import { Prisma, QuestionVariant } from "@prisma/client";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   Choice,
   ScoringDto,

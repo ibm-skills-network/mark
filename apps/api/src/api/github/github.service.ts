@@ -5,7 +5,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import fetch, { Response } from "node-fetch";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 
 @Injectable()
 export class GithubService {

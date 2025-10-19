@@ -16,7 +16,7 @@ import {
   QuestionDto,
   ScoringDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockPrismaService,
   createMockQuestion,

@@ -1,7 +1,7 @@
 import * as crypto from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { isAdminEmail } from "src/config/admin-emails";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 
 @Injectable()
 export class AdminVerificationService {

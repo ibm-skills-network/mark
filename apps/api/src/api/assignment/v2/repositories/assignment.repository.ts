@@ -3,8 +3,8 @@ import { Assignment, Question, QuestionVariant } from "@prisma/client";
 import {
   UserRole,
   UserSession,
-} from "../../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../../prisma.service";
+} from "src/auth/interfaces/user.session.interface";
+import { PrismaService } from "src/database/prisma.service";
 import {
   AssignmentResponseDto,
   GetAssignmentResponseDto,

@@ -13,6 +13,7 @@ import { AppService } from "./app.service";
 import { AdminAuthModule } from "./auth/admin-auth.module";
 import { AuthModule } from "./auth/auth.module";
 import { UserSessionMiddleware } from "./auth/middleware/user.session.middleware";
+import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
@@ -31,6 +32,7 @@ import { routes } from "./routes";
     MessagingModule,
     AuthModule,
     AdminAuthModule,
+    DatabaseModule,
   ],
   providers: [AppService],
 })

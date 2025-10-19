@@ -15,7 +15,7 @@ import {
   UpdateAssignmentQuestionsDto,
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 
 /**
  * Extended Choice type to include optional id property

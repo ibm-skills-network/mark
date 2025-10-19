@@ -13,7 +13,7 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/v2/services/question.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockAssignmentRepository,
   createMockAssignmentResponseDto,

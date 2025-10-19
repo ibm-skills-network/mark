@@ -2,7 +2,7 @@
 import { Injectable } from "@nestjs/common";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "src/api/assignment/question/dto/create.update.question.request.dto";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 
 @Injectable()
 export class QuestionVariantService {
