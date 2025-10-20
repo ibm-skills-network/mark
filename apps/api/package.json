@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@dqbd/tiktoken": "^1.0.7",
+    "@ibm-cloud/watsonx-ai": "^1.7.0",
     "@instana/collector": "^4.14.0",
     "@langchain/community": "^0.3.56",
     "@langchain/core": "^0.3.77",
@@ -86,8 +87,8 @@
     "pg": "^8.11.1",
     "prisma": "^5.3.1",
     "redis": "^4.7.0",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.1",
+    "reflect-metadata": "0.2.0",
+    "rxjs": "7.8.1",
     "sn-messaging-ts-client": "^0.4.0",
     "socket.io": "^4.8.0",
     "unzipper": "^0.12.3",
