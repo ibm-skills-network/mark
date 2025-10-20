@@ -80,6 +80,7 @@ export function useAPITransformer(config?: TransformConfig) {
         "gradingCriteriaOverview",
         "question",
         "content",
+        "choice",
       ],
       deep: true,
       ...config,
