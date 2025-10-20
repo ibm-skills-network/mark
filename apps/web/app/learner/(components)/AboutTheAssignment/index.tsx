@@ -167,7 +167,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       attemptsBeforeCoolDown <= 0 ||
       attemptsCount < attemptsBeforeCoolDown ||
       attemptsLeft === 0 ||
-      retakeAttemptCoolDownMinutes <= 0
+      retakeAttemptCoolDownMinutes <= 0 ||
+      assignmentState === "in-progress"
     ) {
       setCooldownMessage(null);
       setIsCooldown(false);

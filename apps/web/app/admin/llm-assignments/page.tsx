@@ -31,6 +31,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { formatPricePerMillionTokens } from "@/config/constants";
+import { apiClient } from "@/lib/api-client";
 
 interface AIFeature {
   id: number;
@@ -96,22 +97,16 @@ export default function LLMAssignmentsPage() {
       setLoading(true);
       setError(null);
 
-      const [featuresRes, modelsRes] = await Promise.all([
-        fetch("/api/v1/llm-assignments/features", {
+      const [featuresData, modelsData] = await Promise.all([
+        apiClient.get<any>("/api/v1/llm-assignments/features", {
           headers: { "x-admin-token": sessionToken },
         }),
-        fetch("/api/v1/llm-assignments/models", {
+        apiClient.get<any>("/api/v1/llm-assignments/models", {
           headers: { "x-admin-token": sessionToken },
         }),
       ]);
 
-      if (!featuresRes.ok || !modelsRes.ok) {
-        throw new Error("Failed to fetch data");
-      }
-
-      const featuresData = await featuresRes.json();
-      const modelsData = await modelsRes.json();
-
+      // Responses are auto-decoded (base64/comp:) by apiClient
       setFeatures(featuresData.data || []);
       setModels(modelsData.data || []);
     } catch (err) {
@@ -444,38 +439,70 @@ export default function LLMAssignmentsPage() {
           <CardTitle>Available Models</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {models.map((model) => (
-              <div key={model.modelKey} className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium">{model.displayName}</h3>
-                  <Badge variant={model.isActive ? "default" : "secondary"}>
-                    {model.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  <div>
-                    {model.provider} • {model.modelKey}
+          <div className="space-y-6">
+            {/* Group models by provider */}
+            {Object.entries(
+              models.reduce(
+                (acc, model) => {
+                  if (!acc[model.provider]) {
+                    acc[model.provider] = [];
+                  }
+                  acc[model.provider].push(model);
+                  return acc;
+                },
+                {} as Record<string, LLMModel[]>,
+              ),
+            )
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([provider, providerModels]) => (
+                <div key={provider}>
+                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <span>{provider}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {providerModels.length} model
+                      {providerModels.length !== 1 ? "s" : ""}
+                    </Badge>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {providerModels.map((model) => (
+                      <div
+                        key={model.modelKey}
+                        className="p-4 border rounded-lg"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium">{model.displayName}</h4>
+                          <Badge
+                            variant={model.isActive ? "default" : "secondary"}
+                          >
+                            {model.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground mb-2">
+                          <div className="font-mono text-xs">
+                            {model.modelKey}
+                          </div>
+                          {model.currentPricing && (
+                            <div className="mt-1">
+                              {formatPricePerMillionTokens(
+                                model.currentPricing.inputTokenPrice,
+                              )}
+                              /1M in •{" "}
+                              {formatPricePerMillionTokens(
+                                model.currentPricing.outputTokenPrice,
+                              )}
+                              /1M out
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Used by {model.assignedFeatures.length} feature
+                          {model.assignedFeatures.length !== 1 ? "s" : ""}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {model.currentPricing && (
-                    <div>
-                      {formatPricePerMillionTokens(
-                        model.currentPricing.inputTokenPrice,
-                      )}
-                      /1M input tokens •{" "}
-                      {formatPricePerMillionTokens(
-                        model.currentPricing.outputTokenPrice,
-                      )}
-                      /1M output tokens
-                    </div>
-                  )}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Used by {model.assignedFeatures.length} feature
-                  {model.assignedFeatures.length !== 1 ? "s" : ""}
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         </CardContent>
       </Card>

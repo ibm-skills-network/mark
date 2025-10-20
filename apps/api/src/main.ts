@@ -13,7 +13,7 @@
  *
  * @module main
  */
-
+import "reflect-metadata";
 import instana from "@instana/collector";
 import { Logger, ValidationPipe, VersioningType } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";

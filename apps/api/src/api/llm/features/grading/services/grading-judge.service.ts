@@ -48,8 +48,8 @@ const ParsedJudgeResponseSchema = z.object({
   feedbackAligned: z.boolean(),
   rubricAdherence: z.boolean(),
   fairnessScore: z.number().min(0).max(10),
-  suggestedPoints: z.number().optional(),
-  suggestedFeedbackChanges: z.string().optional(),
+  suggestedPoints: z.number().nullable().optional(),
+  suggestedFeedbackChanges: z.string().nullable().optional(),
   correctedRubricScores: z
     .array(
       z.object({
@@ -60,6 +60,7 @@ const ParsedJudgeResponseSchema = z.object({
         justification: z.string(),
       }),
     )
+    .nullable()
     .optional(),
 });
 

@@ -1,8 +1,10 @@
 /* eslint-disable unicorn/no-null */
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
+import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
+import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
 import { PrismaService } from "src/database/prisma.service";
 import {
   getAllLanguageCodes,
@@ -61,7 +63,9 @@ interface BatchProcessResult {
 export class TranslationService {
   private readonly logger = new Logger(TranslationService.name);
   private readonly languageTranslation: boolean;
-  private readonly limiter: Bottleneck;
+  private readonly limiter: Bottleneck; // default high-throughput
+  private readonly watsonxLimiter: Bottleneck; // conservative for IBM Watsonx
+  private useWatsonxLimiterForTranslation = false;
 
   // Performance optimized settings
   private readonly MAX_BATCH_SIZE = 100; // Increased for better throughput
@@ -91,6 +95,8 @@ export class TranslationService {
     private readonly prisma: PrismaService,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV2,
+    @Inject(LLM_RESOLVER_SERVICE)
+    private readonly llmResolver: LLMResolverService,
   ) {
     this.languageTranslation =
       process.env.ENABLE_TRANSLATION.toString().toLowerCase() === "true" ||
@@ -105,8 +111,60 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
+    // More conservative limiter for Watsonx-backed translations
+    this.watsonxLimiter = new Bottleneck({
+      maxConcurrent: 8,
+      minTime: 50, // ~20 rps spacing
+      reservoir: 20,
+      reservoirRefreshInterval: 1000,
+      reservoirRefreshAmount: 20,
+      highWater: 1000,
+      strategy: Bottleneck.strategy.OVERFLOW,
+      timeout: this.OPERATION_TIMEOUT,
+    });
     setInterval(() => this.checkLimiterHealth(), 30_000);
     setInterval(() => this.checkJobTimeouts(), 60_000); // Check every minute
+  }
+
+  /**
+   * Decide which limiter to use based on current translation model assignment
+   */
+  private async syncLimiterForTranslationModel(): Promise<void> {
+    try {
+      const modelKey = await this.llmResolver.getModelKeyWithFallback(
+        "translation",
+        "gpt-4o-mini",
+      );
+      const isWatsonx = this.isWatsonxModel(modelKey);
+      if (isWatsonx !== this.useWatsonxLimiterForTranslation) {
+        this.useWatsonxLimiterForTranslation = isWatsonx;
+        this.logger.debug(
+          `Translation limiter set to ${isWatsonx ? "Watsonx profile" : "default profile"} (model: ${modelKey})`,
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Could not resolve translation model; using default limiter. Reason: ${message}`,
+      );
+      this.useWatsonxLimiterForTranslation = false;
+    }
+  }
+
+  private isWatsonxModel(modelKey: string): boolean {
+    if (!modelKey) return false;
+    return (
+      modelKey.startsWith("granite-") ||
+      modelKey.startsWith("gpt-oss-") ||
+      modelKey === "llama-3-3-70b-instruct" ||
+      modelKey === "llama-4-maverick"
+    );
+  }
+
+  private getActiveLimiter(): Bottleneck {
+    return this.useWatsonxLimiterForTranslation
+      ? this.watsonxLimiter
+      : this.limiter;
   }
 
   /**
@@ -133,7 +191,7 @@ export class TranslationService {
       const chunk = chunks[chunkIndex];
 
       const processingPromises = chunk.map((item) =>
-        this.limiter
+        this.getActiveLimiter()
           .schedule({ expiration: 15_000, priority: 5 }, () =>
             batchProcessor(item),
           )
@@ -582,7 +640,8 @@ export class TranslationService {
    */
   private checkLimiterHealth(): void {
     try {
-      const counts = this.limiter.counts();
+      const limiter = this.getActiveLimiter();
+      const counts = limiter.counts();
 
       if (
         counts.RUNNING > 10 &&
@@ -600,10 +659,10 @@ export class TranslationService {
         this.logger.warn(
           `High queue load: ${counts.QUEUED} jobs queued. Reducing accepting rate.`,
         );
-        this.limiter.updateSettings({ maxConcurrent: 5 });
+        limiter.updateSettings({ maxConcurrent: 5 });
 
         setTimeout(() => {
-          this.limiter.updateSettings({ maxConcurrent: 25 });
+          limiter.updateSettings({ maxConcurrent: 25 });
           this.logger.log("Restored normal concurrency limits");
         }, 30_000);
       }
@@ -623,8 +682,9 @@ export class TranslationService {
         "Resetting bottleneck limiter due to potential stalled state",
       );
 
-      void this.limiter.stop({ dropWaitingJobs: false }).then(() => {
-        this.limiter.updateSettings({
+      const limiter = this.getActiveLimiter();
+      void limiter.stop({ dropWaitingJobs: false }).then(() => {
+        limiter.updateSettings({
           maxConcurrent: 25,
           minTime: 10,
           reservoir: 100,
@@ -1018,6 +1078,7 @@ export class TranslationService {
         )
       : undefined;
 
+    await this.syncLimiterForTranslationModel();
     await this.processBatchesInParallel(
       languageCodes,
       async (lang: string) => {
@@ -1227,6 +1288,7 @@ export class TranslationService {
         )
       : undefined;
 
+    await this.syncLimiterForTranslationModel();
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
@@ -1404,6 +1466,7 @@ export class TranslationService {
       }
     }
 
+    await this.syncLimiterForTranslationModel();
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
@@ -1566,6 +1629,7 @@ export class TranslationService {
       });
     }
 
+    await this.syncLimiterForTranslationModel();
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {

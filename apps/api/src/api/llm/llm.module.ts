@@ -5,6 +5,11 @@ import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
 import { Gpt5NanoLlmService } from "./core/services/gpt5-nano-llm.service";
 import { GptOss120bLlmService } from "./core/services/gpt-oss-120b-llm-service";
+import { Granite4HSmallLlmService } from "./core/services/granite-4-h-small-llm-service";
+import { GraniteVision322bLlmService } from "./core/services/granite-vision-3-2-2b-llm-service";
+import { Llama3370bInstructLlmService } from "./core/services/llama-3-3-70b-instruct-llm-service";
+import { Llama4MaverickLlmService } from "./core/services/llama-4-maverick-llm-service";
+import { MistralMedium2505LlmService } from "./core/services/mistral-medium-2505-llm-service";
 import { LLMAssignmentService } from "./core/services/llm-assignment.service";
 import { LLMPricingService } from "./core/services/llm-pricing.service";
 import { LLMResolverService } from "./core/services/llm-resolver.service";
@@ -65,6 +70,11 @@ import {
     Gpt5MiniLlmService,
     Gpt5NanoLlmService,
     GptOss120bLlmService,
+    Granite4HSmallLlmService,
+    GraniteVision322bLlmService,
+    Llama3370bInstructLlmService,
+    Llama4MaverickLlmService,
+    MistralMedium2505LlmService,
     // LlamaLlmService,
     LlmRouter,
     {
@@ -77,9 +87,14 @@ import {
         p5: Gpt5MiniLlmService,
         p6: Gpt5NanoLlmService,
         p7: GptOss120bLlmService,
-        // p8: LlamaLlmService,
+        p8: Granite4HSmallLlmService,
+        p9: GraniteVision322bLlmService,
+        p10: Llama3370bInstructLlmService,
+        p11: Llama4MaverickLlmService,
+        p12: MistralMedium2505LlmService,
+        // p13: LlamaLlmService,
       ) => {
-        return [p1, p2, p3, p4, p5, p6, p7];
+        return [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12];
       },
       inject: [
         OpenAiLlmService,
@@ -89,6 +104,11 @@ import {
         Gpt5MiniLlmService,
         Gpt5NanoLlmService,
         GptOss120bLlmService,
+        Granite4HSmallLlmService,
+        GraniteVision322bLlmService,
+        Llama3370bInstructLlmService,
+        Llama4MaverickLlmService,
+        MistralMedium2505LlmService,
         // LlamaLlmService,
       ],
     },

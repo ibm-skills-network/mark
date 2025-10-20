@@ -34,7 +34,7 @@ export class APIClient {
     this.autoTransform = config.autoTransform ?? true;
     this.transformConfig = config.transformConfig || {};
     this.defaultHeaders = config.defaultHeaders || {};
-    this.timeout = config.timeout || 30000;
+    this.timeout = config.timeout || 60000;
   }
 
   /**

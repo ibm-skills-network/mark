@@ -1,4 +1,4 @@
-import { WatsonxLLM } from "@langchain/community/llms/ibm";
+import { ChatWatsonx } from "@langchain/community/chat_models/ibm";
 import { HumanMessage } from "@langchain/core/messages";
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -10,6 +10,8 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { extractStructuredJSON } from "../utils/structured-json.util";
+import { withWatsonxRateLimit } from "../utils/watsonx-rate-limiter";
 
 @Injectable()
 export class GptOss120bLlmService implements IMultimodalLlmProvider {
@@ -24,8 +26,8 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
     this.logger = parentLogger.child({ context: GptOss120bLlmService.name });
   }
 
-  private createChatModel(options?: LlmRequestOptions): WatsonxLLM {
-    return new WatsonxLLM({
+  private createChatModel(options?: LlmRequestOptions): ChatWatsonx {
+    return new ChatWatsonx({
       version: "2024-05-31",
       serviceUrl: "https://us-south.ml.cloud.ibm.com",
       projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
@@ -33,7 +35,7 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
       watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
       model: options?.modelName ?? GptOss120bLlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
-      maxNewTokens: options?.maxTokens ?? 1000,
+      maxTokens: options?.maxTokens ?? 8000,
     });
   }
 
@@ -50,13 +52,13 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
 
-    this.logger.debug(`Invoking WatsonX LLM with ${inputTokens} input tokens`);
+    this.logger.debug(`Invoking WatsonX Chat with ${inputTokens} input tokens`);
 
     try {
-      console.log(`Invoking WatsonX LLM with input: ${inputText}`);
-      const result = await model.invoke(inputText);
-      console.log(`WatsonX LLM response: ${result}`);
-      const rawResponse = typeof result === "string" ? result : String(result);
+      console.log(`Invoking WatsonX Chat with ${messages.length} messages`);
+      const result = await withWatsonxRateLimit(() => model.invoke(messages));
+      console.log(`WatsonX Chat response received`);
+      const rawResponse = result.content.toString();
 
       // Extract JSON from the response if it contains additional text
       const responseContent = this.extractJSONFromResponse(rawResponse);
@@ -89,25 +91,27 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     this.logger.warn(
-      "WatsonX LLM does not support multimodal (text + image) inputs. Processing text only.",
+      "WatsonX Chat does not support multimodal (text + image) inputs. Processing text only.",
     );
 
     const inputTokens = this.tokenCounter.countTokens(textContent);
 
     this.logger.debug(
-      `Invoking WatsonX LLM with text only (${inputTokens} input tokens) - image data ignored`,
+      `Invoking WatsonX Chat with text only (${inputTokens} input tokens) - image data ignored`,
     );
 
     const model = this.createChatModel(options);
 
     try {
-      const result = await model.invoke(textContent);
-      const rawResponse = typeof result === "string" ? result : String(result);
+      const result = await withWatsonxRateLimit(() =>
+        model.invoke([new HumanMessage(textContent)]),
+      );
+      const rawResponse = result.content.toString();
       const responseContent = this.extractJSONFromResponse(rawResponse);
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `WatsonX LLM responded with ${outputTokens} output tokens`,
+        `WatsonX Chat responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -119,7 +123,7 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `WatsonX LLM API error: ${
+        `WatsonX Chat API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
@@ -128,43 +132,109 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
   }
 
   /**
-   * Extract JSON from WatsonX response that may contain additional text
+   * Extract JSON from WatsonX response that may contain additional text or be truncated
    */
   private extractJSONFromResponse(response: string): string {
+    // 1) If the whole response is valid JSON, return it
     try {
-      // First, try to parse the response as-is in case it's already clean JSON
       JSON.parse(response);
       return response;
     } catch {
-      // If that fails, try to extract JSON from markdown code blocks
-      const jsonBlockMatch = response.match(/```json\s*([\S\s]*?)\s*```/);
-      if (jsonBlockMatch) {
-        const jsonContent = jsonBlockMatch[1].trim();
-        try {
-          JSON.parse(jsonContent);
-          return jsonContent;
-        } catch {
-          // Fall through to other extraction methods
+      // continue
+    }
+
+    // Use shared extractor which handles schema echoes and noisy wrappers
+    return extractStructuredJSON(response);
+  }
+
+  /**
+   * Attempt to repair truncated JSON by closing open strings, arrays, and objects
+   */
+  private repairTruncatedJSON(json: string): string | null {
+    try {
+      // Try to parse first to see if it's valid
+      JSON.parse(json);
+      return json;
+    } catch (error) {
+      // If it's not valid JSON, try to repair it
+      let repaired = json.trim();
+
+      // Check if we're in the middle of a string (unterminated string error)
+      if (
+        error instanceof SyntaxError &&
+        error.message.includes("Unterminated string")
+      ) {
+        // Find the last complete quote and truncate there, then close the string
+        const lastCompleteQuote = repaired.lastIndexOf(
+          '"',
+          repaired.length - 2,
+        );
+        if (lastCompleteQuote > 0) {
+          // Check if this quote is escaped
+          let quotePos = lastCompleteQuote;
+          let escapeCount = 0;
+          while (quotePos > 0 && repaired[quotePos - 1] === "\\") {
+            escapeCount++;
+            quotePos--;
+          }
+
+          // If odd number of escapes, the quote is escaped, find the previous one
+          if (escapeCount % 2 === 1) {
+            const previousQuote = repaired.lastIndexOf(
+              '"',
+              lastCompleteQuote - 1,
+            );
+            if (previousQuote > 0) {
+              repaired = repaired.slice(0, Math.max(0, previousQuote + 1));
+            }
+          } else {
+            repaired = repaired.slice(0, Math.max(0, lastCompleteQuote + 1));
+          }
+        }
+
+        // Add closing quote if we ended on an open quote
+        const quoteCount = (repaired.match(/"/g) || []).length;
+        if (quoteCount % 2 === 1) {
+          repaired += '"';
         }
       }
 
-      // Try to find JSON object patterns in the response
-      const jsonObjectMatch = response.match(/{[\S\s]*}/);
-      if (jsonObjectMatch) {
-        const jsonContent = jsonObjectMatch[0];
-        try {
-          JSON.parse(jsonContent);
-          return jsonContent;
-        } catch {
-          // Fall through
-        }
+      // Count open braces and brackets
+      const openBraces = (repaired.match(/{/g) || []).length;
+      const closeBraces = (repaired.match(/}/g) || []).length;
+      const openBrackets = (repaired.match(/\[/g) || []).length;
+      const closeBrackets = (repaired.match(/]/g) || []).length;
+
+      // Remove any trailing commas before we close things
+      repaired = repaired.replace(/,\s*$/, "");
+
+      // Close arrays first (inner to outer)
+      for (let index = 0; index < openBrackets - closeBrackets; index++) {
+        repaired += "]";
       }
 
-      // If no valid JSON found, return the original response
-      this.logger.warn(
-        "Could not extract valid JSON from WatsonX response, returning original",
-      );
-      return response;
+      // Close objects (outer to inner)
+      for (let index = 0; index < openBraces - closeBraces; index++) {
+        repaired += "}";
+      }
+
+      // Try to parse the repaired JSON
+      try {
+        JSON.parse(repaired);
+        this.logger.info(
+          `Successfully repaired truncated JSON (added ${
+            openBraces - closeBraces
+          } closing braces, ${openBrackets - closeBrackets} closing brackets)`,
+        );
+        return repaired;
+      } catch (repairError) {
+        this.logger.warn(
+          `Failed to repair truncated JSON: ${
+            repairError instanceof Error ? repairError.message : "Unknown error"
+          }`,
+        );
+        return null;
+      }
     }
   }
 

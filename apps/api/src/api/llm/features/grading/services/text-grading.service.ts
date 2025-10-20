@@ -251,9 +251,15 @@ export class TextGradingService implements ITextGradingService {
         );
       }
 
-      // Generate final feedback
-      const finalFeedback = this.generateAlignedFeedback(
+      // Normalize grading to enforce bounds and fix rubric arithmetic
+      const normalizedAttempt = this.normalizeGradingAttempt(
         gradingAttempt,
+        maxPossiblePoints,
+      );
+
+      // Generate final feedback with normalized values
+      const finalFeedback = this.generateAlignedFeedback(
+        normalizedAttempt,
         maxPossiblePoints,
       );
 
@@ -274,14 +280,14 @@ export class TextGradingService implements ITextGradingService {
 
       // Return the enhanced validated response
       return new TextBasedQuestionResponseModel(
-        gradingAttempt.points,
+        normalizedAttempt.points,
         finalFeedback,
-        gradingAttempt.analysis,
-        gradingAttempt.evaluation,
-        gradingAttempt.explanation,
-        gradingAttempt.guidance,
-        this.ensureRequiredRubricFields(gradingAttempt.rubricScores),
-        gradingAttempt.gradingRationale,
+        normalizedAttempt.analysis,
+        normalizedAttempt.evaluation,
+        normalizedAttempt.explanation,
+        normalizedAttempt.guidance,
+        this.ensureRequiredRubricFields(normalizedAttempt.rubricScores),
+        normalizedAttempt.gradingRationale,
         metadata,
       );
     } catch (error) {
@@ -292,6 +298,79 @@ export class TextGradingService implements ITextGradingService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Normalize a grading attempt by clamping rubric scores and total points to valid ranges.
+   */
+  private normalizeGradingAttempt(
+    attempt: GradingAttempt,
+    maxPossiblePoints: number,
+  ): GradingAttempt {
+    const cloned: GradingAttempt = { ...attempt } as GradingAttempt;
+
+    let totalFromRubrics: number | undefined;
+    if (Array.isArray(cloned.rubricScores) && cloned.rubricScores.length > 0) {
+      type StrictRubricScore = {
+        rubricQuestion: string;
+        pointsAwarded: number;
+        maxPoints: number;
+        criterionSelected: string;
+        justification: string;
+      };
+
+      const normalizedScores: StrictRubricScore[] = cloned.rubricScores.map(
+        (
+          r: {
+            rubricQuestion?: string;
+            pointsAwarded?: number;
+            maxPoints?: number;
+            criterionSelected?: string;
+            justification?: string;
+          },
+          index: number,
+        ): StrictRubricScore => {
+          const max = Math.max(0, Number(r?.maxPoints ?? 0));
+          const awardedRaw = Number(r?.pointsAwarded ?? 0);
+          const awarded = Math.min(Math.max(0, awardedRaw), max);
+          if (awarded !== awardedRaw) {
+            this.logger.warn(
+              `Clamped rubric score at index ${index} from ${awardedRaw} to ${awarded} (max ${max})`,
+            );
+          }
+          return {
+            rubricQuestion: String(r?.rubricQuestion ?? ""),
+            pointsAwarded: awarded,
+            maxPoints: max,
+            criterionSelected: String(r?.criterionSelected ?? ""),
+            justification: String(r?.justification ?? ""),
+          };
+        },
+      );
+
+      cloned.rubricScores =
+        normalizedScores as unknown as typeof cloned.rubricScores;
+      totalFromRubrics = cloned.rubricScores.reduce(
+        (sum, r) => sum + (r.pointsAwarded || 0),
+        0,
+      );
+    }
+
+    const rawPoints = Number(cloned.points ?? 0);
+    const normalizedPoints =
+      totalFromRubrics === undefined ? rawPoints : totalFromRubrics;
+    const cappedPoints = Math.min(
+      Math.max(0, normalizedPoints),
+      maxPossiblePoints,
+    );
+    if (cappedPoints !== rawPoints) {
+      this.logger.warn(
+        `Normalized total points from ${rawPoints} to ${cappedPoints} (max ${maxPossiblePoints})`,
+      );
+    }
+    cloned.points = cappedPoints;
+
+    return cloned;
   }
 
   /**

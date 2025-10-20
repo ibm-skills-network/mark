@@ -164,7 +164,16 @@ export class PromptProcessorService implements IPromptProcessor {
 
       return response;
     } catch (error) {
-      console.log("The issue is:", error);
+      this.logger.error(
+        `Provider invocation failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      const error_ =
+        error instanceof Error
+          ? error
+          : new Error(`Failed provider invoke: ${JSON.stringify(error)}`);
+      throw error_;
     }
   }
 
