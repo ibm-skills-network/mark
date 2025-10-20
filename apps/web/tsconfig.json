@@ -26,6 +26,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.js",
     ".next/types/**/*.ts",
     "../api/src/api/report/helpers/program.ts"
   ],

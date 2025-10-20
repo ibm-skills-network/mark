@@ -30,10 +30,17 @@ export class ChatController {
 
   @Post("today")
   @UseGuards(ChatAccessControlGuard)
-  async getTodayChat(@Body() body: { userId: string; assignmentId?: number }) {
+  async getTodayChat(@Body() body: { header: string; body: string }) {
+    let newBody: { userId: string; assignmentId?: number };
+    if (typeof body.body === "string") {
+      newBody = JSON.parse(body.body) as {
+        userId: string;
+        assignmentId?: number;
+      };
+    }
     return this.chatService.getOrCreateTodayChat(
-      body.userId,
-      body.assignmentId,
+      newBody.userId,
+      newBody.assignmentId,
     );
   }
 

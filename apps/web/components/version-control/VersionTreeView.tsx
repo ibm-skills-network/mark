@@ -127,11 +127,9 @@ export function VersionTreeView({ assignmentId }: Props) {
     currentVersion,
     formatVersionAge,
     hasUnsavedChanges,
-    saveDraft,
     drafts,
     loadDraft,
     activateVersion,
-    // Favorite version functionality
     toggleFavoriteVersion,
     isVersionFavorite,
     getFavoriteVersions,
@@ -538,8 +536,6 @@ export function VersionTreeView({ assignmentId }: Props) {
   // Modal handlers for unsaved changes
   const handleSaveAndProceed = async () => {
     try {
-      await saveDraft();
-
       if (pendingAction) {
         await proceedWithNodeClick(
           pendingAction.version,
@@ -867,7 +863,7 @@ export function VersionTreeView({ assignmentId }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         <div className="flex-1 p-6 overflow-y-auto">
           <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-20">
             {/* Header */}
@@ -1429,6 +1425,36 @@ export function VersionTreeView({ assignmentId }: Props) {
                               </div>
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-600">
+                                  Attempts Before Cooldown Period:
+                                </span>
+                                <span className="font-medium text-gray-900">
+                                  {(selectedVersionDetails || selectedVersion)
+                                    .attemptsBeforeCoolDown === 0
+                                    ? "Never wait"
+                                    : ((
+                                        selectedVersionDetails ||
+                                        selectedVersion
+                                      ).attemptsBeforeCoolDown ?? "")}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
+                                  Time Learners Wait Between Attempts (Minutes):
+                                </span>
+                                <span className="font-medium text-gray-900">
+                                  {(selectedVersionDetails || selectedVersion)
+                                    .attemptsBeforeCoolDown === 0 ||
+                                  (selectedVersionDetails || selectedVersion)
+                                    .retakeAttemptCoolDownMinutes === 0
+                                    ? "Never wait"
+                                    : ((
+                                        selectedVersionDetails ||
+                                        selectedVersion
+                                      ).retakeAttemptCoolDownMinutes ?? "")}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
                                   Passing Grade:
                                 </span>
                                 <span className="font-medium text-gray-900">
@@ -1533,6 +1559,29 @@ export function VersionTreeView({ assignmentId }: Props) {
                                     .showQuestions
                                     ? "Visible"
                                     : "Hidden"}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">
+                                  Correct Answer Visibility:
+                                </span>
+                                <span
+                                  className={`font-medium px-2 py-1 rounded-full text-xs ${
+                                    (selectedVersionDetails || selectedVersion)
+                                      .correctAnswerVisibility === "ALWAYS"
+                                      ? "bg-green-100 text-green-700"
+                                      : (
+                                            selectedVersionDetails ||
+                                            selectedVersion
+                                          ).correctAnswerVisibility === "NEVER"
+                                        ? "bg-red-100 text-red-700"
+                                        : "bg-yellow-100 text-yellow-700"
+                                  }`}
+                                >
+                                  {
+                                    (selectedVersionDetails || selectedVersion)
+                                      .correctAnswerVisibility
+                                  }
                                 </span>
                               </div>
                             </div>

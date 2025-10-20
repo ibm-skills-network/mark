@@ -255,7 +255,7 @@ const SubmitQuestionsButton: FC<Props> = ({
       fromVersion: {
         ...currentVersion,
         createdAt: currentVersion.createdAt,
-        versionNumber: currentVersion.versionNumber.toString(),
+        versionNumber: currentVersion.versionNumber?.toString(),
       },
       toVersion: {
         ...currentVersion,
@@ -386,7 +386,7 @@ const SubmitQuestionsButton: FC<Props> = ({
         fromVersion: {
           ...currentVersion,
           createdAt: currentVersion.createdAt,
-          versionNumber: currentVersion.versionNumber.toString(),
+          versionNumber: currentVersion.versionNumber?.toString(),
         },
         toVersion: {
           ...currentVersion,
@@ -414,7 +414,7 @@ const SubmitQuestionsButton: FC<Props> = ({
           ? {
               ...currentVersion,
               createdAt: currentVersion.createdAt,
-              versionNumber: currentVersion.versionNumber.toString(),
+              versionNumber: currentVersion.versionNumber?.toString(),
             }
           : {
               id: 0,

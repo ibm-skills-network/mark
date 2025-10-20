@@ -1,6 +1,6 @@
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { JobStatusServiceV1 } from "./job-status.service";
 
 @Module({

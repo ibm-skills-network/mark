@@ -25,7 +25,7 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -540,7 +540,9 @@ export class AttemptServiceV2 {
     } catch (error) {
       console.error(`Failed to poll grading job ${gradingJobId}:`, error);
       throw new Error(
-        `Database error while polling job ${gradingJobId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Database error while polling job ${gradingJobId}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
     }
   }

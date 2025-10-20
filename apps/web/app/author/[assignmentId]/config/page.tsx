@@ -2,6 +2,7 @@ import AssignmentQuestionOrder from "@/app/author/(components)/StepTwo/Assignmen
 import AssignmentType from "@/app/author/(components)/StepTwo/AssignmentType";
 import PageTitle from "@authorComponents/PageTitle";
 import AssignmentCompletion from "@authorComponents/StepTwo/AssignmentCompletion";
+import AssignmentRetakeAttempts from "@authorComponents/StepTwo/AssignmentRetakeAttempts";
 import AssignmentFeedback from "@authorComponents/StepTwo/AssignmentFeedback";
 import AssignmentTime from "@authorComponents/StepTwo/AssignmentTime";
 import { FooterNavigation } from "@authorComponents/StepTwo/FooterNavigation";
@@ -23,6 +24,7 @@ function Component(props: Props) {
       <AssignmentType />
       <AssignmentTime />
       <AssignmentCompletion />
+      <AssignmentRetakeAttempts />
       <AssignmentFeedback />
       <AssignmentQuestionDisplay />
       <AssignmentQuestionOrder />

@@ -11,7 +11,7 @@ import {
   RequestRegradingResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/feedback.request.dto";
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptRegradingService {

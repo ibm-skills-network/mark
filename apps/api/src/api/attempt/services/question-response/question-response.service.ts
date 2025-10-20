@@ -25,7 +25,7 @@ import { QuestionService } from "src/api/assignment/question/question.service";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";

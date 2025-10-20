@@ -1,8 +1,4 @@
-import {
-  parseSemanticVersion,
-  SemanticVersion,
-  formatSemanticVersion,
-} from "./semantic-versioning";
+import { parseSemanticVersion, SemanticVersion } from "./semantic-versioning";
 
 export interface VersionNode {
   version: any;
@@ -100,7 +96,7 @@ function buildMinorVersionHierarchy(versions: VersionNode[]): VersionNode[] {
   const result: VersionNode[] = [];
 
   // Process each minor group
-  for (const [minor, minorVersions] of Array.from(minorGroups.entries())) {
+  for (const [_minor, minorVersions] of Array.from(minorGroups.entries())) {
     // Sort by patch version (newest first)
     minorVersions.sort(
       (a, b) => b.semanticVersion.patch - a.semanticVersion.patch,

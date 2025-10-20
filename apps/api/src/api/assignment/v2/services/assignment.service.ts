@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
@@ -223,6 +223,8 @@ export class AssignmentServiceV2 {
         instructions: updateDto.instructions,
         gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
         numAttempts: updateDto.numAttempts,
+        attemptsBeforeCoolDown: updateDto.attemptsBeforeCoolDown,
+        retakeAttemptCoolDownMinutes: updateDto.retakeAttemptCoolDownMinutes,
         passingGrade: updateDto.passingGrade,
         displayOrder: updateDto.displayOrder,
         graded: updateDto.graded,
@@ -232,7 +234,7 @@ export class AssignmentServiceV2 {
         showAssignmentScore: updateDto.showAssignmentScore,
         showQuestionScore: updateDto.showQuestionScore,
         showSubmissionFeedback: updateDto.showSubmissionFeedback,
-        showCorrectAnswer: updateDto.showCorrectAnswer,
+        correctAnswerVisibility: updateDto.correctAnswerVisibility,
         timeEstimateMinutes: updateDto.timeEstimateMinutes,
         showQuestions: updateDto.showQuestions,
         numberOfQuestionsPerAttempt: updateDto.numberOfQuestionsPerAttempt,

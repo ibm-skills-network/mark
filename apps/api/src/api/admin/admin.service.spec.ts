@@ -1,10 +1,24 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { PrismaService } from "../../prisma.service";
+import { PrismaService } from "../../database/prisma.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminService } from "./admin.service";
 
 describe("AdminService", () => {
   let service: AdminService;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+
+  beforeAll(() => {
+    process.env.DATABASE_URL =
+      originalDatabaseUrl ?? "postgresql://user:pass@localhost:5432/test"; // pragma: allowlist secret
+  });
+
+  afterAll(() => {
+    if (originalDatabaseUrl) {
+      process.env.DATABASE_URL = originalDatabaseUrl;
+    } else {
+      delete process.env.DATABASE_URL;
+    }
+  });
 
   beforeEach(async () => {
     const mockLlmPricingService = {

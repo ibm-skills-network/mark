@@ -15,7 +15,7 @@ import {
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 
 export interface SaveDraftDto {
   draftName?: string;
@@ -28,6 +28,8 @@ export interface SaveDraftDto {
     type: string;
     graded: boolean;
     numAttempts: number;
+    attemptsBeforeCoolDown: number;
+    retakeAttemptCoolDownMinutes: number;
     allotedTimeMinutes: number;
     attemptsPerTimeRange: number;
     attemptsTimeRangeHours: number;
@@ -132,6 +134,12 @@ export class DraftManagementService {
           graded: saveDraftDto.assignmentData?.graded ?? assignment.graded,
           numAttempts:
             saveDraftDto.assignmentData?.numAttempts ?? assignment.numAttempts,
+          attemptsBeforeCoolDown:
+            saveDraftDto.assignmentData?.attemptsBeforeCoolDown ??
+            assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes:
+            saveDraftDto.assignmentData?.retakeAttemptCoolDownMinutes ??
+            assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes:
             saveDraftDto.assignmentData?.allotedTimeMinutes ??
             assignment.allotedTimeMinutes,
@@ -248,6 +256,16 @@ export class DraftManagementService {
         ...(saveDraftDto.assignmentData?.numAttempts !== undefined && {
           numAttempts: saveDraftDto.assignmentData.numAttempts,
         }),
+        ...(saveDraftDto.assignmentData?.attemptsBeforeCoolDown !==
+          undefined && {
+          attemptsBeforeCoolDown:
+            saveDraftDto.assignmentData.attemptsBeforeCoolDown,
+        }),
+        ...(saveDraftDto.assignmentData?.retakeAttemptCoolDownMinutes !==
+          undefined && {
+          retakeAttemptCoolDownMinutes:
+            saveDraftDto.assignmentData.retakeAttemptCoolDownMinutes,
+        }),
         ...(saveDraftDto.assignmentData?.allotedTimeMinutes !== undefined && {
           allotedTimeMinutes: saveDraftDto.assignmentData.allotedTimeMinutes,
         }),
@@ -355,6 +373,8 @@ export class DraftManagementService {
     type: string;
     graded: boolean;
     numAttempts: number;
+    attemptsBeforeCoolDown: number;
+    retakeAttemptCoolDownMinutes: number;
     allotedTimeMinutes: number;
     attemptsPerTimeRange: number;
     attemptsTimeRangeHours: number;
@@ -397,6 +417,8 @@ export class DraftManagementService {
       type: draft.type,
       graded: draft.graded,
       numAttempts: draft.numAttempts,
+      attemptsBeforeCoolDown: draft.attemptsBeforeCoolDown,
+      retakeAttemptCoolDownMinutes: draft.retakeAttemptCoolDownMinutes,
       allotedTimeMinutes: draft.allotedTimeMinutes,
       attemptsPerTimeRange: draft.attemptsPerTimeRange,
       attemptsTimeRangeHours: draft.attemptsTimeRangeHours,
@@ -456,6 +478,8 @@ export class DraftManagementService {
     type: string;
     graded: boolean;
     numAttempts: number;
+    attemptsBeforeCoolDown: number;
+    retakeAttemptCoolDownMinutes: number;
     allotedTimeMinutes: number;
     attemptsPerTimeRange: number;
     attemptsTimeRangeHours: number;

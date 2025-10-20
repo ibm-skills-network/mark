@@ -13,10 +13,12 @@ import { AppService } from "./app.service";
 import { AdminAuthModule } from "./auth/admin-auth.module";
 import { AuthModule } from "./auth/auth.module";
 import { UserSessionMiddleware } from "./auth/middleware/user.session.middleware";
+import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
+import { DataTransformMiddleware } from "./middleware/data-transform.middleware";
 import { routes } from "./routes";
 
 @Module({
@@ -30,13 +32,14 @@ import { routes } from "./routes";
     MessagingModule,
     AuthModule,
     AdminAuthModule,
+    DatabaseModule,
   ],
   providers: [AppService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(LoggerMiddleware)
+      .apply(DataTransformMiddleware, LoggerMiddleware)
       .forRoutes({ path: "*", method: RequestMethod.ALL })
       .apply(UserSessionMiddleware)
       .forRoutes(
@@ -45,7 +48,6 @@ export class AppModule implements NestModule {
         { path: "/v1/user-session", method: RequestMethod.GET },
         { path: "/v1/reports*", method: RequestMethod.ALL },
         { path: "/v1/chats*", method: RequestMethod.ALL },
-        { path: "/v1/notifications*", method: RequestMethod.ALL },
         { path: "/v1/files*", method: RequestMethod.ALL },
         { path: "/v1/admin*", method: RequestMethod.ALL },
         { path: "/v2/assignments/*", method: RequestMethod.ALL },

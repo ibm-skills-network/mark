@@ -8,7 +8,7 @@
 /* eslint-disable unicorn/no-null */
 import { Test, TestingModule } from "@nestjs/testing";
 import { firstValueFrom } from "rxjs";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockJob,
   createMockPrismaService,

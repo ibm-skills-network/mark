@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import {
   Assignment,
+  CorrectAnswerVisibility,
   Question,
   QuestionType,
   QuestionVariant,
@@ -19,6 +20,10 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
+import {
+  SuccessPageDataDto,
+  SuccessPageQuestionDto,
+} from "src/api/attempt/dto/success-page-data.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
@@ -27,7 +32,7 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
@@ -43,6 +48,7 @@ import { QuestionService } from "../question/question.service";
 import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
+  IN_COOLDOWN_PERIOD,
   IN_PROGRESS_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
@@ -515,7 +521,7 @@ export class AttemptServiceV1 {
           grade: 0,
           showSubmissionFeedback: false,
           showQuestions: false,
-          showCorrectAnswer: false,
+          correctAnswerVisibility: "NEVER",
           feedbacksForQuestions: [],
           message: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
         };
@@ -581,7 +587,11 @@ export class AttemptServiceV1 {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
-        showCorrectAnswer: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
         questions: {
           where: { isDeleted: false },
         },
@@ -639,7 +649,8 @@ export class AttemptServiceV1 {
         grade: assignment.showAssignmentScore ? grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
-        showCorrectAnswer: assignment.showCorrectAnswer,
+        correctAnswerVisibility:
+          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
           assignment as unknown as LearnerGetAssignmentResponseDto,
@@ -660,7 +671,8 @@ export class AttemptServiceV1 {
         showQuestions: assignment.showQuestions,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
-        showCorrectAnswer: assignment.showCorrectAnswer,
+        correctAnswerVisibility:
+          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
           assignment as unknown as LearnerGetAssignmentResponseDto,
@@ -746,7 +758,11 @@ export class AttemptServiceV1 {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
-        showCorrectAnswer: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
       },
     });
 
@@ -879,7 +895,8 @@ export class AttemptServiceV1 {
 
     // Apply visibility settings for correct answers and if learner didnt pass
     if (
-      assignment.showCorrectAnswer === false &&
+      (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+        "NEVER" &&
       assignmentAttempt.grade < assignment.passingGrade
     ) {
       for (const question of finalQuestions) {
@@ -906,7 +923,8 @@ export class AttemptServiceV1 {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
-      showCorrectAnswer: assignment.showCorrectAnswer,
+      correctAnswerVisibility:
+        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
     };
   }
@@ -971,7 +989,11 @@ export class AttemptServiceV1 {
         showAssignmentScore: true,
         showSubmissionFeedback: true,
         showQuestionScore: true,
-        showCorrectAnswer: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
       },
     })) as LearnerGetAssignmentResponseDto;
 
@@ -1153,9 +1175,9 @@ export class AttemptServiceV1 {
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;
-          // Only remove correct answer data if showCorrectAnswer is false
           if (
-            assignment.showCorrectAnswer === false &&
+            (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+              "ON_PASS" &&
             assignmentAttempt.grade < assignment.passingGrade
           ) {
             delete choice.isCorrect;
@@ -1170,9 +1192,9 @@ export class AttemptServiceV1 {
           if (translationObject?.translatedChoices) {
             for (const choice of translationObject.translatedChoices) {
               delete choice.points;
-              // Only remove correct answer data if showCorrectAnswer is false
               if (
-                assignment.showCorrectAnswer === false &&
+                (assignment.currentVersion?.correctAnswerVisibility ||
+                  "NEVER") === "ON_PASS" &&
                 assignmentAttempt.grade < assignment.passingGrade
               ) {
                 delete choice.isCorrect;
@@ -1192,9 +1214,9 @@ export class AttemptServiceV1 {
         ) as Choice[];
         for (const choice of randomizedArray) {
           delete choice.points;
-          // Only remove correct answer data if showCorrectAnswer is false
           if (
-            assignment.showCorrectAnswer === false &&
+            (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+              "ON_PASS" &&
             assignmentAttempt.grade < assignment.passingGrade
           ) {
             delete choice.isCorrect;
@@ -1204,9 +1226,9 @@ export class AttemptServiceV1 {
         question.randomizedChoices = JSON.stringify(randomizedArray);
       }
 
-      // Only remove the answer field if showCorrectAnswer is false
       if (
-        assignment.showCorrectAnswer === false &&
+        (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
+          "ON_PASS" &&
         assignmentAttempt.grade < assignment.passingGrade
       ) {
         delete question.answer;
@@ -1227,7 +1249,8 @@ export class AttemptServiceV1 {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
-      showCorrectAnswer: assignment.showCorrectAnswer,
+      correctAnswerVisibility:
+        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
     };
   }
 
@@ -1474,6 +1497,7 @@ export class AttemptServiceV1 {
     assignment: LearnerGetAssignmentResponseDto,
     userSession: UserSession,
   ): Promise<void> {
+    const now = new Date();
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
     const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -1483,36 +1507,28 @@ export class AttemptServiceV1 {
         OR: [
           {
             submitted: false,
-            expiresAt: {
-              gte: new Date(),
-            },
+            expiresAt: { gte: now },
           },
           {
             submitted: false,
             expiresAt: undefined,
           },
           {
-            createdAt: {
-              gte: timeRangeStartDate,
-              lte: new Date(),
-            },
+            createdAt: { gte: timeRangeStartDate, lte: now },
           },
         ],
       },
+      orderBy: { createdAt: "desc" },
     });
     const ongoingAttempts = attempts.filter(
-      (sub) =>
-        !sub.submitted &&
-        (sub.expiresAt >= new Date() || sub.expiresAt === null),
-    );
-
-    const attemptsInTimeRange = attempts.filter(
-      (sub) =>
-        sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
+      (sub) => !sub.submitted && (!sub.expiresAt || sub.expiresAt >= now),
     );
     if (ongoingAttempts.length > 0) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
+    const attemptsInTimeRange = attempts.filter(
+      (sub) => sub.createdAt >= timeRangeStartDate && sub.createdAt <= now,
+    );
 
     if (
       assignment.attemptsPerTimeRange &&
@@ -1523,15 +1539,33 @@ export class AttemptServiceV1 {
       );
     }
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
-      const attemptCount = await this.countUserAttempts(
+      const totalAttempts = await this.countUserAttempts(
         userSession.userId,
         assignment.id,
       );
 
-      if (attemptCount >= assignment.numAttempts) {
+      if (totalAttempts >= assignment.numAttempts) {
         throw new UnprocessableEntityException(
           MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
         );
+      }
+
+      const attemptsBeforeCoolDown = assignment.attemptsBeforeCoolDown ?? 1;
+      const cooldownMinutes = assignment.retakeAttemptCoolDownMinutes ?? 0;
+
+      if (
+        attemptsBeforeCoolDown > 0 &&
+        totalAttempts >= attemptsBeforeCoolDown
+      ) {
+        const latestAttempt = attemptsInTimeRange[0];
+        if (latestAttempt?.expiresAt) {
+          const nextEligibleTime =
+            new Date(latestAttempt.expiresAt).getTime() +
+            cooldownMinutes * 60_000;
+          if (now.getTime() < nextEligibleTime) {
+            throw new UnprocessableEntityException(IN_COOLDOWN_PERIOD);
+          }
+        }
       }
     }
   }

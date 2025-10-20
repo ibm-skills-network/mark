@@ -44,7 +44,6 @@ export function VersionControlPanel({
     drafts,
     isLoadingDrafts,
     draftsLoadFailed,
-    loadDrafts,
     loadDraft,
     deleteDraft,
   } = useVersionControl();
@@ -485,15 +484,6 @@ export function VersionControlPanel({
                           onClick={() => loadVersions()}
                         >
                           Retry Versions
-                        </Button>
-                      )}
-                      {draftsLoadFailed && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => loadDrafts()}
-                        >
-                          Retry Drafts
                         </Button>
                       )}
                     </div>

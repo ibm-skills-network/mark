@@ -17,14 +17,15 @@
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/main",
-    "test": "jest",
+    "test": "jest --detectOpenHandles --forceExit",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:staged": "jest --bail --findRelatedTests --passWithNoTests --collectCoverage=false",
     "test:watch": "jest --watch",
     "create-initial-versions": "dotenv -e ./dev.env -- ts-node src/scripts/create-initial-versions.ts",
-    "translation-audit": "node dist/src/scripts/translation-audit.js"
+    "translation-audit": "node dist/src/scripts/translation-audit.js",
+    "verify-migration": "dotenv -e ./dev.env -- ts-node scripts/verify-migration.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -37,7 +38,6 @@
     "@langchain/openai": "^0.6.9",
     "@nestjs/axios": "^3.0.0",
     "@nestjs/class-validator": "^0.13.4",
-    "@nestjs/cli": "^10.0.0",
     "@nestjs/common": "10.4.17",
     "@nestjs/config": "^3.0.0",
     "@nestjs/core": "10.4.17",
@@ -54,7 +54,7 @@
     "@types/nodemailer": "^6.4.17",
     "@types/pdf-parse": "^1.1.5",
     "aws-sdk": "^2.1692.0",
-    "axios": "^1.7.4",
+    "axios": "^1.12.0",
     "bottleneck": "^2.19.5",
     "bullmq": "^5.21.1",
     "chardet": "^2.1.0",
@@ -78,7 +78,7 @@
     "natural": "^8.0.1",
     "nest-winston": "^1.9.2",
     "node-xlsx": "^0.24.0",
-    "nodemailer": "^7.0.5",
+    "nodemailer": "^7.0.7",
     "octonode": "^0.10.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -100,6 +100,7 @@
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.0.2",
+    "@nestjs/cli": "10.4.5",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
     "@types/cookie-parser": "^1.4.7",

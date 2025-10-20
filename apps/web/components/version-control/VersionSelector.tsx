@@ -28,7 +28,6 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
     setSelectedVersion,
     activateVersion,
     createVersion,
-    saveDraft,
     formatVersionAge,
     getDraftVersions,
     getPublishedVersions,
@@ -53,10 +52,6 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
     await createVersion(versionDescription || undefined, false);
     setVersionDescription("");
     setIsCreateVersionOpen(false);
-  };
-
-  const handleSaveDraft = async () => {
-    await saveDraft();
   };
 
   const publishedVersions = getPublishedVersions();

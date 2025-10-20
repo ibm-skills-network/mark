@@ -1,5 +1,5 @@
 import { ApiProperty, OmitType } from "@nestjs/swagger";
-import { Question } from "@prisma/client";
+import { AssignmentVersion, Question } from "@prisma/client";
 import { UpdateAssignmentRequestDto } from "./update.assignment.request.dto";
 
 export class AssignmentResponseDto extends UpdateAssignmentRequestDto {
@@ -44,6 +44,7 @@ export class LearnerGetAssignmentResponseDto extends OmitType(
   GetAssignmentResponseDto,
   ["questions", "displayOrder"] as const,
 ) {
+  currentVersion?: AssignmentVersion;
   questions: Question[];
   displayOrder: string;
 }

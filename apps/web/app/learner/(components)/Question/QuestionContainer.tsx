@@ -60,12 +60,13 @@ function Component(props: Props) {
   const checkToShowRubric = () => {
     if (
       ["TEXT", "UPLOAD", "LINk_FILE", "URL"].includes(question.type) &&
-      question.scoring.showRubricsToLearner &&
+      question.scoring.showSubQuestionsToLearner &&
       question.scoring?.rubrics
     )
       return true;
     else return false;
   };
+  const showRubrics = question.scoring?.showRubricsToLearner ?? false;
   const showPoints = question.scoring?.showPoints ?? false;
   // Get the questionStatus directly from the store
   const questionStatus = getQuestionStatusById
@@ -303,9 +304,7 @@ function Component(props: Props) {
                 translationOn ? "text-violet-600" : "text-gray-600"
               }`}
             />
-            <span className="text-sm text-gray-600 sm:hidden">
-              Translation
-            </span>
+            <span className="text-sm text-gray-600 sm:hidden">Translation</span>
           </div>
           <button
             type="button"
@@ -330,6 +329,7 @@ function Component(props: Props) {
       {checkToShowRubric() && (
         <ShowHideRubric
           rubrics={question.scoring.rubrics}
+          showRubrics={showRubrics}
           showPoints={showPoints}
         />
       )}
@@ -516,7 +516,9 @@ function Component(props: Props) {
             <button
               onClick={() => {
                 // Dispatch a custom event to trigger submission
-                const submitEvent = new CustomEvent('triggerAssignmentSubmission');
+                const submitEvent = new CustomEvent(
+                  "triggerAssignmentSubmission",
+                );
                 window.dispatchEvent(submitEvent);
               }}
               className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md"

@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { AssignmentType } from "@prisma/client";
-import { IsDefined, IsEnum, IsString } from "class-validator";
+import { IsDefined, IsEnum, IsOptional, IsString } from "class-validator";
 
 export class AdminReplaceAssignmentRequestDto {
   @ApiProperty({
@@ -28,7 +28,7 @@ export class AdminCreateAssignmentRequestDto extends AdminReplaceAssignmentReque
     type: String,
     required: true,
   })
-  @IsDefined()
   @IsString()
-  groupId: string;
+  @IsOptional()
+  groupId?: string;
 }

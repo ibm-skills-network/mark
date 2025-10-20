@@ -7,7 +7,7 @@ import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
 import { Logger } from "winston";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import {
   CriteriaDto,
   ScoringDto,

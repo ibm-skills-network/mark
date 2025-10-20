@@ -1,3 +1,16 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/**
+ * ScheduledTasksService - Handles recurring background tasks and data maintenance
+ *
+ * This service manages scheduled tasks including:
+ * - Assignment author migration and synchronization
+ * - Old draft cleanup
+ * - LLM pricing updates
+ * - Insights precomputation
+ *
+ * @module scheduled-tasks
+ */
+
 import {
   Inject,
   Injectable,
@@ -5,7 +18,7 @@ import {
   OnApplicationBootstrap,
 } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 import { AdminService } from "../../admin/admin.service";
 import { LLMPricingService } from "../../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
@@ -20,65 +33,26 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     private adminService: AdminService,
   ) {}
 
-  async onApplicationBootstrap() {
+  /**
+   * Runs initial tasks when the application starts
+   *
+   * @returns {Promise<void>}
+   */
+  async onApplicationBootstrap(): Promise<void> {
     this.logger.log("Application started - running initial tasks");
     // Run initial tasks on startup
     await Promise.all([this.migrateExistingAuthors(), this.updateLLMPricing()]);
   }
 
-  // @Cron(CronExpression.EVERY_DAY_AT_2AM)
-  // async republishTopAssignments() {
-  //   this.logger.log('Starting scheduled task: Republish top 10 used assignments');
-
-  //   try {
-  //     // Find top 10 most attempted assignments
-  //     const topAssignments = await this.prismaService.assignmentAttempt.groupBy({
-  //       by: ['assignmentId'],
-  //       _count: {
-  //         assignmentId: true,
-  //       },
-  //       orderBy: {
-  //         _count: {
-  //           assignmentId: 'desc',
-  //         },
-  //       },
-  //       take: 10,
-  //     });
-
-  //     this.logger.log(`Found ${topAssignments.length} top assignments to republish`);
-
-  //     // Update each assignment to trigger republishing/translation
-  //     for (const assignment of topAssignments) {
-  //       await this.prismaService.assignment.update({
-  //         where: { id: assignment.assignmentId },
-  //         data: {
-  //           updatedAt: new Date(),
-  //           published: true, // Ensure it's published
-  //         },
-  //       });
-
-  //       // Create a publish job to trigger translation
-  //       await this.prismaService.publishJob.create({
-  //         data: {
-  //           userId: 'SYSTEM_SCHEDULED_TASK',
-  //           assignmentId: assignment.assignmentId,
-  //           status: 'Pending',
-  //           progress: 'Scheduled republishing of top assignment',
-  //           percentage: 0,
-  //         },
-  //       });
-
-  //       this.logger.log(`Republished assignment ${assignment.assignmentId} with ${assignment._count.assignmentId} attempts`);
-  //     }
-
-  //     this.logger.log('Completed scheduled task: Republish top 10 used assignments');
-  //   } catch (error) {
-  //     this.logger.error('Error in republishTopAssignments:', error);
-  //   }
-  // }
-
+  /**
+   * Migrates existing authors from various tables to AssignmentAuthor table
+   * Runs monthly and on application startup
+   * Uses upsert to handle duplicates gracefully
+   *
+   * @returns {Promise<void>}
+   */
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
-  async migrateExistingAuthors() {
+  async migrateExistingAuthors(): Promise<void> {
     this.logger.log(
       "Starting scheduled task: Migrate existing authors to AssignmentAuthor table",
     );
@@ -103,7 +77,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Found ${reportAuthors.length} potential authors from Report table`,
       );
 
-      // Find authors from AIUsage table (users who generated content for assignments)
+      // Find authors from AIUsage table
       const aiUsageAuthors = await this.prismaService.aIUsage.findMany({
         where: {
           userId: {
@@ -124,7 +98,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Found ${aiUsageAuthors.length} potential authors from AIUsage table`,
       );
 
-      // Find authors from Job table (users who created assignments)
+      // Find authors from Job table
       const jobAuthors = await this.prismaService.job.findMany({
         select: {
           userId: true,
@@ -137,11 +111,11 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Found ${jobAuthors.length} potential authors from Job table`,
       );
 
-      // Find authors from publishJob table (users who published assignments)
+      // Find authors from publishJob table
       const publishJobAuthors = await this.prismaService.publishJob.findMany({
         where: {
           userId: {
-            not: "SYSTEM_SCHEDULED_TASK", // Exclude system tasks
+            not: "SYSTEM_SCHEDULED_TASK",
           },
         },
         select: {
@@ -150,16 +124,21 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         },
         distinct: ["userId", "assignmentId"],
       });
+
       // Combine all potential authors
       const allPotentialAuthors = [
-        ...reportAuthors.map((r) => ({
-          userId: r.reporterId,
-          assignmentId: r?.assignmentId ?? null,
-        })),
-        ...aiUsageAuthors.map((a) => ({
-          userId: a?.userId ?? null,
-          assignmentId: a.assignmentId,
-        })),
+        ...reportAuthors
+          .filter((r) => r.assignmentId !== null)
+          .map((r) => ({
+            userId: r.reporterId,
+            assignmentId: r.assignmentId,
+          })),
+        ...aiUsageAuthors
+          .filter((a) => a.userId !== null)
+          .map((a) => ({
+            userId: a.userId,
+            assignmentId: a.assignmentId,
+          })),
         ...jobAuthors.map((index) => ({
           userId: index.userId,
           assignmentId: index.assignmentId,
@@ -170,75 +149,162 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         })),
       ];
 
-      // Remove duplicates
+      // Remove duplicates and filter out invalid entries
       const uniqueAuthors = allPotentialAuthors.filter(
         (author, index, self) =>
+          author.userId &&
+          author.assignmentId &&
           index ===
-          self.findIndex(
-            (a) =>
-              a.userId === author.userId &&
-              a.assignmentId === author.assignmentId,
-          ),
+            self.findIndex(
+              (a) =>
+                a.userId === author.userId &&
+                a.assignmentId === author.assignmentId,
+            ),
       );
 
       this.logger.log(
         `Processing ${uniqueAuthors.length} unique author-assignment pairs`,
       );
 
-      let migratedCount = 0;
-      let skippedCount = 0;
-
-      // Insert authors into AssignmentAuthor table (ignore duplicates)
-      for (const author of uniqueAuthors) {
-        try {
-          await this.prismaService.assignmentAuthor.create({
-            data: {
-              userId: author.userId,
-              assignmentId: author.assignmentId,
-            },
-          });
-          migratedCount++;
-        } catch {
-          // Skip if already exists or assignment doesn't exist
-          skippedCount++;
-        }
-      }
+      // Use batch upsert for better performance
+      const results = await this.batchUpsertAuthors(uniqueAuthors);
 
       this.logger.log(
-        `Completed scheduled task: Migrated ${migratedCount} authors, skipped ${skippedCount} duplicates/invalid entries`,
+        `Completed scheduled task: Created ${results.created} new authors, ` +
+          `updated ${results.updated} existing, skipped ${results.skipped} invalid entries`,
       );
     } catch (error) {
       this.logger.error("Error in migrateExistingAuthors:", error);
     }
   }
 
-  // @Cron(CronExpression.EVERY_WEEK)
-  // async cleanupOldPublishJobs() {
-  //   this.logger.log('Starting scheduled task: Cleanup old publish jobs');
+  /**
+   * Batch upserts authors using efficient database operations
+   *
+   * @private
+   * @param {Array} authors - Array of author objects to upsert
+   * @returns {Promise<{created: number, updated: number, skipped: number}>}
+   */
+  private async batchUpsertAuthors(
+    authors: Array<{ userId: string; assignmentId: number }>,
+  ): Promise<{ created: number; updated: number; skipped: number }> {
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
 
-  //   try {
-  //     // Delete completed publish jobs older than 30 days
-  //     const thirtyDaysAgo = new Date();
-  //     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Process in batches to avoid overwhelming the database
+    const batchSize = 100;
+    for (let index = 0; index < authors.length; index += batchSize) {
+      const batch = authors.slice(index, index + batchSize);
 
-  //     const deletedJobs = await this.prismaService.publishJob.deleteMany({
-  //       where: {
-  //         status: 'Completed',
-  //         createdAt: {
-  //           lt: thirtyDaysAgo,
-  //         },
-  //       },
-  //     });
+      // Use transaction for batch operations
+      await this.prismaService.$transaction(async (tx) => {
+        for (const author of batch) {
+          try {
+            // First check if assignment exists
+            const assignmentExists = await tx.assignment.findUnique({
+              where: { id: author.assignmentId },
+              select: { id: true },
+            });
 
-  //     this.logger.log(`Cleaned up ${deletedJobs.count} old publish jobs`);
-  //   } catch (error) {
-  //     this.logger.error('Error in cleanupOldPublishJobs:', error);
-  //   }
-  // }
+            if (!assignmentExists) {
+              skipped++;
+              continue;
+            }
 
-  @Cron(CronExpression.EVERY_WEEK) // Every Sunday at midnight
-  async cleanupOldDrafts(customDaysOld?: number) {
-    const daysOld = customDaysOld === undefined ? 60 : customDaysOld; // Default to 60 days
+            // Upsert the author
+            const result = await tx.assignmentAuthor.upsert({
+              where: {
+                assignmentId_userId: {
+                  assignmentId: author.assignmentId,
+                  userId: author.userId,
+                },
+              },
+              update: {
+                // Update timestamp to track last sync
+                createdAt: new Date(),
+              },
+              create: {
+                assignmentId: author.assignmentId,
+                userId: author.userId,
+                createdAt: new Date(),
+              },
+            });
+
+            // Check if it was a create or update based on createdAt
+            if (result.createdAt.getTime() === Date.now()) {
+              created++;
+            } else {
+              updated++;
+            }
+          } catch (error: { code: string } | any) {
+            // Log specific errors but continue processing
+            if (error.code === "P2002") {
+              // This shouldn't happen with upsert, but log it
+              this.logger.debug(
+                `Unexpected duplicate for assignment ${author.assignmentId}, user ${author.userId}`,
+              );
+            } else if (error.code === "P2003") {
+              // Foreign key constraint failed
+              this.logger.debug(
+                `Invalid reference for assignment ${author.assignmentId} or user ${author.userId}`,
+              );
+            } else {
+              this.logger.error(
+                `Failed to upsert author for assignment ${author.assignmentId}:`,
+                error,
+              );
+            }
+            skipped++;
+          }
+        }
+      });
+    }
+
+    return { created, updated, skipped };
+  }
+
+  /**
+   * Alternative implementation using createMany with skipDuplicates
+   * More efficient for initial bulk migrations
+   *
+   * @param {Array} authors - Authors to create
+   * @returns {Promise<number>} Number of created records
+   */
+  private async bulkCreateAuthors(
+    authors: Array<{ userId: string; assignmentId: number }>,
+  ): Promise<number> {
+    try {
+      const result = await this.prismaService.assignmentAuthor.createMany({
+        data: authors.map((author) => ({
+          assignmentId: author.assignmentId,
+          userId: author.userId,
+          createdAt: new Date(),
+        })),
+        skipDuplicates: true, // Skip existing records
+      });
+
+      return result.count;
+    } catch (error) {
+      this.logger.error("Error in bulkCreateAuthors:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Cleans up old assignment drafts
+   * Runs weekly or can be triggered manually
+   *
+   * @param {number} customDaysOld - Optional custom age in days
+   * @returns {Promise<Object>} Cleanup results
+   */
+  @Cron(CronExpression.EVERY_WEEK)
+  async cleanupOldDrafts(customDaysOld?: number): Promise<{
+    deletedCount: number;
+    daysOld: number;
+    cutoffDate: string;
+  }> {
+    const daysOld = customDaysOld === undefined ? 60 : customDaysOld;
     const isDeleteAll = daysOld === 0;
 
     this.logger.log(
@@ -254,11 +320,9 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       let logMessage = "";
 
       if (isDeleteAll) {
-        // Delete all drafts
         whereCondition = {};
         logMessage = "Looking for ALL drafts to delete";
       } else {
-        // Calculate date for the specified number of days ago
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysOld);
         whereCondition = {
@@ -271,7 +335,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
 
       this.logger.log(logMessage);
 
-      // Find drafts based on condition
+      // Find and log drafts to be deleted
       const oldDrafts = await this.prismaService.assignmentDraft.findMany({
         where: whereCondition,
         select: {
@@ -295,9 +359,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       );
 
       if (oldDrafts.length === 0) {
-        this.logger.log(
-          isDeleteAll ? "No drafts to delete" : "No old drafts to cleanup",
-        );
         return {
           deletedCount: 0,
           daysOld,
@@ -309,12 +370,11 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         };
       }
 
-      // Log details of drafts to be deleted for audit purposes
+      // Log details for audit
       for (const draft of oldDrafts) {
         this.logger.log(
-          `Preparing to delete draft: ID=${draft.id}, Name="${draft.draftName}", ` +
-            `User=${draft.userId}, Assignment="${draft.assignment.name}", ` +
-            `Created=${draft.createdAt.toISOString()}`,
+          `Deleting draft: ID=${draft.id}, Name="${draft.draftName}", ` +
+            `User=${draft.userId}, Created=${draft.createdAt.toISOString()}`,
         );
       }
 
@@ -326,9 +386,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       );
 
       this.logger.log(
-        `Completed ${
-          customDaysOld === undefined ? "scheduled" : "manual"
-        } task: Deleted ${deletedDrafts.count} ${
+        `Completed task: Deleted ${deletedDrafts.count} ${
           isDeleteAll ? "drafts (ALL)" : "old drafts"
         }`,
       );
@@ -346,12 +404,17 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     }
   }
 
-  @Cron("0 */6 * * *") // Every 6 hours
-  async updateLLMPricing() {
+  /**
+   * Updates LLM pricing from external API
+   * Runs every 6 hours
+   *
+   * @returns {Promise<void>}
+   */
+  @Cron("0 */6 * * *")
+  async updateLLMPricing(): Promise<void> {
     this.logger.log("Starting scheduled task: Update LLM pricing");
 
     try {
-      // Fetch current pricing from OpenAI
       const currentPricing = await this.llmPricingService.fetchCurrentPricing();
 
       if (currentPricing.length === 0) {
@@ -359,7 +422,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         return;
       }
 
-      // Update pricing history
       const updatedCount =
         await this.llmPricingService.updatePricingHistory(currentPricing);
 
@@ -367,32 +429,52 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Completed scheduled task: Updated pricing for ${updatedCount} models`,
       );
 
-      // Log pricing statistics
       const stats = await this.llmPricingService.getPricingStatistics();
       this.logger.log(
-        `Pricing statistics: ${stats.totalModels} models, ${stats.activePricingRecords} active pricing records`,
+        `Pricing statistics: ${JSON.stringify(
+          stats.totalModels,
+        )} models, ${JSON.stringify(
+          stats.activePricingRecords,
+        )} active pricing records`,
       );
     } catch (error) {
       this.logger.error("Error in updateLLMPricing:", error);
     }
   }
 
-  async manualUpdateLLMPricing() {
+  /**
+   * Manually triggers LLM pricing update
+   *
+   * @returns {Promise<void>}
+   */
+  async manualUpdateLLMPricing(): Promise<void> {
     this.logger.log("Manual update of LLM pricing requested");
     await this.updateLLMPricing();
   }
 
+  /**
+   * Manually triggers draft cleanup
+   *
+   * @param {number} daysOld - Age of drafts to delete
+   * @returns {Promise<Object>} Cleanup results
+   */
   async manualCleanupOldDrafts(daysOld?: number) {
     this.logger.log(
       `Manual cleanup of old drafts requested${
-        daysOld ? ` (${daysOld} days old)` : ""
+        daysOld === undefined ? "" : ` (${daysOld} days old)`
       }`,
     );
     return await this.cleanupOldDrafts(daysOld);
   }
 
-  @Cron(CronExpression.EVERY_3_HOURS) // Every 3 hours
-  async precomputeInsights() {
+  /**
+   * Precomputes insights for popular assignments
+   * Runs every 3 hours
+   *
+   * @returns {Promise<void>}
+   */
+  @Cron(CronExpression.EVERY_3_HOURS)
+  async precomputeInsights(): Promise<void> {
     this.logger.log(
       "Starting scheduled task: Precompute insights for popular assignments",
     );
@@ -405,7 +487,12 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     }
   }
 
-  async manualPrecomputeInsights() {
+  /**
+   * Manually triggers insights precomputation
+   *
+   * @returns {Promise<void>}
+   */
+  async manualPrecomputeInsights(): Promise<void> {
     this.logger.log("Manual precomputation of insights requested");
     await this.precomputeInsights();
   }

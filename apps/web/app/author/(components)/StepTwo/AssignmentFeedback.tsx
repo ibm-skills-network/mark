@@ -64,7 +64,7 @@ const Component: FC<Props> = () => {
     setShowSubmissionFeedback,
     setShowQuestionScore,
     setShowQuestion,
-    setShowCorrectAnswer,
+    setCorrectAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.setVerbosityLevel,
@@ -72,20 +72,20 @@ const Component: FC<Props> = () => {
     state.setShowSubmissionFeedback,
     state.setShowQuestionScore,
     state.setShowQuestion,
-    state.setShowCorrectAnswer,
+    state.setCorrectAnswerVisibility,
   ]);
   const [
     showAssignmentScore,
     showSubmissionFeedback,
     showQuestionScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showAssignmentScore,
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showQuestions,
-    state.showCorrectAnswer,
+    state.correctAnswerVisibility,
   ]);
   const handleButtonClick = (verbosity: VerbosityLevels) => {
     setVerbosityLevel(verbosity);
@@ -95,21 +95,21 @@ const Component: FC<Props> = () => {
         setShowSubmissionFeedback(true);
         setShowQuestionScore(true);
         setShowQuestion(true);
-        setShowCorrectAnswer(true);
+        setCorrectAnswerVisibility("ALWAYS");
         break;
       case "Custom":
         setShowAssignmentScore(true);
         setShowSubmissionFeedback(false);
         setShowQuestionScore(true);
         setShowQuestion(true);
-        setShowCorrectAnswer(true);
+        setCorrectAnswerVisibility("ALWAYS");
         break;
       case "None":
         setShowAssignmentScore(false);
         setShowSubmissionFeedback(false);
         setShowQuestionScore(false);
         setShowQuestion(false);
-        setShowCorrectAnswer(false);
+        setCorrectAnswerVisibility("NEVER");
         break;
       default:
         break;
@@ -121,7 +121,7 @@ const Component: FC<Props> = () => {
       showSubmissionFeedback &&
       showQuestionScore &&
       showQuestions &&
-      showCorrectAnswer
+      correctAnswerVisibility === "ALWAYS"
     ) {
       setVerbosityLevel("Full");
     } else if (
@@ -129,7 +129,7 @@ const Component: FC<Props> = () => {
       !showSubmissionFeedback &&
       !showQuestionScore &&
       !showQuestions &&
-      !showCorrectAnswer
+      correctAnswerVisibility === "NEVER"
     ) {
       setVerbosityLevel("None");
     } else {
@@ -140,7 +140,7 @@ const Component: FC<Props> = () => {
     showSubmissionFeedback,
     showQuestionScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   ]);
 
   return (

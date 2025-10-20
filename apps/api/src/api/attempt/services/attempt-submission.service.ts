@@ -9,6 +9,7 @@ import {
 import {
   AssignmentAttempt,
   AssignmentQuestionDisplayOrder,
+  CorrectAnswerVisibility,
   Question,
   QuestionType,
   QuestionVariant,
@@ -33,6 +34,8 @@ import {
   QuestionDto,
   ScoringDto,
   UpdateAssignmentQuestionsDto,
+  VariantDto,
+  VariantType,
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
@@ -42,7 +45,7 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 import {
   AssignmentAttemptWithRelations,
   AttemptQuestionsMapper,
@@ -82,7 +85,6 @@ export class AttemptSubmissionService {
 
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
 
-    // Get the assignment with its active version for version-aware attempt creation
     const assignmentWithActiveVersion = await this.prisma.assignment.findUnique(
       {
         where: { id: assignmentId },
@@ -92,7 +94,6 @@ export class AttemptSubmissionService {
               questionVersions: true,
             },
           },
-          // Fallback to legacy questions if no active version exists
           questions: {
             where: { isDeleted: false },
             include: {
@@ -118,37 +119,67 @@ export class AttemptSubmissionService {
         expiresAt: attemptExpiresAt,
         submitted: false,
         assignmentId,
-        assignmentVersionId: activeVersionId, // Store the active version ID
+        assignmentVersionId: activeVersionId,
         grade: undefined,
         userId: userSession.userId,
         questionOrder: [],
       },
     });
 
-    // Use questions from active version if available, otherwise fallback to legacy questions
     const questions: QuestionDto[] =
       assignmentWithActiveVersion?.currentVersion?.questionVersions?.length > 0
-        ? assignmentWithActiveVersion.currentVersion.questionVersions.map(
-            (qv) => ({
-              id: qv.questionId || qv.id, // Use questionId if available, fallback to qv.id
-              question: qv.question,
-              type: qv.type,
-              assignmentId: assignmentId, // Set from parameter since QuestionVersion doesn't have this
-              totalPoints: qv.totalPoints,
-              maxWords: qv.maxWords,
-              maxCharacters: qv.maxCharacters,
-              choices: qv.choices as unknown as Choice[],
-              scoring: qv.scoring as unknown as ScoringDto,
-              answer: qv.answer,
-              variants: [], // QuestionVersions don't have variants, use empty array
-              gradingContextQuestionIds: qv.gradingContextQuestionIds,
-              responseType: qv.responseType,
-              isDeleted: false, // QuestionVersions are not deleted by definition
-              randomizedChoices: qv.randomizedChoices,
-              videoPresentationConfig:
-                qv.videoPresentationConfig as unknown as VideoPresentationConfig,
-              liveRecordingConfig: qv.liveRecordingConfig as object,
-            }),
+        ? await Promise.all(
+            assignmentWithActiveVersion.currentVersion.questionVersions.map(
+              async (qv) => {
+                // Fetch variants from the original question if questionId exists
+                let variants: QuestionVariant[] = [];
+                if (qv.questionId) {
+                  const originalQuestion =
+                    await this.prisma.question.findUnique({
+                      where: { id: qv.questionId },
+                      include: {
+                        variants: {
+                          where: { isDeleted: false },
+                        },
+                      },
+                    });
+                  variants = originalQuestion?.variants || [];
+                }
+
+                return {
+                  id: qv.questionId || qv.id, // Use questionId if available, fallback to qv.id
+                  question: qv.question,
+                  type: qv.type,
+                  assignmentId: assignmentId, // Set from parameter since QuestionVersion doesn't have this
+                  totalPoints: qv.totalPoints,
+                  maxWords: qv.maxWords,
+                  maxCharacters: qv.maxCharacters,
+                  choices: qv.choices as unknown as Choice[],
+                  scoring: qv.scoring as unknown as ScoringDto,
+                  answer: qv.answer,
+                  variants: variants.map(
+                    (v: QuestionVariant): VariantDto => ({
+                      id: v.id,
+                      variantContent: v.variantContent,
+                      choices: v.choices as unknown as Choice[],
+                      scoring: v.scoring as unknown as ScoringDto,
+                      maxWords: v.maxWords || undefined,
+                      maxCharacters: v.maxCharacters || undefined,
+                      variantType: v.variantType as VariantType,
+                      randomizedChoices: v.randomizedChoices || undefined,
+                      isDeleted: v.isDeleted || false,
+                    }),
+                  ),
+                  gradingContextQuestionIds: qv.gradingContextQuestionIds,
+                  responseType: qv.responseType,
+                  isDeleted: false, // QuestionVersions are not deleted by definition
+                  randomizedChoices: qv.randomizedChoices,
+                  videoPresentationConfig:
+                    qv.videoPresentationConfig as unknown as VideoPresentationConfig,
+                  liveRecordingConfig: qv.liveRecordingConfig as object,
+                };
+              },
+            ),
           )
         : ((assignmentWithActiveVersion?.questions || []).map((q) => ({
             ...q,
@@ -164,12 +195,10 @@ export class AttemptSubmissionService {
             })),
           })) as QuestionDto[]);
 
-    // match number of questions to the assignment settings numberOfQuestionsPerAttempt
     if (
       assignment.numberOfQuestionsPerAttempt &&
       assignment.numberOfQuestionsPerAttempt > 0
     ) {
-      // pick random questions from the assignment
       const shuffledQuestions = questions.sort(() => Math.random() - 0.5);
       const selectedQuestions = shuffledQuestions.slice(
         0,
@@ -180,7 +209,7 @@ export class AttemptSubmissionService {
           `Not enough questions available for the assignment with Id ${assignmentId}.`,
         );
       }
-      questions.length = 0; // clear the original questions array
+      questions.length = 0;
       questions.push(...selectedQuestions);
     }
     const questionDtos: QuestionDto[] = questions.map((q: QuestionDto) => ({
@@ -312,7 +341,37 @@ export class AttemptSubmissionService {
       );
     }
 
-    // Use version-specific questions if available, otherwise fallback to legacy questions
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentAttempt.assignmentId },
+      select: {
+        questions: true,
+        questionOrder: true,
+        displayOrder: true,
+        passingGrade: true,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentAttempt.assignmentId} not found.`,
+      );
+    }
+
+    const shouldShowCorrectAnswers = this.shouldShowCorrectAnswers(
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      assignmentAttempt.grade || 0,
+      assignment.passingGrade,
+    );
+
     const questions: unknown[] =
       assignmentAttempt.assignmentVersionId &&
       assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
@@ -326,7 +385,7 @@ export class AttemptSubmissionService {
             maxCharacters: qv.maxCharacters,
             choices: qv.choices,
             scoring: qv.scoring,
-            answer: qv.answer,
+            answer: shouldShowCorrectAnswers ? qv.answer : undefined,
             gradingContextQuestionIds: qv.gradingContextQuestionIds,
             responseType: qv.responseType,
             isDeleted: false,
@@ -337,27 +396,6 @@ export class AttemptSubmissionService {
         : await this.prisma.question.findMany({
             where: { assignmentId: assignmentAttempt.assignmentId },
           });
-
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentAttempt.assignmentId },
-      select: {
-        questions: true,
-        questionOrder: true,
-        displayOrder: true,
-        passingGrade: true,
-        showAssignmentScore: true,
-        showSubmissionFeedback: true,
-        showQuestionScore: true,
-        showQuestions: true,
-        showCorrectAnswer: true,
-      },
-    });
-
-    if (!assignment) {
-      throw new NotFoundException(
-        `Assignment with Id ${assignmentAttempt.assignmentId} not found.`,
-      );
-    }
 
     const questionDtos: EnhancedAttemptQuestionDto[] = questions.map((q) => {
       const question = q as Record<string, unknown>;
@@ -388,7 +426,7 @@ export class AttemptSubmissionService {
           showRubricsToLearner: false,
           rubrics: [],
         }),
-        answer: answerValue,
+        answer: shouldShowCorrectAnswers ? answerValue : undefined,
         gradingContextQuestionIds:
           (question.gradingContextQuestionIds as number[]) || [],
         responseType: (question.responseType as ResponseType) || undefined,
@@ -435,13 +473,99 @@ export class AttemptSubmissionService {
       })),
     };
 
+    let questionsToShow = questionDtos;
+    {
+      // Get all questions from the assignment version or legacy questions
+      const allQuestions: unknown[] =
+        assignmentAttempt.assignmentVersionId &&
+        assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
+          ? assignmentAttempt.assignmentVersion.questionVersions.map((qv) => ({
+              id: qv.questionId || qv.id,
+              question: qv.question,
+              type: qv.type,
+              assignmentId: assignmentAttempt.assignmentId,
+              totalPoints: qv.totalPoints,
+              maxWords: qv.maxWords,
+              maxCharacters: qv.maxCharacters,
+              choices: qv.choices,
+              scoring: qv.scoring,
+              answer: shouldShowCorrectAnswers ? qv.answer : undefined,
+              gradingContextQuestionIds: qv.gradingContextQuestionIds,
+              responseType: qv.responseType,
+              isDeleted: false,
+              randomizedChoices: qv.randomizedChoices,
+              videoPresentationConfig: qv.videoPresentationConfig,
+              liveRecordingConfig: qv.liveRecordingConfig,
+            }))
+          : await this.prisma.question.findMany({
+              where: {
+                assignmentId: assignmentAttempt.assignmentId,
+                isDeleted: false,
+              },
+            });
+
+      // Convert to questionDtos format
+      const allQuestionDtos: EnhancedAttemptQuestionDto[] = allQuestions.map(
+        (q) => {
+          const question = q as Record<string, unknown>;
+
+          const answerValue =
+            typeof question.answer === "boolean"
+              ? String(question.answer)
+              : question.answer !== null && question.answer !== undefined
+                ? String(question.answer)
+                : undefined;
+
+          const randomizedChoicesValue: string =
+            typeof question.randomizedChoices === "string"
+              ? question.randomizedChoices
+              : JSON.stringify(question.randomizedChoices ?? false);
+
+          return {
+            id: question.id as number,
+            question: question.question as string,
+            type: question.type as QuestionType,
+            assignmentId: question.assignmentId as number,
+            totalPoints: question.totalPoints as number,
+            maxWords: (question.maxWords as number) || undefined,
+            maxCharacters: (question.maxCharacters as number) || undefined,
+            choices: this.parseJsonValue<Choice[]>(question.choices, []),
+            scoring: this.parseJsonValue<ScoringDto>(question.scoring, {
+              type: ScoringType.CRITERIA_BASED,
+              showRubricsToLearner: false,
+              rubrics: [],
+            }),
+            answer: shouldShowCorrectAnswers ? answerValue : undefined,
+            gradingContextQuestionIds:
+              (question.gradingContextQuestionIds as number[]) || [],
+            responseType: (question.responseType as ResponseType) || undefined,
+            isDeleted: question.isDeleted as boolean,
+            randomizedChoices: randomizedChoicesValue,
+            videoPresentationConfig:
+              this.parseJsonValue<VideoPresentationConfig | null>(
+                question.videoPresentationConfig,
+                null,
+              ),
+            liveRecordingConfig: this.parseJsonValue<Record<
+              string,
+              unknown
+            > | null>(question.liveRecordingConfig, null),
+          };
+        },
+      );
+
+      questionsToShow = allQuestionDtos;
+    }
+
     const finalQuestions =
       await AttemptQuestionsMapper.buildQuestionsWithResponses(
         formattedAttempt,
-        questionDtos,
+        questionsToShow,
         {
           id: assignmentAttempt.assignmentId,
           ...assignment,
+          // Override questionOrder to include all questions if we should show all
+          questionOrder: questionsToShow.map((q) => q.id),
         },
         this.prisma,
         assignmentAttempt.preferredLanguage || undefined,
@@ -457,7 +581,8 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestions: assignment.showQuestions,
       showQuestionScore: assignment.showQuestionScore,
-      showCorrectAnswer: assignment.showCorrectAnswer,
+      correctAnswerVisibility:
+        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
     };
   }
@@ -509,7 +634,11 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestions: true,
         showQuestionScore: true,
-        showCorrectAnswer: true,
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
       },
     })) as {
       questions: Question[];
@@ -520,7 +649,9 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: boolean;
       showQuestions: boolean;
       showQuestionScore: boolean;
-      showCorrectAnswer: boolean;
+      currentVersion: {
+        correctAnswerVisibility: CorrectAnswerVisibility;
+      } | null;
     };
 
     // Get version-specific questions for translation if available
@@ -582,15 +713,39 @@ export class AttemptSubmissionService {
       })),
     };
 
+    // Determine if we should show all questions based on correctAnswerVisibility
+    const shouldShowAllQuestions = this.shouldShowCorrectAnswers(
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      assignmentAttempt.grade || 0,
+      assignment.passingGrade,
+    );
+
+    // If we should show all questions, override the assignment questionOrder
+    const assignmentForTranslation = {
+      ...assignment,
+      questionOrder: shouldShowAllQuestions
+        ? questionsForTranslation.map((q) => q.id)
+        : assignment.questionOrder,
+      questions: questionsForTranslation,
+    } as unknown as UpdateAssignmentQuestionsDto;
+
     const finalQuestions: AttemptQuestionDto[] =
       await AttemptQuestionsMapper.buildQuestionsWithTranslations(
         formattedAttempt,
-        assignment as unknown as UpdateAssignmentQuestionsDto,
+        assignmentForTranslation,
         translations,
         normalizedLanguage,
       );
 
-    this.removeSensitiveData(finalQuestions, assignment);
+    this.removeSensitiveData(
+      finalQuestions,
+      {
+        correctAnswerVisibility:
+          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      },
+      assignmentAttempt.grade || 0,
+      assignment.passingGrade,
+    );
 
     return {
       ...assignmentAttempt,
@@ -600,7 +755,8 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
-      showCorrectAnswer: assignment.showCorrectAnswer,
+      correctAnswerVisibility:
+        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
     };
   }
 
@@ -665,6 +821,11 @@ export class AttemptSubmissionService {
         include: {
           questions: {
             where: { isDeleted: false },
+          },
+          currentVersion: {
+            select: {
+              correctAnswerVisibility: true,
+            },
           },
         },
       });
@@ -738,7 +899,8 @@ export class AttemptSubmissionService {
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
-        showCorrectAnswer: assignment.showCorrectAnswer,
+        correctAnswerVisibility:
+          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions:
           this.gradingService.constructFeedbacksForQuestions(
             successfulQuestionResponses,
@@ -773,6 +935,11 @@ export class AttemptSubmissionService {
         include: {
           questions: {
             where: { isDeleted: false },
+          },
+          currentVersion: {
+            select: {
+              correctAnswerVisibility: true,
+            },
           },
         },
       });
@@ -825,7 +992,8 @@ export class AttemptSubmissionService {
         grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
-        showCorrectAnswer: assignment.showCorrectAnswer,
+        correctAnswerVisibility:
+          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions:
           this.gradingService.constructFeedbacksForQuestions(
             successfulQuestionResponses,
@@ -869,7 +1037,7 @@ export class AttemptSubmissionService {
       feedbacksForQuestions: [],
       message: "The attempt deadline has passed.",
       showQuestions: false,
-      showCorrectAnswer: false,
+      correctAnswerVisibility: "NEVER",
     };
   }
 
@@ -1114,9 +1282,9 @@ export class AttemptSubmissionService {
    */
   private removeSensitiveData(
     questions: AttemptQuestionDto[],
-    assignment: {
-      showCorrectAnswer?: boolean;
-    },
+    assignment: { correctAnswerVisibility: CorrectAnswerVisibility },
+    grade: number,
+    passingGrade: number,
   ): void {
     for (const question of questions) {
       if (!question.scoring?.showRubricsToLearner) {
@@ -1126,7 +1294,13 @@ export class AttemptSubmissionService {
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;
-          if (assignment.showCorrectAnswer === false) {
+          if (
+            !this.shouldShowCorrectAnswers(
+              assignment.correctAnswerVisibility || "NEVER",
+              grade,
+              passingGrade,
+            )
+          ) {
             delete choice.isCorrect;
             delete choice.feedback;
           }
@@ -1139,7 +1313,13 @@ export class AttemptSubmissionService {
           if (translationObject?.translatedChoices) {
             for (const choice of translationObject.translatedChoices) {
               delete choice.points;
-              if (assignment.showCorrectAnswer === false) {
+              if (
+                !this.shouldShowCorrectAnswers(
+                  assignment.correctAnswerVisibility,
+                  grade,
+                  passingGrade,
+                )
+              ) {
                 delete choice.isCorrect;
                 delete choice.feedback;
               }
@@ -1163,7 +1343,13 @@ export class AttemptSubmissionService {
         if (Array.isArray(randomizedArray)) {
           for (const choice of randomizedArray) {
             delete choice.points;
-            if (assignment.showCorrectAnswer === false) {
+            if (
+              !this.shouldShowCorrectAnswers(
+                assignment.correctAnswerVisibility || "NEVER",
+                grade,
+                passingGrade,
+              )
+            ) {
               delete choice.isCorrect;
               delete choice.feedback;
             }
@@ -1207,5 +1393,29 @@ export class AttemptSubmissionService {
       return "en";
     }
     return language.toLowerCase().split("-")[0];
+  }
+
+  /**
+   * Determine if correct answers should be shown based on visibility setting and grade
+   */
+  private shouldShowCorrectAnswers(
+    correctAnswerVisibility: CorrectAnswerVisibility,
+    grade: number,
+    passingGrade: number,
+  ): boolean {
+    switch (correctAnswerVisibility) {
+      case "NEVER": {
+        return false;
+      }
+      case "ALWAYS": {
+        return true;
+      }
+      case "ON_PASS": {
+        return grade >= passingGrade;
+      }
+      default: {
+        return false;
+      }
+    }
   }
 }

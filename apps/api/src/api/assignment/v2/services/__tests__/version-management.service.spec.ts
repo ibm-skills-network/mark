@@ -6,7 +6,7 @@ import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserRole } from "../../../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../../../prisma.service";
+import { PrismaService } from "../../../../../database/prisma.service";
 import { VersionManagementService } from "../version-management.service";
 
 describe("VersionManagementService", () => {
@@ -139,7 +139,8 @@ describe("VersionManagementService", () => {
 
       const result = await service.getVersion(1, 1);
 
-      expect(result).toEqual(mockVersion);
+      expect(result).toMatchObject(mockVersion);
+      expect(result.questionVersions[0].variants).toEqual([]);
       expect(
         mockPrismaService.assignmentVersion.findUnique,
       ).toHaveBeenCalledWith({

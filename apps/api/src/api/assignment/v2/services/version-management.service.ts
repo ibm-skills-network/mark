@@ -22,8 +22,9 @@ import {
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
+import { assign } from "nodemailer/lib/shared";
 
 export interface CreateVersionDto {
   versionNumber?: string;
@@ -302,6 +303,8 @@ export class VersionManagementService {
           type: assignment.type,
           graded: assignment.graded,
           numAttempts: assignment.numAttempts,
+          attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           attemptsPerTimeRange: assignment.attemptsPerTimeRange,
           attemptsTimeRangeHours: assignment.attemptsTimeRangeHours,
@@ -315,6 +318,7 @@ export class VersionManagementService {
           showQuestionScore: assignment.showQuestionScore,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
+          correctAnswerVisibility: assignment.correctAnswerVisibility,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: createVersionDto.isDraft ?? true,
@@ -488,6 +492,55 @@ export class VersionManagementService {
       },
     );
 
+    // Fetch variants for each question that has a questionId
+    const questionVersionsWithVariants = await Promise.all(
+      version.questionVersions.map(async (qv) => {
+        let variants = [];
+        if (qv.questionId) {
+          const originalQuestion = await this.prisma.question.findUnique({
+            where: { id: qv.questionId },
+            include: {
+              variants: {
+                where: { isDeleted: false },
+              },
+            },
+          });
+          variants = originalQuestion?.variants || [];
+        }
+
+        return {
+          id: qv.id,
+          questionId: qv.questionId,
+          totalPoints: qv.totalPoints,
+          type: qv.type,
+          responseType: qv.responseType,
+          question: qv.question,
+          maxWords: qv.maxWords,
+          scoring: qv.scoring,
+          choices: qv.choices,
+          randomizedChoices: qv.randomizedChoices,
+          answer: qv.answer,
+          gradingContextQuestionIds: qv.gradingContextQuestionIds,
+          maxCharacters: qv.maxCharacters,
+          videoPresentationConfig: qv.videoPresentationConfig,
+          liveRecordingConfig: qv.liveRecordingConfig,
+          displayOrder: qv.displayOrder,
+          variants: variants.map((v) => ({
+            id: v.id,
+            variantContent: v.variantContent,
+            choices: v.choices,
+            scoring: v.scoring,
+            maxWords: v.maxWords,
+            maxCharacters: v.maxCharacters,
+            variantType: v.variantType,
+            randomizedChoices: v.randomizedChoices,
+            isDeleted: v.isDeleted,
+            answer: v.answer,
+          })),
+        };
+      }),
+    );
+
     // Transform the response to match the expected format
     return {
       id: version.id,
@@ -506,6 +559,8 @@ export class VersionManagementService {
       type: version.type,
       graded: version.graded,
       numAttempts: version.numAttempts,
+      attemptsBeforeCoolDown: version.attemptsBeforeCoolDown,
+      retakeAttemptCoolDownMinutes: version.retakeAttemptCoolDownMinutes,
       allotedTimeMinutes: version.allotedTimeMinutes,
       attemptsPerTimeRange: version.attemptsPerTimeRange,
       attemptsTimeRangeHours: version.attemptsTimeRangeHours,
@@ -519,26 +574,10 @@ export class VersionManagementService {
       showQuestionScore: version.showQuestionScore,
       showSubmissionFeedback: version.showSubmissionFeedback,
       showQuestions: version.showQuestions,
+      correctAnswerVisibility: version.correctAnswerVisibility,
       languageCode: version.languageCode,
-      // Transform questionVersions to the expected questions format
-      questionVersions: version.questionVersions.map((qv) => ({
-        id: qv.id,
-        questionId: qv.questionId,
-        totalPoints: qv.totalPoints,
-        type: qv.type,
-        responseType: qv.responseType,
-        question: qv.question,
-        maxWords: qv.maxWords,
-        scoring: qv.scoring,
-        choices: qv.choices,
-        randomizedChoices: qv.randomizedChoices,
-        answer: qv.answer,
-        gradingContextQuestionIds: qv.gradingContextQuestionIds,
-        maxCharacters: qv.maxCharacters,
-        videoPresentationConfig: qv.videoPresentationConfig,
-        liveRecordingConfig: qv.liveRecordingConfig,
-        displayOrder: qv.displayOrder,
-      })),
+      // Use the enhanced questionVersions with variants
+      questionVersions: questionVersionsWithVariants,
     };
   }
 
@@ -607,6 +646,9 @@ export class VersionManagementService {
             type: versionToRestore.type,
             graded: versionToRestore.graded,
             numAttempts: versionToRestore.numAttempts,
+            attemptsBeforeCoolDown: versionToRestore.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes:
+              versionToRestore.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: versionToRestore.allotedTimeMinutes,
             attemptsPerTimeRange: versionToRestore.attemptsPerTimeRange,
             attemptsTimeRangeHours: versionToRestore.attemptsTimeRangeHours,
@@ -621,6 +663,7 @@ export class VersionManagementService {
             showQuestionScore: versionToRestore.showQuestionScore,
             showSubmissionFeedback: versionToRestore.showSubmissionFeedback,
             showQuestions: versionToRestore.showQuestions,
+            correctAnswerVisibility: versionToRestore.correctAnswerVisibility,
             languageCode: versionToRestore.languageCode,
             createdBy: userSession.userId,
             isDraft: true, // Restored versions start as drafts
@@ -1056,6 +1099,8 @@ export class VersionManagementService {
           type: assignment.type,
           graded: assignment.graded,
           numAttempts: assignment.numAttempts,
+          attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           attemptsPerTimeRange: assignment.attemptsPerTimeRange,
           attemptsTimeRangeHours: assignment.attemptsTimeRangeHours,
@@ -1068,6 +1113,7 @@ export class VersionManagementService {
           showQuestionScore: assignment.showQuestionScore,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
+          correctAnswerVisibility: assignment.correctAnswerVisibility,
           languageCode: assignment.languageCode,
         },
         include: { _count: { select: { questionVersions: true } } },
@@ -1363,6 +1409,8 @@ export class VersionManagementService {
           type: assignment.type,
           graded: assignment.graded,
           numAttempts: assignment.numAttempts,
+          attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           attemptsPerTimeRange: assignment.attemptsPerTimeRange,
           attemptsTimeRangeHours: assignment.attemptsTimeRangeHours,
@@ -1376,6 +1424,7 @@ export class VersionManagementService {
           showQuestionScore: assignment.showQuestionScore,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
+          correctAnswerVisibility: assignment.correctAnswerVisibility,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: true,
@@ -1457,6 +1506,8 @@ export class VersionManagementService {
     type: string;
     graded: boolean;
     numAttempts: number | null;
+    attemptsBeforeCoolDown: number | null;
+    retakeAttemptCoolDownMinutes: number | null;
     allotedTimeMinutes: number | null;
     passingGrade: number | null;
     displayOrder: string | null;
@@ -1468,6 +1519,7 @@ export class VersionManagementService {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    correctAnswerVisibility: string;
     languageCode: string | null;
   }> {
     // await this.verifyAssignmentAccess(assignmentId, userSession);
@@ -1499,6 +1551,8 @@ export class VersionManagementService {
       type: latestDraft.type,
       graded: latestDraft.graded,
       numAttempts: latestDraft.numAttempts,
+      attemptsBeforeCoolDown: latestDraft.attemptsBeforeCoolDown,
+      retakeAttemptCoolDownMinutes: latestDraft.retakeAttemptCoolDownMinutes,
       allotedTimeMinutes: latestDraft.allotedTimeMinutes,
       passingGrade: latestDraft.passingGrade,
       displayOrder: latestDraft.displayOrder,
@@ -1510,6 +1564,7 @@ export class VersionManagementService {
       showQuestionScore: latestDraft.showQuestionScore,
       showSubmissionFeedback: latestDraft.showSubmissionFeedback,
       showQuestions: latestDraft.showQuestions,
+      correctAnswerVisibility: latestDraft.correctAnswerVisibility,
       languageCode: latestDraft.languageCode,
       questions: latestDraft.questionVersions.map((qv) => ({
         id: qv.questionId,
@@ -1595,6 +1650,9 @@ export class VersionManagementService {
             type: sourceVersion.type,
             graded: sourceVersion.graded,
             numAttempts: sourceVersion.numAttempts,
+            attemptsBeforeCoolDown: sourceVersion.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes:
+              sourceVersion.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: sourceVersion.allotedTimeMinutes,
             attemptsPerTimeRange: sourceVersion.attemptsPerTimeRange,
             attemptsTimeRangeHours: sourceVersion.attemptsTimeRangeHours,
@@ -1609,6 +1667,7 @@ export class VersionManagementService {
             showQuestionScore: sourceVersion.showQuestionScore,
             showSubmissionFeedback: sourceVersion.showSubmissionFeedback,
             showQuestions: sourceVersion.showQuestions,
+            correctAnswerVisibility: sourceVersion.correctAnswerVisibility,
             languageCode: sourceVersion.languageCode,
             createdBy: userSession.userId,
             isDraft: true,
@@ -2055,6 +2114,12 @@ export class VersionManagementService {
             graded: draftData.assignmentData.graded ?? assignment.graded,
             numAttempts:
               draftData.assignmentData.numAttempts ?? assignment.numAttempts,
+            attemptsBeforeCoolDown:
+              draftData.assignmentData.attemptsBeforeCoolDown ??
+              assignment.attemptsBeforeCoolDown,
+            retakeAttemptCoolDownMinutes:
+              draftData.assignmentData.retakeAttemptCoolDownMinutes ??
+              assignment.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes:
               draftData.assignmentData.allotedTimeMinutes ??
               assignment.allotedTimeMinutes,
@@ -2094,6 +2159,9 @@ export class VersionManagementService {
               draftData.assignmentData.showQuestions ??
               assignment.showQuestions ??
               true,
+            correctAnswerVisibility:
+              draftData.assignmentData.correctAnswerVisibility ??
+              assignment.correctAnswerVisibility,
             languageCode:
               draftData.assignmentData.languageCode ?? assignment.languageCode,
           },

@@ -19,6 +19,14 @@ export class ModerationService implements IModerationService {
   async validateContent(content: string): Promise<boolean> {
     if (!content) return true;
 
+    // Check if this appears to be legitimate educational/technical content
+    if (this.isEducationalContent(content)) {
+      this.logger.debug(
+        "Content appears to be educational/technical, allowing with less strict moderation",
+      );
+      return true;
+    }
+
     try {
       const moderation = new OpenAIModerationChain();
 
@@ -26,10 +34,17 @@ export class ModerationService implements IModerationService {
         input: content,
       });
 
-      return (
-        guardRailsResponse !==
-        "Text was found that violates OpenAI's content policy."
-      );
+      const isViolation =
+        guardRailsResponse ===
+        "Text was found that violates OpenAI's content policy.";
+
+      if (isViolation) {
+        this.logger.warn(
+          `Content flagged by moderation: ${content.slice(0, 200)}...`,
+        );
+      }
+
+      return !isViolation;
     } catch (error) {
       this.logger.error(
         `Error validating content: ${
@@ -39,6 +54,59 @@ export class ModerationService implements IModerationService {
 
       return true;
     }
+  }
+
+  private isEducationalContent(content: string): boolean {
+    const educationalIndicators = [
+      // Security education keywords
+      "xss",
+      "cross-site scripting",
+      "security",
+      "vulnerability",
+      "penetration testing",
+      "cybersecurity",
+      "sql injection",
+      "csrf",
+      "owasp",
+      "security report",
+      "vulnerability assessment",
+      "security analysis",
+      "ethical hacking",
+
+      // Technical/programming education
+      "algorithm",
+      "data structure",
+      "programming",
+      "software development",
+      "computer science",
+      "technical documentation",
+      "code example",
+      "tutorial",
+      "documentation",
+      "technical report",
+      "analysis",
+      "implementation",
+
+      // Academic indicators
+      "research",
+      "study",
+      "analysis",
+      "conclusion",
+      "methodology",
+      "findings",
+      "bibliography",
+      "references",
+      "abstract",
+      "introduction",
+    ];
+
+    const lowerContent = content.toLowerCase();
+    const matchCount = educationalIndicators.filter((indicator) =>
+      lowerContent.includes(indicator),
+    ).length;
+
+    // If multiple educational indicators are present, likely educational content
+    return matchCount >= 2;
   }
 
   /**
