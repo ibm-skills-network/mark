@@ -24,7 +24,7 @@ export class LLMResolverService {
     string,
     { modelKey: string; cachedAt: number }
   >();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+  private readonly CACHE_TTL = 1;
 
   constructor(
     @Inject(LLM_ASSIGNMENT_SERVICE)
@@ -49,6 +49,9 @@ export class LLMResolverService {
       // Get assigned model from service
       const modelKey =
         await this.assignmentService.getAssignedModel(featureKey);
+      console.log(
+        `Resolving model for feature ${featureKey}, assigned: ${modelKey}`,
+      );
 
       if (modelKey) {
         // Cache the result
@@ -144,7 +147,9 @@ export class LLMResolverService {
     fallbackModel = "gpt-4o-mini",
   ): Promise<string> {
     const resolvedModel = await this.resolveModelForFeature(featureKey);
-
+    console.log(
+      `Resolving model for feature ${featureKey}, resolved: ${resolvedModel}`,
+    );
     if (resolvedModel) {
       return resolvedModel;
     }

@@ -1225,16 +1225,7 @@ export async function getAdminReports(
     headers["x-admin-token"] = adminToken;
   }
 
-  const res = await fetch(url, { headers });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to fetch reports data");
-  }
-
-  return (await res.json()) as ReportsResponse;
+  return (await apiClient.get(url, { headers })) as ReportsResponse;
 }
 
 /**
@@ -1260,18 +1251,7 @@ export async function getAssignmentAnalytics(
     "x-admin-token": sessionToken,
   };
 
-  const res = await fetch(url, { headers });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(
-      errorBody.message || "Failed to fetch assignment analytics",
-    );
-  }
-
-  return (await res.json()) as AssignmentAnalyticsResponse;
+  return (await apiClient.get(url, { headers })) as AssignmentAnalyticsResponse;
 }
 
 /**
@@ -1297,18 +1277,7 @@ export async function getDashboardAssignments(
     "x-admin-token": sessionToken,
   };
 
-  const res = await fetch(url, { headers });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(
-      errorBody.message || "Failed to fetch dashboard assignments",
-    );
-  }
-
-  return await res.json();
+  return await apiClient.get(url, { headers });
 }
 
 export async function getDashboardReports(
@@ -1331,16 +1300,7 @@ export async function getDashboardReports(
     "x-admin-token": sessionToken,
   };
 
-  const res = await fetch(url, { headers });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to fetch dashboard reports");
-  }
-
-  return await res.json();
+  return await apiClient.get(url, { headers });
 }
 
 export async function getDashboardFeedback(
@@ -1542,16 +1502,7 @@ export async function getDashboardStats(
     ...(bustCache ? { "Cache-Control": "no-cache" } : {}),
   };
 
-  const res = await fetch(url, { headers });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to fetch dashboard stats");
-  }
-
-  return await res.json();
+  return await apiClient.get(url, { headers });
 }
 
 export async function upscalePricing(
@@ -1781,18 +1732,7 @@ export async function getDetailedAssignmentInsights(
     "x-admin-token": sessionToken,
   };
 
-  const res = await fetch(url, { headers });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(
-      errorBody.message || "Failed to fetch detailed assignment insights",
-    );
-  }
-
-  return await res.json();
+  return await apiClient.get(url, { headers });
 }
 
 /**
@@ -1813,14 +1753,5 @@ export async function executeQuickAction(
     "x-admin-token": sessionToken,
   };
 
-  const res = await fetch(url, { headers });
-
-  if (!res.ok) {
-    const errorBody = (await res
-      .json()
-      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to execute quick action");
-  }
-
-  return await res.json();
+  return await apiClient.get(url, { headers });
 }

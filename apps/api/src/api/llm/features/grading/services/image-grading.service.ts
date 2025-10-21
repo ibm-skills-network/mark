@@ -17,7 +17,12 @@ import { Logger } from "winston";
 import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
+import {
+  LLM_RESOLVER_SERVICE,
+  MODERATION_SERVICE,
+  PROMPT_PROCESSOR,
+} from "../../../llm.constants";
+import { LLMResolverService } from "../../../core/services/llm-resolver.service";
 import { IImageGradingService } from "../interfaces/image-grading.interface";
 
 interface ProcessedImageData {
@@ -36,6 +41,8 @@ export class ImageGradingService implements IImageGradingService {
     private readonly promptProcessor: IPromptProcessor,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
+    @Inject(LLM_RESOLVER_SERVICE)
+    private readonly llmResolver: LLMResolverService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
     private readonly s3Service: S3Service,
   ) {
@@ -240,11 +247,21 @@ Respond with a JSON object containing:
     });
 
     try {
+      // Resolve model assigned to image grading (fallback to vision-capable default)
+      const modelKey = await this.llmResolver.getModelKeyWithFallback(
+        "image_grading",
+        "gpt-4.1-mini",
+      );
+      this.logger.debug(
+        `Using model ${modelKey} for image_grading feature (assignment ${assignmentId})`,
+      );
+
       const llmOut = await this.promptProcessor.processPromptWithImage(
         gradingPrompt,
         primaryImage.base64,
         assignmentId,
         AIUsageType.ASSIGNMENT_GRADING,
+        modelKey,
       );
 
       const parsed = await parser.parse(llmOut);

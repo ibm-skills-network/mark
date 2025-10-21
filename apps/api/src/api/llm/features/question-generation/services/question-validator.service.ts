@@ -150,10 +150,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.ASSIGNMENT_GENERATION,
+        "question_generation",
         "gpt-4o-mini",
       );
 

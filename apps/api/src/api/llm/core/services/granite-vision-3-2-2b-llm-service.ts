@@ -1,5 +1,5 @@
+import { ChatWatsonx } from "@langchain/community/chat_models/ibm";
 import { HumanMessage } from "@langchain/core/messages";
-import { ChatOpenAI } from "@langchain/openai";
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -10,37 +10,37 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { extractStructuredJSON } from "../utils/structured-json.util";
+import { withWatsonxRateLimit } from "../utils/watsonx-rate-limiter";
 
 @Injectable()
-export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
+export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
   private readonly logger: Logger;
-  static readonly DEFAULT_MODEL = "gpt-4.1-mini";
-  readonly key = "gpt-4.1-mini";
+  static readonly DEFAULT_MODEL = "ibm/granite-vision-3-2-2b";
+  readonly key = "granite-vision-3-2-2b";
 
   constructor(
     @Inject(TOKEN_COUNTER) private readonly tokenCounter: ITokenCounter,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({
-      context: Gpt4VisionPreviewLlmService.name,
+      context: GraniteVision322bLlmService.name,
     });
   }
 
-  /**
-   * Create a ChatOpenAI instance with the given options
-   */
-  private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
-    return new ChatOpenAI({
+  private createChatModel(options?: LlmRequestOptions): ChatWatsonx {
+    return new ChatWatsonx({
+      version: "2024-05-31",
+      serviceUrl: "https://us-south.ml.cloud.ibm.com",
+      projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
+      watsonxAIAuthType: "iam",
+      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
+      model: options?.modelName ?? GraniteVision322bLlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
-      modelName:
-        options?.modelName ?? Gpt4VisionPreviewLlmService.DEFAULT_MODEL,
-      maxTokens: options?.maxTokens ?? 4096, // Vision preview has token limits
+      maxTokens: options?.maxTokens ?? 4096,
     });
   }
 
-  /**
-   * Send a request to the LLM and get a response
-   */
   async invoke(
     messages: HumanMessage[],
     options?: LlmRequestOptions,
@@ -55,29 +55,37 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
     const inputTokens = this.tokenCounter.countTokens(inputText);
 
     this.logger.debug(
-      `Invoking GPT-4 Vision Preview with ${inputTokens} input tokens`,
+      `Invoking Granite Vision 3.2 2B with ${inputTokens} input tokens`,
     );
 
-    const result = await model.invoke(messages);
-    const responseContent = result.content.toString();
-    const outputTokens = this.tokenCounter.countTokens(responseContent);
+    try {
+      const result = await withWatsonxRateLimit(() => model.invoke(messages));
+      const rawResponse = result.content.toString();
 
-    this.logger.debug(
-      `GPT-4 Vision Preview responded with ${outputTokens} output tokens`,
-    );
+      const responseContent = this.extractJSONFromResponse(rawResponse);
+      const outputTokens = this.tokenCounter.countTokens(responseContent);
 
-    return {
-      content: responseContent,
-      tokenUsage: {
-        input: inputTokens,
-        output: outputTokens,
-      },
-    };
+      this.logger.debug(
+        `Granite Vision 3.2 2B responded with ${outputTokens} output tokens`,
+      );
+
+      return {
+        content: responseContent,
+        tokenUsage: {
+          input: inputTokens,
+          output: outputTokens,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Granite Vision 3.2 2B API error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      throw error;
+    }
   }
 
-  /**
-   * Send a request with image content to the LLM
-   */
   async invokeWithImage(
     textContent: string,
     imageData: string,
@@ -87,36 +95,36 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
 
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
-
-    // GPT-4 Vision Preview uses a different token calculation for images
-    // Images are processed in 512px chunks, each chunk costs ~170 tokens
     const estimatedImageTokens = this.estimateImageTokens(processedImageData);
 
     this.logger.debug(
-      `Invoking GPT-4 Vision Preview with image (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
+      `Invoking Granite Vision 3.2 2B with multimodal input (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
     );
 
     try {
-      const result = await model.invoke([
-        new HumanMessage({
-          content: [
-            { type: "text", text: textContent },
-            {
-              type: "image_url",
-              image_url: {
-                url: processedImageData,
-                detail: options?.imageDetail ?? "auto", // auto, low, high
+      const result = await withWatsonxRateLimit(() =>
+        model.invoke([
+          new HumanMessage({
+            content: [
+              { type: "text", text: textContent },
+              {
+                type: "image_url",
+                image_url: {
+                  url: processedImageData,
+                },
               },
-            },
-          ],
-        }),
-      ]);
+            ],
+          }),
+        ]),
+      );
+      console.log(result);
 
-      const responseContent = result.content.toString();
+      const rawResponse = result.content.toString();
+      const responseContent = this.extractJSONFromResponse(rawResponse);
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-4 Vision Preview responded with ${outputTokens} output tokens`,
+        `Granite Vision 3.2 2B responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -128,7 +136,7 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `Error processing image with GPT-4 Vision Preview: ${
+        `Granite Vision 3.2 2B API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
@@ -136,9 +144,20 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
     }
   }
 
+  private extractJSONFromResponse(response: string): string {
+    const extracted = extractStructuredJSON(response);
+    if (extracted !== response) return extracted;
+
+    // If still not valid JSON, log and return original
+    this.logger.warn(
+      "Could not extract valid JSON from Granite Vision response, returning original",
+    );
+    return response;
+  }
+
   /**
-   * Estimate image token usage for GPT-4 Vision Preview
-   * Based on OpenAI's documentation for vision pricing
+   * Estimate image token usage for Granite Vision
+   * Based on similar multimodal models' pricing
    */
   private estimateImageTokens(imageData: string): number {
     try {
@@ -150,25 +169,19 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       // Estimate image size in bytes (base64 is ~1.33x larger than binary)
       const estimatedBytes = (base64Data.length * 3) / 4;
 
-      // Rough estimation: GPT-4 Vision processes images in chunks
-      // Low detail: ~85 tokens per image
-      // High detail: depends on image size, roughly 170 tokens per 512px tile
-
+      // Estimation based on typical vision model token usage
       if (estimatedBytes < 50_000) {
-        // Small image (~50KB)
-        return 85; // Low detail processing
+        return 100; // Small image
       } else if (estimatedBytes < 200_000) {
-        // Medium image (~200KB)
-        return 255; // ~1.5 tiles
+        return 300; // Medium image
       } else if (estimatedBytes < 500_000) {
-        // Large image (~500KB)
-        return 510; // ~3 tiles
+        return 600; // Large image
       } else {
-        return 765; // Very large image, ~4.5 tiles
+        return 900; // Very large image
       }
     } catch (error) {
       this.logger.warn("Could not estimate image tokens, using default", error);
-      return 170; // Default estimate
+      return 300; // Default estimate
     }
   }
 
@@ -184,9 +197,8 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       return imageData;
     }
 
-    // Detect image format based on base64 header
-    let mimeType = "image/jpeg"; // Default
-
+    // Detect image format from base64 header
+    let mimeType = "image/jpeg";
     if (imageData.startsWith("/9j/")) {
       mimeType = "image/jpeg";
     } else if (imageData.startsWith("iVBORw0KGgo")) {
@@ -195,8 +207,6 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       mimeType = "image/gif";
     } else if (imageData.startsWith("UklGR")) {
       mimeType = "image/webp";
-    } else if (imageData.startsWith("Qk")) {
-      mimeType = "image/bmp";
     }
 
     return `data:${mimeType};base64,${imageData}`;
