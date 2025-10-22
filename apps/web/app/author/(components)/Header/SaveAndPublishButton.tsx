@@ -18,7 +18,6 @@ import { VersionConflictModal } from "@/components/version-control/VersionConfli
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { VersionComparison } from "@/types/version-types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { decodeFields } from "@/app/Helpers/decoder";
 import { getAssignment, getUser } from "@/lib/shared";
 import { mergeData } from "@/lib/utils";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -74,39 +73,25 @@ const SaveAndPublishButton: FC<Props> = ({
   const fetchAssignment = async () => {
     const assignment = await getAssignment(activeAssignmentId);
     if (assignment) {
-      const decodedFields = decodeFields({
-        introduction: assignment.introduction,
-        instructions: assignment.instructions,
-        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-      });
+      useAuthorStore.getState().setOriginalAssignment(assignment);
 
-      const decodedAssignment = {
-        ...assignment,
-        ...decodedFields,
-      };
-
-      useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
-
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        decodedAssignment,
-      );
+      const mergedAuthorData = mergeData(useAuthorStore.getState(), assignment);
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
         ...cleanedAuthorData,
       });
-      if (decodedAssignment.questionOrder) {
-        setQuestionOrder(decodedAssignment.questionOrder);
+      if (assignment.questionOrder) {
+        setQuestionOrder(assignment.questionOrder);
       } else {
         setQuestionOrder(questions.map((question) => question.id));
       }
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
-        decodedAssignment,
+        assignment,
       );
-      if (decodedAssignment.questionVariationNumber !== undefined) {
+      if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
-          questionVariationNumber: decodedAssignment.questionVariationNumber,
+          questionVariationNumber: assignment.questionVariationNumber,
         });
       }
       const {
@@ -119,7 +104,7 @@ const SaveAndPublishButton: FC<Props> = ({
 
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
-        decodedAssignment,
+        assignment,
       );
       const {
         updatedAt: assignmentFeedbackUpdatedAt,
@@ -129,7 +114,7 @@ const SaveAndPublishButton: FC<Props> = ({
         ...cleanedAssignmentFeedbackData,
       });
 
-      useAuthorStore.getState().setName(decodedAssignment.name);
+      useAuthorStore.getState().setName(assignment.name);
     }
   };
 

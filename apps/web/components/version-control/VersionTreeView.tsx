@@ -4,8 +4,6 @@ import React, { useState, useMemo, useCallback } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { useRouter } from "next/navigation";
 import { useChatbot } from "@/hooks/useChatbot";
-import { decodeIfBase64 } from "@/app/Helpers/decoder";
-import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { UnpublishedActivationModal } from "./UnpublishedActivationModal";
 import {
   GitBranch,
@@ -55,6 +53,7 @@ import {
   formatSemanticVersion,
 } from "@/lib/semantic-versioning";
 import { toast } from "sonner";
+import { UnsavedChangesModal } from "./UnsavedChangesModal";
 
 // Table row type for versions
 interface VersionTableRow {
@@ -154,6 +153,30 @@ export function VersionTreeView({ assignmentId }: Props) {
       (sum: number, q: any) => sum + (q.totalPoints || 0),
       0,
     );
+  };
+  const handleNodeClick = async (
+    version: any,
+    isDraft = false,
+    overrideUnsaved = false,
+  ) => {
+    // Check for unsaved changes first
+    if (hasUnsavedChanges && !overrideUnsaved) {
+      const targetName = isDraft
+        ? version.name || "Draft"
+        : `v${version.versionNumber}`;
+
+      setPendingAction({
+        type: isDraft ? "loadDraft" : "checkout",
+        version,
+        isDraft,
+        targetName,
+      });
+      setShowUnsavedModal(true);
+      return;
+    }
+
+    // Proceed with original functionality
+    await proceedWithNodeClick(version, isDraft);
   };
 
   // Handle viewing details with proper data fetching
@@ -466,38 +489,6 @@ export function VersionTreeView({ assignmentId }: Props) {
       ),
     };
   }, [versions, drafts, selectedVersionDetails]);
-
-  // Helper function to safely decode using the proper decoder
-  const safeDecodeContent = (str: string | null | undefined): string => {
-    if (!str) return "Not available";
-    const decoded = decodeIfBase64(str);
-    return decoded || str || "Content not available";
-  };
-
-  const handleNodeClick = async (
-    version: any,
-    isDraft = false,
-    overrideUnsaved = false,
-  ) => {
-    // Check for unsaved changes first
-    if (hasUnsavedChanges && !overrideUnsaved) {
-      const targetName = isDraft
-        ? version.name || "Draft"
-        : `v${version.versionNumber}`;
-
-      setPendingAction({
-        type: isDraft ? "loadDraft" : "checkout",
-        version,
-        isDraft,
-        targetName,
-      });
-      setShowUnsavedModal(true);
-      return;
-    }
-
-    // Proceed with original functionality
-    await proceedWithNodeClick(version, isDraft);
-  };
 
   const proceedWithNodeClick = async (version: any, isDraft = false) => {
     setSelectedVersion(version);
@@ -1246,10 +1237,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <div
                               className="text-gray-900 prose prose-sm max-w-none"
                               dangerouslySetInnerHTML={{
-                                __html: safeDecodeContent(
-                                  (selectedVersionDetails || selectedVersion)
-                                    .introduction,
-                                ),
+                                __html: (
+                                  selectedVersionDetails || selectedVersion
+                                ).introduction,
                               }}
                             />
                           </div>
@@ -1264,10 +1254,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <div
                               className="text-gray-900 prose prose-sm max-w-none"
                               dangerouslySetInnerHTML={{
-                                __html: safeDecodeContent(
-                                  (selectedVersionDetails || selectedVersion)
-                                    .instructions,
-                                ),
+                                __html: (
+                                  selectedVersionDetails || selectedVersion
+                                ).instructions,
                               }}
                             />
                           </div>
@@ -1284,10 +1273,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                               <div
                                 className="text-gray-900 prose prose-sm max-w-none"
                                 dangerouslySetInnerHTML={{
-                                  __html: safeDecodeContent(
-                                    (selectedVersionDetails || selectedVersion)
-                                      .gradingCriteriaOverview,
-                                  ),
+                                  __html: (
+                                    selectedVersionDetails || selectedVersion
+                                  ).gradingCriteriaOverview,
                                 }}
                               />
                             </div>

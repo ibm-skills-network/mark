@@ -20,6 +20,114 @@ const transformCache = new Map<
   { data: any; metadata: TransformMetadata; expiry: number }
 >();
 const CACHE_TTL = 5 * 60 * 1000;
+const HTML_TAG_REGEX = /<\/?[a-z][\s\S]*>/i;
+const BASE64_FULL_REGEX = /^[A-Za-z0-9+/]+={0,2}$/;
+const BASE64_SEGMENT_REGEX = /[A-Za-z0-9+/=]{12,}/g;
+const MAX_BASE64_DEPTH = 5;
+
+interface Base64Payload {
+  candidate: string;
+  decoded: string;
+}
+
+function padBase64(value: string): string {
+  const remainder = value.length % 4;
+  if (remainder === 0) return value;
+  return value + "=".repeat(4 - remainder);
+}
+
+function isPrintableText(value: string): boolean {
+  if (!value) return true;
+
+  let printableCount = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const charCode = value.charCodeAt(index);
+    const isPrintable =
+      charCode === 9 ||
+      charCode === 10 ||
+      charCode === 13 ||
+      (charCode >= 32 && charCode !== 127);
+
+    if (isPrintable) {
+      printableCount += 1;
+    }
+  }
+
+  return printableCount / value.length >= 0.85;
+}
+
+function decodeBase64String(value: string): string | null {
+  try {
+    const binaryString = atob(value);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let index = 0; index < binaryString.length; index += 1) {
+      bytes[index] = binaryString.charCodeAt(index);
+    }
+    const decoder = new TextDecoder();
+    const decoded = decoder.decode(bytes);
+    if (!isPrintableText(decoded)) {
+      return null;
+    }
+
+    const encoder = new TextEncoder();
+    const reencoded = btoa(
+      String.fromCharCode(...Array.from(encoder.encode(decoded))),
+    ).replace(/=+$/g, "");
+    const normalizedInput = value.replace(/=+$/g, "");
+
+    return reencoded === normalizedInput ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function findBase64Payload(rawValue: string): Base64Payload | null {
+  if (!rawValue) return null;
+
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+
+  const primaryCandidate =
+    trimmed.length >= 8 &&
+    BASE64_FULL_REGEX.test(trimmed) &&
+    decodeBase64String(trimmed);
+
+  if (typeof primaryCandidate === "string") {
+    return { candidate: trimmed, decoded: primaryCandidate };
+  }
+
+  const matches = trimmed.match(BASE64_SEGMENT_REGEX);
+  if (!matches) return null;
+
+  for (const match of matches) {
+    if (!match) continue;
+    const padded = padBase64(match);
+    const decoded = decodeBase64String(padded);
+    if (decoded !== null) {
+      return { candidate: padded, decoded };
+    }
+  }
+
+  return null;
+}
+
+function decodeBase64Layers(value: string): string {
+  let current = value;
+  let depth = 0;
+
+  while (depth < MAX_BASE64_DEPTH) {
+    const payload = findBase64Payload(current);
+    if (!payload) break;
+
+    const decoded = payload.decoded;
+    if (decoded === current) break;
+
+    current = decoded;
+    depth += 1;
+  }
+
+  return current;
+}
 
 /**
  * Smart encoding that automatically detects content type and applies appropriate transformation
@@ -88,40 +196,72 @@ function transformData(
   config: TransformConfig,
   operation: "encode" | "decode",
   visited: WeakSet<object> = new WeakSet(),
+  currentPath = "",
 ): any {
-  if (!data || typeof data !== "object") {
+  if (data === null || data === undefined) {
     return data;
   }
 
-  // Check for circular references
+  if (typeof data !== "object") {
+    return data;
+  }
+
   if (visited.has(data)) {
     return "[Circular]";
   }
   visited.add(data);
 
   if (Array.isArray(data)) {
-    return data.map((item) => transformData(item, config, operation, visited));
+    const transformedArray = data.map((item, index) =>
+      transformData(
+        item,
+        config,
+        operation,
+        visited,
+        `${currentPath}[${index}]`,
+      ),
+    );
+    visited.delete(data);
+    return transformedArray;
   }
 
   const result: any = {};
   const { fields, exclude, deep = true } = config;
 
   for (const [key, value] of Object.entries(data)) {
-    if (exclude?.includes(key)) {
+    const fieldPath = currentPath ? `${currentPath}.${key}` : key;
+
+    if (exclude?.includes(key) || exclude?.includes(fieldPath)) {
       result[key] = value;
       continue;
     }
 
-    if (shouldTransformField(key, value, fields)) {
-      result[key] =
-        operation === "encode" ? encodeValue(value) : decodeValue(value);
+    if (shouldTransformField(key, value, fields, fieldPath, operation)) {
+      if (Array.isArray(value)) {
+        result[key] = value.map((item, index) => {
+          const childPath = `${fieldPath}[${index}]`;
+          if (typeof item === "string") {
+            return operation === "encode"
+              ? encodeValue(item)
+              : decodeValue(item);
+          }
+          if (item && typeof item === "object") {
+            return transformData(item, config, operation, visited, childPath);
+          }
+          return item;
+        });
+      } else {
+        result[key] =
+          operation === "encode" ? encodeValue(value) : decodeValue(value);
+      }
     } else if (deep && value && typeof value === "object") {
-      result[key] = transformData(value, config, operation, visited);
+      result[key] = transformData(value, config, operation, visited, fieldPath);
     } else {
       result[key] = value;
     }
   }
 
+  visited.delete(data);
   return result;
 }
 
@@ -131,28 +271,83 @@ function transformData(
 function shouldTransformField(
   key: string,
   value: any,
-  fields?: string[],
+  fields: string[] | undefined,
+  fieldPath: string,
+  operation: "encode" | "decode",
 ): boolean {
   if (fields && fields.length > 0) {
-    return fields.includes(key);
+    return matchesConfiguredField(fields, key, fieldPath);
   }
 
-  return (
-    typeof value === "string" && value.length > 10 && !isAlreadyEncoded(value)
-  );
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmedValue = value.trim();
+  const containsHtmlTags = HTML_TAG_REGEX.test(trimmedValue);
+  const base64Payload = findBase64Payload(value);
+
+  if (operation === "encode") {
+    const alreadyEncoded =
+      base64Payload !== null && base64Payload.candidate === trimmedValue;
+
+    return !alreadyEncoded && (value.length > 10 || containsHtmlTags);
+  }
+
+  return base64Payload !== null;
+}
+
+function normalizeFieldPath(path: string): string[] {
+  return path
+    .replace(/\[\d+\]/g, "")
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function matchesConfiguredField(
+  configuredFields: string[],
+  key: string,
+  fieldPath: string,
+): boolean {
+  const candidateSegments = normalizeFieldPath(fieldPath);
+
+  return configuredFields.some((field) => {
+    const normalizedFieldSegments = normalizeFieldPath(field);
+
+    if (
+      normalizedFieldSegments.length === 1 &&
+      normalizedFieldSegments[0] === key
+    ) {
+      return true;
+    }
+
+    if (normalizedFieldSegments.length !== candidateSegments.length) {
+      return false;
+    }
+
+    return normalizedFieldSegments.every(
+      (segment, index) => segment === candidateSegments[index],
+    );
+  });
 }
 
 /**
  * Check if a string is already Base64 encoded
  */
 function isAlreadyEncoded(value: string): boolean {
-  try {
-    const decoded = atob(value);
-    const reencoded = btoa(decoded);
-    return reencoded === value;
-  } catch {
+  if (!value || typeof value !== "string") return false;
+
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.length % 4 !== 0 ||
+    !BASE64_FULL_REGEX.test(trimmed)
+  ) {
     return false;
   }
+
+  return decodeBase64String(trimmed) !== null;
 }
 
 /**
@@ -186,27 +381,30 @@ function decodeValue(value: any): any {
     return value;
   }
 
-  try {
-    if (value.startsWith("comp:")) {
-      return decompressAndDecode(value);
-    }
-
-    const binaryString = atob(value);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    const decoder = new TextDecoder();
-    const decoded = decoder.decode(bytes);
-
+  if (value.startsWith("comp:")) {
     try {
-      return JSON.parse(decoded);
-    } catch {
-      return decoded;
+      const decoded = decompressAndDecode(value);
+      const fullyDecoded = decodeBase64Layers(decoded);
+      try {
+        return JSON.parse(fullyDecoded);
+      } catch {
+        return fullyDecoded;
+      }
+    } catch (error) {
+      console.warn("Failed to decode compressed value:", error);
+      return value;
     }
-  } catch (error) {
-    console.warn("Failed to decode value:", error);
+  }
+
+  const fullyDecoded = decodeBase64Layers(value);
+  if (fullyDecoded === value) {
     return value;
+  }
+
+  try {
+    return JSON.parse(fullyDecoded);
+  } catch {
+    return fullyDecoded;
   }
 }
 
@@ -287,7 +485,7 @@ function extractTransformedFields(
 
   if (data && typeof data === "object") {
     for (const [key, value] of Object.entries(data)) {
-      if (shouldTransformField(key, value, config.fields)) {
+      if (shouldTransformField(key, value, config.fields, key, "encode")) {
         fields.push(key);
       }
     }

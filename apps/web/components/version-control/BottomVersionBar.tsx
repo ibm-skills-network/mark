@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { useRouter } from "next/navigation";
 import { useAuthorStore } from "@/stores/author";
-import { decodeIfBase64 } from "@/app/Helpers/decoder";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { VersionSelectionModal } from "./VersionSelectionModal";
 import { useChatbot } from "@/hooks/useChatbot";
@@ -585,7 +584,7 @@ export function BottomVersionBar() {
                 <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 rounded-lg max-w-80">
                   <Eye className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
                   <span className="text-xs font-medium truncate">
-                    {decodeIfBase64(workingVersion?.versionDescription) ||
+                    {workingVersion?.versionDescription ||
                       workingVersion?.versionDescription}
                   </span>
                 </div>

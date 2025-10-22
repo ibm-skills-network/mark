@@ -16,8 +16,6 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { DraftSummary, VersionSummary } from "@/lib/author";
-import { DataTransformer } from "@/app/Helpers/data-transformer";
-import { config } from "process";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   // version control state
   "versions",
@@ -1680,22 +1678,18 @@ export const useAuthorStore = createWithEqualityFn<
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         setAuthorStore: (state) => {
           const currentState = get();
-          // Automatically decode any backend data
-          const decodedState = DataTransformer.decodeFromAPI(state);
           set((prev) => ({
             ...prev,
-            ...decodedState,
+            ...state,
             questions: currentState.questions.length
               ? currentState.questions
-              : decodedState.questions || [],
+              : state.questions || [],
           }));
         },
         // Centralized method for setting data from backend
         // All backend data should go through this method or the apiClient
-        // which automatically handles decoding via DataTransformer.decodeFromAPI()
         setDataFromBackend: (data: Partial<AuthorAssignmentState>) => {
-          const decodedData = DataTransformer.decodeFromAPI(data);
-          set({ ...decodedData, hasUnsavedChanges: true });
+          set({ ...data, hasUnsavedChanges: true });
         },
         deleteStore: () =>
           set({
@@ -1974,16 +1968,6 @@ export const useAuthorStore = createWithEqualityFn<
 
             if (!versionData) return false;
 
-            // Decode base64 fields
-            const { decodeFields } = await import("@/app/Helpers/decoder");
-            const decodedFields = decodeFields({
-              introduction: versionData.introduction,
-              instructions: versionData.instructions,
-              gradingCriteriaOverview: versionData.gradingCriteriaOverview,
-            });
-
-            const decodedVersionData = { ...versionData, ...decodedFields };
-
             // Process questions using helper functions
             const rawQuestions = versionData.questionVersions || [];
             const {
@@ -2005,14 +1989,13 @@ export const useAuthorStore = createWithEqualityFn<
             );
 
             set({
-              name: decodedVersionData.name,
-              introduction: decodedVersionData.introduction,
-              instructions: decodedVersionData.instructions,
-              gradingCriteriaOverview:
-                decodedVersionData.gradingCriteriaOverview,
+              name: versionData.name,
+              introduction: versionData.introduction,
+              instructions: versionData.instructions,
+              gradingCriteriaOverview: versionData.gradingCriteriaOverview,
               questions: processedQuestions,
               questionOrder:
-                decodedVersionData.questionOrder ||
+                versionData.questionOrder ||
                 processedQuestions.map((q) => q.id),
               checkedOutVersion: versionToCheckout,
               hasUnsavedChanges: false,

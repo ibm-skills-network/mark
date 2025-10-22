@@ -1,7 +1,6 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
-import { decodeFields } from "@/app/Helpers/decoder";
 import Loading from "@/components/Loading";
 import {
   AssignmentAttemptWithQuestions,
@@ -51,43 +50,29 @@ function QuestionPage(props: Props) {
       const assignment = await getAssignment(assignmentId);
 
       if (assignment) {
-        // Assignment contains encoded fields
-        // Decode specific fields before using them
-        const decodedFields = decodeFields({
-          introduction: assignment.introduction,
-          instructions: assignment.instructions,
-          gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-        });
-
-        const decodedAssignment = {
-          ...assignment,
-          ...decodedFields,
-        };
-
         // Only set assignment details if they are different from the current state
         // Fetched assignment will be stored in the global state, assignmentDetails
         // Set the global state only if it is different from the fetched assignment
         if (
           !assignmentDetails ||
-          assignmentDetails.id !== decodedAssignment.id ||
-          JSON.stringify(assignmentDetails) !==
-            JSON.stringify(decodedAssignment)
+          assignmentDetails.id !== assignment.id ||
+          JSON.stringify(assignmentDetails) !== JSON.stringify(assignment)
         ) {
           setAssignmentDetails({
-            id: decodedAssignment.id,
-            name: decodedAssignment.name,
-            numAttempts: decodedAssignment.numAttempts,
-            passingGrade: decodedAssignment.passingGrade,
-            allotedTimeMinutes: decodedAssignment.allotedTimeMinutes,
-            questionDisplay: decodedAssignment.questionDisplay,
-            introduction: decodedAssignment.introduction,
-            instructions: decodedAssignment.instructions,
-            gradingCriteriaOverview: decodedAssignment.gradingCriteriaOverview,
-            questions: decodedAssignment.questions,
-            graded: decodedAssignment.graded,
-            published: decodedAssignment.published,
-            questionOrder: decodedAssignment.questionOrder,
-            updatedAt: decodedAssignment.updatedAt,
+            id: assignment.id,
+            name: assignment.name,
+            numAttempts: assignment.numAttempts,
+            passingGrade: assignment.passingGrade,
+            allotedTimeMinutes: assignment.allotedTimeMinutes,
+            questionDisplay: assignment.questionDisplay,
+            introduction: assignment.introduction,
+            instructions: assignment.instructions,
+            gradingCriteriaOverview: assignment.gradingCriteriaOverview,
+            questions: assignment.questions,
+            graded: assignment.graded,
+            published: assignment.published,
+            questionOrder: assignment.questionOrder,
+            updatedAt: assignment.updatedAt,
           });
         }
       } else {

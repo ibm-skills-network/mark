@@ -14,7 +14,7 @@
     "prestart": "yarn download-models",
     "prebuild": "yarn download-models",
     "start": "next start",
-    "test": "jest",
+    "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

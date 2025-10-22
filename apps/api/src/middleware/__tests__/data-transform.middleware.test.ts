@@ -203,6 +203,54 @@ describe("DataTransformMiddleware", () => {
       expect(mockNext).toHaveBeenCalled();
     });
 
+    it("should decode base64 fields even when they include stray characters", () => {
+      const html = "<p>Remediated content</p>";
+      const encodedHtml = Buffer.from(html, "utf8").toString("base64");
+      mockRequest.body = {
+        responsesForQuestions: [
+          {
+            id: 1,
+            learnerTextResponse: `r\uFFFD\uFFFD${encodedHtml}`,
+          },
+        ],
+      };
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
+
+      expect(
+        (mockRequest.body as any).responsesForQuestions[0].learnerTextResponse,
+      ).toBe(html);
+    });
+
+    it("should decode nested base64 layers in requests", () => {
+      const html = "<p>Double encoded</p>";
+      const once = Buffer.from(html, "utf8").toString("base64");
+      const twice = Buffer.from(once, "utf8").toString("base64");
+
+      mockRequest.body = {
+        responsesForQuestions: [
+          {
+            id: 1,
+            learnerTextResponse: twice,
+          },
+        ],
+      };
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
+
+      expect(
+        (mockRequest.body as any).responsesForQuestions[0].learnerTextResponse,
+      ).toBe(html);
+    });
+
     it("should transform query parameters when present", () => {
       const encodedIntroduction = Buffer.from("Welcome to the course").toString(
         "base64",

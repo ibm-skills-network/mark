@@ -51,6 +51,23 @@ describe("DataTransformer Web App", () => {
       expect(result.metadata.fields).toContain("longField");
     });
 
+    it("should encode short HTML snippets to preserve markup", () => {
+      const htmlSnippet = "<p>Hi</p>";
+      const testData = { html: htmlSnippet };
+
+      const result = smartEncode(testData);
+
+      expect(result.data.html).not.toBe(htmlSnippet);
+      const decoder = new TextDecoder();
+      const binaryString = atob(result.data.html);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      expect(decoder.decode(bytes)).toBe(htmlSnippet);
+      expect(result.metadata.fields).toContain("html");
+    });
+
     it("should exclude specified fields from encoding", () => {
       const testData = {
         shouldEncode: "This field should be encoded because it is long enough",
@@ -128,6 +145,42 @@ describe("DataTransformer Web App", () => {
       expect(result.metadata.fields).toContain("introduction");
     });
 
+    it("should respect nested field configuration for array elements", () => {
+      const testData = {
+        questions: [
+          {
+            choices: [
+              { choice: "<p>Option A</p>" },
+              { choice: "<p>Option B</p>" },
+            ],
+          },
+        ],
+      };
+
+      const config = {
+        fields: ["questions.choices.choice"],
+        deep: true,
+      };
+
+      const encoded = smartEncode(testData, config);
+
+      expect(encoded.data.questions[0].choices[0].choice).not.toBe(
+        testData.questions[0].choices[0].choice,
+      );
+      expect(encoded.data.questions[0].choices[1].choice).not.toBe(
+        testData.questions[0].choices[1].choice,
+      );
+
+      const decoded = smartDecode(encoded.data, config);
+
+      expect(decoded.questions[0].choices[0].choice).toBe(
+        testData.questions[0].choices[0].choice,
+      );
+      expect(decoded.questions[0].choices[1].choice).toBe(
+        testData.questions[0].choices[1].choice,
+      );
+    });
+
     it("should handle null and undefined values", () => {
       const testData = {
         nullField: null,
@@ -169,6 +222,18 @@ describe("DataTransformer Web App", () => {
 
       expect(result.data.encodedField).toBe(alreadyEncoded);
       expect(result.data.plainField).not.toBe(testData.plainField);
+    });
+
+    it("should not re-encode nested base64 strings", () => {
+      const html = "<p>double encoded</p>";
+      const once = btoa(html);
+      const twice = btoa(once);
+      const testData = { field: twice };
+
+      const result = smartEncode(testData);
+
+      expect(result.data.field).toBe(twice);
+      expect(result.metadata.fields).not.toContain("field");
     });
 
     it("should handle compression for large strings", () => {
@@ -241,6 +306,36 @@ describe("DataTransformer Web App", () => {
 
       expect(decoded.introduction).toBe(originalData.introduction);
       expect(decoded.normalField).toBe(originalData.normalField);
+    });
+
+    it("should automatically decode base64 strings without explicit configuration", () => {
+      const html = "<div>Auto decode</div>";
+      const encoder = new TextEncoder();
+      const encoded = encoder.encode(html);
+      const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
+      const testData = { html: base64 };
+
+      const decoded = smartDecode(testData);
+
+      expect(decoded.html).toBe(html);
+    });
+
+    it("should decode base64 payloads even when wrapped with stray characters", () => {
+      const html = "<p>Remediated content</p>";
+      const base64 = btoa(html);
+      const decoded = smartDecode({ html: `r\uFFFD\uFFFD${base64}` });
+
+      expect(decoded.html).toBe(html);
+    });
+
+    it("should fully decode nested base64 layers", () => {
+      const html = "<p>double decode</p>";
+      const once = btoa(html);
+      const twice = btoa(once);
+
+      const decoded = smartDecode({ html: twice });
+
+      expect(decoded.html).toBe(html);
     });
 
     it("should handle malformed base64 gracefully", () => {

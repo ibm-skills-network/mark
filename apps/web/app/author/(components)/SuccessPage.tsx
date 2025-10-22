@@ -1,6 +1,5 @@
 "use client";
 
-import { decodeFields } from "@/app/Helpers/decoder";
 import ExitIcon from "@/components/svgs/ExitIcon";
 import { getAssignment, getUser } from "@/lib/talkToBackend";
 import { mergeData } from "@/lib/utils";
@@ -9,7 +8,7 @@ import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { use, useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 
 type Props = ComponentPropsWithoutRef<"section">;
 
@@ -42,39 +41,25 @@ function SuccessPage(props: Props) {
   const fetchAssignment = async () => {
     const assignment = await getAssignment(activeAssignmentId);
     if (assignment) {
-      const decodedFields = decodeFields({
-        introduction: assignment.introduction,
-        instructions: assignment.instructions,
-        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-      });
+      useAuthorStore.getState().setOriginalAssignment(assignment);
 
-      const decodedAssignment = {
-        ...assignment,
-        ...decodedFields,
-      };
-
-      useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
-
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        decodedAssignment,
-      );
+      const mergedAuthorData = mergeData(useAuthorStore.getState(), assignment);
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
         ...cleanedAuthorData,
       });
-      if (decodedAssignment.questionOrder) {
-        setQuestionOrder(decodedAssignment.questionOrder);
+      if (assignment.questionOrder) {
+        setQuestionOrder(assignment.questionOrder);
       } else {
         setQuestionOrder(questions.map((question) => question.id));
       }
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
-        decodedAssignment,
+        assignment,
       );
-      if (decodedAssignment.questionVariationNumber !== undefined) {
+      if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
-          questionVariationNumber: decodedAssignment.questionVariationNumber,
+          questionVariationNumber: assignment.questionVariationNumber,
         });
       }
       const {
@@ -87,7 +72,7 @@ function SuccessPage(props: Props) {
 
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
-        decodedAssignment,
+        assignment,
       );
       const {
         updatedAt: assignmentFeedbackUpdatedAt,
@@ -97,7 +82,7 @@ function SuccessPage(props: Props) {
         ...cleanedAssignmentFeedbackData,
       });
 
-      useAuthorStore.getState().setName(decodedAssignment.name);
+      useAuthorStore.getState().setName(assignment.name);
       setPageState("success");
     } else {
       setPageState("error");

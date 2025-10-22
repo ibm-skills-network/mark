@@ -44,6 +44,19 @@ describe("DataTransformer API", () => {
       expect(result.metadata.transformedFields).toContain("longField");
     });
 
+    it("should encode short HTML snippets to preserve markup", () => {
+      const htmlSnippet = "<p>Hi</p>";
+      const testData = { html: htmlSnippet };
+
+      const result = smartEncode(testData);
+
+      expect(result.data.html).not.toBe(htmlSnippet);
+      expect(Buffer.from(result.data.html, "base64").toString("utf8")).toBe(
+        htmlSnippet,
+      );
+      expect(result.metadata.transformedFields).toContain("html");
+    });
+
     it("should exclude specified fields from encoding", () => {
       const testData = {
         shouldEncode: "This field should be encoded because it is long enough",
@@ -125,6 +138,45 @@ describe("DataTransformer API", () => {
       );
     });
 
+    it("should respect nested field configuration for array elements", () => {
+      const testData = {
+        questions: [
+          {
+            choices: [
+              { choice: "<p>Option A</p>" },
+              { choice: "<p>Option B</p>" },
+            ],
+          },
+        ],
+      };
+
+      const config = {
+        fields: ["questions.choices.choice"],
+        deep: true,
+      };
+
+      const encoded = smartEncode(testData, config);
+
+      expect(encoded.data.questions[0].choices[0].choice).not.toBe(
+        testData.questions[0].choices[0].choice,
+      );
+      expect(encoded.data.questions[0].choices[1].choice).not.toBe(
+        testData.questions[0].choices[1].choice,
+      );
+      expect(encoded.metadata.transformedFields).toContain(
+        "questions[0].choices[0].choice",
+      );
+
+      const decoded = smartDecode(encoded.data, config);
+
+      expect(decoded.questions[0].choices[0].choice).toBe(
+        testData.questions[0].choices[0].choice,
+      );
+      expect(decoded.questions[0].choices[1].choice).toBe(
+        testData.questions[0].choices[1].choice,
+      );
+    });
+
     it("should handle null and undefined values", () => {
       const testData = {
         nullField: null,
@@ -169,6 +221,18 @@ describe("DataTransformer API", () => {
       expect(result.data.encodedField).toBe(alreadyEncoded);
       expect(result.data.plainField).not.toBe(testData.plainField);
     });
+
+    it("should not re-encode nested base64 strings", () => {
+      const html = "<p>double encoded</p>";
+      const once = Buffer.from(html, "utf8").toString("base64");
+      const twice = Buffer.from(once, "utf8").toString("base64");
+      const testData = { field: twice };
+
+      const result = smartEncode(testData);
+
+      expect(result.data.field).toBe(twice);
+      expect(result.metadata.transformedFields).not.toContain("field");
+    });
   });
 
   describe("smartDecode", () => {
@@ -188,6 +252,35 @@ describe("DataTransformer API", () => {
 
       expect(decoded.introduction).toBe(originalData.introduction);
       expect(decoded.normalField).toBe(originalData.normalField);
+    });
+
+    it("should automatically decode base64 strings without explicit configuration", () => {
+      const html = "<div>Auto decode</div>";
+      const encodedHtml = Buffer.from(html, "utf8").toString("base64");
+      const testData = { html: encodedHtml };
+
+      const decoded = smartDecode(testData);
+
+      expect(decoded.html).toBe(html);
+    });
+
+    it("should decode base64 payloads even when wrapped with stray characters", () => {
+      const html = "<p>Corrupted payload</p>";
+      const encodedHtml = Buffer.from(html, "utf8").toString("base64");
+      const corrupted = `r\uFFFD\uFFFD${encodedHtml}`;
+
+      const decoded = smartDecode({ html: corrupted });
+
+      expect(decoded.html).toBe(html);
+    });
+
+    it("should fully decode nested base64 layers", () => {
+      const html = "<p>double decode</p>";
+      const once = Buffer.from(html, "utf8").toString("base64");
+      const twice = Buffer.from(once, "utf8").toString("base64");
+      const decoded = smartDecode({ html: twice });
+
+      expect(decoded.html).toBe(html);
     });
 
     it("should handle malformed base64 gracefully", () => {

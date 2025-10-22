@@ -4,7 +4,6 @@ import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearne
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import { useChatbot } from "@/hooks/useChatbot";
-import { decodeFields } from "@/app/Helpers/decoder";
 import { encodeFields } from "@/app/Helpers/encoder";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import { stripHtml } from "@/app/Helpers/strippers";
@@ -42,16 +41,7 @@ import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import SaveAndPublishButton from "./SaveAndPublishButton";
 
-function maybeDecodeString(str: string | null | undefined): string | null {
-  if (!str) return str;
-  try {
-    return atob(str);
-  } catch {
-    return str;
-  }
-}
-
-function fixScoringAndDecode(assignment: Assignment): Assignment {
+function normalizeAssignment(assignment: Assignment): Assignment {
   if (!assignment || !assignment.questions) return assignment;
 
   assignment.questions.forEach((q: Question) => {
@@ -65,10 +55,8 @@ function fixScoringAndDecode(assignment: Assignment): Assignment {
       delete q.scoring.criteria;
     }
 
-    q.question = maybeDecodeString(q.question);
     q.variants.forEach((variant: QuestionVariants) => {
       if (variant.scoring && variant.scoring.criteria) {
-        variant.variantContent = maybeDecodeString(variant.variantContent);
         variant.scoring.rubrics = [
           {
             rubricQuestion: variant.variantContent,
@@ -205,18 +193,7 @@ function AuthorHeader() {
         toast.error("Failed to fetch the assignment.");
         return;
       }
-      const decodedFields = decodeFields({
-        introduction: assignment.introduction,
-        instructions: assignment.instructions,
-        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-      });
-
-      const decodedAssignment = {
-        ...assignment,
-        ...decodedFields,
-      };
-
-      const newAssignment = fixScoringAndDecode(decodedAssignment);
+      const newAssignment = normalizeAssignment({ ...assignment });
       const questions: QuestionAuthorStore[] =
         newAssignment.questions?.map(
           (question: QuestionAuthorStore, index: number) => {
@@ -303,18 +280,7 @@ function AuthorHeader() {
     // TODO: Re-enable draft loading once basic version control is working
     const assignment = await getAssignment(parseInt(assignmentId, 10));
     if (assignment) {
-      const decodedFields = decodeFields({
-        introduction: assignment.introduction,
-        instructions: assignment.instructions,
-        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-      });
-
-      const decodedAssignment = {
-        ...assignment,
-        ...decodedFields,
-      };
-
-      const newAssignment = fixScoringAndDecode(decodedAssignment);
+      const newAssignment = normalizeAssignment({ ...assignment });
 
       useAuthorStore.getState().setOriginalAssignment(newAssignment);
 
