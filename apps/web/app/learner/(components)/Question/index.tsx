@@ -94,7 +94,13 @@ function QuestionPage(props: Props) {
       status: question.status ?? "unedited",
     }));
 
-    debugLog("attemptId, expiresAt", id, new Date(expiresAt).getTime());
+    const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : undefined;
+    const normalizedExpiresAt =
+      typeof expiresAtMs === "number" && !Number.isNaN(expiresAtMs)
+        ? expiresAtMs
+        : undefined;
+
+    debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
 
     // Use setQuestions to merge fresh assignment data with existing user responses
     // This preserves any responses the user has already entered
@@ -103,12 +109,12 @@ function QuestionPage(props: Props) {
     // Update other store properties that don't contain user responses
     const currentStoreUpdate = {
       activeAttemptId: id,
-      expiresAt: new Date(expiresAt).getTime(),
+      expiresAt: normalizedExpiresAt,
     };
 
     const hasOtherChanges =
       id !== useLearnerStore.getState().activeAttemptId ||
-      new Date(expiresAt).getTime() !== useLearnerStore.getState().expiresAt;
+      normalizedExpiresAt !== useLearnerStore.getState().expiresAt;
     if (hasOtherChanges) {
       setLearnerStore(currentStoreUpdate);
     }

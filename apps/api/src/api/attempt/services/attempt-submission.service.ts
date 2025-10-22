@@ -116,7 +116,7 @@ export class AttemptSubmissionService {
 
     const assignmentAttempt = await this.prisma.assignmentAttempt.create({
       data: {
-        expiresAt: attemptExpiresAt,
+        expiresAt: attemptExpiresAt ?? null,
         submitted: false,
         assignmentId,
         assignmentVersionId: activeVersionId,
@@ -1148,7 +1148,7 @@ export class AttemptSubmissionService {
     ) {
       return new Date(Date.now() + assignment.allotedTimeMinutes * 60 * 1000);
     }
-    return undefined;
+    return null;
   }
 
   /**

@@ -613,7 +613,7 @@ export interface GetAssignmentResponse extends Assignment {
 export type AssignmentAttempt = {
   id: number;
   assignmentId: number;
-  submitted: boolean;
+  submitted: boolean | string | number;
 
   grade?: number;
 

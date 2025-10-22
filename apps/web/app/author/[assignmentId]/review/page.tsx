@@ -92,6 +92,7 @@ const IssuesModal = ({
   onNavigateToConfig: () => void;
 }) => {
   if (!isOpen) return null;
+  console.log("questionIssues", questionIssues);
 
   const totalIssues = Object.keys(questionIssues).length;
   const hasValidationError = !isValid && message;
