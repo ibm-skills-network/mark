@@ -44,7 +44,7 @@ const ParsedJudgeResponseSchema = z.object({
   approved: z.boolean(),
   feedback: z.string(),
   issues: z.array(z.string()).optional(),
-  mathematicallyCorrect: z.boolean(),
+  mathematicallyCorrect: z.boolean().nullable().optional(),
   feedbackAligned: z.boolean(),
   rubricAdherence: z.boolean(),
   fairnessScore: z.number().min(0).max(10),

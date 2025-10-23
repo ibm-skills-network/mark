@@ -681,9 +681,11 @@ export class QuestionResponseService {
       (!requestDto.learnerFileResponse ||
         requestDto.learnerFileResponse.length === 0) &&
       (!requestDto.learnerUrlResponse ||
-        requestDto.learnerUrlResponse.trim() === "") &&
+        (typeof requestDto.learnerUrlResponse === "string" &&
+          requestDto.learnerUrlResponse.trim() === "")) &&
       (!requestDto.learnerTextResponse ||
-        requestDto.learnerTextResponse.trim() === "") &&
+        (typeof requestDto.learnerTextResponse === "string" &&
+          requestDto.learnerTextResponse.trim() === "")) &&
       (!requestDto.learnerChoices || requestDto.learnerChoices.length === 0) &&
       requestDto.learnerAnswerChoice === null &&
       (!requestDto.learnerPresentationResponse ||

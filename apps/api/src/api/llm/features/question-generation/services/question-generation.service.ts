@@ -2278,6 +2278,92 @@ FORMAT INSTRUCTIONS:
       return {};
     }
 
+    // Estimate token count (rough approximation: 1 token ≈ 4 characters)
+    const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
+
+    // Prepare questions with smart text handling
+    const preparedQuestions = questions.map((q) => {
+      const tokens = estimateTokens(q.questionText);
+      // If question is very long, intelligently extract key information
+      if (tokens > 150) {
+        // Extract first sentence and key phrases
+        const sentences = q.questionText.match(/[^!.?]+[!.?]+/g) || [
+          q.questionText,
+        ];
+        const summary = sentences[0].trim();
+        return {
+          id: q.id,
+          questionText:
+            summary + (sentences.length > 1 ? " [multi-part question]" : ""),
+        };
+      }
+      return q;
+    });
+
+    // Calculate batch size dynamically based on content
+    const totalEstimatedTokens = preparedQuestions.reduce(
+      (sum, q) => sum + estimateTokens(q.questionText),
+      0,
+    );
+
+    // Target ~80k tokens per batch (leaving room for template and response)
+    const TARGET_TOKENS_PER_BATCH = 80_000;
+    const estimatedQuestionsPerBatch = Math.max(
+      10,
+      Math.floor(
+        (TARGET_TOKENS_PER_BATCH * questions.length) / totalEstimatedTokens,
+      ),
+    );
+
+    // If there are too many questions, process in chunks
+    if (questions.length > estimatedQuestionsPerBatch) {
+      this.logger.info(
+        `Processing ${questions.length} questions in batches of ~${estimatedQuestionsPerBatch} ` +
+          `(estimated ${totalEstimatedTokens} tokens total)`,
+      );
+      const dependencies: Record<number, number[]> = {};
+
+      for (
+        let index = 0;
+        index < preparedQuestions.length;
+        index += estimatedQuestionsPerBatch
+      ) {
+        const batch = preparedQuestions.slice(
+          index,
+          index + estimatedQuestionsPerBatch,
+        );
+        try {
+          const batchDeps = await this.processQuestionContextBatch(
+            batch,
+            assignmentId,
+          );
+          Object.assign(dependencies, batchDeps);
+        } catch (error) {
+          this.logger.error(
+            `Failed to process question context batch ${index / estimatedQuestionsPerBatch + 1}: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+          );
+          // Add empty dependencies for failed batch to avoid breaking the flow
+          for (const q of batch) {
+            dependencies[q.id] = [];
+          }
+        }
+      }
+
+      return dependencies;
+    }
+
+    return await this.processQuestionContextBatch(
+      preparedQuestions,
+      assignmentId,
+    );
+  }
+
+  private async processQuestionContextBatch(
+    questions: { id: number; questionText: string }[],
+    assignmentId: number,
+  ): Promise<Record<number, number[]>> {
     const parser = StructuredOutputParser.fromZodSchema(
       z.array(
         z
@@ -2299,28 +2385,28 @@ FORMAT INSTRUCTIONS:
 
     const template = `
     You are an expert assessment designer tasked with identifying contextual relationships between questions in an assignment.
-    
+
     A contextual relationship means that understanding or answering one question correctly may depend on knowledge
     from another question or its expected answer. This helps create a dependency graph for grading.
-    
+
     QUESTIONS:
     {questions}
-    
+
     INSTRUCTIONS:
-    
+
     1. Carefully analyze each question to identify if it builds upon or requires knowledge from other questions.
-    
+
     2. For each question, provide an array of IDs of questions it depends on contextually.
        - For example, if Question 5 requires knowledge tested in Questions 2 and 3, then Question 5 has context
          dependencies on Questions 2 and 3.
        - If a question is independent and doesn't rely on other questions, return an empty array.
        - Only include DIRECT dependencies (if A depends on B and B depends on C, A's dependencies should include
          B but not necessarily C).
-    
+
     3. Be careful to avoid creating circular dependencies (A depends on B depends on A).
-    
+
     4. Return a complete array with an entry for EVERY question, even those with no dependencies.
-    
+
     {formatInstructions}
     `;
 
@@ -2367,10 +2453,48 @@ FORMAT INSTRUCTIONS:
 
         success = true;
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+
+        // Check if this is a token limit error
+        const isTokenLimitError =
+          errorMessage.includes("maximum context length") ||
+          errorMessage.includes("token");
+
+        if (isTokenLimitError && questions.length > 10) {
+          // If we hit token limits, split into smaller batches recursively
+          this.logger.warn(
+            `Token limit exceeded for ${questions.length} questions. Splitting into smaller batches...`,
+          );
+
+          const midpoint = Math.floor(questions.length / 2);
+          const firstHalf = questions.slice(0, midpoint);
+          const secondHalf = questions.slice(midpoint);
+
+          try {
+            const [firstDeps, secondDeps] = await Promise.all([
+              this.processQuestionContextBatch(firstHalf, assignmentId),
+              this.processQuestionContextBatch(secondHalf, assignmentId),
+            ]);
+
+            return { ...firstDeps, ...secondDeps };
+          } catch (splitError) {
+            this.logger.error(
+              `Failed even after splitting batch: ${
+                splitError instanceof Error
+                  ? splitError.message
+                  : "Unknown error"
+              }`,
+            );
+            // Fall through to return fallback
+            break;
+          }
+        }
+
         this.logger.warn(
           `Error generating question dependencies (attempt ${
             this.MAX_GENERATION_RETRIES - attemptsLeft + 1
-          }): ${error instanceof Error ? error.message : "Unknown error"}`,
+          }): ${errorMessage}`,
         );
         attemptsLeft--;
       }

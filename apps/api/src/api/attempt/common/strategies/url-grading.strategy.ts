@@ -51,10 +51,13 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
     try {
-      if (
-        !requestDto.learnerUrlResponse ||
-        requestDto.learnerUrlResponse.trim() === ""
-      ) {
+      // Ensure learnerUrlResponse is a string and not empty
+      const urlResponse =
+        typeof requestDto.learnerUrlResponse === "string"
+          ? requestDto.learnerUrlResponse.trim()
+          : "";
+
+      if (!urlResponse) {
         throw new BadRequestException(
           this.localizationService?.getLocalizedString?.(
             "expectedUrlResponse",
@@ -64,14 +67,14 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       }
 
       try {
-        new URL(requestDto.learnerUrlResponse);
+        new URL(urlResponse);
       } catch {
         throw new BadRequestException(
           this.localizationService?.getLocalizedString?.(
             "invalidUrl",
             requestDto.language,
-            { url: requestDto.learnerUrlResponse },
-          ) || `Invalid URL: ${requestDto.learnerUrlResponse}`,
+            { url: urlResponse },
+          ) || `Invalid URL: ${urlResponse}`,
         );
       }
 
@@ -93,6 +96,9 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
   async extractLearnerResponse(
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<string> {
+    if (typeof requestDto.learnerUrlResponse !== "string") {
+      throw new BadRequestException("URL response must be a string");
+    }
     return requestDto.learnerUrlResponse.trim();
   }
 

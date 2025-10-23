@@ -105,7 +105,11 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
     const choices: Choice[] = Array.isArray(question.choices)
       ? question.choices
       : (JSON.parse(question.choices as unknown as string) as Choice[]);
-    const correctAnswer = choices[0]?.choice?.trim().toLowerCase() === "true";
+    const choiceValue = choices[0]?.choice;
+    const correctAnswer =
+      typeof choiceValue === "string"
+        ? choiceValue.trim().toLowerCase() === "true"
+        : false;
     if (correctAnswer === undefined) {
       throw new BadRequestException(
         this.localizationService.getLocalizedString(
@@ -219,7 +223,10 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
     }
 
     const langMapping = mapping[language] || mapping["en"];
-    const normalized = learnerChoice.trim().toLowerCase();
+    const normalized =
+      typeof learnerChoice === "string"
+        ? learnerChoice.trim().toLowerCase()
+        : "";
 
     return langMapping[normalized];
   }
