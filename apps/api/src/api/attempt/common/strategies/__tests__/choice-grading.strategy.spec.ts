@@ -92,6 +92,28 @@ describe("ChoiceGradingStrategy - Type Safety Tests", () => {
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toEqual(["single-choice"]);
     });
+
+    it("should convert numeric learner choices to strings", async () => {
+      const requestDto = {
+        learnerChoices: [1, 2, 3],
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      const result = await strategy.extractLearnerResponse(requestDto);
+      expect(result).toEqual(["1", "2", "3"]);
+    });
+
+    it("should extract text from object based learner choices", async () => {
+      const requestDto = {
+        learnerChoices: [
+          { value: "Option A" },
+          { label: "Option B" },
+          { choice: { text: "Option C" } },
+        ],
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      const result = await strategy.extractLearnerResponse(requestDto);
+      expect(result).toEqual(["Option A", "Option B", "Option C"]);
+    });
   });
 
   describe("validateResponse - Single Choice", () => {
@@ -268,6 +290,21 @@ describe("ChoiceGradingStrategy - Type Safety Tests", () => {
 
       expect(result).toBeDefined();
       expect(result.totalPoints).toBeDefined();
+    });
+
+    it("should gracefully handle numeric learner choices during grading", async () => {
+      const { responseDto, learnerResponse } = await strategy.handleResponse(
+        mockSingleChoiceQuestion,
+        {
+          learnerChoices: [123 as any],
+          language: "en",
+        } as CreateQuestionResponseAttemptRequestDto,
+        mockContext,
+      );
+
+      expect(learnerResponse).toEqual(["123"]);
+      expect(responseDto).toBeDefined();
+      expect(responseDto.totalPoints).toBe(0);
     });
 
     it("should handle multiple choice question with multiple responses", async () => {
