@@ -87,14 +87,18 @@ function QuestionPage(props: Props) {
     ) {
       void fetchAssignment();
     }
-    //questions come from the attempt object that is passed in the props
-    //user actions complete the attemp object and submit it
     const questionsWithStatus = questions.map((question) => ({
       ...question,
       status: question.status ?? "unedited",
     }));
 
-    const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : undefined;
+    const expiresAtMs = expiresAt
+      ? typeof expiresAt === "string"
+        ? new Date(expiresAt).getTime()
+        : expiresAt instanceof Date
+          ? expiresAt.getTime()
+          : undefined
+      : undefined;
     const normalizedExpiresAt =
       typeof expiresAtMs === "number" && !Number.isNaN(expiresAtMs)
         ? expiresAtMs

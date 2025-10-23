@@ -4,6 +4,7 @@ import {
   useAssignmentDetails,
   useLearnerOverviewStore,
 } from "@/stores/learner";
+import { getTimestampMs } from "@/app/learner/utils/attempts";
 import React, { useMemo, useState } from "react";
 import DataTable, {
   createTheme,
@@ -76,51 +77,40 @@ export default function AssignmentAttempts() {
           grade !== null ? `${Math.round(grade * 100)}%` : "N/A";
         const scoreNumeric = grade !== null ? grade * 100 : -1;
 
-        const startedAt = attempt.createdAt
-          ? (() => {
-              const date = new Date(attempt.createdAt);
-              return isNaN(date.getTime())
-                ? "N/A"
-                : date.toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "numeric",
-                    hour12: true,
-                  });
-            })()
-          : "N/A";
-        const expiresAt = attempt.expiresAt
-          ? (() => {
-              const date = new Date(attempt.expiresAt);
-              return isNaN(date.getTime())
-                ? "N/A"
-                : date.toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "numeric",
-                    hour12: true,
-                  });
-            })()
-          : "N/A";
+        const startedAtMs = getTimestampMs(attempt.createdAt);
+        const expiresAtMs = getTimestampMs(attempt.expiresAt);
+
+        const startedAt = Number.isNaN(startedAtMs)
+          ? "N/A"
+          : new Date(startedAtMs).toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "numeric",
+              hour12: true,
+            });
+
+        const expiresAt = Number.isNaN(expiresAtMs)
+          ? "N/A"
+          : new Date(expiresAtMs).toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "numeric",
+              hour12: true,
+            });
 
         let duration = "N/A";
-        if (attempt.createdAt && attempt.expiresAt) {
-          const start = new Date(attempt.createdAt).getTime();
-          const end = new Date(attempt.expiresAt).getTime();
+        if (!Number.isNaN(startedAtMs) && !Number.isNaN(expiresAtMs)) {
+          const diffInSeconds = (expiresAtMs - startedAtMs) / 1000;
 
-          // Check for valid dates
-          if (!isNaN(start) && !isNaN(end)) {
-            const diffInSeconds = (end - start) / 1000;
-            if (diffInSeconds >= 0) {
-              const hours = Math.floor(diffInSeconds / 3600);
-              const minutes = Math.floor((diffInSeconds % 3600) / 60);
-              const seconds = Math.floor(diffInSeconds % 60);
-              duration = `${hours}h ${minutes}m ${seconds}s`;
-            }
+          if (diffInSeconds >= 0) {
+            const hours = Math.floor(diffInSeconds / 3600);
+            const minutes = Math.floor((diffInSeconds % 3600) / 60);
+            const seconds = Math.floor(diffInSeconds % 60);
+            duration = `${hours}h ${minutes}m ${seconds}s`;
           }
         }
 

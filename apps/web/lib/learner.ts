@@ -21,6 +21,7 @@ import type {
 import { toast } from "sonner";
 import { submitReportAuthor } from "@/lib/talkToBackend";
 import { apiClient, APIError } from "./api-client";
+import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 
 /**
  * Creates a attempt for a given assignment.
@@ -85,7 +86,17 @@ export async function getAttempt(
         },
       },
     );
-    return attempt;
+    if (!attempt) {
+      return undefined;
+    }
+
+    const fallbackAllotedMinutes =
+      attempt.assignmentVersion?.allotedTimeMinutes ??
+      attempt.assignmentDetails?.allotedTimeMinutes ??
+      attempt.assignment?.allotedTimeMinutes ??
+      null;
+
+    return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
   } catch (err) {
     return undefined;
   }
@@ -114,7 +125,17 @@ export async function getCompletedAttempt(
         },
       },
     );
-    return attempt;
+    if (!attempt) {
+      return undefined;
+    }
+
+    const fallbackAllotedMinutes =
+      attempt.assignmentVersion?.allotedTimeMinutes ??
+      attempt.assignmentDetails?.allotedTimeMinutes ??
+      attempt.assignment?.allotedTimeMinutes ??
+      null;
+
+    return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
   } catch (err) {
     return undefined;
   }

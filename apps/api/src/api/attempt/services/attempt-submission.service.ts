@@ -76,6 +76,25 @@ export class AttemptSubmissionService {
     assignmentId: number,
     userSession: UserSession,
   ): Promise<BaseAssignmentAttemptResponseDto> {
+    const now = new Date();
+
+    const existingAttempt = await this.prisma.assignmentAttempt.findFirst({
+      where: {
+        assignmentId,
+        userId: userSession.userId,
+        submitted: false,
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existingAttempt) {
+      return {
+        id: existingAttempt.id,
+        success: true,
+      };
+    }
+
     const assignment = await this.assignmentRepository.findById(
       assignmentId,
       userSession,
@@ -1088,12 +1107,14 @@ export class AttemptSubmissionService {
       authorAssignmentDetails,
       language,
       preTranslatedQuestions,
+      expiresAt: _ignoredExpiresAt,
       ...cleanedUpdateDto
     } = updateDto;
 
     return this.prisma.assignmentAttempt.update({
       data: {
         ...cleanedUpdateDto,
+        submitted: true,
         preferredLanguage: language ?? "en",
         expiresAt: new Date(),
         grade,

@@ -20,6 +20,7 @@ import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 import {
   getExpiresAtMs,
   getLatestAttempt,
+  getTimestampMs,
   isAttemptInProgress,
   isAttemptSubmitted,
 } from "@/app/learner/utils/attempts";
@@ -167,13 +168,26 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       setIsCooldown(false);
       return;
     }
+    console.log("Latest attempt:", latestAttempt);
 
     const fallbackCreatedAt = latestAttempt.createdAt
       ? new Date(latestAttempt.createdAt).getTime()
       : undefined;
 
-    const finishedAt =
-      getExpiresAtMs(latestAttempt.expiresAt) ?? fallbackCreatedAt;
+    const updatedAtMs = getTimestampMs(latestAttempt.updatedAt);
+
+    let finishedAt =
+      getExpiresAtMs(latestAttempt.expiresAt) ??
+      updatedAtMs ??
+      fallbackCreatedAt;
+
+    if (
+      isAttemptSubmitted(latestAttempt) &&
+      updatedAtMs !== undefined &&
+      !Number.isNaN(updatedAtMs)
+    ) {
+      finishedAt = finishedAt ? Math.min(finishedAt, updatedAtMs) : updatedAtMs;
+    }
 
     if (finishedAt === undefined || Number.isNaN(finishedAt)) {
       setCooldownMessage(null);

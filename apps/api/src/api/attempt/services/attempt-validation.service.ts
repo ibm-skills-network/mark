@@ -34,25 +34,16 @@ export class AttemptValidationService {
     const now = new Date();
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
-    const attempts = await this.prisma.assignmentAttempt.findMany({
+    const activeAttempt = await this.prisma.assignmentAttempt.findFirst({
       where: {
         userId: userSession.userId,
         assignmentId: assignment.id,
+        submitted: false,
         OR: [
+          { expiresAt: null },
           {
-            submitted: false,
             expiresAt: {
               gte: now,
-            },
-          },
-          {
-            submitted: false,
-            expiresAt: undefined,
-          },
-          {
-            createdAt: {
-              gte: timeRangeStartDate,
-              lte: now,
             },
           },
         ],
@@ -60,34 +51,27 @@ export class AttemptValidationService {
       orderBy: { createdAt: "desc" },
     });
 
-    const lastSubmittedAttempt = await this.prisma.assignmentAttempt.findFirst({
-      where: {
-        userId: userSession.userId,
-        assignmentId: assignment.id,
-        submitted: true,
-      },
-      orderBy: { expiresAt: "desc" },
-    });
-
-    const ongoingAttempts = attempts.filter(
-      (sub) => !sub.submitted && (!sub.expiresAt || sub.expiresAt >= now),
-    );
-
-    if (ongoingAttempts.length > 0) {
+    if (activeAttempt) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
 
-    const attemptsInTimeRange = attempts.filter(
-      (sub) => sub.createdAt >= timeRangeStartDate && sub.createdAt <= now,
-    );
+    if (assignment.attemptsPerTimeRange) {
+      const attemptsInTimeRange = await this.prisma.assignmentAttempt.count({
+        where: {
+          userId: userSession.userId,
+          assignmentId: assignment.id,
+          createdAt: {
+            gte: timeRangeStartDate,
+            lte: now,
+          },
+        },
+      });
 
-    if (
-      assignment.attemptsPerTimeRange &&
-      attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
-    ) {
-      throw new UnprocessableEntityException(
-        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-      );
+      if (attemptsInTimeRange >= assignment.attemptsPerTimeRange) {
+        throw new UnprocessableEntityException(
+          TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        );
+      }
     }
 
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
@@ -107,22 +91,45 @@ export class AttemptValidationService {
 
       if (
         attemptsBeforeCoolDown > 0 &&
+        cooldownMinutes > 0 &&
         totalAttempts >= attemptsBeforeCoolDown
       ) {
-        const lastAttemptTime = new Date(
-          lastSubmittedAttempt.expiresAt,
-        ).getTime();
-        const cooldownMs = cooldownMinutes * 60_000;
-        const nextEligibleTime = lastAttemptTime + cooldownMs;
-
-        if (now.getTime() < nextEligibleTime) {
-          throw new HttpException(
-            {
-              statusCode: HttpStatus.TOO_MANY_REQUESTS,
-              message: IN_COOLDOWN_PERIOD,
+        const lastSubmittedAttempt =
+          await this.prisma.assignmentAttempt.findFirst({
+            where: {
+              userId: userSession.userId,
+              assignmentId: assignment.id,
+              submitted: true,
             },
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
+            orderBy: [{ expiresAt: "desc" }, { createdAt: "desc" }],
+          });
+
+        if (lastSubmittedAttempt) {
+          const lastAttemptReference =
+            lastSubmittedAttempt.expiresAt ?? lastSubmittedAttempt.createdAt;
+
+          if (lastAttemptReference) {
+            const referenceTimestamp = new Date(lastAttemptReference).getTime();
+
+            if (!Number.isNaN(referenceTimestamp)) {
+              const lastAttemptTime = Math.min(
+                referenceTimestamp,
+                now.getTime(),
+              );
+              const cooldownMs = cooldownMinutes * 60_000;
+              const nextEligibleTime = lastAttemptTime + cooldownMs;
+
+              if (now.getTime() < nextEligibleTime) {
+                throw new HttpException(
+                  {
+                    statusCode: HttpStatus.TOO_MANY_REQUESTS,
+                    message: IN_COOLDOWN_PERIOD,
+                  },
+                  HttpStatus.TOO_MANY_REQUESTS,
+                );
+              }
+            }
+          }
         }
       }
     }

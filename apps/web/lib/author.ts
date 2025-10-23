@@ -17,6 +17,7 @@ import type {
   Scoring,
 } from "@config/types";
 import { apiClient } from "./api-client";
+import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 
 interface Notification {
   id: number;
@@ -436,7 +437,7 @@ export async function getAttempts(
         ...(cookies ? { Cookie: cookies } : {}),
       },
     })) as AssignmentAttempt[];
-    return attempts;
+    return attempts.map((attempt) => normalizeAttemptTimestamps(attempt));
   } catch (err) {
     return undefined;
   }

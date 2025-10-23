@@ -6,6 +6,7 @@ import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
 import type { Assignment } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
+import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
@@ -58,12 +59,19 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           const attemptsData = await getAttempts(assignmentId, cookie);
 
           if (isMounted && assignmentData) {
+            const normalizedAttempts = (attemptsData ?? []).map((attempt) =>
+              normalizeAttemptTimestamps(
+                attempt,
+                assignmentData?.allotedTimeMinutes ?? null,
+              ),
+            );
+
             setAssignment(assignmentData);
             setAssignmentDetails({
               ...assignmentData,
               name: assignmentData.name || "Untitled Assignment",
             });
-            setListOfAttempts(attemptsData);
+            setListOfAttempts(normalizedAttempts);
           }
         } catch (error) {
           setError({
@@ -121,7 +129,6 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           : "You are not authorized to view this page";
     return <ErrorPage error={errorMessage} statusCode={403} />;
   }
-
   return (
     <>
       <AboutTheAssignment

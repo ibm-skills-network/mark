@@ -617,14 +617,19 @@ export type AssignmentAttempt = {
 
   grade?: number;
 
-  expiresAt?: string;
-  createdAt?: string;
+  expiresAt?: string | Date | null | Record<string, unknown>;
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
   message?: string;
 };
 
 export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questions: QuestionStore[];
   assignmentDetails: AssignmentDetails;
+  assignmentVersion?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
+    Record<string, unknown>;
+  assignment?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
+    Record<string, unknown>;
   grade?: number;
   totalPointsEarned?: number;
   totalPossiblePoints?: number;

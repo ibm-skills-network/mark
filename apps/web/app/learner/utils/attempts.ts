@@ -1,4 +1,15 @@
-import { AssignmentAttempt } from "@/config/types";
+import {
+  AssignmentAttempt,
+  AssignmentAttemptWithQuestions,
+} from "@/config/types";
+
+type MaybeDateValue =
+  | string
+  | Date
+  | number
+  | null
+  | undefined
+  | Record<string, unknown>;
 
 export const coerceSubmitted = (
   submitted: AssignmentAttempt["submitted"],
@@ -28,11 +39,12 @@ export const coerceSubmitted = (
 export const getExpiresAtMs = (
   expiresAt: AssignmentAttempt["expiresAt"],
 ): number | undefined => {
-  if (!expiresAt) {
+  const isoString = toIsoString(expiresAt);
+  if (!isoString) {
     return undefined;
   }
 
-  const timestamp = new Date(expiresAt).getTime();
+  const timestamp = new Date(isoString).getTime();
   return Number.isNaN(timestamp) ? undefined : timestamp;
 };
 
@@ -54,12 +66,8 @@ export const getLatestAttempt = (
   return attempts.reduce<AssignmentAttempt | null>((latest, attempt) => {
     if (!latest) return attempt;
 
-    const attemptCreatedAt = attempt.createdAt
-      ? new Date(attempt.createdAt).getTime()
-      : Number.NEGATIVE_INFINITY;
-    const latestCreatedAt = latest.createdAt
-      ? new Date(latest.createdAt).getTime()
-      : Number.NEGATIVE_INFINITY;
+    const attemptCreatedAt = getTimestampMs(attempt.createdAt);
+    const latestCreatedAt = getTimestampMs(latest.createdAt);
 
     const normalizedAttemptCreatedAt = Number.isNaN(attemptCreatedAt)
       ? Number.NEGATIVE_INFINITY
@@ -81,4 +89,122 @@ export const getLatestAttempt = (
 
     return latest;
   }, null);
+};
+
+export const toIsoString = (value: MaybeDateValue): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (
+    typeof value === "object" &&
+    "toISOString" in value &&
+    typeof (value as { toISOString: () => string }).toISOString === "function"
+  ) {
+    try {
+      return (value as { toISOString: () => string }).toISOString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (typeof value === "number") {
+    return new Date(value).toISOString();
+  }
+
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  }
+
+  return undefined;
+};
+
+export const getTimestampMs = (value: MaybeDateValue): number => {
+  const isoString = toIsoString(value);
+  if (!isoString) {
+    return Number.NaN;
+  }
+
+  return new Date(isoString).getTime();
+};
+
+export type AttemptWithTiming =
+  | AssignmentAttempt
+  | AssignmentAttemptWithQuestions
+  | (AssignmentAttempt & { [key: string]: unknown });
+
+export const normalizeAttemptTimestamps = <T extends AttemptWithTiming>(
+  attempt: T,
+  fallbackAllotedMinutes?: number | string | null,
+): T => {
+  const parsedFallbackMinutes =
+    typeof fallbackAllotedMinutes === "string"
+      ? Number(fallbackAllotedMinutes)
+      : fallbackAllotedMinutes;
+
+  const createdAtIso = toIsoString(attempt.createdAt) ?? undefined;
+  const expiresAtIso = toIsoString(attempt.expiresAt);
+  const updatedAtIso =
+    toIsoString((attempt as AssignmentAttempt)?.updatedAt) ?? undefined;
+
+  let normalizedExpiresAt = expiresAtIso;
+  if (
+    !normalizedExpiresAt &&
+    !isAttemptSubmitted(attempt as AssignmentAttempt) &&
+    createdAtIso &&
+    parsedFallbackMinutes &&
+    parsedFallbackMinutes > 0
+  ) {
+    const createdAtMs = new Date(createdAtIso).getTime();
+    if (!Number.isNaN(createdAtMs)) {
+      normalizedExpiresAt = new Date(
+        createdAtMs + parsedFallbackMinutes * 60_000,
+      ).toISOString();
+    }
+  }
+
+  // If the attempt is already submitted and we still don't have a reliable
+  // expiresAt, fall back to the last update time which reflects completion.
+  if (
+    isAttemptSubmitted(attempt as AssignmentAttempt) &&
+    !normalizedExpiresAt &&
+    updatedAtIso
+  ) {
+    normalizedExpiresAt = updatedAtIso;
+  }
+
+  if (
+    isAttemptSubmitted(attempt as AssignmentAttempt) &&
+    normalizedExpiresAt &&
+    updatedAtIso
+  ) {
+    const normalizedMs = new Date(normalizedExpiresAt).getTime();
+    const updatedMs = new Date(updatedAtIso).getTime();
+
+    if (!Number.isNaN(normalizedMs) && !Number.isNaN(updatedMs)) {
+      if (updatedMs < normalizedMs) {
+        normalizedExpiresAt = updatedAtIso;
+      }
+    }
+  }
+
+  if (
+    !normalizedExpiresAt &&
+    createdAtIso &&
+    isAttemptSubmitted(attempt as AssignmentAttempt)
+  ) {
+    normalizedExpiresAt = createdAtIso;
+  }
+
+  return {
+    ...attempt,
+    createdAt: createdAtIso ?? attempt.createdAt,
+    updatedAt: updatedAtIso ?? attempt.updatedAt,
+    expiresAt: normalizedExpiresAt ?? null,
+  } as T;
 };

@@ -35,6 +35,7 @@ function Timer(props: Props) {
     setTotalPointsEarned,
     setTotalPointsPossible,
     setShowSubmissionFeedback,
+    setLearnerStore,
   ] = useLearnerStore((state) => [
     state.activeAttemptId,
     state.questions,
@@ -43,6 +44,7 @@ function Timer(props: Props) {
     state.setTotalPointsEarned,
     state.setTotalPointsPossible,
     state.setShowSubmissionFeedback,
+    state.setLearnerStore,
   ]);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
@@ -179,6 +181,10 @@ function Timer(props: Props) {
       });
     }
     clearGithubStore();
+    setLearnerStore({
+      activeAttemptId: null,
+      expiresAt: undefined,
+    });
     useLearnerStore.getState().setActiveQuestionNumber(null);
     setTimeout(() => {
       useLearnerStore.getState().setUserPreferedLanguage(null);
