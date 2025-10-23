@@ -546,7 +546,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
 
       const firstStringValue = Object.values(record).find(
         (entry) => typeof entry === "string",
-      ) as string | undefined;
+      );
 
       if (firstStringValue) {
         return firstStringValue;
