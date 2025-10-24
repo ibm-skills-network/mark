@@ -345,53 +345,58 @@ const AuthorQuestionsPage: FC<Props> = ({
             };
 
             const questions: QuestionAuthorStore[] =
-              assignment.questions?.map(
-                (question: QuestionAuthorStore, index: number) => {
-                  //unify scoring rubrics
-                  const unifiedQuestionScoring = unifyScoringRubrics(
-                    question.scoring,
-                    question.question,
-                  );
-                  //sort criteria by points
-                  unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
-                    rubric.criteria.sort(
-                      (a: Criteria, b: Criteria) => a.points - b.points,
+              assignment.questions
+                ?.sort(
+                  (a: QuestionAuthorStore, b: QuestionAuthorStore) =>
+                    (a.index || 0) - (b.index || 0),
+                )
+                .map(
+                  (question: QuestionAuthorStore, index: number) => {
+                    //unify scoring rubrics
+                    const unifiedQuestionScoring = unifyScoringRubrics(
+                      question.scoring,
+                      question.question,
                     );
-                  });
-
-                  const parsedVariants: QuestionVariants[] =
-                    question.variants?.map((variant: QuestionVariants) => {
-                      const unifiedVariantScoring = unifyScoringRubrics(
-                        variant.scoring,
-                        variant.variantContent ?? question.question,
+                    //sort criteria by points
+                    unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
+                      rubric.criteria.sort(
+                        (a: Criteria, b: Criteria) => a.points - b.points,
                       );
-                      unifiedVariantScoring.rubrics?.forEach(
-                        (rubric: Rubric) => {
-                          rubric.criteria.sort(
-                            (a: Criteria, b: Criteria) => a.points - b.points,
-                          );
-                        },
-                      );
+                    });
 
-                      return {
-                        ...variant,
-                        choices:
-                          typeof variant.choices === "string"
-                            ? (JSON.parse(variant.choices) as Choice[])
-                            : variant.choices,
-                        scoring: unifiedVariantScoring,
-                      };
-                    }) ?? [];
+                    const parsedVariants: QuestionVariants[] =
+                      question.variants?.map((variant: QuestionVariants) => {
+                        const unifiedVariantScoring = unifyScoringRubrics(
+                          variant.scoring,
+                          variant.variantContent ?? question.question,
+                        );
+                        unifiedVariantScoring.rubrics?.forEach(
+                          (rubric: Rubric) => {
+                            rubric.criteria.sort(
+                              (a: Criteria, b: Criteria) => a.points - b.points,
+                            );
+                          },
+                        );
 
-                  return {
-                    ...question,
-                    alreadyInBackend: true,
-                    index: index + 1,
-                    variants: parsedVariants,
-                    scoring: unifiedQuestionScoring,
-                  };
-                },
-              ) ?? [];
+                        return {
+                          ...variant,
+                          choices:
+                            typeof variant.choices === "string"
+                              ? (JSON.parse(variant.choices) as Choice[])
+                              : variant.choices,
+                          scoring: unifiedVariantScoring,
+                        };
+                      }) ?? [];
+
+                    return {
+                      ...question,
+                      alreadyInBackend: true,
+                      index: index + 1,
+                      variants: parsedVariants,
+                      scoring: unifiedQuestionScoring,
+                    };
+                  },
+                ) ?? [];
 
             if (questions.length > 0) {
               setQuestions(questions);

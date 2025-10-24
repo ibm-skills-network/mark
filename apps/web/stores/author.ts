@@ -271,7 +271,10 @@ export type AuthorActions = {
   setVersions: (versions: VersionSummary[]) => void;
   setCurrentVersion: (version?: VersionSummary) => void;
   setCheckedOutVersion: (version?: VersionSummary) => void;
-  checkoutVersion: (versionId: number) => Promise<boolean>;
+  checkoutVersion: (
+    versionId: number,
+    versionNumber?: string | number,
+  ) => Promise<boolean>;
   setSelectedVersion: (version?: VersionSummary) => void;
   setVersionComparison: (comparison?: VersionComparison) => void;
   setIsLoadingVersions: (loading: boolean) => void;
@@ -1744,14 +1747,25 @@ export const useAuthorStore = createWithEqualityFn<
             const currentVersion = versions.find((v) => v.isActive);
             const currentState = get();
 
-            let checkedOutVersion = currentVersion;
-            if (currentState.checkedOutVersion) {
+            // Preserve the current checkedOutVersion if it exists and is still in the version list
+            // This ensures that when versions are refreshed, we don't lose the user's current checkout
+            let checkedOutVersion = currentState.checkedOutVersion;
+
+            if (checkedOutVersion) {
+              // Find the updated version object from the fresh list
               const existingCheckedOut = versions.find(
-                (v) => v.id === currentState.checkedOutVersion.id,
+                (v) => v.id === checkedOutVersion.id,
               );
               if (existingCheckedOut) {
+                // Use the fresh version object from the API
                 checkedOutVersion = existingCheckedOut;
+              } else {
+                // If the checked out version no longer exists, fall back to current version
+                checkedOutVersion = currentVersion;
               }
+            } else {
+              // If no version is checked out, default to the current active version
+              checkedOutVersion = currentVersion;
             }
 
             set({
@@ -1945,7 +1959,10 @@ export const useAuthorStore = createWithEqualityFn<
             });
         },
 
-        checkoutVersion: async (versionId: number) => {
+        checkoutVersion: async (
+          versionId: number,
+          versionNumber?: string | number,
+        ) => {
           const state = get();
           if (!state.activeAssignmentId) return false;
 
@@ -1977,7 +1994,86 @@ export const useAuthorStore = createWithEqualityFn<
               updateConfigStores,
             } = get();
 
-            const processedQuestions = rawQuestions.map(
+            // Sort questions by their index before processing to ensure correct order
+            const questionOrderArray: number[] =
+              versionData.questionOrder && Array.isArray(versionData.questionOrder)
+                ? (versionData.questionOrder
+                    .map((value: unknown) => {
+                      if (typeof value === "number" && Number.isFinite(value)) {
+                        return value;
+                      }
+
+                      if (typeof value === "string") {
+                        const parsed = Number.parseInt(value, 10);
+                        if (!Number.isNaN(parsed)) {
+                          return parsed;
+                        }
+                      }
+
+                      return null;
+                    })
+                    .filter((value: number | null): value is number => value !== null) as number[])
+                : [];
+
+            const questionOrderMap = questionOrderArray.reduce(
+              (acc: Map<number, number>, questionId: number, orderIndex: number) => {
+                acc.set(questionId, orderIndex);
+                return acc;
+              },
+              new Map<number, number>(),
+            );
+
+            const resolveQuestionId = (questionVersion: any): number | undefined => {
+              if (typeof questionVersion?.questionId === "number") {
+                return questionVersion.questionId;
+              }
+
+              if (typeof questionVersion?.id === "number") {
+                return questionVersion.id;
+              }
+
+              if (questionVersion?.question && typeof questionVersion.question.id === "number") {
+                return questionVersion.question.id;
+              }
+
+              return undefined;
+            };
+
+            const getQuestionOrder = (questionVersion: any, fallbackIndex: number) => {
+              const displayOrder = questionVersion?.displayOrder;
+              if (typeof displayOrder === "number" && Number.isFinite(displayOrder)) {
+                return displayOrder;
+              }
+
+              const questionId =
+                resolveQuestionId(questionVersion);
+
+              if (
+                questionId !== undefined &&
+                questionOrderMap.has(questionId)
+              ) {
+                return (questionOrderMap.get(questionId) ?? fallbackIndex) + 1;
+              }
+
+              if (typeof questionVersion?.index === "number") {
+                return questionVersion.index;
+              }
+
+              return fallbackIndex + 1;
+            };
+
+            const originalOrderMap = new Map<any, number>();
+            rawQuestions.forEach((question: any, index: number) => {
+              originalOrderMap.set(question, index);
+            });
+
+            const sortedQuestions = [...rawQuestions].sort((a: any, b: any) => {
+              const orderA = getQuestionOrder(a, originalOrderMap.get(a) ?? 0);
+              const orderB = getQuestionOrder(b, originalOrderMap.get(b) ?? 0);
+              return orderA - orderB;
+            });
+
+            const processedQuestions = sortedQuestions.map(
               (questionVersion: any, index: number) =>
                 processQuestionVersion(
                   questionVersion,
@@ -1988,6 +2084,12 @@ export const useAuthorStore = createWithEqualityFn<
                 ),
             );
 
+            const finalQuestionOrder =
+              sortedQuestions
+                .map((questionVersion: any) => resolveQuestionId(questionVersion))
+                .filter((id: number | undefined): id is number => typeof id === "number");
+
+            // Update the store with the version data
             set({
               name: versionData.name,
               introduction: versionData.introduction,
@@ -1995,13 +2097,18 @@ export const useAuthorStore = createWithEqualityFn<
               gradingCriteriaOverview: versionData.gradingCriteriaOverview,
               questions: processedQuestions,
               questionOrder:
-                versionData.questionOrder ||
-                processedQuestions.map((q) => q.id),
+                finalQuestionOrder.length > 0
+                  ? finalQuestionOrder
+                  : questionOrderArray.length > 0
+                    ? questionOrderArray
+                    : processedQuestions.map((q) => q.id),
               checkedOutVersion: versionToCheckout,
               hasUnsavedChanges: false,
             });
 
             await updateConfigStores(versionData);
+
+            console.log("✅ Checked out version:", versionToCheckout.versionNumber, "ID:", versionToCheckout.id);
 
             return true;
           } catch (error) {
@@ -2147,16 +2254,39 @@ export const useAuthorStore = createWithEqualityFn<
                 updatedVersions = [newVersion, ...state.versions];
               }
 
+              // First update the versions array
               set({
                 versions: updatedVersions,
                 currentVersion: newVersion.isActive
                   ? newVersion
                   : state.currentVersion,
-                // Clear checkedOutVersion so BottomVersionBar shows the latest version
-                // When user creates a new version, they should see that version in the bar
-                checkedOutVersion: newVersion,
-                hasUnsavedChanges: false,
               });
+
+              console.log(
+                "📦 Published version:",
+                newVersion.versionNumber,
+                "ID:",
+                newVersion.id,
+              );
+
+              if (!isDraft) {
+                console.log("🔄 Auto-checking out to published version...");
+
+                // Then automatically checkout to the published version to reflect its content
+                // This will update checkedOutVersion and load the version data
+                const checkoutSuccess = await get().checkoutVersion(
+                  newVersion.id,
+                );
+
+                if (checkoutSuccess) {
+                  console.log("✅ Successfully checked out to published version");
+                } else {
+                  console.warn(
+                    "⚠️ Checkout failed after publishing, setting checkedOutVersion manually",
+                  );
+                  set({ checkedOutVersion: newVersion });
+                }
+              }
             }
 
             return newVersion;
