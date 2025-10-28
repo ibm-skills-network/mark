@@ -28,15 +28,22 @@ import { AuthModule } from "./auth/auth.module";
 import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { winstonOptions } from "./logger/config";
 
-// Initialize Instana APM collector for application monitoring
-instana();
-
-/**
- * Bootstrap function - initializes and configures the NestJS application
- * Sets up middleware, security, API documentation, and graceful shutdown
- *
- * @throws {Error} When application fails to start or configuration is invalid
- */
+if (process.env.NODE_ENV === "production") {
+  instana({
+    level: "warn",
+    tracing: {
+      stackTraceLength: 20,
+      http: {
+        captureAsyncContext: true,
+        extraHttpHeadersToCapture: [
+          "user-agent",
+          "x-request-id",
+          "x-correlation-id",
+        ],
+      },
+    },
+  });
+}
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
 
