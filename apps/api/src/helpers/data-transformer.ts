@@ -1,8 +1,26 @@
+import type { API_CONFIG, DATABASE_CONFIG } from "./transform-config";
+
 export interface TransformConfig {
   fields?: string[];
   exclude?: string[];
   deep?: boolean;
   preserveTypes?: boolean;
+}
+
+// Lazy-loaded config to avoid circular dependencies
+let _transformConfig:
+  | {
+      DATABASE_CONFIG: typeof DATABASE_CONFIG;
+      API_CONFIG: typeof API_CONFIG;
+    }
+  | undefined;
+
+function getTransformConfig() {
+  if (!_transformConfig) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment, unicorn/prefer-module
+    _transformConfig = require("./transform-config");
+  }
+  return _transformConfig;
 }
 
 export interface TransformResult<T = any> {
@@ -15,7 +33,6 @@ export interface TransformResult<T = any> {
   };
 }
 
-const HTML_TAG_REGEX = /<\/?[a-z][\S\s]*>/i;
 const BASE64_FULL_REGEX = /^[\d+/A-Za-z]+={0,2}$/;
 const BASE64_SEGMENT_REGEX = /[\d+/=A-Za-z]{4,}/g;
 const MAX_BASE64_DEPTH = 5;
@@ -418,59 +435,27 @@ export function batchDecode<T = any>(
 }
 
 export const DataTransformer = {
-  encodeForDatabase: <T>(data: T) => {
-    const result = smartEncode(data, {
-      fields: [
-        "introduction",
-        "instructions",
-        "gradingCriteriaOverview",
-        "question",
-        "content",
-        "rubricQuestion",
-        "description",
-        "questions.choices.choice",
-        "questions.scoring.rubrics.rubricQuestion",
-        "questions.scoring.rubrics.criteria.description",
-        "learnerTextResponse",
-        "learnerChoices",
-      ],
-      deep: true,
-    });
+  encodeForDatabase: <T>(data: T, config?: TransformConfig) => {
+    const { DATABASE_CONFIG } = getTransformConfig();
+    const result = smartEncode(data, config || DATABASE_CONFIG);
     return result;
   },
 
-  decodeFromDatabase: <T>(data: T) => {
-    const result = smartDecode(data, {
-      fields: [
-        "introduction",
-        "instructions",
-        "gradingCriteriaOverview",
-        "question",
-        "content",
-        "rubricQuestion",
-        "description",
-        "questions.choices.choice",
-        "questions.scoring.rubrics.rubricQuestion",
-        "questions.scoring.rubrics.criteria.description",
-        "responsesForQuestions.learnerTextResponse",
-        "responsesForQuestions.learnerChoices",
-      ],
-      deep: true,
-    });
+  decodeFromDatabase: <T>(data: T, config?: TransformConfig) => {
+    const { DATABASE_CONFIG } = getTransformConfig();
+    const result = smartDecode(data, config || DATABASE_CONFIG);
     return result;
   },
 
-  encodeForAPI: <T>(data: T) =>
-    smartEncode(data, {
-      exclude: ["id", "createdAt", "updatedAt"],
-      deep: true,
-    }),
+  encodeForAPI: <T>(data: T, config?: TransformConfig) => {
+    const { API_CONFIG } = getTransformConfig();
+    return smartEncode(data, config || API_CONFIG);
+  },
 
-  decodeFromAPI: <T>(data: T) =>
-    smartDecode(data, {
-      exclude: ["id", "createdAt", "updatedAt"],
-      deep: true,
-    }),
+  decodeFromAPI: <T>(data: T, config?: TransformConfig) => {
+    const { API_CONFIG } = getTransformConfig();
+    return smartDecode(data, config || API_CONFIG);
+  },
 
   batchEncode,
   batchDecode,

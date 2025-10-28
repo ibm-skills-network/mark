@@ -1,8 +1,33 @@
+import type {
+  API_ENCODE_CONFIG,
+  API_DECODE_CONFIG,
+  FORM_DATA_CONFIG,
+  STORAGE_CONFIG,
+} from "./transform-config";
+
 export interface TransformConfig {
   fields?: string[];
   exclude?: string[];
   deep?: boolean;
   compressionLevel?: "none" | "light" | "heavy";
+}
+
+// Lazy-loaded config to avoid circular dependencies
+let _transformConfig:
+  | {
+      API_ENCODE_CONFIG: typeof API_ENCODE_CONFIG;
+      API_DECODE_CONFIG: typeof API_DECODE_CONFIG;
+      FORM_DATA_CONFIG: typeof FORM_DATA_CONFIG;
+      STORAGE_CONFIG: typeof STORAGE_CONFIG;
+    }
+  | undefined;
+
+function getTransformConfig() {
+  if (!_transformConfig) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _transformConfig = require("./transform-config");
+  }
+  return _transformConfig;
 }
 
 export interface TransformMetadata {
@@ -246,6 +271,22 @@ function transformData(
       continue;
     }
 
+    // Special handling: If the value is a JSON string, parse it first, then transform
+    if (typeof value === "string" && operation === "decode") {
+      const parsed = tryParseJSON(value);
+      if (parsed !== null && typeof parsed === "object") {
+        // It's a JSON string - parse, transform, then keep as object (don't re-stringify)
+        result[key] = transformData(
+          parsed,
+          config,
+          operation,
+          visited,
+          fieldPath,
+        );
+        continue;
+      }
+    }
+
     if (shouldTransformField(key, value, fields, fieldPath, operation)) {
       if (Array.isArray(value)) {
         result[key] = value.map((item, index) => {
@@ -273,6 +314,17 @@ function transformData(
 
   visited.delete(data);
   return result;
+}
+
+/**
+ * Try to parse a string as JSON, return null if it fails
+ */
+function tryParseJSON(value: string): any {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -545,67 +597,26 @@ export function getCacheStats() {
  */
 export const DataTransformer = {
   encodeForAPI: (data: any, config?: TransformConfig) => {
-    const defaultConfig = {
-      fields: [
-        "introduction",
-        "instructions",
-        "gradingCriteriaOverview",
-        "question",
-        "content",
-        "rubricQuestion",
-        "description",
-        "questions.choices.choice",
-        "questions.scoring.rubrics.rubricQuestion",
-        "questions.scoring.rubrics.criteria.description",
-        "learnerTextResponse",
-        "learnerChoices",
-        "responsesForQuestions.learnerTextResponse",
-        "responsesForQuestions.learnerChoices",
-      ],
-      deep: true,
-    };
-    const result = smartEncode(data, config || defaultConfig);
+    const { API_ENCODE_CONFIG } = getTransformConfig();
+    const result = smartEncode(data, config || API_ENCODE_CONFIG);
     return result;
   },
 
   decodeFromAPI: (data: any, config?: TransformConfig) => {
-    const defaultConfig = {
-      fields: [
-        "introduction",
-        "instructions",
-        "gradingCriteriaOverview",
-        "question",
-        "content",
-        "rubricQuestion",
-        "questions.choices",
-        "questionVersions.choices",
-        "questionVersions.question",
-        "description",
-        "questions.choices.choice",
-        "questions.scoring.rubrics.rubricQuestion",
-        "questions.scoring.rubrics.criteria.description",
-        "learnerTextResponse",
-        "learnerChoices",
-        "responsesForQuestions.learnerTextResponse",
-        "responsesForQuestions.learnerChoices",
-      ],
-      deep: true,
-    };
-    const result = smartDecode(data, config || defaultConfig);
+    const { API_DECODE_CONFIG } = getTransformConfig();
+    const result = smartDecode(data, config || API_DECODE_CONFIG);
     return result;
   },
 
-  encodeFormData: (data: any) =>
-    smartEncode(data, {
-      exclude: ["id", "createdAt", "updatedAt"],
-      deep: false,
-    }),
+  encodeFormData: (data: any, config?: TransformConfig) => {
+    const { FORM_DATA_CONFIG } = getTransformConfig();
+    return smartEncode(data, config || FORM_DATA_CONFIG);
+  },
 
-  encodeForStorage: (data: any) =>
-    smartEncode(data, {
-      compressionLevel: "heavy",
-      deep: true,
-    }),
+  encodeForStorage: (data: any, config?: TransformConfig) => {
+    const { STORAGE_CONFIG } = getTransformConfig();
+    return smartEncode(data, config || STORAGE_CONFIG);
+  },
 
   clearCache: clearTransformCache,
   getStats: getCacheStats,

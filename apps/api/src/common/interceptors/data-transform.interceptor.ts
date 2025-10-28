@@ -7,6 +7,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
+import { TRANSFORM_FIELDS } from "../../helpers/transform-config";
 
 export interface TransformOptions {
   fields?: string[];
@@ -198,19 +199,7 @@ export class DataTransformInterceptor implements NestInterceptor {
       return {
         encodeResponse: true,
         decodeRequest: true,
-        fields: [
-          "introduction",
-          "instructions",
-          "gradingCriteriaOverview",
-          "question",
-          "content",
-          "rubricQuestion",
-          "description",
-          "questions.scoring.rubrics.rubricQuestion",
-          "questions.scoring.rubrics.criteria.description",
-          "responsesForQuestions.learnerTextResponse",
-          "responsesForQuestions.learnerChoices",
-        ],
+        fields: [...TRANSFORM_FIELDS],
         deep: true,
       };
     }
