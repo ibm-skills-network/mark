@@ -191,6 +191,11 @@ const Question: FC<QuestionProps> = ({
       if (params.maxWordCount !== undefined) {
         updatedData.maxWords = params.maxWordCount;
       }
+
+      if (params.authorComment !== undefined) {
+        updatedData.authorComment = params.authorComment;
+      }
+
       useAuthorStore.getState().modifyQuestion(questionId, {
         ...question,
         ...updatedData,
@@ -218,6 +223,9 @@ const Question: FC<QuestionProps> = ({
             ? params.rubrics
             : (question.scoring?.rubrics ?? []),
         },
+
+        authorComment: params.authorComment ?? question.authorComment,
+
       };
 
       useAuthorStore.getState().modifyQuestion(questionId, updatedQuestion);
@@ -239,37 +247,37 @@ const Question: FC<QuestionProps> = ({
       choices:
         questionType === "MULTIPLE_CORRECT" || questionType === "SINGLE_CORRECT"
           ? [
-              {
-                choice: "",
-                points: 1,
-                feedback: "",
-                isCorrect: true,
-              },
-              {
-                choice: "",
-                points: 0,
-                feedback: "",
-                isCorrect: false,
-              },
-            ]
+            {
+              choice: "",
+              points: 1,
+              feedback: "",
+              isCorrect: true,
+            },
+            {
+              choice: "",
+              points: 0,
+              feedback: "",
+              isCorrect: false,
+            },
+          ]
           : undefined,
       scoring:
         questionType === "TEXT" || questionType === "URL"
           ? {
-              type: "CRITERIA_BASED",
-              criteria: [
-                {
-                  id: 1,
-                  description: "",
-                  points: 1,
-                },
-                {
-                  id: 2,
-                  description: "",
-                  points: 0,
-                },
-              ],
-            }
+            type: "CRITERIA_BASED",
+            criteria: [
+              {
+                id: 1,
+                description: "",
+                points: 1,
+              },
+              {
+                id: 2,
+                description: "",
+                points: 0,
+              },
+            ],
+          }
           : undefined,
       createdAt: new Date().toISOString(),
       variantType: "REWORDED",
@@ -450,16 +458,14 @@ const Question: FC<QuestionProps> = ({
     if (variantId) {
       const randomizedMode = toggleRandomizedChoicesMode(questionId, variantId);
       toast.info(
-        `Randomized choice order for question ${questionIndex}  ${
-          variantId ? `: variant ${Index}` : ""
+        `Randomized choice order for question ${questionIndex}  ${variantId ? `: variant ${Index}` : ""
         } has been ${randomizedMode ? "ENABLED" : "DISABLED"}`,
       );
       return;
     }
     const randomizedMode = toggleRandomizedChoicesMode(questionId);
     toast.info(
-      `Randomized choice order for question number ${questionIndex} has been ${
-        randomizedMode ? "ENABLED" : "DISABLED"
+      `Randomized choice order for question number ${questionIndex} has been ${randomizedMode ? "ENABLED" : "DISABLED"
       }`,
     );
   };
@@ -468,9 +474,42 @@ const Question: FC<QuestionProps> = ({
     router.push(`/author/${question.assignmentId}/questions`);
   };
 
+  // Local state for author comment
+  const [localAuthorComment, setLocalAuthorComment] = useState(question.authorComment ?? "");
+
+  // Keep local state synced if question changes elsewhere
+  useEffect(() => {
+    setLocalAuthorComment(question.authorComment ?? "");
+  }, [question.authorComment]);
+
   return (
     <div className="flex flex-col items-center justify-between rounded-lg bg-white w-full gap-y-6">
       <div className="flex gap-2 flex-wrap w-full">
+        {/* 🔹 Author Comment field (top of every question) */}
+        {!preview && (
+          <div className="w-full mb-4 bg-grey-50 border border-violet-200 rounded-md p-3">
+            <label className="block text-violet-900 text-sm font-semibold mb-1">
+              Author Comment
+            </label>
+            <textarea
+              className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:ring-violet-500 focus:border-violet-500"
+              placeholder="Add a note or explanation for this question..."
+              value={localAuthorComment}
+              onChange={(e) => setLocalAuthorComment(e.target.value)}
+              onBlur={() => {
+                handleUpdateQuestionState({ authorComment: localAuthorComment });
+              }}
+            />
+          </div>
+        )}
+
+        {preview && question.authorComment && (
+          <div className="w-full mb-4 p-3 bg-gray-50 rounded-md text-gray-700">
+            <strong>Author Comment:</strong>
+            <p className="mt-1">{question.authorComment}</p>
+          </div>
+        )}
+
         <div className="flex items-center gap-x-2 flex-1">
           <div className="items-center w-11 h-full typography-body text-gray-500 border border-gray-200 rounded-md text-center">
             {preview ? (
@@ -551,13 +590,13 @@ const Question: FC<QuestionProps> = ({
                             }
                             setQuestionTypeState(
                               qt.value as
-                                | "TEXT"
-                                | "URL"
-                                | "MULTIPLE_CORRECT"
-                                | "UPLOAD"
-                                | "CODE"
-                                | "SINGLE_CORRECT"
-                                | "TRUE_FALSE",
+                              | "TEXT"
+                              | "URL"
+                              | "MULTIPLE_CORRECT"
+                              | "UPLOAD"
+                              | "CODE"
+                              | "SINGLE_CORRECT"
+                              | "TRUE_FALSE",
                             );
                             handleUpdateQuestionState({
                               questionType: qt.value as
@@ -575,15 +614,13 @@ const Question: FC<QuestionProps> = ({
                               ? true
                               : false
                           }
-                          className={`${
-                            active
-                              ? "bg-gray-100 text-gray-600"
-                              : "text-gray-600"
-                          } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
-                            disabledMenuButtons.includes(qt.value)
+                          className={`${active
+                            ? "bg-gray-100 text-gray-600"
+                            : "text-gray-600"
+                            } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${disabledMenuButtons.includes(qt.value)
                               ? "cursor-not-allowed opacity-50"
                               : "cursor-pointer"
-                          }`}
+                            }`}
                         >
                           <div className="stroke-gray-500">{qt.icon}</div>
                           {qt.label}
@@ -666,15 +703,13 @@ const Question: FC<QuestionProps> = ({
                                   ? true
                                   : false
                               }
-                              className={`${
-                                active
-                                  ? "bg-gray-100 text-gray-600"
-                                  : "text-gray-600"
-                              } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
-                                disabledMenuButtons.includes(qt.value)
+                              className={`${active
+                                ? "bg-gray-100 text-gray-600"
+                                : "text-gray-600"
+                                } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${disabledMenuButtons.includes(qt.value)
                                   ? "cursor-not-allowed opacity-50"
                                   : "cursor-pointer"
-                              }`}
+                                }`}
                             >
                               <div className="stroke-gray-500">{qt.icon}</div>
                               {qt.label}
@@ -770,9 +805,8 @@ const Question: FC<QuestionProps> = ({
                             maxWordCount: null,
                           });
                         }}
-                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
-                          isFocused ? "focused" : "not-focused"
-                        }`}
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${isFocused ? "focused" : "not-focused"
+                          }`}
                         style={{
                           width: `${maxCharacters?.toString()?.length + 1}ch`,
                         }}
@@ -843,15 +877,13 @@ const Question: FC<QuestionProps> = ({
                             maxCharacters: null,
                           });
                         }}
-                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
-                          isFocused ? "focused" : "not-focused"
-                        }`}
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${isFocused ? "focused" : "not-focused"
+                          }`}
                         style={{
-                          width: `${
-                            isFocused
-                              ? maxWordCount?.toString()?.length + 2
-                              : maxWordCount?.toString()?.length + 1
-                          }ch`,
+                          width: `${isFocused
+                            ? maxWordCount?.toString()?.length + 2
+                            : maxWordCount?.toString()?.length + 1
+                            }ch`,
                         }}
                       />
                       <button
@@ -926,7 +958,7 @@ const Question: FC<QuestionProps> = ({
                 </button>
               ) : null}
               {question.type === "MULTIPLE_CORRECT" ||
-              question.type === "SINGLE_CORRECT" ? (
+                question.type === "SINGLE_CORRECT" ? (
                 <Tooltip
                   content={
                     question.randomizedChoices
@@ -1027,20 +1059,20 @@ const Question: FC<QuestionProps> = ({
             const [localCriteria, setLocalCriteria] = useState(() =>
               variant.scoring?.criteria
                 ? {
-                    points: variant.scoring.criteria.map((c) => c.points),
-                    criteriaDesc: variant.scoring.criteria.map(
-                      (c) => c.description,
-                    ),
-                    criteriaIds: variant.scoring.criteria.map((c) => c.id),
-                  }
+                  points: variant.scoring.criteria.map((c) => c.points),
+                  criteriaDesc: variant.scoring.criteria.map(
+                    (c) => c.description,
+                  ),
+                  criteriaIds: variant.scoring.criteria.map((c) => c.id),
+                }
                 : {
-                    points: [1, 0],
-                    criteriaDesc: [
-                      "Student must show their work and state the correct answer",
-                      "By default, learners will be given 0 points if they do not meet any of the criteria.",
-                    ],
-                    criteriaIds: [1, 2],
-                  },
+                  points: [1, 0],
+                  criteriaDesc: [
+                    "Student must show their work and state the correct answer",
+                    "By default, learners will be given 0 points if they do not meet any of the criteria.",
+                  ],
+                  criteriaIds: [1, 2],
+                },
             );
 
             return (
@@ -1052,7 +1084,7 @@ const Question: FC<QuestionProps> = ({
                   <span className="typography-body">Variant {index + 1}</span>
                   <div className="flex items-center gap-4">
                     {question.type === "MULTIPLE_CORRECT" ||
-                    question.type === "SINGLE_CORRECT" ? (
+                      question.type === "SINGLE_CORRECT" ? (
                       <Tooltip
                         content={
                           variant.randomizedChoices

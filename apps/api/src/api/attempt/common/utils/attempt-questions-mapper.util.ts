@@ -150,6 +150,7 @@ export class AttemptQuestionsMapper {
           variantId: variant ? variant.id : undefined,
           question: questionText,
           choices: finalChoices,
+          authorComment: null,
           maxWords,
           maxCharacters: maxChars,
           scoring: scoring as ScoringDto,
@@ -176,7 +177,7 @@ export class AttemptQuestionsMapper {
       if (variantQ) {
         return variantQ;
       }
-      return { ...originalQ, variantId: undefined };
+      return { ...originalQ, variantId: undefined, authorComment: null };
     });
 
     const questionsWithResponses = this.constructQuestionsWithResponses(
@@ -303,6 +304,7 @@ export class AttemptQuestionsMapper {
           question: primaryTranslation.translatedText,
           choices: sanitizedChoices,
           translations: sanitizedTranslations,
+          authorComment: null,
           maxWords: variant?.maxWords ?? originalQ?.maxWords,
           maxCharacters: variant?.maxCharacters ?? originalQ?.maxCharacters,
           scoring:
@@ -348,6 +350,7 @@ export class AttemptQuestionsMapper {
             translationForLanguage?.translatedText || originalQ.question,
           choices: sanitizedChoices,
           translations: sanitizedTranslations,
+          authorComment: null,
           maxWords: originalQ.maxWords,
           maxCharacters: originalQ.maxCharacters,
           scoring: originalQ.scoring,

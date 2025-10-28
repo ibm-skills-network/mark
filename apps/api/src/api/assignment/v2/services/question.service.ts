@@ -204,6 +204,7 @@ export class QuestionService {
           type: questionDto.type,
           answer: questionDto.answer ?? false,
           totalPoints: questionDto.totalPoints ?? 0,
+          authorComment: questionDto.authorComment ?? null,
           choices: questionDto.choices,
           scoring: questionDto.scoring,
           maxWords: questionDto.maxWords,

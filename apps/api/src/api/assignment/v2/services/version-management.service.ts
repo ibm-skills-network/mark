@@ -342,6 +342,7 @@ export class VersionManagementService {
             assignmentVersionId: assignmentVersion.id,
             questionId: question.id,
             totalPoints: question.totalPoints,
+            authorComment: question.authorComment ?? null,
             type: question.type,
             responseType: question.responseType,
             question: question.question,
@@ -512,6 +513,7 @@ export class VersionManagementService {
           id: qv.id,
           questionId: qv.questionId,
           totalPoints: qv.totalPoints,
+          authorComment: qv.authorComment,
           type: qv.type,
           responseType: qv.responseType,
           question: qv.question,
@@ -680,6 +682,7 @@ export class VersionManagementService {
             data: {
               assignmentVersionId: restoredVersion.id,
               questionId: questionVersion.questionId,
+              authorComment: questionVersion.authorComment ?? null,
               totalPoints: questionVersion.totalPoints,
               type: questionVersion.type,
               responseType: questionVersion.responseType,
@@ -1019,6 +1022,7 @@ export class VersionManagementService {
             data: {
               assignmentVersionId: draftId,
               questionId: questionData.id || null,
+              authorComment: questionData.authorComment ?? null,
               totalPoints: questionData.totalPoints || 0,
               type: questionData.type,
               responseType: questionData.responseType,
@@ -1130,6 +1134,7 @@ export class VersionManagementService {
           data: {
             assignmentVersionId: versionId,
             questionId: question.id,
+            authorComment: question.authorComment ?? null,
             totalPoints: question.totalPoints,
             type: question.type,
             responseType: question.responseType,
@@ -1444,6 +1449,7 @@ export class VersionManagementService {
             data: {
               assignmentVersionId: assignmentVersion.id,
               questionId: questionData.id || null,
+              authorComment: questionData.authorComment ?? null,
               totalPoints: questionData.totalPoints || 0,
               type: questionData.type,
               responseType: questionData.responseType,
@@ -1569,6 +1575,7 @@ export class VersionManagementService {
       questions: latestDraft.questionVersions.map((qv) => ({
         id: qv.questionId,
         totalPoints: qv.totalPoints,
+        authorComment: qv.authorComment,
         type: qv.type,
         responseType: qv.responseType,
         question: qv.question,
@@ -2175,6 +2182,7 @@ export class VersionManagementService {
             data: {
               assignmentVersionId: assignmentVersion.id,
               questionId: questionData.id || undefined,
+              authorComment: questionData.authorComment ?? null,
               totalPoints: questionData.totalPoints || 0,
               type: questionData.type,
               responseType: questionData.responseType,
