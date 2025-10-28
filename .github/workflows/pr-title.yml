@@ -11,7 +11,15 @@ jobs:
             - uses: amannn/action-semantic-pull-request@v5
               with:
                   types: |
-                      feat,fix,chore,docs,refactor,test,build,ci,perf
+                      feat
+                      fix
+                      chore
+                      docs
+                      refactor
+                      test
+                      build
+                      ci
+                      perf
                   requireScope: false
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
