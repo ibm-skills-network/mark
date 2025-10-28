@@ -22,7 +22,7 @@ const transformCache = new Map<
 const CACHE_TTL = 5 * 60 * 1000;
 const HTML_TAG_REGEX = /<\/?[a-z][\s\S]*>/i;
 const BASE64_FULL_REGEX = /^[A-Za-z0-9+/]+={0,2}$/;
-const BASE64_SEGMENT_REGEX = /[A-Za-z0-9+/=]{12,}/g;
+const BASE64_SEGMENT_REGEX = /[A-Za-z0-9+/=]{4,}/g;
 const MAX_BASE64_DEPTH = 5;
 
 interface Base64Payload {
@@ -70,13 +70,19 @@ function decodeBase64String(value: string): string | null {
     }
 
     const encoder = new TextEncoder();
-    const reencoded = btoa(
-      String.fromCharCode(...Array.from(encoder.encode(decoded))),
-    ).replace(/=+$/g, "");
+    const encodedBytes = encoder.encode(decoded);
+    const binaryStr = Array.from(encodedBytes, (byte) =>
+      String.fromCharCode(byte),
+    ).join("");
+    const reencoded = btoa(binaryStr).replace(/=+$/g, "");
     const normalizedInput = value.replace(/=+$/g, "");
 
-    return reencoded === normalizedInput ? decoded : null;
-  } catch {
+    if (reencoded !== normalizedInput) {
+      return null;
+    }
+
+    return decoded;
+  } catch (error) {
     return null;
   }
 }
@@ -87,10 +93,9 @@ function findBase64Payload(rawValue: string): Base64Payload | null {
   const trimmed = rawValue.trim();
   if (!trimmed) return null;
 
-  const primaryCandidate =
-    trimmed.length >= 8 &&
-    BASE64_FULL_REGEX.test(trimmed) &&
-    decodeBase64String(trimmed);
+  const passesFullRegex = BASE64_FULL_REGEX.test(trimmed);
+
+  const primaryCandidate = passesFullRegex && decodeBase64String(trimmed);
 
   if (typeof primaryCandidate === "string") {
     return { candidate: trimmed, decoded: primaryCandidate };
@@ -116,6 +121,11 @@ function decodeBase64Layers(value: string): string {
   let depth = 0;
 
   while (depth < MAX_BASE64_DEPTH) {
+    // If the current value contains HTML tags, it's already decoded - stop
+    if (HTML_TAG_REGEX.test(current)) {
+      break;
+    }
+
     const payload = findBase64Payload(current);
     if (!payload) break;
 
@@ -266,7 +276,8 @@ function transformData(
 }
 
 /**
- * Determine if a field should be transformed based on configuration and content
+ * Determine if a field should be transformed
+ * Only transforms explicitly configured fields - no auto-detection
  */
 function shouldTransformField(
   key: string,
@@ -275,26 +286,29 @@ function shouldTransformField(
   fieldPath: string,
   operation: "encode" | "decode",
 ): boolean {
-  if (fields && fields.length > 0) {
-    return matchesConfiguredField(fields, key, fieldPath);
-  }
-
-  if (typeof value !== "string") {
+  // Only transform explicitly configured fields
+  if (!fields || fields.length === 0) {
     return false;
   }
 
-  const trimmedValue = value.trim();
-  const containsHtmlTags = HTML_TAG_REGEX.test(trimmedValue);
-  const base64Payload = findBase64Payload(value);
-
-  if (operation === "encode") {
-    const alreadyEncoded =
-      base64Payload !== null && base64Payload.candidate === trimmedValue;
-
-    return !alreadyEncoded && (value.length > 10 || containsHtmlTags);
+  const isConfigured = matchesConfiguredField(fields, key, fieldPath);
+  if (!isConfigured) {
+    return false;
   }
 
-  return base64Payload !== null;
+  // Skip encoding short numeric strings (like "45", "2027")
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+    if (
+      operation === "encode" &&
+      /^\d+$/.test(trimmedValue) &&
+      trimmedValue.length <= 10
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function normalizeFieldPath(path: string): string[] {
@@ -364,7 +378,12 @@ function encodeValue(value: any): string {
 
   const encoder = new TextEncoder();
   const encoded = encoder.encode(value);
-  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
+
+  // Properly convert Uint8Array to binary string
+  const binaryString = Array.from(encoded, (byte) =>
+    String.fromCharCode(byte),
+  ).join("");
+  const base64 = btoa(binaryString);
 
   if (value.length > 1000) {
     return compressAndEncode(value);
@@ -414,7 +433,12 @@ function decodeValue(value: any): any {
 function compressAndEncode(value: string): string {
   const encoder = new TextEncoder();
   const encoded = encoder.encode(value);
-  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
+
+  // Properly convert Uint8Array to binary string
+  const binaryString = Array.from(encoded, (byte) =>
+    String.fromCharCode(byte),
+  ).join("");
+  const base64 = btoa(binaryString);
   return "comp:" + base64;
 }
 
@@ -465,7 +489,12 @@ function generateCacheKey(
   // Use TextEncoder to handle Unicode characters properly before base64 encoding
   const encoder = new TextEncoder();
   const encoded = encoder.encode(configHash + dataHash);
-  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
+
+  // Properly convert Uint8Array to binary string
+  const binaryString = Array.from(encoded, (byte) =>
+    String.fromCharCode(byte),
+  ).join("");
+  const base64 = btoa(binaryString);
 
   return `${operation || "transform"}_${base64}`;
 }
@@ -530,6 +559,8 @@ export const DataTransformer = {
         "questions.scoring.rubrics.criteria.description",
         "learnerTextResponse",
         "learnerChoices",
+        "responsesForQuestions.learnerTextResponse",
+        "responsesForQuestions.learnerChoices",
       ],
       deep: true,
     };
@@ -553,6 +584,10 @@ export const DataTransformer = {
         "questions.choices.choice",
         "questions.scoring.rubrics.rubricQuestion",
         "questions.scoring.rubrics.criteria.description",
+        "learnerTextResponse",
+        "learnerChoices",
+        "responsesForQuestions.learnerTextResponse",
+        "responsesForQuestions.learnerChoices",
       ],
       deep: true,
     };

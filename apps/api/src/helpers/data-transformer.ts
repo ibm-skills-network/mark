@@ -17,7 +17,7 @@ export interface TransformResult<T = any> {
 
 const HTML_TAG_REGEX = /<\/?[a-z][\S\s]*>/i;
 const BASE64_FULL_REGEX = /^[\d+/A-Za-z]+={0,2}$/;
-const BASE64_SEGMENT_REGEX = /[\d+/=A-Za-z]{12,}/g;
+const BASE64_SEGMENT_REGEX = /[\d+/=A-Za-z]{4,}/g;
 const MAX_BASE64_DEPTH = 5;
 
 interface Base64Payload {
@@ -242,6 +242,7 @@ function transformDataRecursive(
 
 /**
  * Determine if a field should be transformed
+ * Only transforms explicitly configured fields - no auto-detection
  */
 function shouldTransformField(
   key: string,
@@ -250,26 +251,29 @@ function shouldTransformField(
   fieldPath: string,
   operation: "encode" | "decode",
 ): boolean {
-  if (fields && fields.length > 0) {
-    return matchesConfiguredField(fields, key, fieldPath);
-  }
-
-  if (typeof value !== "string") {
+  // Only transform explicitly configured fields
+  if (!fields || fields.length === 0) {
     return false;
   }
 
-  const trimmedValue = value.trim();
-  const containsHtmlTags = HTML_TAG_REGEX.test(trimmedValue);
-  const base64Payload = findBase64Payload(value);
-
-  if (operation === "encode") {
-    const alreadyEncoded =
-      base64Payload !== null && base64Payload.candidate === trimmedValue;
-
-    return !alreadyEncoded && (value.length > 10 || containsHtmlTags);
+  const isConfigured = matchesConfiguredField(fields, key, fieldPath);
+  if (!isConfigured) {
+    return false;
   }
 
-  return base64Payload !== null;
+  // Skip encoding short numeric strings (like "45", "2027")
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+    if (
+      operation === "encode" &&
+      /^\d+$/.test(trimmedValue) &&
+      trimmedValue.length <= 10
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -448,8 +452,8 @@ export const DataTransformer = {
         "questions.choices.choice",
         "questions.scoring.rubrics.rubricQuestion",
         "questions.scoring.rubrics.criteria.description",
-        "learnerTextResponse",
-        "learnerChoices",
+        "responsesForQuestions.learnerTextResponse",
+        "responsesForQuestions.learnerChoices",
       ],
       deep: true,
     });

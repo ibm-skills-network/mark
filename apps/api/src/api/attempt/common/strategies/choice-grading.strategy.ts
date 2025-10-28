@@ -154,6 +154,8 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
   }> {
     await this.validateResponse(question, requestDto);
 
+    console.log("request dto:", requestDto);
+
     const learnerResponse = await this.extractLearnerResponse(requestDto);
 
     return this.gradeSingleChoice(question, learnerResponse, context);
@@ -170,6 +172,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string[];
   }> {
+    console.log("learner response:", learnerResponse);
     const choices = this.parseChoices(question.choices);
 
     if (!learnerResponse || learnerResponse.length === 0) {
@@ -187,12 +190,25 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     }
 
     const learnerChoice = learnerResponse[0];
+    console.log("learner response:", learnerResponse);
     const normalizedLearnerChoice = this.normalizeText(learnerChoice);
     const correctChoice = choices.find((choice) => choice.isCorrect);
+
+    console.log("learner choice:", normalizedLearnerChoice);
+    console.log(
+      "all choices:",
+      choices.map((c) => c.choice),
+    );
+
+    console.log(
+      "correct answer:",
+      correctChoice ? correctChoice.choice : "none",
+    );
 
     const selectedChoice = choices.find(
       (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice,
     );
+    console.log("selected choice:", selectedChoice);
 
     const data = {
       learnerChoice,
