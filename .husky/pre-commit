@@ -7,11 +7,5 @@ yarn lint
 echo "Running yarn build..."
 yarn build
 
-echo "Running secrets check..."
-
-echo "Updating secrets baseline..."
-detect-secrets scan > .secrets.baseline
-git add .secrets.baseline
-
 echo "Running lint-staged..."
 npx lint-staged
