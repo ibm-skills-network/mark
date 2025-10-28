@@ -20,6 +20,8 @@ import type {
 } from "@config/types";
 import { toast } from "sonner";
 import { submitReportAuthor } from "@/lib/talkToBackend";
+import { apiClient, APIError } from "./api-client";
+import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 
 /**
  * Creates a attempt for a given assignment.
@@ -33,30 +35,29 @@ export async function createAttempt(
 ): Promise<number | undefined | "no more attempts" | "in cooldown period"> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    const res = await apiClient.post<BaseBackendResponse>(
+      endpointURL,
+      undefined,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-    });
+    );
     console.log("result: ", res);
-    if (!res.ok) {
-      console.log("result status: ", res.status);
-      const errorBody = (await res.json()) as { message: string };
-      console.log("error: ", errorBody);
-      if (res.status === 422) {
-        return "no more attempts";
-      } else if (res.status === 429) return "in cooldown period";
-      throw new Error(errorBody.message || "Failed to create attempt");
-    }
-    const { success, error, id } = (await res.json()) as BaseBackendResponse;
+    const { success, error, id } = res;
     if (!success) {
       throw new Error(error);
     }
 
     return id;
   } catch (err) {
+    if (err instanceof APIError && err.status === 422) {
+      return "no more attempts";
+    } else if (err instanceof APIError && err.status === 429) {
+      return "in cooldown period";
+    }
     return undefined;
   }
 }
@@ -77,17 +78,25 @@ export async function getAttempt(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}?lang=${language}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      headers: {
-        ...(cookies ? { Cookie: cookies } : {}),
+    const attempt = await apiClient.get<AssignmentAttemptWithQuestions>(
+      endpointURL,
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-    });
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to get attempt questions");
+    );
+    if (!attempt) {
+      return undefined;
     }
-    const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
-    return attempt;
+
+    const fallbackAllotedMinutes =
+      attempt.assignmentVersion?.allotedTimeMinutes ??
+      attempt.assignmentDetails?.allotedTimeMinutes ??
+      attempt.assignment?.allotedTimeMinutes ??
+      null;
+
+    return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
   } catch (err) {
     return undefined;
   }
@@ -108,18 +117,62 @@ export async function getCompletedAttempt(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/completed`;
 
   try {
-    const res = await fetch(endpointURL, {
+    const attempt = await apiClient.get<AssignmentAttemptWithQuestions>(
+      endpointURL,
+      {
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      },
+    );
+    if (!attempt) {
+      return undefined;
+    }
+
+    const fallbackAllotedMinutes =
+      attempt.assignmentVersion?.allotedTimeMinutes ??
+      attempt.assignmentDetails?.allotedTimeMinutes ??
+      attempt.assignment?.allotedTimeMinutes ??
+      null;
+
+    return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
+  } catch (err) {
+    return undefined;
+  }
+}
+
+/**
+ * Gets unified success page data for an attempt (works for both authors and learners).
+ * @param assignmentId The id of the assignment.
+ * @param attemptId The id of the attempt.
+ * @param authorData Optional author data from Zustand stores (for authors only).
+ * @param cookies Optional cookies for authentication.
+ * @returns Success page data or undefined if error.
+ */
+export async function getSuccessPageData(
+  assignmentId: number,
+  attemptId: number,
+  authorData?: {
+    questions: any[];
+    grade: number;
+    totalPointsEarned: number;
+    totalPointsPossible: number;
+    responses: any[];
+  },
+  cookies?: string,
+): Promise<any | undefined> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/success-page-data`;
+
+  try {
+    const data = await apiClient.post(endpointURL, authorData || {}, {
       headers: {
+        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to get attempt questions");
-    }
-    const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
-    return attempt;
+    return data;
   } catch (err) {
+    console.error("Error fetching success page data:", err);
     return undefined;
   }
 }
@@ -137,26 +190,25 @@ export async function submitQuestion(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-
-      body: JSON.stringify(requestBody, (key, value) => {
+    const processedBody = JSON.parse(
+      JSON.stringify(requestBody, (key, value) => {
         if (value === "" || value === null || value === undefined) {
           return undefined;
         }
-        return value as QuestionAttemptRequest;
+        return value;
       }),
-    });
+    );
 
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to submit question");
-    }
-    const data = (await res.json()) as QuestionAttemptResponse;
+    const data = await apiClient.post<QuestionAttemptResponse>(
+      endpointURL,
+      processedBody,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      },
+    );
     return data;
   } catch (err) {
     return undefined;
@@ -174,28 +226,19 @@ export async function getLiveRecordingFeedback(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/questions/live-recording-feedback`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      body: JSON.stringify({ liveRecordingData }),
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    const data = await apiClient.post<{ feedback: string }>(
+      endpointURL,
+      { liveRecordingData },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(
-        errorBody.message || "Failed to fetch live recording feedback",
-      );
-    }
-
-    const data = (await res.json()) as {
-      feedback: string;
-    };
+    );
     return data;
   } catch (err) {
-    return undefined;
+    return { feedback: "" };
   }
 }
 
@@ -219,46 +262,47 @@ export async function submitAssignment(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "PATCH",
-      body: JSON.stringify({
-        submitted: true,
-        responsesForQuestions,
-        language,
-        authorQuestions: authorQuestions || undefined,
-        authorAssignmentDetails: authorAssignmentDetails || undefined,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    });
+    const requestData = {
+      submitted: true,
+      responsesForQuestions,
+      language,
+      authorQuestions: authorQuestions || undefined,
+      authorAssignmentDetails: authorAssignmentDetails || undefined,
+    };
 
-    if (!res.ok) {
-      let errorMessage = `Submission failed with status: ${res.status}`;
+    let responseData: SubmitAssignmentResponse;
+    try {
+      responseData = await apiClient.patch<SubmitAssignmentResponse>(
+        endpointURL,
+        requestData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(cookies ? { Cookie: cookies } : {}),
+          },
+        },
+      );
+    } catch (apiError) {
+      let errorMessage = "Submission failed";
 
-      try {
-        const errorBody = (await res.json()) as { message?: string };
-        if (errorBody.message) {
-          errorMessage = errorBody.message;
-          if (
-            errorMessage.includes("maximum context length") ||
-            errorMessage.includes("tokens")
-          ) {
-            errorMessage =
-              "Your submission is too long. Please reduce the length of your responses and try again.";
-          }
+      if (apiError instanceof APIError) {
+        errorMessage = `Submission failed with status: ${apiError.status}`;
+
+        if (
+          apiError.message.includes("maximum context length") ||
+          apiError.message.includes("tokens")
+        ) {
+          errorMessage =
+            "Your submission is too long. Please reduce the length of your responses and try again.";
+        } else if (apiError.message) {
+          errorMessage = apiError.message;
         }
-        console.error("Submission error:", errorBody);
-        toast.error(errorMessage);
-      } catch (parseError) {
-        console.error("Failed to parse error response:", parseError);
       }
 
+      console.error("Submission error:", apiError);
+      toast.error(errorMessage);
       throw new Error(errorMessage);
     }
-
-    const responseData = (await res.json()) as SubmitAssignmentResponse;
 
     const { gradingJobId, message } = responseData;
 
@@ -570,17 +614,11 @@ export async function getFeedback(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/feedback`;
 
   try {
-    const res = await fetch(endpointURL, {
+    const data = await apiClient.get<AssignmentFeedback>(endpointURL, {
       headers: {
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
-
-    if (!res.ok) {
-      throw new Error("Failed to fetch feedback");
-    }
-
-    const data = (await res.json()) as AssignmentFeedback;
     return data;
   } catch (err) {
     return undefined;
@@ -599,18 +637,16 @@ export async function submitFeedback(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/feedback`;
 
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    await apiClient.post(
+      endpointURL,
+      { feedback },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify({ feedback }),
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to submit feedback");
-    }
+    );
 
     return true;
   } catch (err) {
@@ -627,18 +663,16 @@ export async function submitRegradingRequest(
 ): Promise<boolean> {
   const endpointURL = `${getApiRoutes().assignments}/${regradingRequest.assignmentId}/attempts/${regradingRequest.attemptId}/regrade`;
   try {
-    const res = await fetch(endpointURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
+    await apiClient.post(
+      endpointURL,
+      { regradingRequest },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
       },
-      body: JSON.stringify({ regradingRequest }),
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to submit regrading request");
-    }
+    );
 
     return true;
   } catch (err) {
@@ -657,37 +691,31 @@ export async function submitReportLearner(
   cookies?: string,
 ): Promise<{ success: boolean } | undefined> {
   try {
-    const response:
-      | Response
-      | {
-          status: number;
-          message: string;
-        } = await fetch(
+    const response = await apiClient.post<{ success: boolean }>(
       `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/report`,
       {
-        method: "POST",
+        issueType,
+        description,
+      },
+      {
         headers: {
           "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
-        body: JSON.stringify({
-          issueType,
-          description,
-        }),
       },
     );
 
-    if (response.status === 422) {
-      throw new Error(
-        "You have reached the maximum number of reports allowed in a 24-hour period.",
-      );
-    } else if (!response.ok) {
-      throw new Error("Failed to submit report");
-    }
-
-    return (await response.json()) as { success: boolean };
+    return response;
   } catch (error: unknown) {
-    if (error instanceof Error) {
+    if (error instanceof APIError) {
+      if (error.status === 422) {
+        toast.error(
+          "You have reached the maximum number of reports allowed in a 24-hour period.",
+        );
+      } else {
+        toast.error("Failed to submit report");
+      }
+    } else if (error instanceof Error) {
       toast.error(error.message);
     } else {
       toast.error("Failed to submit report");
@@ -726,20 +754,13 @@ export async function getCurrentAssignmentVersion(
     // which automatically returns the current active version
     const endpointURL = `${getApiRoutes().assignments}/${assignmentId}`;
 
-    const res = await fetch(endpointURL, {
-      method: "GET",
+    const assignment = await apiClient.get(endpointURL, {
       headers: {
-        "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
 
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to fetch assignment");
-    }
-
-    return await res.json();
+    return assignment;
   } catch (err) {
     console.error("Error fetching current assignment version:", err);
     return undefined;

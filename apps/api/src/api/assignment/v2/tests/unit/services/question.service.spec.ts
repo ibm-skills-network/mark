@@ -13,7 +13,7 @@ import {
   VariantDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockJob,
   createMockJobStatusService,

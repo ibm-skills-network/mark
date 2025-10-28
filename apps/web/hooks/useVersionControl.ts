@@ -210,7 +210,7 @@ export function useVersionControl() {
   const checkoutVersionWithToast = useCallback(
     async (versionId: number, versionNumber?: string | number) => {
       try {
-        const success = await checkoutVersion(versionId);
+        const success = await checkoutVersion(versionId, versionNumber);
 
         if (success) {
           toast.success(

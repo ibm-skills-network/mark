@@ -24,22 +24,30 @@ function safeArrayCompare<T>(
   b: T[] | null | undefined,
   compareFn?: (itemA: T, itemB: T) => boolean,
 ): boolean {
-  if (a == null && b == null) return true;
-  if (a == null || b == null) return false;
+  // Normalize null/undefined to empty arrays for comparison
+  const normalizeArray = (arr: T[] | null | undefined): T[] => {
+    if (arr == null) return [];
+    return arr;
+  };
 
-  if (a.length !== b.length) return false;
+  const normalizedA = normalizeArray(a);
+  const normalizedB = normalizeArray(b);
 
-  if (a.length === 0 && b.length === 0) return true;
+  if (normalizedA.length !== normalizedB.length) return false;
+
+  if (normalizedA.length === 0 && normalizedB.length === 0) return true;
 
   if (compareFn) {
-    for (let i = 0; i < a.length; i++) {
-      const matchFound = b.some((bItem) => compareFn(a[i], bItem));
+    for (let i = 0; i < normalizedA.length; i++) {
+      const matchFound = normalizedB.some((bItem) =>
+        compareFn(normalizedA[i], bItem),
+      );
       if (!matchFound) return false;
     }
     return true;
   }
 
-  return JSON.stringify(a) === JSON.stringify(b);
+  return JSON.stringify(normalizedA) === JSON.stringify(normalizedB);
 }
 
 export function useChangesSummary(): string {
@@ -75,7 +83,7 @@ export function useChangesSummary(): string {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   } = useAssignmentFeedbackConfig();
 
   const changesSummary = useMemo(() => {
@@ -117,8 +125,8 @@ export function useChangesSummary(): string {
 
     if (
       !safeCompare(
-        showCorrectAnswer,
-        originalAssignment.showCorrectAnswer ?? true,
+        correctAnswerVisibility,
+        originalAssignment.correctAnswerVisibility ?? "ALWAYS",
       )
     )
       diffs.push("Changed correct answer visibility.");
@@ -129,7 +137,7 @@ export function useChangesSummary(): string {
     }
 
     const originalQuestions = originalAssignment.questions || [];
-    const currentQuestions = questions || [];
+    const currentQuestions = questions instanceof Array ? questions : [];
 
     const addedQuestions = currentQuestions?.filter(
       (question) =>

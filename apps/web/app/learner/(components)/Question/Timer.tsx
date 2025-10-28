@@ -35,6 +35,7 @@ function Timer(props: Props) {
     setTotalPointsEarned,
     setTotalPointsPossible,
     setShowSubmissionFeedback,
+    setLearnerStore,
   ] = useLearnerStore((state) => [
     state.activeAttemptId,
     state.questions,
@@ -43,6 +44,7 @@ function Timer(props: Props) {
     state.setTotalPointsEarned,
     state.setTotalPointsPossible,
     state.setShowSubmissionFeedback,
+    state.setLearnerStore,
   ]);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
@@ -64,9 +66,12 @@ function Timer(props: Props) {
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   const assignmentId = assignmentDetails?.id;
   const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
-  const seconds = Math.floor((countdown / 1000) % 60);
-  const minutes = Math.floor((countdown / (1000 * 60)) % 60);
-  const hours = Math.floor((countdown / (1000 * 60 * 60)) % 24);
+  const hasCountdown = typeof countdown === "number";
+  const safeCountdown = hasCountdown ? countdown : 0;
+
+  const seconds = Math.floor((safeCountdown / 1000) % 60);
+  const minutes = Math.floor((safeCountdown / (1000 * 60)) % 60);
+  const hours = Math.floor((safeCountdown / (1000 * 60 * 60)) % 24);
   const twoDigit = (num: number) => {
     return num < 10 ? `0${num}` : num;
   };
@@ -176,6 +181,10 @@ function Timer(props: Props) {
       });
     }
     clearGithubStore();
+    setLearnerStore({
+      activeAttemptId: null,
+      expiresAt: undefined,
+    });
     useLearnerStore.getState().setActiveQuestionNumber(null);
     setTimeout(() => {
       useLearnerStore.getState().setUserPreferedLanguage(null);
@@ -184,7 +193,12 @@ function Timer(props: Props) {
   }
 
   useEffect(() => {
-    if (expiresAt && countdown <= 60000 && !oneMinuteAlertShown) {
+    if (
+      expiresAt &&
+      hasCountdown &&
+      countdown <= 60000 &&
+      !oneMinuteAlertShown
+    ) {
       toast.warning("You have 1 minute remaining to submit your assignment.", {
         description:
           "If you don't submit your assignment in time, it will be automatically submitted.",
@@ -209,14 +223,20 @@ function Timer(props: Props) {
       <div className="text-gray-600 text-base font-medium leading-tight">
         Time Remaining:
       </div>
-      <div
-        className={cn(
-          "text-base font-bold leading-tight",
-          hours === 0 && minutes < 5 ? "text-red-500" : "text-purple-600",
-        )}
-      >
-        {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}
-      </div>
+      {hasCountdown ? (
+        <div
+          className={cn(
+            "text-base font-bold leading-tight",
+            hours === 0 && minutes < 5 ? "text-red-500" : "text-purple-600",
+          )}
+        >
+          {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}
+        </div>
+      ) : (
+        <div className="text-base font-bold leading-tight text-gray-400">
+          --:--:--
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AIFeatureType } from "@prisma/client";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import { LLM_RESOLVER_SERVICE } from "../../llm.constants";
 import { LLMResolverService } from "./llm-resolver.service";
 

@@ -41,6 +41,10 @@ export class PromptProcessorService implements IPromptProcessor {
         featureKey,
         fallbackModel,
       );
+      console.log(
+        `Processing prompt for feature ${featureKey} with model ${llm.key}`,
+      );
+
       return await this._processPromptWithProvider(
         prompt,
         assignmentId,
@@ -68,6 +72,7 @@ export class PromptProcessorService implements IPromptProcessor {
   ): Promise<string> {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4o");
+
       return await this._processPromptWithProvider(
         prompt,
         assignmentId,
@@ -146,18 +151,30 @@ export class PromptProcessorService implements IPromptProcessor {
       throw formatError;
     }
 
-    const result = await llm.invoke([new HumanMessage(input)]);
-    const response = this.cleanResponse(result.content);
+    try {
+      const result = await llm.invoke([new HumanMessage(input)]);
+      const response = this.cleanResponse(result.content);
+      await this.usageTracker.trackUsage(
+        assignmentId,
+        usageType,
+        result.tokenUsage.input,
+        result.tokenUsage.output,
+        llm.key,
+      );
 
-    await this.usageTracker.trackUsage(
-      assignmentId,
-      usageType,
-      result.tokenUsage.input,
-      result.tokenUsage.output,
-      llm.key,
-    );
-
-    return response;
+      return response;
+    } catch (error) {
+      this.logger.error(
+        `Provider invocation failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      const error_ =
+        error instanceof Error
+          ? error
+          : new Error(`Failed provider invoke: ${JSON.stringify(error)}`);
+      throw error_;
+    }
   }
 
   /**

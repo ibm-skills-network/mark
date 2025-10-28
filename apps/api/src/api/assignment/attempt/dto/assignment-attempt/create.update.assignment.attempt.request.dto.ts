@@ -91,4 +91,12 @@ export class LearnerUpdateAssignmentAttemptRequestDto {
   @IsArray()
   @IsOptional()
   preTranslatedQuestions?: Map<number, QuestionDto>;
+
+  @ApiProperty({
+    description: "The expiration date of the assignment attempt",
+    type: Date,
+    required: false,
+  })
+  @IsOptional()
+  expiresAt?: Date;
 }

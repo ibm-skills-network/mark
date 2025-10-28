@@ -15,7 +15,7 @@ import {
   UpdateAssignmentQuestionsDto,
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 
 /**
  * Extended Choice type to include optional id property
@@ -230,8 +230,6 @@ export class AttemptQuestionsMapper {
           variant && translations.has(variantKey)
             ? translations.get(variantKey) || {}
             : {};
-
-        console.log("variantTranslations", variantTranslations);
 
         const questionTranslations = translations.has(questionKey)
           ? translations.get(questionKey) || {}

@@ -5,7 +5,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { TOKEN_COUNTER } from "../../llm.constants";
 import {
-  ILlmProvider,
+  IMultimodalLlmProvider,
   LlmRequestOptions,
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
@@ -17,7 +17,7 @@ import { ITokenCounter } from "../interfaces/token-counter.interface";
  * enhanced capabilities and performance compared to GPT-4 models.
  */
 @Injectable()
-export class Gpt5LlmService implements ILlmProvider {
+export class Gpt5LlmService implements IMultimodalLlmProvider {
   private readonly logger: Logger;
   static readonly DEFAULT_MODEL = "gpt-5";
   readonly key = "gpt-5";
@@ -34,7 +34,6 @@ export class Gpt5LlmService implements ILlmProvider {
    */
   private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
     return new ChatOpenAI({
-      temperature: options?.temperature ?? 0.5,
       modelName: options?.modelName ?? Gpt5LlmService.DEFAULT_MODEL,
       maxCompletionTokens: options?.maxTokens,
     });

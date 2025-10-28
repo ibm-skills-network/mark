@@ -53,10 +53,12 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
-    if (
-      !requestDto.learnerTextResponse ||
-      requestDto.learnerTextResponse.trim() === ""
-    ) {
+    const textResponse =
+      typeof requestDto.learnerTextResponse === "string"
+        ? requestDto.learnerTextResponse.trim()
+        : "";
+
+    if (!textResponse) {
       throw new BadRequestException(
         this.localizationService.getLocalizedString(
           "expectedTextResponse",
@@ -73,6 +75,9 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
   async extractLearnerResponse(
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<string> {
+    if (typeof requestDto.learnerTextResponse !== "string") {
+      throw new BadRequestException("Text response must be a string");
+    }
     return requestDto.learnerTextResponse.trim();
   }
 

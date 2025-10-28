@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AssignmentAccessControlGuard implements CanActivate {

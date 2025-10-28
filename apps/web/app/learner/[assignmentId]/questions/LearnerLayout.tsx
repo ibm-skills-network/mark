@@ -13,6 +13,7 @@ import QuestionPage from "@learnerComponents/Question";
 import { headers } from "next/headers";
 import { Suspense } from "react";
 import ClientLearnerLayout from "./ClientComponent";
+import { coerceSubmitted } from "@/app/learner/utils/attempts";
 
 interface Props {
   params: { assignmentId: string };
@@ -38,7 +39,7 @@ async function LearnerLayout(props: Props) {
   }
 
   const unsubmittedAssignment = listOfAttempts.find(
-    (attempt) => attempt.submitted === false,
+    (attempt) => !coerceSubmitted(attempt.submitted),
   );
   const attemptId = unsubmittedAssignment
     ? unsubmittedAssignment.id

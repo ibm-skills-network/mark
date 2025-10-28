@@ -187,7 +187,7 @@ function LearnerHeader() {
           role === "author"
             ? q.choices
                 ?.map((choice, index) =>
-                  q.learnerChoices?.find((c) => String(c) === String(index))
+                  q.learnerChoices?.includes(String(index))
                     ? choice.choice
                     : undefined,
                 )
@@ -291,7 +291,9 @@ function LearnerHeader() {
           });
         }
         clearGithubStore();
-        clearLearnerAnswers(); // Clear all learner responses after successful submission
+        if (role === "learner") {
+          clearLearnerAnswers();
+        }
         useLearnerStore.getState().setActiveQuestionNumber(null);
         router.push(`/learner/${assignmentId}/successPage/${res.id}`);
 

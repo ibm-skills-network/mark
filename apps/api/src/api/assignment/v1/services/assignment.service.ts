@@ -22,7 +22,7 @@ import {
   UserRole,
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 import {
   getAllLanguageCodes,

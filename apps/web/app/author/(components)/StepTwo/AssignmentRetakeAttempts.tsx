@@ -41,7 +41,6 @@ const Component: FC<Props> = () => {
     { value: 300, label: "5 hours" },
     { value: 1440, label: "1 day" },
     { value: 10080, label: "7 days" },
-    { value: 0, label: "Never wait to retry" },
   ];
 
   return (

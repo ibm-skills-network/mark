@@ -6,7 +6,7 @@ import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserRole } from "../../../../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../../../../prisma.service";
+import { PrismaService } from "../../../../../database/prisma.service";
 import { VersionManagementService } from "../version-management.service";
 
 describe("VersionManagementService", () => {

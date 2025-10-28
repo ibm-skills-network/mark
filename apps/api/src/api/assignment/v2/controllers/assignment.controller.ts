@@ -37,7 +37,7 @@ import {
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";

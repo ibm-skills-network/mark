@@ -65,9 +65,12 @@ dev.env
 dev.op.env
 .env.merged
 .env.op.local
+.env*.local
+# mock that shouldnt change
+*/mock.jwt.cookie.auth.guard.ts
 
 # manifest files
-face_expresstion_model-weights_manifest.json
+face_expression_model-weights_manifest.json
 tiny_face_detector_model-weights_manifest.json
 
 *.env

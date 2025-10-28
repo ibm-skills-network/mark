@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { ChatController } from "../controllers/chat.controller";
 import { ChatAccessControlGuard } from "../guards/chat.access.control.guard";
 import { ChatRepository } from "../repositories/chat.repository";

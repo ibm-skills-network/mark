@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   AssignmentQuestionDisplayOrder,
+  CorrectAnswerVisibility,
   QuestionDisplay,
   QuestionType,
   ResponseType,
@@ -575,8 +576,7 @@ export class UpdateAssignmentQuestionsDto {
     required: false,
   })
   @IsOptional()
-  @IsBoolean()
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 
   @ApiProperty({
     description: "updatedAt",

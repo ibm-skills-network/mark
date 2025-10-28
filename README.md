@@ -1,107 +1,90 @@
 ![Build Status](https://github.com/ibm-skills-network/mark/actions/workflows/release.yml/badge.svg)
 
-# Mark System
+# Mark
 
-## Overview
+**Mark** is an AI-powered educational assessment platform that automates grading, provides intelligent feedback, and supports multilingual learning at scale.
 
-Mark System is an advanced education technology platform that provides AI-assisted assessment and feedback capabilities for educational institutions. The system handles assignment creation, question management, student attempts, automated grading, and multilingual support.
+---
+
+## Quick Links
+
+- [Getting Started](#getting-started)
+- [Key Features](#key-features)
+- [Technology Stack](#technology-stack)
+- [Contributing](./docs/CONTRIBUTING.md)
+- [Architecture Overview](#architecture-overview)
+
+---
+
+## Getting Started
+
+### For Contributors
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/ibm-skills-network/mark.git
+   cd mark
+   ```
+
+2. **Follow the setup guide**
+   See [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for detailed setup instructions, environment configuration, and development workflows.
+
+3. **Pick an issue**
+   Browse the [project board](https://github.com/orgs/ibm-skills-network/projects/9) and assign yourself an issue.
+
+### For Users
+
+Mark is designed for educational institutions looking to scale their assessment capabilities with AI assistance. Contact the team for deployment options.
+
+---
 
 ## Key Features
 
-- **AI-Assisted Grading**: Automated evaluation of various response types (text, file uploads, URLs)
-- **Multi-Format Assessments**: Support for multiple-choice, text, file upload, URL submission questions
-- **Multilingual Support**: Translation of assignments and questions into multiple languages
-- **Assignment Management**: Creation, editing, and publishing of assignments
-- **Attempt Tracking**: Monitoring student submissions and progress
-- **Job Status Monitoring**: Real-time tracking of long-running operations
-- **Reporting & Analytics**: Insights into student performance and system usage
+- **AI-Assisted Grading** - Automated evaluation with customizable rubrics
+- **Multi-Format Support** - Text, file uploads, URLs, presentations, videos
+- **Multilingual** - Translate assignments and feedback into multiple languages
+- **Real-Time Progress** - Track grading jobs and student attempts
+- **Flexible Architecture** - Modular, extensible, and production-ready
 
-## System Architecture
-
-The Mark System is built on a modular, domain-driven architecture that separates concerns into distinct services and repositories. The system follows modern software engineering principles including the repository pattern, dependency injection, and service-oriented architecture.
-
-### Core Components
-
-#### Controllers
-
-- **Assignment Controller**: Manages assignment CRUD operations
-- **Question Controller**: Handles question management
-- **Job Status Controller**: Tracks long-running processes
-- **Attempt Controller**: Processes student attempts and submissions
-
-#### Services
-
-- **Assignment Service**: Core business logic for assignments
-- **Question Service**: Question generation and management
-- **Translation Service**: Multilingual support
-- **Job Status Service**: Process monitoring and reporting
-- **Attempt Service**: Submission handling and grading
-
-#### Repositories
-
-- **Assignment Repository**: Data access for assignments
-- **Question Repository**: Data access for questions and variants
-- **Job Status Repository**: Data access for process tracking
-
-#### LLM Integration
-
-- **LLM Facade Service**: Abstraction layer for AI/ML providers
-- **Specialized Grading Services**: Purpose-built evaluators for different content types
-- **Prompt Processor**: Manages prompts for AI services
-- **Token Counter & Usage Tracker**: Monitors usage for optimization
+---
 
 ## Technology Stack
 
-- **Backend**: NestJS (TypeScript)
-- **Database**: PostgreSQL with Prisma ORM
-- **AI Integration**: OpenAI and other LLM providers
-- **Concurrency Management**: Bottleneck.js for rate limiting
-- **Testing**: Jest
+| Layer          | Technology                                   |
+| -------------- | -------------------------------------------- |
+| **Backend**    | NestJS (TypeScript)                          |
+| **Database**   | PostgreSQL + Prisma ORM                      |
+| **AI/LLM**     | OpenAI GPT-4o, extensible to other providers |
+| **Messaging**  | NATS                                         |
+| **Testing**    | Jest                                         |
+| **Deployment** | Docker, GitHub Actions                       |
 
-## Key Architectural Improvements
+---
 
-Mark System V2 represents a significant evolution from the original architecture, with improvements in:
+## Architecture Overview
 
-1. **Repository Pattern Implementation**:
-   - Centralized data access logic
-   - Improved testability and maintainability
+Mark follows a **domain-driven, service-oriented architecture** with clear separation of concerns:
 
-2. **Service Modularity**:
-   - Specialized service components
-   - Clear boundaries of responsibility
+### Layers
 
-3. **Enhanced Error Handling**:
-   - Structured logging with stack traces
-   - Error categorization and recovery strategies
+1. **API Layer** - Controllers for assignments, questions, attempts, reports
+2. **Service Layer** - Business logic, grading strategies, translation, job processing
+3. **Repository Layer** - Data access abstraction
+4. **Data Layer** - PostgreSQL with Prisma, caching
+5. **LLM Integration** - Facade pattern for AI providers, token tracking, moderation
 
-4. **Concurrency Management**:
-   - Rate limiting with Bottleneck
-   - Queue management for high-load operations
+### Design Principles
 
-5. **Intelligent Processing**:
-   - Content change detection
-   - Avoiding redundant operations
-   - Batch processing for efficiency
+- **Repository Pattern** - Centralized data access, improved testability
+- **Dependency Injection** - Loose coupling, easier testing
+- **Strategy Pattern** - Pluggable grading strategies per question type
+- **Rate Limiting** - Bottleneck.js for API throttling
+- **Job Queues** - Background processing for long-running tasks
+- **Health Monitoring** - System checks and recovery mechanisms
 
-6. **Progress Tracking**:
-   - Detailed job status reporting
-   - Percentage-based completion indicators
-
-7. **Health Monitoring**:
-   - System health checks
-   - Recovery from stalled processes
-
-### Contribution Guidelines
-
-Contributions are welcome.
-Please see [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md) to get started.
-
-1. Create a feature branch
-2. Implement your changes with tests
-3. Ensure all tests pass
-4. Submit a pull request
-
-## System Architecture Diagram
+<details>
+<summary><strong>View Detailed Architecture Diagram</strong></summary>
 
 ```mermaid
 graph TD
@@ -272,9 +255,6 @@ subgraph "Background Processing"
   JSS --> JPQ
 end
 
-%% ─────────────── CACHE ───────────────
-
-
 %% ─────────────── MONITORING ──────────
 subgraph "Monitoring System"
   direction TB
@@ -282,8 +262,6 @@ subgraph "Monitoring System"
   BN --> Metrics["Metrics System"]
   JSS --> Metrics
 end
-
-
 
 %% ─────────────── COLOUR CLASSES ─────
 classDef clientLayer    fill:#b3e0ff,stroke:#005b9f,color:#000,font-weight:bold;
@@ -309,11 +287,25 @@ class JPQ,W1,W2,W3 jobLayer
 class Cache cacheLayer
 class ELK,Metrics,Socket monitoringLayer
 class NATS,GHAPI externalLayer
-
 ```
+
+</details>
+
+---
+
+## Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. **Read the guidelines** - [CONTRIBUTING.md](./docs/CONTRIBUTING.md)
+2. **Pick an issue** - Browse the [project board](https://github.com/orgs/ibm-skills-network/projects/9)
+3. **Follow conventions** - Conventional Commits for all PRs and commits
+4. **Submit PR** - Include tests and ensure CI passes
+
+All commits and PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) format (enforced via Husky and CI).
+
+---
 
 ## Acknowledgments
 
-- NestJS Team for the excellent framework
-- OpenAI for their powerful language models
-- Education Technology community for continuous feedback
+Built with NestJS, PostgreSQL, Prisma, OpenAI, and the support of the education technology community.

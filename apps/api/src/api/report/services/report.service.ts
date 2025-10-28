@@ -18,7 +18,7 @@ import {
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { AdminEmailService } from "src/auth/services/admin-email.service";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 

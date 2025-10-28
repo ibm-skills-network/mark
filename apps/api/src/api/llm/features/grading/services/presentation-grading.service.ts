@@ -152,16 +152,16 @@ export class PresentationGradingService implements IPresentationGradingService {
     });
 
     // Process the prompt through the LLM
-    const response = await this.promptProcessor.processPrompt(
+    const response = await this.promptProcessor.processPromptForFeature(
       prompt,
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
+      "presentation_grading",
     );
 
     try {
       // Parse the LLM output to get points & feedback
       const parsedResponse = await parser.parse(response);
-      console.log("Parsed Response:", parsedResponse);
 
       // Combine the AEEG components into comprehensive feedback
       const aeegFeedback = `
@@ -265,10 +265,11 @@ ${parsedResponse.guidance}
 
     try {
       // Process the prompt through the LLM
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.LIVE_RECORDING_FEEDBACK,
+        "live_recording_feedback",
       );
 
       // Parse the response

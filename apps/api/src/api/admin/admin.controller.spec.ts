@@ -1,6 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { AdminVerificationService } from "../../auth/services/admin-verification.service";
-import { PrismaService } from "../../prisma.service";
+import { PrismaService } from "../../database/prisma.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminController } from "./admin.controller";
 import { AdminRepository } from "./admin.repository";
@@ -8,6 +8,20 @@ import { AdminService } from "./admin.service";
 
 describe("AdminController", () => {
   let controller: AdminController;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+
+  beforeAll(() => {
+    process.env.DATABASE_URL =
+      originalDatabaseUrl ?? "postgresql://user:pass@localhost:5432/test"; // pragma: allowlist secret
+  });
+
+  afterAll(() => {
+    if (originalDatabaseUrl) {
+      process.env.DATABASE_URL = originalDatabaseUrl;
+    } else {
+      delete process.env.DATABASE_URL;
+    }
+  });
 
   beforeEach(async () => {
     const mockLlmPricingService = {

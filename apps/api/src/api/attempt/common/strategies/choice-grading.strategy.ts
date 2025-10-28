@@ -97,7 +97,15 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
   async extractLearnerResponse(
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<string[]> {
-    return requestDto.learnerChoices || [];
+    const { learnerChoices } = requestDto;
+
+    if (!Array.isArray(learnerChoices)) {
+      return [];
+    }
+
+    return learnerChoices
+      .filter((choice) => choice !== null && choice !== undefined)
+      .map((choice) => this.coerceToString(choice));
   }
 
   /**
@@ -467,12 +475,98 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
   /**
    * Normalize text for comparison (lowercase, trim, remove punctuation)
    */
-  private normalizeText(text: string): string {
-    return text
+  private normalizeText(text: unknown): string {
+    const normalized = this.coerceToString(text);
+
+    if (!normalized) {
+      return "";
+    }
+
+    return normalized
       .trim()
       .toLowerCase()
-
       .replaceAll(/[!,.،؛؟]/g, "");
+  }
+
+  /**
+   * Safely convert different learner response representations to string
+   */
+  private coerceToString(value: unknown): string {
+    if (typeof value === "string") {
+      return value;
+    }
+
+    if (
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      typeof value === "bigint"
+    ) {
+      return String(value);
+    }
+
+    if (value && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      const candidateKeys = [
+        "choice",
+        "value",
+        "label",
+        "text",
+        "name",
+        "title",
+      ];
+      for (const key of candidateKeys) {
+        if (!(key in record)) {
+          continue;
+        }
+
+        const candidate = record[key];
+        if (candidate === value) {
+          continue;
+        }
+
+        if (typeof candidate === "string") {
+          return candidate;
+        }
+
+        if (
+          typeof candidate === "number" ||
+          typeof candidate === "boolean" ||
+          typeof candidate === "bigint"
+        ) {
+          return String(candidate);
+        }
+
+        if (candidate && typeof candidate === "object") {
+          const nested = this.coerceToString(candidate);
+          if (nested) {
+            return nested;
+          }
+        }
+      }
+
+      const firstStringValue = Object.values(record).find(
+        (entry) => typeof entry === "string",
+      );
+
+      if (firstStringValue) {
+        return firstStringValue;
+      }
+
+      if (
+        typeof (value as { toString?: () => string }).toString === "function"
+      ) {
+        const stringValue = (value as { toString?: () => string }).toString();
+
+        if (
+          typeof stringValue === "string" &&
+          stringValue !== "[object Object]"
+        ) {
+          return stringValue;
+        }
+      }
+    }
+
+    return "";
   }
 
   /**

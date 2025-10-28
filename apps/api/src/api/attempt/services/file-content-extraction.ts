@@ -281,7 +281,7 @@ export class FileContentExtractionService {
     extractedText?: string;
     encoding?: string;
     detectedLanguage?: string;
-    additionalMetadata?: Record<string, number | boolean>;
+    additionalMetadata?: Record<string, number | boolean | string>;
   }> {
     const fileExtension = filename.split(".").pop()?.toLowerCase() || "";
     this.logger.debug(
@@ -318,7 +318,7 @@ export class FileContentExtractionService {
     text: string;
     extractedText?: string;
     encoding?: string;
-    additionalMetadata?: Record<string, number | boolean>;
+    additionalMetadata?: Record<string, number | boolean | string>;
   } | null> {
     switch (extension) {
       case "ipynb":
@@ -536,7 +536,7 @@ export class FileContentExtractionService {
     text: string;
     extractedText?: string;
     encoding?: string;
-    additionalMetadata?: Record<string, number | boolean>;
+    additionalMetadata?: Record<string, number | boolean | string>;
   } | null> {
     for (const [mime, extensions] of Object.entries(this.mimeTypeMap)) {
       if (mimeType.includes(mime)) {
@@ -571,7 +571,7 @@ export class FileContentExtractionService {
     text: string;
     extractedText?: string;
     encoding?: string;
-    additionalMetadata?: Record<string, number | boolean>;
+    additionalMetadata?: Record<string, number | boolean | string>;
   }> {
     this.logger.debug(`Using fallback extraction for ${filename}`);
 
@@ -2248,7 +2248,11 @@ export class FileContentExtractionService {
   private async extractPDFText(buffer: Buffer): Promise<{
     text: string;
     extractedText: string;
-    additionalMetadata: { pageCount: number };
+    additionalMetadata: {
+      pageCount: number;
+      extractionFailed?: boolean;
+      errorType?: string;
+    };
   }> {
     try {
       const data = (await pdfParse(buffer, {
@@ -2284,28 +2288,94 @@ export class FileContentExtractionService {
           ? (error as { message: string }).message
           : String(error);
 
-      this.logger.error(`PDF extraction failed: ${errorMessage}`);
+      this.logger.warn(
+        `PDF extraction failed, attempting fallback methods: ${errorMessage}`,
+      );
 
-      const textMatches = buffer.toString("latin1").match(/BT[\s\S]*?ET/g);
-      if (textMatches && textMatches.length > 0) {
-        let fallbackText = "[PDF - FALLBACK EXTRACTION]\n";
-        for (const match of textMatches) {
-          const text = match
-            .replace(/BT|ET/g, "")
-            .replace(/\\[0-9]{3}/g, "")
-            .replace(/[^\x20-\x7E\n]/g, " ");
-          if (text.trim()) {
-            fallbackText += text + "\n";
+      // Try multiple fallback extraction methods
+
+      // Method 1: Extract text between BT...ET markers (PDF text objects)
+      try {
+        const textMatches = buffer.toString("latin1").match(/BT[\s\S]*?ET/g);
+        if (textMatches && textMatches.length > 0) {
+          let fallbackText = "[PDF - FALLBACK EXTRACTION]\n";
+          fallbackText +=
+            "Note: Using simplified extraction. Some formatting may be lost.\n\n";
+
+          for (const match of textMatches) {
+            const text = match
+              .replace(/BT|ET/g, "")
+              .replace(/\\[0-9]{3}/g, "")
+              .replace(/[^\x20-\x7E\n]/g, " ")
+              .trim();
+            if (text && text.length > 2) {
+              fallbackText += text + "\n";
+            }
+          }
+
+          if (fallbackText.length > 100) {
+            this.logger.log(
+              "Successfully extracted PDF text using fallback method 1",
+            );
+            return {
+              text: fallbackText,
+              extractedText: fallbackText,
+              additionalMetadata: { pageCount: 0 },
+            };
           }
         }
-        return {
-          text: fallbackText,
-          extractedText: fallbackText,
-          additionalMetadata: { pageCount: 0 },
-        };
+      } catch (fallbackError) {
+        this.logger.debug(`Fallback method 1 failed: ${fallbackError}`);
       }
 
-      throw new Error(`PDF extraction failed: ${errorMessage}`);
+      // Method 2: Try to extract any readable ASCII text
+      try {
+        const asciiText = buffer
+          .toString("latin1")
+          .replace(/[^\x20-\x7E\n\r\t]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        if (asciiText.length > 50) {
+          const fallbackText =
+            "[PDF - BASIC TEXT EXTRACTION]\n" +
+            "Note: PDF structure is invalid. Extracted raw text content.\n\n" +
+            asciiText.slice(0, 10000); // Limit to 10KB
+
+          this.logger.log(
+            "Successfully extracted PDF text using fallback method 2",
+          );
+          return {
+            text: fallbackText,
+            extractedText: fallbackText,
+            additionalMetadata: { pageCount: 0 },
+          };
+        }
+      } catch (fallbackError2) {
+        this.logger.debug(`Fallback method 2 failed: ${fallbackError2}`);
+      }
+
+      // Method 3: Return a placeholder with file info
+      const placeholderText =
+        `[PDF FILE - EXTRACTION FAILED]\n` +
+        `File size: ${buffer.length} bytes\n` +
+        `Error: ${errorMessage}\n\n` +
+        `This PDF file has an invalid or corrupted structure and could not be processed.\n` +
+        `The file exists in the submission but its content cannot be analyzed.`;
+
+      this.logger.warn(
+        `All PDF extraction methods failed. Returning placeholder.`,
+      );
+
+      return {
+        text: placeholderText,
+        extractedText: placeholderText,
+        additionalMetadata: {
+          pageCount: 0,
+          extractionFailed: true,
+          errorType: "invalid_structure",
+        },
+      };
     }
   }
 

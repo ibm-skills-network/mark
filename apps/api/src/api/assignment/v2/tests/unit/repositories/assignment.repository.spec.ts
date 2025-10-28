@@ -7,7 +7,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { QuestionType } from "@prisma/client";
 import { GetAssignmentResponseDto } from "src/api/assignment/dto/get.assignment.response.dto";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import {
   createMockAssignment,
   sampleAuthorSession,

@@ -1,6 +1,11 @@
 import { Optional } from "@nestjs/common";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { QuestionResponse, QuestionType, ResponseType } from "@prisma/client";
+import {
+  CorrectAnswerVisibility,
+  QuestionResponse,
+  QuestionType,
+  ResponseType,
+} from "@prisma/client";
 import { Type } from "class-transformer";
 import { AttemptQuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "../../../question/dto/create.update.question.request.dto";
@@ -46,6 +51,14 @@ export class AssignmentAttemptResponseDto {
     required: false,
   })
   expiresAt: Date | null;
+
+  @ApiProperty({
+    description: "The DateTime at which the attempt was created",
+    type: Date,
+    example: "2023-12-31T10:00:00Z",
+    required: true,
+  })
+  createdAt: Date;
 }
 
 export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDto {
@@ -91,7 +104,7 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     type: Boolean,
     required: false,
   })
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 
   @ApiPropertyOptional({
     description: "The comments for the question.",

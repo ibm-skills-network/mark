@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
   AssignmentQuestionDisplayOrder,
+  CorrectAnswerVisibility,
   QuestionDisplay,
 } from "@prisma/client";
 import {
@@ -221,12 +222,9 @@ export class UpdateAssignmentRequestDto {
   showSubmissionFeedback: boolean;
 
   @ApiProperty({
-    description:
-      "Should the correct answer be shown to the learner after its submission",
-    type: Boolean,
+    description: "When should correct answers be shown to learners",
     required: false,
   })
   @IsOptional()
-  @IsBoolean()
-  showCorrectAnswer: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 }

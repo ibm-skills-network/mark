@@ -254,11 +254,12 @@ jobs:
 
       - name: Run linting for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn turbo run lint --filter=${{ matrix.service }}
+        run: yarn turbo run lint --filter=${{ matrix.service }} --only
 
       - name: Run tests for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn turbo run test --filter=${{ matrix.service }} -- -- --watchAll=false
+        run: yarn turbo run test --filter=${{ matrix.service }} --only -- -- --watchAll=false
+        timeout-minutes: 10
 
   build-and-deploy:
     name: Build & Deploy - ${{ matrix.service }}

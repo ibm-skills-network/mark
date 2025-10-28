@@ -1193,6 +1193,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                       </button>
                     </div>
                     <FileUploader
+                      key={`file-uploader-${uploadType}-${currentPath}`}
                       uploadType={uploadType}
                       context={{ ...context, path: currentPath }}
                       currentPath={currentPath}

@@ -4,7 +4,6 @@ import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearne
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import { useChatbot } from "@/hooks/useChatbot";
-import { decodeFields } from "@/app/Helpers/decoder";
 import { encodeFields } from "@/app/Helpers/encoder";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import { stripHtml } from "@/app/Helpers/strippers";
@@ -42,16 +41,7 @@ import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import SaveAndPublishButton from "./SaveAndPublishButton";
 
-function maybeDecodeString(str: string | null | undefined): string | null {
-  if (!str) return str;
-  try {
-    return atob(str);
-  } catch {
-    return str;
-  }
-}
-
-function fixScoringAndDecode(assignment: Assignment): Assignment {
+function normalizeAssignment(assignment: Assignment): Assignment {
   if (!assignment || !assignment.questions) return assignment;
 
   assignment.questions.forEach((q: Question) => {
@@ -65,10 +55,8 @@ function fixScoringAndDecode(assignment: Assignment): Assignment {
       delete q.scoring.criteria;
     }
 
-    q.question = maybeDecodeString(q.question);
     q.variants.forEach((variant: QuestionVariants) => {
       if (variant.scoring && variant.scoring.criteria) {
-        variant.variantContent = maybeDecodeString(variant.variantContent);
         variant.scoring.rubrics = [
           {
             rubricQuestion: variant.variantContent,
@@ -166,13 +154,13 @@ function AuthorHeader() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    showCorrectAnswer,
+    correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
-    state.showCorrectAnswer,
+    state.correctAnswerVisibility,
   ]);
   const role = useAuthorStore((state) => state.role);
 
@@ -200,23 +188,26 @@ function AuthorHeader() {
 
   const SyncAssignment = async () => {
     try {
+      const state = useAuthorStore.getState();
+      const checkedOutVersion = state.checkedOutVersion;
+      const versions = state.versions;
+
+      if (checkedOutVersion && versions.length > 0) {
+        const { checkoutVersion } = useAuthorStore.getState();
+        await checkoutVersion(
+          checkedOutVersion.id,
+          checkedOutVersion.versionNumber,
+        );
+        toast.success("Assignment synced with checked out version");
+        return;
+      }
+
       const assignment = await getAssignment(parseInt(assignmentId, 10));
       if (!assignment) {
         toast.error("Failed to fetch the assignment.");
         return;
       }
-      const decodedFields = decodeFields({
-        introduction: assignment.introduction,
-        instructions: assignment.instructions,
-        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-      });
-
-      const decodedAssignment = {
-        ...assignment,
-        ...decodedFields,
-      };
-
-      const newAssignment = fixScoringAndDecode(decodedAssignment);
+      const newAssignment = normalizeAssignment({ ...assignment });
       const questions: QuestionAuthorStore[] =
         newAssignment.questions?.map(
           (question: QuestionAuthorStore, index: number) => {
@@ -286,7 +277,7 @@ function AuthorHeader() {
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
         showQuestionScore: newAssignment.showQuestionScore,
         showAssignmentScore: newAssignment.showAssignmentScore,
-        showCorrectAnswer: newAssignment.showCorrectAnswer,
+        correctAnswerVisibility: newAssignment.correctAnswerVisibility,
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
@@ -299,22 +290,39 @@ function AuthorHeader() {
   };
 
   const fetchAssignment = async () => {
-    // For now, just load the regular assignment
-    // TODO: Re-enable draft loading once basic version control is working
+    // Check if there's a checked out version - if so, fetch that version's data
+    // But wait for versions to be loaded first
+    const state = useAuthorStore.getState();
+    const checkedOutVersion = state.checkedOutVersion;
+    const versions = state.versions;
+
+    if (checkedOutVersion && versions.length > 0) {
+      try {
+        const { checkoutVersion } = useAuthorStore.getState();
+        await checkoutVersion(
+          checkedOutVersion.id,
+          checkedOutVersion.versionNumber,
+        );
+        setPageState("success");
+        return;
+      } catch (error) {
+        console.error("Failed to fetch checked out version:", error);
+        setPageState("error");
+        return;
+      }
+    }
+
+    // If checkedOutVersion exists but versions aren't loaded yet, wait
+    if (checkedOutVersion && versions.length === 0) {
+      // Wait a bit for versions to load, then retry
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return fetchAssignment(); // Retry
+    }
+
+    // Otherwise, load the regular assignment
     const assignment = await getAssignment(parseInt(assignmentId, 10));
     if (assignment) {
-      const decodedFields = decodeFields({
-        introduction: assignment.introduction,
-        instructions: assignment.instructions,
-        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-      });
-
-      const decodedAssignment = {
-        ...assignment,
-        ...decodedFields,
-      };
-
-      const newAssignment = fixScoringAndDecode(decodedAssignment);
+      const newAssignment = normalizeAssignment({ ...assignment });
 
       useAuthorStore.getState().setOriginalAssignment(newAssignment);
 
@@ -524,7 +532,7 @@ function AuthorHeader() {
       showQuestions,
       showQuestionScore,
       showAssignmentScore,
-      showCorrectAnswer,
+      correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)

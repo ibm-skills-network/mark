@@ -89,13 +89,6 @@ export class VersionManagementController {
     @Param("assignmentId", ParseIntPipe) assignmentId: number,
     @Req() request: UserSessionRequest,
   ): Promise<VersionSummary[]> {
-    console.log(
-      "Received assignmentId:",
-      assignmentId,
-      "type:",
-      typeof assignmentId,
-    );
-
     if (!request?.userSession) {
       throw new Error("User session is required");
     }
@@ -274,12 +267,6 @@ export class VersionManagementController {
     @Param("assignmentId", ParseIntPipe) assignmentId: number,
     @Req() request: UserSessionRequest,
   ) {
-    console.log(
-      "getVersionHistory called with assignmentId:",
-      assignmentId,
-      "type:",
-      typeof assignmentId,
-    );
     return await this.versionService.getVersionHistory(
       assignmentId,
       request.userSession,

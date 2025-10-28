@@ -391,10 +391,28 @@ export default function AssignmentInsightsPage() {
   }
 
   if (error || !data) {
+    const isAuthError =
+      error?.includes("Invalid or expired admin session") ||
+      error?.includes("authentication") ||
+      error?.includes("Unauthorized");
+
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center py-12">
+        <div className="flex flex-col items-center justify-center py-12 gap-4">
           <div className="text-red-600">Error: {error || "No data found"}</div>
+          {isAuthError && (
+            <Button
+              onClick={() =>
+                router.push(
+                  `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`,
+                )
+              }
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Go to Admin Login
+            </Button>
+          )}
         </div>
       </div>
     );

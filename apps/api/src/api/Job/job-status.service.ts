@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Job } from "@prisma/client";
 import { Observable, Subject } from "rxjs";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 
 @Injectable()
 export class JobStatusServiceV1 {

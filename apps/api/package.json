@@ -17,20 +17,22 @@
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/main",
-    "test": "jest",
+    "test": "jest --detectOpenHandles --forceExit",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:staged": "jest --bail --findRelatedTests --passWithNoTests --collectCoverage=false",
     "test:watch": "jest --watch",
     "create-initial-versions": "dotenv -e ./dev.env -- ts-node src/scripts/create-initial-versions.ts",
-    "translation-audit": "node dist/src/scripts/translation-audit.js"
+    "translation-audit": "node dist/src/scripts/translation-audit.js",
+    "verify-migration": "dotenv -e ./dev.env -- ts-node scripts/verify-migration.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@dqbd/tiktoken": "^1.0.7",
+    "@ibm-cloud/watsonx-ai": "^1.7.0",
     "@instana/collector": "^4.14.0",
     "@langchain/community": "^0.3.56",
     "@langchain/core": "^0.3.77",
@@ -85,8 +87,8 @@
     "pg": "^8.11.1",
     "prisma": "^5.3.1",
     "redis": "^4.7.0",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.1",
+    "reflect-metadata": "0.2.0",
+    "rxjs": "7.8.1",
     "sn-messaging-ts-client": "^0.4.0",
     "socket.io": "^4.8.0",
     "unzipper": "^0.12.3",
@@ -98,6 +100,8 @@
     "form-data": "4.0.4"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.0.2",
     "@nestjs/cli": "10.4.5",
     "@nestjs/schematics": "^10.0.0",
@@ -118,7 +122,7 @@
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-unicorn": "^47.0.0",
-    "husky": "^8.0.3",
+    "husky": "^9.1.7",
     "jest": "^29.5.0",
     "prettier": "^2.8.8",
     "prettier-plugin-pkg": "^0.19.0",

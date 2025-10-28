@@ -27,6 +27,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
+import { SuccessPageDataDto } from "../../attempt/dto/success-page-data.dto";
 import {
   GRADE_SUBMISSION_EXCEPTION,
   IN_COOLDOWN_PERIOD,

@@ -17,6 +17,13 @@ import { usePathname, useRouter } from "next/navigation";
 import React, { FC, useEffect, useState } from "react";
 import { toast } from "sonner";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
+import {
+  getExpiresAtMs,
+  getLatestAttempt,
+  getTimestampMs,
+  isAttemptInProgress,
+  isAttemptSubmitted,
+} from "@/app/learner/utils/attempts";
 
 interface AssignmentSectionProps {
   title: string;
@@ -73,12 +80,7 @@ const getAssignmentState = (
 ): LearnerAssignmentState => {
   if (numAttempts !== -1 && attempts.length >= numAttempts) return "completed";
 
-  const inProgress = attempts.find(
-    (attempt) =>
-      !attempt.submitted &&
-      (!attempt.expiresAt ||
-        Date.now() < new Date(attempt.expiresAt).getTime()),
-  );
+  const inProgress = attempts.some(isAttemptInProgress);
 
   return inProgress ? "in-progress" : "not-started";
 };
@@ -145,16 +147,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const attemptsLeft =
     numAttempts === -1 ? Infinity : Math.max(0, numAttempts - attempts.length);
 
-  const latestAttempt = attempts?.reduce((latest, attempt) => {
-    if (!latest) return attempt;
-    if (
-      new Date(attempt.createdAt).getTime() >
-      new Date(latest.createdAt).getTime()
-    ) {
-      return attempt;
-    }
-    return latest;
-  }, null);
+  const latestAttempt = getLatestAttempt(attempts || []);
 
   const attemptsCount = attempts.length;
   const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
@@ -163,16 +156,45 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   useEffect(() => {
     if (
       !latestAttempt ||
+      !latestAttempt.createdAt ||
       attemptsBeforeCoolDown <= 0 ||
-      (attemptsLeft > 0 && attemptsCount < attemptsBeforeCoolDown) ||
-      attemptsLeft === 0
+      attemptsCount < attemptsBeforeCoolDown ||
+      attemptsLeft === 0 ||
+      retakeAttemptCoolDownMinutes <= 0 ||
+      assignmentState === "in-progress" ||
+      !isAttemptSubmitted(latestAttempt)
     ) {
       setCooldownMessage(null);
       setIsCooldown(false);
       return;
     }
+    console.log("Latest attempt:", latestAttempt);
 
-    const finishedAt = new Date(latestAttempt?.expiresAt).getTime();
+    const fallbackCreatedAt = latestAttempt.createdAt
+      ? new Date(latestAttempt.createdAt).getTime()
+      : undefined;
+
+    const updatedAtMs = getTimestampMs(latestAttempt.updatedAt);
+
+    let finishedAt =
+      getExpiresAtMs(latestAttempt.expiresAt) ??
+      updatedAtMs ??
+      fallbackCreatedAt;
+
+    if (
+      isAttemptSubmitted(latestAttempt) &&
+      updatedAtMs !== undefined &&
+      !Number.isNaN(updatedAtMs)
+    ) {
+      finishedAt = finishedAt ? Math.min(finishedAt, updatedAtMs) : updatedAtMs;
+    }
+
+    if (finishedAt === undefined || Number.isNaN(finishedAt)) {
+      setCooldownMessage(null);
+      setIsCooldown(false);
+      return;
+    }
+
     const cooldownMs = retakeAttemptCoolDownMinutes * 60_000;
     const nextEligibleAt = finishedAt + cooldownMs;
 
@@ -200,7 +222,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       if (minutes) parts.push(`${minutes}m`);
       if (seconds) parts.push(`${seconds}s`);
 
-      setCooldownMessage(`Please wait ${parts.join(" ")} before retrying`);
+      const timeString = parts.length > 0 ? parts.join(" ") : "a moment";
+      setCooldownMessage(`Please wait ${timeString} before retrying`);
     }
 
     updateCountdown();

@@ -242,10 +242,11 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
+        "translation",
         "gpt-5-nano",
       );
 
@@ -361,10 +362,11 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
+        "translation",
         "gpt-5-nano",
       );
 
@@ -430,15 +432,47 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
+        "translation",
         "gpt-4o-mini",
       );
 
-      const parsedResponse = await parser.parse(response);
-      return parsedResponse.translatedText;
+      try {
+        const parsedResponse = await parser.parse(response);
+        return parsedResponse.translatedText;
+      } catch (parseError) {
+        // Fallback: ask for plain text translation without structured output
+        this.logger.warn(
+          `Structured parse failed for question translation, falling back to plain text: ${
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError)
+          }`,
+        );
+
+        const fallbackPrompt = new PromptTemplate({
+          template:
+            `Translate the following question into {target_language}.\n` +
+            `Return ONLY the translated text. No quotes, no JSON, no markdown, no explanations.\n\n` +
+            `QUESTION:\n{question_text}`,
+          inputVariables: [],
+          partialVariables: {
+            question_text: cleanedText,
+            target_language: targetLanguageName,
+          },
+        });
+
+        const plain = await this.promptProcessor.processPrompt(
+          fallbackPrompt,
+          assignmentId,
+          AIUsageType.TRANSLATION,
+          "gpt-4o-mini",
+        );
+        return plain?.trim?.() ?? plain;
+      }
     } catch (error) {
       this.logger.error(
         `Error translating question: ${
@@ -821,16 +855,47 @@ INSTRUCTIONS:
     });
 
     try {
-      const response = await this.promptProcessor.processPrompt(
+      const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
         AIUsageType.TRANSLATION,
+        "translation",
         "gpt-4o-mini",
       );
 
-      const parsedResponse = await parser.parse(response);
+      try {
+        const parsedResponse = await parser.parse(response);
+        return parsedResponse.translatedText;
+      } catch (parseError) {
+        // Fallback: request plain text translation without structured instructions
+        this.logger.warn(
+          `Structured parse failed for text translation, falling back to plain text: ${
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError)
+          }`,
+        );
 
-      return parsedResponse.translatedText;
+        const fallbackPrompt = new PromptTemplate({
+          template:
+            `Translate the following text into {target_language}.\n` +
+            `Return ONLY the translated text. No quotes, no JSON, no markdown, no explanations.\n\n` +
+            `TEXT:\n{text}`,
+          inputVariables: [],
+          partialVariables: {
+            text: decodedText,
+            target_language: targetLanguageName,
+          },
+        });
+
+        const plain = await this.promptProcessor.processPrompt(
+          fallbackPrompt,
+          assignmentId,
+          AIUsageType.TRANSLATION,
+          "gpt-4o-mini",
+        );
+        return plain?.trim?.() ?? plain;
+      }
     } catch (error) {
       this.logger.error(
         `Error translating text: ${

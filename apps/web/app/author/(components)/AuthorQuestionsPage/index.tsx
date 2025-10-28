@@ -179,7 +179,6 @@ const AuthorQuestionsPage: FC<Props> = ({
     state.focusedQuestionId,
     state.setFocusedQuestionId,
   ]);
-  //questions are previously loaded into global state through backend call
   const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
   const questions = useAuthorStore((state) => state.questions, shallow);
 
@@ -192,8 +191,8 @@ const AuthorQuestionsPage: FC<Props> = ({
     (state) => state.setActiveAssignmentId,
   );
   const checkedOutVersion = useAuthorStore((state) => state.checkedOutVersion);
+  const versions = useAuthorStore((state) => state.versions);
 
-  // Get version control hook to ensure version synchronization
   const { loadVersions } = useVersionControl();
 
   const [isMassVariationLoading, setIsMassVariationLoading] = useState(false);
@@ -263,16 +262,47 @@ const AuthorQuestionsPage: FC<Props> = ({
   }, [assignmentId, loadVersions]);
 
   useEffect(() => {
-    if (checkedOutVersion) {
+    // If there's a checked out version, always fetch that version's data
+    // But only after versions have been loaded
+    if (checkedOutVersion && versions.length > 0) {
       if (assignmentId !== activeAssignmentId) {
         setActiveAssignmentId(assignmentId);
       }
+      // Re-fetch the checked out version's data to ensure sync
+      const fetchCheckedOutVersion = async () => {
+        try {
+          const { checkoutVersion } = useAuthorStore.getState();
+          await checkoutVersion(
+            checkedOutVersion.id,
+            checkedOutVersion.versionNumber,
+          );
+        } catch (error) {
+          console.error("Failed to fetch checked out version:", error);
+        }
+      };
+      void fetchCheckedOutVersion();
       return;
     }
 
     if (assignmentId !== activeAssignmentId) {
       const fetchAssignment = async () => {
         try {
+          // Check if there's a checked-out version - if so, fetch that instead of latest
+          const currentCheckedOutVersion =
+            useAuthorStore.getState().checkedOutVersion;
+
+          if (currentCheckedOutVersion) {
+            // There's a checked-out version, fetch that version's data
+            const { checkoutVersion } = useAuthorStore.getState();
+            await checkoutVersion(
+              currentCheckedOutVersion.id,
+              currentCheckedOutVersion.versionNumber,
+            );
+            setActiveAssignmentId(assignmentId);
+            return;
+          }
+
+          // No checked-out version, fetch the current/latest assignment
           const assignment = await getAssignment(assignmentId);
           if (assignment) {
             setActiveAssignmentId(assignmentId);
@@ -344,58 +374,104 @@ const AuthorQuestionsPage: FC<Props> = ({
               };
             };
 
-            const questions: QuestionAuthorStore[] =
-              assignment.questions?.map(
-                (question: QuestionAuthorStore, index: number) => {
-                  //unify scoring rubrics
-                  const unifiedQuestionScoring = unifyScoringRubrics(
-                    question.scoring,
-                    question.question,
+            const rawQuestions = (assignment.questions ??
+              []) as QuestionAuthorStore[];
+
+            const sanitizedQuestionOrder = Array.isArray(
+              assignment.questionOrder,
+            )
+              ? (assignment.questionOrder
+                  .map((value) => {
+                    if (typeof value === "number" && Number.isFinite(value)) {
+                      return value;
+                    }
+
+                    if (typeof value === "string") {
+                      const parsed = Number.parseInt(value, 10);
+                      if (!Number.isNaN(parsed)) {
+                        return parsed;
+                      }
+                    }
+
+                    return null;
+                  })
+                  .filter(
+                    (value): value is number => value !== null,
+                  ) as number[])
+              : [];
+
+            // Process all questions first
+            const allProcessedQuestions: QuestionAuthorStore[] =
+              rawQuestions.map((question, index) => {
+                const unifiedQuestionScoring = unifyScoringRubrics(
+                  question.scoring,
+                  question.question,
+                );
+
+                unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
+                  rubric.criteria.sort(
+                    (a: Criteria, b: Criteria) => a.points - b.points,
                   );
-                  //sort criteria by points
-                  unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
-                    rubric.criteria.sort(
-                      (a: Criteria, b: Criteria) => a.points - b.points,
+                });
+
+                const parsedVariants: QuestionVariants[] =
+                  question.variants?.map((variant: QuestionVariants) => {
+                    const unifiedVariantScoring = unifyScoringRubrics(
+                      variant.scoring,
+                      variant.variantContent ?? question.question,
                     );
-                  });
-
-                  const parsedVariants: QuestionVariants[] =
-                    question.variants?.map((variant: QuestionVariants) => {
-                      const unifiedVariantScoring = unifyScoringRubrics(
-                        variant.scoring,
-                        variant.variantContent ?? question.question,
+                    unifiedVariantScoring.rubrics?.forEach((rubric: Rubric) => {
+                      rubric.criteria.sort(
+                        (a: Criteria, b: Criteria) => a.points - b.points,
                       );
-                      unifiedVariantScoring.rubrics?.forEach(
-                        (rubric: Rubric) => {
-                          rubric.criteria.sort(
-                            (a: Criteria, b: Criteria) => a.points - b.points,
-                          );
-                        },
-                      );
+                    });
 
-                      return {
-                        ...variant,
-                        choices:
-                          typeof variant.choices === "string"
-                            ? (JSON.parse(variant.choices) as Choice[])
-                            : variant.choices,
-                        scoring: unifiedVariantScoring,
-                      };
-                    }) ?? [];
+                    return {
+                      ...variant,
+                      choices:
+                        typeof variant.choices === "string"
+                          ? (JSON.parse(variant.choices) as Choice[])
+                          : variant.choices,
+                      scoring: unifiedVariantScoring,
+                    };
+                  }) ?? [];
 
-                  return {
-                    ...question,
-                    alreadyInBackend: true,
-                    index: index + 1,
-                    variants: parsedVariants,
-                    scoring: unifiedQuestionScoring,
-                  };
-                },
-              ) ?? [];
+                return {
+                  ...question,
+                  alreadyInBackend: true,
+                  index: index + 1,
+                  variants: parsedVariants,
+                  scoring: unifiedQuestionScoring,
+                };
+              });
+
+            let questions: QuestionAuthorStore[];
+            if (sanitizedQuestionOrder.length > 0) {
+              const orderedQuestions = sanitizedQuestionOrder
+                .map((questionId) =>
+                  allProcessedQuestions.find((q) => q.id === questionId),
+                )
+                .filter((q): q is QuestionAuthorStore => q !== undefined);
+
+              const remainingQuestions = allProcessedQuestions.filter(
+                (q) => !sanitizedQuestionOrder.includes(q.id),
+              );
+
+              questions = [...orderedQuestions, ...remainingQuestions];
+            } else {
+              questions = allProcessedQuestions;
+            }
+
+            questions = questions.map((q, index) => ({
+              ...q,
+              index: index + 1,
+            }));
 
             if (questions.length > 0) {
               setQuestions(questions);
               setFocusedQuestionId(questions[0].id);
+              const questionIds = questions.map((question) => question.id);
+              useAuthorStore.getState().setQuestionOrder(questionIds);
             }
           } else {
             toast.error("Failed to get assignment details");
@@ -415,16 +491,20 @@ const AuthorQuestionsPage: FC<Props> = ({
     setQuestions,
     setFocusedQuestionId,
     checkedOutVersion,
+    versions,
   ]);
 
   useEffect(() => {
     const currentQuestionOrder = useAuthorStore.getState().questionOrder;
-    const newQuestionOrder = questions.map((q) => q.id);
+    const questionIds = questions.map((q) => q.id);
 
     if (
-      JSON.stringify(currentQuestionOrder) !== JSON.stringify(newQuestionOrder)
+      !currentQuestionOrder ||
+      currentQuestionOrder.length === 0 ||
+      currentQuestionOrder.some((id) => !questionIds.includes(id)) ||
+      questionIds.some((id) => !currentQuestionOrder.includes(id))
     ) {
-      useAuthorStore.getState().setQuestionOrder(newQuestionOrder);
+      useAuthorStore.getState().setQuestionOrder(questionIds);
     }
   }, [questions]);
 
@@ -1021,11 +1101,17 @@ const AuthorQuestionsPage: FC<Props> = ({
             settingsUpdated = true;
           }
           if (assignmentData.config.attemptsBeforeCoolDown !== undefined) {
-            configStore.setAttemptsBeforeCoolDown(assignmentData.config.attemptsBeforeCoolDown);
+            configStore.setAttemptsBeforeCoolDown(
+              assignmentData.config.attemptsBeforeCoolDown,
+            );
             settingsUpdated = true;
           }
-          if (assignmentData.config.retakeAttemptCoolDownMinutes !== undefined) {
-            configStore.setRetakeAttemptCoolDownMinutes(assignmentData.config.retakeAttemptCoolDownMinutes);
+          if (
+            assignmentData.config.retakeAttemptCoolDownMinutes !== undefined
+          ) {
+            configStore.setRetakeAttemptCoolDownMinutes(
+              assignmentData.config.retakeAttemptCoolDownMinutes,
+            );
             settingsUpdated = true;
           }
           if (assignmentData.config.allotedTimeMinutes !== undefined) {

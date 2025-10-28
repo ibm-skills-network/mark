@@ -70,6 +70,7 @@ export const submitReportAuthor = apiAuthor.submitReportAuthor;
 export const createAttempt = apiLearner.createAttempt;
 export const getAttempt = apiLearner.getAttempt;
 export const getCompletedAttempt = apiLearner.getCompletedAttempt;
+export const getSuccessPageData = apiLearner.getSuccessPageData;
 export const submitQuestion = apiLearner.submitQuestion;
 export const getLiveRecordingFeedback = apiLearner.getLiveRecordingFeedback;
 export const submitAssignment = apiLearner.submitAssignment;

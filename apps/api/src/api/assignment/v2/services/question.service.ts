@@ -7,7 +7,7 @@ import {
 import { ResponseType } from "@prisma/client";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { PrismaService } from "src/prisma.service";
+import { PrismaService } from "src/database/prisma.service";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   EnhancedQuestionsToGenerate,

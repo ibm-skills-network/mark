@@ -9,7 +9,7 @@ import {
   UserRole,
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
-import { PrismaService } from "../../prisma.service";
+import { PrismaService } from "../../database/prisma.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";

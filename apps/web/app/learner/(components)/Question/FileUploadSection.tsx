@@ -251,6 +251,7 @@ const FileUploadSection = ({
                 </div>
               )}
               <FileUploader
+                key={`file-uploader-${questionId}`}
                 uploadType={"learner"}
                 context={{
                   assignmentId,

@@ -13,7 +13,10 @@
     "download-models": "node scripts/download-models.js",
     "prestart": "yarn download-models",
     "prebuild": "yarn download-models",
-    "start": "next start"
+    "start": "next start",
+    "test": "jest --detectOpenHandles --forceExit",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.6",

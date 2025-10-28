@@ -1,388 +1,417 @@
-# CONTRIBUTING GUIDE
+# Contributing to Mark
+
+Welcome! This guide will help you start contributing to Mark quickly and effectively.
+
+---
+
+## Quick Start
+
+1. **Install prerequisites** - See [Prerequisites](#prerequisites)
+2. **Set up environment** - See [Environment Setup](#environment-setup)
+3. **Run the project** - See [Running Mark Locally](#running-mark-locally)
+4. **Pick an issue** - Browse the [project board](https://github.com/orgs/ibm-skills-network/projects/9)
+5. **Follow conventions** - Read [Commit & PR Guidelines](#commit--pr-guidelines)
+6. **Submit PR** - Follow the [PR Process](#pull-request-process)
+
+---
+
 ## Table of Contents
 
-- [CONTRIBUTING GUIDE](#contributing-guide)
-  - [Table of Contents](#table-of-contents)
-  - [Reporting Bugs](#reporting-bugs)
-  - [Suggesting New Features](#suggesting-new-features)
-  - [Pull Request Process](#pull-request-pr-process)
-  - [Prerequisites](#prerequisites)
-  - [Environment Setup Guide](#environment-setup-guide)
-    - [Step 1: Locate the `.env.template` Files](#step-1-locate-the-envtemplate-files)
-    - [Step 2: Create Your Own `dev.env` Files](#step-2-create-your-own-devenv-files)
-    - [Step 3: Acquire and Fill in Environment-Specific Values](#step-3-acquire-and-fill-in-environment-specific-values)
-    - [Step 4: Verify `.gitignore`](#step-4-verify-gitignore)
-    - [Important Notes](#important-notes)
-  - [Secrets Management](#secrets-management)
-  - [Development Setup](#development-setup)
-    - [Dependencies](#dependencies)
-    - [Local Database](#local-database)
-    - [Accessing Mark Locally](#accessing-mark-locally)
-    - [Useful Resources](#useful-resources)
-  - [Troubleshooting](#troubleshooting)
-
-## Reporting Bugs
-
-To report a bug:
-
-1. **Navigate** to the **Issues** tab.
-2. **Click** **New Issue**.
-3. **Describe** your bug with:
-
-   * A clear **title**
-   * **Steps to reproduce**
-   * **Expected vs. actual behavior**
-   * Relevant **logs** or **screenshots**
-
-Our team reviews new issues **daily** and will respond **as soon as possible**.
+- [Prerequisites](#prerequisites)
+- [Environment Setup](#environment-setup)
+- [Running Mark Locally](#running-mark-locally)
+- [Pull Request Process](#pull-request-process)
+- [Commit & PR Guidelines](#commit--pr-guidelines)
+- [Reporting Bugs](#reporting-bugs)
+- [Suggesting Features](#suggesting-features)
+- [Troubleshooting](#troubleshooting)
 
 ---
-
-## Suggesting New Features
-
-To propose a new feature:
-
-1. **Open** the roadmap board:
-   [https://github.com/orgs/ibm-skills-network/projects/9](https://github.com/orgs/ibm-skills-network/projects/9)
-2. **Add** your idea to the **TODO** column.
-3. **Assign** it to a team member for initial review.
-
----
-
-## Pull Request (PR) Process
-
-We follow **semantic conventions** for branches, versions, and PRs:
-
-### A. Conventions & Resources
-
-* **Branch Naming**
-  [https://gist.github.com/seunggabi/87f8c722d35cd07deb3f649d45a31082](https://gist.github.com/seunggabi/87f8c722d35cd07deb3f649d45a31082)
-* **Semantic Versioning**
-  [https://www.geeksforgeeks.org/introduction-semantic-versioning/](https://www.geeksforgeeks.org/introduction-semantic-versioning/)
-* **React Code Style**
-  [https://developer.dynatrace.com/develop/react-style-guide/](https://developer.dynatrace.com/develop/react-style-guide/)
-* **Stacked PRs**
-  [https://blog.logrocket.com/using-stacked-pull-requests-in-github/](https://blog.logrocket.com/using-stacked-pull-requests-in-github/)
-
-### B. Workflow
-
-1. **Pick up** an issue.
-2. **Create** a branch named per our conventions (e.g., `feature/ISSUE-123-description`).
-3. **Break down** large issues into multiple, focused PRs.
-4. **Stack** related PRs under a main branch if needed.
-5. **Submit** each PR for review.
-6. **Merge** once approved.
-7. **Release** a new version if the change is client-facing.
 
 ## Prerequisites
 
-Before contributing to this project, ensure the following tools and dependencies are installed:
+Install the following tools before getting started:
 
- **IBM's detect-secrets fork**:
+### Required Tools
 
-   ```bash
-   pip install --upgrade "git+https://github.com/ibm/detect-secrets.git@master#egg=detect-secrets"
-   ```
+```bash
+# Python and pip (for detect-secrets)
+python3 --version
+pip3 --version
 
-### 📦 Install `pip` (and Python) on macOS / Linux & Windows
+# IBM's detect-secrets fork
+pip install --upgrade "git+https://github.com/ibm/detect-secrets.git@master#egg=detect-secrets"
 
----
+# Hadolint (Docker linting)
+brew install hadolint
 
-#### 🐧 macOS / Linux
+# Shellcheck (shell script linting)
+brew install shellcheck
 
-1. **Check if Python 3 is already installed**
+# asdf (version manager)
+# See: https://asdf-vm.com/guide/getting-started.html
 
-   ```bash
-   python3 --version
-   ```
+# Node.js and Yarn via asdf
+asdf plugin add nodejs
+asdf plugin add yarn
+asdf install
+```
 
-2. **Install `pip` (if it isn’t there yet)**
+<details>
+<summary><strong>Installing Python & pip on macOS/Linux/Windows</strong></summary>
 
-   ```bash
-   curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-   python3 get-pip.py
-   ```
+### macOS / Linux
 
-3. **Confirm that `pip` works**
+```bash
+# Check Python 3
+python3 --version
 
-   ```bash
-   pip3 --version
-   ```
+# Install pip
+curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+python3 get-pip.py
 
----
+# Verify
+pip3 --version
+```
 
-#### 🪟 Windows
+### Windows
 
-1. **Install Python**
-
-   - Grab the installer from [https://www.python.org/downloads/](https://www.python.org/downloads/).
-   - During setup, **check “Add Python to PATH.”**
-
-2. **Install (or upgrade) `pip`**
-
+1. Download Python from [python.org](https://www.python.org/downloads/)
+2. **Check "Add Python to PATH"** during installation
+3. Install pip:
    ```powershell
    python -m ensurepip --upgrade
    ```
-
-3. **Verify `pip`**
-
+4. Verify:
    ```powershell
    pip --version
    ```
 
----
-
-> **🔧 PATH tip (macOS / Linux):**
-> If `pip3` isn’t found after installation, add this to your shell config (e.g. `~/.zshrc`, `~/.bashrc`) and reload:
->
-> ```bash
-> export PATH="$HOME/Library/Python/3.9/bin:$PATH"
-> ```
->
-> _(Adjust the Python version/directory to match your system.)_
-
-1. **Hadolint**:  
-   [Installation Guide for Hadolint](https://github.com/hadolint/hadolint#install)
-
-   ```bash
-   brew install hadolint
-   ```
-
-2. **Shellcheck**:  
-   [Installation Guide for Shellcheck](https://github.com/koalaman/shellcheck#installing)
-
-   ```bash
-   brew install shellcheck
-   ```
-
-3. **asdf (version manager)**:  
-   See [asdf's installation instructions here](https://asdf-vm.com/guide/getting-started.html).
-
-4. **Node.js and Yarn via asdf**:
-   ```bash
-   asdf plugin add nodejs
-   asdf plugin add yarn
-   asdf install
-   ```
+</details>
 
 ---
 
-## Environment Setup Guide
+## Environment Setup
 
-This project requires three environment files (`dev.env`) for different components. Follow the steps below to configure your environment.
-
----
-
-### Step 1: Locate the `.env.template` Files
-
-Each component has its own `.env.template` file. These files are located in the following directories:
-
-1. **Root Directory**  
-   Template: `/.env.template`
-2. **Web Directory**
-   Template: `/apps/web/.env.tempalte`
-3. **API Service**  
-   Template: `/apps/api/.env.template`
-4. **API Gateway**  
-   Template: `/apps/api-gateway/.env.template`
-
----
-
-### Step 2: Create Your Own `dev.env` Files
-
-For each component, copy the corresponding `.env.template` file to create a `dev.env` file.
-
-Run the following commands:
+### 1. Clone and Install Dependencies
 
 ```bash
-# Root environment file
-cp ./.env.template dev.env
+git clone https://github.com/ibm-skills-network/mark.git
+cd mark
+yarn install  # This also installs Husky pre-commit hooks
+```
 
-# Web environment file
+### 2. Configure Environment Files
+
+You need to create `dev.env` files in multiple locations:
+
+```bash
+# Root
+cp .env.template dev.env
+
+# Web app
 cp apps/web/.env.template apps/web/.env.local
 
-# API environment file
+# API service
 cp apps/api/.env.template apps/api/dev.env
 
-# API Gateway environment file
+# API Gateway
 cp apps/api-gateway/.env.template apps/api-gateway/dev.env
 ```
 
----
+### 3. Fill in Required Values
 
-### Step 3: Acquire and Fill in Environment-Specific Values
+<details>
+<summary><strong>Environment Variables Reference</strong></summary>
 
-P.S. If you are a skills-network developer, ask full timer to give you op files for mark, so you dont have to go through this step
+**Note:** If you're an IBM Skills Network developer, request the 1Password files from a full-timer to skip this step.
 
-Each `dev.env` file requires specific environment variables. Below are the details on how to acquire these values:
-| # | Variable(s) | Found in template(s) | Where you obtain the value |
-| ----- | -------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A** | `POSTGRES_PASSWORD` | _root of the project_ | Choose a strong password (e.g. `openssl rand -base64 32`) when you create the local Postgres container/user. |
-| **B** | `OPENAI_API_KEY`, `OPENAI_API_SPEECH_TEXT_KEY` | _api_, _web_ | OpenAI dashboard → API Keys → **Create new secret key** (same key works for both chat & speech). |
-| **C** | `SECRET` (JWT signing) | _api-gateway_ | Generate 32+ random bytes (`openssl rand -hex 32`). Needed only if `AUTH_DISABLED=false`. |
-| **D** | `NATS_USERNAME`, `NATS_PASSWORD`, `NATS_URL` | _api-gateway_, _api_ | _Self-hosted_: set in your `nats-server.conf` and reuse here. <br>_Synadia NGS cloud_: create a **User** in the NGS console, copy the user/pass & server URL. |
-| **E** | `DATABASE_URL`, `DATABASE_URL_DIRECT` | _api_ | Compose: `postgresql://<user>:<password>@<host>:<port>/<db>` using the password from **A**. |
-| **F** | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | _api_ | GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**. |
-| **G** | `GITHUB_CLIENT_ID_LOCAL`, `GITHUB_CLIENT_SECRET_LOCAL` | _api_ | Same as **F**, but create a second OAuth App whose callback URL points to `localhost` (for local dev). |
-| **H** | `GITHUB_APP_TOKEN` | _api_ | If you use a GitHub App: GitHub → **Settings → Apps → Your App → Generate token**. |
-| **I** | `WATSONX_AI_API_KEY`, `WATSONX_PROJECT_ID` | _api_ | IBM Cloud → Resource list → **watsonx.ai** instance → Create service credential. |
-| **J** | `LTI_CREDENTIAL_MANAGER_USERNAME`, `LTI_CREDENTIAL_MANAGER_PASSWORD` | _api-gateway_ | Ask the team running the LTI Credential Manager for a service account or create one yourself. |
+| Variable(s) | Where | How to Obtain |
+|------------|-------|---------------|
+| `POSTGRES_PASSWORD` | Root | Choose a strong password (e.g., `openssl rand -base64 32`) |
+| `OPENAI_API_KEY` | API, Web | [OpenAI Dashboard](https://platform.openai.com/api-keys) → Create new key |
+| `SECRET` (JWT) | API Gateway | Generate: `openssl rand -hex 32` |
+| `NATS_USERNAME`, `NATS_PASSWORD`, `NATS_URL` | API, Gateway | Self-hosted NATS config or [Synadia NGS](https://www.synadia.com/ngs) |
+| `DATABASE_URL`, `DATABASE_URL_DIRECT` | API | Format: `postgresql://user:password@host:port/db` |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | API | [GitHub OAuth Apps](https://github.com/settings/developers) |
+| `WATSONX_AI_API_KEY`, `WATSONX_PROJECT_ID` | API | IBM Cloud → watsonx.ai → Create credential |
+| `LTI_CREDENTIAL_MANAGER_USERNAME`, `LTI_CREDENTIAL_MANAGER_PASSWORD` | Gateway | Ask team or create service account |
 
----
+</details>
 
-### Step 4: Verify `.gitignore`
+### 4. Verify `.gitignore`
 
-Ensure `.env` files are excluded from version control to avoid accidental exposure of sensitive data. Verify that `.gitignore` contains the following lines:
+Ensure environment files are ignored:
 
 ```bash
-# Ignore all environment files
+# Should be in .gitignore
 *.env
+dev.env
+.env.local
 ```
 
----
-
-### Important Notes
-
-1. **DO NOT COMMIT `dev.env` FILES**  
-   Ensure that your `.env` files are never committed to version control.
-
-2. **Keep Secrets Secure**  
-   Use secure tools (e.g., 1Password, Vault) for sensitive values in your `dev.env` files.
-
-3. **Use `.env.template` for Updates**  
-   Always update `.env.template` files if new environment variables are required. This ensures other developers have a clear reference.
+**IMPORTANT:** Never commit `.env` files. Use secure tools (1Password, Vault) for secrets.
 
 ---
 
-## Secrets Management
+## Running Mark Locally
 
-To integrate with a staging environment during local development, ensure secrets are stored securely using a secrets manager. Export references to the secrets in your `dev.env` files.
-
-Example:
+### Start the Database
 
 ```bash
-export MY_SECRET=<secure-reference>
+yarn db  # Starts PostgreSQL in Docker
 ```
 
----
-
-## Development Setup
-
-### Dependencies
-
-Install project dependencies:
+### Run Migrations and Seed Data
 
 ```bash
-yarn
+yarn setup  # Runs Prisma migrations
+yarn seed   # (Optional) Seeds test data
 ```
 
-### Tools
+### Start Development Server
 
-install `sqlelectorn` as it helps you during development to see the database and run sql queries.
-You can download the GUI from [here](https://github.com/sqlectron/sqlectron-gui/releases/tag/v1.38.0)
-After installing it, here is how to configure it to mark's db:
+```bash
+yarn dev    # Starts all services in parallel
+# OR
+yarn start  # Runs db + setup + seed + dev
+```
 
-1. Click add
-2. Add these configurations:
-   ![Mark sqldb config](image.png)
+### Access the Application
 
-### Local Database
+1. **Swagger API Docs**: [http://localhost:4222/api](http://localhost:4222/api)
+2. **Web Interface**:
+   - Author view: `http://localhost:3010/author/{assignmentId}`
+   - Learner view: `http://localhost:3010/learner/{assignmentId}`
 
-1. **Running Mark**
+### Switch User Roles
 
-   - Start (or restart) Postgres database locally:
+Edit `apps/api-gateway/src/auth/jwt/cookie-based/mock.jwt.cookie.auth.guard.ts`:
 
-     ```bash
-     yarn db
-     ```
+```typescript
+// For author view
+role: UserRole.AUTHOR
 
-   - Run one-time setup operations like Prisma migrations to create the database schema:
-     Make sure you enable `integrate with 1Password CLI` if you are using op version
+// For learner view
+role: UserRole.LEARNER
+```
 
-     ```bash
-     yarn setup
-     ```
+### Useful Commands
 
-   - Seed the database with test data (optional) (For the first time, you will need to run yarn setup before yarn seed, then later you can do seed first)
-
-     ```bash
-     yarn seed
-     ```
-
-   - Run the application:
-
-     ```bash
-     yarn dev
-     ```
-
-     OR
-
-     ```bash
-     yarn start
-     ```
-
-2. **Create Assignments Using Swagger, skip this step if you already ran yarn seed command**:
-
-   - Open a browser and navigate to the Swagger documentation at [http://localhost:4222/api](http://localhost:4222/api).
-   - Locate the `# Admin` section in the Swagger UI.
-   - Under `AdminController_createAssignment`, click on the `Try it out` button.
-   - Fill in the required fields in the provided JSON body. For example:
-
-     ```json
-     {
-       "name": "Assignment 1",
-       "groupId": "test-group-id",
-       "type": "AI_GRADED"
-     }
-     ```
-
-   - Click "Execute" to create the assignment.  
-     Swagger will return the `assignmentId`, which can be used to access the assignment.
-
-3. **Access the Website**:
-
-   Open a browser and navigate to:
-
-   ```
-   http://localhost:3010/author/${assignmentid}
-   ```
+```bash
+yarn build              # Build all apps
+yarn test               # Run tests
+yarn lint               # Lint and fix code
+yarn prisma:studio      # Open database GUI
+```
 
 ---
 
-### Accessing Mark Locally
+## Pull Request Process
 
-Switch between views by modifying roles:
+### Workflow
 
-1. Open the `mock.jwt.cookie.auth.guard.ts` file.
-2. Change the role:
-   ```typescript
-   role: UserRole.AUTHOR, // to switch to author
-   ```
-   OR
-   ```typescript
-   role: UserRole.LEARNER, // to switch to learner
-   ```
+1. **Pick an issue** from the [project board](https://github.com/orgs/ibm-skills-network/projects/9)
+2. **Create a branch** using semantic naming:
+   - `feat/issue-123-add-grading-rubric`
+   - `fix/issue-456-file-upload-bug`
+   - `docs/issue-789-update-readme`
+3. **Make focused changes** - Break large features into multiple PRs
+4. **Use stacked PRs** for related changes ([guide](https://blog.logrocket.com/using-stacked-pull-requests-in-github/))
+5. **Ensure tests pass** - Pre-commit hooks will run automatically
+6. **Submit PR** - Use Conventional Commits format for title
+7. **Address feedback** - Respond to review comments
+8. **Merge** - Once approved and CI passes
 
-Update the URL as follows:
+### PR Checklist
 
-- For author view: `http://localhost:3010/author/${assignmentid}`
-- For learner view: `http://localhost:3010/learner/${assignmentid}`
+- [ ] PR title follows Conventional Commits format
+- [ ] All commits follow Conventional Commits format
+- [ ] Tests added/updated and passing
+- [ ] Code follows project style (linting passes)
+- [ ] No secrets committed (pre-commit hook checks)
+- [ ] Documentation updated if needed
+- [ ] CI checks pass
 
 ---
 
-### Useful Resources
+## Commit & PR Guidelines
 
-- **Swagger Documentation**: Accessible at [http://localhost:4222/api](http://localhost:4222/api).
-- **React Documentation**: [https://reactjs.org/docs/getting-started.html](https://reactjs.org/docs/getting-started.html)
-- **Next.js Documentation**: [https://nextjs.org/docs](https://nextjs.org/docs)
-- **Nest.js Documentation**: [https://docs.nestjs.com](https://docs.nestjs.com)
-- **Zustand Documentation**:https://zustand.docs.pmnd.rs/getting-started/introduction
-- **Langchain Documentation**:https://js.langchain.com/docs/introduction/
+We enforce **[Conventional Commits](https://www.conventionalcommits.org/)** for all commits and PR titles.
+
+### Format
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+### Types
+
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation only
+- `refactor` - Code refactoring
+- `test` - Adding/updating tests
+- `chore` - Maintenance tasks
+- `build` - Build system changes
+- `ci` - CI/CD changes
+- `perf` - Performance improvements
+
+### Scopes (optional)
+
+- `api` - Backend API service
+- `web` - Frontend application
+- `docs` - Documentation
+- `deps` - Dependencies
+- `ci` - CI configuration
+
+### Examples
+
+**Good:**
+```
+feat(api): add JWT refresh token rotation
+fix(web): prevent race condition in file uploads
+docs: update environment setup guide
+refactor(api): simplify grading service logic
+```
+
+**Bad:**
+```
+Update code
+Fixed bugs
+WIP testing
+```
+
+### Enforcement
+
+**Local (Husky):** Pre-commit hooks run on every commit:
+- Secrets scanning
+- Code formatting (Prettier)
+- Linting (ESLint)
+- Tests (Jest)
+- Build validation
+
+**CI (GitHub Actions):**
+- `commit-messages.yml` - Validates all commit messages
+- `pr-title.yml` - Validates PR title
+
+**Configuration files:**
+- `commitlint.config.js` - Commit message rules
+- `.husky/pre-commit` - Pre-commit hook
+- `.lintstagedrc.json` - Staged file checks
+
+### Troubleshooting
+
+**Commit rejected?**
+- Follow format: `type(scope): description`
+- Keep header under 72 characters
+- Use allowed types and scopes
+
+**PR title failing?**
+- Edit PR title to match Conventional Commits format
+- Be specific (not "Update" or "Fix bugs")
+
+**Husky hooks not running?**
+```bash
+yarn install  # Reinstalls hooks
+```
+
+---
+
+## Reporting Bugs
+
+1. Go to the [Issues](https://github.com/ibm-skills-network/mark/issues) tab
+2. Click **New Issue**
+3. Include:
+   - Clear title
+   - Steps to reproduce
+   - Expected vs actual behavior
+   - Logs or screenshots
+   - Environment details
+
+---
+
+## Suggesting Features
+
+1. Open the [roadmap board](https://github.com/orgs/ibm-skills-network/projects/9)
+2. Add your idea to the **TODO** column
+3. Assign to a team member for review
 
 ---
 
 ## Troubleshooting
 
-### Unable to Reach Localhost:
+### Can't Connect to localhost
 
-Ensure your local database and API are running correctly. Verify your `.env` configuration and that required ports are not blocked.
+**Problem:** Services not accessible at localhost URLs
+
+**Solutions:**
+- Ensure database is running: `yarn db`
+- Check environment variables are set correctly
+- Verify ports 3010, 4222 are not in use
+- Check logs: `yarn dev` output
+
+### Database Connection Errors
+
+**Problem:** Prisma can't connect to database
+
+**Solutions:**
+```bash
+# Restart database
+yarn db
+
+# Check connection string in dev.env
+echo $DATABASE_URL
+
+# Reset database
+yarn prisma:reset
+
+# Re-run migrations
+yarn setup
+```
+
+### Pre-commit Hooks Failing
+
+**Problem:** Husky blocks commits
+
+**Solutions:**
+- Fix linting errors: `yarn lint`
+- Fix formatting: `yarn format`
+- Fix tests: `yarn test`
+- Check for secrets: `yarn secrets:check`
+- Ensure build works: `yarn build`
+
+### Node/Yarn Version Issues
+
+**Problem:** Version mismatch errors
+
+**Solutions:**
+```bash
+# Install correct versions
+asdf install
+
+# Verify versions
+node --version
+yarn --version
+```
+
+---
+
+## Additional Resources
+
+- **Semantic Versioning**: [geeksforgeeks.org/introduction-semantic-versioning](https://www.geeksforgeeks.org/introduction-semantic-versioning/)
+- **React Style Guide**: [developer.dynatrace.com/develop/react-style-guide](https://developer.dynatrace.com/develop/react-style-guide/)
+- **Stacked PRs**: [blog.logrocket.com/using-stacked-pull-requests-in-github](https://blog.logrocket.com/using-stacked-pull-requests-in-github/)
+- **NestJS Docs**: [docs.nestjs.com](https://docs.nestjs.com)
+- **Next.js Docs**: [nextjs.org/docs](https://nextjs.org/docs)
+- **Prisma Docs**: [prisma.io/docs](https://www.prisma.io/docs)
+- **Zustand Docs**: [zustand.docs.pmnd.rs](https://zustand.docs.pmnd.rs/getting-started/introduction)
+- **Langchain Docs**: [js.langchain.com/docs](https://js.langchain.com/docs/introduction/)
+
+---
+
+**Questions?** Ask in the team chat or open a [discussion](https://github.com/ibm-skills-network/mark/discussions).

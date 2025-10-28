@@ -1,12 +1,12 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
-import { decodeFields } from "@/app/Helpers/decoder";
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
 import type { Assignment } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
+import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
@@ -59,22 +59,19 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           const attemptsData = await getAttempts(assignmentId, cookie);
 
           if (isMounted && assignmentData) {
-            const decodedFields = decodeFields({
-              introduction: assignmentData?.introduction,
-              instructions: assignmentData?.instructions,
-              gradingCriteriaOverview: assignmentData?.gradingCriteriaOverview,
-            });
+            const normalizedAttempts = (attemptsData ?? []).map((attempt) =>
+              normalizeAttemptTimestamps(
+                attempt,
+                assignmentData?.allotedTimeMinutes ?? null,
+              ),
+            );
 
-            const decodedAssignment = {
-              ...assignmentData,
-              ...decodedFields,
-            };
-            setAssignment(decodedAssignment);
+            setAssignment(assignmentData);
             setAssignmentDetails({
-              ...decodedAssignment,
-              name: decodedAssignment.name || "Untitled Assignment",
+              ...assignmentData,
+              name: assignmentData.name || "Untitled Assignment",
             });
-            setListOfAttempts(attemptsData);
+            setListOfAttempts(normalizedAttempts);
           }
         } catch (error) {
           setError({
@@ -91,18 +88,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           {},
         ) as Assignment;
         if (isMounted) {
-          const decodedFields = decodeFields({
-            introduction: assignmentDetails?.introduction,
-            instructions: assignmentDetails?.instructions,
-            gradingCriteriaOverview: assignmentDetails?.gradingCriteriaOverview,
-          });
-
-          const decodedAssignment = {
-            ...assignmentDetails,
-            ...decodedFields,
-          };
-
-          setAssignment(decodedAssignment);
+          setAssignment(assignmentDetails);
         }
       }
     } catch (error) {
@@ -143,7 +129,6 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           : "You are not authorized to view this page";
     return <ErrorPage error={errorMessage} statusCode={403} />;
   }
-
   return (
     <>
       <AboutTheAssignment

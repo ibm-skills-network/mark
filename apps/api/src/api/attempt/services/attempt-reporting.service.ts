@@ -4,7 +4,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { ReportType } from "@prisma/client";
-import { PrismaService } from "../../../prisma.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptReportingService {

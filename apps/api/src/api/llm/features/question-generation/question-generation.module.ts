@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { WinstonModule } from "nest-winston";
-import { PrismaService } from "../../../../prisma.service";
+import { PrismaService } from "../../../../database/prisma.service";
 import { QUESTION_GENERATION_SERVICE } from "../../llm.constants";
 import { LlmModule } from "../../llm.module";
 import { QuestionGenerationService } from "./services/question-generation.service";

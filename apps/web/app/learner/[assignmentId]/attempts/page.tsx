@@ -4,6 +4,7 @@ import {
   useAssignmentDetails,
   useLearnerOverviewStore,
 } from "@/stores/learner";
+import { getTimestampMs } from "@/app/learner/utils/attempts";
 import React, { useMemo, useState } from "react";
 import DataTable, {
   createTheme,
@@ -55,11 +56,16 @@ export default function AssignmentAttempts() {
     state.assignmentDetails,
   ]);
 
-  const sortedAttempts = [...listOfAttempts].sort((a, b) =>
-    a.createdAt && b.createdAt
-      ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      : 0,
-  );
+  const sortedAttempts = [...listOfAttempts].sort((a, b) => {
+    if (!a.createdAt || !b.createdAt) return 0;
+
+    const dateA = new Date(a.createdAt).getTime();
+    const dateB = new Date(b.createdAt).getTime();
+
+    if (isNaN(dateA) || isNaN(dateB)) return 0;
+
+    return dateB - dateA;
+  });
 
   const attemptsData: AttemptTableRow[] = useMemo(
     () =>
@@ -71,32 +77,35 @@ export default function AssignmentAttempts() {
           grade !== null ? `${Math.round(grade * 100)}%` : "N/A";
         const scoreNumeric = grade !== null ? grade * 100 : -1;
 
-        const startedAt = attempt.createdAt
-          ? new Date(attempt.createdAt).toLocaleString("en-US", {
+        const startedAtMs = getTimestampMs(attempt.createdAt);
+        const expiresAtMs = getTimestampMs(attempt.expiresAt);
+
+        const startedAt = Number.isNaN(startedAtMs)
+          ? "N/A"
+          : new Date(startedAtMs).toLocaleString("en-US", {
               month: "short",
               day: "numeric",
               year: "numeric",
               hour: "numeric",
               minute: "numeric",
               hour12: true,
-            })
-          : "N/A";
-        const expiresAt = attempt.expiresAt
-          ? new Date(attempt.expiresAt).toLocaleString("en-US", {
+            });
+
+        const expiresAt = Number.isNaN(expiresAtMs)
+          ? "N/A"
+          : new Date(expiresAtMs).toLocaleString("en-US", {
               month: "short",
               day: "numeric",
               year: "numeric",
               hour: "numeric",
               minute: "numeric",
               hour12: true,
-            })
-          : "N/A";
+            });
 
         let duration = "N/A";
-        if (attempt.createdAt && attempt.expiresAt) {
-          const start = new Date(attempt.createdAt).getTime();
-          const end = new Date(attempt.expiresAt).getTime();
-          const diffInSeconds = (end - start) / 1000;
+        if (!Number.isNaN(startedAtMs) && !Number.isNaN(expiresAtMs)) {
+          const diffInSeconds = (expiresAtMs - startedAtMs) / 1000;
+
           if (diffInSeconds >= 0) {
             const hours = Math.floor(diffInSeconds / 3600);
             const minutes = Math.floor((diffInSeconds % 3600) / 60);
