@@ -308,4 +308,4 @@ All commits and PR titles must follow [Conventional Commits](https://www.convent
 
 ## Acknowledgments
 
-Built with NestJS, PostgreSQL, Prisma, OpenAI, and the support of the education technology community.
+Built with NestJS, Prisma, PostgreSQL, OpenAI, and the support of the education technology community.

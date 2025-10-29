@@ -1,5 +1,5 @@
 import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
-import { type ReactNode } from "react";
+import { type FC, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 interface ModalProps {
@@ -12,7 +12,7 @@ interface ModalProps {
   children?: ReactNode;
 }
 
-const WarningAlert: React.FC<ModalProps> = ({
+const WarningAlert: FC<ModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
@@ -20,7 +20,7 @@ const WarningAlert: React.FC<ModalProps> = ({
   confirmText = "Proceed",
   cancelText = "Cancel",
   children,
-}: ModalProps) => {
+}) => {
   if (!isOpen) return null;
 
   return createPortal(
@@ -28,6 +28,7 @@ const WarningAlert: React.FC<ModalProps> = ({
       <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 relative animate-fadeIn">
         <button
           onClick={onClose}
+          aria-label="Close warning dialog"
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
         >
           ✕
