@@ -102,6 +102,8 @@
     "zod": "^3.23.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^24.9.2",
     "detect-secrets": "^1.0.6",
     "dotenv-cli": "^8.0.0",
     "prettier": "^3.5.3",
