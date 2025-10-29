@@ -475,41 +475,32 @@ const Question: FC<QuestionProps> = ({
   };
 
   // Local state for author comment
-  const [localAuthorComment, setLocalAuthorComment] = useState(question.authorComment ?? "");
+  const [localAuthorComment, setLocalAuthorComment] = useState(
+    question.authorComment ?? "",
+  );
+  const [isAuthorCommentVisible, setIsAuthorCommentVisible] = useState(
+    Boolean((question.authorComment ?? "").trim()),
+  );
 
   // Keep local state synced if question changes elsewhere
   useEffect(() => {
-    setLocalAuthorComment(question.authorComment ?? "");
+    const authorComment = question.authorComment ?? "";
+    setLocalAuthorComment(authorComment);
+    setIsAuthorCommentVisible(Boolean(authorComment.trim()));
   }, [question.authorComment]);
+
+  const handleAuthorCommentBlur = () => {
+    handleUpdateQuestionState({
+      authorComment: localAuthorComment,
+    });
+    if (!localAuthorComment.trim()) {
+      setIsAuthorCommentVisible(false);
+    }
+  };
 
   return (
     <div className="flex flex-col items-center justify-between rounded-lg bg-white w-full gap-y-6">
       <div className="flex gap-2 flex-wrap w-full">
-        {/* 🔹 Author Comment field (top of every question) */}
-        {!preview && (
-          <div className="w-full mb-4 bg-grey-50 border border-violet-200 rounded-md p-3">
-            <label className="block text-violet-900 text-sm font-semibold mb-1">
-              Author Comment
-            </label>
-            <textarea
-              className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:ring-violet-500 focus:border-violet-500"
-              placeholder="Add a note or explanation for this question..."
-              value={localAuthorComment}
-              onChange={(e) => setLocalAuthorComment(e.target.value)}
-              onBlur={() => {
-                handleUpdateQuestionState({ authorComment: localAuthorComment });
-              }}
-            />
-          </div>
-        )}
-
-        {preview && question.authorComment && (
-          <div className="w-full mb-4 p-3 bg-gray-50 rounded-md text-gray-700">
-            <strong>Author Comment:</strong>
-            <p className="mt-1">{question.authorComment}</p>
-          </div>
-        )}
-
         <div className="flex items-center gap-x-2 flex-1">
           <div className="items-center w-11 h-full typography-body text-gray-500 border border-gray-200 rounded-md text-center">
             {preview ? (
@@ -1040,6 +1031,11 @@ const Question: FC<QuestionProps> = ({
             questionIndex={questionIndex}
             preview={preview}
             questionFromParent={question}
+            authorComment={localAuthorComment}
+            setAuthorComment={setLocalAuthorComment}
+            onAuthorCommentBlur={handleAuthorCommentBlur}
+            isAuthorCommentVisible={isAuthorCommentVisible}
+            setIsAuthorCommentVisible={setIsAuthorCommentVisible}
             variantMode={false}
             responseType={question.responseType ?? ("OTHER" as const)}
             showSubQuestionsToLearner={

@@ -16,13 +16,14 @@ import { expandMarkingRubric, generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
-import { ArrowDownIcon, PlusIcon } from "@heroicons/react/24/solid";
 import React, {
   FC,
   useEffect,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 import { toast } from "sonner";
 import MultipleAnswerSection from "../Questions/QuestionTypes/MultipleAnswerSection";
@@ -289,6 +290,11 @@ interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
   variantMode: boolean;
   responseType: ResponseType;
   variantId?: number;
+  authorComment?: string;
+  setAuthorComment?: Dispatch<SetStateAction<string>>;
+  onAuthorCommentBlur?: () => void;
+  isAuthorCommentVisible?: boolean;
+  setIsAuthorCommentVisible?: Dispatch<SetStateAction<boolean>>;
 }
 
 const QuestionWrapper: FC<QuestionWrapperProps> = ({
@@ -309,6 +315,11 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   variantMode,
   variantId,
   responseType,
+  authorComment,
+  setAuthorComment,
+  onAuthorCommentBlur,
+  isAuthorCommentVisible,
+  setIsAuthorCommentVisible,
 }) => {
   const [localQuestionTitle, setLocalQuestionTitle] =
     useState<string>(questionTitle);
@@ -805,10 +816,12 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   };
 
+  
   return (
     <div
       id={`question-title-${questionId}`}
       className="flex flex-col w-full gap-y-2"
+      
     >
       {toggleTitle && !preview ? (
         <div ref={titleRef} className="w-full">
@@ -843,17 +856,57 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           }
         >
           <MarkdownViewer
-            className={`typography-body px-1 py-0.5 ${
-              localQuestionTitle?.trim() === ""
-                ? "!text-gray-500"
-                : "!text-black"
-            }`}
+            className={`typography-body px-1 py-0.5 ${localQuestionTitle?.trim() === ""
+              ? "!text-gray-500"
+              : "!text-black"
+              }`}
           >
             {localQuestionTitle?.trim() === ""
               ? "Enter question here"
               : localQuestionTitle}
           </MarkdownViewer>
           <div className="border-b border-gray-200 w-full" />
+        </div>
+      )}
+
+      {!variantMode &&
+        !preview &&
+        typeof isAuthorCommentVisible === "boolean" &&
+        setIsAuthorCommentVisible &&
+        setAuthorComment && (
+          isAuthorCommentVisible ? (
+            <div className="w-full mb-4 bg-grey-50 border border-violet-200 rounded-md p-3">
+              <label className="block text-violet-900 text-sm font-semibold mb-1">
+                Author Comment
+              </label>
+              <textarea
+                className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:ring-violet-500 focus:border-violet-500"
+                placeholder="Add a note or explanation for this question..."
+                value={authorComment ?? ""}
+                onChange={(e) => setAuthorComment?.(e.target.value)}
+                onBlur={() => {
+                  onAuthorCommentBlur?.();
+                }}
+              />
+            </div>
+          ) : (
+
+            <button
+              type="button"
+              onClick={() => setIsAuthorCommentVisible?.(true)}
+              className="flex items-center gap-2 bg-violet-100 border border-violet-200 rounded-md py-2 px-4 hover:bg-violet-100 transition-colors duration-150 w-fit"
+            >
+              <span className="text-violet-800 typography-body text-nowrap font-bold">
+                + Add Author Comment
+              </span>
+            </button>
+          )
+        )}
+
+      {!variantMode && preview && authorComment?.trim() && (
+        <div className="w-full mb-4 p-3 bg-gray-50 rounded-md text-gray-700">
+          <strong>Author Comment:</strong>
+          <p className="mt-1">{authorComment}</p>
         </div>
       )}
 
@@ -1023,7 +1076,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
 
       {/* Render different question types */}
       {questionType === "MULTIPLE_CORRECT" ||
-      questionType === "SINGLE_CORRECT" ? (
+        questionType === "SINGLE_CORRECT" ? (
         <MultipleAnswerSection
           questionId={questionId}
           variantId={variantId}
@@ -1042,11 +1095,10 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           <button
             type="button"
             disabled={preview}
-            className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${
-              isItTrueOrFalse === true
-                ? "bg-violet-600 text-white border-violet-600 shadow-lg"
-                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-            }`}
+            className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${isItTrueOrFalse === true
+              ? "bg-violet-600 text-white border-violet-600 shadow-lg"
+              : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+              }`}
             onClick={() => handleSelectAnswer(true)}
           >
             True
@@ -1056,11 +1108,10 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           <button
             type="button"
             disabled={preview}
-            className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${
-              isItTrueOrFalse === false
-                ? "bg-violet-600 text-white border-violet-600 shadow-lg"
-                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-            }`}
+            className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${isItTrueOrFalse === false
+              ? "bg-violet-600 text-white border-violet-600 shadow-lg"
+              : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+              }`}
             onClick={() => handleSelectAnswer(false)}
           >
             False
