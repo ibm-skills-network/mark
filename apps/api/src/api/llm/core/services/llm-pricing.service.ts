@@ -27,19 +27,16 @@ export interface CostBreakdown {
   outputTokenPrice: number;
 }
 
-// Web scraping types and constants
 const OPENAI_PRICING_URL = "https://openai.com/api/pricing";
 
 type ExtractResult = {
   modelKey: string;
-  inputPerToken: number; // USD per token
-  outputPerToken: number; // USD per token
+  inputPerToken: number;
+  outputPerToken: number;
   sourceUrl: string;
   fetchedAt: string;
   lastModified?: string | null;
 };
-
-// Helper functions for web scraping
 
 /**
  * Helper functions for parsing pricing data
@@ -58,13 +55,11 @@ async function extractFromStructuredData(
   const results: ExtractResult[] = [];
 
   try {
-    // Look for JSON-LD structured data
     const jsonLdScripts = $('script[type="application/ld+json"]');
     jsonLdScripts.each((i, elem) => {
       try {
         const jsonData = JSON.parse($(elem).text());
         if (jsonData && jsonData.offers && Array.isArray(jsonData.offers)) {
-          // Parse structured pricing data if available
           jsonData.offers.forEach((offer: any) => {
             if (offer.name && offer.price) {
               const modelKey = normalizeModelName(offer.name);
@@ -80,12 +75,9 @@ async function extractFromStructuredData(
             }
           });
         }
-      } catch {
-        // Skip invalid JSON
-      }
+      } catch {}
     });
 
-    // Look for data attributes on pricing elements
     const pricingElements = $(
       "[data-model-name], [data-pricing], .pricing-card, .model-card",
     );
@@ -133,21 +125,17 @@ async function extractFromPricingTables(
   const results: ExtractResult[] = [];
 
   try {
-    // Look for table-based pricing
     const tables = $("table, .pricing-table, .model-grid, .pricing-grid");
     tables.each((i, table) => {
       const $table = $(table);
 
-      // Look for rows or cards that contain model information
       const rows = $table.find("tr, .pricing-card, .model-card, .pricing-row");
       rows.each((j, row) => {
         const $row = $(row);
         const text = $row.text().toLowerCase();
 
-        // Check if this row contains a known model
         const modelKey = detectModelFromText(text);
         if (modelKey) {
-          // Look for pricing patterns in this row
           const prices = extractPricesFromElement($row);
           if (prices.input && prices.output) {
             results.push({
@@ -162,7 +150,6 @@ async function extractFromPricingTables(
       });
     });
 
-    // Look for card-based layouts
     const cards = $(
       '.card, .pricing-card, .model-card, [class*="pricing"], [class*="model"]',
     );
@@ -205,39 +192,37 @@ async function extractFromTextPatterns(
   try {
     const bodyText = $("body").text();
 
-    // Enhanced patterns for different model types
     const patterns = [
-      // GPT-5 models
       {
         regex:
           /gpt-?5(?:\s+|-)?(mini|nano)?\s*[^$]*?\$?([\d.]+)[^$]*?\$?([\d.]+)/gi,
+
         baseModel: "gpt-5",
       },
-      // GPT-4o models - more flexible pattern matching
       {
         regex:
           /gpt-?4o(?:\s+|-)?(mini)?\s*[^$]*?\$?([\d.]+)[^$]*?\$?([\d.]+)/gi,
+
         baseModel: "gpt-4o",
       },
-      // Additional specific pattern for standalone gpt-4o
       {
         regex:
           /(?:^|[^a-z])gpt.?4o(?:\s|\$|[^a-z-])[^$]*?\$?([\d.]+)[^$]*?\$?([\d.]+)/gi,
+
         baseModel: "gpt-4o",
       },
-      // GPT-4.1 models
       {
         regex:
           /gpt-?4\.1(?:\s+|-)?(mini|nano)?\s*[^$]*?\$?([\d.]+)[^$]*?\$?([\d.]+)/gi,
+
         baseModel: "gpt-4.1",
       },
-      // o1/o3/o4 models
       {
         regex:
           /o([1-4])(?:\s+|-)?(pro|mini|deep-research)?\s*[^$]*?\$?([\d.]+)[^$]*?\$?([\d.]+)/gi,
+
         baseModel: "o",
       },
-      // More specific text patterns for common OpenAI page formats
       {
         regex: /textgpt-4o[^$]*?\$?([\d.]+)[^$]*?\$?([\d.]+)/gi,
         baseModel: "gpt-4o",
@@ -251,7 +236,7 @@ async function extractFromTextPatterns(
     for (const pattern of patterns) {
       let match;
       while ((match = pattern.regex.exec(bodyText)) !== null) {
-        const variant = match[1] || match[2]; // Handle different capture group positions
+        const variant = match[1] || match[2];
         const inputPrice = Number.parseFloat(match.at(-2));
         const outputPrice = Number.parseFloat(match.at(-1));
 
@@ -266,7 +251,6 @@ async function extractFromTextPatterns(
             modelKey += `-${variant}`;
           }
 
-          // Convert from per-million to per-token pricing
           results.push({
             modelKey: modelKey.toLowerCase(),
             inputPerToken: dollarsPerTokenFromPerMillion(inputPrice),
@@ -318,18 +302,16 @@ function normalizeModelName(name: string): string | null {
 function detectModelFromText(text: string): string | null {
   const lowerText = text.toLowerCase();
 
-  // Check for specific model patterns - order matters for specificity
   if (lowerText.includes("gpt-5") && lowerText.includes("nano"))
     return "gpt-5-nano";
   if (lowerText.includes("gpt-5") && lowerText.includes("mini"))
     return "gpt-5-mini";
   if (lowerText.includes("gpt-5")) return "gpt-5";
 
-  // GPT-4o - be more specific to catch standalone gpt-4o
   if (lowerText.includes("gpt-4o") && lowerText.includes("mini"))
     return "gpt-4o-mini";
-  if (lowerText.match(/gpt-?4o(?!\w)/)) return "gpt-4o"; // Ensure not part of another word
-  if (lowerText.includes("gpt4o")) return "gpt-4o"; // Handle without hyphen
+  if (lowerText.match(/gpt-?4o(?!\w)/)) return "gpt-4o";
+  if (lowerText.includes("gpt4o")) return "gpt-4o";
 
   if (lowerText.includes("gpt-4.1") && lowerText.includes("mini"))
     return "gpt-4.1-mini";
@@ -386,15 +368,13 @@ function extractPricesFromElement($elem: any): {
 } {
   const text = $elem.text();
 
-  // Look for common pricing patterns
   const patterns = [
     /input[\s:]*\$?([\d.]+)[^$]*output[\s:]*\$?([\d.]+)/gi,
     /\$?([\d.]+)[^$]*input[^$]*\$?([\d.]+)[^$]*output/gi,
-    /\$?([\d.]+)[^$]*\/[^$]*\$?([\d.]+)/gi, // $X.XX / $Y.YY format
+    /\$?([\d.]+)[^$]*\/[^$]*\$?([\d.]+)/gi,
     /per\s+million.*?\$?([\d.]+)[^$]*\$?([\d.]+)/gi,
-    // Additional patterns for OpenAI's specific formatting
-    /\$?([\d.]+)[^$\d]{0,20}\$?([\d.]+)(?:\s|$)/gi, // Two prices close together
-    /(?:^|\s)\$?([\d.]+)[^$]*?(?:per|\/)[^$]*?\$?([\d.]+)/gi, // Price per something
+    /\$?([\d.]+)[^$\d]{0,20}\$?([\d.]+)(?:\s|$)/gi,
+    /(?:^|\s)\$?([\d.]+)[^$]*?(?:per|\/)[^$]*?\$?([\d.]+)/gi,
   ];
 
   for (const pattern of patterns) {
@@ -404,7 +384,6 @@ function extractPricesFromElement($elem: any): {
       const price2 = Number.parseFloat(match[2]);
 
       if (!isNaN(price1) && !isNaN(price2)) {
-        // Assume first price is input, second is output (common convention)
         return {
           input: dollarsPerTokenFromPerMillion(price1),
           output: dollarsPerTokenFromPerMillion(price2),
@@ -429,15 +408,10 @@ async function extractWithAggressivePatterns(
     const bodyText = $("body").text();
     const cleanedText = bodyText.replace(/\s+/g, " ").toLowerCase();
 
-    // Very broad patterns to catch gpt-4o specifically
     const aggressivePatterns = [
-      // Look for "gpt-4o" followed by prices within reasonable distance
       /gpt[-\s]?4o[^a-z][^$]*?\$?([\d.]+)[^$\d]{1,50}\$?([\d.]+)/gi,
-      // Look for specific page section patterns
       /text[^$]*?gpt[-\s]?4o[^$]*?\$?([\d.]+)[^$\d]{1,50}\$?([\d.]+)/gi,
-      // Look for pricing table patterns
       /gpt[-\s]?4o[^$]{0,100}([\d.]+)[^$\d]{1,50}([\d.]+)/gi,
-      // Very loose pattern for any two prices near "4o"
       /4o[^$\d]{0,80}([\d.]+)[^$\d]{1,50}([\d.]+)/gi,
     ];
 
@@ -448,11 +422,9 @@ async function extractWithAggressivePatterns(
         const price2 = parseFloat(match[2]);
 
         if (!isNaN(price1) && !isNaN(price2) && price1 > 0 && price2 > 0) {
-          // Basic sanity check - input price should be less than output price typically
           const inputPrice = price1 < price2 ? price1 : price2;
           const outputPrice = price1 < price2 ? price2 : price1;
 
-          // Only accept reasonable pricing ranges (OpenAI prices are usually in these ranges)
           if (
             inputPrice >= 0.1 &&
             inputPrice <= 50 &&
@@ -470,12 +442,11 @@ async function extractWithAggressivePatterns(
             logger.log(
               `Aggressive pattern found gpt-4o: $${inputPrice}/$${outputPrice} per million`,
             );
-            break; // Only take the first reasonable match
+            break;
           }
         }
       }
 
-      // If we found gpt-4o, also try to find gpt-4o-mini with similar patterns
       if (results.length > 0) {
         const miniPatterns = [
           /gpt[-\s]?4o[-\s]?mini[^$]*?\$?([\d.]+)[^$\d]{1,50}\$?([\d.]+)/gi,
@@ -521,7 +492,7 @@ async function extractWithAggressivePatterns(
             }
           }
         }
-        break; // If we found the main model, stop looking
+        break;
       }
     }
 
@@ -540,7 +511,6 @@ async function extractWithAggressivePatterns(
 async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
   const logger = new Logger("LLMPricingScraper");
 
-  // Try multiple user agents to avoid detection
   const userAgents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -551,9 +521,8 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
     userAgents[Math.floor(Math.random() * userAgents.length)];
 
   try {
-    // Add timeout and better headers
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15_000); // 15 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15_000);
 
     const res = await fetch(OPENAI_PRICING_URL, {
       signal: controller.signal,
@@ -585,10 +554,8 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // Try multiple extraction strategies
     let results: ExtractResult[] = [];
 
-    // Strategy 1: Look for JSON-LD or structured data
     results = await extractFromStructuredData($, logger);
     if (results.length > 0) {
       logger.log(
@@ -597,7 +564,6 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
       return results;
     }
 
-    // Strategy 2: Look for pricing tables or cards
     results = await extractFromPricingTables($, logger);
     if (results.length > 0) {
       logger.log(
@@ -606,7 +572,6 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
       return results;
     }
 
-    // Strategy 3: Enhanced text parsing with multiple patterns
     results = await extractFromTextPatterns($, logger);
     if (results.length > 0) {
       logger.log(
@@ -615,7 +580,6 @@ async function scrapeAllPricingFromOpenAI(): Promise<ExtractResult[]> {
       return results;
     }
 
-    // Strategy 4: Aggressive fallback specifically for missing models
     results = await extractWithAggressivePatterns($, logger);
     if (results.length > 0) {
       logger.log(
@@ -640,7 +604,7 @@ async function resolveOneModelFromWeb(
 ): Promise<ExtractResult | null> {
   const logger = new Logger("LLMPricingScraper");
   const maxRetries = 3;
-  const baseDelay = 2000; // 2 seconds
+  const baseDelay = 2000;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -657,7 +621,7 @@ async function resolveOneModelFromWeb(
 
       if (attempt < maxRetries) {
         const delay =
-          baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000; // Exponential backoff with jitter
+          baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000;
         logger.warn(
           `Model ${modelKey} not found in scraped data, retrying in ${delay}ms...`,
         );
@@ -690,7 +654,7 @@ export class LLMPricingService {
     string,
     { data: ExtractResult[]; timestamp: number }
   > = new Map();
-  private readonly CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
+  private readonly CACHE_TTL = 10 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -713,7 +677,6 @@ export class LLMPricingService {
     this.logger.log("Fetching fresh pricing data from OpenAI");
     const freshData = await scrapeAllPricingFromOpenAI();
 
-    // Cache the results
     this.pricingCache.set(cacheKey, {
       data: freshData,
       timestamp: Date.now(),
@@ -732,7 +695,6 @@ export class LLMPricingService {
     );
 
     try {
-      // Get all OpenAI models from the database
       const openaiModels = await this.prisma.lLMModel.findMany({
         where: {
           provider: "OpenAI",
@@ -744,7 +706,6 @@ export class LLMPricingService {
         `Found ${openaiModels.length} OpenAI models to fetch pricing for`,
       );
 
-      // Use cached pricing data to reduce API calls
       const scrapedPricing = await this.getCachedPricingData();
 
       if (scrapedPricing.length === 0) {
@@ -757,7 +718,6 @@ export class LLMPricingService {
       const currentPricing: ModelPricing[] = [];
       const modelsWithPricing: Set<string> = new Set();
 
-      // Match scraped data with database models
       for (const model of openaiModels) {
         const scrapedModel = scrapedPricing.find(
           (p) => p.modelKey === model.modelKey,
@@ -782,7 +742,6 @@ export class LLMPricingService {
             `Successfully fetched pricing for ${model.modelKey}: input=$${scrapedModel.inputPerToken}, output=$${scrapedModel.outputPerToken}`,
           );
         } else {
-          // Try fallback pricing for this specific model
           const fallbackPricing = this.getFallbackPricing(model.modelKey);
           if (fallbackPricing) {
             currentPricing.push(fallbackPricing);
@@ -806,7 +765,6 @@ export class LLMPricingService {
     } catch (error) {
       this.logger.error("Failed to fetch current pricing:", error);
 
-      // Return fallback pricing for known models to prevent complete failure
       const fallbackPricing = this.getFallbackPricingForAllModels();
       this.logger.warn(
         `Returning fallback pricing for ${fallbackPricing.length} models due to scraping failure`,
@@ -821,34 +779,28 @@ export class LLMPricingService {
    */
   private getFallbackPricing(modelKey: string): ModelPricing | null {
     const fallbackPrices: Record<string, { input: number; output: number }> = {
-      // GPT-4o models (Standard tier)
-      "gpt-4o": { input: 0.000_002_5, output: 0.000_01 }, // $2.50 / $10.00
-      "gpt-4o-mini": { input: 0.000_000_15, output: 0.000_000_6 }, // $0.15 / $0.60
+      "gpt-4o": { input: 0.000_002_5, output: 0.000_01 },
+      "gpt-4o-mini": { input: 0.000_000_15, output: 0.000_000_6 },
 
-      // GPT-4.1 models (Standard tier)
-      "gpt-4.1": { input: 0.000_002, output: 0.000_008 }, // $2.00 / $8.00
-      "gpt-4.1-mini": { input: 0.000_000_4, output: 0.000_001_6 }, // $0.40 / $1.60
-      "gpt-4.1-nano": { input: 0.000_000_1, output: 0.000_000_4 }, // $0.10 / $0.40
+      "gpt-4.1": { input: 0.000_002, output: 0.000_008 },
+      "gpt-4.1-mini": { input: 0.000_000_4, output: 0.000_001_6 },
+      "gpt-4.1-nano": { input: 0.000_000_1, output: 0.000_000_4 },
 
-      // GPT-5 models (Standard tier)
-      "gpt-5": { input: 0.000_001_25, output: 0.000_01 }, // $1.25 / $10.00
-      "gpt-5-mini": { input: 0.000_000_25, output: 0.000_002 }, // $0.25 / $2.00
-      "gpt-5-nano": { input: 0.000_000_05, output: 0.000_000_4 }, // $0.05 / $0.40
+      "gpt-5": { input: 0.000_001_25, output: 0.000_01 },
+      "gpt-5-mini": { input: 0.000_000_25, output: 0.000_002 },
+      "gpt-5-nano": { input: 0.000_000_05, output: 0.000_000_4 },
 
-      // o1 models (Standard tier)
-      o1: { input: 0.000_015, output: 0.000_06 }, // $15.00 / $60.00
-      "o1-pro": { input: 0.000_15, output: 0.0006 }, // $150.00 / $600.00
-      "o1-mini": { input: 0.000_001_1, output: 0.000_004_4 }, // $1.10 / $4.40
+      o1: { input: 0.000_015, output: 0.000_06 },
+      "o1-pro": { input: 0.000_15, output: 0.0006 },
+      "o1-mini": { input: 0.000_001_1, output: 0.000_004_4 },
 
-      // o3 models (Standard tier)
-      o3: { input: 0.000_002, output: 0.000_008 }, // $2.00 / $8.00
-      "o3-pro": { input: 0.000_02, output: 0.000_08 }, // $20.00 / $80.00
-      "o3-mini": { input: 0.000_001_1, output: 0.000_004_4 }, // $1.10 / $4.40
-      "o3-deep-research": { input: 0.000_01, output: 0.000_04 }, // $10.00 / $40.00
+      o3: { input: 0.000_002, output: 0.000_008 },
+      "o3-pro": { input: 0.000_02, output: 0.000_08 },
+      "o3-mini": { input: 0.000_001_1, output: 0.000_004_4 },
+      "o3-deep-research": { input: 0.000_01, output: 0.000_04 },
 
-      // o4 models (Standard tier)
-      "o4-mini": { input: 0.000_001_1, output: 0.000_004_4 }, // $1.10 / $4.40
-      "o4-mini-deep-research": { input: 0.000_002, output: 0.000_008 }, // $2.00 / $8.00
+      "o4-mini": { input: 0.000_001_1, output: 0.000_004_4 },
+      "o4-mini-deep-research": { input: 0.000_002, output: 0.000_008 },
     };
 
     const pricing = fallbackPrices[modelKey];
@@ -906,7 +858,6 @@ export class LLMPricingService {
 
     for (const pricing of pricingData) {
       try {
-        // Get the model by modelKey
         const model = await this.prisma.lLMModel.findUnique({
           where: { modelKey: pricing.modelKey },
         });
@@ -916,7 +867,6 @@ export class LLMPricingService {
           continue;
         }
 
-        // Check if this exact pricing already exists
         const existingPricing = await this.prisma.lLMPricing.findFirst({
           where: {
             modelId: model.id,
@@ -924,7 +874,7 @@ export class LLMPricingService {
             outputTokenPrice: pricing.outputTokenPrice,
             source: pricing.source,
             effectiveDate: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Within last 24 hours
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
             },
           },
         });
@@ -936,7 +886,6 @@ export class LLMPricingService {
           continue;
         }
 
-        // Deactivate previous pricing for this model
         await this.prisma.lLMPricing.updateMany({
           where: {
             modelId: model.id,
@@ -947,7 +896,6 @@ export class LLMPricingService {
           },
         });
 
-        // Insert new pricing
         await this.prisma.lLMPricing.create({
           data: {
             modelId: model.id,
@@ -992,7 +940,6 @@ export class LLMPricingService {
       return null;
     }
 
-    // First try to find pricing effective on or before the requested date
     let pricing = await this.prisma.lLMPricing.findFirst({
       where: {
         modelId: model.id,
@@ -1008,7 +955,6 @@ export class LLMPricingService {
       },
     });
 
-    // If no pricing found before the date, find the closest pricing after the date
     if (!pricing) {
       pricing = await this.prisma.lLMPricing.findFirst({
         where: {
@@ -1032,7 +978,6 @@ export class LLMPricingService {
       }
     }
 
-    // If still no pricing found, try to find any pricing for this model
     if (!pricing) {
       pricing = await this.prisma.lLMPricing.findFirst({
         where: {
@@ -1114,7 +1059,6 @@ export class LLMPricingService {
     usageDate: Date,
     usageType?: string,
   ): Promise<CostBreakdown | null> {
-    // Use the new upscaling-aware calculation method
     return await this.calculateCostWithUpscaling(
       modelKey,
       inputTokens,
@@ -1206,7 +1150,6 @@ export class LLMPricingService {
     );
 
     try {
-      // Deactivate any existing active upscaling
       const oldUpscaling = await this.prisma.lLMPriceUpscaling.findFirst({
         where: { isActive: true },
       });
@@ -1221,7 +1164,6 @@ export class LLMPricingService {
         });
       }
 
-      // Create new upscaling record
       const newUpscaling = await this.prisma.lLMPriceUpscaling.create({
         data: {
           globalFactor: globalFactor || null,
@@ -1233,10 +1175,8 @@ export class LLMPricingService {
         },
       });
 
-      // Clear the pricing cache to ensure new factors are applied
       await this.clearPricingCache();
 
-      // Get count of models that will be affected
       const modelsCount = await this.prisma.lLMModel.count({
         where: { isActive: true },
       });
@@ -1302,7 +1242,6 @@ export class LLMPricingService {
         },
       });
 
-      // Clear the pricing cache
       await this.clearPricingCache();
 
       this.logger.log(`Price upscaling removed by ${removedBy || "admin"}`);
@@ -1323,26 +1262,22 @@ export class LLMPricingService {
     usageDate: Date,
     usageType?: string,
   ): Promise<CostBreakdown | null> {
-    // Get base pricing
     const basePricing = await this.getPricingAtDate(modelKey, usageDate);
     if (!basePricing) {
       return null;
     }
 
-    // Get current upscaling factors
     const upscaling = await this.getCurrentPriceUpscaling();
 
     let finalInputPrice = basePricing.inputTokenPrice;
     let finalOutputPrice = basePricing.outputTokenPrice;
 
     if (upscaling) {
-      // Apply global factor first
       if (upscaling.globalFactor && upscaling.globalFactor > 0) {
         finalInputPrice *= upscaling.globalFactor;
         finalOutputPrice *= upscaling.globalFactor;
       }
 
-      // Apply usage-type specific factor
       if (usageType && upscaling.usageTypeFactors) {
         try {
           const usageFactors = JSON.parse(upscaling.usageTypeFactors as string);
@@ -1379,8 +1314,6 @@ export class LLMPricingService {
    */
   private clearPricingCache(): void {
     try {
-      // Clear the model assignment cache in the resolver service
-      // This is critical because the resolver service caches model assignments for 5 minutes
       this.llmResolverService.clearAllCache();
 
       this.logger.log("Pricing cache and model assignment cache cleared");
@@ -1427,7 +1360,6 @@ export class LLMPricingService {
     try {
       this.logger.log(`Testing scraping functionality for ${modelKey}`);
 
-      // Try to scrape fresh data (bypass cache)
       this.pricingCache.delete("openai_pricing");
       const scrapedData = await this.getCachedPricingData();
 
@@ -1436,7 +1368,6 @@ export class LLMPricingService {
       if (result) {
         return { success: true, pricing: result };
       } else {
-        // Check if we have fallback pricing
         const fallback = this.getFallbackPricing(modelKey);
         return fallback
           ? {
@@ -1499,7 +1430,6 @@ export class LLMPricingService {
         }
       }
 
-      // Get last update from database
       const lastUpdate = await this.prisma.lLMPricing.findFirst({
         orderBy: { effectiveDate: "desc" },
         select: { effectiveDate: true },

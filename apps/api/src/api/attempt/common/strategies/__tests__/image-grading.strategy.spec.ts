@@ -231,10 +231,10 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         learnerFileResponse: [
           {
             filename: "test.jpg",
-            content: "base64data", // legacy field for imageData
-            key: "some-key", // legacy field for imageKey
-            bucket: "some-bucket", // legacy field for imageBucket
-            fileType: "image/jpeg", // legacy field for mimeType
+            content: "base64data",
+            key: "some-key",
+            bucket: "some-bucket",
+            fileType: "image/jpeg",
           },
         ],
       } as any as CreateQuestionResponseAttemptRequestDto;
@@ -254,7 +254,7 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         learnerFileResponse: [
           {
             filename: "test.jpg",
-            imageData: "InCos", // placeholder value
+            imageData: "InCos",
             imageUrl: "https://example.com/test.jpg",
             mimeType: "image/jpeg",
           },
@@ -263,7 +263,7 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
 
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toHaveLength(1);
-      expect(result[0].imageData).toBe(""); // Should be empty, not "InCos"
+      expect(result[0].imageData).toBe("");
     });
 
     it("should handle missing optional fields gracefully", async () => {
@@ -271,7 +271,6 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         learnerFileResponse: [
           {
             filename: "test.jpg",
-            // No imageData, imageUrl, etc.
           },
         ],
       } as any as CreateQuestionResponseAttemptRequestDto;

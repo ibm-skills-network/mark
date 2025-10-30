@@ -373,10 +373,9 @@ export class DataTransformInterceptor implements NestInterceptor {
   private decodeValue(value: unknown): unknown {
     if (typeof value !== "string") return value;
 
-    // Handle compressed data with 'comp:' prefix
     if (value.startsWith("comp:")) {
       try {
-        const base64Data = value.slice(5); // Remove 'comp:' prefix
+        const base64Data = value.slice(5);
         const decoded = Buffer.from(base64Data, "base64").toString("utf8");
         const fullyDecoded = decodeBase64Layers(decoded);
         try {

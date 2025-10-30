@@ -172,7 +172,6 @@ describe("VersionManagementService", () => {
         published: true,
       };
 
-      // Access private method for testing
       const result = (service as any).compareAssignmentData(
         fromVersion,
         toVersion,
@@ -285,7 +284,7 @@ describe("VersionManagementService", () => {
       const modifiedChanges = result.filter(
         (c: any) => c.changeType === "modified",
       );
-      expect(modifiedChanges).toHaveLength(2); // question text and totalPoints
+      expect(modifiedChanges).toHaveLength(2);
 
       expect(modifiedChanges).toContainEqual(
         expect.objectContaining({

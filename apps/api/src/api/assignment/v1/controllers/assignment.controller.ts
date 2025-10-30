@@ -322,7 +322,12 @@ export class AssignmentControllerV1 {
         }
         return { data: { status: job.status, progress: job.progress } };
       }),
-      map((data) => ({ data }) as MessageEvent),
+      map(
+        (data) =>
+          ({
+            data,
+          }) as MessageEvent,
+      ),
     );
   }
 

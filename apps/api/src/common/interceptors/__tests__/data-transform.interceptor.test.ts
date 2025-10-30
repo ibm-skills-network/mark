@@ -33,7 +33,6 @@ describe("DataTransformInterceptor", () => {
     );
     reflector = module.get<Reflector>(Reflector);
 
-    // Mock ExecutionContext
     executionContext = {
       switchToHttp: () => ({
         getRequest: () => ({
@@ -45,7 +44,6 @@ describe("DataTransformInterceptor", () => {
       getClass: jest.fn(),
     } as any;
 
-    // Mock CallHandler
     callHandler = {
       handle: () => of({}),
     };
@@ -77,7 +75,6 @@ describe("DataTransformInterceptor", () => {
         getNext: () => ({}) as any,
       });
 
-      // Mock reflector to return undefined (use default config)
       (reflector.getAllAndOverride as jest.Mock).mockReturnValue(undefined);
 
       const responseData = {
@@ -89,7 +86,6 @@ describe("DataTransformInterceptor", () => {
 
       interceptor.intercept(executionContext, callHandler).subscribe({
         next: (_result) => {
-          // Check that request was transformed
           expect(
             mockRequest.body.responsesForQuestions[0].learnerTextResponse,
           ).toBe("<p>Test answer</p>");
@@ -209,7 +205,6 @@ describe("DataTransformInterceptor", () => {
 
       interceptor.intercept(executionContext, callHandler).subscribe({
         next: (result: any) => {
-          // Check that response was encoded
           expect(result.assignment.introduction).not.toBe(
             "Welcome to the course",
           );
@@ -381,10 +376,8 @@ describe("DataTransformInterceptor", () => {
 
       callHandler.handle = () => of({ success: true });
 
-      // Should not throw an error
       interceptor.intercept(executionContext, callHandler).subscribe({
         next: () => {
-          // Invalid base64 should remain unchanged
           expect(mockRequest.body.learnerTextResponse).toBe(
             "invalid-base64-!@#$%",
           );
@@ -409,7 +402,6 @@ describe("DataTransformInterceptor", () => {
         getNext: () => ({}) as any,
       });
 
-      // Return null to indicate no transformation should occur
       (reflector.getAllAndOverride as jest.Mock).mockReturnValue(null);
 
       const responseData = { result: "success" };

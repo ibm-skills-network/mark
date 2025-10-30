@@ -98,7 +98,6 @@ export class ImageGradingService implements IImageGradingService {
       `Calculated max total points: ${maxTotalPoints} for assignment ${assignmentId}`,
     );
 
-    // Define output schema with AEEG structure
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         points: z
@@ -247,7 +246,6 @@ Respond with a JSON object containing:
     });
 
     try {
-      // Resolve model assigned to image grading (fallback to vision-capable default)
       const modelKey = await this.llmResolver.getModelKeyWithFallback(
         "image_grading",
         "gpt-4.1-mini",
@@ -266,7 +264,6 @@ Respond with a JSON object containing:
 
       const parsed = await parser.parse(llmOut);
 
-      // Validate and cap points if needed
       let finalPoints = parsed.points;
       if (finalPoints > maxTotalPoints) {
         this.logger.warn(
@@ -280,7 +277,6 @@ Respond with a JSON object containing:
         finalPoints = 0;
       }
 
-      // Combine the AEEG components into comprehensive feedback
       const aeegFeedback = `
 **Analysis:**
 ${parsed.analysis}
@@ -346,7 +342,6 @@ ${parsed.guidance}
     return sum > 0 ? sum : totalPoints || 0;
   }
 
-  // Keep all the existing helper methods unchanged
   private normalizeLearnerImages(rawImages: unknown[]): LearnerImageUpload[] {
     return rawImages.map((img) => {
       interface ImageAnalysisResult {

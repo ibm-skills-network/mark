@@ -24,12 +24,10 @@ describe("Backend Data Transformer", () => {
         deep: true,
       });
 
-      // Check that fields were encoded
       const encoded = result.data.responsesForQuestions[0];
       expect(encoded.learnerTextResponse).not.toBe("<p>Test response</p>");
       expect(encoded.learnerChoices[0]).not.toBe("Option A");
 
-      // Verify they can be decoded back
       expect(
         Buffer.from(encoded.learnerTextResponse, "base64").toString("utf8"),
       ).toBe("<p>Test response</p>");
@@ -37,7 +35,6 @@ describe("Backend Data Transformer", () => {
         Buffer.from(encoded.learnerChoices[0], "base64").toString("utf8"),
       ).toBe("Option A");
 
-      // Check metadata
       expect(result.metadata.transformedFields).toEqual([
         "learnerTextResponse",
         "learnerChoices",
@@ -80,7 +77,6 @@ describe("Backend Data Transformer", () => {
 
       const resultData = result.data;
 
-      // All specified fields should be encoded
       expect(resultData.assignment.introduction).not.toBe(
         "Welcome to the course",
       );
@@ -112,11 +108,9 @@ describe("Backend Data Transformer", () => {
         deep: true,
       });
 
-      // Excluded fields should remain unchanged
       expect(result.data.id).toBe(123);
       expect(result.data.createdAt).toBe("2023-01-01");
 
-      // Non-excluded fields should be encoded
       expect(result.data.learnerTextResponse).not.toBe("<p>Test</p>");
       expect(result.data.content).not.toBe("Should be encoded");
     });
@@ -197,7 +191,6 @@ describe("Backend Data Transformer", () => {
         deep: true,
       });
 
-      // Should return original values for invalid base64
       expect(result.learnerTextResponse).toBe("not-valid-base64!@#");
       expect(result.learnerChoices).toEqual(["also-invalid-base64!"]);
     });
@@ -234,21 +227,18 @@ describe("Backend Data Transformer", () => {
           introduction: "Course intro",
           learnerTextResponse: "<p>Student answer</p>",
           learnerChoices: ["Option 1", "Option 2"],
-          id: 123, // Should not be encoded
+          id: 123,
         };
 
         const encoded = DataTransformer.encodeForDatabase(data);
 
-        // Check that learner fields are encoded
         expect(encoded.data.learnerTextResponse).not.toBe(
           "<p>Student answer</p>",
         );
         expect(encoded.data.learnerChoices[0]).not.toBe("Option 1");
 
-        // Check that introduction is also encoded
         expect(encoded.data.introduction).not.toBe("Course intro");
 
-        // ID should remain unchanged
         expect(encoded.data.id).toBe(123);
 
         const decoded = DataTransformer.decodeFromDatabase(encoded.data);
@@ -270,7 +260,6 @@ describe("Backend Data Transformer", () => {
 
         const encoded = DataTransformer.encodeForAPI(data);
 
-        // Excluded fields should remain unchanged
         expect(encoded.data.id).toBe(123);
         expect(encoded.data.createdAt).toBe("2023-01-01");
         expect(encoded.data.updatedAt).toBe("2023-01-01");
@@ -300,7 +289,6 @@ describe("Backend Data Transformer", () => {
       expect(result.data[0].learnerTextResponse).not.toBe("<p>Response 1</p>");
       expect(result.data[1].learnerTextResponse).not.toBe("<p>Response 2</p>");
 
-      // Check metadata
       expect(result.metadata.transformedFields).toEqual([
         "learnerTextResponse",
         "learnerChoices",
@@ -411,7 +399,7 @@ describe("Backend Data Transformer", () => {
       const endTime = Date.now();
 
       expect(decoded.learnerTextResponse).toBe(largeText);
-      expect(endTime - startTime).toBeLessThan(1000); // Should complete within 1 second
+      expect(endTime - startTime).toBeLessThan(1000);
     });
   });
 });

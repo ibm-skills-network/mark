@@ -535,7 +535,6 @@ export class AttemptServiceV1 {
         );
         let question: QuestionDto;
         if (variantMapping && variantMapping.questionVariant !== null) {
-          // Build the question from variant details (logic from Response)
           const variant = variantMapping.questionVariant;
           const baseQuestion = variant.variantOf;
           question = {
@@ -893,7 +892,6 @@ export class AttemptServiceV1 {
       }
     }
 
-    // Apply visibility settings for correct answers and if learner didnt pass
     if (
       (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
         "NEVER" &&
@@ -1523,13 +1521,7 @@ export class AttemptServiceV1 {
     const ongoingAttempts = attempts.filter(
       (sub) => !sub.submitted && (!sub.expiresAt || sub.expiresAt >= now),
     );
-    console.log(
-      `Found ${ongoingAttempts.length} ongoing attempts for user ${userSession.userId} on assignment ${assignment.id}`,
-    );
     if (ongoingAttempts.length > 0) {
-      console.log(
-        `User ${userSession.userId} has ongoing attempts for assignment ${assignment.id}`,
-      );
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
     const attemptsInTimeRange = attempts.filter(

@@ -59,7 +59,6 @@ export class ReportsController {
     @Query("endDate") endDate?: string,
     @Req() request?: UserSessionRequest,
   ) {
-    // Convert admin session to user session format for the service
     const userSession = request?.userSession
       ? {
           userId: request.userSession.userId,
@@ -122,7 +121,7 @@ export class ReportsController {
     FileInterceptor("screenshot", {
       storage: memoryStorage(),
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB limit
+        fileSize: 10 * 1024 * 1024,
       },
     }),
   )

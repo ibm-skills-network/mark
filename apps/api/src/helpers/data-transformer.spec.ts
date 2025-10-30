@@ -293,8 +293,6 @@ describe("DataTransformer API", () => {
         fields: ["invalidBase64"],
       });
 
-      // Node.js Buffer.from() will decode any string, so the result will be the decoded bytes
-      // The test should just verify it doesn't crash and returns something
       expect(result.validField).toBe(testData.validField);
       expect(typeof result.invalidBase64).toBe("string");
     });
@@ -399,11 +397,9 @@ describe("DataTransformer API", () => {
         const plainText = "Hello world";
         const encoded = Buffer.from(plainText, "utf8").toString("base64");
 
-        // Test by encoding then checking auto-detection
         const testData = { field: encoded };
         const result = smartEncode(testData);
 
-        // If it's correctly identified as base64, it shouldn't be re-encoded
         expect(result.data.field).toBe(encoded);
         expect(result.metadata.transformedFields).not.toContain("field");
       });
@@ -414,7 +410,6 @@ describe("DataTransformer API", () => {
 
         const result = smartEncode(testData);
 
-        // Should be encoded since it's not already base64
         expect(result.data.field).not.toBe(plainText);
         expect(result.metadata.transformedFields).toContain("field");
       });
@@ -598,7 +593,6 @@ describe("DataTransformer API", () => {
 
         const decoded = DataTransformer.decodeFromAPI(testData);
 
-        // ID, createdAt, updatedAt should be excluded and remain unchanged
         expect(decoded.id).toBe(testData.id);
         expect(decoded.createdAt).toBe(testData.createdAt);
         expect(decoded.updatedAt).toBe(testData.updatedAt);
@@ -666,7 +660,6 @@ describe("DataTransformer API", () => {
       });
 
       expect(result.validField).toBe(testData.validField);
-      // Node.js will decode this as binary data, so we just check it's a string
       expect(typeof result.invalidBase64).toBe("string");
     });
   });

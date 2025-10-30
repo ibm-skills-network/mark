@@ -150,7 +150,6 @@ export class AttemptSubmissionService {
         ? await Promise.all(
             assignmentWithActiveVersion.currentVersion.questionVersions.map(
               async (qv) => {
-                // Fetch variants from the original question if questionId exists
                 let variants: QuestionVariant[] = [];
                 if (qv.questionId) {
                   const originalQuestion =
@@ -166,10 +165,10 @@ export class AttemptSubmissionService {
                 }
 
                 return {
-                  id: qv.questionId || qv.id, // Use questionId if available, fallback to qv.id
+                  id: qv.questionId || qv.id,
                   question: qv.question,
                   type: qv.type,
-                  assignmentId: assignmentId, // Set from parameter since QuestionVersion doesn't have this
+                  assignmentId: assignmentId,
                   totalPoints: qv.totalPoints,
                   maxWords: qv.maxWords,
                   maxCharacters: qv.maxCharacters,
@@ -191,7 +190,7 @@ export class AttemptSubmissionService {
                   ),
                   gradingContextQuestionIds: qv.gradingContextQuestionIds,
                   responseType: qv.responseType,
-                  isDeleted: false, // QuestionVersions are not deleted by definition
+                  isDeleted: false,
                   randomizedChoices: qv.randomizedChoices,
                   videoPresentationConfig:
                     qv.videoPresentationConfig as unknown as VideoPresentationConfig,
@@ -494,7 +493,6 @@ export class AttemptSubmissionService {
 
     let questionsToShow = questionDtos;
     {
-      // Get all questions from the assignment version or legacy questions
       const allQuestions: unknown[] =
         assignmentAttempt.assignmentVersionId &&
         assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
@@ -523,7 +521,6 @@ export class AttemptSubmissionService {
               },
             });
 
-      // Convert to questionDtos format
       const allQuestionDtos: EnhancedAttemptQuestionDto[] = allQuestions.map(
         (q) => {
           const question = q as Record<string, unknown>;
@@ -583,7 +580,6 @@ export class AttemptSubmissionService {
         {
           id: assignmentAttempt.assignmentId,
           ...assignment,
-          // Override questionOrder to include all questions if we should show all
           questionOrder: questionsToShow.map((q) => q.id),
         },
         this.prisma,
@@ -673,7 +669,6 @@ export class AttemptSubmissionService {
       } | null;
     };
 
-    // Get version-specific questions for translation if available
     const questionsForTranslation: QuestionDto[] =
       assignmentAttempt.assignmentVersionId &&
       assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
@@ -732,14 +727,12 @@ export class AttemptSubmissionService {
       })),
     };
 
-    // Determine if we should show all questions based on correctAnswerVisibility
     const shouldShowAllQuestions = this.shouldShowCorrectAnswers(
       assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
     );
 
-    // If we should show all questions, override the assignment questionOrder
     const assignmentForTranslation = {
       ...assignment,
       questionOrder: shouldShowAllQuestions
@@ -792,7 +785,6 @@ export class AttemptSubmissionService {
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
-      // Report initial progress
       if (progressCallback) {
         await progressCallback("Validating submission...", 5);
       }

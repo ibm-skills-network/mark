@@ -37,8 +37,8 @@ interface Base64Payload {
 @Injectable()
 export class DataTransformMiddleware implements NestMiddleware {
   private config: TransformConfig = {
-    encodeRequests: true, // Don't encode outgoing requests (backend doesn't make requests)
-    decodeResponses: true, // Don't decode incoming responses (backend doesn't receive responses)
+    encodeRequests: true,
+    decodeResponses: true,
     fields: [
       "introduction",
       "instructions",
@@ -274,10 +274,9 @@ export class DataTransformMiddleware implements NestMiddleware {
   private decodeValue(value: unknown): unknown {
     if (typeof value !== "string") return value;
 
-    // Handle compressed payloads with the 'comp:' prefix (matches web encoder)
     if (value.startsWith("comp:")) {
       try {
-        const base64Data = value.slice(5); // strip 'comp:'
+        const base64Data = value.slice(5);
         const decoded = Buffer.from(base64Data, "base64").toString("utf8");
         const fullyDecoded = decodeBase64Layers(decoded);
         try {

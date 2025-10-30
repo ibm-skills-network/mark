@@ -1,5 +1,4 @@
 /* eslint-disable unicorn/no-null */
-// src/llm/features/grading/services/text-grading.service.ts
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
@@ -89,7 +88,6 @@ const GradingAttemptSchema = z.object({
 
 export type GradingAttempt = z.infer<typeof GradingAttemptSchema>;
 
-// Singleton parser instance to avoid recreation
 let singletonParser: StructuredOutputParser<
   typeof GradingAttemptSchema
 > | null = null;
@@ -98,7 +96,7 @@ let singletonParser: StructuredOutputParser<
 export class TextGradingService implements ITextGradingService {
   private readonly logger: Logger;
   private readonly maxRetries = 3;
-  private readonly retryDelay = 1000; // ms
+  private readonly retryDelay = 1000;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -126,10 +124,8 @@ export class TextGradingService implements ITextGradingService {
       const { question, learnerResponse, totalPoints, scoringCriteria } =
         textBasedQuestionEvaluateModel;
 
-      // Sanitize learner response to prevent injection attacks
       const sanitizedLearnerResponse = this.sanitizeInput(learnerResponse);
 
-      // Validate the learner's response
       const isValidResponse = await this.moderationService.validateContent(
         sanitizedLearnerResponse,
       );
@@ -140,16 +136,13 @@ export class TextGradingService implements ITextGradingService {
         );
       }
 
-      // Calculate maximum possible points from rubrics
       const maxPossiblePoints = this.calculateMaxPossiblePoints(
         scoringCriteria as ScoringDto,
         totalPoints,
       );
 
-      // Generate content hash for consistency checking
       const contentHash = this.generateContentHash(learnerResponse, question);
 
-      // Attempt grading with judge validation loop
       let gradingAttempt: GradingAttempt | null = null;
       let judgeApproved = false;
       let attemptCount = 0;
@@ -162,7 +155,6 @@ export class TextGradingService implements ITextGradingService {
         );
 
         try {
-          // Generate grading
           gradingAttempt = await this.generateGrading(
             textBasedQuestionEvaluateModel,
             maxPossiblePoints,
@@ -172,7 +164,6 @@ export class TextGradingService implements ITextGradingService {
             previousJudgeFeedback,
           );
 
-          // Validate with judge
           const judgeResult = await this.validateWithJudge(
             question,
             sanitizedLearnerResponse,
@@ -188,7 +179,6 @@ export class TextGradingService implements ITextGradingService {
               `Judge approved grading on attempt ${attemptCount}`,
             );
           } else {
-            // Format judge feedback to be more actionable for the TA
             previousJudgeFeedback = this.formatJudgeFeedbackForTA(
               judgeResult,
               attemptCount,
@@ -197,7 +187,6 @@ export class TextGradingService implements ITextGradingService {
               `Judge rejected grading attempt ${attemptCount}: ${judgeResult.feedback}`,
             );
 
-            // Apply judge's corrections if provided
             if (judgeResult.corrections && gradingAttempt) {
               const originalPoints = gradingAttempt.points;
               gradingAttempt = this.applyJudgeCorrections(
@@ -205,7 +194,6 @@ export class TextGradingService implements ITextGradingService {
                 judgeResult.corrections,
               );
 
-              // If corrections were applied, check if we should approve
               if (
                 this.areCorrectionsMinor(
                   judgeResult.corrections,
@@ -220,11 +208,10 @@ export class TextGradingService implements ITextGradingService {
               }
             }
 
-            // Add exponential backoff delay before retry
             if (!judgeApproved && attemptCount < this.maxRetries) {
               const backoffDelay =
                 this.retryDelay * Math.pow(2, attemptCount - 1);
-              await this.delay(Math.min(backoffDelay, 5000)); // Cap at 5 seconds
+              await this.delay(Math.min(backoffDelay, 5000));
             }
           }
         } catch (error) {
@@ -234,7 +221,6 @@ export class TextGradingService implements ITextGradingService {
             }`,
           );
 
-          // On last attempt, use the grading even if judge fails
           if (attemptCount === this.maxRetries && gradingAttempt) {
             judgeApproved = true;
             this.logger.warn(
@@ -251,13 +237,11 @@ export class TextGradingService implements ITextGradingService {
         );
       }
 
-      // Normalize grading to enforce bounds and fix rubric arithmetic
       const normalizedAttempt = this.normalizeGradingAttempt(
         gradingAttempt,
         maxPossiblePoints,
       );
 
-      // Generate final feedback with normalized values
       const finalFeedback = this.generateAlignedFeedback(
         normalizedAttempt,
         maxPossiblePoints,
@@ -270,7 +254,6 @@ export class TextGradingService implements ITextGradingService {
           `Time: ${endTime - startTime}ms, Attempts: ${attemptCount}`,
       );
 
-      // Create properly typed metadata
       const metadata: GradingMetadata = {
         judgeApproved,
         attempts: attemptCount,
@@ -278,7 +261,6 @@ export class TextGradingService implements ITextGradingService {
         contentHash,
       };
 
-      // Return the enhanced validated response
       return new TextBasedQuestionResponseModel(
         normalizedAttempt.points,
         finalFeedback,
@@ -394,20 +376,16 @@ export class TextGradingService implements ITextGradingService {
       responseType,
     } = textBasedQuestionEvaluateModel;
 
-    // Get or create parser
     const parser = this.getOrCreateParser();
     const formatInstructions = parser.getFormatInstructions();
 
-    // Add response-specific instructions based on the type
     const responseSpecificInstruction =
       RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS[
         responseType as keyof typeof RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS
       ] ?? "";
 
-    // Load the enhanced grading template with proper rubric data
     const template = this.loadEnhancedTextGradingTemplate();
 
-    // Debug rubric data being passed to LLM
     this.logger.info("Rubric data being passed to LLM", {
       assignmentId,
       scoringCriteriaType,
@@ -447,18 +425,16 @@ export class TextGradingService implements ITextGradingService {
       },
     });
 
-    // Process the prompt through the LLM using dynamic model assignment
     const response = await this.promptProcessor.processPromptForFeature(
       prompt,
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
       "text_grading",
-      "gpt-4o-mini", // fallback for text grading
+      "gpt-4o-mini",
     );
 
     const parsedResponse = await parser.parse(response);
 
-    // Log the LLM's original grading for audit purposes
     this.logger.info(
       `LLM grading result - Points: ${parsedResponse.points}/${maxPossiblePoints}, ` +
         `Rubric scores: ${parsedResponse.rubricScores?.length || 0} items`,
@@ -504,7 +480,6 @@ export class TextGradingService implements ITextGradingService {
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
-      // Return approved by default if judge fails
       return {
         approved: true,
         feedback: "Judge validation failed, approving by default",
@@ -535,7 +510,6 @@ export class TextGradingService implements ITextGradingService {
 
     if (corrections.rubricScores && Array.isArray(corrections.rubricScores)) {
       corrected.rubricScores = corrections.rubricScores;
-      // Recalculate total points from rubric scores
       corrected.points = corrections.rubricScores.reduce(
         (sum: number, score: RubricScore) => sum + (score.pointsAwarded || 0),
         0,
@@ -557,7 +531,6 @@ export class TextGradingService implements ITextGradingService {
     originalPoints?: number,
     maxPoints?: number,
   ): boolean {
-    // Only consider minor if it's just a small point adjustment
     if (corrections.rubricScores) return false;
     if (corrections.feedback) return false;
 
@@ -570,7 +543,6 @@ export class TextGradingService implements ITextGradingService {
       const percentageChange =
         maxPoints > 0 ? (pointDifference / maxPoints) * 100 : 0;
 
-      // Auto-approve if point adjustment is small (within 5% of max points)
       return percentageChange <= 5;
     }
     return false;
@@ -584,24 +556,16 @@ export class TextGradingService implements ITextGradingService {
       return "";
     }
 
-    // Remove or escape potentially dangerous patterns
-    return (
-      input
-        // Remove null bytes and control characters except newlines and tabs
-        .replaceAll(/[^\t\n\r\u0020-\u007E\u00A0-\uFFFF]/gu, "")
-        // Limit consecutive newlines to prevent prompt breaking
-        .replaceAll(/\n{3,}/g, "\n\n")
-        // Remove potential prompt injection markers
-        .replaceAll(/(?:^|\n)\s*(?:system|user|assistant|human):/gi, "")
-        // Remove common LLM instruction patterns
-        .replaceAll(
-          /(?:^|\n)\s*(?:ignore|disregard|forget).*?(?:instruction|prompt|rule)/gi,
-          "",
-        )
-        // Truncate if too long
-        .slice(0, 10_000)
-        .trim()
-    );
+    return input
+      .replaceAll(/[^\t\n\r\u0020-\u007E\u00A0-\uFFFF]/gu, "")
+      .replaceAll(/\n{3,}/g, "\n\n")
+      .replaceAll(/(?:^|\n)\s*(?:system|user|assistant|human):/gi, "")
+      .replaceAll(
+        /(?:^|\n)\s*(?:ignore|disregard|forget).*?(?:instruction|prompt|rule)/gi,
+        "",
+      )
+      .slice(0, 10_000)
+      .trim();
   }
 
   /**
@@ -712,13 +676,12 @@ export class TextGradingService implements ITextGradingService {
     learnerResponse: string,
     question: string,
   ): string {
-    // Create a normalized version of the response for comparison
     const normalizedResponse = learnerResponse
       .toLowerCase()
       .replaceAll(/[^\s\w]/g, "")
       .replaceAll(/\s+/g, " ")
       .trim()
-      .slice(0, 1000); // Limit length for performance
+      .slice(0, 1000);
 
     const normalizedQuestion = question
       .toLowerCase()
@@ -727,7 +690,6 @@ export class TextGradingService implements ITextGradingService {
       .trim()
       .slice(0, 500);
 
-    // Use a more efficient hashing approach
     const combined = `${normalizedQuestion}:${normalizedResponse}`;
     return Buffer.from(combined).toString("base64").slice(0, 16);
   }
@@ -744,7 +706,6 @@ export class TextGradingService implements ITextGradingService {
     const guidance = gradingAttempt.guidance || "";
     const allText = `${feedback} ${explanation} ${guidance}`.toLowerCase();
 
-    // Define tone indicators
     const positiveWords = [
       "excellent",
       "outstanding",
@@ -789,7 +750,6 @@ export class TextGradingService implements ITextGradingService {
       0,
     );
 
-    // Check alignment based on score percentage
     if (
       scorePercentage >= 85 &&
       (negativeCount > positiveCount || criticalCount > encouragingCount)
@@ -818,7 +778,7 @@ export class TextGradingService implements ITextGradingService {
       )}%) but excessively critical feedback`;
     }
 
-    return null; // Alignment is acceptable
+    return null;
   }
 
   /**
@@ -852,7 +812,6 @@ export class TextGradingService implements ITextGradingService {
         ? Math.round((gradingAttempt.points / maxPossiblePoints) * 100)
         : 0;
 
-    // Super simple format: just the essential info
     const conciseFeedback = `${gradingAttempt.explanation}
 
 ${gradingAttempt.guidance}
@@ -906,7 +865,6 @@ ${gradingAttempt.guidance}
   ): string {
     let formattedFeedback = `📋 GRADING FEEDBACK - ATTEMPT ${attemptNumber}:\n\n`;
 
-    // Extract issues from judge feedback
     if (judgeResult.issues && Array.isArray(judgeResult.issues)) {
       formattedFeedback += `🚨 CRITICAL ISSUES TO FIX:\n`;
       for (const [index, issue] of judgeResult.issues.entries()) {
@@ -915,11 +873,9 @@ ${gradingAttempt.guidance}
       formattedFeedback += "\n";
     }
 
-    // Add structured feedback based on common patterns
     const feedback = judgeResult.feedback || "";
     formattedFeedback += `📝 DETAILED FEEDBACK:\n${feedback}\n\n`;
 
-    // Add specific corrections if available
     if (judgeResult.corrections) {
       formattedFeedback += `✅ REQUIRED CORRECTIONS:\n`;
       if (judgeResult.corrections.points !== undefined) {
@@ -934,7 +890,6 @@ ${gradingAttempt.guidance}
       formattedFeedback += "\n";
     }
 
-    // Add learning guidance
     formattedFeedback += `🎯 WHAT YOU MUST DO DIFFERENTLY:\n`;
     if (feedback.includes("mathematical")) {
       formattedFeedback += `• Double-check ALL math: Total points MUST equal sum of rubric scores\n`;

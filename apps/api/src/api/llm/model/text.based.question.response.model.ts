@@ -1,5 +1,3 @@
-// Define types to align with grading service output
-
 import { RubricScore } from "./file.based.question.response.model";
 
 export interface GradingMetadata {
@@ -57,12 +55,12 @@ export class TextBasedQuestionResponseModel {
     return new TextBasedQuestionResponseModel(
       points,
       feedback,
-      undefined, // analysis
-      undefined, // evaluation
+      undefined,
+      undefined,
       explanation,
       guidance,
-      undefined, // rubricScores
-      undefined, // gradingRationale
+      undefined,
+      undefined,
       metadata,
     );
   }

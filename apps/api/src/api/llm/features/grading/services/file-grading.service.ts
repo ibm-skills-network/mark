@@ -17,7 +17,6 @@ import {
 } from "../../../llm.constants";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 
-// Define types to avoid deep instantiation issues
 type RubricScore = {
   rubricQuestion: string;
   pointsAwarded: number;
@@ -109,7 +108,6 @@ export class FileGradingService implements IFileGradingService {
 
     const selectedTemplate = this.getTemplateForFileType(responseType);
 
-    // Use simple Zod schema to avoid deep instantiation
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         points: z.number(),
@@ -206,7 +204,6 @@ export class FileGradingService implements IFileGradingService {
           calculatedTotalPoints += score.pointsAwarded;
         }
 
-        // If rubric scores are provided, ensure total points match sum of rubric scores
         if (
           scoringCriteriaType === "CRITERIA_BASED" &&
           parsedResponse.points !== calculatedTotalPoints
@@ -214,7 +211,6 @@ export class FileGradingService implements IFileGradingService {
           this.logger.warn(
             `LLM total points (${parsedResponse.points}) doesn't match sum of rubric scores (${calculatedTotalPoints}). Using rubric sum.`,
           );
-          // Create corrected response object
           parsedResponse = {
             ...parsedResponse,
             points: calculatedTotalPoints,
@@ -271,7 +267,6 @@ export class FileGradingService implements IFileGradingService {
         }. Response: "${response?.slice(0, 200)}..."`,
       );
 
-      // Return fallback response instead of throwing
       return this.createFallbackResponse(
         maxTotalPoints,
         "Failed to parse LLM response - using fallback grading",
@@ -293,7 +288,6 @@ export class FileGradingService implements IFileGradingService {
     const maxRetries = 3;
     let lastError: Error | null = null;
 
-    // Try with primary model (up to 3 attempts)
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         this.logger.debug(
@@ -308,7 +302,6 @@ export class FileGradingService implements IFileGradingService {
           primaryModel,
         );
 
-        // Check if response is valid
         if (this.isValidLLMResponse(response)) {
           if (attempt > 1) {
             this.logger.info(
@@ -334,13 +327,11 @@ export class FileGradingService implements IFileGradingService {
         );
       }
 
-      // Wait before retry (exponential backoff)
       if (attempt < maxRetries) {
-        await this.delay(Math.pow(2, attempt - 1) * 1000); // 1s, 2s, 4s
+        await this.delay(Math.pow(2, attempt - 1) * 1000);
       }
     }
 
-    // Try with fallback model
     try {
       const fallbackModel = await this.llmResolver.getModelKeyWithFallback(
         "file_grading_fallback",
@@ -376,7 +367,6 @@ export class FileGradingService implements IFileGradingService {
       );
     }
 
-    // If all attempts failed, throw to trigger fallback response
     throw lastError || new Error("All LLM attempts failed");
   }
 
@@ -403,9 +393,8 @@ export class FileGradingService implements IFileGradingService {
     rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
   ): FileBasedQuestionResponseModel {
     const fallbackPoints =
-      maxTotalPoints > 0 ? Math.floor(maxTotalPoints * 0.5) : 0; // Give 50% as fallback or 0 if no points
+      maxTotalPoints > 0 ? Math.floor(maxTotalPoints * 0.5) : 0;
 
-    // Create fallback rubric scores if rubrics exist
     const fallbackRubricScores =
       rubricMaxPoints?.map((rubric) => ({
         rubricQuestion: rubric.rubricQuestion,

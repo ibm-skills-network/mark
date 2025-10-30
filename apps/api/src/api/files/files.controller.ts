@@ -36,10 +36,9 @@ export interface FileAccessDto {
   isImage: boolean;
   isPdf: boolean;
   isText: boolean;
-  // Direct URLs - no proxy needed!
-  viewUrl: string; // For viewing files
-  downloadUrl: string; // For downloading files
-  textContentUrl?: string; // For getting text content
+  viewUrl: string;
+  downloadUrl: string;
+  textContentUrl?: string;
 }
 
 export interface FileContentDto {
@@ -84,7 +83,7 @@ export class FilesController {
     FileInterceptor("file", {
       storage: memoryStorage(),
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB limit
+        fileSize: 10 * 1024 * 1024,
       },
     }),
   )
@@ -100,31 +99,15 @@ export class FilesController {
       throw new BadRequestException("No file provided");
     }
 
-    // Parse multipart form data manually
-    console.log("[DIRECT UPLOAD] Received body:", body);
     const uploadType = body.uploadType;
     let context: any = {};
 
-    // Parse context JSON if provided
     if (body.context) {
-      console.log(
-        "[DIRECT UPLOAD] Raw context value:",
-        body.context,
-        "type:",
-        typeof body.context,
-      );
       try {
         context =
           typeof body.context === "string"
             ? JSON.parse(body.context)
             : body.context;
-        console.log("[DIRECT UPLOAD] Parsed context:", context);
-        console.log(
-          "[DIRECT UPLOAD] reportId from context:",
-          context.reportId,
-          "type:",
-          typeof context.reportId,
-        );
       } catch (error) {
         console.error(
           "[DIRECT UPLOAD] Failed to parse context:",
@@ -137,30 +120,8 @@ export class FilesController {
 
     const userId = request.userSession.userId;
 
-    // Generate the appropriate bucket and key using the same logic as generateUploadUrl
     const bucket = this.s3Service.getBucketName(uploadType);
-    console.log("[DIRECT UPLOAD] Upload type:", uploadType);
-    console.log("[DIRECT UPLOAD] Resolved bucket:", bucket);
-    console.log("[DIRECT UPLOAD] All bucket env vars:");
-    console.log("  - IBM_COS_DEBUG_BUCKET:", process.env.IBM_COS_DEBUG_BUCKET);
-    console.log(
-      "  - IBM_COS_AUTHOR_BUCKET:",
-      process.env.IBM_COS_AUTHOR_BUCKET,
-    );
-    console.log(
-      "  - IBM_COS_LEARNER_BUCKET:",
-      process.env.IBM_COS_LEARNER_BUCKET,
-    );
-
-    // Also test bucket resolution for all types
     try {
-      console.log("[DIRECT UPLOAD] Testing bucket resolution:");
-      console.log("  - debug bucket:", this.s3Service.getBucketName("debug"));
-      console.log("  - author bucket:", this.s3Service.getBucketName("author"));
-      console.log(
-        "  - learner bucket:",
-        this.s3Service.getBucketName("learner"),
-      );
     } catch (resolutionError) {
       console.error(
         "[DIRECT UPLOAD] Bucket resolution error:",
@@ -172,12 +133,6 @@ export class FilesController {
       throw new BadRequestException("Invalid upload type");
     }
 
-    // Skip bucket access test - let the actual upload handle any bucket issues
-    console.log(
-      `[DIRECT UPLOAD] Proceeding with upload to bucket "${bucket}"...`,
-    );
-
-    // Use the same prefix generation logic from FilesService
     let prefix = "";
     const normalizedPath = context.path?.startsWith("/")
       ? context.path.slice(1)
@@ -220,12 +175,10 @@ export class FilesController {
       }
     }
 
-    // Generate unique key
     const uniqueId =
       Date.now().toString(36) + Math.random().toString(36).slice(2);
     const key = `${prefix}${uniqueId}-${file.originalname}`;
 
-    // Direct upload through backend
     const result = await this.filesService.directUpload(file, bucket, key);
 
     return {
@@ -270,11 +223,8 @@ export class FilesController {
         );
       }
 
-      console.log(`[FILES] Getting access for: ${key} in bucket: ${bucket}`);
-
       const expirationSeconds = Number.parseInt(expiration, 10);
 
-      // Get file metadata
       const metadata = await this.s3Service.headObject({
         Bucket: bucket,
         Key: key,
@@ -286,7 +236,6 @@ export class FilesController {
       const isPdf = this.isPdfFile(filename);
       const isText = this.isTextFile(filename);
 
-      // Generate presigned URLs for direct access
       const viewUrl = this.s3Service.getSignedUrl("getObject", {
         Bucket: bucket,
         Key: key,
@@ -303,20 +252,12 @@ export class FilesController {
         ResponseContentType: contentType,
       });
 
-      // For text files, also provide a URL for getting content as JSON
       let textContentUrl: string | undefined;
       if (isText) {
         textContentUrl = `/api/v1/files/content?key=${encodeURIComponent(
           key,
         )}&bucket=${encodeURIComponent(bucket)}`;
       }
-
-      console.log(
-        `[FILES] Generated URLs for ${filename}: view=${viewUrl.slice(
-          0,
-          100,
-        )}...`,
-      );
 
       return {
         filename,
@@ -375,15 +316,12 @@ export class FilesController {
 
       const filename = key.split("/").pop() || key;
 
-      // Only allow text files
       if (!this.isTextFile(filename)) {
         throw new HttpException(
           "Only text files are supported for content retrieval",
           HttpStatus.BAD_REQUEST,
         );
       }
-
-      console.log(`[FILES] Getting text content for: ${filename}`);
 
       const result = await this.s3Service.getObject({
         Bucket: bucket,
@@ -394,7 +332,6 @@ export class FilesController {
         throw new HttpException("File not found", HttpStatus.NOT_FOUND);
       }
 
-      // Convert to string
       let content: string;
 
       if (Buffer.isBuffer(result.Body)) {
@@ -402,7 +339,6 @@ export class FilesController {
       } else if (result.Body instanceof Uint8Array) {
         content = Buffer.from(result.Body).toString(encoding as BufferEncoding);
       } else {
-        // Handle stream
         const chunks: Buffer[] = [];
         const stream = result.Body as NodeJS.ReadableStream;
 
@@ -417,7 +353,6 @@ export class FilesController {
         content = buffer.toString(encoding as BufferEncoding);
       }
 
-      // Validate content
       if (this.containsBinaryData(content)) {
         throw new HttpException(
           "File contains binary data",
@@ -467,7 +402,6 @@ export class FilesController {
   ) {
     const fileAccess = await this.getFileAccess(key, bucket);
 
-    // Return the appropriate URL based on download parameter
     const redirectUrl =
       forceDownload === "true" ? fileAccess.downloadUrl : fileAccess.viewUrl;
 
@@ -486,7 +420,6 @@ export class FilesController {
   async legacyInfo(@Query("key") key: string, @Query("bucket") bucket: string) {
     const fileAccess = await this.getFileAccess(key, bucket);
 
-    // Return in old format for compatibility
     return {
       filename: fileAccess.filename,
       size: fileAccess.size,
@@ -495,18 +428,15 @@ export class FilesController {
       isImage: fileAccess.isImage,
       isPdf: fileAccess.isPdf,
       isText: fileAccess.isText,
-      // Old names for compatibility
       proxyUrl: fileAccess.viewUrl,
       contentUrl: fileAccess.textContentUrl,
     };
   }
 
-  // Helper methods
   private getContentType(filename: string): string {
     const extension = filename.split(".").pop()?.toLowerCase() || "";
 
     const mimeTypes: Record<string, string> = {
-      // Images
       jpg: "image/jpeg",
       jpeg: "image/jpeg",
       png: "image/png",
@@ -519,7 +449,6 @@ export class FilesController {
       tiff: "image/tiff",
       tif: "image/tiff",
 
-      // Documents
       pdf: "application/pdf",
       doc: "application/msword",
       docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -528,7 +457,6 @@ export class FilesController {
       ppt: "application/vnd.ms-powerpoint",
       pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 
-      // Text files
       txt: "text/plain; charset=utf-8",
       md: "text/markdown; charset=utf-8",
       json: "application/json; charset=utf-8",
@@ -559,7 +487,6 @@ export class FilesController {
       ipynb: "application/x-ipynb+json; charset=utf-8",
       log: "text/plain; charset=utf-8",
 
-      // Audio/Video
       mp3: "audio/mpeg",
       wav: "audio/wav",
       ogg: "audio/ogg",
@@ -571,7 +498,6 @@ export class FilesController {
       avi: "video/x-msvideo",
       webm: "video/webm",
 
-      // Archives
       zip: "application/zip",
       rar: "application/x-rar-compressed",
       "7z": "application/x-7z-compressed",

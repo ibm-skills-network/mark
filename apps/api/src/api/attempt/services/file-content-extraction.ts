@@ -1235,9 +1235,7 @@ export class FileContentExtractionService {
                   }
                   extractedContent += "\n";
                 }
-              } catch {
-                // Skip files that can't be extracted
-              }
+              } catch {}
             }
           }
         } catch (error) {
@@ -2292,9 +2290,6 @@ export class FileContentExtractionService {
         `PDF extraction failed, attempting fallback methods: ${errorMessage}`,
       );
 
-      // Try multiple fallback extraction methods
-
-      // Method 1: Extract text between BT...ET markers (PDF text objects)
       try {
         const textMatches = buffer.toString("latin1").match(/BT[\s\S]*?ET/g);
         if (textMatches && textMatches.length > 0) {
@@ -2328,7 +2323,6 @@ export class FileContentExtractionService {
         this.logger.debug(`Fallback method 1 failed: ${fallbackError}`);
       }
 
-      // Method 2: Try to extract any readable ASCII text
       try {
         const asciiText = buffer
           .toString("latin1")
@@ -2340,7 +2334,7 @@ export class FileContentExtractionService {
           const fallbackText =
             "[PDF - BASIC TEXT EXTRACTION]\n" +
             "Note: PDF structure is invalid. Extracted raw text content.\n\n" +
-            asciiText.slice(0, 10000); // Limit to 10KB
+            asciiText.slice(0, 10000);
 
           this.logger.log(
             "Successfully extracted PDF text using fallback method 2",
@@ -2355,7 +2349,6 @@ export class FileContentExtractionService {
         this.logger.debug(`Fallback method 2 failed: ${fallbackError2}`);
       }
 
-      // Method 3: Return a placeholder with file info
       const placeholderText =
         `[PDF FILE - EXTRACTION FAILED]\n` +
         `File size: ${buffer.length} bytes\n` +
@@ -2421,9 +2414,7 @@ export class FileContentExtractionService {
             extractedText: result.value,
           };
         }
-      } catch {
-        // Continue with fallback
-      }
+      } catch {}
 
       let text = "";
       const str = buffer.toString("binary");

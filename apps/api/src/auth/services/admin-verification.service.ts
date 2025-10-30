@@ -19,14 +19,12 @@ export class AdminVerificationService {
    */
   async generateAndStoreCode(email: string): Promise<string> {
     const code = this.generateVerificationCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Clean up old codes for this email
     await this.prisma.adminVerificationCode.deleteMany({
       where: { email: email.toLowerCase() },
     });
 
-    // Store new code
     await this.prisma.adminVerificationCode.create({
       data: {
         email: email.toLowerCase(),
@@ -59,7 +57,6 @@ export class AdminVerificationService {
       return false;
     }
 
-    // Mark code as used
     await this.prisma.adminVerificationCode.update({
       where: { id: verificationRecord.id },
       data: { used: true },
@@ -73,14 +70,12 @@ export class AdminVerificationService {
    */
   async generateAdminSession(email: string): Promise<string> {
     const sessionToken = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // Clean up old sessions for this email
     await this.prisma.adminSession.deleteMany({
       where: { email: email.toLowerCase() },
     });
 
-    // Create new session
     await this.prisma.adminSession.create({
       data: {
         email: email.toLowerCase(),
@@ -123,12 +118,10 @@ export class AdminVerificationService {
    * Check if email is authorized (admin or has authored assignments)
    */
   async isAuthorizedEmail(email: string): Promise<boolean> {
-    // Check if it's an admin email
     if (isAdminEmail(email)) {
       return true;
     }
 
-    // Check if user has authored any assignments
     const authorRecord = await this.prisma.assignmentAuthor.findFirst({
       where: {
         userId: email.toLowerCase(),

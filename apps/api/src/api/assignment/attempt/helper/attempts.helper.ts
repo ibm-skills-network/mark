@@ -41,11 +41,9 @@ export const AttemptHelper = {
         },
       ] as TrueFalseBasedFeedbackDto[];
     } else if (model instanceof FileBasedQuestionResponseModel) {
-      // Handle file-based responses with enhanced rubric data
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
 
-      // Add AEEG components if available and not already present in feedback
       if (
         model.analysis ||
         model.evaluation ||
@@ -79,7 +77,6 @@ export const AttemptHelper = {
 
       responseDto.feedback = [generalFeedbackDto];
 
-      // Add rubric metadata for judge validation
       if (model.rubricScores && model.rubricScores.length > 0) {
         responseDto.metadata = {
           ...responseDto.metadata,
@@ -89,11 +86,9 @@ export const AttemptHelper = {
         };
       }
     } else if (model instanceof TextBasedQuestionResponseModel) {
-      // Handle text-based responses with enhanced rubric data (similar to file-based)
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
 
-      // Add AEEG components if available and not already present in feedback
       if (
         model.analysis ||
         model.evaluation ||
@@ -126,7 +121,6 @@ export const AttemptHelper = {
       }
       responseDto.feedback = [generalFeedbackDto];
 
-      // Add rubric metadata for judge validation
       if (model.rubricScores && model.rubricScores.length > 0) {
         responseDto.metadata = {
           ...responseDto.metadata,
@@ -136,7 +130,6 @@ export const AttemptHelper = {
         };
       }
 
-      // Add judge metadata if available
       if (model.metadata) {
         responseDto.metadata = {
           ...responseDto.metadata,
@@ -241,14 +234,12 @@ export const AttemptHelper = {
                       return { body, isFunctional: true };
                     }
                   } catch (apiError) {
-                    // Handle API error
                     console.error("Error fetching repo info:", apiError);
                   }
                 }
               }
             }
           } catch (repoError) {
-            // Handle repo error
             console.error("Error fetching README:", repoError);
           }
 
@@ -294,7 +285,6 @@ export const AttemptHelper = {
               };
             }
           } catch (pageError) {
-            // Handle page error
             console.error("Error fetching page content:", pageError);
           }
         }

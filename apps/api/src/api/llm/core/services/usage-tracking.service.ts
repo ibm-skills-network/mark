@@ -29,9 +29,6 @@ export class UsageTrackerService implements IUsageTracker {
   ): Promise<void> {
     try {
       const assignmentIdToDatabase = Number(assignmentId);
-      console.log(
-        `Tracking usage for assignment ID: ${assignmentIdToDatabase}, usage type: ${usageType}, tokens in: ${tokensIn}, tokens out: ${tokensOut}`,
-      );
       const assignmentExists = await this.prisma.assignment.findUnique({
         where: { id: assignmentIdToDatabase },
       });

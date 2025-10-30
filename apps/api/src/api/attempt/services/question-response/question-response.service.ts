@@ -152,7 +152,6 @@ export class QuestionResponseService {
       const { responseDto, learnerResponse } =
         this.handleEmptyResponse(language);
 
-      // Only save to database if not an author
       if (role !== UserRole.AUTHOR) {
         await this.saveResponseToDatabase(
           assignmentAttemptId,
@@ -228,7 +227,6 @@ export class QuestionResponseService {
           responseType: question.responseType,
         });
 
-        // Validate response
         this.logger.debug("Validating response", { questionId });
         const isValid = await gradingStrategy.validateResponse(
           question,
@@ -246,13 +244,11 @@ export class QuestionResponseService {
           );
         }
 
-        // Extract learner response
         this.logger.debug("Extracting learner response", { questionId });
         learnerResponse = await gradingStrategy.extractLearnerResponse(
           createQuestionResponseAttemptRequestDto,
         );
 
-        // Grade the response
         this.logger.info("Grading response with strategy", {
           questionId,
           strategyName: gradingStrategy.constructor.name,
@@ -304,7 +300,6 @@ export class QuestionResponseService {
       );
     }
 
-    // Only save to database if not an author
     if (role !== UserRole.AUTHOR) {
       await this.saveResponseToDatabase(
         assignmentAttemptId,

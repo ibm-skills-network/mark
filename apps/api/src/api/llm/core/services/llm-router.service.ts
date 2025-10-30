@@ -43,7 +43,6 @@ export class LlmRouter {
         }
       }
 
-      // Fallback to default if no assignment or provider not found
       const defaultProvider = this.getDefault();
       this.logger.debug(
         `Using default model ${defaultProvider.key} for feature ${featureKey}`,

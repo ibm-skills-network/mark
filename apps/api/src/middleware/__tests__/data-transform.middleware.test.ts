@@ -38,7 +38,7 @@ describe("DataTransformMiddleware", () => {
           {
             id: 1,
             learnerTextResponse: "PHA+dGVzdDwvcD4=",
-            learnerChoices: ["VXNlIHRoZSBASW5qZWN0YWJsZSgpIGRlY29yYXRvcg=="], // pragma: allowlist secret
+            learnerChoices: ["VXNlIHRoZSBASW5qZWN0YWJsZSgpIGRlY29yYXRvcg=="],
           },
         ],
       };
@@ -64,7 +64,6 @@ describe("DataTransformMiddleware", () => {
     });
 
     it("should decode multiple learner responses with various content", () => {
-      // Base64 encoding test data
       const htmlContent = Buffer.from(
         "<div><strong>Bold</strong> text</div>",
       ).toString("base64");
@@ -176,7 +175,6 @@ describe("DataTransformMiddleware", () => {
         mockNext,
       );
 
-      // Should not decode the health route
       expect(mockRequest.body.learnerTextResponse).toBe("PHA+dGVzdDwvcD4=");
       expect(mockNext).toHaveBeenCalled();
     });
@@ -282,7 +280,6 @@ describe("DataTransformMiddleware", () => {
         mockNext,
       );
 
-      // Check that response.json was replaced
       expect(mockResponse.json).toBeDefined();
       expect(mockResponse.locals?.middleware?.transformData).toBeDefined();
     });
@@ -305,18 +302,15 @@ describe("DataTransformMiddleware", () => {
         ],
       };
 
-      // Mock the original json function
       const originalJson = jest.fn();
       (mockResponse as any).json = originalJson;
 
-      // Get the middleware instance and call transformData
       const transformData = mockResponse.locals?.middleware?.transformData;
       expect(transformData).toBeDefined();
 
       if (transformData) {
         const encodedData = transformData(responseData, "encode");
 
-        // The encoded data should have base64 encoded fields
         expect(encodedData.introduction).not.toBe("Welcome to the course");
         expect(
           encodedData.responsesForQuestions[0].learnerTextResponse,
@@ -382,7 +376,6 @@ describe("DataTransformMiddleware", () => {
         mockNext,
       );
 
-      // Check that nested fields were decoded
       expect(mockRequest.body.assignment.questions[0].variants[0].content).toBe(
         "<p>Question content</p>",
       );

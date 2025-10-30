@@ -41,9 +41,6 @@ export class PromptProcessorService implements IPromptProcessor {
         featureKey,
         fallbackModel,
       );
-      console.log(
-        `Processing prompt for feature ${featureKey} with model ${llm.key}`,
-      );
 
       return await this._processPromptWithProvider(
         prompt,
