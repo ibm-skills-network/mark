@@ -60,6 +60,7 @@ import {
 
 @Global()
 @Module({
+  imports: [],
   providers: [
     PrismaService,
 

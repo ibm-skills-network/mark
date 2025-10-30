@@ -137,7 +137,14 @@ model AIUsage {
   userId            String? /// The ID of the user who used the AI feature
   user              UserCredential? @relation(fields: [userId], references: [userId]) /// Relation to the UserCredential model
   modelKey          String?     /// The key of the LLM model actually used for this AI operation
+  inputCost         Float?      /// Persisted input cost at write time
+  outputCost        Float?      /// Persisted output cost at write time
+  totalCost         Float?      /// Persisted total cost at write time
+  inputTokenPrice   Float?      /// Price per token (input) used for calculation
+  outputTokenPrice  Float?      /// Price per token (output) used for calculation
+  pricingDate       DateTime?   /// Date of pricing used for calculation
   @@unique([assignmentId, usageType]) /// Ensure each assignment has a unique usage record for each AI feature
+  @@index([assignmentId, createdAt, usageType, modelKey]) /// Composite index for analytics queries
 }
 
 /// Enum to track different types of AI usage
@@ -402,13 +409,14 @@ model AssignmentAttempt {
   preferredLanguage     String?
 
   GradingJob GradingJob[]
-  
+
   @@index([assignmentId])
   @@index([userId])
   @@index([assignmentId, submitted])
   @@index([createdAt])
   @@index([assignmentId, userId])
   @@index([assignmentVersionId])
+  @@index([assignmentId, submitted, createdAt]) /// Composite index for analytics queries
 }
 
 model AssignmentAttemptQuestionVariant {
@@ -455,6 +463,8 @@ model QuestionResponse {
   feedback            Json /// Feedback on the student's response, stored as JSON
   metadata            Json? /// Optional additional metadata about the response
   gradedAt           DateTime? /// Timestamp for when the response was graded
+
+  @@index([questionId, assignmentAttemptId]) /// Composite index for analytics queries
 }
 
 /// This model captures feedback and regrading requests for assignments

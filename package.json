@@ -18,7 +18,11 @@
   "scripts": {
     "build": "turbo run build",
     "build:docker": "docker buildx build -f ./apps/api-gateway/Dockerfile -t mark-api-gateway --no-cache --platform linux/amd64 . &> build-gateway.log && docker buildx build -f ./apps/web/Dockerfile -t mark-web --no-cache --platform linux/amd64 . &> build-web.log && docker buildx build -f ./apps/api/Dockerfile -t mark-api --no-cache --platform linux/amd64 . &> build-api.log",
-    "db": "scripts/start-db.sh",
+    "db": "scripts/start-services.sh",
+    "db:stop": "docker-compose -f docker-compose.yml down",
+    "db:logs": "docker-compose -f docker-compose.yml logs -f",
+    "db:status": "docker-compose -f docker-compose.yml ps",
+    "db:clean": "docker-compose -f docker-compose.yml down -v",
     "seed": "source dev.env && docker cp seed.sql mark-postgres:/tmp/seed.sql && docker exec -i mark-postgres pg_restore --username=$POSTGRES_USER --dbname=$POSTGRES_DB --no-owner --no-acl --clean --if-exists --no-password /tmp/seed.sql",
     "dev": "dotenv -e dev.env -- turbo run dev --parallel",
     "format": "prettier --ignore-unknown --write .",

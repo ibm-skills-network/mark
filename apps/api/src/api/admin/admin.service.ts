@@ -4,11 +4,18 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   UserRole,
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
+import { RedisService } from "../../cache/redis.service";
 import { PrismaService } from "../../database/prisma.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
@@ -32,209 +39,194 @@ interface DashboardFilters {
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
-  private readonly insightsCache = new Map<
-    string,
-    { data: any; cachedAt: number }
-  >();
-  private readonly INSIGHTS_CACHE_TTL = 1 * 60 * 1000; // 1 minute cache
+  private readonly INSIGHTS_CACHE_TTL = 300;
+  private readonly ANALYTICS_CACHE_TTL = 180;
+  private readonly DASHBOARD_CACHE_TTL = 120;
+  private readonly QUICK_ACTION_CACHE_TTL = 300;
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redisService: RedisService,
     @Inject(LLM_PRICING_SERVICE)
-    private readonly llmPricingService: LLMPricingService,
+    private readonly llmPricingService: LLMPricingService
   ) {}
 
   /**
-   * Helper method to get cached insights data
+   * Helper method to generate cache keys
    */
-  private getCachedInsights(assignmentId: number): any | null {
-    const cacheKey = `insights:${assignmentId}`;
-    const cached = this.insightsCache.get(cacheKey);
-
-    if (cached && Date.now() - cached.cachedAt < this.INSIGHTS_CACHE_TTL) {
-      this.logger.debug(`Cache hit for assignment ${assignmentId} insights`);
-      return cached.data;
-    }
-
-    if (cached) {
-      this.insightsCache.delete(cacheKey);
-    }
-
-    return null;
-  }
-
-  /**
-   * Helper method to cache insights data
-   */
-  private setCachedInsights(assignmentId: number, data: any): void {
-    const cacheKey = `insights:${assignmentId}`;
-    this.insightsCache.set(cacheKey, {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      data,
-      cachedAt: Date.now(),
-    });
-    this.logger.debug(`Cached insights for assignment ${assignmentId}`);
+  private getCacheKey(prefix: string, ...parts: (string | number)[]): string {
+    return `admin:${prefix}:${parts.join(":")}`;
   }
 
   /**
    * Helper method to invalidate insights cache for an assignment
    */
-  private invalidateInsightsCache(assignmentId: number): void {
-    const cacheKey = `insights:${assignmentId}`;
-    this.insightsCache.delete(cacheKey);
+  private async invalidateInsightsCache(assignmentId: number): Promise<void> {
+    const cacheKey = this.getCacheKey("insights", assignmentId);
+    await this.redisService.del(cacheKey);
     this.logger.debug(
-      `Invalidated insights cache for assignment ${assignmentId}`,
+      `Invalidated insights cache for assignment ${assignmentId}`
     );
   }
 
   /**
    * Public method to invalidate insights cache when assignment data changes
    */
-  invalidateAssignmentInsightsCache(assignmentId: number): void {
-    this.invalidateInsightsCache(assignmentId);
+  async invalidateAssignmentInsightsCache(assignmentId: number): Promise<void> {
+    await this.invalidateInsightsCache(assignmentId);
+    await this.redisService.delPattern(this.getCacheKey("analytics", "*"));
+    await this.redisService.delPattern(this.getCacheKey("dashboard", "*"));
+  }
+
+  /**
+   * Invalidate all admin caches
+   */
+  async invalidateAllCaches(): Promise<void> {
+    await this.redisService.delPattern(this.getCacheKey("*"));
+    this.logger.log("Invalidated all admin caches");
   }
 
   async getBasicAssignmentAnalytics(assignmentId: number) {
-    // Check if the assignment exists
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      include: {
-        questions: {
-          where: { isDeleted: false },
-        },
-      },
-    });
+    const cacheKey = this.getCacheKey("basic-analytics", assignmentId);
 
-    if (!assignment) {
-      throw new Error(`Assignment with ID ${assignmentId} not found`);
-    }
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        const assignment = await this.prisma.assignment.findUnique({
+          where: { id: assignmentId },
+          include: {
+            questions: {
+              where: { isDeleted: false },
+            },
+          },
+        });
 
-    // Get all attempts for this assignment
-    const attempts = await this.prisma.assignmentAttempt.findMany({
-      where: {
-        assignmentId,
-        submitted: true,
-      },
-      include: {
-        questionResponses: true,
-      },
-    });
-
-    // Calculate average score
-    const totalGrades = attempts.reduce(
-      (sum, attempt) => sum + (attempt.grade || 0),
-      0,
-    );
-    const averageScore =
-      attempts.length > 0 ? (totalGrades / attempts.length) * 100 : 0;
-
-    // Calculate median score
-    const grades = attempts
-      .map((attempt) => attempt.grade || 0)
-      .sort((a, b) => a - b);
-    const medianIndex = Math.floor(grades.length / 2);
-    const medianScore =
-      grades.length > 0
-        ? (grades.length % 2 === 0
-            ? (grades[medianIndex - 1] + grades[medianIndex]) / 2
-            : grades[medianIndex]) * 100
-        : 0;
-
-    // Calculate completion rate
-    const totalAttempts = attempts.length;
-    const completedAttempts = attempts.filter(
-      (attempt) => attempt.submitted,
-    ).length;
-    const completionRate =
-      totalAttempts > 0 ? (completedAttempts / totalAttempts) * 100 : 0;
-
-    // Calculate average completion time
-    const completionTimes = attempts
-      .map((attempt) => {
-        if (attempt.createdAt && attempt.expiresAt) {
-          return (
-            new Date(attempt.expiresAt).getTime() -
-            new Date(attempt.createdAt).getTime()
-          );
+        if (!assignment) {
+          throw new Error(`Assignment with ID ${assignmentId} not found`);
         }
-        return 0;
-      })
-      .filter((time) => time > 0);
 
-    const avgTimeMs =
-      completionTimes.length > 0
-        ? completionTimes.reduce((sum, time) => sum + time, 0) /
-          completionTimes.length
-        : 0;
-    const averageCompletionTime = Math.round(avgTimeMs / (1000 * 60)); // Convert to minutes
+        const attempts = await this.prisma.assignmentAttempt.findMany({
+          where: {
+            assignmentId,
+            submitted: true,
+          },
+          include: {
+            questionResponses: true,
+          },
+        });
 
-    // Calculate score distribution
-    const scoreRanges = [
-      "0-10",
-      "11-20",
-      "21-30",
-      "31-40",
-      "41-50",
-      "51-60",
-      "61-70",
-      "71-80",
-      "81-90",
-      "91-100",
-    ];
-    const scoreDistribution = scoreRanges.map((range) => {
-      const [min, max] = range.split("-").map(Number);
-      const count = grades.filter((grade) => {
-        const score = grade * 100;
-        return score >= min && score <= max;
-      }).length;
-      return { range, count };
-    });
+        const totalGrades = attempts.reduce(
+          (sum, attempt) => sum + (attempt.grade || 0),
+          0
+        );
+        const averageScore =
+          attempts.length > 0 ? (totalGrades / attempts.length) * 100 : 0;
 
-    // Calculate question breakdown
-    const questionBreakdown = assignment.questions.map((question) => {
-      const responses = attempts.flatMap((attempt) =>
-        attempt.questionResponses.filter(
-          (response) => response.questionId === question.id,
-        ),
-      );
+        const grades = attempts
+          .map((attempt) => attempt.grade || 0)
+          .sort((a, b) => a - b);
+        const medianIndex = Math.floor(grades.length / 2);
+        const medianScore =
+          grades.length > 0
+            ? (grades.length % 2 === 0
+                ? (grades[medianIndex - 1] + grades[medianIndex]) / 2
+                : grades[medianIndex]) * 100
+            : 0;
 
-      const totalPoints = responses.reduce(
-        (sum, response) => sum + response.points,
-        0,
-      );
-      const averageScore =
-        responses.length > 0
-          ? (totalPoints / (responses.length * question.totalPoints)) * 100
-          : 0;
+        const totalAttempts = attempts.length;
+        const completedAttempts = attempts.filter(
+          (attempt) => attempt.submitted
+        ).length;
+        const completionRate =
+          totalAttempts > 0 ? (completedAttempts / totalAttempts) * 100 : 0;
 
-      const incorrectResponses = responses.filter(
-        (response) => response.points < question.totalPoints,
-      );
-      const incorrectRate =
-        responses.length > 0
-          ? (incorrectResponses.length / responses.length) * 100
-          : 0;
+        const completionTimes = attempts
+          .map((attempt) => {
+            if (attempt.createdAt && attempt.expiresAt) {
+              return (
+                new Date(attempt.expiresAt).getTime() -
+                new Date(attempt.createdAt).getTime()
+              );
+            }
+            return 0;
+          })
+          .filter((time) => time > 0);
 
-      return {
-        questionId: question.id,
-        averageScore,
-        incorrectRate,
-      };
-    });
+        const avgTimeMs =
+          completionTimes.length > 0
+            ? completionTimes.reduce((sum, time) => sum + time, 0) /
+              completionTimes.length
+            : 0;
+        const averageCompletionTime = Math.round(avgTimeMs / (1000 * 60));
 
-    // total number of unique users who attempted the assignment
-    const uniqueUsers = new Set(attempts.map((attempt) => attempt.userId)).size;
+        const scoreRanges = [
+          "0-10",
+          "11-20",
+          "21-30",
+          "31-40",
+          "41-50",
+          "51-60",
+          "61-70",
+          "71-80",
+          "81-90",
+          "91-100",
+        ];
+        const scoreDistribution = scoreRanges.map((range) => {
+          const [min, max] = range.split("-").map(Number);
+          const count = grades.filter((grade) => {
+            const score = grade * 100;
+            return score >= min && score <= max;
+          }).length;
+          return { range, count };
+        });
 
-    return {
-      averageScore,
-      medianScore,
-      completionRate,
-      totalAttempts,
-      averageCompletionTime,
-      scoreDistribution,
-      questionBreakdown,
-      uniqueUsers,
-    };
+        const questionBreakdown = assignment.questions.map((question) => {
+          const responses = attempts.flatMap((attempt) =>
+            attempt.questionResponses.filter(
+              (response) => response.questionId === question.id
+            )
+          );
+
+          const totalPoints = responses.reduce(
+            (sum, response) => sum + response.points,
+            0
+          );
+          const averageScore =
+            responses.length > 0
+              ? (totalPoints / (responses.length * question.totalPoints)) * 100
+              : 0;
+
+          const incorrectResponses = responses.filter(
+            (response) => response.points < question.totalPoints
+          );
+          const incorrectRate =
+            responses.length > 0
+              ? (incorrectResponses.length / responses.length) * 100
+              : 0;
+
+          return {
+            questionId: question.id,
+            averageScore,
+            incorrectRate,
+          };
+        });
+
+        const uniqueUsers = new Set(attempts.map((attempt) => attempt.userId))
+          .size;
+
+        return {
+          averageScore,
+          medianScore,
+          completionRate,
+          totalAttempts,
+          averageCompletionTime,
+          scoreDistribution,
+          questionBreakdown,
+          uniqueUsers,
+        };
+      },
+      { ttl: this.ANALYTICS_CACHE_TTL }
+    );
   }
 
   /**
@@ -265,7 +257,7 @@ export class AdminService {
     } catch (error) {
       this.logger.error(
         `Error fetching attempts for assignment ${assignmentId}:`,
-        error,
+        error
       );
       return [];
     }
@@ -277,15 +269,14 @@ export class AdminService {
   async precomputePopularInsights(): Promise<void> {
     try {
       this.logger.log(
-        "Starting precomputation of insights for popular assignments",
+        "Starting precomputation of insights for popular assignments"
       );
 
-      // Find the most accessed assignments in the last 7 days
       const popularAssignments = await this.prisma.assignmentAttempt.groupBy({
         by: ["assignmentId"],
         where: {
           createdAt: {
-            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
           },
         },
         _count: {
@@ -296,14 +287,13 @@ export class AdminService {
             assignmentId: "desc",
           },
         },
-        take: 20, // Top 20 most active assignments
+        take: 20,
       });
 
       this.logger.log(
-        `Found ${popularAssignments.length} popular assignments to precompute`,
+        `Found ${popularAssignments.length} popular assignments to precompute`
       );
 
-      // Create a mock admin session for precomputation
       const adminSession = {
         assignmentId: 1,
         role: UserRole.ADMIN,
@@ -311,7 +301,6 @@ export class AdminService {
         userId: "system-user",
       };
 
-      // Process assignments in smaller batches to avoid overwhelming the system
       const batchSize = 5;
       for (
         let index = 0;
@@ -323,31 +312,29 @@ export class AdminService {
         await Promise.all(
           batch.map(async (assignment) => {
             try {
-              // This will compute and cache the insights
               await this.getDetailedAssignmentInsights(
                 adminSession,
-                assignment.assignmentId,
+                assignment.assignmentId
               );
               this.logger.debug(
-                `Precomputed insights for assignment ${assignment.assignmentId}`,
+                `Precomputed insights for assignment ${assignment.assignmentId}`
               );
             } catch (error) {
               this.logger.warn(
                 `Failed to precompute insights for assignment ${assignment.assignmentId}:`,
-                error,
+                error
               );
             }
-          }),
+          })
         );
 
-        // Add a small delay between batches
         if (index + batchSize < popularAssignments.length) {
-          await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 second delay
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
 
       this.logger.log(
-        `Completed precomputation of insights for ${popularAssignments.length} assignments`,
+        `Completed precomputation of insights for ${popularAssignments.length} assignments`
       );
     } catch (error) {
       this.logger.error("Error during insights precomputation:", error);
@@ -364,7 +351,7 @@ export class AdminService {
       createdAt: Date;
       usageType?: string;
       modelKey?: string;
-    }>,
+    }>
   ): Promise<{
     totalCost: number;
     costBreakdown: {
@@ -402,16 +389,13 @@ export class AdminService {
     };
 
     for (const usage of aiUsageRecords) {
-      // Use the actual model key from the database if available
       let modelKey = usage.modelKey;
 
       if (!modelKey) {
-        // Log warning for missing model key - this shouldn't happen with new records
         this.logger.warn(
-          `Missing model key for usage record from ${usage.createdAt.toISOString()}, falling back based on usage type`,
+          `Missing model key for usage record from ${usage.createdAt.toISOString()}, falling back based on usage type`
         );
 
-        // Fallback logic for older records without model key stored
         const usageType = usage.usageType?.toLowerCase() || "";
         if (usageType.includes("translation")) {
           modelKey = "gpt-4o-mini";
@@ -426,7 +410,7 @@ export class AdminService {
         ) {
           modelKey = "gpt-4o";
         } else {
-          modelKey = "gpt-4o-mini"; // Default for unknown types
+          modelKey = "gpt-4o-mini";
         }
       }
 
@@ -436,13 +420,12 @@ export class AdminService {
           usage.tokensIn,
           usage.tokensOut,
           usage.createdAt,
-          usage.usageType, // Pass usage type for upscaling-aware calculations
+          usage.usageType
         );
 
       if (costBreakdown) {
         totalCost += costBreakdown.totalCost;
 
-        // Categorize costs by usage type
         const usageType = usage.usageType?.toLowerCase() || "other";
         if (usageType.includes("grading")) {
           costByType.grading += costBreakdown.totalCost;
@@ -457,21 +440,20 @@ export class AdminService {
           costByType.other += costBreakdown.totalCost;
         }
 
-        // Create detailed calculation steps for transparency (showing per million token pricing)
         const inputPricePerMillion = costBreakdown.inputTokenPrice * 1_000_000;
         const outputPricePerMillion =
           costBreakdown.outputTokenPrice * 1_000_000;
         const calculationSteps = {
           inputCalculation: `${usage.tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
-            2,
+            2
           )}/1M tokens = $${costBreakdown.inputCost.toFixed(8)}`,
           outputCalculation: `${usage.tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
-            2,
+            2
           )}/1M tokens = $${costBreakdown.outputCost.toFixed(8)}`,
           totalCalculation: `$${costBreakdown.inputCost.toFixed(
-            8,
+            8
           )} + $${costBreakdown.outputCost.toFixed(
-            8,
+            8
           )} = $${costBreakdown.totalCost.toFixed(8)}`,
         };
 
@@ -490,9 +472,8 @@ export class AdminService {
           calculationSteps,
         });
       } else {
-        // Enhanced fallback with proper logging and transparency
         this.logger.error(
-          `No pricing found for ${modelKey} at ${usage.createdAt.toISOString()}, using emergency fallback`,
+          `No pricing found for ${modelKey} at ${usage.createdAt.toISOString()}, using emergency fallback`
         );
 
         const fallbackPrices: Record<
@@ -517,13 +498,13 @@ export class AdminService {
         const outputPricePerMillion = prices.output * 1_000_000;
         const calculationSteps = {
           inputCalculation: `${usage.tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
-            2,
+            2
           )}/1M tokens = $${inputCost.toFixed(8)} (fallback)`,
           outputCalculation: `${usage.tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
-            2,
+            2
           )}/1M tokens = $${outputCost.toFixed(8)} (fallback)`,
           totalCalculation: `$${inputCost.toFixed(8)} + $${outputCost.toFixed(
-            8,
+            8
           )} = $${fallbackCost.toFixed(8)} (fallback)`,
         };
 
@@ -537,7 +518,7 @@ export class AdminService {
           modelKey: `${modelKey} (fallback)`,
           inputTokenPrice: prices.input,
           outputTokenPrice: prices.output,
-          pricingEffectiveDate: new Date(), // Use current date for fallback
+          pricingEffectiveDate: new Date(),
           usageType: usage.usageType,
           calculationSteps,
         });
@@ -555,7 +536,7 @@ export class AdminService {
    * Helper method to get author activity insights
    */
   private async getAuthorActivity(
-    assignmentAuthors: { userId: string; createdAt: Date }[],
+    assignmentAuthors: { userId: string; createdAt: Date }[]
   ) {
     if (!assignmentAuthors || assignmentAuthors.length === 0) {
       return {
@@ -566,10 +547,9 @@ export class AdminService {
     }
 
     const authorIds = assignmentAuthors.map(
-      (author: { userId: string }) => author.userId,
+      (author: { userId: string }) => author.userId
     );
 
-    // Get all assignments by these authors to understand their activity
     const authorAssignments = await this.prisma.assignment.findMany({
       where: {
         AssignmentAuthor: {
@@ -592,7 +572,6 @@ export class AdminService {
       },
     });
 
-    // Get assignment attempt counts separately since it's not a direct relation
     const attemptCounts = await this.prisma.assignmentAttempt.groupBy({
       by: ["assignmentId"],
       where: {
@@ -605,11 +584,10 @@ export class AdminService {
       },
     });
 
-    // Get recent activity for these authors (simplified approach)
     const validAssignmentIds = authorAssignments
       .map((a) => a.id)
       .filter(
-        (id) => id !== null && id !== undefined && typeof id === "number",
+        (id) => id !== null && id !== undefined && typeof id === "number"
       );
 
     const recentActivity =
@@ -630,39 +608,34 @@ export class AdminService {
           })
         : [];
 
-    // Analyze author contributions
     const authorStats = authorIds.map((authorId) => {
       const authoredAssignments = authorAssignments.filter((assignment) =>
-        assignment.AssignmentAuthor.some(
-          (author) => author.userId === authorId,
-        ),
+        assignment.AssignmentAuthor.some((author) => author.userId === authorId)
       );
 
       const totalAssignments = authoredAssignments.length;
       const totalQuestions = authoredAssignments.reduce(
         (sum, assignment) => sum + assignment._count.questions,
-        0,
+        0
       );
       const totalAIUsage = authoredAssignments.reduce(
         (sum, assignment) => sum + assignment._count.AIUsage,
-        0,
+        0
       );
       const totalFeedback = authoredAssignments.reduce(
         (sum, assignment) => sum + assignment._count.AssignmentFeedback,
-        0,
+        0
       );
 
-      // Calculate total attempts from attempt counts
       const authorAssignmentIds = new Set(authoredAssignments.map((a) => a.id));
       const totalAttempts = attemptCounts
         .filter((count) => authorAssignmentIds.has(count.assignmentId))
         .reduce((sum, count) => sum + count._count.id, 0);
 
-      // Get recent activity for this author
       const authorRecentActivity = recentActivity.filter((attempt) =>
         authoredAssignments.some(
-          (assignment) => assignment.id === attempt.assignmentId,
-        ),
+          (assignment) => assignment.id === attempt.assignmentId
+        )
       );
 
       return {
@@ -684,34 +657,32 @@ export class AdminService {
         joinedAt:
           assignmentAuthors.find(
             (author: { userId: string; createdAt: Date }) =>
-              author.userId === authorId,
+              author.userId === authorId
           )?.createdAt || new Date(),
         isActiveContributor: totalAssignments >= 3,
         activityScore: Math.round(
-          totalAssignments * 2 + totalQuestions * 0.5 + totalAttempts * 0.1,
+          totalAssignments * 2 + totalQuestions * 0.5 + totalAttempts * 0.1
         ),
       };
     });
 
-    // Sort authors by activity score
     authorStats.sort((a, b) => b.activityScore - a.activityScore);
 
-    // Generate insights
     const activityInsights = [];
     const totalAuthors = authorStats.length;
     const activeAuthors = authorStats.filter(
-      (author) => author.isActiveContributor,
+      (author) => author.isActiveContributor
     ).length;
     const mostActiveAuthor = authorStats[0];
 
     if (totalAuthors > 1) {
       activityInsights.push(
-        `This assignment has ${totalAuthors} contributing authors`,
+        `This assignment has ${totalAuthors} contributing authors`
       );
 
       if (activeAuthors > 0) {
         activityInsights.push(
-          `${activeAuthors} of ${totalAuthors} authors are active contributors (3+ assignments)`,
+          `${activeAuthors} of ${totalAuthors} authors are active contributors (3+ assignments)`
         );
       }
 
@@ -719,17 +690,17 @@ export class AdminService {
         activityInsights.push(
           `Most active contributor: ${String(mostActiveAuthor.userId)} with ${
             mostActiveAuthor.totalAssignments
-          } assignments`,
+          } assignments`
         );
       }
     } else if (totalAuthors === 1) {
       const singleAuthor = authorStats[0];
       activityInsights.push(
-        `Single author assignment by ${String(singleAuthor.userId)}`,
+        `Single author assignment by ${String(singleAuthor.userId)}`
       );
       if (singleAuthor.totalAssignments > 1) {
         activityInsights.push(
-          `Author has created ${singleAuthor.totalAssignments} total assignments`,
+          `Author has created ${singleAuthor.totalAssignments} total assignments`
         );
       }
     }
@@ -743,7 +714,7 @@ export class AdminService {
 
   async cloneAssignment(
     id: number,
-    groupId: string,
+    groupId: string
   ): Promise<BaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: id },
@@ -801,38 +772,59 @@ export class AdminService {
     };
   }
 
-  // Method to get flagged submissions
   async getFlaggedSubmissions() {
-    return this.prisma.regradingRequest.findMany({
-      where: {
-        regradingStatus: "PENDING",
+    const cacheKey = this.getCacheKey("flagged-submissions", "all");
+
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        return this.prisma.regradingRequest.findMany({
+          where: {
+            regradingStatus: "PENDING",
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
       },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+      { ttl: this.ANALYTICS_CACHE_TTL }
+    );
   }
 
-  // Method to dismiss a flagged submission
   async dismissFlaggedSubmission(id: number) {
-    return this.prisma.regradingRequest.update({
+    const result = await this.prisma.regradingRequest.update({
       where: { id },
       data: {
         regradingStatus: "REJECTED",
       },
     });
+
+    await this.redisService.delPattern(
+      this.getCacheKey("flagged-submissions", "*")
+    );
+    await this.redisService.delPattern(
+      this.getCacheKey("regrading-requests", "*")
+    );
+
+    return result;
   }
 
-  // Method to get regrading requests
   async getRegradingRequests() {
-    return this.prisma.regradingRequest.findMany({
-      orderBy: {
-        createdAt: "desc",
+    const cacheKey = this.getCacheKey("regrading-requests", "all");
+
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        return this.prisma.regradingRequest.findMany({
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
       },
-    });
+      { ttl: this.ANALYTICS_CACHE_TTL }
+    );
   }
 
-  // Method to approve a regrading request
   async approveRegradingRequest(id: number, newGrade: number) {
     const request = await this.prisma.regradingRequest.findUnique({
       where: { id },
@@ -842,7 +834,6 @@ export class AdminService {
       throw new Error(`Regrading request with ID ${id} not found`);
     }
 
-    // Update the regrading request status
     await this.prisma.regradingRequest.update({
       where: { id },
       data: {
@@ -850,18 +841,21 @@ export class AdminService {
       },
     });
 
-    // Update the assignment attempt grade
     await this.prisma.assignmentAttempt.update({
       where: { id: request.attemptId },
       data: {
-        grade: newGrade / 100, // Convert percentage to decimal
+        grade: newGrade / 100, 
       },
     });
+
+    await this.invalidateAssignmentInsightsCache(request.assignmentId);
+    await this.redisService.delPattern(
+      this.getCacheKey("regrading-requests", "*")
+    );
 
     return { success: true };
   }
 
-  // Method to reject a regrading request
   async rejectRegradingRequest(id: number, reason: string) {
     const request = await this.prisma.regradingRequest.findUnique({
       where: { id },
@@ -871,7 +865,6 @@ export class AdminService {
       throw new Error(`Regrading request with ID ${id} not found`);
     }
 
-    // Update the regrading request status
     await this.prisma.regradingRequest.update({
       where: { id },
       data: {
@@ -880,11 +873,15 @@ export class AdminService {
       },
     });
 
+    await this.redisService.delPattern(
+      this.getCacheKey("regrading-requests", "*")
+    );
+
     return { success: true };
   }
   async addAssignmentToGroup(
     assignmentId: number,
-    groupId: string,
+    groupId: string
   ): Promise<AdminAddAssignmentToGroupResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -892,7 +889,7 @@ export class AdminService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with Id ${assignmentId} not found.`,
+        `Assignment with Id ${assignmentId} not found.`
       );
     }
 
@@ -941,7 +938,7 @@ export class AdminService {
   }
 
   async createAssignment(
-    createAssignmentRequestDto: AdminCreateAssignmentRequestDto,
+    createAssignmentRequestDto: AdminCreateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.create({
       data: {
@@ -994,12 +991,14 @@ export class AdminService {
 
   async updateAssignment(
     id: number,
-    updateAssignmentDto: AdminUpdateAssignmentRequestDto,
+    updateAssignmentDto: AdminUpdateAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,
     });
+
+    await this.invalidateAssignmentInsightsCache(id);
 
     return {
       id: result.id,
@@ -1011,7 +1010,7 @@ export class AdminService {
 
   async replaceAssignment(
     id: number,
-    updateAssignmentDto: AdminReplaceAssignmentRequestDto,
+    updateAssignmentDto: AdminReplaceAssignmentRequestDto
   ): Promise<BaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
@@ -1031,160 +1030,161 @@ export class AdminService {
     page: number,
     limit: number,
     search?: string,
+    details?: boolean,
   ) {
-    const isAdmin = adminSession.role === UserRole.ADMIN;
-    const skip = (page - 1) * limit;
-
-    // Build where clause based on role and search
-    const searchCondition = search
-      ? {
-          OR: [
-            { name: { contains: search, mode: "insensitive" as const } },
-            // Check if search term is a number and search by ID
-            ...(Number.isNaN(Number(search))
-              ? []
-              : [{ id: { equals: Number(search) } }]),
-          ],
-        }
-      : {};
-
-    const whereClause = {
-      ...searchCondition,
-      ...(isAdmin
-        ? {}
-        : {
-            AssignmentAuthor: {
-              some: {
-                userId: adminSession.userId,
-              },
-            },
-          }),
-    };
-
-    // Get total count for pagination (separate optimized query)
-    const totalCount = await this.prisma.assignment.count({
-      where: whereClause,
-    });
-
-    // Get assignments with only essential data for the list view
-    const assignments = await this.prisma.assignment.findMany({
-      where: whereClause,
-      skip,
-      take: limit,
-      select: {
-        id: true,
-        name: true,
-        published: true,
-        updatedAt: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-
-    if (assignments.length === 0) {
-      return {
-        data: [],
-        pagination: {
-          total: totalCount,
-          page,
-          limit,
-          totalPages: Math.ceil(totalCount / limit),
-        },
-      };
-    }
-
-    const assignmentIds = assignments.map((a) => a.id);
-
-    // Batch fetch all analytics data with optimized queries
-    const [attemptStats, uniqueLearnersStats, feedbackStats] =
-      await Promise.all([
-        // Get attempt statistics in separate queries for accuracy
-        Promise.all([
-          // Get total attempts count (all attempts)
-          this.prisma.assignmentAttempt.groupBy({
-            by: ["assignmentId"],
-            where: {
-              assignmentId: { in: assignmentIds },
-            },
-            _count: {
-              id: true,
-            },
-          }),
-          // Get completed attempts count and average grade (only submitted attempts)
-          this.prisma.assignmentAttempt.groupBy({
-            by: ["assignmentId"],
-            where: {
-              assignmentId: { in: assignmentIds },
-              submitted: true,
-            },
-            _count: {
-              id: true,
-            },
-            _avg: {
-              grade: true,
-            },
-          }),
-        ]).then(([totalStats, submittedStats]) => {
-          const totalStatsMap = new Map(
-            totalStats.map((s) => [s.assignmentId, s._count.id]),
-          );
-          const submittedStatsMap = new Map(
-            submittedStats.map((s) => [s.assignmentId, s]),
-          );
-
-          return { totalStatsMap, submittedStatsMap };
-        }),
-
-        // Get unique learner counts in one query - use distinct users per assignment
-        Promise.all(
-          assignmentIds.map(async (assignmentId) => {
-            const uniqueUsers = await this.prisma.assignmentAttempt.findMany({
-              where: { assignmentId },
-              distinct: ["userId"],
-              select: { userId: true },
-            });
-            return { assignmentId, uniqueUsersCount: uniqueUsers.length };
-          }),
-        ),
-
-        // Get feedback statistics in one query
-        this.prisma.assignmentFeedback.groupBy({
-          by: ["assignmentId"],
-          where: {
-            assignmentId: { in: assignmentIds },
-            assignmentRating: { not: undefined },
-          },
-          _avg: {
-            assignmentRating: true,
-          },
-          _count: {
-            id: true,
-          },
-        }),
-      ]);
-
-    const { totalStatsMap, submittedStatsMap } = attemptStats;
-    const uniqueLearnersMap = new Map(
-      uniqueLearnersStats.map((s) => [s.assignmentId, s.uniqueUsersCount]),
+    const cacheKey = this.getCacheKey(
+      "analytics",
+      adminSession.userId || "admin",
+      page,
+      limit,
+      search || "all",
+      details ? 'detailed' : 'basic'
     );
-    const feedbackMap = new Map(feedbackStats.map((s) => [s.assignmentId, s]));
-    // const questionMap = new Map(questionStats.map(s => [s.assignmentId, s]));
 
-    const analyticsData = await Promise.all(
-      assignments.map(async (assignment) => {
-        const totalAttempts = totalStatsMap.get(assignment.id) || 0;
-        const submittedData = submittedStatsMap.get(assignment.id);
-        const completedAttempts = submittedData?._count.id || 0;
-        const uniqueLearners = uniqueLearnersMap.get(assignment.id) || 0;
-        const feedback = feedbackMap.get(assignment.id);
-        // const questions = questionMap.get(assignment.id); // Future use
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        const isAdmin = adminSession.role === UserRole.ADMIN;
+        const skip = (page - 1) * limit;
 
-        const averageGrade = (submittedData?._avg.grade || 0) * 100; // Convert to percentage
-        const averageRating = feedback?._avg.assignmentRating || 0;
+        const searchCondition = search
+          ? {
+              OR: [
+                { name: { contains: search, mode: "insensitive" as const } },
+                ...(Number.isNaN(Number(search))
+                  ? []
+                  : [{ id: { equals: Number(search) } }]),
+              ],
+            }
+          : {};
 
-        // Get detailed AI usage data for accurate cost calculation
-        const aiUsageDetails = await this.prisma.aIUsage.findMany({
-          where: { assignmentId: assignment.id },
+        const whereClause = {
+          ...searchCondition,
+          ...(isAdmin
+            ? {}
+            : {
+                AssignmentAuthor: {
+                  some: {
+                    userId: adminSession.userId,
+                  },
+                },
+              }),
+        };
+
+        const totalCount = await this.prisma.assignment.count({
+          where: whereClause,
+        });
+
+        const assignments = await this.prisma.assignment.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
           select: {
+            id: true,
+            name: true,
+            published: true,
+            updatedAt: true,
+          },
+          orderBy: { updatedAt: "desc" },
+        });
+
+        if (assignments.length === 0) {
+          return {
+            data: [],
+            pagination: {
+              total: totalCount,
+              page,
+              limit,
+              totalPages: Math.ceil(totalCount / limit),
+            },
+          };
+        }
+
+        const assignmentIds = assignments.map((a) => a.id);
+
+        const [attemptStats, uniqueLearnersStats, feedbackStats] =
+          await Promise.all([
+            Promise.all([
+              this.prisma.assignmentAttempt.groupBy({
+                by: ["assignmentId"],
+                where: {
+                  assignmentId: { in: assignmentIds },
+                },
+                _count: {
+                  id: true,
+                },
+              }),
+              this.prisma.assignmentAttempt.groupBy({
+                by: ["assignmentId"],
+                where: {
+                  assignmentId: { in: assignmentIds },
+                  submitted: true,
+                },
+                _count: {
+                  id: true,
+                },
+                _avg: {
+                  grade: true,
+                },
+              }),
+            ]).then(([totalStats, submittedStats]) => {
+              const totalStatsMap = new Map(
+                totalStats.map((s) => [s.assignmentId, s._count.id])
+              );
+              const submittedStatsMap = new Map(
+                submittedStats.map((s) => [s.assignmentId, s])
+              );
+
+              return { totalStatsMap, submittedStatsMap };
+            }),
+
+            // Batched query for unique learners per assignment
+            this.prisma.assignmentAttempt.groupBy({
+              by: ["assignmentId", "userId"],
+              where: {
+                assignmentId: { in: assignmentIds },
+              },
+            }).then(results => {
+              // Count unique users per assignment
+              const countsMap = new Map<number, number>();
+              for (const result of results) {
+                const count = countsMap.get(result.assignmentId) || 0;
+                countsMap.set(result.assignmentId, count + 1);
+              }
+              return assignmentIds.map(id => ({
+                assignmentId: id,
+                uniqueUsersCount: countsMap.get(id) || 0,
+              }));
+            }),
+
+            this.prisma.assignmentFeedback.groupBy({
+              by: ["assignmentId"],
+              where: {
+                assignmentId: { in: assignmentIds },
+                assignmentRating: { not: undefined },
+              },
+              _avg: {
+                assignmentRating: true,
+              },
+              _count: {
+                id: true,
+              },
+            }),
+          ]);
+
+        const { totalStatsMap, submittedStatsMap } = attemptStats;
+        const uniqueLearnersMap = new Map(
+          uniqueLearnersStats.map((s) => [s.assignmentId, s.uniqueUsersCount])
+        );
+        const feedbackMap = new Map(
+          feedbackStats.map((s) => [s.assignmentId, s])
+        );
+
+        // Batched query: Fetch all AI usage records for all assignments at once
+        const allAiUsage = await this.prisma.aIUsage.findMany({
+          where: { assignmentId: { in: assignmentIds } },
+          select: {
+            assignmentId: true,
             tokensIn: true,
             tokensOut: true,
             createdAt: true,
@@ -1193,180 +1193,241 @@ export class AdminService {
           },
         });
 
-        // Calculate accurate costs using historical pricing and actual models
-        const costData = await this.calculateHistoricalCosts(aiUsageDetails);
-        const totalCost = costData.totalCost;
-
-        // Generate simple performance insights
-        const performanceInsights: string[] = [];
-        if (totalAttempts > 0) {
-          const completionRate = (completedAttempts / totalAttempts) * 100;
-          if (completionRate < 70) {
-            performanceInsights.push(
-              `Low completion rate (${Math.round(
-                completionRate,
-              )}%) - consider reducing difficulty`,
-            );
+        // Group AI usage by assignmentId
+        const aiUsageByAssignment = new Map<number, typeof allAiUsage>();
+        for (const usage of allAiUsage) {
+          if (!aiUsageByAssignment.has(usage.assignmentId)) {
+            aiUsageByAssignment.set(usage.assignmentId, []);
           }
-          if (averageGrade > 85) {
-            performanceInsights.push(
-              `High average grade (${Math.round(
-                averageGrade,
-              )}%) - learners are doing well`,
-            );
-          } else if (averageGrade < 60) {
-            performanceInsights.push(
-              `Low average grade (${Math.round(
-                averageGrade,
-              )}%) - may need clearer instructions`,
-            );
-          }
+          aiUsageByAssignment.get(usage.assignmentId)!.push(usage);
         }
 
-        // Accurate cost breakdown based on actual usage types
-        const costBreakdown = {
-          grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-          questionGeneration:
-            Math.round(costData.costBreakdown.questionGeneration * 100) / 100,
-          translation:
-            Math.round(costData.costBreakdown.translation * 100) / 100,
-          other: Math.round(costData.costBreakdown.other * 100) / 100,
-        };
+        const analyticsData = await Promise.all(
+          assignments.map(async (assignment) => {
+            const totalAttempts = totalStatsMap.get(assignment.id) || 0;
+            const submittedData = submittedStatsMap.get(assignment.id);
+            const completedAttempts = submittedData?._count.id || 0;
+            const uniqueLearners = uniqueLearnersMap.get(assignment.id) || 0;
+            const feedback = feedbackMap.get(assignment.id);
+
+            const averageGrade = (submittedData?._avg.grade || 0) * 100;
+            const averageRating = feedback?._avg.assignmentRating || 0;
+
+            const aiUsageDetails = aiUsageByAssignment.get(assignment.id) || [];
+
+            const costData = await this.calculateHistoricalCosts(
+              aiUsageDetails
+            );
+            const totalCost = costData.totalCost;
+
+            const performanceInsights: string[] = [];
+            if (totalAttempts > 0) {
+              const completionRate = (completedAttempts / totalAttempts) * 100;
+              if (completionRate < 70) {
+                performanceInsights.push(
+                  `Low completion rate (${Math.round(
+                    completionRate
+                  )}%) - consider reducing difficulty`
+                );
+              }
+              if (averageGrade > 85) {
+                performanceInsights.push(
+                  `High average grade (${Math.round(
+                    averageGrade
+                  )}%) - learners are doing well`
+                );
+              } else if (averageGrade < 60) {
+                performanceInsights.push(
+                  `Low average grade (${Math.round(
+                    averageGrade
+                  )}%) - may need clearer instructions`
+                );
+              }
+            }
+
+            const costBreakdown = {
+              grading: Math.round(costData.costBreakdown.grading * 100) / 100,
+              questionGeneration:
+                Math.round(costData.costBreakdown.questionGeneration * 100) /
+                100,
+              translation:
+                Math.round(costData.costBreakdown.translation * 100) / 100,
+              other: Math.round(costData.costBreakdown.other * 100) / 100,
+            };
+
+            return {
+              id: assignment.id,
+              name: assignment.name,
+              totalCost,
+              uniqueLearners,
+              totalAttempts,
+              completedAttempts,
+              averageGrade,
+              averageRating,
+              published: assignment.published,
+              insights: {
+                questionInsights: [],
+                performanceInsights,
+                costBreakdown,
+                detailedCostBreakdown: costData.detailedBreakdown.map(
+                  (detail) => ({
+                    ...detail,
+                    usageDate: detail.usageDate.toISOString(),
+                    pricingEffectiveDate:
+                      detail.pricingEffectiveDate.toISOString(),
+                  })
+                ),
+              },
+            };
+          })
+        );
 
         return {
-          id: assignment.id,
-          name: assignment.name,
-          totalCost,
-          uniqueLearners,
-          totalAttempts,
-          completedAttempts,
-          averageGrade,
-          averageRating,
-          published: assignment.published,
-          insights: {
-            questionInsights: [], // Simplified - can be loaded on-demand
-            performanceInsights,
-            costBreakdown,
-            detailedCostBreakdown: costData.detailedBreakdown.map((detail) => ({
-              ...detail,
-              usageDate: detail.usageDate.toISOString(),
-              pricingEffectiveDate: detail.pricingEffectiveDate.toISOString(),
-            })),
+          data: analyticsData,
+          pagination: {
+            total: totalCount,
+            page,
+            limit,
+            totalPages: Math.ceil(totalCount / limit),
           },
         };
-      }),
-    );
-
-    return {
-      data: analyticsData,
-      pagination: {
-        total: totalCount,
-        page,
-        limit,
-        totalPages: Math.ceil(totalCount / limit),
       },
-    };
+      { ttl: this.ANALYTICS_CACHE_TTL }
+    );
   }
 
   async getDashboardStats(
     adminSession: UserSession & { userId?: string },
-    filters?: DashboardFilters,
+    filters?: DashboardFilters
   ) {
-    const isAdmin = adminSession.role === UserRole.ADMIN;
+    const cacheKey = this.getCacheKey(
+      "dashboard",
+      adminSession.userId || "admin",
+      JSON.stringify(filters || {})
+    );
 
-    // Build base where clauses for different queries with filters
-    const assignmentWhere: any = isAdmin
-      ? {}
-      : {
-          AssignmentAuthor: {
-            some: {
-              userId: adminSession.userId,
-            },
-          },
-        };
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        const isAdmin = adminSession.role === UserRole.ADMIN;
 
-    // Apply assignment filters
-    if (filters?.assignmentId) {
-      assignmentWhere.id = filters.assignmentId;
-    }
-    if (filters?.assignmentName) {
-      assignmentWhere.name = {
-        contains: filters.assignmentName,
-        mode: "insensitive",
-      };
-    }
-
-    // Build date filter for time-based queries
-    const dateFilter: any = {};
-    if (filters?.startDate || filters?.endDate) {
-      if (filters.startDate) {
-        dateFilter.gte = new Date(filters.startDate);
-      }
-      if (filters.endDate) {
-        dateFilter.lte = new Date(filters.endDate);
-      }
-    }
-
-    // For non-admins, we need to get assignment IDs first for attempt/feedback queries
-    let assignmentIds: number[] = [];
-    if (!isAdmin) {
-      const assignments = await this.prisma.assignment.findMany({
-        where: assignmentWhere,
-        select: { id: true },
-      });
-      assignmentIds = assignments.map((a) => a.id);
-    } else if (filters?.assignmentId || filters?.assignmentName) {
-      // For admins with assignment filters, also get the filtered assignment IDs
-      const assignments = await this.prisma.assignment.findMany({
-        where: assignmentWhere,
-        select: { id: true },
-      });
-      assignmentIds = assignments.map((a) => a.id);
-    }
-
-    // Optimized parallel queries
-    const [
-      totalAssignments,
-      publishedAssignments,
-      attemptStats,
-      feedbackCount,
-      reportCounts,
-      recentAttempts,
-      learnerCount,
-      aiUsageStats,
-      averageAssignmentRating,
-    ] = await Promise.all([
-      // Total assignments
-      this.prisma.assignment.count({ where: assignmentWhere }),
-
-      // Published assignments
-      this.prisma.assignment.count({
-        where: { ...assignmentWhere, published: true },
-      }),
-
-      // Attempt statistics (total attempts + unique users in one query)
-      isAdmin || assignmentIds.length > 0
-        ? this.prisma.assignmentAttempt
-            .aggregate({
-              where: {
-                ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
-                ...(assignmentIds.length > 0 && isAdmin
-                  ? { assignmentId: { in: assignmentIds } }
-                  : {}),
-                ...(Object.keys(dateFilter).length > 0
-                  ? { createdAt: dateFilter }
-                  : {}),
-                ...(filters?.userId
-                  ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
-                    }
-                  : {}),
+        const assignmentWhere: any = isAdmin
+          ? {}
+          : {
+              AssignmentAuthor: {
+                some: {
+                  userId: adminSession.userId,
+                },
               },
-              _count: { id: true },
-            })
-            .then(async (totalAttempts) => {
-              const uniqueUsers = await this.prisma.assignmentAttempt.groupBy({
-                by: ["userId"],
+            };
+
+        if (filters?.assignmentId) {
+          assignmentWhere.id = filters.assignmentId;
+        }
+        if (filters?.assignmentName) {
+          assignmentWhere.name = {
+            contains: filters.assignmentName,
+            mode: "insensitive",
+          };
+        }
+
+        const dateFilter: any = {};
+        if (filters?.startDate || filters?.endDate) {
+          if (filters.startDate) {
+            dateFilter.gte = new Date(filters.startDate);
+          }
+          if (filters.endDate) {
+            dateFilter.lte = new Date(filters.endDate);
+          }
+        }
+
+        let assignmentIds: number[] = [];
+        if (!isAdmin) {
+          const assignments = await this.prisma.assignment.findMany({
+            where: assignmentWhere,
+            select: { id: true },
+          });
+          assignmentIds = assignments.map((a) => a.id);
+        } else if (filters?.assignmentId || filters?.assignmentName) {
+          const assignments = await this.prisma.assignment.findMany({
+            where: assignmentWhere,
+            select: { id: true },
+          });
+          assignmentIds = assignments.map((a) => a.id);
+        }
+
+        const [
+          totalAssignments,
+          publishedAssignments,
+          attemptStats,
+          feedbackCount,
+          reportCounts,
+          recentAttempts,
+          learnerCount,
+          aiUsageStats,
+          averageAssignmentRating,
+        ] = await Promise.all([
+          this.prisma.assignment.count({ where: assignmentWhere }),
+
+          this.prisma.assignment.count({
+            where: { ...assignmentWhere, published: true },
+          }),
+
+          isAdmin || assignmentIds.length > 0
+            ? this.prisma.assignmentAttempt
+                .aggregate({
+                  where: {
+                    ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
+                    ...(assignmentIds.length > 0 && isAdmin
+                      ? { assignmentId: { in: assignmentIds } }
+                      : {}),
+                    ...(Object.keys(dateFilter).length > 0
+                      ? { createdAt: dateFilter }
+                      : {}),
+                    ...(filters?.userId
+                      ? {
+                          userId: {
+                            contains: filters.userId,
+                            mode: "insensitive",
+                          },
+                        }
+                      : {}),
+                  },
+                  _count: { id: true },
+                })
+                .then(async (totalAttempts) => {
+                  const uniqueUsers =
+                    await this.prisma.assignmentAttempt.groupBy({
+                      by: ["userId"],
+                      where: {
+                        ...(isAdmin
+                          ? {}
+                          : { assignmentId: { in: assignmentIds } }),
+                        ...(assignmentIds.length > 0 && isAdmin
+                          ? { assignmentId: { in: assignmentIds } }
+                          : {}),
+                        ...(Object.keys(dateFilter).length > 0
+                          ? { createdAt: dateFilter }
+                          : {}),
+                        ...(filters?.userId
+                          ? {
+                              userId: {
+                                contains: filters.userId,
+                                mode: "insensitive",
+                              },
+                            }
+                          : {}),
+                      },
+                    });
+                  return {
+                    totalAttempts: totalAttempts._count.id,
+                    totalUsers: uniqueUsers.length,
+                  };
+                })
+            : Promise.resolve({ totalAttempts: 0, totalUsers: 0 }),
+
+          isAdmin || assignmentIds.length > 0
+            ? this.prisma.assignmentFeedback.count({
                 where: {
                   ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
                   ...(assignmentIds.length > 0 && isAdmin
@@ -1384,52 +1445,55 @@ export class AdminService {
                       }
                     : {}),
                 },
-              });
-              return {
-                totalAttempts: totalAttempts._count.id,
-                totalUsers: uniqueUsers.length,
-              };
-            })
-        : Promise.resolve({ totalAttempts: 0, totalUsers: 0 }),
+              })
+            : 0,
 
-      // Total feedback
-      isAdmin || assignmentIds.length > 0
-        ? this.prisma.assignmentFeedback.count({
-            where: {
-              ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
-              ...(assignmentIds.length > 0 && isAdmin
-                ? { assignmentId: { in: assignmentIds } }
-                : {}),
-              ...(Object.keys(dateFilter).length > 0
-                ? { createdAt: dateFilter }
-                : {}),
-              ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
-                : {}),
-            },
-          })
-        : 0,
+          isAdmin
+            ? this.prisma.report
+                .aggregate({
+                  _count: { id: true },
+                  where: {
+                    ...(Object.keys(dateFilter).length > 0
+                      ? { createdAt: dateFilter }
+                      : {}),
+                    ...(filters?.userId
+                      ? {
+                          userId: {
+                            contains: filters.userId,
+                            mode: "insensitive",
+                          },
+                        }
+                      : {}),
+                  },
+                })
+                .then(async (total) => {
+                  const open = await this.prisma.report.count({
+                    where: {
+                      status: "OPEN",
+                      ...(Object.keys(dateFilter).length > 0
+                        ? { createdAt: dateFilter }
+                        : {}),
+                      ...(filters?.userId
+                        ? {
+                            userId: {
+                              contains: filters.userId,
+                              mode: "insensitive",
+                            },
+                          }
+                        : {}),
+                    },
+                  });
+                  return { totalReports: total._count.id, openReports: open };
+                })
+            : { totalReports: 0, openReports: 0 },
 
-      // Report counts (admin only)
-      isAdmin
-        ? this.prisma.report
-            .aggregate({
-              _count: { id: true },
-              where: {
-                ...(Object.keys(dateFilter).length > 0
-                  ? { createdAt: dateFilter }
-                  : {}),
-                ...(filters?.userId
-                  ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
-                    }
-                  : {}),
-              },
-            })
-            .then(async (total) => {
-              const open = await this.prisma.report.count({
+          isAdmin || assignmentIds.length > 0
+            ? this.prisma.assignmentAttempt.findMany({
                 where: {
-                  status: "OPEN",
+                  ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
+                  ...(assignmentIds.length > 0 && isAdmin
+                    ? { assignmentId: { in: assignmentIds } }
+                    : {}),
                   ...(Object.keys(dateFilter).length > 0
                     ? { createdAt: dateFilter }
                     : {}),
@@ -1442,307 +1506,284 @@ export class AdminService {
                       }
                     : {}),
                 },
-              });
-              return { totalReports: total._count.id, openReports: open };
-            })
-        : { totalReports: 0, openReports: 0 },
+                take: 10,
+                orderBy: { createdAt: "desc" },
+                select: {
+                  id: true,
+                  userId: true,
+                  submitted: true,
+                  grade: true,
+                  createdAt: true,
+                  assignmentId: true,
+                },
+              })
+            : [],
 
-      // Recent activity with assignment names in one query
-      isAdmin || assignmentIds.length > 0
-        ? this.prisma.assignmentAttempt.findMany({
-            where: {
-              ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
-              ...(assignmentIds.length > 0 && isAdmin
-                ? { assignmentId: { in: assignmentIds } }
-                : {}),
-              ...(Object.keys(dateFilter).length > 0
-                ? { createdAt: dateFilter }
-                : {}),
-              ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
-                : {}),
-            },
-            take: 10,
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              userId: true,
-              submitted: true,
-              grade: true,
-              createdAt: true,
-              assignmentId: true,
-            },
-          })
-        : [],
+          isAdmin || assignmentIds.length > 0
+            ? this.prisma.assignmentAttempt
+                .groupBy({
+                  by: ["userId"],
+                  where: {
+                    ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
+                    ...(assignmentIds.length > 0 && isAdmin
+                      ? { assignmentId: { in: assignmentIds } }
+                      : {}),
+                    ...(Object.keys(dateFilter).length > 0
+                      ? { createdAt: dateFilter }
+                      : {}),
+                    ...(filters?.userId
+                      ? {
+                          userId: {
+                            contains: filters.userId,
+                            mode: "insensitive",
+                          },
+                        }
+                      : {}),
+                  },
+                })
+                .then((users) => users.length)
+            : 0,
 
-      // total number of unique leaners
-      isAdmin || assignmentIds.length > 0
-        ? this.prisma.assignmentAttempt
-            .groupBy({
-              by: ["userId"],
-              where: {
-                ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
-                ...(assignmentIds.length > 0 && isAdmin
-                  ? { assignmentId: { in: assignmentIds } }
-                  : {}),
-                ...(Object.keys(dateFilter).length > 0
-                  ? { createdAt: dateFilter }
-                  : {}),
-                ...(filters?.userId
-                  ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
-                    }
-                  : {}),
-              },
-            })
-            .then((users) => users.length)
-        : 0,
+          isAdmin || assignmentIds.length > 0
+            ? this.prisma.aIUsage.findMany({
+                where: {
+                  ...(isAdmin
+                    ? {}
+                    : {
+                        assignment: {
+                          AssignmentAuthor: {
+                            some: { userId: adminSession.userId },
+                          },
+                        },
+                      }),
+                  ...(assignmentIds.length > 0 && isAdmin
+                    ? { assignmentId: { in: assignmentIds } }
+                    : {}),
+                  ...(Object.keys(dateFilter).length > 0
+                    ? { createdAt: dateFilter }
+                    : {}),
+                },
+                select: {
+                  tokensIn: true,
+                  tokensOut: true,
+                  createdAt: true,
+                  usageType: true,
+                  modelKey: true,
+                },
+              })
+            : [],
 
-      // AI usage data for cost calculation
-      isAdmin || assignmentIds.length > 0
-        ? this.prisma.aIUsage.findMany({
-            where: {
-              ...(isAdmin
-                ? {}
-                : {
-                    assignment: {
-                      AssignmentAuthor: {
-                        some: { userId: adminSession.userId },
-                      },
-                    },
-                  }),
-              ...(assignmentIds.length > 0 && isAdmin
-                ? { assignmentId: { in: assignmentIds } }
-                : {}),
-              ...(Object.keys(dateFilter).length > 0
-                ? { createdAt: dateFilter }
-                : {}),
-            },
-            select: {
-              tokensIn: true,
-              tokensOut: true,
-              createdAt: true,
-              usageType: true,
-              modelKey: true,
-            },
-          })
-        : [],
+          isAdmin || assignmentIds.length > 0
+            ? this.prisma.assignmentFeedback.aggregate({
+                where: {
+                  ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
+                  ...(assignmentIds.length > 0 && isAdmin
+                    ? { assignmentId: { in: assignmentIds } }
+                    : {}),
+                  ...(Object.keys(dateFilter).length > 0
+                    ? { createdAt: dateFilter }
+                    : {}),
+                  ...(filters?.userId
+                    ? {
+                        userId: {
+                          contains: filters.userId,
+                          mode: "insensitive",
+                        },
+                      }
+                    : {}),
+                },
+                _avg: { assignmentRating: true },
+              })
+            : { _avg: { assignmentRating: 0 } },
+        ]);
 
-      // Average Assignment Rating for all assignments
-      isAdmin || assignmentIds.length > 0
-        ? this.prisma.assignmentFeedback.aggregate({
-            where: {
-              ...(isAdmin ? {} : { assignmentId: { in: assignmentIds } }),
-              ...(assignmentIds.length > 0 && isAdmin
-                ? { assignmentId: { in: assignmentIds } }
-                : {}),
-              ...(Object.keys(dateFilter).length > 0
-                ? { createdAt: dateFilter }
-                : {}),
-              ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
-                : {}),
-            },
-            _avg: { assignmentRating: true },
-          })
-        : { _avg: { assignmentRating: 0 } },
-    ]);
+        const costData = await this.calculateHistoricalCosts(aiUsageStats);
+        const totalCost = costData.totalCost;
 
-    // Calculate total cost using historical pricing
-    const costData = await this.calculateHistoricalCosts(aiUsageStats);
-    const totalCost = costData.totalCost;
+        const assignmentNames = new Map<number, string>();
+        if (recentAttempts.length > 0) {
+          const uniqueAssignmentIds = [
+            ...new Set(recentAttempts.map((a: any) => a.assignmentId)),
+          ];
+          const assignments = await this.prisma.assignment.findMany({
+            where: { id: { in: uniqueAssignmentIds } },
+            select: { id: true, name: true },
+          });
+          for (const assignment of assignments) {
+            assignmentNames.set(assignment.id, assignment.name);
+          }
+        }
 
-    // Get assignment names for recent attempts
-    const assignmentNames = new Map<number, string>();
-    if (recentAttempts.length > 0) {
-      const uniqueAssignmentIds = [
-        ...new Set(recentAttempts.map((a: any) => a.assignmentId)),
-      ];
-      const assignments = await this.prisma.assignment.findMany({
-        where: { id: { in: uniqueAssignmentIds } },
-        select: { id: true, name: true },
-      });
-      for (const assignment of assignments) {
-        assignmentNames.set(assignment.id, assignment.name);
-      }
-    }
-
-    return {
-      totalAssignments,
-      publishedAssignments,
-      totalReports: reportCounts.totalReports,
-      openReports: reportCounts.openReports,
-      totalFeedback: feedbackCount,
-      totalLearners: learnerCount,
-      totalAttempts: attemptStats.totalAttempts,
-      totalUsers: attemptStats.totalUsers,
-      averageAssignmentRating:
-        averageAssignmentRating._avg.assignmentRating || 0,
-      totalCost: Math.round(totalCost * 100) / 100,
-      costBreakdown: {
-        grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-        questionGeneration:
-          Math.round(costData.costBreakdown.questionGeneration * 100) / 100,
-        translation: Math.round(costData.costBreakdown.translation * 100) / 100,
-        other: Math.round(costData.costBreakdown.other * 100) / 100,
+        return {
+          totalAssignments,
+          publishedAssignments,
+          totalReports: reportCounts.totalReports,
+          openReports: reportCounts.openReports,
+          totalFeedback: feedbackCount,
+          totalLearners: learnerCount,
+          totalAttempts: attemptStats.totalAttempts,
+          totalUsers: attemptStats.totalUsers,
+          averageAssignmentRating:
+            averageAssignmentRating._avg.assignmentRating || 0,
+          totalCost: Math.round(totalCost * 100) / 100,
+          costBreakdown: {
+            grading: Math.round(costData.costBreakdown.grading * 100) / 100,
+            questionGeneration:
+              Math.round(costData.costBreakdown.questionGeneration * 100) / 100,
+            translation:
+              Math.round(costData.costBreakdown.translation * 100) / 100,
+            other: Math.round(costData.costBreakdown.other * 100) / 100,
+          },
+          userRole: isAdmin ? ("admin" as const) : ("author" as const),
+          recentActivity: recentAttempts.map((attempt: any) => ({
+            id: attempt.id,
+            assignmentName:
+              assignmentNames.get(attempt.assignmentId) ?? "Unknown",
+            userId: attempt.userId,
+            submitted: attempt.submitted,
+            grade: attempt.grade,
+            createdAt: attempt.createdAt,
+          })),
+        };
       },
-      userRole: isAdmin ? ("admin" as const) : ("author" as const),
-      recentActivity: recentAttempts.map((attempt: any) => ({
-        id: attempt.id,
-        assignmentName: assignmentNames.get(attempt.assignmentId) ?? "Unknown",
-        userId: attempt.userId,
-        submitted: attempt.submitted,
-        grade: attempt.grade,
-        createdAt: attempt.createdAt,
-      })),
-    };
+      { ttl: this.DASHBOARD_CACHE_TTL }
+    );
   }
 
   async getDetailedAssignmentInsights(
     adminSession: UserSession,
     assignmentId: number,
+    details?: boolean
   ) {
-    try {
-      // Check cache first
-      const cachedInsights = this.getCachedInsights(assignmentId);
-      if (cachedInsights) {
-        return cachedInsights;
-      }
-      // Validate assignmentId
-      if (!assignmentId || assignmentId <= 0) {
-        throw new Error(`Invalid assignment ID: ${assignmentId}`);
-      }
+    const cacheKey = this.getCacheKey("insights", assignmentId, details ? 'detailed' : 'basic');
 
-      const isAdmin = adminSession.role === UserRole.ADMIN;
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        try {
+          if (!assignmentId || assignmentId <= 0) {
+            throw new Error(`Invalid assignment ID: ${assignmentId}`);
+          }
 
-      // Check if user has access to this assignment
-      const assignment = await this.prisma.assignment.findFirst({
-        where: {
-          id: assignmentId,
-          ...(isAdmin
-            ? {}
-            : {
-                AssignmentAuthor: {
-                  some: {
-                    userId: adminSession.userId,
+          const isAdmin = adminSession.role === UserRole.ADMIN;
+
+          const assignment = await this.prisma.assignment.findFirst({
+            where: {
+              id: assignmentId,
+              ...(isAdmin
+                ? {}
+                : {
+                    AssignmentAuthor: {
+                      some: {
+                        userId: adminSession.userId,
+                      },
+                    },
+                  }),
+            },
+            include: {
+              questions: {
+                where: { isDeleted: false },
+                include: {
+                  translations: true,
+                  variants: {
+                    where: { isDeleted: false },
                   },
                 },
-              }),
-        },
-        include: {
-          questions: {
-            where: { isDeleted: false },
-            include: {
-              translations: true,
-              variants: {
-                where: { isDeleted: false },
               },
+              AIUsage: true,
+              AssignmentFeedback: true,
+              Report: true,
+              AssignmentAuthor: true,
             },
-          },
-          AIUsage: true,
-          AssignmentFeedback: true,
-          Report: true,
-          AssignmentAuthor: true,
-        },
-      });
+          });
 
-      if (!assignment) {
-        throw new NotFoundException(
-          `Assignment with ID ${assignmentId} not found or access denied`,
-        );
-      }
+          if (!assignment) {
+            throw new NotFoundException(
+              `Assignment with ID ${assignmentId} not found or access denied`
+            );
+          }
 
-      // Get assignment attempts count and basic stats with error handling
-      let totalAttempts = 0;
-      let submittedAttempts = 0;
-      let calculatedAverageGrade = 0;
+          let totalAttempts = 0;
+          let submittedAttempts = 0;
+          let calculatedAverageGrade = 0;
 
-      try {
-        // Get simple counts first
-        totalAttempts = await this.prisma.assignmentAttempt.count({
-          where: { assignmentId },
-        });
+          try {
+            totalAttempts = await this.prisma.assignmentAttempt.count({
+              where: { assignmentId },
+            });
 
-        submittedAttempts = await this.prisma.assignmentAttempt.count({
-          where: { assignmentId, submitted: true },
-        });
+            submittedAttempts = await this.prisma.assignmentAttempt.count({
+              where: { assignmentId, submitted: true },
+            });
 
-        // Get average grade with simple aggregation
-        const gradeAvg = await this.prisma.assignmentAttempt.aggregate({
-          where: { assignmentId, submitted: true },
-          _avg: { grade: true },
-        });
-        calculatedAverageGrade = (gradeAvg._avg.grade || 0) * 100; // Convert to percentage
-      } catch (error) {
-        this.logger.error(
-          `Error fetching attempt statistics for assignment ${assignmentId}:`,
-          error,
-        );
-        // Use fallback values (already initialized above)
-      }
+            const gradeAvg = await this.prisma.assignmentAttempt.aggregate({
+              where: { assignmentId, submitted: true },
+              _avg: { grade: true },
+            });
+            calculatedAverageGrade = (gradeAvg._avg.grade || 0) * 100;
+          } catch (error) {
+            this.logger.error(
+              `Error fetching attempt statistics for assignment ${assignmentId}:`,
+              error
+            );
+          }
 
-      // Process question insights in batches to prevent connection pool exhaustion
-      const questionInsights = [];
-      const batchSize = 3; // Process 3 questions at a time to avoid connection pool issues
+          // Batched aggregation: get all question stats in 2 queries instead of 3N queries
+          let questionInsights = [];
 
-      for (
-        let index = 0;
-        index < assignment.questions.length;
-        index += batchSize
-      ) {
-        const batch = assignment.questions.slice(index, index + batchSize);
+          try {
+            const questionIds = assignment.questions.map(q => q.id);
 
-        try {
-          const batchResults = await Promise.all(
-            batch.map(async (question) => {
-              let totalResponses = 0;
-              let correctCount = 0;
-              let averagePoints = 0;
+            // Single query to get total responses and average points for all questions
+            const responseStats = await this.prisma.questionResponse.groupBy({
+              by: ['questionId'],
+              where: {
+                questionId: { in: questionIds },
+                assignmentAttempt: { assignmentId },
+              },
+              _count: { id: true },
+              _avg: { points: true },
+            });
 
-              try {
-                // Get total response count for this question
-                totalResponses = await this.prisma.questionResponse.count({
-                  where: {
-                    questionId: question.id,
-                    assignmentAttempt: { assignmentId },
-                  },
-                });
-
-                if (totalResponses > 0) {
-                  // Get count of correct responses using aggregate
-                  correctCount = await this.prisma.questionResponse.count({
-                    where: {
-                      questionId: question.id,
-                      assignmentAttempt: { assignmentId },
-                      points: question.totalPoints,
-                    },
-                  });
-
-                  // Get average points using aggregate
-                  const pointsAvg =
-                    await this.prisma.questionResponse.aggregate({
-                      where: {
-                        questionId: question.id,
-                        assignmentAttempt: { assignmentId },
-                      },
-                      _avg: { points: true },
-                    });
-                  averagePoints = pointsAvg._avg.points || 0;
+            // Build a map of questionId -> stats for quick lookup
+            const statsMap = new Map(
+              responseStats.map(stat => [
+                stat.questionId,
+                {
+                  totalResponses: stat._count.id,
+                  averagePoints: stat._avg.points || 0,
                 }
-              } catch (error) {
-                this.logger.error(
-                  `Error fetching response statistics for question ${question.id}:`,
-                  error,
-                );
-                // Use fallback values (already initialized above)
-              }
+              ])
+            );
+
+            // Get correct counts: fetch responses where points = question.totalPoints
+            // Build OR conditions for each question
+            const correctCountQueries = assignment.questions.map(question => ({
+              questionId: question.id,
+              points: question.totalPoints,
+              assignmentAttempt: { assignmentId },
+            }));
+
+            const correctCounts = await Promise.all(
+              correctCountQueries.map(where =>
+                this.prisma.questionResponse.count({ where })
+              )
+            );
+
+            const correctCountMap = new Map(
+              assignment.questions.map((q, index) => [q.id, correctCounts[index]])
+            );
+
+            // Build question insights from aggregated data
+            questionInsights = assignment.questions.map(question => {
+              const stats = statsMap.get(question.id) || { totalResponses: 0, averagePoints: 0 };
+              const correctCount = correctCountMap.get(question.id) || 0;
+              const totalResponses = stats.totalResponses;
 
               const correctPercentage =
                 totalResponses > 0 ? (correctCount / totalResponses) * 100 : 0;
 
-              let insight = `${Math.round(
-                correctPercentage,
-              )}% of learners answered correctly`;
+              let insight = `${Math.round(correctPercentage)}% of learners answered correctly`;
               if (correctPercentage < 50) {
                 insight += ` - consider reviewing this question`;
               }
@@ -1753,7 +1794,7 @@ export class AdminService {
                 type: question.type,
                 totalPoints: question.totalPoints,
                 correctPercentage,
-                averagePoints,
+                averagePoints: stats.averagePoints,
                 responseCount: totalResponses,
                 insight,
                 variants: question.variants.length,
@@ -1761,306 +1802,295 @@ export class AdminService {
                   languageCode: t.languageCode,
                 })),
               };
-            }),
-          );
-          questionInsights.push(...batchResults);
-
-          // Add a small delay between batches to prevent connection pool exhaustion
-          if (index + batchSize < assignment.questions.length) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-        } catch (error) {
-          this.logger.error(
-            `Error processing question batch starting at index ${index}:`,
-            error,
-          );
-          // Continue with empty results for this batch to prevent total failure
-          const fallbackResults = batch.map((question) => ({
-            id: question.id,
-            question: question.question,
-            type: question.type,
-            totalPoints: question.totalPoints,
-            correctPercentage: 0,
-            averagePoints: 0,
-            responseCount: 0,
-            insight: "Data unavailable due to processing error",
-            variants: question.variants?.length || 0,
-            translations:
-              question.translations?.map((t) => ({
+            });
+          } catch (error) {
+            this.logger.error(
+              `Error fetching batched question statistics for assignment ${assignmentId}:`,
+              error
+            );
+            // Fallback to empty stats on error
+            questionInsights = assignment.questions.map(question => ({
+              id: question.id,
+              question: question.question,
+              type: question.type,
+              totalPoints: question.totalPoints,
+              correctPercentage: 0,
+              averagePoints: 0,
+              responseCount: 0,
+              insight: "Data unavailable due to processing error",
+              variants: question.variants?.length || 0,
+              translations: question.translations?.map((t) => ({
                 languageCode: t.languageCode,
               })) || [],
+            }));
+          }
+
+          const uniqueLearners = await this.prisma.assignmentAttempt.groupBy({
+            by: ["userId"],
+            where: { assignmentId },
+          });
+
+          const completedAttempts = submittedAttempts;
+          const averageGrade = calculatedAverageGrade;
+
+          const aiUsageRecords = assignment.AIUsage.map((usage) => ({
+            tokensIn: usage.tokensIn,
+            tokensOut: usage.tokensOut,
+            createdAt: usage.createdAt,
+            usageType: usage.usageType,
+            modelKey: usage.modelKey,
           }));
-          questionInsights.push(...fallbackResults);
-        }
-      }
 
-      // Calculate analytics
-      const uniqueLearners = await this.prisma.assignmentAttempt.groupBy({
-        by: ["userId"],
-        where: { assignmentId },
-      });
+          const costData = await this.calculateHistoricalCosts(aiUsageRecords);
+          const totalCost = costData.totalCost;
 
-      // Use the calculated stats instead of processing attempts array
-      const completedAttempts = submittedAttempts;
-      const averageGrade = calculatedAverageGrade;
-
-      // Calculate total cost using historical pricing
-      const aiUsageRecords = assignment.AIUsage.map((usage) => ({
-        tokensIn: usage.tokensIn,
-        tokensOut: usage.tokensOut,
-        createdAt: usage.createdAt,
-        usageType: usage.usageType,
-        modelKey: usage.modelKey,
-      }));
-
-      const costData = await this.calculateHistoricalCosts(aiUsageRecords);
-      const totalCost = costData.totalCost;
-
-      // Get author information and activity analysis
-      const authorActivity = await this.getAuthorActivity(
-        assignment.AssignmentAuthor,
-      );
-
-      const aiUsageWithCost = assignment.AIUsage.map((usage, index) => {
-        const detailedCost = costData.detailedBreakdown[index] || {
-          totalCost: 0,
-          inputCost: 0,
-          outputCost: 0,
-          modelKey: "unknown",
-          inputTokenPrice: 0,
-          outputTokenPrice: 0,
-          pricingEffectiveDate: new Date(),
-          calculationSteps: {
-            inputCalculation: "0 tokens × $0 = $0 (missing)",
-            outputCalculation: "0 tokens × $0 = $0 (missing)",
-            totalCalculation: "$0 + $0 = $0 (missing)",
-          },
-        };
-
-        return {
-          usageType: usage.usageType,
-          tokensIn: usage.tokensIn,
-          tokensOut: usage.tokensOut,
-          usageCount: usage.usageCount,
-          inputCost: detailedCost.inputCost,
-          outputCost: detailedCost.outputCost,
-          totalCost: detailedCost.totalCost,
-          modelUsed: detailedCost.modelKey,
-          inputTokenPrice: detailedCost.inputTokenPrice,
-          outputTokenPrice: detailedCost.outputTokenPrice,
-          pricingEffectiveDate: detailedCost.pricingEffectiveDate.toISOString(),
-          calculationSteps: detailedCost.calculationSteps,
-          createdAt: usage.createdAt.toISOString(),
-        };
-      });
-
-      // Calculate average rating
-      const ratings = assignment.AssignmentFeedback.map(
-        (f) => f.assignmentRating,
-      ).filter((r) => r !== null);
-      const averageRating =
-        ratings.length > 0
-          ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
-          : 0;
-
-      // Calculate total points for assignment
-      const totalPoints = assignment.questions.reduce(
-        (sum, q) => sum + q.totalPoints,
-        0,
-      );
-
-      // Cost breakdown from historical pricing data
-      const costBreakdown = {
-        grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-        questionGeneration:
-          Math.round(costData.costBreakdown.questionGeneration * 100) / 100,
-        translation: Math.round(costData.costBreakdown.translation * 100) / 100,
-        other: Math.round(costData.costBreakdown.other * 100) / 100,
-      };
-
-      // Generate performance insights
-      const performanceInsights: string[] = [];
-      if (completedAttempts > 0 && totalAttempts > 0) {
-        const completionRate = (completedAttempts / totalAttempts) * 100;
-        if (completionRate < 70) {
-          performanceInsights.push(
-            `Low completion rate (${Math.round(
-              completionRate,
-            )}%) - consider reducing difficulty`,
+          const authorActivity = await this.getAuthorActivity(
+            assignment.AssignmentAuthor
           );
-        }
-        if (averageGrade > 85) {
-          performanceInsights.push(
-            `High average grade (${Math.round(
-              averageGrade,
-            )}%) - learners are doing well`,
-          );
-        }
-        if (averageGrade < 60) {
-          performanceInsights.push(
-            `Low average grade (${Math.round(
-              averageGrade,
-            )}%) - may need clearer instructions`,
-          );
-        }
-      }
 
-      const insights = {
-        assignment: {
-          id: assignment.id,
-          name: assignment.name,
-          type: assignment.type,
-          published: assignment.published,
-          introduction: assignment.introduction,
-          instructions: assignment.instructions,
-          timeEstimateMinutes: assignment.timeEstimateMinutes,
-          allotedTimeMinutes: assignment.allotedTimeMinutes,
-          passingGrade: assignment.passingGrade,
-          createdAt: assignment.updatedAt.toISOString(),
-          updatedAt: assignment.updatedAt.toISOString(),
-          totalPoints,
-        },
-        analytics: {
-          totalCost,
-          uniqueLearners: uniqueLearners.length,
-          totalAttempts,
-          completedAttempts,
-          averageGrade,
-          averageRating,
-          costBreakdown,
-          performanceInsights,
-        },
-        questions: questionInsights,
-        attempts: await this.getAssignmentAttempts(assignmentId),
-        feedback: assignment.AssignmentFeedback.map((feedback) => ({
-          id: feedback.id,
-          userId: feedback.userId,
-          assignmentRating: feedback.assignmentRating,
-          aiGradingRating: feedback.aiGradingRating,
-          aiFeedbackRating: feedback.aiFeedbackRating,
-          comments: feedback.comments,
-          createdAt: feedback.createdAt.toISOString(),
-        })),
-        reports: assignment.Report.map((report) => ({
-          id: report.id,
-          issueType: report.issueType,
-          description: report.description,
-          status: report.status,
-          createdAt: report.createdAt.toISOString(),
-        })),
-        aiUsage: aiUsageWithCost,
-        costCalculationDetails: {
-          totalCost: Math.round(totalCost * 100) / 100,
-          breakdown: costData.detailedBreakdown.map((detail) => ({
-            usageType: detail.usageType || "Unknown",
-            tokensIn: detail.tokensIn,
-            tokensOut: detail.tokensOut,
-            modelUsed: detail.modelKey,
-            inputTokenPrice: detail.inputTokenPrice,
-            outputTokenPrice: detail.outputTokenPrice,
-            inputCost: Math.round(detail.inputCost * 100_000_000) / 100_000_000, // 8 decimal places
-            outputCost:
-              Math.round(detail.outputCost * 100_000_000) / 100_000_000,
-            totalCost: Math.round(detail.totalCost * 100_000_000) / 100_000_000,
-            pricingEffectiveDate: detail.pricingEffectiveDate.toISOString(),
-            usageDate: detail.usageDate.toISOString(),
-            calculationSteps: detail.calculationSteps,
-          })),
-          summary: {
-            totalInputTokens: costData.detailedBreakdown.reduce(
-              (sum, d) => sum + d.tokensIn,
-              0,
-            ),
-            totalOutputTokens: costData.detailedBreakdown.reduce(
-              (sum, d) => sum + d.tokensOut,
-              0,
-            ),
-            totalInputCost:
-              Math.round(
-                costData.detailedBreakdown.reduce(
-                  (sum, d) => sum + d.inputCost,
-                  0,
-                ) * 100_000_000,
-              ) / 100_000_000,
-            totalOutputCost:
-              Math.round(
-                costData.detailedBreakdown.reduce(
-                  (sum, d) => sum + d.outputCost,
-                  0,
-                ) * 100_000_000,
-              ) / 100_000_000,
-            averageInputPrice:
-              costData.detailedBreakdown.length > 0
-                ? costData.detailedBreakdown.reduce(
-                    (sum, d) => sum + d.inputTokenPrice,
-                    0,
-                  ) / costData.detailedBreakdown.length
-                : 0,
-            averageOutputPrice:
-              costData.detailedBreakdown.length > 0
-                ? costData.detailedBreakdown.reduce(
-                    (sum, d) => sum + d.outputTokenPrice,
-                    0,
-                  ) / costData.detailedBreakdown.length
-                : 0,
-            // eslint-disable-next-line unicorn/no-array-reduce
-            modelDistribution: costData.detailedBreakdown.reduce(
-              (accumulator: Record<string, number>, detail) => {
-                accumulator[detail.modelKey] =
-                  (accumulator[detail.modelKey] || 0) + detail.totalCost;
-                return accumulator;
+          const aiUsageWithCost = assignment.AIUsage.map((usage, index) => {
+            const detailedCost = costData.detailedBreakdown[index] || {
+              totalCost: 0,
+              inputCost: 0,
+              outputCost: 0,
+              modelKey: "unknown",
+              inputTokenPrice: 0,
+              outputTokenPrice: 0,
+              pricingEffectiveDate: new Date(),
+              calculationSteps: {
+                inputCalculation: "0 tokens × $0 = $0 (missing)",
+                outputCalculation: "0 tokens × $0 = $0 (missing)",
+                totalCalculation: "$0 + $0 = $0 (missing)",
               },
-              {} as Record<string, number>,
-            ),
-            usageTypeDistribution: {
-              grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-              questionGeneration:
-                Math.round(costData.costBreakdown.questionGeneration * 100) /
-                100,
-              translation:
-                Math.round(costData.costBreakdown.translation * 100) / 100,
-              other: Math.round(costData.costBreakdown.other * 100) / 100,
+            };
+
+            return {
+              usageType: usage.usageType,
+              tokensIn: usage.tokensIn,
+              tokensOut: usage.tokensOut,
+              usageCount: usage.usageCount,
+              inputCost: detailedCost.inputCost,
+              outputCost: detailedCost.outputCost,
+              totalCost: detailedCost.totalCost,
+              modelUsed: detailedCost.modelKey,
+              inputTokenPrice: detailedCost.inputTokenPrice,
+              outputTokenPrice: detailedCost.outputTokenPrice,
+              pricingEffectiveDate:
+                detailedCost.pricingEffectiveDate.toISOString(),
+              calculationSteps: detailedCost.calculationSteps,
+              createdAt: usage.createdAt.toISOString(),
+            };
+          });
+
+          const ratings = assignment.AssignmentFeedback.map(
+            (f) => f.assignmentRating
+          ).filter((r) => r !== null);
+          const averageRating =
+            ratings.length > 0
+              ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
+              : 0;
+
+          const totalPoints = assignment.questions.reduce(
+            (sum, q) => sum + q.totalPoints,
+            0
+          );
+
+          const costBreakdown = {
+            grading: Math.round(costData.costBreakdown.grading * 100) / 100,
+            questionGeneration:
+              Math.round(costData.costBreakdown.questionGeneration * 100) / 100,
+            translation:
+              Math.round(costData.costBreakdown.translation * 100) / 100,
+            other: Math.round(costData.costBreakdown.other * 100) / 100,
+          };
+
+          const performanceInsights: string[] = [];
+          if (completedAttempts > 0 && totalAttempts > 0) {
+            const completionRate = (completedAttempts / totalAttempts) * 100;
+            if (completionRate < 70) {
+              performanceInsights.push(
+                `Low completion rate (${Math.round(
+                  completionRate
+                )}%) - consider reducing difficulty`
+              );
+            }
+            if (averageGrade > 85) {
+              performanceInsights.push(
+                `High average grade (${Math.round(
+                  averageGrade
+                )}%) - learners are doing well`
+              );
+            }
+            if (averageGrade < 60) {
+              performanceInsights.push(
+                `Low average grade (${Math.round(
+                  averageGrade
+                )}%) - may need clearer instructions`
+              );
+            }
+          }
+
+          const insights = {
+            assignment: {
+              id: assignment.id,
+              name: assignment.name,
+              type: assignment.type,
+              published: assignment.published,
+              introduction: assignment.introduction,
+              instructions: assignment.instructions,
+              timeEstimateMinutes: assignment.timeEstimateMinutes,
+              allotedTimeMinutes: assignment.allotedTimeMinutes,
+              passingGrade: assignment.passingGrade,
+              createdAt: assignment.updatedAt.toISOString(),
+              updatedAt: assignment.updatedAt.toISOString(),
+              totalPoints,
             },
-          },
-        },
-        authorActivity: {
-          totalAuthors: authorActivity.totalAuthors,
-          authors: authorActivity.authors,
-          activityInsights: authorActivity.activityInsights,
-        },
-      };
+            analytics: {
+              totalCost,
+              uniqueLearners: uniqueLearners.length,
+              totalAttempts,
+              completedAttempts,
+              averageGrade,
+              averageRating,
+              costBreakdown,
+              performanceInsights,
+            },
+            questions: questionInsights,
+            attempts: await this.getAssignmentAttempts(assignmentId),
+            feedback: assignment.AssignmentFeedback.map((feedback) => ({
+              id: feedback.id,
+              userId: feedback.userId,
+              assignmentRating: feedback.assignmentRating,
+              aiGradingRating: feedback.aiGradingRating,
+              aiFeedbackRating: feedback.aiFeedbackRating,
+              comments: feedback.comments,
+              createdAt: feedback.createdAt.toISOString(),
+            })),
+            reports: assignment.Report.map((report) => ({
+              id: report.id,
+              issueType: report.issueType,
+              description: report.description,
+              status: report.status,
+              createdAt: report.createdAt.toISOString(),
+            })),
+            aiUsage: aiUsageWithCost,
+            costCalculationDetails: {
+              totalCost: Math.round(totalCost * 100) / 100,
+              breakdown: costData.detailedBreakdown.map((detail) => ({
+                usageType: detail.usageType || "Unknown",
+                tokensIn: detail.tokensIn,
+                tokensOut: detail.tokensOut,
+                modelUsed: detail.modelKey,
+                inputTokenPrice: detail.inputTokenPrice,
+                outputTokenPrice: detail.outputTokenPrice,
+                inputCost:
+                  Math.round(detail.inputCost * 100_000_000) / 100_000_000,
+                outputCost:
+                  Math.round(detail.outputCost * 100_000_000) / 100_000_000,
+                totalCost:
+                  Math.round(detail.totalCost * 100_000_000) / 100_000_000,
+                pricingEffectiveDate: detail.pricingEffectiveDate.toISOString(),
+                usageDate: detail.usageDate.toISOString(),
+                calculationSteps: detail.calculationSteps,
+              })),
+              summary: {
+                totalInputTokens: costData.detailedBreakdown.reduce(
+                  (sum, d) => sum + d.tokensIn,
+                  0
+                ),
+                totalOutputTokens: costData.detailedBreakdown.reduce(
+                  (sum, d) => sum + d.tokensOut,
+                  0
+                ),
+                totalInputCost:
+                  Math.round(
+                    costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + d.inputCost,
+                      0
+                    ) * 100_000_000
+                  ) / 100_000_000,
+                totalOutputCost:
+                  Math.round(
+                    costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + d.outputCost,
+                      0
+                    ) * 100_000_000
+                  ) / 100_000_000,
+                averageInputPrice:
+                  costData.detailedBreakdown.length > 0
+                    ? costData.detailedBreakdown.reduce(
+                        (sum, d) => sum + d.inputTokenPrice,
+                        0
+                      ) / costData.detailedBreakdown.length
+                    : 0,
+                averageOutputPrice:
+                  costData.detailedBreakdown.length > 0
+                    ? costData.detailedBreakdown.reduce(
+                        (sum, d) => sum + d.outputTokenPrice,
+                        0
+                      ) / costData.detailedBreakdown.length
+                    : 0,
+                // eslint-disable-next-line unicorn/no-array-reduce
+                modelDistribution: costData.detailedBreakdown.reduce(
+                  (accumulator: Record<string, number>, detail) => {
+                    accumulator[detail.modelKey] =
+                      (accumulator[detail.modelKey] || 0) + detail.totalCost;
+                    return accumulator;
+                  },
+                  {} as Record<string, number>
+                ),
+                usageTypeDistribution: {
+                  grading:
+                    Math.round(costData.costBreakdown.grading * 100) / 100,
+                  questionGeneration:
+                    Math.round(
+                      costData.costBreakdown.questionGeneration * 100
+                    ) / 100,
+                  translation:
+                    Math.round(costData.costBreakdown.translation * 100) / 100,
+                  other: Math.round(costData.costBreakdown.other * 100) / 100,
+                },
+              },
+            },
+            authorActivity: {
+              totalAuthors: authorActivity.totalAuthors,
+              authors: authorActivity.authors,
+              activityInsights: authorActivity.activityInsights,
+            },
+          };
 
-      // Cache the result before returning
-      this.setCachedInsights(assignmentId, insights);
+          return insights;
+        } catch (error) {
+          this.logger.error(
+            `Error getting detailed assignment insights for assignment ${assignmentId}:`,
+            error
+          );
 
-      return insights;
-    } catch (error) {
-      this.logger.error(
-        `Error getting detailed assignment insights for assignment ${assignmentId}:`,
-        error,
-      );
-
-      // Return a safe fallback response
-      return {
-        insights: {
-          questionInsights: [],
-          performanceInsights: [
-            "Unable to load detailed insights due to a data processing error. Please try again later.",
-          ],
-          costBreakdown: {
-            grading: 0,
-            questionGeneration: 0,
-            translation: 0,
-            other: 0,
-          },
-        },
-        authorActivity: {
-          totalAuthors: 0,
-          authors: [],
-          activityInsights: ["Author activity data is currently unavailable."],
-        },
-      };
-    }
+          return {
+            insights: {
+              questionInsights: [],
+              performanceInsights: [
+                "Unable to load detailed insights due to a data processing error. Please try again later.",
+              ],
+              costBreakdown: {
+                grading: 0,
+                questionGeneration: 0,
+                translation: 0,
+                other: 0,
+              },
+            },
+            authorActivity: {
+              totalAuthors: 0,
+              authors: [],
+              activityInsights: [
+                "Author activity data is currently unavailable.",
+              ],
+            },
+          };
+        }
+      },
+      { ttl: this.INSIGHTS_CACHE_TTL }
+    );
   }
 
   async removeAssignment(id: number): Promise<BaseAssignmentResponseDto> {
@@ -2117,6 +2147,8 @@ export class AdminService {
       where: { id },
     });
 
+    await this.invalidateAssignmentInsightsCache(id);
+
     return {
       id: id,
       success: true,
@@ -2128,72 +2160,100 @@ export class AdminService {
   async executeQuickAction(
     adminSession: { email: string; role: UserRole; userId?: string },
     action: string,
-    limit = 10,
+    limit = 10
   ) {
-    const isAdmin = adminSession.role === UserRole.ADMIN;
+    const cacheKey = this.getCacheKey(
+      "quick-action",
+      adminSession.userId || "admin",
+      action,
+      limit
+    );
 
-    // Build base where clauses for different queries
-    const assignmentWhere: any = isAdmin
-      ? {}
-      : {
-          AssignmentAuthor: {
-            some: {
-              userId: adminSession.userId,
-            },
-          },
-        };
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        const isAdmin = adminSession.role === UserRole.ADMIN;
 
-    switch (action) {
-      case "top-assignments-by-cost": {
-        return await this.getTopAssignmentsByCost(assignmentWhere, limit);
-      }
+        // Build base where clauses for different queries
+        const assignmentWhere: any = isAdmin
+          ? {}
+          : {
+              AssignmentAuthor: {
+                some: {
+                  userId: adminSession.userId,
+                },
+              },
+            };
 
-      case "top-assignments-by-attempts": {
-        return await this.getTopAssignmentsByAttempts(assignmentWhere, limit);
-      }
+        switch (action) {
+          case "top-assignments-by-cost": {
+            return await this.getTopAssignmentsByCost(assignmentWhere, limit);
+          }
 
-      case "top-assignments-by-learners": {
-        return await this.getTopAssignmentsByLearners(assignmentWhere, limit);
-      }
+          case "top-assignments-by-attempts": {
+            return await this.getTopAssignmentsByAttempts(
+              assignmentWhere,
+              limit
+            );
+          }
 
-      case "most-expensive-assignments": {
-        return await this.getMostExpensiveAssignments(assignmentWhere, limit);
-      }
+          case "top-assignments-by-learners": {
+            return await this.getTopAssignmentsByLearners(
+              assignmentWhere,
+              limit
+            );
+          }
 
-      case "assignments-with-most-reports": {
-        return await this.getAssignmentsWithMostReports(assignmentWhere, limit);
-      }
+          case "most-expensive-assignments": {
+            return await this.getMostExpensiveAssignments(
+              assignmentWhere,
+              limit
+            );
+          }
 
-      case "highest-rated-assignments": {
-        return await this.getHighestRatedAssignments(assignmentWhere, limit);
-      }
+          case "assignments-with-most-reports": {
+            return await this.getAssignmentsWithMostReports(
+              assignmentWhere,
+              limit
+            );
+          }
 
-      case "assignments-with-lowest-ratings": {
-        return await this.getAssignmentsWithLowestRatings(
-          assignmentWhere,
-          limit,
-        );
-      }
+          case "highest-rated-assignments": {
+            return await this.getHighestRatedAssignments(
+              assignmentWhere,
+              limit
+            );
+          }
 
-      case "recent-high-activity": {
-        return await this.getRecentHighActivityAssignments(
-          assignmentWhere,
-          limit,
-        );
-      }
+          case "assignments-with-lowest-ratings": {
+            return await this.getAssignmentsWithLowestRatings(
+              assignmentWhere,
+              limit
+            );
+          }
 
-      case "cost-per-learner-analysis": {
-        return await this.getCostPerLearnerAnalysis(assignmentWhere, limit);
-      }
+          case "recent-high-activity": {
+            return await this.getRecentHighActivityAssignments(
+              assignmentWhere,
+              limit
+            );
+          }
 
-      case "completion-rate-analysis": {
-        return await this.getCompletionRateAnalysis(assignmentWhere, limit);
-      }
+          case "cost-per-learner-analysis": {
+            return await this.getCostPerLearnerAnalysis(assignmentWhere, limit);
+          }
 
-      default: {
-        throw new Error(`Unknown quick action: ${action}`);
-      }
-    }
+          case "completion-rate-analysis": {
+            return await this.getCompletionRateAnalysis(assignmentWhere, limit);
+          }
+
+          default: {
+            throw new BadRequestException(`Unknown quick action: ${action}`);
+          }
+        }
+      },
+      { ttl: this.QUICK_ACTION_CACHE_TTL }
+    );
   }
 
   private async getTopAssignmentsByCost(assignmentWhere: any, limit: number) {
@@ -2217,16 +2277,15 @@ export class AdminService {
           select: { id: true },
         },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithCost = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsage,
+          assignment.AIUsage
         );
 
-        // Get attempt count separately
         const attemptCount = await this.prisma.assignmentAttempt.count({
           where: { assignmentId: assignment.id },
         });
@@ -2241,7 +2300,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
@@ -2254,9 +2313,8 @@ export class AdminService {
 
   private async getTopAssignmentsByAttempts(
     assignmentWhere: any,
-    limit: number,
+    limit: number
   ) {
-    // First get assignments with basic info
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
       select: {
@@ -2266,10 +2324,9 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
-    // Get attempt data for each assignment
     const assignmentsWithAttempts = await Promise.all(
       assignments.map(async (assignment) => {
         const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -2299,7 +2356,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
@@ -2312,7 +2369,7 @@ export class AdminService {
 
   private async getTopAssignmentsByLearners(
     assignmentWhere: any,
-    limit: number,
+    limit: number
   ) {
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
@@ -2323,7 +2380,7 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithLearnerCount = await Promise.all(
@@ -2338,7 +2395,7 @@ export class AdminService {
 
         const uniqueLearners = new Set(attempts.map((a) => a.userId)).size;
         const completedLearners = new Set(
-          attempts.filter((a) => a.submitted).map((a) => a.userId),
+          attempts.filter((a) => a.submitted).map((a) => a.userId)
         ).size;
 
         return {
@@ -2353,7 +2410,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
@@ -2366,14 +2423,14 @@ export class AdminService {
 
   private async getMostExpensiveAssignments(
     assignmentWhere: any,
-    limit: number,
+    limit: number
   ) {
     return await this.getTopAssignmentsByCost(assignmentWhere, limit);
   }
 
   private async getAssignmentsWithMostReports(
     assignmentWhere: any,
-    limit: number,
+    limit: number
   ) {
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
@@ -2391,10 +2448,9 @@ export class AdminService {
         },
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
-    // Get assignments with report data and sort by report count
     const assignmentsWithReports = await Promise.all(
       assignments.map(async (assignment) => {
         const attemptCount = await this.prisma.assignmentAttempt.count({
@@ -2402,12 +2458,12 @@ export class AdminService {
         });
 
         const openReports = assignment.Report.filter(
-          (r: any) => r.status === "OPEN",
+          (r: any) => r.status === "OPEN"
         ).length;
         const recentReports = assignment.Report.filter(
           (r: any) =>
             new Date(r.createdAt) >
-            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
         ).length;
 
         return {
@@ -2421,7 +2477,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
@@ -2434,7 +2490,7 @@ export class AdminService {
 
   private async getHighestRatedAssignments(
     assignmentWhere: any,
-    limit: number,
+    limit: number
   ) {
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
@@ -2451,7 +2507,7 @@ export class AdminService {
           },
         },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithRatings = await Promise.all(
@@ -2461,7 +2517,7 @@ export class AdminService {
         });
 
         const ratings = assignment.AssignmentFeedback.map(
-          (f: any) => f.assignmentRating,
+          (f: any) => f.assignmentRating
         ).filter((r: any) => r !== null && r !== undefined) as number[];
 
         const averageRating =
@@ -2470,7 +2526,7 @@ export class AdminService {
             : 0;
 
         const aiRatings = assignment.AssignmentFeedback.map(
-          (f: any) => f.aiGradingRating,
+          (f: any) => f.aiGradingRating
         ).filter((r: any) => r !== null && r !== undefined) as number[];
 
         const averageAiRating =
@@ -2490,7 +2546,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
@@ -2504,11 +2560,11 @@ export class AdminService {
 
   private async getAssignmentsWithLowestRatings(
     assignmentWhere: any,
-    limit: number,
+    limit: number
   ) {
     const result = await this.getHighestRatedAssignments(
       assignmentWhere,
-      limit * 2,
+      limit * 2
     );
     return {
       title: `${limit} Assignments with Lowest Ratings`,
@@ -2520,11 +2576,10 @@ export class AdminService {
 
   private async getRecentHighActivityAssignments(
     assignmentWhere: any,
-    limit: number,
+    limit: number
   ) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // First, get assignments that have recent attempts
     const assignmentIds = await this.prisma.assignmentAttempt.findMany({
       where: {
         createdAt: { gte: sevenDaysAgo },
@@ -2545,7 +2600,7 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithActivity = await Promise.all(
@@ -2567,10 +2622,10 @@ export class AdminService {
         });
 
         const uniqueRecentUsers = new Set(
-          recentAttempts.map((a: any) => a.userId),
+          recentAttempts.map((a: any) => a.userId)
         ).size;
         const recentCompletions = recentAttempts.filter(
-          (a: any) => a.submitted,
+          (a: any) => a.submitted
         ).length;
 
         return {
@@ -2584,7 +2639,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
@@ -2613,13 +2668,13 @@ export class AdminService {
           },
         },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithCostPerLearner = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsage,
+          assignment.AIUsage
         );
 
         const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -2644,7 +2699,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
@@ -2666,7 +2721,7 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithCompletionRate = await Promise.all(
@@ -2681,7 +2736,7 @@ export class AdminService {
 
         const uniqueUsers = new Set(attempts.map((a: any) => a.userId)).size;
         const completedUsers = new Set(
-          attempts.filter((a: any) => a.submitted).map((a: any) => a.userId),
+          attempts.filter((a: any) => a.submitted).map((a: any) => a.userId)
         ).size;
         const completionRate =
           uniqueUsers > 0 ? (completedUsers / uniqueUsers) * 100 : 0;
@@ -2697,7 +2752,7 @@ export class AdminService {
           published: assignment.published,
           createdAt: assignment.updatedAt,
         };
-      }),
+      })
     );
 
     return {
