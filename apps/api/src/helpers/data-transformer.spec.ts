@@ -38,7 +38,6 @@ describe("DataTransformer API", () => {
 
       const result = smartEncode(testData);
 
-      // Without explicit field configuration, nothing should be transformed
       expect(result.data.shortField).toBe(testData.shortField);
       expect(result.data.longField).toBe(testData.longField);
       expect(result.data.number).toBe(testData.number);
@@ -268,14 +267,14 @@ describe("DataTransformer API", () => {
       expect(decoded.html).toBe(html);
     });
 
-    it("should decode base64 payloads even when wrapped with stray characters", () => {
+    it("should NOT decode base64 payloads when wrapped with stray characters (safer behavior)", () => {
       const html = "<p>Corrupted payload</p>";
       const encodedHtml = Buffer.from(html, "utf8").toString("base64");
       const corrupted = `r\uFFFD\uFFFD${encodedHtml}`;
 
       const decoded = smartDecode({ html: corrupted }, { fields: ["html"] });
 
-      expect(decoded.html).toBe(html);
+      expect(decoded.html).toBe(corrupted);
     });
 
     it("should fully decode nested base64 layers", () => {
@@ -297,8 +296,6 @@ describe("DataTransformer API", () => {
         fields: ["invalidBase64"],
       });
 
-      // Node.js Buffer.from() will decode any string, so the result will be the decoded bytes
-      // The test should just verify it doesn't crash and returns something
       expect(result.validField).toBe(testData.validField);
       expect(typeof result.invalidBase64).toBe("string");
     });
@@ -404,7 +401,6 @@ describe("DataTransformer API", () => {
         const testData = { field: plainText };
         const result = smartEncode(testData, { fields: ["field"] });
 
-        // Should be encoded when explicitly configured
         expect(result.data.field).not.toBe(plainText);
         expect(result.metadata.transformedFields).toContain("field");
       });
@@ -415,7 +411,6 @@ describe("DataTransformer API", () => {
 
         const result = smartEncode(testData);
 
-        // Should NOT be encoded without explicit configuration
         expect(result.data.field).toBe(plainText);
         expect(result.metadata.transformedFields).not.toContain("field");
       });
@@ -578,11 +573,9 @@ describe("DataTransformer API", () => {
 
         const result = DataTransformer.encodeForAPI(testData);
 
-        // Excluded fields should remain unchanged
         expect(result.data.id).toBe(testData.id);
         expect(result.data.createdAt).toBe(testData.createdAt);
         expect(result.data.updatedAt).toBe(testData.updatedAt);
-        // Without explicit fields config, content is NOT encoded
         expect(result.data.longContent).toBe(testData.longContent);
         expect(result.data.nested.deepContent).toBe(
           testData.nested.deepContent,
@@ -601,7 +594,6 @@ describe("DataTransformer API", () => {
 
         const decoded = DataTransformer.decodeFromAPI(testData);
 
-        // ID, createdAt, updatedAt should be excluded and remain unchanged
         expect(decoded.id).toBe(testData.id);
         expect(decoded.createdAt).toBe(testData.createdAt);
         expect(decoded.updatedAt).toBe(testData.updatedAt);
@@ -669,7 +661,6 @@ describe("DataTransformer API", () => {
       });
 
       expect(result.validField).toBe(testData.validField);
-      // Node.js will decode this as binary data, so we just check it's a string
       expect(typeof result.invalidBase64).toBe("string");
     });
   });

@@ -15,11 +15,7 @@ export const TRANSFORM_FIELDS = [
 
   "question",
   "content",
-  "rubricQuestion",
-  "description",
 
-  "choice",
-  "feedback",
   "choices.choice",
   "choices.feedback",
   "questions.choices.choice",

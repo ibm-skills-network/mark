@@ -12,7 +12,6 @@ export interface TransformConfig {
   compressionLevel?: "none" | "light" | "heavy";
 }
 
-// Lazy-loaded config to avoid circular dependencies
 let _transformConfig:
   | {
       API_ENCODE_CONFIG: typeof API_ENCODE_CONFIG;
@@ -45,22 +44,13 @@ const transformCache = new Map<
   { data: any; metadata: TransformMetadata; expiry: number }
 >();
 const CACHE_TTL = 5 * 60 * 1000;
-const HTML_TAG_REGEX = /<\/?[a-z][\s\S]*>/i;
-const BASE64_FULL_REGEX = /^[A-Za-z0-9+/]+={0,2}$/;
-const BASE64_SEGMENT_REGEX = /[A-Za-z0-9+/=]{4,}/g;
+const BASE64_REGEX = /^[A-Za-z0-9+/]+=*$/;
 const MAX_BASE64_DEPTH = 5;
 
-interface Base64Payload {
-  candidate: string;
-  decoded: string;
-}
-
-function padBase64(value: string): string {
-  const remainder = value.length % 4;
-  if (remainder === 0) return value;
-  return value + "=".repeat(4 - remainder);
-}
-
+/**
+ * Check if a string contains mostly printable text
+ * Used to validate that decoded base64 produces readable content
+ */
 function isPrintableText(value: string): boolean {
   if (!value) return true;
 
@@ -81,15 +71,34 @@ function isPrintableText(value: string): boolean {
   return printableCount / value.length >= 0.85;
 }
 
-function decodeBase64String(value: string): string | null {
+/**
+ * Strictly validate and decode a base64 string
+ * Returns decoded string only if:
+ * 1. Input is valid base64 format
+ * 2. Decoded content is printable text
+ * 3. Re-encoding produces the same result (round-trip validation)
+ */
+function tryDecodeBase64(value: string): string | null {
+  if (!value || typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+
+  if (trimmed.length < 4) return null;
+
+  if (!BASE64_REGEX.test(trimmed)) return null;
+
+  const paddingNeeded = (4 - (trimmed.length % 4)) % 4;
+  const padded = trimmed + "=".repeat(paddingNeeded);
+
   try {
-    const binaryString = atob(value);
+    const binaryString = atob(padded);
     const bytes = new Uint8Array(binaryString.length);
     for (let index = 0; index < binaryString.length; index += 1) {
       bytes[index] = binaryString.charCodeAt(index);
     }
     const decoder = new TextDecoder();
     const decoded = decoder.decode(bytes);
+
     if (!isPrintableText(decoded)) {
       return null;
     }
@@ -100,62 +109,30 @@ function decodeBase64String(value: string): string | null {
       String.fromCharCode(byte),
     ).join("");
     const reencoded = btoa(binaryStr).replace(/=+$/g, "");
-    const normalizedInput = value.replace(/=+$/g, "");
+    const normalizedInput = trimmed.replace(/=+$/g, "");
 
-    if (reencoded !== normalizedInput) {
-      return null;
-    }
-
-    return decoded;
-  } catch (error) {
+    return reencoded === normalizedInput ? decoded : null;
+  } catch {
     return null;
   }
 }
 
-function findBase64Payload(rawValue: string): Base64Payload | null {
-  if (!rawValue) return null;
-
-  const trimmed = rawValue.trim();
-  if (!trimmed) return null;
-
-  const passesFullRegex = BASE64_FULL_REGEX.test(trimmed);
-
-  const primaryCandidate = passesFullRegex && decodeBase64String(trimmed);
-
-  if (typeof primaryCandidate === "string") {
-    return { candidate: trimmed, decoded: primaryCandidate };
-  }
-
-  const matches = trimmed.match(BASE64_SEGMENT_REGEX);
-  if (!matches) return null;
-
-  for (const match of matches) {
-    if (!match) continue;
-    const padded = padBase64(match);
-    const decoded = decodeBase64String(padded);
-    if (decoded !== null) {
-      return { candidate: padded, decoded };
-    }
-  }
-
-  return null;
-}
-
+/**
+ * Decode multiple layers of base64 encoding
+ * Handles cases where data was encoded multiple times
+ */
 function decodeBase64Layers(value: string): string {
+  if (!value || typeof value !== "string") return value;
+
   let current = value;
   let depth = 0;
 
   while (depth < MAX_BASE64_DEPTH) {
-    // If the current value contains HTML tags, it's already decoded - stop
-    if (HTML_TAG_REGEX.test(current)) {
+    const decoded = tryDecodeBase64(current);
+
+    if (decoded === null || decoded === current) {
       break;
     }
-
-    const payload = findBase64Payload(current);
-    if (!payload) break;
-
-    const decoded = payload.decoded;
-    if (decoded === current) break;
 
     current = decoded;
     depth += 1;
@@ -271,11 +248,9 @@ function transformData(
       continue;
     }
 
-    // Special handling: If the value is a JSON string, parse it first, then transform
     if (typeof value === "string" && operation === "decode") {
       const parsed = tryParseJSON(value);
       if (parsed !== null && typeof parsed === "object") {
-        // It's a JSON string - parse, transform, then keep as object (don't re-stringify)
         result[key] = transformData(
           parsed,
           config,
@@ -338,7 +313,6 @@ function shouldTransformField(
   fieldPath: string,
   operation: "encode" | "decode",
 ): boolean {
-  // Only transform explicitly configured fields
   if (!fields || fields.length === 0) {
     return false;
   }
@@ -348,7 +322,6 @@ function shouldTransformField(
     return false;
   }
 
-  // Skip encoding short numeric strings (like "45", "2027")
   if (typeof value === "string") {
     const trimmedValue = value.trim();
     if (
@@ -399,24 +372,6 @@ function matchesConfiguredField(
 }
 
 /**
- * Check if a string is already Base64 encoded
- */
-function isAlreadyEncoded(value: string): boolean {
-  if (!value || typeof value !== "string") return false;
-
-  const trimmed = value.trim();
-  if (
-    !trimmed ||
-    trimmed.length % 4 !== 0 ||
-    !BASE64_FULL_REGEX.test(trimmed)
-  ) {
-    return false;
-  }
-
-  return decodeBase64String(trimmed) !== null;
-}
-
-/**
  * Encode a single value with optional compression for large strings
  */
 function encodeValue(value: any): string {
@@ -431,7 +386,6 @@ function encodeValue(value: any): string {
   const encoder = new TextEncoder();
   const encoded = encoder.encode(value);
 
-  // Properly convert Uint8Array to binary string
   const binaryString = Array.from(encoded, (byte) =>
     String.fromCharCode(byte),
   ).join("");
@@ -462,7 +416,6 @@ function decodeValue(value: any): any {
         return fullyDecoded;
       }
     } catch (error) {
-      console.warn("Failed to decode compressed value:", error);
       return value;
     }
   }
@@ -486,7 +439,6 @@ function compressAndEncode(value: string): string {
   const encoder = new TextEncoder();
   const encoded = encoder.encode(value);
 
-  // Properly convert Uint8Array to binary string
   const binaryString = Array.from(encoded, (byte) =>
     String.fromCharCode(byte),
   ).join("");
@@ -538,11 +490,9 @@ function generateCacheKey(
       ? data.substring(0, 50)
       : safeStringify(data).substring(0, 50);
 
-  // Use TextEncoder to handle Unicode characters properly before base64 encoding
   const encoder = new TextEncoder();
   const encoded = encoder.encode(configHash + dataHash);
 
-  // Properly convert Uint8Array to binary string
   const binaryString = Array.from(encoded, (byte) =>
     String.fromCharCode(byte),
   ).join("");

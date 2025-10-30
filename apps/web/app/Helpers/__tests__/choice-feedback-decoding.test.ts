@@ -29,21 +29,16 @@ describe("Choice and Feedback Decoding", () => {
         ],
       };
 
-      // Encode
       const { data: encoded } = DataTransformer.encodeForAPI(
         originalData,
         API_ENCODE_CONFIG,
       );
 
-      // Verify choices are NOT encoded (they're plain text in the original)
-      // but question IS encoded (it has HTML tags)
       expect(encoded.question).not.toBe(originalData.question);
-      expect(encoded.question).toMatch(/^[A-Za-z0-9+/]+=*$/); // base64 format
+      expect(encoded.question).toMatch(/^[A-Za-z0-9+/]+=*$/);
 
-      // Decode
       const decoded = DataTransformer.decodeFromAPI(encoded, API_DECODE_CONFIG);
 
-      // Verify everything is decoded correctly
       expect(decoded.question).toBe(originalData.question);
       expect(decoded.choices[0].choice).toBe(originalData.choices[0].choice);
       expect(decoded.choices[0].feedback).toBe(
@@ -73,21 +68,17 @@ describe("Choice and Feedback Decoding", () => {
         ],
       };
 
-      // Encode
       const { data: encoded } = DataTransformer.encodeForAPI(
         originalData,
         API_ENCODE_CONFIG,
       );
 
-      // All HTML content should be encoded
       expect(encoded.question).toMatch(/^[A-Za-z0-9+/]+=*$/);
       expect(encoded.choices[0].choice).toMatch(/^[A-Za-z0-9+/]+=*$/);
       expect(encoded.choices[0].feedback).toMatch(/^[A-Za-z0-9+/]+=*$/);
 
-      // Decode
       const decoded = DataTransformer.decodeFromAPI(encoded, API_DECODE_CONFIG);
 
-      // Verify all HTML content is decoded
       expect(decoded.question).toBe(originalData.question);
       expect(decoded.choices[0].choice).toBe(originalData.choices[0].choice);
       expect(decoded.choices[0].feedback).toBe(
@@ -112,7 +103,6 @@ describe("Choice and Feedback Decoding", () => {
           {
             choice: "Option B",
             isCorrect: false,
-            // No feedback field
           },
         ],
       };
@@ -176,7 +166,6 @@ describe("Choice and Feedback Decoding", () => {
       );
       const decoded = DataTransformer.decodeFromAPI(encoded, API_DECODE_CONFIG);
 
-      // Verify first question
       expect(decoded.questions[0].question).toBe(
         originalData.questions[0].question,
       );
@@ -187,7 +176,6 @@ describe("Choice and Feedback Decoding", () => {
         originalData.questions[0].choices[0].feedback,
       );
 
-      // Verify second question
       expect(decoded.questions[1].question).toBe(
         originalData.questions[1].question,
       );
@@ -238,7 +226,6 @@ describe("Choice and Feedback Decoding", () => {
 
   describe("Real-world API Response Format", () => {
     it("should decode the exact format from the bug report", () => {
-      // This is the actual data structure from the user's bug report
       const apiResponse = [
         {
           type: "SINGLE_CORRECT",
@@ -275,18 +262,15 @@ describe("Choice and Feedback Decoding", () => {
         },
       ];
 
-      // Decode the response
       const decoded = DataTransformer.decodeFromAPI(
         apiResponse,
         API_DECODE_CONFIG,
       );
 
-      // The question should be decoded
       expect(decoded[0].question).toBe(
         "<p>Which SQL query correctly retrieves the first 100 rows from the sales_detail table in PostgreSQL?</p>",
       );
 
-      // The choices should remain as plain text (not encoded in the original response)
       expect(decoded[0].choices[0].choice).toBe(
         "SELECT * FROM sales_detail LIMIT 100;",
       );
@@ -373,18 +357,20 @@ describe("Choice and Feedback Decoding", () => {
   });
 
   describe("Config Consistency", () => {
-    it("should have choice and feedback fields in encode config", () => {
-      expect(API_ENCODE_CONFIG.fields).toContain("choice");
-      expect(API_ENCODE_CONFIG.fields).toContain("feedback");
+    it("should have choice and feedback fields in encode config (specific paths only)", () => {
+      expect(API_ENCODE_CONFIG.fields).not.toContain("choice");
+      expect(API_ENCODE_CONFIG.fields).not.toContain("feedback");
+
       expect(API_ENCODE_CONFIG.fields).toContain("choices.choice");
       expect(API_ENCODE_CONFIG.fields).toContain("choices.feedback");
       expect(API_ENCODE_CONFIG.fields).toContain("questions.choices.choice");
       expect(API_ENCODE_CONFIG.fields).toContain("questions.choices.feedback");
     });
 
-    it("should have choice and feedback fields in decode config", () => {
-      expect(API_DECODE_CONFIG.fields).toContain("choice");
-      expect(API_DECODE_CONFIG.fields).toContain("feedback");
+    it("should have choice and feedback fields in decode config (specific paths only)", () => {
+      expect(API_DECODE_CONFIG.fields).not.toContain("choice");
+      expect(API_DECODE_CONFIG.fields).not.toContain("feedback");
+
       expect(API_DECODE_CONFIG.fields).toContain("choices.choice");
       expect(API_DECODE_CONFIG.fields).toContain("choices.feedback");
       expect(API_DECODE_CONFIG.fields).toContain("questions.choices.choice");
