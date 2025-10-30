@@ -16,13 +16,16 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { IsNumber, IsString } from "class-validator";
 import { AdminService } from "../admin.service";
 
 class ApproveRegradingRequestDto {
+  @IsNumber()
   newGrade: number;
 }
 
 class RejectRegradingRequestDto {
+  @IsString()
   reason: string;
 }
 
@@ -54,7 +57,7 @@ export class RegradingRequestsController {
   @ApiOperation({ summary: "Approve a regrading request" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({ type: ApproveRegradingRequestDto })
-  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 201 })
   @ApiResponse({ status: 403 })
   approveRegradingRequest(
     @Param("id") id: number,
@@ -70,7 +73,7 @@ export class RegradingRequestsController {
   @ApiOperation({ summary: "Reject a regrading request" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({ type: RejectRegradingRequestDto })
-  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 201 })
   @ApiResponse({ status: 403 })
   rejectRegradingRequest(
     @Param("id") id: number,

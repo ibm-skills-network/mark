@@ -1,2 +1,42 @@
 *.test.ts
 **/node_modules
+
+# Environment files
+.env
+.env.local
+.env.*.local
+dev.env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Logs
+*.log
+logs
+
+# Test coverage
+coverage
+
+# Docker Compose (not needed in images)
+docker-compose.yml
+docker-compose.*.yml
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Misc
+.turbo
+.cache

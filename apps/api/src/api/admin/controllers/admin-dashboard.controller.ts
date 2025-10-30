@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Controller,
   DefaultValuePipe,
   Get,
   Injectable,
   Param,
+  ParseBoolPipe,
   ParseIntPipe,
   Post,
   Query,
@@ -25,14 +27,6 @@ import {
 import { Roles } from "src/auth/role/roles.global.guard";
 import { ScheduledTasksService } from "../../scheduled-tasks/services/scheduled-tasks.service";
 import { AdminService } from "../admin.service";
-
-interface AdminSessionRequest extends Request {
-  adminSession: {
-    email: string;
-    role: UserRole;
-    sessionToken: string;
-  };
-}
 
 interface AssignmentAnalyticsResponse {
   data: Array<{
@@ -89,6 +83,11 @@ interface AssignmentAnalyticsResponse {
     totalPages: number;
   };
 }
+// Input validation constants
+const MAX_LIMIT = 25;
+const DEFAULT_LIMIT = 10;
+const DEFAULT_DATE_WINDOW_DAYS = 30;
+
 @ApiTags("Admin Dashboard")
 @UseGuards(AdminGuard)
 @ApiBearerAuth()
@@ -102,6 +101,25 @@ export class AdminDashboardController {
     private adminService: AdminService,
     private scheduledTasksService: ScheduledTasksService,
   ) {}
+
+  private validateLimit(limit: number): number {
+    if (limit > MAX_LIMIT) {
+      throw new BadRequestException(`Limit cannot exceed ${MAX_LIMIT}`);
+    }
+    return limit;
+  }
+
+  private validateDateWindow(startDate?: string, endDate?: string): void {
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diffDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+
+      if (diffDays > 365) {
+        throw new BadRequestException('Date range cannot exceed 365 days');
+      }
+    }
+  }
 
   @Get("stats")
   @Roles(UserRole.AUTHOR, UserRole.ADMIN)
@@ -123,6 +141,9 @@ export class AdminDashboardController {
     @Query("assignmentName") assignmentName?: string,
     @Query("userId") userId?: string,
   ): Promise<any> {
+    // Validate date window
+    this.validateDateWindow(startDate, endDate);
+
     return this.adminService.getDashboardStats(request.userSession, {
       startDate,
       endDate,
@@ -138,18 +159,19 @@ export class AdminDashboardController {
   @ApiOperation({
     summary: "Execute predefined quick actions for dashboard insights",
   })
-  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number, description: `Maximum ${MAX_LIMIT}` })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   async executeQuickAction(
-    @Req() request: AdminSessionRequest,
+    @Req() request: UserSessionRequest,
     @Param("action") action: string,
-    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query("limit", new DefaultValuePipe(DEFAULT_LIMIT), ParseIntPipe) limit: number,
   ): Promise<any> {
+    const validatedLimit = this.validateLimit(limit);
     return this.adminService.executeQuickAction(
-      request.adminSession,
+      request.userSession,
       action,
-      limit,
+      validatedLimit,
     );
   }
 
@@ -164,21 +186,25 @@ export class AdminDashboardController {
       "Get detailed assignment analytics with insights (for authors and admins)",
   })
   @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number, description: `Maximum ${MAX_LIMIT}` })
   @ApiQuery({ name: "search", required: false, type: String })
+  @ApiQuery({ name: "details", required: false, type: Boolean, description: 'Include detailed cost breakdown' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   async getAssignmentAnalytics(
     @Req() request: UserSessionRequest,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query("limit", new DefaultValuePipe(DEFAULT_LIMIT), ParseIntPipe) limit: number,
     @Query("search") search?: string,
+    @Query("details", new DefaultValuePipe(false), ParseBoolPipe) details?: boolean,
   ): Promise<AssignmentAnalyticsResponse> {
+    const validatedLimit = this.validateLimit(limit);
     return await this.adminService.getAssignmentAnalytics(
       request.userSession,
       page,
-      limit,
+      validatedLimit,
       search,
+      details,
     );
   }
 
@@ -191,17 +217,20 @@ export class AdminDashboardController {
   @ApiOperation({
     summary: "Get detailed insights for a specific assignment",
   })
+  @ApiQuery({ name: "details", required: false, type: Boolean, description: 'Include detailed cost breakdown and question insights' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   @ApiResponse({ status: 404 })
   async getDetailedAssignmentInsights(
     @Req() request: UserSessionRequest,
     @Param("id", ParseIntPipe) id: number,
+    @Query("details", new DefaultValuePipe(false), ParseBoolPipe) details?: boolean,
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return await this.adminService.getDetailedAssignmentInsights(
       request.userSession,
       id,
+      details,
     );
   }
 
@@ -240,7 +269,7 @@ export class AdminDashboardController {
     description: "Forbidden - Admin access required",
   })
   async manualDraftCleanup(
-    @Req() request: AdminSessionRequest,
+    @Req() request: UserSessionRequest,
     @Query("daysOld", new DefaultValuePipe(60), ParseIntPipe) daysOld: number,
   ) {
     try {

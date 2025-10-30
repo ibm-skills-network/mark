@@ -95,11 +95,11 @@ export function AssignmentAnalyticsTable({
     setError(null);
 
     try {
-      // Always fetch all data for tanstack table to handle pagination/filtering
+      // Use server-side pagination with MAX_LIMIT of 25
       const response = await getAssignmentAnalytics(
         sessionToken,
         1,
-        1000, // Get all data for client-side table operations
+        25, // Respect new MAX_LIMIT
         undefined,
       );
       setData(response.data);

@@ -6,6 +6,10 @@ import { MessagingService } from "../messaging/messaging.service";
 import { ApiController } from "./api.controller";
 import { ApiService } from "./api.service";
 
+process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+process.env.REDIS_HOST = "localhost";
+process.env.REDIS_PORT = "6379";
+
 describe("ApiController", () => {
   let controller: ApiController;
 
