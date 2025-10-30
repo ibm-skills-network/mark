@@ -54,7 +54,6 @@ export function VersionConflictModal({
       {isOpen && (
         <div className="fixed inset-0 z-[9999] overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 py-8">
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -63,7 +62,6 @@ export function VersionConflictModal({
               onClick={onClose}
             />
 
-            {/* Modal */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -73,7 +71,6 @@ export function VersionConflictModal({
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6">
-                {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-amber-100 rounded-lg">
@@ -96,7 +93,6 @@ export function VersionConflictModal({
                   </button>
                 </div>
 
-                {/* Conflict Details */}
                 <div className="mb-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
                   <div className="flex items-start space-x-3">
                     <Tag className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -114,7 +110,6 @@ export function VersionConflictModal({
                   </div>
                 </div>
 
-                {/* Existing Version Info */}
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-900 mb-3">
                     Existing Version Details
@@ -167,7 +162,6 @@ export function VersionConflictModal({
                   </div>
                 </div>
 
-                {/* Action Options */}
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <button
@@ -194,7 +188,6 @@ export function VersionConflictModal({
                   </button>
                 </div>
 
-                {/* Help Text */}
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                   <div className="text-xs text-blue-700">
                     <p className="font-medium mb-1">What happens next?</p>

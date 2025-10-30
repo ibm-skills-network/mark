@@ -9,8 +9,8 @@ import { FooterNavigation } from "@authorComponents/StepTwo/FooterNavigation";
 import AssignmentQuestionDisplay from "../../(components)/StepTwo/AssignmentQuestionDisplay";
 
 interface Props {
-  params: {assignmentId: string;};
-  searchParams: {submissionTime?: string;};
+  params: { assignmentId: string };
+  searchParams: { submissionTime?: string };
 }
 
 function Component(props: Props) {
@@ -19,7 +19,8 @@ function Component(props: Props) {
     <main className="main-author-container">
       <PageTitle
         title="Let's configure your assignment settings!"
-        description="Set up the assignment parameters. You can review and edit these later" />
+        description="Set up the assignment parameters. You can review and edit these later"
+      />
 
       <AssignmentType />
       <AssignmentTime />
@@ -29,8 +30,8 @@ function Component(props: Props) {
       <AssignmentQuestionDisplay />
       <AssignmentQuestionOrder />
       <FooterNavigation />
-    </main>);
-
+    </main>
+  );
 }
 
 export default Component;

@@ -80,7 +80,6 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Report Status and Type */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Tag className="h-4 w-4 text-muted-foreground" />
@@ -98,7 +97,6 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
             </Badge>
           </div>
 
-          {/* Submission Date */}
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Reported:</span>
@@ -107,7 +105,6 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
 
           <Separator />
 
-          {/* Description Section */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -120,7 +117,6 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
             </div>
           </div>
 
-          {/* Priority Indicators */}
           {report.status === "OPEN" && (
             <>
               <Separator />
@@ -133,7 +129,6 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
             </>
           )}
 
-          {/* Metadata */}
           <Separator />
           <div className="text-xs text-muted-foreground">
             <div className="flex justify-between">

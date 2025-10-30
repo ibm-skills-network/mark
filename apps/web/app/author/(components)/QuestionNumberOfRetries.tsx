@@ -17,8 +17,8 @@ function Component(props: Props) {
         className="border border-gray-300 rounded-md px-4 py-3"
         name="attempts"
         value={retries ?? -1}
-        onChange={handleRetryChange}>
-
+        onChange={handleRetryChange}
+      >
         <option value={1}>1</option>
         <option value={2}>2</option>
         <option value={3}>3</option>
@@ -26,8 +26,8 @@ function Component(props: Props) {
         <option value={5}>5</option>
         <option value={-1}>unlimited</option>
       </select>
-    </div>);
-
+    </div>
+  );
 }
 
 export default Component;

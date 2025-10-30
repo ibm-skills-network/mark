@@ -82,6 +82,7 @@ export function useAPITransformer(config?: TransformConfig) {
         "content",
         "choice",
       ],
+
       deep: true,
       ...config,
     },

@@ -8,8 +8,8 @@ import {
   DocumentTextIcon,
   MagnifyingGlassIcon,
   QuestionMarkCircleIcon,
-  SparklesIcon } from
-"@heroicons/react/24/solid";
+  SparklesIcon,
+} from "@heroicons/react/24/solid";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { FC, useEffect, useState } from "react";
@@ -35,8 +35,7 @@ interface NavProps {
   setCurrentStepId: (id: number) => void;
 }
 
-
-const NewBadge: FC<{feature: WhatsNewFeature;}> = ({ feature }) => {
+const NewBadge: FC<{ feature: WhatsNewFeature }> = ({ feature }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -51,25 +50,25 @@ const NewBadge: FC<{feature: WhatsNewFeature;}> = ({ feature }) => {
           type: "spring",
           stiffness: 500,
           damping: 15,
-          delay: 0.2
-        }}>
-
+          delay: 0.2,
+        }}
+      >
         <motion.span
           className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-full cursor-pointer shadow-lg"
           whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}>
-
+          whileTap={{ scale: 0.95 }}
+        >
           <motion.div
             animate={{
               rotate: [0, 15, -15, 0],
-              scale: [1, 1.2, 1]
+              scale: [1, 1.2, 1],
             }}
             transition={{
               duration: 2,
               repeat: Infinity,
-              repeatType: "reverse"
-            }}>
-
+              repeatType: "reverse",
+            }}
+          >
             <SparklesIcon className="w-3.5 h-3.5" />
           </motion.div>
           NEW
@@ -79,48 +78,48 @@ const NewBadge: FC<{feature: WhatsNewFeature;}> = ({ feature }) => {
           className="absolute inset-0 rounded-full bg-purple-400 opacity-75 blur-xl"
           animate={{
             scale: [1, 1.5, 1],
-            opacity: [0.5, 0.2, 0.5]
+            opacity: [0.5, 0.2, 0.5],
           }}
           transition={{
             duration: 2,
             repeat: Infinity,
-            repeatType: "reverse"
-          }} />
-
+            repeatType: "reverse",
+          }}
+        />
       </motion.div>
 
       <AnimatePresence>
-        {isHovered &&
-        <motion.div
-          className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 translate-y-full z-50"
-          initial={{ opacity: 0, y: -10, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.9 }}
-          transition={{ duration: 0.2 }}>
-
+        {isHovered && (
+          <motion.div
+            className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 translate-y-full z-50"
+            initial={{ opacity: 0, y: -10, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+          >
             <div className="mt-3 w-72 p-4 bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white rounded-xl shadow-2xl backdrop-blur-sm border border-purple-500/20">
               <div className="relative">
                 <motion.div
-                className="absolute -top-6 left-1/2 transform -translate-x-1/2"
-                initial={{ y: 5 }}
-                animate={{ y: 0 }}
-                transition={{ duration: 0.2 }}>
-
+                  className="absolute -top-6 left-1/2 transform -translate-x-1/2"
+                  initial={{ y: 5 }}
+                  animate={{ y: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
                   <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[8px] border-b-purple-900"></div>
                 </motion.div>
 
                 <div className="absolute -top-2 -right-2">
                   <motion.div
-                  animate={{
-                    rotate: 15,
-                    scale: [0.8, 1.2, 0.8]
-                  }}
-                  transition={{
-                    duration: 3,
-                    repeat: Infinity,
-                    ease: "linear"
-                  }}>
-
+                    animate={{
+                      rotate: 15,
+                      scale: [0.8, 1.2, 0.8],
+                    }}
+                    transition={{
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "linear",
+                    }}
+                  >
                     <SparklesIcon className="w-4 h-4 text-yellow-400" />
                   </motion.div>
                 </div>
@@ -130,36 +129,36 @@ const NewBadge: FC<{feature: WhatsNewFeature;}> = ({ feature }) => {
                 </h4>
 
                 <ul className="space-y-2">
-                  {feature.items.map((item, idx) =>
-                <motion.li
-                  key={idx}
-                  className="text-sm flex items-start gap-2"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}>
-
+                  {feature.items.map((item, idx) => (
+                    <motion.li
+                      key={idx}
+                      className="text-sm flex items-start gap-2"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                    >
                       <span className="text-purple-300 mt-0.5 flex-shrink-0">
                         <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ delay: 0.1 + idx * 0.05 }}>
-
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: 0.1 + idx * 0.05 }}
+                        >
                           ✦
                         </motion.span>
                       </span>
                       <span className="text-gray-100">{item}</span>
                     </motion.li>
-                )}
+                  ))}
                 </ul>
 
                 <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-purple-900/50 to-transparent pointer-events-none rounded-b-xl" />
               </div>
             </div>
           </motion.div>
-        }
+        )}
       </AnimatePresence>
-    </div>);
-
+    </div>
+  );
 };
 
 export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
@@ -170,56 +169,56 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
   const numbers = pathname.match(regex);
   const activeAssignmentId = numbers[1];
   const questionsAreReadyToBePublished =
-  useQuestionsAreReadyToBePublished(questions);
+    useQuestionsAreReadyToBePublished(questions);
 
   useEffect(() => {
     setCurrentStepId(getCurrentId());
   }, [pathname]);
 
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId
+    (state) => state.setFocusedQuestionId,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const validateAssignmentConfig = useAssignmentConfig(
-    (state) => state.validate
+    (state) => state.validate,
   );
   const validateAssignmentSetup = useAuthorStore((state) => state.validate);
 
   const steps: Step[] = [
-  {
-    id: 0,
-    name: "1. Overview",
-    href: `/author/${activeAssignmentId}`,
-    icon: DocumentTextIcon,
-    tooltip: "Set up your assignment details"
-  },
-  {
-    id: 1,
-    name: "2. Questions",
-    href: `/author/${activeAssignmentId}/questions`,
-    icon: QuestionMarkCircleIcon,
-    tooltip: "Add and edit questions"
-  },
-  {
-    id: 2,
-    name: "3. Settings",
-    href: `/author/${activeAssignmentId}/config`,
-    icon: Cog6ToothIcon,
-    tooltip: "Configure assignment settings"
-  },
-  {
-    id: 3,
-    name: "4. Review",
-    href: `/author/${activeAssignmentId}/review`,
-    icon: MagnifyingGlassIcon,
-    tooltip: "Review and publish your assignment"
-  }];
-
+    {
+      id: 0,
+      name: "1. Overview",
+      href: `/author/${activeAssignmentId}`,
+      icon: DocumentTextIcon,
+      tooltip: "Set up your assignment details",
+    },
+    {
+      id: 1,
+      name: "2. Questions",
+      href: `/author/${activeAssignmentId}/questions`,
+      icon: QuestionMarkCircleIcon,
+      tooltip: "Add and edit questions",
+    },
+    {
+      id: 2,
+      name: "3. Settings",
+      href: `/author/${activeAssignmentId}/config`,
+      icon: Cog6ToothIcon,
+      tooltip: "Configure assignment settings",
+    },
+    {
+      id: 3,
+      name: "4. Review",
+      href: `/author/${activeAssignmentId}/review`,
+      icon: MagnifyingGlassIcon,
+      tooltip: "Review and publish your assignment",
+    },
+  ];
 
   const handleDisabled = (id: number) => {
     if (id === 3) {
       const { isValid, message, step, invalidQuestionId } =
-      questionsAreReadyToBePublished();
+        questionsAreReadyToBePublished();
       const handleNavigate = () => {
         if (invalidQuestionId) {
           setFocusedQuestionId(invalidQuestionId);
@@ -231,21 +230,22 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
           if (step === 1) router.push(`/author/${activeAssignmentId}`);
           if (step === 2) router.push(`/author/${activeAssignmentId}/config`);
           if (step === 3)
-          router.push(`/author/${activeAssignmentId}/questions`);
+            router.push(`/author/${activeAssignmentId}/questions`);
         }
       };
-      tooltipMessage =
-      <>
+      tooltipMessage = (
+        <>
           <span>{message}</span>
-          {!isValid && invalidQuestionId &&
-        <button
-          onClick={handleNavigate}
-          className="ml-2 text-purple-500 hover:underline">
-
+          {!isValid && invalidQuestionId && (
+            <button
+              onClick={handleNavigate}
+              className="ml-2 text-purple-500 hover:underline"
+            >
               Take me there
             </button>
-        }
-        </>;
+          )}
+        </>
+      );
 
       return !isValid;
     }
@@ -282,7 +282,7 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
   async function handleStepClick(id: number) {
     const stepActions: Record<number, () => Promise<void>> = {
       0: void goToAssignmentConfig(id),
-      1: void goToQuestionSetup(id)
+      1: void goToQuestionSetup(id),
     };
 
     const action = stepActions[currentStepId];
@@ -317,95 +317,93 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
               className="flex items-center"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}>
-
+              transition={{ delay: index * 0.1 }}
+            >
               <div className="relative group">
                 <motion.button
                   onClick={() => handleStepClick(index)}
                   className="relative flex text-center p-3 gap-x-2.5 focus:outline-none items-center text-nowrap rounded-lg transition-all duration-200"
                   whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}>
-
-                  
-                  {isActive &&
-                  <motion.div
-                    className="absolute inset-0 rounded-lg bg-violet-100"
-                    layoutId="activeBackground"
-                    transition={{
-                      type: "spring",
-                      stiffness: 350,
-                      damping: 30
-                    }} />
-
-                  }
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isActive && (
+                    <motion.div
+                      className="absolute inset-0 rounded-lg bg-violet-100"
+                      layoutId="activeBackground"
+                      transition={{
+                        type: "spring",
+                        stiffness: 350,
+                        damping: 30,
+                      }}
+                    />
+                  )}
 
                   <motion.div
                     initial={{ scale: 1 }}
                     animate={{
-                      scale: isActive ? 1.3 : 1
+                      scale: isActive ? 1.3 : 1,
                     }}
                     transition={{
                       duration: 0.4,
                       type: "spring",
-                      stiffness: 300
+                      stiffness: 300,
                     }}
                     className={`w-6 h-6 flex items-center justify-center rounded-full relative z-10 ${
-                    isActive ?
-                    "text-violet-600 drop-shadow-lg" :
-                    isCompleted ?
-                    "text-violet-500" :
-                    "text-gray-400"}`
-                    }>
-
+                      isActive
+                        ? "text-violet-600 drop-shadow-lg"
+                        : isCompleted
+                          ? "text-violet-500"
+                          : "text-gray-400"
+                    }`}
+                  >
                     <Icon className={isActive ? "drop-shadow-sm" : ""} />
 
-                    
-                    {isCompleted && !isActive &&
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center">
-
+                    {isCompleted && !isActive && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center"
+                      >
                         <span className="text-white text-[8px] font-bold">
                           ✓
                         </span>
                       </motion.div>
-                    }
+                    )}
                   </motion.div>
 
                   <span
                     className={`text-sm font-medium relative z-10 transition-all duration-200 ${
-                    isActive ?
-                    "text-violet-700 font-bold drop-shadow-sm" :
-                    isCompleted ?
-                    "text-violet-600 font-semibold" :
-                    "text-gray-500 group-hover:text-gray-700"}`
-                    }>
-
+                      isActive
+                        ? "text-violet-700 font-bold drop-shadow-sm"
+                        : isCompleted
+                          ? "text-violet-600 font-semibold"
+                          : "text-gray-500 group-hover:text-gray-700"
+                    }`}
+                  >
                     {step.name}
                   </span>
                 </motion.button>
               </div>
 
-              {index < steps.length - 1 &&
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{
-                  opacity: 1,
-                  scale: 1
-                }}
-                transition={{ duration: 0.3, delay: index * 0.1 + 0.1 }}
-                className={`mx-3 transition-colors duration-300 ${
-                index < currentStepId ? "text-violet-400" : "text-gray-300"}`
-                }>
-
+              {index < steps.length - 1 && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0 }}
+                  animate={{
+                    opacity: 1,
+                    scale: 1,
+                  }}
+                  transition={{ duration: 0.3, delay: index * 0.1 + 0.1 }}
+                  className={`mx-3 transition-colors duration-300 ${
+                    index < currentStepId ? "text-violet-400" : "text-gray-300"
+                  }`}
+                >
                   <ArrowRightIcon className="w-5 h-5" />
                 </motion.div>
-              }
-            </motion.li>);
-
+              )}
+            </motion.li>
+          );
         })}
       </ol>
-    </nav>);
-
+    </nav>
+  );
 };

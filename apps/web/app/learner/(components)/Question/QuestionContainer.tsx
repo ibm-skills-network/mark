@@ -1,7 +1,7 @@
 import {
   getLanguageCode,
-  getLanguageName } from
-"@/app/Helpers/getLanguageName";
+  getLanguageName,
+} from "@/app/Helpers/getLanguageName";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
@@ -16,8 +16,8 @@ import {
   LanguageIcon,
   TagIcon as OutlineTagIcon,
   ArrowRightIcon,
-  PaperAirplaneIcon } from
-"@heroicons/react/24/outline";
+  PaperAirplaneIcon,
+} from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
 import { AnimatePresence, motion } from "framer-motion";
 import { ComponentPropsWithoutRef, useEffect, useState } from "react";
@@ -39,18 +39,18 @@ function Component(props: Props) {
     questionNumber,
     question,
     questionDisplay,
-    lastQuestionNumber
+    lastQuestionNumber,
   } = props;
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
-    (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber]
+    (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber],
   );
   const setQuestionStatus = useLearnerStore((state) => state.setQuestionStatus);
   const getQuestionStatusById = useLearnerStore(
-    (state) => state.getQuestionStatusById
+    (state) => state.getQuestionStatusById,
   );
   const setSelectedLanguage = useLearnerStore(
-    (state) => state.setSelectedLanguage
+    (state) => state.setSelectedLanguage,
   );
   useEffect(() => {
     if (typeof question.scoring === "string") {
@@ -59,19 +59,19 @@ function Component(props: Props) {
   }, [question.scoring]);
   const checkToShowRubric = () => {
     if (
-    ["TEXT", "UPLOAD", "LINk_FILE", "URL"].includes(question.type) &&
-    question.scoring.showSubQuestionsToLearner &&
-    question.scoring?.rubrics)
-
-    return true;else
-    return false;
+      ["TEXT", "UPLOAD", "LINk_FILE", "URL"].includes(question.type) &&
+      question.scoring.showSubQuestionsToLearner &&
+      question.scoring?.rubrics
+    )
+      return true;
+    else return false;
   };
   const showRubrics = question.scoring?.showRubricsToLearner ?? false;
   const showPoints = question.scoring?.showPoints ?? false;
 
-  const questionStatus = getQuestionStatusById ?
-  getQuestionStatusById(questionId) :
-  "unedited";
+  const questionStatus = getQuestionStatusById
+    ? getQuestionStatusById(questionId)
+    : "unedited";
 
   let questionTypeText: string;
   if (question.type === "MULTIPLE_CORRECT") {
@@ -92,55 +92,56 @@ function Component(props: Props) {
     }
   };
   const translationOn = useLearnerStore((state) =>
-  state.getTranslationOn(questionId)
+    state.getTranslationOn(questionId),
   );
   const setTranslatedQuestion = useLearnerStore(
-    (state) => state.setTranslatedQuestion
+    (state) => state.setTranslatedQuestion,
   );
   const setTranslatedChoices = useLearnerStore(
-    (state) => state.setTranslatedChoices
+    (state) => state.setTranslatedChoices,
   );
   const [userPreferedLanguage, setUserPreferredLanguage] = useLearnerStore(
-    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage]
+    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
   const [userPreferedLanguageName, setUserPreferredLanguageName] = useState<
-    string | undefined>(
-    undefined);
-  useEffect(() => {
+    string | undefined
+  >(undefined);
+  (useEffect(() => {
     if (userPreferedLanguage) {
       setUserPreferredLanguageName(
-        getLanguageName(userPreferedLanguage) || "English"
+        getLanguageName(userPreferedLanguage) || "English",
       );
     }
   }),
-  [userPreferedLanguage];
+    [userPreferedLanguage]);
   const translatingWords = [
-  "Translating",
-  "Traduciendo",
-  "Traduction",
-  "Traduzione",
-  "Übersetzen",
-  "Tradução",
-  "번역 중",
-  "翻訳中",
-  "ترجمة"];
+    "Translating",
+    "Traduciendo",
+    "Traduction",
+    "Traduzione",
+    "Übersetzen",
+    "Tradução",
+    "번역 중",
+    "翻訳中",
+    "ترجمة",
+  ];
 
   const setTranslationOn = useLearnerStore((state) => state.setTranslationOn);
   const toggleTranslation = () => {
     setTranslationOn(questionId, !translationOn);
 
     if (
-    !translationOn &&
-    question.selectedLanguage !== userPreferedLanguageName)
-    {
+      !translationOn &&
+      question.selectedLanguage !== userPreferedLanguageName
+    ) {
       void fetchTranslation();
     }
   };
 
   const [globalLanguage, setGlobalLanguage] = useLearnerStore((state) => [
-  state.globalLanguage,
-  state.setGlobalLanguage]
-  );
+    state.globalLanguage,
+    state.setGlobalLanguage,
+  ]);
   const [loadingTranslation, setLoadingTranslation] = useState(false);
   const [currentWord, setCurrentWord] = useState(translatingWords[0]);
 
@@ -163,17 +164,16 @@ function Component(props: Props) {
         questionId,
         question,
         question.selectedLanguage,
-        languages.find((lang) => lang.name === question.selectedLanguage)?.
-        code || "en"
+        languages.find((lang) => lang.name === question.selectedLanguage)
+          ?.code || "en",
       );
 
       setTranslatedQuestion(questionId, translation.translatedQuestion);
       if (translation.translatedChoices) {
-
         const choiceTexts = translation.translatedChoices.map((choice) =>
-        typeof choice === "string" ?
-        choice :
-        choice?.choice || String(choice)
+          typeof choice === "string"
+            ? choice
+            : choice?.choice || String(choice),
         );
         setTranslatedChoices(questionId, choiceTexts);
       }
@@ -185,19 +185,18 @@ function Component(props: Props) {
   };
   useEffect(() => {
     if (
-    translationOn &&
-    question.selectedLanguage !== userPreferedLanguageName)
-    {
+      translationOn &&
+      question.selectedLanguage !== userPreferedLanguageName
+    ) {
       void fetchTranslation();
     }
     if (question.selectedLanguage === userPreferedLanguageName) {
       setTranslatedQuestion(questionId, question.question);
       if (question.choices) {
-
         const choiceTexts = question.choices.map((choice) =>
-        typeof choice === "string" ?
-        choice :
-        choice?.choice || String(choice)
+          typeof choice === "string"
+            ? choice
+            : choice?.choice || String(choice),
         );
         setTranslatedChoices(questionId, choiceTexts);
       }
@@ -207,8 +206,8 @@ function Component(props: Props) {
     if (!globalLanguage) {
       const browserLanguage = navigator.language || navigator.languages[0];
       const detectedLanguage =
-      languages.find((lang) => lang.code === browserLanguage)?.name ||
-      userPreferedLanguageName;
+        languages.find((lang) => lang.code === browserLanguage)?.name ||
+        userPreferedLanguageName;
 
       setGlobalLanguage(detectedLanguage);
     }
@@ -218,7 +217,7 @@ function Component(props: Props) {
     if (!question.selectedLanguage) {
       setSelectedLanguage(
         questionId,
-        globalLanguage || userPreferedLanguageName
+        globalLanguage || userPreferedLanguageName,
       );
     }
   }, [questionId, globalLanguage, setSelectedLanguage]);
@@ -240,9 +239,9 @@ function Component(props: Props) {
       className={cn(
         "flex bg-white rounded flex-col gap-y-4 p-4 sm:p-6 relative shadow hover:shadow-md border ",
         className,
-        `${activeQuestionNumber === questionNumber ? "border-violet-600" : ""}`
-      )}>
-
+        `${activeQuestionNumber === questionNumber ? "border-violet-600" : ""}`,
+      )}
+    >
       <div className="flex flex-col sm:flex-row sm:justify-between gap-3 sm:gap-0 sm:items-center pb-4 border-b">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-x-2">
           <p className="text-gray-700 text-lg sm:text-xl font-semibold">
@@ -258,8 +257,8 @@ function Component(props: Props) {
         <div className="flex items-center justify-between sm:justify-start gap-x-2">
           <button
             className="text-gray-600 font-medium flex items-center group gap-x-2 hover:text-violet-600 transition"
-            onClick={handleFlaggingQuestion}>
-
+            onClick={handleFlaggingQuestion}
+          >
             <Bookmark questionStatus={questionStatus} />
             <span className="text-sm sm:hidden">Flag</span>
           </button>
@@ -269,23 +268,20 @@ function Component(props: Props) {
         </div>
       </div>
 
-      
       <div className="flex flex-col sm:flex-row sm:justify-between gap-3">
         <div className="flex-grow">
-          
           <div className="mb-2">
             <MarkdownViewer
               className="text-gray-800 px-2 border-gray-300 text-sm sm:text-base"
-              id={`question-${question.id}-original`}>
-
+              id={`question-${question.id}-original`}
+            >
               {question.translations?.[userPreferedLanguage]?.translatedText ??
-              question.question}
+                question.question}
             </MarkdownViewer>
           </div>
 
-          
-          {translationOn && loadingTranslation &&
-          <div className="mt-3 pt-3 border-t border-gray-200">
+          {translationOn && loadingTranslation && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-500">
                   {currentWord}...
@@ -295,14 +291,15 @@ function Component(props: Props) {
                 <div className="h-4 bg-gray-200 rounded w-3/4"></div>
               </div>
             </div>
-          }
+          )}
         </div>
         <div className="flex items-center justify-between sm:justify-start gap-x-3 pt-2 sm:pt-0 border-t sm:border-t-0 sm:ml-4">
           <div className="flex items-center gap-2">
             <LanguageIcon
               className={`h-5 w-5 sm:h-6 sm:w-6 ${
-              translationOn ? "text-violet-600" : "text-gray-600"}`
-              } />
+                translationOn ? "text-violet-600" : "text-gray-600"
+              }`}
+            />
 
             <span className="text-sm text-gray-600 sm:hidden">Translation</span>
           </div>
@@ -311,60 +308,57 @@ function Component(props: Props) {
             onClick={toggleTranslation}
             className={cn(
               "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-              translationOn ? "bg-violet-600" : "bg-gray-200"
+              translationOn ? "bg-violet-600" : "bg-gray-200",
             )}
             role="switch"
-            aria-checked={translationOn}>
-
+            aria-checked={translationOn}
+          >
             <span
               aria-hidden="true"
               className={cn(
                 "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                translationOn ? "translate-x-5" : "translate-x-0"
-              )} />
-
+                translationOn ? "translate-x-5" : "translate-x-0",
+              )}
+            />
           </button>
         </div>
       </div>
-      {checkToShowRubric() &&
-      <ShowHideRubric
-        rubrics={question.scoring.rubrics}
-        showRubrics={showRubrics}
-        showPoints={showPoints} />
+      {checkToShowRubric() && (
+        <ShowHideRubric
+          rubrics={question.scoring.rubrics}
+          showRubrics={showRubrics}
+          showPoints={showPoints}
+        />
+      )}
 
-      }
-      
-      {translationOn ?
-      <>
-          
-          {question.type === "SINGLE_CORRECT" ||
-        question.type === "MULTIPLE_CORRECT" ?
+      {translationOn ? (
         <>
+          {question.type === "SINGLE_CORRECT" ||
+          question.type === "MULTIPLE_CORRECT" ? (
+            <>
               {translationOn &&
-          question.translatedQuestion &&
-          question.translatedQuestion !== question.question &&
-          <div className="mt-3 pt-3 border-t border-gray-200">
+                question.translatedQuestion &&
+                question.translatedQuestion !== question.question && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
                         Translated
                       </span>
                     </div>
                     <MarkdownViewer
-              className="text-gray-700 px-2 border-gray-300 bg-violet-50 rounded-lg p-3"
-              id={`question-${question.id}-translated`}>
-
+                      className="text-gray-700 px-2 border-gray-300 bg-violet-50 rounded-lg p-3"
+                      id={`question-${question.id}-translated`}
+                    >
                       {question.translatedQuestion}
                     </MarkdownViewer>
                   </div>
-          }
+                )}
 
               <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-12 relative">
-                
                 <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
                   <ArrowRightIcon className="w-6 h-6 text-black" />
                 </div>
 
-                
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-gray-200 pb-2">
                     <span className="text-sm font-medium text-gray-700">
@@ -376,41 +370,40 @@ function Component(props: Props) {
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
                     <RenderQuestion
-                  questionType={question.type}
-                  question={{
-                    ...question,
-                    choices: question?.choices?.map((choice, index) =>
-                    question.translations?.[userPreferedLanguage]?.
-                    translatedChoices ?
-                    question.translations[userPreferedLanguage].
-                    translatedChoices[index] :
-                    choice
-                    )
-                  }} />
-
+                      questionType={question.type}
+                      question={{
+                        ...question,
+                        choices: question?.choices?.map((choice, index) =>
+                          question.translations?.[userPreferedLanguage]
+                            ?.translatedChoices
+                            ? question.translations[userPreferedLanguage]
+                                .translatedChoices[index]
+                            : choice,
+                        ),
+                      }}
+                    />
                   </div>
                 </div>
 
-                
                 <div className="space-y-3 border-t lg:border-t-0 pt-4 lg:pt-0">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-2">
                     <select
-                  className="text-sm font-medium border border-gray-300 rounded px-2 py-1 bg-white"
-                  value={question.selectedLanguage}
-                  onChange={(e) => handleLanguageChange(e.target.value)}>
-
-                      {languages.map((lang) =>
-                  <option key={lang.code} value={lang.name}>
+                      className="text-sm font-medium border border-gray-300 rounded px-2 py-1 bg-white"
+                      value={question.selectedLanguage}
+                      onChange={(e) => handleLanguageChange(e.target.value)}
+                    >
+                      {languages.map((lang) => (
+                        <option key={lang.code} value={lang.name}>
                           {lang.name}
                         </option>
-                  )}
+                      ))}
                     </select>
                     <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600 self-start sm:self-auto">
                       Translation
                     </span>
                   </div>
-                  {loadingTranslation ?
-              <div className="flex items-center justify-center py-8 min-h-[120px] sm:min-h-[200px]">
+                  {loadingTranslation ? (
+                    <div className="flex items-center justify-center py-8 min-h-[120px] sm:min-h-[200px]">
                       <div className="text-center">
                         <div className="animate-pulse text-violet-600 mb-2 text-sm">
                           {currentWord}...
@@ -419,43 +412,42 @@ function Component(props: Props) {
                           Loading translation
                         </div>
                       </div>
-                    </div> :
-
-              <div className="bg-violet-50 rounded-lg p-3 sm:p-4">
-                      <RenderQuestion
-                  questionType={question.type}
-                  question={{
-                    ...question,
-                    choices: question?.choices?.map((choice, index) =>
-                    question.translations?.[
-                    getLanguageCode(question.selectedLanguage)]?.
-                    translatedChoices ?
-                    question.translations[
-                    getLanguageCode(question.selectedLanguage)].
-                    translatedChoices[index] :
-                    choice
-                    )
-                  }} />
-
                     </div>
-              }
+                  ) : (
+                    <div className="bg-violet-50 rounded-lg p-3 sm:p-4">
+                      <RenderQuestion
+                        questionType={question.type}
+                        question={{
+                          ...question,
+                          choices: question?.choices?.map((choice, index) =>
+                            question.translations?.[
+                              getLanguageCode(question.selectedLanguage)
+                            ]?.translatedChoices
+                              ? question.translations[
+                                  getLanguageCode(question.selectedLanguage)
+                                ].translatedChoices[index]
+                              : choice,
+                          ),
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
-            </> :
-
-
-        <div className="space-y-4">
+            </>
+          ) : (
+            <div className="space-y-4">
               <div className="flex items-center justify-between border-t border-gray-200 pt-4">
                 <select
-              className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
-              value={question.selectedLanguage}
-              onChange={(e) => handleLanguageChange(e.target.value)}>
-
-                  {languages.map((lang) =>
-              <option key={lang.code} value={lang.name}>
+                  className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
+                  value={question.selectedLanguage}
+                  onChange={(e) => handleLanguageChange(e.target.value)}
+                >
+                  {languages.map((lang) => (
+                    <option key={lang.code} value={lang.name}>
                       {lang.name}
                     </option>
-              )}
+                  ))}
                 </select>
                 <span className="text-xs px-2 py-1 bg-violet-100 rounded-full text-violet-600">
                   Translation
@@ -465,94 +457,92 @@ function Component(props: Props) {
                 {question.translatedQuestion || question.question}
               </MarkdownViewer>
 
-              
               <RenderQuestion
-            questionType={question.type}
-            question={{
-              ...question,
-              choices: question?.choices?.map((choice, index) =>
-              question.translations?.[userPreferedLanguage]?.
-              translatedChoices ?
-              question.translations[userPreferedLanguage].
-              translatedChoices[index] :
-              choice
-              )
-            }} />
-
+                questionType={question.type}
+                question={{
+                  ...question,
+                  choices: question?.choices?.map((choice, index) =>
+                    question.translations?.[userPreferedLanguage]
+                      ?.translatedChoices
+                      ? question.translations[userPreferedLanguage]
+                          .translatedChoices[index]
+                      : choice,
+                  ),
+                }}
+              />
             </div>
-        }
-        </> :
+          )}
+        </>
+      ) : (
+        <RenderQuestion
+          questionType={question.type}
+          question={{
+            ...question,
+            choices: question?.choices?.map((choice, index) =>
+              question.translations?.[userPreferedLanguage]?.translatedChoices
+                ? question.translations[userPreferedLanguage].translatedChoices[
+                    index
+                  ]
+                : choice,
+            ),
+          }}
+        />
+      )}
 
-
-      <RenderQuestion
-        questionType={question.type}
-        question={{
-          ...question,
-          choices: question?.choices?.map((choice, index) =>
-          question.translations?.[userPreferedLanguage]?.translatedChoices ?
-          question.translations[userPreferedLanguage].translatedChoices[
-          index] :
-
-          choice
-          )
-        }} />
-
-      }
-
-      {questionDisplay === "ONE_PER_PAGE" &&
-      <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 border-t border-gray-200">
+      {questionDisplay === "ONE_PER_PAGE" && (
+        <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 border-t border-gray-200">
           <button
-          onClick={() => setActiveQuestionNumber(questionNumber - 1)}
-          disabled={questionNumber === 1}
-          className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none">
-
+            onClick={() => setActiveQuestionNumber(questionNumber - 1)}
+            disabled={questionNumber === 1}
+            className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
+          >
             <ArrowLongLeftIcon
-            strokeWidth={2}
-            className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1" />
+              strokeWidth={2}
+              className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
+            />
 
             <span className="text-sm sm:text-base">Previous Question</span>
           </button>
-          {questionNumber === lastQuestionNumber ?
-        <button
-          onClick={() => {
-
-            const submitEvent = new CustomEvent(
-              "triggerAssignmentSubmission"
-            );
-            window.dispatchEvent(submitEvent);
-          }}
-          className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md">
-
+          {questionNumber === lastQuestionNumber ? (
+            <button
+              onClick={() => {
+                const submitEvent = new CustomEvent(
+                  "triggerAssignmentSubmission",
+                );
+                window.dispatchEvent(submitEvent);
+              }}
+              className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md"
+            >
               <span className="text-sm sm:text-base">Submit Assignment</span>
               <PaperAirplaneIcon
-            strokeWidth={2}
-            className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1" />
-
-            </button> :
-
-        <button
-          onClick={() => setActiveQuestionNumber(questionNumber + 1)}
-          className="text-gray-600 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none">
-
+                strokeWidth={2}
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1"
+              />
+            </button>
+          ) : (
+            <button
+              onClick={() => setActiveQuestionNumber(questionNumber + 1)}
+              className="text-gray-600 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
+            >
               <span className="text-sm sm:text-base">Next Question</span>
               <ArrowLongRightIcon
-            strokeWidth={2}
-            className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1" />
-
+                strokeWidth={2}
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1"
+              />
             </button>
-        }
+          )}
         </div>
-      }
-    </section>);
-
+      )}
+    </section>
+  );
 }
 
 export default Component;
 
 function Bookmark({ questionStatus }) {
-  return questionStatus === "flagged" ?
-  <TagIcon className="w-5 h-5 text-violet-600" /> :
-
-  <OutlineTagIcon className="w-5 h-5 text-violet-600" />;
-
+  return questionStatus === "flagged" ? (
+    <TagIcon className="w-5 h-5 text-violet-600" />
+  ) : (
+    <OutlineTagIcon className="w-5 h-5 text-violet-600" />
+  );
 }

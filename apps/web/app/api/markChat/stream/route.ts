@@ -5,14 +5,14 @@ import {
   getQuestionDetails,
   requestRegrading,
   searchKnowledgeBase,
-  submitFeedbackQuestion } from
-"@/app/chatbot/lib/markChatFunctions";
+  submitFeedbackQuestion,
+} from "@/app/chatbot/lib/markChatFunctions";
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
 import { z } from "zod";
 
 const STANDARD_ERROR_MESSAGE =
-"Sorry for the inconvenience, I am still new around here and this capability is not there yet, my developers are working on it!";
+  "Sorry for the inconvenience, I am still new around here and this capability is not there yet, my developers are working on it!";
 
 function withErrorHandling(fn) {
   return async (...args) => {
@@ -38,41 +38,40 @@ export function learnerTools(cookieHeader: string) {
   return {
     searchKnowledgeBase: {
       description:
-      "Search the knowledge base for information about the platform or features",
+        "Search the knowledge base for information about the platform or features",
       parameters: z.object({
-        query: z.
-        string().
-        describe("The search query to find relevant information")
+        query: z
+          .string()
+          .describe("The search query to find relevant information"),
       }),
       execute: withErrorHandling(async ({ query }) => {
         return await searchKnowledgeBase(query);
-      })
+      }),
     },
     reportIssue: {
       description:
-      "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
+        "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
       parameters: z.object({
-        issueType: z.
-        enum(["technical", "content", "grading", "other"]).
-        describe("The type of issue being reported"),
-        description: z.
-        string().
-        describe(
-          "Detailed description of the issue - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment where the issue was encountered (if applicable)"
-        ),
-        severity: z.
-        enum(["info", "warning", "error", "critical"]).
-        optional().
-        describe("The severity of the issue")
+        issueType: z
+          .enum(["technical", "content", "grading", "other"])
+          .describe("The type of issue being reported"),
+        description: z
+          .string()
+          .describe(
+            "Detailed description of the issue - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment where the issue was encountered (if applicable)",
+          ),
+        severity: z
+          .enum(["info", "warning", "error", "critical"])
+          .optional()
+          .describe("The severity of the issue"),
       }),
       execute: async ({ issueType, description, assignmentId, severity }) => {
-
         return JSON.stringify({
           clientExecution: true,
           function: "showReportPreview",
@@ -83,35 +82,35 @@ export function learnerTools(cookieHeader: string) {
             assignmentId,
             severity: severity || "info",
             userRole: "learner",
-            category: "Learner Issue"
-          }
+            category: "Learner Issue",
+          },
         });
-      }
+      },
     },
     provideFeedback: {
       description:
-      "Provide general feedback about the learning experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
+        "Provide general feedback about the learning experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
       parameters: z.object({
-        feedbackType: z.
-        enum(["general", "assignment", "grading", "experience"]).
-        describe("The type of feedback being provided"),
-        description: z.
-        string().
-        describe(
-          "Detailed feedback comments - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment (if feedback is assignment-specific)"
-        ),
-        rating: z.
-        number().
-        min(1).
-        max(5).
-        optional().
-        describe("Optional rating from 1-5 stars")
+        feedbackType: z
+          .enum(["general", "assignment", "grading", "experience"])
+          .describe("The type of feedback being provided"),
+        description: z
+          .string()
+          .describe(
+            "Detailed feedback comments - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if feedback is assignment-specific)",
+          ),
+        rating: z
+          .number()
+          .min(1)
+          .max(5)
+          .optional()
+          .describe("Optional rating from 1-5 stars"),
       }),
       execute: async ({ feedbackType, description, assignmentId, rating }) => {
         return JSON.stringify({
@@ -124,29 +123,29 @@ export function learnerTools(cookieHeader: string) {
             assignmentId,
             rating,
             userRole: "learner",
-            category: "Learner Feedback"
-          }
+            category: "Learner Feedback",
+          },
         });
-      }
+      },
     },
     submitSuggestion: {
       description:
-      "Submit suggestions for improving the platform or assignments. Extract the user's suggestion text and use it as the description to prefill the form.",
+        "Submit suggestions for improving the platform or assignments. Extract the user's suggestion text and use it as the description to prefill the form.",
       parameters: z.object({
-        suggestionType: z.
-        enum(["feature", "content", "ui", "general"]).
-        describe("The type of suggestion being made"),
-        description: z.
-        string().
-        describe(
-          "Detailed suggestion or improvement idea - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment (if suggestion is assignment-specific)"
-        )
+        suggestionType: z
+          .enum(["feature", "content", "ui", "general"])
+          .describe("The type of suggestion being made"),
+        description: z
+          .string()
+          .describe(
+            "Detailed suggestion or improvement idea - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if suggestion is assignment-specific)",
+          ),
       }),
       execute: async ({ suggestionType, description, assignmentId }) => {
         return JSON.stringify({
@@ -158,29 +157,29 @@ export function learnerTools(cookieHeader: string) {
             description,
             assignmentId,
             userRole: "learner",
-            category: "Learner Suggestion"
-          }
+            category: "Learner Suggestion",
+          },
         });
-      }
+      },
     },
     submitInquiry: {
       description:
-      "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+        "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
       parameters: z.object({
-        inquiryType: z.
-        enum(["general", "technical", "academic", "other"]).
-        describe("The type of inquiry being made"),
-        description: z.
-        string().
-        describe(
-          "The question or inquiry details - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment (if inquiry is assignment-specific)"
-        )
+        inquiryType: z
+          .enum(["general", "technical", "academic", "other"])
+          .describe("The type of inquiry being made"),
+        description: z
+          .string()
+          .describe(
+            "The question or inquiry details - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if inquiry is assignment-specific)",
+          ),
       }),
       execute: async ({ inquiryType, description, assignmentId }) => {
         return JSON.stringify({
@@ -192,71 +191,71 @@ export function learnerTools(cookieHeader: string) {
             description,
             assignmentId,
             userRole: "learner",
-            category: "Learner Inquiry"
-          }
+            category: "Learner Inquiry",
+          },
         });
-      }
+      },
     },
     getQuestionDetails: {
       description:
-      "Get detailed information about a specific question in the assignment",
+        "Get detailed information about a specific question in the assignment",
       parameters: z.object({
-        questionId: z.
-        number().
-        describe("The ID of the question to retrieve details for")
+        questionId: z
+          .number()
+          .describe("The ID of the question to retrieve details for"),
       }),
       execute: withErrorHandling(async ({ questionId }) => {
         return await getQuestionDetails(questionId);
-      })
+      }),
     },
     getAssignmentRubric: {
       description: "Get the rubric or grading criteria for the assignment",
       parameters: z.object({
-        assignmentId: z.number().describe("The ID of the assignment")
+        assignmentId: z.number().describe("The ID of the assignment"),
       }),
       execute: withErrorHandling(async ({ assignmentId }) => {
         return await getAssignmentRubric(assignmentId);
-      })
+      }),
     },
     submitFeedbackQuestion: {
       description:
-      "Submit a question about feedback that requires instructor attention",
+        "Submit a question about feedback that requires instructor attention",
       parameters: z.object({
-        questionId: z.
-        number().
-        describe("The ID of the question being asked about"),
-        feedbackQuery: z.
-        string().
-        describe("The specific question or concern about the feedback")
+        questionId: z
+          .number()
+          .describe("The ID of the question being asked about"),
+        feedbackQuery: z
+          .string()
+          .describe("The specific question or concern about the feedback"),
       }),
       execute: withErrorHandling(async ({ questionId, feedbackQuery }) => {
         return await submitFeedbackQuestion(questionId, feedbackQuery);
-      })
+      }),
     },
     requestRegrading: {
       description: "Submit a formal request for regrading an assignment",
       parameters: z.object({
-        assignmentId: z.
-        number().
-        optional().
-        describe("The ID of the assignment to be regraded"),
-        attemptId: z.
-        number().
-        optional().
-        describe("The ID of the attempt to be regraded"),
-        reason: z.string().describe("The reason for requesting regrading")
+        assignmentId: z
+          .number()
+          .optional()
+          .describe("The ID of the assignment to be regraded"),
+        attemptId: z
+          .number()
+          .optional()
+          .describe("The ID of the attempt to be regraded"),
+        reason: z.string().describe("The reason for requesting regrading"),
       }),
       execute: withErrorHandling(
         async ({ assignmentId, attemptId, reason }) => {
           const result = await requestRegrading(
             assignmentId,
             attemptId,
-            reason
+            reason,
           );
           return result;
-        }
-      )
-    }
+        },
+      ),
+    },
   };
 }
 
@@ -264,243 +263,242 @@ export function authorTools(cookieHeader: string) {
   return {
     createQuestion: {
       description:
-      "Create a new question for the assignment with complete specifications",
+        "Create a new question for the assignment with complete specifications",
       parameters: z.object({
-        questionType: z.
-        enum([
-        "TEXT",
-        "SINGLE_CORRECT",
-        "MULTIPLE_CORRECT",
-        "TRUE_FALSE",
-        "URL",
-        "UPLOAD"]
-        ).
-        describe("The type of question to create"),
+        questionType: z
+          .enum([
+            "TEXT",
+            "SINGLE_CORRECT",
+            "MULTIPLE_CORRECT",
+            "TRUE_FALSE",
+            "URL",
+            "UPLOAD",
+          ])
+          .describe("The type of question to create"),
         questionText: z.string().describe("The text of the question"),
-        totalPoints: z.
-        number().
-        optional().
-        describe("The number of points the question is worth"),
+        totalPoints: z
+          .number()
+          .optional()
+          .describe("The number of points the question is worth"),
         feedback: z.string().optional().describe("Feedback for the question"),
-        options: z.
-        array(
-          z.object({
-            text: z.string().describe("The text of the option"),
-            isCorrect: z.boolean().describe("Whether this option is correct"),
-            points: z.number().optional().describe("Points for this option")
-          })
-        ).
-        optional().
-        describe("For multiple choice questions, the answer options")
+        options: z
+          .array(
+            z.object({
+              text: z.string().describe("The text of the option"),
+              isCorrect: z.boolean().describe("Whether this option is correct"),
+              points: z.number().optional().describe("Points for this option"),
+            }),
+          )
+          .optional()
+          .describe("For multiple choice questions, the answer options"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "createQuestion",
-          params
+          params,
         });
-      }
+      },
     },
     modifyQuestion: {
       description: "Modify an existing question",
       parameters: z.object({
         questionId: z.number().describe("The ID of the question to modify"),
-        questionText: z.
-        string().
-        optional().
-        describe("The updated text of the question"),
-        totalPoints: z.
-        number().
-        optional().
-        describe("The updated number of points"),
-        questionType: z.
-        string().
-        optional().
-        describe("The updated type of the question"),
-        feedback: z.string().optional().describe("Feedback for the question")
+        questionText: z
+          .string()
+          .optional()
+          .describe("The updated text of the question"),
+        totalPoints: z
+          .number()
+          .optional()
+          .describe("The updated number of points"),
+        questionType: z
+          .string()
+          .optional()
+          .describe("The updated type of the question"),
+        feedback: z.string().optional().describe("Feedback for the question"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "modifyQuestion",
-          params
+          params,
         });
-      }
+      },
     },
     setQuestionChoices: {
       description: "Set the choices for a multiple choice question",
       parameters: z.object({
         questionId: z.number().describe("The ID of the question"),
-        choices: z.
-        array(
-          z.object({
-            text: z.string().describe("The text of the choice"),
-            isCorrect: z.boolean().describe("Whether this choice is correct"),
-            points: z.number().optional().describe("Points for this choice"),
-            feedback: z.
-            string().
-            optional().
-            describe("Feedback for this choice")
-          })
-        ).
-        describe("The choices for the question"),
-        variantId: z.
-        number().
-        optional().
-        describe("The ID of the variant if applicable")
+        choices: z
+          .array(
+            z.object({
+              text: z.string().describe("The text of the choice"),
+              isCorrect: z.boolean().describe("Whether this choice is correct"),
+              points: z.number().optional().describe("Points for this choice"),
+              feedback: z
+                .string()
+                .optional()
+                .describe("Feedback for this choice"),
+            }),
+          )
+          .describe("The choices for the question"),
+        variantId: z
+          .number()
+          .optional()
+          .describe("The ID of the variant if applicable"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "setQuestionChoices",
-          params
+          params,
         });
-      }
+      },
     },
     addRubric: {
       description:
-      "Add a scoring rubric to a question (REQUIRED for text response questions)",
+        "Add a scoring rubric to a question (REQUIRED for text response questions)",
       parameters: z.object({
         questionId: z.number().describe("The ID of the question"),
         rubricQuestion: z.string().describe("The text of the rubric question"),
-        criteria: z.
-        array(
-          z.object({
-            description: z.string().describe("Description of the criterion"),
-            points: z.number().describe("Points for this criterion")
-          })
-        ).
-        describe("The criteria for the rubric")
+        criteria: z
+          .array(
+            z.object({
+              description: z.string().describe("Description of the criterion"),
+              points: z.number().describe("Points for this criterion"),
+            }),
+          )
+          .describe("The criteria for the rubric"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "addRubric",
-          params
+          params,
         });
-      }
+      },
     },
     generateQuestionVariant: {
       description: "Generate a variant of an existing question",
       parameters: z.object({
-        questionId: z.
-        number().
-        describe("The ID of the question to create a variant for"),
-        variantType: z.
-        enum(["REWORDED", "REPHRASED"]).
-        describe("The type of variant to create")
+        questionId: z
+          .number()
+          .describe("The ID of the question to create a variant for"),
+        variantType: z
+          .enum(["REWORDED", "REPHRASED"])
+          .describe("The type of variant to create"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "generateQuestionVariant",
-          params
+          params,
         });
-      }
+      },
     },
     deleteQuestion: {
       description: "Delete a question from the assignment",
       parameters: z.object({
-        questionId: z.number().describe("The ID of the question to delete")
+        questionId: z.number().describe("The ID of the question to delete"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "deleteQuestion",
-          params
+          params,
         });
-      }
+      },
     },
     generateQuestionsFromObjectives: {
       description: "Generate questions based on learning objectives",
       parameters: z.object({
-        learningObjectives: z.
-        string().
-        describe("The learning objectives to generate questions from"),
-        questionTypes: z.
-        array(z.string()).
-        optional().
-        describe("The types of questions to generate"),
-        count: z.
-        number().
-        optional().
-        describe("The number of questions to generate")
+        learningObjectives: z
+          .string()
+          .describe("The learning objectives to generate questions from"),
+        questionTypes: z
+          .array(z.string())
+          .optional()
+          .describe("The types of questions to generate"),
+        count: z
+          .number()
+          .optional()
+          .describe("The number of questions to generate"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "generateQuestionsFromObjectives",
-          params
+          params,
         });
-      }
+      },
     },
     updateLearningObjectives: {
       description: "Update the learning objectives for the assignment",
       parameters: z.object({
-        learningObjectives: z.
-        string().
-        describe("The updated learning objectives")
+        learningObjectives: z
+          .string()
+          .describe("The updated learning objectives"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "updateLearningObjectives",
-          params
+          params,
         });
-      }
+      },
     },
     setQuestionTitle: {
       description: "Set the title for a question",
       parameters: z.object({
         questionId: z.number().describe("The ID of the question"),
-        title: z.string().describe("The title of the question")
+        title: z.string().describe("The title of the question"),
       }),
       execute: async (params) => {
         return JSON.stringify({
           clientExecution: true,
           function: "setQuestionTitle",
-          params
+          params,
         });
-      }
+      },
     },
 
     searchKnowledgeBase: {
       description:
-      "Search the knowledge base for information about the platform or features",
+        "Search the knowledge base for information about the platform or features",
       parameters: z.object({
-        query: z.
-        string().
-        describe("The search query to find relevant information")
+        query: z
+          .string()
+          .describe("The search query to find relevant information"),
       }),
       execute: withErrorHandling(async ({ query }) => {
         return await searchKnowledgeBase(query);
-      })
+      }),
     },
     reportIssue: {
       description:
-      "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
+        "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
       parameters: z.object({
-        issueType: z.
-        enum(["technical", "content", "grading", "other"]).
-        describe("The type of issue being reported"),
-        description: z.
-        string().
-        describe(
-          "Detailed description of the issue - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment where the issue was encountered (if applicable)"
-        ),
-        severity: z.
-        enum(["info", "warning", "error", "critical"]).
-        optional().
-        describe("The severity of the issue")
+        issueType: z
+          .enum(["technical", "content", "grading", "other"])
+          .describe("The type of issue being reported"),
+        description: z
+          .string()
+          .describe(
+            "Detailed description of the issue - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment where the issue was encountered (if applicable)",
+          ),
+        severity: z
+          .enum(["info", "warning", "error", "critical"])
+          .optional()
+          .describe("The severity of the issue"),
       }),
       execute: async ({ issueType, description, assignmentId, severity }) => {
-
         return JSON.stringify({
           clientExecution: true,
           function: "showReportPreview",
@@ -510,35 +508,35 @@ export function authorTools(cookieHeader: string) {
             assignmentId,
             severity: severity || "info",
             userRole: "author",
-            category: "Author Issue"
-          }
+            category: "Author Issue",
+          },
         });
-      }
+      },
     },
     provideFeedback: {
       description:
-      "Provide general feedback about the teaching experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
+        "Provide general feedback about the teaching experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
       parameters: z.object({
-        feedbackType: z.
-        enum(["general", "assignment", "grading", "experience"]).
-        describe("The type of feedback being provided"),
-        description: z.
-        string().
-        describe(
-          "Detailed feedback comments - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment (if feedback is assignment-specific)"
-        ),
-        rating: z.
-        number().
-        min(1).
-        max(5).
-        optional().
-        describe("Optional rating from 1-5 stars")
+        feedbackType: z
+          .enum(["general", "assignment", "grading", "experience"])
+          .describe("The type of feedback being provided"),
+        description: z
+          .string()
+          .describe(
+            "Detailed feedback comments - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if feedback is assignment-specific)",
+          ),
+        rating: z
+          .number()
+          .min(1)
+          .max(5)
+          .optional()
+          .describe("Optional rating from 1-5 stars"),
       }),
       execute: async ({ feedbackType, description, assignmentId, rating }) => {
         return JSON.stringify({
@@ -551,29 +549,29 @@ export function authorTools(cookieHeader: string) {
             assignmentId,
             rating,
             userRole: "author",
-            category: "Author Feedback"
-          }
+            category: "Author Feedback",
+          },
         });
-      }
+      },
     },
     submitSuggestion: {
       description:
-      "Submit suggestions for improving the platform or teaching tools. Extract the user's suggestion text and use it as the description to prefill the form.",
+        "Submit suggestions for improving the platform or teaching tools. Extract the user's suggestion text and use it as the description to prefill the form.",
       parameters: z.object({
-        suggestionType: z.
-        enum(["feature", "content", "ui", "general"]).
-        describe("The type of suggestion being made"),
-        description: z.
-        string().
-        describe(
-          "Detailed suggestion or improvement idea - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment (if suggestion is assignment-specific)"
-        )
+        suggestionType: z
+          .enum(["feature", "content", "ui", "general"])
+          .describe("The type of suggestion being made"),
+        description: z
+          .string()
+          .describe(
+            "Detailed suggestion or improvement idea - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if suggestion is assignment-specific)",
+          ),
       }),
       execute: async ({ suggestionType, description, assignmentId }) => {
         return JSON.stringify({
@@ -585,29 +583,29 @@ export function authorTools(cookieHeader: string) {
             description,
             assignmentId,
             userRole: "author",
-            category: "Author Suggestion"
-          }
+            category: "Author Suggestion",
+          },
         });
-      }
+      },
     },
     submitInquiry: {
       description:
-      "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+        "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
       parameters: z.object({
-        inquiryType: z.
-        enum(["general", "technical", "academic", "other"]).
-        describe("The type of inquiry being made"),
-        description: z.
-        string().
-        describe(
-          "The question or inquiry details - extract this from the user's message to prefill the form"
-        ),
-        assignmentId: z.
-        number().
-        optional().
-        describe(
-          "The ID of the assignment (if inquiry is assignment-specific)"
-        )
+        inquiryType: z
+          .enum(["general", "technical", "academic", "other"])
+          .describe("The type of inquiry being made"),
+        description: z
+          .string()
+          .describe(
+            "The question or inquiry details - extract this from the user's message to prefill the form",
+          ),
+        assignmentId: z
+          .number()
+          .optional()
+          .describe(
+            "The ID of the assignment (if inquiry is assignment-specific)",
+          ),
       }),
       execute: async ({ inquiryType, description, assignmentId }) => {
         return JSON.stringify({
@@ -619,11 +617,11 @@ export function authorTools(cookieHeader: string) {
             description,
             assignmentId,
             userRole: "author",
-            category: "Author Inquiry"
-          }
+            category: "Author Inquiry",
+          },
         });
-      }
-    }
+      },
+    },
   };
 }
 
@@ -709,8 +707,8 @@ RESPONSE STYLE:
 CORE PRINCIPLE: You are an educator first, assistant second. Your goal is to help learners understand concepts deeply.
 
 ${
-    assignmentMode === "practice" ?
-    `PRACTICE ASSIGNMENT MODE - FULL TUTORING:
+  assignmentMode === "practice"
+    ? `PRACTICE ASSIGNMENT MODE - FULL TUTORING:
 You are a comprehensive tutor who helps learners master concepts through detailed explanations.
 
 TUTORING APPROACH:
@@ -750,14 +748,14 @@ Now, for this specific question, here's how we approach it:
 
 The answer is [direct answer] because [detailed reasoning].
 
-Does this make sense? Would you like me to explain any part differently or try another example?"` :
-    assignmentMode === "graded" ?
-    `GRADED ASSIGNMENT MODE - GUIDANCE ONLY:
+Does this make sense? Would you like me to explain any part differently or try another example?"`
+    : assignmentMode === "graded"
+      ? `GRADED ASSIGNMENT MODE - GUIDANCE ONLY:
 Assignment submission status: ${isSubmitted ? "SUBMITTED" : "NOT SUBMITTED"}
 
 ${
-    !isSubmitted ?
-    `STRICT RULES FOR UNSUBMITTED GRADED ASSIGNMENTS:
+  !isSubmitted
+    ? `STRICT RULES FOR UNSUBMITTED GRADED ASSIGNMENTS:
     
 WHAT YOU CANNOT DO:
 - ❌ NO direct answers or solutions
@@ -781,23 +779,24 @@ RESPONSE TEMPLATE:
 - Point you to relevant course materials
 - Help with technical issues
 
-What aspect would you like clarification on?"` :
-    `SUBMITTED GRADED ASSIGNMENTS - FULL EXPLANATION:
+What aspect would you like clarification on?"`
+    : `SUBMITTED GRADED ASSIGNMENTS - FULL EXPLANATION:
 Now that you've submitted, I can help you understand everything!
 
 - Provide detailed explanations of correct answers
 - Explain why your approach worked or didn't
 - Show alternative solutions
 - Help you learn from any mistakes
-- Prepare you for similar problems in the future`}` :
-
-    `UNKNOWN ASSIGNMENT MODE - CAUTIOUS APPROACH:
+- Prepare you for similar problems in the future`
+}`
+      : `UNKNOWN ASSIGNMENT MODE - CAUTIOUS APPROACH:
 I'll provide general conceptual guidance while being careful not to give away specific answers.
 
 - Focus on fundamental concepts
 - Provide general problem-solving strategies
 - Suggest reviewing course materials
-- Avoid specific solutions or direct answers`}
+- Avoid specific solutions or direct answers`
+}
 
 EMOTIONAL SUPPORT & ENCOURAGEMENT:
 - Acknowledge when learners are struggling
@@ -818,14 +817,17 @@ TOOL USAGE:
 - Use submitInquiry for general questions or inquiries
 
 IMPORTANT: ${
-    assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
+      assignmentId
+        ? `When calling tools that require assignmentId, always use ${assignmentId}`
+        : "Assignment ID information is not available in the current context"
+    }
 
 RESPONSE STYLE:
 - Warm, encouraging, and patient
 - Use clear, simple language
 - Break down complex explanations
 - Use emojis sparingly to add warmth (🌟 ✨ 💡 🎯)
-- Always end with a question or next step to keep engagement`
+- Always end with a question or next step to keep engagement`,
   };
 
   return systemPrompts[userRole] || "";
@@ -842,8 +844,8 @@ export async function POST(req) {
         JSON.stringify({ error: "Missing required fields" }),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" }
-        }
+          headers: { "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -851,13 +853,12 @@ export async function POST(req) {
     let newChatCreated = false;
 
     const systemContextMessages = conversation.filter(
-      (msg) => msg.role === "system" && msg.id?.includes("context")
+      (msg) => msg.role === "system" && msg.id?.includes("context"),
     );
 
     const assignmentInfo = systemContextMessages.find(
-      (msg) => msg.role === "system" && msg.id?.includes("context")
+      (msg) => msg.role === "system" && msg.id?.includes("context"),
     );
-
 
     let assignmentMode = "unknown";
     let isSubmitted = false;
@@ -866,8 +867,8 @@ export async function POST(req) {
       if (assignmentInfo.content.includes("Type: Graded assignment")) {
         assignmentMode = "graded";
         isSubmitted =
-        assignmentInfo.content.includes("Student Status: PASSED") ||
-        assignmentInfo.content.includes("MODE: FEEDBACK ANALYSIS");
+          assignmentInfo.content.includes("Student Status: PASSED") ||
+          assignmentInfo.content.includes("MODE: FEEDBACK ANALYSIS");
       } else if (assignmentInfo.content.includes("Type: Practice assignment")) {
         assignmentMode = "practice";
       }
@@ -880,9 +881,9 @@ export async function POST(req) {
         );
 
         const assignmentId =
-        userRole === "learner" ?
-        parseInt(assignmentInfo?.assignmentId || "0") :
-        undefined;
+          userRole === "learner"
+            ? parseInt(assignmentInfo?.assignmentId || "0")
+            : undefined;
 
         const chat = await getOrCreateTodayChat(userId, assignmentId);
         currentChatId = chat.id;
@@ -900,41 +901,41 @@ export async function POST(req) {
     }
 
     const regularMessages = conversation.filter(
-      (msg) => msg.role !== "system" || !msg.id?.includes("context")
+      (msg) => msg.role !== "system" || !msg.id?.includes("context"),
     );
 
     const formattedMessages = [
-    ...regularMessages.map((msg) => ({
-      role: msg.role,
-      content: msg.content
-    })),
-    { role: "user", content: userText }];
-
+      ...regularMessages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+      { role: "user", content: userText },
+    ];
 
     let trackedClientExecutions = [];
     const tools =
-    userRole === "author" ?
-    authorTools(cookieHeader) :
-    learnerTools(cookieHeader);
+      userRole === "author"
+        ? authorTools(cookieHeader)
+        : learnerTools(cookieHeader);
 
     try {
       const systemPrompt = generateSystemPrompt(userRole, {
         mode: assignmentMode,
         submitted: isSubmitted,
         assignmentId:
-        userRole === "learner" ?
-        parseInt(assignmentInfo?.assignmentId || "0") :
-        undefined
+          userRole === "learner"
+            ? parseInt(assignmentInfo?.assignmentId || "0")
+            : undefined,
       });
 
       const result = await streamText({
         model: openai("gpt-4o-mini"),
         system:
-        systemPrompt + (
-        systemContextMessages.length > 0 ?
-        "\n\n" +
-        systemContextMessages.map((msg) => msg.content).join("\n\n") :
-        ""),
+          systemPrompt +
+          (systemContextMessages.length > 0
+            ? "\n\n" +
+              systemContextMessages.map((msg) => msg.content).join("\n\n")
+            : ""),
         messages: formattedMessages,
         temperature: 0.7,
         tools: tools,
@@ -943,29 +944,29 @@ export async function POST(req) {
         onStepFinish: (result) => {
           if (result.toolCalls && result.toolCalls.length > 0) {
             console.group(
-              `Tool calls in this step: ${result.toolCalls.length}`
+              `Tool calls in this step: ${result.toolCalls.length}`,
             );
 
             const clientExecutionRequests = [];
 
             result.toolCalls.forEach((call) => {
               if (
-              userRole === "author" &&
-              [
-              "createQuestion",
-              "modifyQuestion",
-              "setQuestionChoices",
-              "addRubric",
-              "generateQuestionVariant",
-              "deleteQuestion",
-              "generateQuestionsFromObjectives",
-              "updateLearningObjectives",
-              "setQuestionTitle"].
-              includes(call.toolName))
-              {
+                userRole === "author" &&
+                [
+                  "createQuestion",
+                  "modifyQuestion",
+                  "setQuestionChoices",
+                  "addRubric",
+                  "generateQuestionVariant",
+                  "deleteQuestion",
+                  "generateQuestionsFromObjectives",
+                  "updateLearningObjectives",
+                  "setQuestionTitle",
+                ].includes(call.toolName)
+              ) {
                 clientExecutionRequests.push({
                   function: call.toolName,
-                  params: call.args
+                  params: call.args,
                 });
               }
             });
@@ -976,7 +977,7 @@ export async function POST(req) {
               trackedClientExecutions.push(...clientExecutionRequests);
             }
           }
-        }
+        },
       });
 
       if (!result || !result.textStream) {
@@ -1002,38 +1003,34 @@ export async function POST(req) {
           const toolResults = (await result.toolResults) || [];
           for (const toolResult of toolResults) {
             if (toolResult && toolResult.result) {
-
               if (
-              [
-              "reportIssue",
-              "provideFeedback",
-              "submitSuggestion",
-              "submitInquiry"].
-              includes(toolResult.toolName))
-              {
+                [
+                  "reportIssue",
+                  "provideFeedback",
+                  "submitSuggestion",
+                  "submitInquiry",
+                ].includes(toolResult.toolName)
+              ) {
                 try {
                   const parsedResult = JSON.parse(toolResult.result);
                   if (
-                  parsedResult.clientExecution &&
-                  parsedResult.function === "showReportPreview")
-                  {
-
+                    parsedResult.clientExecution &&
+                    parsedResult.function === "showReportPreview"
+                  ) {
                     trackedClientExecutions.push({
                       function: parsedResult.function,
-                      params: parsedResult.params
+                      params: parsedResult.params,
                     });
                   } else {
-
                     if (!fullContent.includes(toolResult.result)) {
                       const toolResponse = `\n\n${toolResult.result}`;
                       fullContent += toolResponse;
                       await writer.write(
-                        new TextEncoder().encode(toolResponse)
+                        new TextEncoder().encode(toolResponse),
                       );
                     }
                   }
                 } catch (e) {
-
                   if (!fullContent.includes(toolResult.result)) {
                     const toolResponse = `\n\n${toolResult.result}`;
                     fullContent += toolResponse;
@@ -1061,9 +1058,9 @@ ${JSON.stringify(trackedClientExecutions)}
                 currentChatId,
                 "ASSISTANT",
                 fullContent,
-                trackedClientExecutions.length > 0 ?
-                trackedClientExecutions :
-                undefined
+                trackedClientExecutions.length > 0
+                  ? trackedClientExecutions
+                  : undefined,
               );
             } catch (error) {
               console.error("Error saving assistant response:", error);
@@ -1084,17 +1081,17 @@ ${JSON.stringify(trackedClientExecutions)}
           "X-Chat-ID": currentChatId || "",
           "X-Chat-Created": newChatCreated ? "true" : "false",
           "X-Assignment-Mode": assignmentMode,
-          "X-Assignment-Submitted": isSubmitted ? "true" : "false"
-        }
+          "X-Assignment-Submitted": isSubmitted ? "true" : "false",
+        },
       });
     } catch (aiError) {
       return new Response(STANDARD_ERROR_MESSAGE, {
-        headers: { "Content-Type": "text/plain; charset=utf-8" }
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
   } catch (error) {
     return new Response(STANDARD_ERROR_MESSAGE, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   }
 }

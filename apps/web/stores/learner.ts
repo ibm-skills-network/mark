@@ -108,6 +108,7 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
             "video/webm; codecs=vp8",
             "video/webm",
           ];
+
           return (
             possibleTypes.find((type) => MediaRecorder.isTypeSupported(type)) ||
             ""

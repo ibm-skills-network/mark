@@ -25,23 +25,24 @@ const TooltipMessage: FC<TooltipMessageProps> = ({
   changesSummary,
   invalidQuestionId,
   onNavigate,
-  showAction = true
+  showAction = true,
 }) => {
   if (isLoading) return "Loading questions...";
   if (hasEmptyQuestion) return "Some questions have incomplete fields";
   if (!isValid)
-  return (
-    <>
+    return (
+      <>
         <span>{message}</span>
-        {!isValid && showAction &&
-      <button
-        onClick={onNavigate}
-        className="ml-2 text-purple-500 hover:underline">
-
+        {!isValid && showAction && (
+          <button
+            onClick={onNavigate}
+            className="ml-2 text-purple-500 hover:underline"
+          >
             Take me there
           </button>
-      }
-      </>);
+        )}
+      </>
+    );
 
   if (submitting) return "Mark is analyzing your questions...";
   if (!hasChanges) return "No changes detected.";
@@ -52,8 +53,8 @@ const TooltipMessage: FC<TooltipMessageProps> = ({
       <span className="block mt-2 text-sm font-normal text-gray-500">
         {changesSummary}
       </span>
-    </>);
-
+    </>
+  );
 };
 
 export default TooltipMessage;

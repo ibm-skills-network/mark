@@ -18,8 +18,8 @@ function PageWithStickySides(props: Props) {
       <div className="sticky top-14 flex h-full flex-col gap-y-2">
         {rightStickySide}
       </div>
-    </section>);
-
+    </section>
+  );
 }
 
 export default PageWithStickySides;

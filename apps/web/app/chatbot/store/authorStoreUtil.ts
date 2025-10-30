@@ -32,7 +32,7 @@ export function waitForBridge(maxWait = 10000) {
       const timeoutId = setTimeout(() => {
         if (window._authorStoreBridgeCallbacks) {
           window._authorStoreBridgeCallbacks =
-          window._authorStoreBridgeCallbacks.filter((cb) => cb !== callback);
+            window._authorStoreBridgeCallbacks.filter((cb) => cb !== callback);
         }
         reject(new Error("Bridge did not initialize in time"));
       }, maxWait);
@@ -59,9 +59,9 @@ export function waitForBridge(maxWait = 10000) {
     registerCallback();
 
     if (
-    !window.authorStoreBridge &&
-    !document.getElementById("author-store-bridge-trigger"))
-    {
+      !window.authorStoreBridge &&
+      !document.getElementById("author-store-bridge-trigger")
+    ) {
       const bridgeTrigger = document.createElement("div");
       bridgeTrigger.id = "author-store-bridge-trigger";
       bridgeTrigger.style.display = "none";
@@ -85,7 +85,7 @@ export function waitForBridge(maxWait = 10000) {
 export async function executeAuthorStoreOperation(operation, ...args) {
   if (typeof window === "undefined") {
     return Promise.reject(
-      new Error("Cannot execute author store operation on server")
+      new Error("Cannot execute author store operation on server"),
     );
   }
 
@@ -107,8 +107,8 @@ export async function executeAuthorStoreOperation(operation, ...args) {
             reject(
               new Error(
                 e.detail.result?.message ||
-                "Unknown error in author store operation"
-              )
+                  "Unknown error in author store operation",
+              ),
             );
           }
         }
@@ -121,9 +121,9 @@ export async function executeAuthorStoreOperation(operation, ...args) {
           detail: {
             operation,
             args,
-            requestId
-          }
-        })
+            requestId,
+          },
+        }),
       );
 
       setTimeout(() => {
@@ -145,17 +145,17 @@ export async function executeAuthorStoreOperation(operation, ...args) {
  * @returns {Promise} - Promise that resolves with the result
  */
 export function createQuestion(
-questionType,
-questionText,
-totalPoints = 10,
-options = [])
-{
+  questionType,
+  questionText,
+  totalPoints = 10,
+  options = [],
+) {
   return executeAuthorStoreOperation(
     "createQuestion",
     questionType,
     questionText,
     totalPoints,
-    options
+    options,
   );
 }
 
@@ -168,17 +168,17 @@ options = [])
  * @returns {Promise} - Promise that resolves with the result
  */
 export function modifyQuestion(
-questionId,
-questionText,
-totalPoints,
-questionType)
-{
+  questionId,
+  questionText,
+  totalPoints,
+  questionType,
+) {
   return executeAuthorStoreOperation(
     "modifyQuestion",
     questionId,
     questionText,
     totalPoints,
-    questionType
+    questionType,
   );
 }
 
@@ -194,7 +194,7 @@ export function setQuestionChoices(questionId, choices, variantId) {
     "setQuestionChoices",
     questionId,
     choices,
-    variantId
+    variantId,
   );
 }
 
@@ -210,7 +210,7 @@ export function addRubric(questionId, rubricQuestion, criteria) {
     "addRubric",
     questionId,
     rubricQuestion,
-    criteria
+    criteria,
   );
 }
 
@@ -224,7 +224,7 @@ export function generateQuestionVariant(questionId, variantType) {
   return executeAuthorStoreOperation(
     "generateQuestionVariant",
     questionId,
-    variantType
+    variantType,
   );
 }
 
@@ -245,15 +245,15 @@ export function deleteQuestion(questionId) {
  * @returns {Promise} - Promise that resolves with the result
  */
 export function generateQuestionsFromObjectives(
-learningObjectives,
-questionTypes,
-count)
-{
+  learningObjectives,
+  questionTypes,
+  count,
+) {
   return executeAuthorStoreOperation(
     "generateQuestionsFromObjectives",
     learningObjectives,
     questionTypes,
-    count
+    count,
   );
 }
 
@@ -265,7 +265,7 @@ count)
 export function updateLearningObjectives(learningObjectives) {
   return executeAuthorStoreOperation(
     "updateLearningObjectives",
-    learningObjectives
+    learningObjectives,
   );
 }
 
@@ -285,12 +285,10 @@ export function setQuestionTitle(questionId, title) {
  * @returns {Promise} - Promise that resolves with success
  */
 export function showReportPreview(params) {
-
-
   return Promise.resolve({
     success: true,
     message: "Report preview form displayed",
-    data: params
+    data: params,
   });
 }
 
@@ -308,26 +306,26 @@ export function runAuthorOperation(operation, params) {
         params.questionType,
         params.questionText,
         params.totalPoints,
-        params.options
+        params.options,
       );
     case "modifyQuestion":
       return modifyQuestion(
         params.questionId,
         params.questionText,
         params.totalPoints,
-        params.questionType
+        params.questionType,
       );
     case "setQuestionChoices":
       return setQuestionChoices(
         params.questionId,
         params.choices,
-        params.variantId
+        params.variantId,
       );
     case "addRubric":
       return addRubric(
         params.questionId,
         params.rubricQuestion,
-        params.criteria
+        params.criteria,
       );
     case "generateQuestionVariant":
       return generateQuestionVariant(params.questionId, params.variantType);
@@ -337,17 +335,16 @@ export function runAuthorOperation(operation, params) {
       return generateQuestionsFromObjectives(
         params.learningObjectives,
         params.questionTypes,
-        params.count
+        params.count,
       );
     case "updateLearningObjectives":
       return updateLearningObjectives(params.learningObjectives);
     case "setQuestionTitle":
       return setQuestionTitle(params.questionId, params.title);
     case "showReportPreview":
-
       return Promise.resolve({
         success: true,
-        message: "Report preview handled by component"
+        message: "Report preview handled by component",
       });
     default:
       return Promise.reject(new Error(`Unknown operation: ${operation}`));
@@ -367,5 +364,5 @@ export default {
   showReportPreview,
   executeAuthorStoreOperation,
   runAuthorOperation,
-  waitForBridge
+  waitForBridge,
 };

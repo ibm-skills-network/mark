@@ -78,14 +78,7 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
       return (
         <div className="space-y-1">
           <div className="text-sm">{value.substring(0, 100)}...</div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs h-auto p-1"
-            onClick={() => {
-              // Show full content in a modal or expand inline
-            }}
-          >
+          <Button variant="ghost" size="sm" className="text-xs h-auto p-1">
             Show more
           </Button>
         </div>
@@ -100,7 +93,6 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
   return (
     <Modal onClose={handleClose} Title="Version Comparison">
       <div className="space-y-6 overflow-y-auto max-h-[60vh]">
-        {/* Version Headers */}
         <div className="grid grid-cols-2 gap-4 pb-4 border-b">
           <div className="space-y-2">
             <h3 className="font-semibold text-red-700 flex items-center gap-2">
@@ -139,7 +131,6 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
           </div>
         </div>
 
-        {/* Assignment Changes */}
         {assignmentChanges.length > 0 && (
           <div>
             <h3 className="font-semibold mb-3 flex items-center gap-2">
@@ -188,7 +179,6 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
           </div>
         )}
 
-        {/* Question Changes */}
         {questionChanges.length > 0 && (
           <div>
             <h3 className="font-semibold mb-3 flex items-center gap-2">
@@ -250,7 +240,6 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
           </div>
         )}
 
-        {/* No Changes */}
         {assignmentChanges.length === 0 && questionChanges.length === 0 && (
           <div className="text-center py-12">
             <GitCompare className="h-12 w-12 mx-auto mb-4 text-gray-300" />
@@ -263,7 +252,6 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
           </div>
         )}
 
-        {/* Summary */}
         {(assignmentChanges.length > 0 || questionChanges.length > 0) && (
           <div className="bg-gray-50 p-4 rounded-lg border-t">
             <h3 className="font-semibold mb-2">Summary</h3>

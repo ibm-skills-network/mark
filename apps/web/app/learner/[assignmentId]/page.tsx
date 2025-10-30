@@ -3,8 +3,8 @@ import { headers } from "next/headers";
 import AuthFetchToAbout from "./AuthFetchToAbout";
 
 interface Props {
-  params: {assignmentId: string;};
-  searchParams: {submissionTime?: string;};
+  params: { assignmentId: string };
+  searchParams: { submissionTime?: string };
 }
 
 async function Component(props: Props) {
@@ -19,9 +19,9 @@ async function Component(props: Props) {
     <AuthFetchToAbout
       assignmentId={~~assignmentId}
       role={role}
-      cookie={cookieHeader} />);
-
-
+      cookie={cookieHeader}
+    />
+  );
 }
 
 export default Component;

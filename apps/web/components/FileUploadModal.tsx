@@ -456,6 +456,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                         onChange={() => setSelectedDifficulty(option.value)}
                         className="h-4 w-4 mt-1 text-violet-600 border-gray-300 focus:ring-violet-500"
                       />
+
                       <div>
                         <span className="text-sm font-medium text-gray-700">
                           {option.label}
@@ -525,6 +526,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
                 />
+
                 <label className="text-sm font-medium text-gray-700">
                   Multiple Choice
                 </label>
@@ -543,6 +545,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
                 />
+
                 <label className="text-sm font-medium text-gray-700">
                   Multiple Select
                 </label>
@@ -561,6 +564,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
                 />
+
                 <label className="text-sm font-medium text-gray-700">
                   Text Response
                 </label>
@@ -579,6 +583,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
                 />
+
                 <label className="text-sm font-medium text-gray-700">
                   True or False
                 </label>
@@ -597,6 +602,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
                 />
+
                 <label className="text-sm font-medium text-gray-700">
                   URL Response
                 </label>
@@ -625,6 +631,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
                 />
+
                 <label className="text-sm font-medium text-gray-700">
                   File Upload
                 </label>
@@ -653,6 +660,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
                 />
+
                 <label className="text-sm font-medium text-gray-700">
                   Link or File
                 </label>
@@ -739,7 +747,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* File Inspector Modal */}
+
       {fileInspectorModalOpen && (
         <Modal
           onClose={() => setFileInspectorModalOpen(false)}

@@ -1,4 +1,3 @@
-// Updated FolderContextMenu.tsx
 import React, { useRef, useEffect } from "react";
 import {
   IconFolder,
@@ -44,7 +43,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Handle clicking outside to close menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -52,7 +50,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       }
     };
 
-    // Close on escape key
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
@@ -68,7 +65,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
     };
   }, [onClose]);
 
-  // Adjust position to keep menu in viewport
   const adjustedPosition = () => {
     if (!position || !menuRef.current) return { top: 0, left: 0 };
 
@@ -76,19 +72,16 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
     const menuRect = menuRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const menuWidth = menuRect.width || 180; // Fallback width if not measured yet
-    const menuHeight = menuRect.height || 200; // Fallback height
+    const menuWidth = menuRect.width || 180;
+    const menuHeight = menuRect.height || 200;
 
-    // Calculate adjusted positions to keep menu within viewport
     let left = x;
     let top = y;
 
-    // Adjust horizontally if needed
     if (x + menuWidth > viewportWidth) {
-      left = Math.max(10, x - menuWidth); // Position to the left of the click
+      left = Math.max(10, x - menuWidth);
     }
 
-    // Adjust vertically if needed
     if (y + menuHeight > viewportHeight) {
       top = Math.max(10, viewportHeight - menuHeight - 10);
     }
@@ -96,20 +89,16 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
     return { top, left };
   };
 
-  // Define available actions
   const getActions = (): FolderContextMenuAction[] => {
     const actions: FolderContextMenuAction[] = [];
 
-    // Navigate action
     actions.push({
       icon: <IconFolder size={18} />,
       label: "Open",
       onClick: onNavigate,
     });
 
-    // Non-read-only actions
     if (!readOnly) {
-      // Upload to folder
       if (onUploadToFolder) {
         actions.push({
           icon: <IconUpload size={18} />,
@@ -118,7 +107,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
         });
       }
 
-      // Create subfolder
       if (onCreateSubfolder) {
         actions.push({
           icon: <IconFolderPlus size={18} />,
@@ -129,7 +117,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       }
     }
 
-    // Copy path action
     if (onCopyPath) {
       actions.push({
         icon: <IconClipboard size={18} />,
@@ -138,7 +125,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       });
     }
 
-    // Delete folder (not available for root folder or in read-only mode)
     if (!isRootFolder && !readOnly && onDeleteFolder) {
       actions.push({
         icon: <IconFolderX size={18} />,
@@ -164,7 +150,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       className="fixed z-50 min-w-[180px] bg-white rounded-md shadow-lg border border-gray-200 py-1"
       style={{ top, left }}
     >
-      {/* Folder header */}
       <div className="px-3 py-2 border-b border-gray-200 mb-1">
         <div className="flex items-center">
           <IconFolder size={20} className="text-yellow-500 mr-2" />
@@ -174,7 +159,6 @@ const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
         </div>
       </div>
 
-      {/* Menu actions */}
       {actions.map((action, index) => (
         <React.Fragment key={index}>
           <button

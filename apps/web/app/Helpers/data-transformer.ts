@@ -17,8 +17,8 @@ export interface TransformMetadata {
 
 const transformCache = new Map<
   string,
-  {data: any;metadata: TransformMetadata;expiry: number;}>(
-);
+  { data: any; metadata: TransformMetadata; expiry: number }
+>();
 const CACHE_TTL = 5 * 60 * 1000;
 const HTML_TAG_REGEX = /<\/?[a-z][\s\S]*>/i;
 const BASE64_FULL_REGEX = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -43,10 +43,10 @@ function isPrintableText(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const charCode = value.charCodeAt(index);
     const isPrintable =
-    charCode === 9 ||
-    charCode === 10 ||
-    charCode === 13 ||
-    charCode >= 32 && charCode !== 127;
+      charCode === 9 ||
+      charCode === 10 ||
+      charCode === 13 ||
+      (charCode >= 32 && charCode !== 127);
 
     if (isPrintable) {
       printableCount += 1;
@@ -71,7 +71,7 @@ function decodeBase64String(value: string): string | null {
 
     const encoder = new TextEncoder();
     const reencoded = btoa(
-      String.fromCharCode(...Array.from(encoder.encode(decoded)))
+      String.fromCharCode(...Array.from(encoder.encode(decoded))),
     ).replace(/=+$/g, "");
     const normalizedInput = value.replace(/=+$/g, "");
 
@@ -88,9 +88,9 @@ function findBase64Payload(rawValue: string): Base64Payload | null {
   if (!trimmed) return null;
 
   const primaryCandidate =
-  trimmed.length >= 8 &&
-  BASE64_FULL_REGEX.test(trimmed) &&
-  decodeBase64String(trimmed);
+    trimmed.length >= 8 &&
+    BASE64_FULL_REGEX.test(trimmed) &&
+    decodeBase64String(trimmed);
 
   if (typeof primaryCandidate === "string") {
     return { candidate: trimmed, decoded: primaryCandidate };
@@ -133,9 +133,9 @@ function decodeBase64Layers(value: string): string {
  * Smart encoding that automatically detects content type and applies appropriate transformation
  */
 export function smartEncode(
-data: any,
-config: TransformConfig = {})
-: {data: any;metadata: TransformMetadata;} {
+  data: any,
+  config: TransformConfig = {},
+): { data: any; metadata: TransformMetadata } {
   const originalSize = safeStringify(data).length;
 
   const cacheKey = generateCacheKey(data, config);
@@ -155,13 +155,13 @@ config: TransformConfig = {})
     compressionRatio: originalSize > 0 ? encodedSize / originalSize : 1,
     timestamp: Date.now(),
     fields: transformedFields,
-    transformedFields: transformedFields
+    transformedFields: transformedFields,
   };
 
   transformCache.set(cacheKey, {
     data: transformedData,
     metadata,
-    expiry: Date.now() + CACHE_TTL
+    expiry: Date.now() + CACHE_TTL,
   });
 
   return { data: transformedData, metadata };
@@ -182,7 +182,7 @@ export function smartDecode(data: any, config: TransformConfig = {}): any {
   transformCache.set(cacheKey, {
     data: decodedData,
     metadata: {} as TransformMetadata,
-    expiry: Date.now() + CACHE_TTL
+    expiry: Date.now() + CACHE_TTL,
   });
 
   return decodedData;
@@ -192,12 +192,12 @@ export function smartDecode(data: any, config: TransformConfig = {}): any {
  * Core transformation logic for encoding and decoding operations
  */
 function transformData(
-data: any,
-config: TransformConfig,
-operation: "encode" | "decode",
-visited: WeakSet<object> = new WeakSet(),
-currentPath = "")
-: any {
+  data: any,
+  config: TransformConfig,
+  operation: "encode" | "decode",
+  visited: WeakSet<object> = new WeakSet(),
+  currentPath = "",
+): any {
   if (data === null || data === undefined) {
     return data;
   }
@@ -213,13 +213,13 @@ currentPath = "")
 
   if (Array.isArray(data)) {
     const transformedArray = data.map((item, index) =>
-    transformData(
-      item,
-      config,
-      operation,
-      visited,
-      `${currentPath}[${index}]`
-    )
+      transformData(
+        item,
+        config,
+        operation,
+        visited,
+        `${currentPath}[${index}]`,
+      ),
     );
     visited.delete(data);
     return transformedArray;
@@ -241,9 +241,9 @@ currentPath = "")
         result[key] = value.map((item, index) => {
           const childPath = `${fieldPath}[${index}]`;
           if (typeof item === "string") {
-            return operation === "encode" ?
-            encodeValue(item) :
-            decodeValue(item);
+            return operation === "encode"
+              ? encodeValue(item)
+              : decodeValue(item);
           }
           if (item && typeof item === "object") {
             return transformData(item, config, operation, visited, childPath);
@@ -252,7 +252,7 @@ currentPath = "")
         });
       } else {
         result[key] =
-        operation === "encode" ? encodeValue(value) : decodeValue(value);
+          operation === "encode" ? encodeValue(value) : decodeValue(value);
       }
     } else if (deep && value && typeof value === "object") {
       result[key] = transformData(value, config, operation, visited, fieldPath);
@@ -269,12 +269,12 @@ currentPath = "")
  * Determine if a field should be transformed based on configuration and content
  */
 function shouldTransformField(
-key: string,
-value: any,
-fields: string[] | undefined,
-fieldPath: string,
-operation: "encode" | "decode")
-: boolean {
+  key: string,
+  value: any,
+  fields: string[] | undefined,
+  fieldPath: string,
+  operation: "encode" | "decode",
+): boolean {
   if (fields && fields.length > 0) {
     return matchesConfiguredField(fields, key, fieldPath);
   }
@@ -289,7 +289,7 @@ operation: "encode" | "decode")
 
   if (operation === "encode") {
     const alreadyEncoded =
-    base64Payload !== null && base64Payload.candidate === trimmedValue;
+      base64Payload !== null && base64Payload.candidate === trimmedValue;
 
     return !alreadyEncoded && (value.length > 10 || containsHtmlTags);
   }
@@ -298,27 +298,27 @@ operation: "encode" | "decode")
 }
 
 function normalizeFieldPath(path: string): string[] {
-  return path.
-  replace(/\[\d+\]/g, "").
-  split(".").
-  map((segment) => segment.trim()).
-  filter(Boolean);
+  return path
+    .replace(/\[\d+\]/g, "")
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
 }
 
 function matchesConfiguredField(
-configuredFields: string[],
-key: string,
-fieldPath: string)
-: boolean {
+  configuredFields: string[],
+  key: string,
+  fieldPath: string,
+): boolean {
   const candidateSegments = normalizeFieldPath(fieldPath);
 
   return configuredFields.some((field) => {
     const normalizedFieldSegments = normalizeFieldPath(field);
 
     if (
-    normalizedFieldSegments.length === 1 &&
-    normalizedFieldSegments[0] === key)
-    {
+      normalizedFieldSegments.length === 1 &&
+      normalizedFieldSegments[0] === key
+    ) {
       return true;
     }
 
@@ -327,7 +327,7 @@ fieldPath: string)
     }
 
     return normalizedFieldSegments.every(
-      (segment, index) => segment === candidateSegments[index]
+      (segment, index) => segment === candidateSegments[index],
     );
   });
 }
@@ -340,10 +340,10 @@ function isAlreadyEncoded(value: string): boolean {
 
   const trimmed = value.trim();
   if (
-  !trimmed ||
-  trimmed.length % 4 !== 0 ||
-  !BASE64_FULL_REGEX.test(trimmed))
-  {
+    !trimmed ||
+    trimmed.length % 4 !== 0 ||
+    !BASE64_FULL_REGEX.test(trimmed)
+  ) {
     return false;
   }
 
@@ -452,16 +452,15 @@ function safeStringify(data: any): string {
  * Generate unique cache key for transformation operations
  */
 function generateCacheKey(
-data: any,
-config: TransformConfig,
-operation?: string)
-: string {
+  data: any,
+  config: TransformConfig,
+  operation?: string,
+): string {
   const configHash = safeStringify(config);
   const dataHash =
-  typeof data === "string" ?
-  data.substring(0, 50) :
-  safeStringify(data).substring(0, 50);
-
+    typeof data === "string"
+      ? data.substring(0, 50)
+      : safeStringify(data).substring(0, 50);
 
   const encoder = new TextEncoder();
   const encoded = encoder.encode(configHash + dataHash);
@@ -474,9 +473,9 @@ operation?: string)
  * Extract list of fields that were transformed
  */
 function extractTransformedFields(
-data: any,
-config: TransformConfig)
-: string[] {
+  data: any,
+  config: TransformConfig,
+): string[] {
   const fields: string[] = [];
 
   if (config.fields) {
@@ -507,7 +506,7 @@ export function clearTransformCache(): void {
 export function getCacheStats() {
   return {
     size: transformCache.size,
-    entries: Array.from(transformCache.keys())
+    entries: Array.from(transformCache.keys()),
   };
 }
 
@@ -518,20 +517,21 @@ export const DataTransformer = {
   encodeForAPI: (data: any, config?: TransformConfig) => {
     const defaultConfig = {
       fields: [
-      "introduction",
-      "instructions",
-      "gradingCriteriaOverview",
-      "question",
-      "content",
-      "rubricQuestion",
-      "description",
-      "questions.choices.choice",
-      "questions.scoring.rubrics.rubricQuestion",
-      "questions.scoring.rubrics.criteria.description",
-      "learnerTextResponse",
-      "learnerChoices"],
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+        "rubricQuestion",
+        "description",
+        "questions.choices.choice",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
+        "learnerTextResponse",
+        "learnerChoices",
+      ],
 
-      deep: true
+      deep: true,
     };
     const result = smartEncode(data, config || defaultConfig);
     return result;
@@ -540,38 +540,39 @@ export const DataTransformer = {
   decodeFromAPI: (data: any, config?: TransformConfig) => {
     const defaultConfig = {
       fields: [
-      "introduction",
-      "instructions",
-      "gradingCriteriaOverview",
-      "question",
-      "content",
-      "rubricQuestion",
-      "questions.choices",
-      "questionVersions.choices",
-      "questionVersions.question",
-      "description",
-      "questions.choices.choice",
-      "questions.scoring.rubrics.rubricQuestion",
-      "questions.scoring.rubrics.criteria.description"],
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+        "rubricQuestion",
+        "questions.choices",
+        "questionVersions.choices",
+        "questionVersions.question",
+        "description",
+        "questions.choices.choice",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
+      ],
 
-      deep: true
+      deep: true,
     };
     const result = smartDecode(data, config || defaultConfig);
     return result;
   },
 
   encodeFormData: (data: any) =>
-  smartEncode(data, {
-    exclude: ["id", "createdAt", "updatedAt"],
-    deep: false
-  }),
+    smartEncode(data, {
+      exclude: ["id", "createdAt", "updatedAt"],
+      deep: false,
+    }),
 
   encodeForStorage: (data: any) =>
-  smartEncode(data, {
-    compressionLevel: "heavy",
-    deep: true
-  }),
+    smartEncode(data, {
+      compressionLevel: "heavy",
+      deep: true,
+    }),
 
   clearCache: clearTransformCache,
-  getStats: getCacheStats
+  getStats: getCacheStats,
 };

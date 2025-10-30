@@ -1,8 +1,8 @@
 /* eslint-disable */
 import {
   createQuestion,
-  generateQuestionVariant } from
-"../store/authorStoreUtil";
+  generateQuestionVariant,
+} from "../store/authorStoreUtil";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 
 /**
@@ -10,64 +10,64 @@ import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
  */
 export async function searchKnowledgeBase(query: string): Promise<string> {
   const knowledgeItems = [
-  {
-    id: "kb-1",
-    title: "Multiple Choice Questions",
-    description:
-    "Multiple choice questions allow learners to select one correct answer from several options. They're great for testing recall and recognition."
-  },
-  {
-    id: "kb-2",
-    title: "Assignment Feedback",
-    description:
-    "Feedback is provided automatically for assignments based on the rubric and AI evaluation of the learner's responses."
-  },
-  {
-    id: "kb-3",
-    title: "Practice vs. Graded Assignments",
-    description:
-    "Practice assignments allow unlimited attempts and provide detailed feedback. Graded assignments may have limited attempts and contribute to a final grade."
-  },
-  {
-    id: "kb-4",
-    title: "Regrading Process",
-    description:
-    "You can request regrading if you believe your submission was incorrectly assessed. Instructors will review your request and adjust scores if appropriate."
-  },
-  {
-    id: "kb-5",
-    title: "Technical Issues",
-    description:
-    "If you encounter technical issues with the platform, you can report them through Mark. Include the specific steps to reproduce the issue and any error messages you see."
-  }];
-
+    {
+      id: "kb-1",
+      title: "Multiple Choice Questions",
+      description:
+        "Multiple choice questions allow learners to select one correct answer from several options. They're great for testing recall and recognition.",
+    },
+    {
+      id: "kb-2",
+      title: "Assignment Feedback",
+      description:
+        "Feedback is provided automatically for assignments based on the rubric and AI evaluation of the learner's responses.",
+    },
+    {
+      id: "kb-3",
+      title: "Practice vs. Graded Assignments",
+      description:
+        "Practice assignments allow unlimited attempts and provide detailed feedback. Graded assignments may have limited attempts and contribute to a final grade.",
+    },
+    {
+      id: "kb-4",
+      title: "Regrading Process",
+      description:
+        "You can request regrading if you believe your submission was incorrectly assessed. Instructors will review your request and adjust scores if appropriate.",
+    },
+    {
+      id: "kb-5",
+      title: "Technical Issues",
+      description:
+        "If you encounter technical issues with the platform, you can report them through Mark. Include the specific steps to reproduce the issue and any error messages you see.",
+    },
+  ];
 
   const results = knowledgeItems.filter(
     (item) =>
-    item.title.toLowerCase().includes(query.toLowerCase()) ||
-    item.description.toLowerCase().includes(query.toLowerCase())
+      item.title.toLowerCase().includes(query.toLowerCase()) ||
+      item.description.toLowerCase().includes(query.toLowerCase()),
   );
 
   if (results.length === 0) {
     return "I couldn't find specific information about that in our knowledge base, but I'll try to help based on my general knowledge.";
   }
 
-  return results.
-  map((item) => `**${item.title}**\n${item.description}`).
-  join("\n\n");
+  return results
+    .map((item) => `**${item.title}**\n${item.description}`)
+    .join("\n\n");
 }
 
 const highestScoreResponse = (
-questionResponses: any[],
-showSubmissionFeedback: boolean) =>
-{
+  questionResponses: any[],
+  showSubmissionFeedback: boolean,
+) => {
   if (!questionResponses || questionResponses.length === 0) {
-    return showSubmissionFeedback ?
-    { points: 0, feedback: [{ feedback: "This answer was blank" }] } :
-    undefined;
+    return showSubmissionFeedback
+      ? { points: 0, feedback: [{ feedback: "This answer was blank" }] }
+      : undefined;
   }
   return questionResponses.reduce((acc, curr) =>
-  acc.points > curr.points ? acc : curr
+    acc.points > curr.points ? acc : curr,
   );
 };
 /**
@@ -82,7 +82,7 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
   }
   const pointsEarned = highestScoreResponse(
     question.questionResponses,
-    useLearnerStore.getState().showSubmissionFeedback
+    useLearnerStore.getState().showSubmissionFeedback,
   );
 
   let result = `**Question Details**\n\n`;
@@ -93,8 +93,8 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
   result += `**Question**: ${question.question}\n\n`;
   result += `**Feedback**: ${question.questionResponses || "No feedback available."}\n\n`;
   result += `**Was the assignment submitted?**: ${
-  question.questionResponses ? "Yes" : "No"}\n`;
-
+    question.questionResponses ? "Yes" : "No"
+  }\n`;
 
   if (question.choices) {
     result += `**Answer Choices**:\n`;
@@ -108,18 +108,18 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
 
   if (useLearnerStore.getState().showSubmissionFeedback) {
     result += `\n**Your Score**: ${
-    question.choices ?
-    question.choices.filter((choice: any) => choice.isCorrect).length :
-    0} / ${
-    question.totalPoints}\n`;
+      question.choices
+        ? question.choices.filter((choice: any) => choice.isCorrect).length
+        : 0
+    } / ${question.totalPoints}\n`;
 
     if (question.questionResponses && question.questionResponses.length > 0) {
       result += `\n**Feedback**:\n`;
       const feedback = Array.isArray(
-        question.questionResponses.map((response: any) => response.feedback)
-      ) ?
-      question.questionResponses.map((response: any) => response.feedback) :
-      [];
+        question.questionResponses.map((response: any) => response.feedback),
+      )
+        ? question.questionResponses.map((response: any) => response.feedback)
+        : [];
 
       feedback.forEach((fb: any) => {
         if (typeof fb === "string") {
@@ -138,8 +138,8 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
  * Get the rubric for an assignment
  */
 export async function getAssignmentRubric(
-assignmentId: number)
-: Promise<string> {
+  assignmentId: number,
+): Promise<string> {
   const assignmentDetails = useAssignmentDetails.getState().assignmentDetails;
 
   if (!assignmentDetails || assignmentDetails.id !== assignmentId) {
@@ -152,7 +152,7 @@ assignmentId: number)
     result += `**Grading Criteria Overview**:\n${assignmentDetails.gradingCriteriaOverview}\n\n`;
   } else {
     result +=
-    "This assignment doesn't have detailed grading criteria specified.\n\n";
+      "This assignment doesn't have detailed grading criteria specified.\n\n";
   }
 
   result += `**Passing Grade**: ${assignmentDetails.passingGrade || 50}%\n`;
@@ -180,9 +180,9 @@ assignmentId: number)
  * Submit a question about feedback
  */
 export async function submitFeedbackQuestion(
-questionId: number,
-feedbackQuery: string)
-: Promise<string> {
+  questionId: number,
+  feedbackQuery: string,
+): Promise<string> {
   const assignmentId = useAssignmentDetails.getState().assignmentDetails?.id;
   const attemptId = useLearnerStore.getState().activeAttemptId;
 
@@ -193,30 +193,30 @@ feedbackQuery: string)
     const response = await fetch("/api/feedbackQuestions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         assignmentId,
         attemptId,
         questionId,
-        feedbackQuery
-      })
+        feedbackQuery,
+      }),
     });
 
     if (response.ok) {
       const data = await response.json();
       return `Your question about the feedback for question ${questionId} has been submitted. An instructor will review your query and respond as soon as possible. For reference, your query ID is ${
-      data.id || "FQ-" + Date.now().toString(36).toUpperCase()}.`;
-
+        data.id || "FQ-" + Date.now().toString(36).toUpperCase()
+      }.`;
     } else {
-      return `Your question about the feedback for question ${questionId} has been submitted. An instructor will review your query and respond as soon as possible. For reference, your query ID is FQ-${Date.now().
-      toString(36).
-      toUpperCase()}.`;
+      return `Your question about the feedback for question ${questionId} has been submitted. An instructor will review your query and respond as soon as possible. For reference, your query ID is FQ-${Date.now()
+        .toString(36)
+        .toUpperCase()}.`;
     }
   } catch (error) {
-    return `Your question about the feedback for question ${questionId} has been submitted. An instructor will review your query and respond as soon as possible. For reference, your query ID is FQ-${Date.now().
-    toString(36).
-    toUpperCase()}.`;
+    return `Your question about the feedback for question ${questionId} has been submitted. An instructor will review your query and respond as soon as possible. For reference, your query ID is FQ-${Date.now()
+      .toString(36)
+      .toUpperCase()}.`;
   }
 }
 
@@ -225,10 +225,10 @@ feedbackQuery: string)
  * This implementation actually attempts to make a server call to create a regrade request
  */
 export async function requestRegrading(
-assignmentId: number,
-attemptId: number,
-reason: string)
-: Promise<string> {
+  assignmentId: number,
+  attemptId: number,
+  reason: string,
+): Promise<string> {
   if (!assignmentId) {
     assignmentId = useAssignmentDetails.getState().assignmentDetails?.id || 0;
   }
@@ -244,29 +244,29 @@ reason: string)
     const response = await fetch("/api/regrading", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         assignmentId,
         attemptId,
-        reason
-      })
+        reason,
+      }),
     });
 
     if (response.ok) {
       const data = await response.json();
       return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is ${
-      data.id || "RG-" + Date.now().toString(36).toUpperCase()}.`;
-
+        data.id || "RG-" + Date.now().toString(36).toUpperCase()
+      }.`;
     } else {
-      return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is RG-${Date.now().
-      toString(36).
-      toUpperCase()}.`;
+      return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is RG-${Date.now()
+        .toString(36)
+        .toUpperCase()}.`;
     }
   } catch (error) {
-    return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is RG-${Date.now().
-    toString(36).
-    toUpperCase()}.`;
+    return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is RG-${Date.now()
+      .toString(36)
+      .toUpperCase()}.`;
   }
 }
 
@@ -275,16 +275,16 @@ async function publishAssignment(assignmentId: number) {
 }
 
 async function generateQuestionsFromContent(
-assignmentId: number,
-learningObjectives: string,
-numberOfQuestions?: number,
-questionTypes?: string[])
-{
+  assignmentId: number,
+  learningObjectives: string,
+  numberOfQuestions?: number,
+  questionTypes?: string[],
+) {
   const count = numberOfQuestions || 5;
   const types = questionTypes || ["MULTIPLE_CHOICE", "TRUE_FALSE", "TEXT"];
 
   return `I'm generating ${count} questions for assignment ${assignmentId} based on the following learning objectives: "${learningObjectives}". The questions will include ${types.join(
-    ", "
+    ", ",
   )} types. This process may take a few moments. You'll receive a notification when the questions are ready for your review.`;
 }
 
@@ -293,10 +293,10 @@ questionTypes?: string[])
  * This maps function calls to their implementations
  */
 export async function handleFunctionCall(
-functionName: string,
-args: any,
-userRole: "learner" | "author")
-{
+  functionName: string,
+  args: any,
+  userRole: "learner" | "author",
+) {
   if (functionName === "searchKnowledgeBase") {
     return await searchKnowledgeBase(args.query);
   }
@@ -312,14 +312,14 @@ userRole: "learner" | "author")
       case "submitFeedbackQuestion":
         return await submitFeedbackQuestion(
           args.questionId,
-          args.feedbackQuery
+          args.feedbackQuery,
         );
 
       case "requestRegrading":
         return await requestRegrading(
           args.assignmentId,
           args.attemptId,
-          args.reason
+          args.reason,
         );
 
       default:
@@ -332,7 +332,7 @@ userRole: "learner" | "author")
           args.assignmentId,
           args.questionType,
           args.questionText,
-          args.totalPoints
+          args.totalPoints,
         );
 
       case "generateQuestionVariant":
@@ -346,7 +346,7 @@ userRole: "learner" | "author")
           args.assignmentId,
           args.learningObjectives,
           args.numberOfQuestions,
-          args.questionTypes
+          args.questionTypes,
         );
 
       default:

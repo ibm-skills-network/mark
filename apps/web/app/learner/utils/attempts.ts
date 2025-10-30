@@ -1,19 +1,19 @@
 import {
   AssignmentAttempt,
-  AssignmentAttemptWithQuestions } from
-"@/config/types";
+  AssignmentAttemptWithQuestions,
+} from "@/config/types";
 
 type MaybeDateValue =
-string |
-Date |
-number |
-null |
-undefined |
-Record<string, unknown>;
+  | string
+  | Date
+  | number
+  | null
+  | undefined
+  | Record<string, unknown>;
 
 export const coerceSubmitted = (
-submitted: AssignmentAttempt["submitted"])
-: boolean => {
+  submitted: AssignmentAttempt["submitted"],
+): boolean => {
   if (typeof submitted === "boolean") {
     return submitted;
   }
@@ -37,8 +37,8 @@ submitted: AssignmentAttempt["submitted"])
 };
 
 export const getExpiresAtMs = (
-expiresAt: AssignmentAttempt["expiresAt"])
-: number | undefined => {
+  expiresAt: AssignmentAttempt["expiresAt"],
+): number | undefined => {
   const isoString = toIsoString(expiresAt);
   if (!isoString) {
     return undefined;
@@ -49,7 +49,7 @@ expiresAt: AssignmentAttempt["expiresAt"])
 };
 
 export const isAttemptSubmitted = (attempt: AssignmentAttempt): boolean =>
-coerceSubmitted(attempt.submitted);
+  coerceSubmitted(attempt.submitted);
 
 export const isAttemptInProgress = (attempt: AssignmentAttempt): boolean => {
   if (isAttemptSubmitted(attempt)) {
@@ -61,29 +61,29 @@ export const isAttemptInProgress = (attempt: AssignmentAttempt): boolean => {
 };
 
 export const getLatestAttempt = (
-attempts: AssignmentAttempt[])
-: AssignmentAttempt | null => {
+  attempts: AssignmentAttempt[],
+): AssignmentAttempt | null => {
   return attempts.reduce<AssignmentAttempt | null>((latest, attempt) => {
     if (!latest) return attempt;
 
     const attemptCreatedAt = getTimestampMs(attempt.createdAt);
     const latestCreatedAt = getTimestampMs(latest.createdAt);
 
-    const normalizedAttemptCreatedAt = Number.isNaN(attemptCreatedAt) ?
-    Number.NEGATIVE_INFINITY :
-    attemptCreatedAt;
-    const normalizedLatestCreatedAt = Number.isNaN(latestCreatedAt) ?
-    Number.NEGATIVE_INFINITY :
-    latestCreatedAt;
+    const normalizedAttemptCreatedAt = Number.isNaN(attemptCreatedAt)
+      ? Number.NEGATIVE_INFINITY
+      : attemptCreatedAt;
+    const normalizedLatestCreatedAt = Number.isNaN(latestCreatedAt)
+      ? Number.NEGATIVE_INFINITY
+      : latestCreatedAt;
 
     if (normalizedAttemptCreatedAt > normalizedLatestCreatedAt) {
       return attempt;
     }
 
     if (
-    normalizedAttemptCreatedAt === normalizedLatestCreatedAt &&
-    attempt.id > latest.id)
-    {
+      normalizedAttemptCreatedAt === normalizedLatestCreatedAt &&
+      attempt.id > latest.id
+    ) {
       return attempt;
     }
 
@@ -101,12 +101,12 @@ export const toIsoString = (value: MaybeDateValue): string | undefined => {
   }
 
   if (
-  typeof value === "object" &&
-  "toISOString" in value &&
-  typeof (value as {toISOString: () => string;}).toISOString === "function")
-  {
+    typeof value === "object" &&
+    "toISOString" in value &&
+    typeof (value as { toISOString: () => string }).toISOString === "function"
+  ) {
     try {
-      return (value as {toISOString: () => string;}).toISOString();
+      return (value as { toISOString: () => string }).toISOString();
     } catch {
       return undefined;
     }
@@ -134,55 +134,53 @@ export const getTimestampMs = (value: MaybeDateValue): number => {
 };
 
 export type AttemptWithTiming =
-AssignmentAttempt |
-AssignmentAttemptWithQuestions |
-(AssignmentAttempt & {[key: string]: unknown;});
+  | AssignmentAttempt
+  | AssignmentAttemptWithQuestions
+  | (AssignmentAttempt & { [key: string]: unknown });
 
-export const normalizeAttemptTimestamps = <T extends AttemptWithTiming,>(
-attempt: T,
-fallbackAllotedMinutes?: number | string | null)
-: T => {
+export const normalizeAttemptTimestamps = <T extends AttemptWithTiming>(
+  attempt: T,
+  fallbackAllotedMinutes?: number | string | null,
+): T => {
   const parsedFallbackMinutes =
-  typeof fallbackAllotedMinutes === "string" ?
-  Number(fallbackAllotedMinutes) :
-  fallbackAllotedMinutes;
+    typeof fallbackAllotedMinutes === "string"
+      ? Number(fallbackAllotedMinutes)
+      : fallbackAllotedMinutes;
 
   const createdAtIso = toIsoString(attempt.createdAt) ?? undefined;
   const expiresAtIso = toIsoString(attempt.expiresAt);
   const updatedAtIso =
-  toIsoString((attempt as AssignmentAttempt)?.updatedAt) ?? undefined;
+    toIsoString((attempt as AssignmentAttempt)?.updatedAt) ?? undefined;
 
   let normalizedExpiresAt = expiresAtIso;
   if (
-  !normalizedExpiresAt &&
-  !isAttemptSubmitted(attempt as AssignmentAttempt) &&
-  createdAtIso &&
-  parsedFallbackMinutes &&
-  parsedFallbackMinutes > 0)
-  {
+    !normalizedExpiresAt &&
+    !isAttemptSubmitted(attempt as AssignmentAttempt) &&
+    createdAtIso &&
+    parsedFallbackMinutes &&
+    parsedFallbackMinutes > 0
+  ) {
     const createdAtMs = new Date(createdAtIso).getTime();
     if (!Number.isNaN(createdAtMs)) {
       normalizedExpiresAt = new Date(
-        createdAtMs + parsedFallbackMinutes * 60_000
+        createdAtMs + parsedFallbackMinutes * 60_000,
       ).toISOString();
     }
   }
 
-
-
   if (
-  isAttemptSubmitted(attempt as AssignmentAttempt) &&
-  !normalizedExpiresAt &&
-  updatedAtIso)
-  {
+    isAttemptSubmitted(attempt as AssignmentAttempt) &&
+    !normalizedExpiresAt &&
+    updatedAtIso
+  ) {
     normalizedExpiresAt = updatedAtIso;
   }
 
   if (
-  isAttemptSubmitted(attempt as AssignmentAttempt) &&
-  normalizedExpiresAt &&
-  updatedAtIso)
-  {
+    isAttemptSubmitted(attempt as AssignmentAttempt) &&
+    normalizedExpiresAt &&
+    updatedAtIso
+  ) {
     const normalizedMs = new Date(normalizedExpiresAt).getTime();
     const updatedMs = new Date(updatedAtIso).getTime();
 
@@ -194,10 +192,10 @@ fallbackAllotedMinutes?: number | string | null)
   }
 
   if (
-  !normalizedExpiresAt &&
-  createdAtIso &&
-  isAttemptSubmitted(attempt as AssignmentAttempt))
-  {
+    !normalizedExpiresAt &&
+    createdAtIso &&
+    isAttemptSubmitted(attempt as AssignmentAttempt)
+  ) {
     normalizedExpiresAt = createdAtIso;
   }
 
@@ -205,6 +203,6 @@ fallbackAllotedMinutes?: number | string | null)
     ...attempt,
     createdAt: createdAtIso ?? attempt.createdAt,
     updatedAt: updatedAtIso ?? attempt.updatedAt,
-    expiresAt: normalizedExpiresAt ?? null
+    expiresAt: normalizedExpiresAt ?? null,
   } as T;
 };

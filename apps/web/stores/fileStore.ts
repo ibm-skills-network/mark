@@ -1,4 +1,3 @@
-// stores/fileStore.ts
 import { getFileExtension } from "../components/FileExplorer/utils/fileUtils";
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
@@ -22,7 +21,6 @@ export type SortDirection = "asc" | "desc";
 export type ViewMode = "list" | "grid" | "details";
 
 export interface FileStoreState {
-  // State
   files: FileObject[];
   selectedFiles: FileObject[];
   expandedFolders: string[];
@@ -35,7 +33,6 @@ export interface FileStoreState {
   error: string | null;
   recentPaths: string[];
 
-  // Actions - Files
   setFiles: (files: FileObject[]) => void;
   addFile: (file: FileObject) => void;
   updateFile: (file: FileObject) => void;
@@ -46,30 +43,25 @@ export interface FileStoreState {
   toggleFileSelection: (file: FileObject) => void;
   clearSelectedFiles: () => void;
 
-  // Actions - Sorting & Filtering
   sortFiles: (field: SortField, direction: SortDirection) => void;
   toggleSortDirection: () => void;
   setSearchTerm: (term: string) => void;
   setViewMode: (mode: ViewMode) => void;
 
-  // Actions - Folders
   toggleFolderExpanded: (path: string) => void;
   expandFolder: (path: string) => void;
   collapseFolder: (path: string) => void;
   addRecentPath: (path: string) => void;
 
-  // Actions - Loading state
   setIsLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
 
-  // Utility functions
   setLastFetchTime: (time: number) => void;
   getFilesByFolder: (folderPath: string) => FileObject[];
   getFilesByType: (fileType: string) => FileObject[];
   searchFiles: (term: string) => FileObject[];
 }
 
-// Helper function to sort files
 const sortFileList = (
   files: FileObject[],
   field: SortField,
@@ -104,12 +96,10 @@ const sortFileList = (
   });
 };
 
-// Create the store
 export const useFileStore = create<FileStoreState>()(
   devtools(
     persist(
       (set, get) => ({
-        // Initial state
         files: [],
         selectedFiles: [],
         expandedFolders: ["/"],
@@ -122,7 +112,6 @@ export const useFileStore = create<FileStoreState>()(
         error: null,
         recentPaths: ["/"],
 
-        // File actions
         setFiles: (files) =>
           set({
             files: sortFileList(files, get().sortField, get().sortDirection),
@@ -149,7 +138,7 @@ export const useFileStore = create<FileStoreState>()(
               state.sortField,
               state.sortDirection,
             ),
-            // Also update in selectedFiles if present
+
             selectedFiles: state.selectedFiles.map((file) =>
               file.id === updatedFile.id ? { ...file, ...updatedFile } : file,
             ),
@@ -169,14 +158,12 @@ export const useFileStore = create<FileStoreState>()(
 
             if (!fileToMove) return state;
 
-            // Calculate new cosKey based on targetPath and filename
             const fileName = fileToMove.fileName;
             const newKey =
               targetPath === "/"
                 ? fileName
                 : `${targetPath.substring(1)}/${fileName}`;
 
-            // Update the file with new path and key
             const updatedFile = {
               ...fileToMove,
               path: targetPath,
@@ -191,7 +178,7 @@ export const useFileStore = create<FileStoreState>()(
                 state.sortField,
                 state.sortDirection,
               ),
-              // Also update in selectedFiles if present
+
               selectedFiles: state.selectedFiles.map((file) =>
                 file.id === fileId ? updatedFile : file,
               ),
@@ -200,7 +187,6 @@ export const useFileStore = create<FileStoreState>()(
 
         selectFile: (file) =>
           set((state) => {
-            // Check if file is already selected
             if (state.selectedFiles.some((f) => f.id === file.id)) {
               return state;
             }
@@ -233,7 +219,6 @@ export const useFileStore = create<FileStoreState>()(
 
         clearSelectedFiles: () => set({ selectedFiles: [] }),
 
-        // Sorting & filtering actions
         sortFiles: (field, direction) =>
           set((state) => ({
             sortField: field,
@@ -254,10 +239,8 @@ export const useFileStore = create<FileStoreState>()(
 
         setViewMode: (mode) => set({ viewMode: mode }),
 
-        // Folder actions
         toggleFolderExpanded: (path) =>
           set((state) => ({
-            // Toggle folder expansion state
             expandedFolders: state.expandedFolders.includes(path)
               ? state.expandedFolders.filter((p) => p !== path)
               : [...state.expandedFolders, path],
@@ -279,16 +262,14 @@ export const useFileStore = create<FileStoreState>()(
           set((state) => {
             const filteredPaths = state.recentPaths.filter((p) => p !== path);
             return {
-              recentPaths: [path, ...filteredPaths].slice(0, 5), // Keep max 5 recent paths
+              recentPaths: [path, ...filteredPaths].slice(0, 5),
             };
           }),
 
-        // Loading state actions
         setIsLoading: (isLoading) => set({ isLoading }),
 
         setError: (error) => set({ error, isLoading: false }),
 
-        // Utility functions
         setLastFetchTime: (time) => set({ lastFetchTime: time }),
 
         getFilesByFolder: (folderPath) => {

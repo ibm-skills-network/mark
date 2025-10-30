@@ -10,8 +10,8 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue } from
-"@/components/ui/select";
+  SelectValue,
+} from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
@@ -19,8 +19,8 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow } from
-"@/components/ui/table";
+  TableRow,
+} from "@/components/ui/table";
 import {
   ArrowLeft,
   Settings,
@@ -28,8 +28,8 @@ import {
   CheckCircle,
   AlertTriangle,
   RefreshCw,
-  RotateCcw } from
-"lucide-react";
+  RotateCcw,
+} from "lucide-react";
 import { formatPricePerMillionTokens } from "@/config/constants";
 import { apiClient } from "@/lib/api-client";
 
@@ -88,7 +88,7 @@ export default function LLMAssignmentsPage() {
     const sessionToken = localStorage.getItem("adminSessionToken");
     if (!sessionToken) {
       router.push(
-        `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`
+        `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`,
       );
       return;
     }
@@ -98,14 +98,13 @@ export default function LLMAssignmentsPage() {
       setError(null);
 
       const [featuresData, modelsData] = await Promise.all([
-      apiClient.get<any>("/api/v1/llm-assignments/features", {
-        headers: { "x-admin-token": sessionToken }
-      }),
-      apiClient.get<any>("/api/v1/llm-assignments/models", {
-        headers: { "x-admin-token": sessionToken }
-      })]
-      );
-
+        apiClient.get<any>("/api/v1/llm-assignments/features", {
+          headers: { "x-admin-token": sessionToken },
+        }),
+        apiClient.get<any>("/api/v1/llm-assignments/models", {
+          headers: { "x-admin-token": sessionToken },
+        }),
+      ]);
 
       setFeatures(featuresData.data || []);
       setModels(modelsData.data || []);
@@ -119,12 +118,10 @@ export default function LLMAssignmentsPage() {
   const handleModelChange = (featureKey: string, modelKey: string) => {
     const newChanges = new Map(changes);
 
-
     const feature = features.find((f) => f.featureKey === featureKey);
     const currentModelKey = feature?.assignedModel?.modelKey;
 
     if (currentModelKey === modelKey) {
-
       newChanges.delete(featureKey);
     } else {
       newChanges.set(featureKey, modelKey);
@@ -147,17 +144,17 @@ export default function LLMAssignmentsPage() {
       const assignments = Array.from(changes.entries()).map(
         ([featureKey, modelKey]) => ({
           featureKey,
-          modelKey
-        })
+          modelKey,
+        }),
       );
 
       const response = await fetch("/api/v1/llm-assignments/bulk-assign", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-token": sessionToken
+          "x-admin-token": sessionToken,
         },
-        body: JSON.stringify({ assignments })
+        body: JSON.stringify({ assignments }),
       });
 
       if (!response.ok) {
@@ -168,7 +165,7 @@ export default function LLMAssignmentsPage() {
 
       if (result.success) {
         setSuccess(
-          `Successfully updated ${result.data.successful} assignments`
+          `Successfully updated ${result.data.successful} assignments`,
         );
         setChanges(new Map());
         await fetchData();
@@ -177,7 +174,7 @@ export default function LLMAssignmentsPage() {
       }
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to save assignments"
+        err instanceof Error ? err.message : "Failed to save assignments",
       );
     } finally {
       setSaving(false);
@@ -197,8 +194,8 @@ export default function LLMAssignmentsPage() {
         "/api/v1/llm-assignments/reset-to-defaults",
         {
           method: "POST",
-          headers: { "x-admin-token": sessionToken }
-        }
+          headers: { "x-admin-token": sessionToken },
+        },
       );
 
       if (!response.ok) {
@@ -209,7 +206,7 @@ export default function LLMAssignmentsPage() {
 
       if (result.success) {
         setSuccess(
-          `Successfully reset ${result.data.resetCount} features to default models`
+          `Successfully reset ${result.data.resetCount} features to default models`,
         );
         setChanges(new Map());
         await fetchData();
@@ -218,7 +215,7 @@ export default function LLMAssignmentsPage() {
       }
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to reset to defaults"
+        err instanceof Error ? err.message : "Failed to reset to defaults",
       );
     } finally {
       setSaving(false);
@@ -234,20 +231,18 @@ export default function LLMAssignmentsPage() {
 
   const getAvailableModelsForFeature = (feature: AIFeature): LLMModel[] => {
     const visionCapableFeatures = [
-    "image_grading",
-    "presentation_grading",
-    "video_grading"];
-
+      "image_grading",
+      "presentation_grading",
+      "video_grading",
+    ];
 
     const visionModels = ["gpt-4.1-mini"];
 
     if (visionCapableFeatures.includes(feature.featureKey)) {
-
       return models.filter((m) => m.isActive);
     } else {
-
       return models.filter(
-        (m) => m.isActive && !visionModels.includes(m.modelKey)
+        (m) => m.isActive && !visionModels.includes(m.modelKey),
       );
     }
   };
@@ -262,13 +257,12 @@ export default function LLMAssignmentsPage() {
             Loading LLM assignments...
           </div>
         </div>
-      </div>);
-
+      </div>
+    );
   }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -289,32 +283,30 @@ export default function LLMAssignmentsPage() {
             Reset to Defaults
           </Button>
           <Button onClick={saveChanges} disabled={!hasChanges || saving}>
-            {saving ?
-            <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> :
-
-            <CheckCircle className="h-4 w-4 mr-2" />
-            }
+            {saving ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle className="h-4 w-4 mr-2" />
+            )}
             Save Changes {hasChanges && `(${changes.size})`}
           </Button>
         </div>
       </div>
 
-      
-      {error &&
-      <Alert variant="destructive">
+      {error && (
+        <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      }
+      )}
 
-      {success &&
-      <Alert>
+      {success && (
+        <Alert>
           <CheckCircle className="h-4 w-4" />
           <AlertDescription>{success}</AlertDescription>
         </Alert>
-      }
+      )}
 
-      
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -338,7 +330,7 @@ export default function LLMAssignmentsPage() {
                 const effectiveModel = getEffectiveModel(feature);
                 const hasChange = changes.has(feature.featureKey);
                 const selectedModel = models.find(
-                  (m) => m.modelKey === effectiveModel
+                  (m) => m.modelKey === effectiveModel,
                 );
 
                 return (
@@ -357,8 +349,8 @@ export default function LLMAssignmentsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {feature.assignedModel ?
-                      <div>
+                      {feature.assignedModel ? (
+                        <div>
                           <div className="font-medium">
                             {feature.assignedModel.displayName}
                           </div>
@@ -366,81 +358,79 @@ export default function LLMAssignmentsPage() {
                             {feature.assignedModel.provider} •{" "}
                             {feature.assignedModel.modelKey}
                           </div>
-                        </div> :
-
-                      <div className="text-muted-foreground">
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground">
                           Default: {feature.defaultModelKey}
                         </div>
-                      }
+                      )}
                     </TableCell>
                     <TableCell>
                       <Select
                         value={effectiveModel}
                         onValueChange={(value) =>
-                        handleModelChange(feature.featureKey, value)
+                          handleModelChange(feature.featureKey, value)
                         }
-                        disabled={!feature.isActive || saving}>
-
+                        disabled={!feature.isActive || saving}
+                      >
                         <SelectTrigger
-                          className={hasChange ? "border-orange-500" : ""}>
-
+                          className={hasChange ? "border-orange-500" : ""}
+                        >
                           <SelectValue placeholder="Select model" />
                         </SelectTrigger>
                         <SelectContent>
                           {getAvailableModelsForFeature(feature).map(
-                            (model) =>
-                            <SelectItem
-                              key={model.modelKey}
-                              value={model.modelKey}>
-
+                            (model) => (
+                              <SelectItem
+                                key={model.modelKey}
+                                value={model.modelKey}
+                              >
                                 <div className="flex items-center gap-2">
                                   <span>{model.displayName}</span>
                                   <Badge
-                                  variant="secondary"
-                                  className="text-xs">
-
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
                                     {model.provider}
                                   </Badge>
                                 </div>
                               </SelectItem>
-
+                            ),
                           )}
                         </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {feature.isActive ?
-                        <Badge variant="default">Active</Badge> :
-
-                        <Badge variant="secondary">Inactive</Badge>
-                        }
-                        {hasChange &&
-                        <Badge
-                          variant="outline"
-                          className="text-orange-600 border-orange-500">
-
+                        {feature.isActive ? (
+                          <Badge variant="default">Active</Badge>
+                        ) : (
+                          <Badge variant="secondary">Inactive</Badge>
+                        )}
+                        {hasChange && (
+                          <Badge
+                            variant="outline"
+                            className="text-orange-600 border-orange-500"
+                          >
                             Modified
                           </Badge>
-                        }
+                        )}
                       </div>
                     </TableCell>
-                  </TableRow>);
-
+                  </TableRow>
+                );
               })}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      
       <Card>
         <CardHeader>
           <CardTitle>Available Models</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            
             {Object.entries(
               models.reduce(
                 (acc, model) => {
@@ -450,12 +440,12 @@ export default function LLMAssignmentsPage() {
                   acc[model.provider].push(model);
                   return acc;
                 },
-                {} as Record<string, LLMModel[]>
-              )
-            ).
-            sort(([a], [b]) => a.localeCompare(b)).
-            map(([provider, providerModels]) =>
-            <div key={provider}>
+                {} as Record<string, LLMModel[]>,
+              ),
+            )
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([provider, providerModels]) => (
+                <div key={provider}>
                   <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                     <span>{provider}</span>
                     <Badge variant="outline" className="text-xs">
@@ -464,16 +454,16 @@ export default function LLMAssignmentsPage() {
                     </Badge>
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {providerModels.map((model) =>
-                <div
-                  key={model.modelKey}
-                  className="p-4 border rounded-lg">
-
+                    {providerModels.map((model) => (
+                      <div
+                        key={model.modelKey}
+                        className="p-4 border rounded-lg"
+                      >
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="font-medium">{model.displayName}</h4>
                           <Badge
-                      variant={model.isActive ? "default" : "secondary"}>
-
+                            variant={model.isActive ? "default" : "secondary"}
+                          >
                             {model.isActive ? "Active" : "Inactive"}
                           </Badge>
                         </div>
@@ -481,31 +471,31 @@ export default function LLMAssignmentsPage() {
                           <div className="font-mono text-xs">
                             {model.modelKey}
                           </div>
-                          {model.currentPricing &&
-                    <div className="mt-1">
+                          {model.currentPricing && (
+                            <div className="mt-1">
                               {formatPricePerMillionTokens(
-                        model.currentPricing.inputTokenPrice
-                      )}
+                                model.currentPricing.inputTokenPrice,
+                              )}
                               /1M in •{" "}
                               {formatPricePerMillionTokens(
-                        model.currentPricing.outputTokenPrice
-                      )}
+                                model.currentPricing.outputTokenPrice,
+                              )}
                               /1M out
                             </div>
-                    }
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           Used by {model.assignedFeatures.length} feature
                           {model.assignedFeatures.length !== 1 ? "s" : ""}
                         </div>
                       </div>
-                )}
+                    ))}
                   </div>
                 </div>
-            )}
+              ))}
           </div>
         </CardContent>
       </Card>
-    </div>);
-
+    </div>
+  );
 }

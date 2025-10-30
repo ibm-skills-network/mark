@@ -1,14 +1,14 @@
 import { TranscriptionResult } from "@/config/types";
 
 export const transcribeAudio = async (
-audioBlob: Blob)
-: Promise<TranscriptionResult> => {
+  audioBlob: Blob,
+): Promise<TranscriptionResult> => {
   const formData = new FormData();
   formData.append("audio", audioBlob);
 
   const response = await fetch("/api/transcribe", {
     method: "POST",
-    body: formData
+    body: formData,
   });
 
   if (!response.ok) {

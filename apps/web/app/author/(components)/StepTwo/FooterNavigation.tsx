@@ -7,18 +7,18 @@ import { useAuthorStore } from "@/stores/author";
 import {
   ChevronRightIcon,
   ExclamationTriangleIcon,
-  XMarkIcon } from
-"@heroicons/react/24/outline";
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export const FooterNavigation = () => {
   const router = useRouter();
   const [activeAssignmentId] = useAuthorStore((state) => [
-  state.activeAssignmentId]
-  );
+    state.activeAssignmentId,
+  ]);
   const validateAssignmentConfig = useAssignmentConfig(
-    (state) => state.validate
+    (state) => state.validate,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -33,14 +33,11 @@ export const FooterNavigation = () => {
     if (isAssignmentConfigValid) {
       router.push(`/author/${activeAssignmentId}/review`);
     } else {
-
       const firstErrorField = document.querySelector('[aria-invalid="true"]');
 
       if (firstErrorField) {
-
         handleScrollToFirstErrorField();
       } else {
-
         setErrorMessage("Please fix all validation errors before proceeding.");
         setShowErrorModal(true);
       }
@@ -56,33 +53,28 @@ export const FooterNavigation = () => {
           version="secondary"
           RightIcon={ChevronRightIcon}
           onClick={goToNextStep}
-          disabled={isSubmitting}>
-
+          disabled={isSubmitting}
+        >
           Next
         </Button>
       </footer>
 
-      
-      {showErrorModal &&
-      <div className="fixed inset-0 z-50 overflow-y-auto">
+      {showErrorModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            
             <div
-            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-            onClick={() => setShowErrorModal(false)} />
-
-
-            
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              
-              <button
+              className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
               onClick={() => setShowErrorModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+            />
 
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              >
                 <XMarkIcon className="h-6 w-6" />
               </button>
 
-              
               <div className="flex items-center mb-4">
                 <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -90,24 +82,22 @@ export const FooterNavigation = () => {
                 </h3>
               </div>
 
-              
               <div className="mb-6">
                 <p className="text-gray-600">{errorMessage}</p>
               </div>
 
-              
               <div className="flex justify-end">
                 <button
-                onClick={() => setShowErrorModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
-
+                  onClick={() => setShowErrorModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+                >
                   Close
                 </button>
               </div>
             </div>
           </div>
         </div>
-      }
-    </>);
-
+      )}
+    </>
+  );
 };

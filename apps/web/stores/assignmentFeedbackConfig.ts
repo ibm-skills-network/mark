@@ -47,7 +47,6 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
         setCorrectAnswerVisibility: (
           correctAnswerVisibility: CorrectAnswerVisibility,
         ) => {
-          // Clear localStorage when correctAnswerVisibility changes
           if (typeof window !== "undefined") {
             localStorage.removeItem("questions");
             localStorage.removeItem("assignmentConfig");

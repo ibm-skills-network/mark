@@ -5,7 +5,7 @@ import { Prism, SyntaxHighlighterProps } from "react-syntax-highlighter";
 import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const SyntaxHighlighter =
-Prism as unknown as typeof React.Component<SyntaxHighlighterProps>;
+  Prism as unknown as typeof React.Component<SyntaxHighlighterProps>;
 
 interface FileViewerProps {
   file: {
@@ -28,7 +28,7 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
   }, [file]);
 
   const extension: string =
-  file.filename.split(".").pop()?.toLowerCase().toString() || "";
+    file.filename.split(".").pop()?.toLowerCase().toString() || "";
   const renderContent = () => {
     switch (extension) {
       case "txt":
@@ -41,7 +41,8 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
         return (
           <FeedbackFormatter className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
             {file.content}
-          </FeedbackFormatter>);
+          </FeedbackFormatter>
+        );
 
       case "py":
       case "js":
@@ -58,7 +59,8 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
         return (
           <SyntaxHighlighter language={extension} style={tomorrow}>
             {file.content}
-          </SyntaxHighlighter>);
+          </SyntaxHighlighter>
+        );
 
       case "jpg":
       case "jpeg":
@@ -70,16 +72,17 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             <img
               src={file.content}
               alt={file.filename}
-              className="max-w-full max-h-[80vh] object-contain rounded-md" />
-
-          </div>);
+              className="max-w-full max-h-[80vh] object-contain rounded-md"
+            />
+          </div>
+        );
 
       default:
         return (
           <FeedbackFormatter className="whitespace-pre-wrap p-4">
             Unsupported file type: {extension}
-          </FeedbackFormatter>);
-
+          </FeedbackFormatter>
+        );
     }
   };
 
@@ -94,16 +97,16 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             <IconX size={20} className="text-red-500" />
           </button>
         </div>
-        {isLoading ?
-        <div className="flex justify-center items-center h-40">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-40">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-violet-600"></div>
-          </div> :
-
-        renderContent()
-        }
+          </div>
+        ) : (
+          renderContent()
+        )}
       </div>
-    </div>);
-
+    </div>
+  );
 };
 
 export default FileViewer;

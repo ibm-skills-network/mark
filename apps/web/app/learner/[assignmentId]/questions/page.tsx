@@ -6,8 +6,8 @@ import { Suspense } from "react";
 import LearnerLayout from "./LearnerLayout";
 
 interface Props {
-  params: {assignmentId: string;};
-  searchParams: {authorMode?: string;};
+  params: { assignmentId: string };
+  searchParams: { authorMode?: string };
 }
 
 export default function Page(props: Props) {

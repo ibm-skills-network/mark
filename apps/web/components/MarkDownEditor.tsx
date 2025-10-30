@@ -74,6 +74,7 @@ const MarkdownEditor: React.FC<Props> = ({
               ["link", "image", "video"],
               ["clean"],
             ],
+
             syntax: {
               highlight: (text: string) => hljs.highlightAuto(text).value,
             },
@@ -192,6 +193,7 @@ const MarkdownEditor: React.FC<Props> = ({
         )}
         ref={quillRef}
       />
+
       {maxWords ? (
         <div
           className={`mt-2 text-sm font-medium leading-tight ${

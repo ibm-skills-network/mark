@@ -2,10 +2,10 @@ import Header from "./(components)/Header";
 import { BottomVersionBar } from "@/components/version-control/BottomVersionBar";
 
 export default function RootLayout({
-  children
-
-
-}: {children: React.ReactNode;}) {
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <>
       <Header />
@@ -13,6 +13,6 @@ export default function RootLayout({
         {children}
       </div>
       <BottomVersionBar />
-    </>);
-
+    </>
+  );
 }

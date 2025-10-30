@@ -35,11 +35,11 @@ export class ReportingService {
    * @returns A response object with information about the report
    */
   static async reportIssue(
-  title: string,
-  description: string,
-  details: IssueReportDetails,
-  cookieHeader?: string)
-  : Promise<ReportResponse> {
+    title: string,
+    description: string,
+    details: IssueReportDetails,
+    cookieHeader?: string,
+  ): Promise<ReportResponse> {
     try {
       const payload = {
         issueType: details.issueType || "technical",
@@ -49,28 +49,27 @@ export class ReportingService {
         role: details.userRole || "system",
         severity: details.severity || "info",
         category: details.category || "General Issue",
-        ...details
+        ...details,
       };
 
       const response = await fetch(`${getBaseApiPath("v1")}/reports`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(cookieHeader ? { Cookie: cookieHeader } : {})
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
         },
         credentials: "include",
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
       console.dir(response, {
         depth: 2,
-        colors: true
+        colors: true,
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         const errorMessage =
-        errorData?.message || `HTTP error ${response.status}`;
-
+          errorData?.message || `HTTP error ${response.status}`;
 
         if (response.status === 429) {
           throw new Error(errorMessage);
@@ -84,31 +83,30 @@ export class ReportingService {
       return {
         success: true,
         content:
-        data.message ||
-        `Thank you for reporting this issue. Our team will review it shortly.`,
+          data.message ||
+          `Thank you for reporting this issue. Our team will review it shortly.`,
         issueNumber: data.issueNumber,
-        reportId: data.reportId
+        reportId: data.reportId,
       };
     } catch (error) {
       const errorMessage =
-      error instanceof Error ? error.message : String(error);
-
+        error instanceof Error ? error.message : String(error);
 
       if (
-      errorMessage.includes("too many issues") ||
-      errorMessage.includes("24 hours"))
-      {
+        errorMessage.includes("too many issues") ||
+        errorMessage.includes("24 hours")
+      ) {
         return {
           success: false,
           content: errorMessage,
-          error: errorMessage
+          error: errorMessage,
         };
       }
 
       return {
         success: false,
         content: `There was an error submitting your issue report, but we've recorded it locally. Please try again later.`,
-        error: errorMessage
+        error: errorMessage,
       };
     }
   }
@@ -129,13 +127,13 @@ export class ReportingService {
 
     try {
       const errorLogs = JSON.parse(
-        localStorage.getItem("mark_error_logs") || "[]"
+        localStorage.getItem("mark_error_logs") || "[]",
       );
       errorLogs.push({
         timestamp: new Date().toISOString(),
         context,
         message: errorMessage,
-        stack: errorStack
+        stack: errorStack,
       });
 
       if (errorLogs.length > 50) {

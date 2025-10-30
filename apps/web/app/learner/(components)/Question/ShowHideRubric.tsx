@@ -22,7 +22,7 @@ function ShowHideRubric({
   rubrics,
   className,
   showRubrics,
-  showPoints
+  showPoints,
 }: ShowHideRubricProps) {
   const [showRubric, setShowRubric] = useState(false);
 
@@ -38,38 +38,35 @@ function ShowHideRubric({
         className="inline-flex items-center gap-x-1 
                      px-3 py-2 text-sm font-medium 
                      typography-text rounded-md 
-                     transition">
-
-
-
-
+                     transition"
+      >
         <span>{showRubric ? "Hide Rubric" : "Show Rubric"}</span>
-        {showRubric ?
-        <ChevronUpIcon className="w-4 h-4" /> :
-
-        <ChevronDownIcon className="w-4 h-4" />
-        }
+        {showRubric ? (
+          <ChevronUpIcon className="w-4 h-4" />
+        ) : (
+          <ChevronDownIcon className="w-4 h-4" />
+        )}
       </button>
 
       <AnimatePresence>
-        {showRubric &&
-        <motion.div
-          key="rubric"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.3, ease: "easeInOut" }}
-          className="overflow-hidden">
-
+        {showRubric && (
+          <motion.div
+            key="rubric"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
             <LearnerRubricTable
-            rubrics={rubrics}
-            showRubrics={showRubrics}
-            showPoints={showPoints} />
-
+              rubrics={rubrics}
+              showRubrics={showRubrics}
+              showPoints={showPoints}
+            />
           </motion.div>
-        }
+        )}
       </AnimatePresence>
-    </div>);
-
+    </div>
+  );
 }
 export default ShowHideRubric;

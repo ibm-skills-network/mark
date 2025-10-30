@@ -12,7 +12,7 @@ export function handleJumpToQuestion(elementString: string) {
     element.scrollIntoView({
       behavior: "smooth",
       block: "start",
-      inline: "nearest"
+      inline: "nearest",
     });
   });
 }
@@ -24,7 +24,7 @@ export function handleJumpToQuestionTitle(elementString: string) {
     element.scrollIntoView({
       behavior: "smooth",
       block: "center",
-      inline: "center"
+      inline: "center",
     });
   });
 }

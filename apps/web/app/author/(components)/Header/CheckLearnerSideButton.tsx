@@ -20,24 +20,24 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
   const assignmentConfigstate = useAssignmentConfig.getState();
   const authorState = useAuthorStore.getState();
   const [
-  showSubmissionFeedback,
-  showQuestionScore,
-  showAssignmentScore,
-  showQuestions,
-  correctAnswerVisibility] =
-  useAssignmentFeedbackConfig((state) => [
-  state.showSubmissionFeedback,
-  state.showQuestionScore,
-  state.showAssignmentScore,
-  state.showQuestions,
-  state.correctAnswerVisibility]
-  );
+    showSubmissionFeedback,
+    showQuestionScore,
+    showAssignmentScore,
+    showQuestions,
+    correctAnswerVisibility,
+  ] = useAssignmentFeedbackConfig((state) => [
+    state.showSubmissionFeedback,
+    state.showQuestionScore,
+    state.showAssignmentScore,
+    state.showQuestions,
+    state.correctAnswerVisibility,
+  ]);
   const assignmentConfig = {
     questionDisplay: assignmentConfigstate.questionDisplay,
     graded: assignmentConfigstate.graded,
     numAttempts: assignmentConfigstate.numAttempts,
     retakeAttemptCoolDownMinutes:
-    assignmentConfigstate.retakeAttemptCoolDownMinutes,
+      assignmentConfigstate.retakeAttemptCoolDownMinutes,
     attemptsBeforeCoolDown: assignmentConfigstate.attemptsBeforeCoolDown,
     passingGrade: assignmentConfigstate.passingGrade,
     allotedTimeMinutes: assignmentConfigstate.allotedTimeMinutes,
@@ -53,14 +53,14 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     gradingCriteriaOverview: authorState.gradingCriteriaOverview ?? "",
     showSubmissionFeedback: showSubmissionFeedback,
     numberOfQuestionsPerAttempt:
-    assignmentConfigstate.numberOfQuestionsPerAttempt,
+      assignmentConfigstate.numberOfQuestionsPerAttempt,
     name: authorState.name,
-    id: assignmentId
+    id: assignmentId,
   };
   function handleJumpToLearnerSide(
-  questions: QuestionAuthorStore[],
-  assignmentId: number)
-  {
+    questions: QuestionAuthorStore[],
+    assignmentId: number,
+  ) {
     const processedQuestions = processQuestions(questions);
     localStorage.setItem("questions", JSON.stringify(processedQuestions));
     localStorage.setItem("assignmentConfig", JSON.stringify(assignmentConfig));
@@ -69,23 +69,23 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
   return (
     <Tooltip
       content={
-      disabled ?
-      "Please complete setup before previewing the learner side" :
-      "Preview the learner side"
+        disabled
+          ? "Please complete setup before previewing the learner side"
+          : "Preview the learner side"
       }
-      distance={-2.5}>
-
+      distance={-2.5}
+    >
       <button
         type="button"
         disabled={disabled}
         onClick={() => handleJumpToLearnerSide(questions, assignmentId)}
-        className="text-sm flex items-center justify-center px-3 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950 disabled:opacity-50">
-
+        className="text-sm flex items-center justify-center px-3 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 text-violet-800 border-violet-100 bg-violet-50 hover:bg-violet-100 dark:text-violet-100 dark:border-violet-800 dark:bg-violet-900 dark:hover:bg-violet-950 disabled:opacity-50"
+      >
         <EyeIcon className="w-5 h-5" />
         <span className="ml-2">Preview</span>
       </button>
-    </Tooltip>);
-
+    </Tooltip>
+  );
 };
 
 export default CheckLearnerSideButton;

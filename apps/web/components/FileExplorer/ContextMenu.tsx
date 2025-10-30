@@ -1,4 +1,3 @@
-// Updated ContextMenu.tsx
 import React, { useRef, useEffect, useState } from "react";
 import {
   IconEye,
@@ -49,7 +48,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   const [left, setLeft] = useState(0);
   const [menuDimensions, setMenuDimensions] = useState({ width: 0, height: 0 });
 
-  // Handle clicking outside to close menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -57,7 +55,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       }
     };
 
-    // Close on escape key
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
@@ -73,10 +70,8 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
     };
   }, [onClose]);
 
-  // Get menu dimensions after render
   useEffect(() => {
     if (menuRef.current) {
-      // Get actual dimensions of the rendered menu
       const rect = menuRef.current.getBoundingClientRect();
       setMenuDimensions({
         width: rect.width,
@@ -85,41 +80,33 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
     }
   }, []);
 
-  // Adjust position to keep menu in viewport
   useEffect(() => {
     if (!position) return;
 
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
 
-    // Use the actual menu dimensions if available, or estimated dimensions
-    const menuWidth = menuDimensions.width || 180; // Default minimum width
-    const menuHeight = menuDimensions.height || 200; // Estimated height
+    const menuWidth = menuDimensions.width || 180;
+    const menuHeight = menuDimensions.height || 200;
 
-    // Calculate adjusted positions
     let calculatedTop = position.y;
     let calculatedLeft = position.x;
 
-    // Adjust horizontally if needed
     if (position.x + menuWidth > viewportWidth) {
       calculatedLeft = Math.max(10, position.x - menuWidth);
     }
 
-    // Adjust vertically if needed
     if (position.y + menuHeight > viewportHeight) {
       calculatedTop = Math.max(10, viewportHeight - menuHeight - 10);
     }
 
-    // Update state with calculated positions
     setTop(calculatedTop);
     setLeft(calculatedLeft);
   }, [position, menuDimensions]);
 
-  // Define available actions
   const getActions = (): ContextMenuAction[] => {
     const actions: ContextMenuAction[] = [];
 
-    // Preview action
     if (onPreview) {
       actions.push({
         icon: <IconEye size={18} />,
@@ -128,7 +115,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       });
     }
 
-    // Download action
     if (onDownload) {
       actions.push({
         icon: <IconDownload size={18} />,
@@ -137,7 +123,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       });
     }
 
-    // Copy path action
     if (onCopyPath) {
       actions.push({
         icon: <IconClipboard size={18} />,
@@ -147,7 +132,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       });
     }
 
-    // File info
     if (onShowInfo) {
       actions.push({
         icon: <IconInfoCircle size={18} />,
@@ -157,9 +141,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       });
     }
 
-    // Edit actions (not available in read-only mode)
     if (!readOnly) {
-      // Rename action
       if (onRename) {
         actions.push({
           icon: <IconEdit size={18} />,
@@ -168,7 +150,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
         });
       }
 
-      // Delete action
       if (onDelete) {
         actions.push({
           icon: <IconTrash size={18} />,
@@ -194,7 +175,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       className="fixed z-50 min-w-[180px] bg-white rounded-md shadow-lg border border-gray-200 py-1"
       style={{ top, left }}
     >
-      {/* File header */}
       <div className="px-3 py-2 border-b border-gray-200 mb-1">
         <div className="flex items-center">
           {getFileIcon(file, 20)}
@@ -204,7 +184,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
         </div>
       </div>
 
-      {/* Menu actions */}
       {actions.map((action, index) => (
         <React.Fragment key={index}>
           <button

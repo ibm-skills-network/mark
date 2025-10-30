@@ -20,7 +20,6 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAdminAccess = async () => {
       try {
-
         const adminToken = localStorage.getItem("adminSessionToken");
         const adminEmail = localStorage.getItem("adminEmail");
         const expiresAt = localStorage.getItem("adminExpiresAt");
@@ -29,31 +28,27 @@ export default function AdminPage() {
           const expireDate = new Date(expiresAt);
 
           if (expireDate > new Date()) {
-
             try {
               const response = await fetch(
                 "/api/v1/reports/feedback?page=1&limit=1",
                 {
                   headers: {
-                    "x-admin-token": adminToken
-                  }
-                }
+                    "x-admin-token": adminToken,
+                  },
+                },
               );
 
               if (response.ok) {
-
                 setSessionToken(adminToken);
                 setIsAuthenticated(true);
                 setUserRole("admin");
                 setIsLoading(false);
-
 
                 if (returnTo) {
                   router.push(returnTo);
                 }
                 return;
               } else {
-
                 localStorage.removeItem("adminSessionToken");
                 localStorage.removeItem("adminEmail");
                 localStorage.removeItem("adminExpiresAt");
@@ -66,7 +61,6 @@ export default function AdminPage() {
               localStorage.removeItem("adminExpiresAt");
             }
           } else {
-
             localStorage.removeItem("adminSessionToken");
             localStorage.removeItem("adminEmail");
             localStorage.removeItem("adminExpiresAt");
@@ -74,7 +68,6 @@ export default function AdminPage() {
         }
       } catch (error) {
         console.error("Failed to check admin access:", error);
-
       } finally {
         setIsLoading(false);
       }
@@ -87,7 +80,6 @@ export default function AdminPage() {
     setSessionToken(token);
     setIsAuthenticated(true);
     setUserRole("admin");
-
 
     if (returnTo) {
       router.push(returnTo);
@@ -102,25 +94,22 @@ export default function AdminPage() {
         await fetch("/api/v1/auth/admin/logout", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify({ sessionToken: adminToken })
+          body: JSON.stringify({ sessionToken: adminToken }),
         });
       } catch (error) {
         console.error("Failed to logout:", error);
       }
     }
 
-
     localStorage.removeItem("adminSessionToken");
     localStorage.removeItem("adminEmail");
     localStorage.removeItem("adminExpiresAt");
 
-
     setSessionToken(null);
     setIsAuthenticated(false);
     setUserRole(null);
-
 
     router.push("/");
   };
@@ -137,8 +126,8 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       <OptimizedAdminDashboard
         sessionToken={sessionToken}
-        onLogout={handleLogout} />
-
-    </div>);
-
+        onLogout={handleLogout}
+      />
+    </div>
+  );
 }

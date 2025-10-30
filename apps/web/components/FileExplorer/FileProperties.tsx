@@ -1,4 +1,3 @@
-// src/components/FileExplorer/FileProperties.tsx
 import React from "react";
 import { IconX, IconCheck, IconCopy } from "@tabler/icons-react";
 import { formatFileSize, getFileExtension } from "./utils/fileUtils";
@@ -13,7 +12,6 @@ interface FilePropertiesProps {
 const FileProperties: React.FC<FilePropertiesProps> = ({ file, onClose }) => {
   const [copySuccess, setCopySuccess] = React.useState<string | null>(null);
 
-  // Format date for display
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = {
       year: "numeric",
@@ -25,7 +23,6 @@ const FileProperties: React.FC<FilePropertiesProps> = ({ file, onClose }) => {
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
-  // Function to copy text to clipboard
   const copyToClipboard = async (text: string, field: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -36,7 +33,6 @@ const FileProperties: React.FC<FilePropertiesProps> = ({ file, onClose }) => {
     }
   };
 
-  // Function to render a property field with copy button
   const renderField = (label: string, value: string, fieldName: string) => (
     <div className="mb-4">
       <label className="block text-sm font-medium text-gray-500 mb-1">

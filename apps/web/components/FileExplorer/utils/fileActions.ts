@@ -1,11 +1,9 @@
-// src/components/FileExplorer/utils/fileActions.ts
 import { ExtendedFileContent, readFile } from "@/app/Helpers/fileReader";
 import { EnhancedFileObject } from "@/config/types";
 import { FileObject } from "@/stores/fileStore";
 import axios, { AxiosProgressEvent } from "axios";
 import { toast } from "sonner";
 
-// Type definitions for responses
 interface PresignedUrlResponse {
   presignedUrl: string;
   bucket?: string;
@@ -26,7 +24,6 @@ interface UploadContext {
   [key: string]: unknown;
 }
 
-// Error handling type guard
 function isAxiosError(error: unknown): error is {
   response?: {
     data?: {
@@ -38,7 +35,6 @@ function isAxiosError(error: unknown): error is {
   return typeof error === "object" && error !== null && "message" in error;
 }
 
-// Fetch file content for preview or download
 export const fetchFileContent = async (
   file: FileObject,
   uploadType: string,
@@ -46,9 +42,9 @@ export const fetchFileContent = async (
 ): Promise<ExtendedFileContent> => {
   try {
     const urlResponse = await axios.get<PresignedUrlResponse>(
-      `/api/files/getFileUrl?fileId=${
-        file.id
-      }&uploadType=${uploadType}&key=${encodeURIComponent(file.cosKey)}`,
+      `/api/files/getFileUrl?fileId=${file.id}&uploadType=${
+        uploadType
+      }&key=${encodeURIComponent(file.cosKey)}`,
       { withCredentials: true },
     );
 
@@ -88,7 +84,6 @@ export const fetchFileContent = async (
   }
 };
 
-// Create a new folder
 export const createFolder = async (
   folderName: string,
   currentPath: string,
@@ -123,16 +118,15 @@ export const createFolder = async (
   }
 };
 
-// Delete a file
 export const deleteFile = async (
   file: FileObject,
   uploadType: string,
 ): Promise<void> => {
   try {
     await axios.delete(
-      `/api/files/delete?fileId=${
-        file.id
-      }&uploadType=${uploadType}&key=${encodeURIComponent(file.cosKey)}`,
+      `/api/files/delete?fileId=${file.id}&uploadType=${
+        uploadType
+      }&key=${encodeURIComponent(file.cosKey)}`,
     );
     toast.success(`File "${file.fileName}" deleted successfully`);
   } catch (err) {
@@ -145,7 +139,6 @@ export const deleteFile = async (
   }
 };
 
-// Download a file
 export const downloadFile = async (
   file: EnhancedFileObject,
   uploadType: string,
@@ -154,14 +147,13 @@ export const downloadFile = async (
     toast.info(`Preparing download for ${file.fileName}...`);
 
     const response = await axios.get<PresignedUrlResponse>(
-      `/api/files/getFileUrl?fileId=${
-        file.id
-      }&uploadType=${uploadType}&key=${encodeURIComponent(file.cosKey)}`,
+      `/api/files/getFileUrl?fileId=${file.id}&uploadType=${
+        uploadType
+      }&key=${encodeURIComponent(file.cosKey)}`,
       { withCredentials: true },
     );
 
     if (response.data.presignedUrl) {
-      // Create an invisible link and click it to trigger download
       const a = document.createElement("a");
       a.href = response.data.presignedUrl;
       a.download = file.fileName;
@@ -183,7 +175,6 @@ export const downloadFile = async (
   }
 };
 
-// Rename a file
 export const renameFile = async (
   file: FileObject,
   newFileName: string,
@@ -195,11 +186,10 @@ export const renameFile = async (
   }
 
   if (newFileName === file.fileName) {
-    return file; // No change needed
+    return file;
   }
 
   try {
-    // Call API to rename file using the dedicated rename endpoint
     const response = await axios.put<FileOperationResponse>(
       "/api/files/rename",
       {
@@ -211,13 +201,11 @@ export const renameFile = async (
       },
     );
 
-    // Calculate the new key path based on the rename result
     const newKey =
       response.data.newKey || calculateNewKeyPath(file.cosKey, newFileName);
 
     toast.success(`File renamed to "${newFileName}"`);
 
-    // Return updated file object
     return {
       ...file,
       fileName: newFileName,
@@ -233,29 +221,25 @@ export const renameFile = async (
   }
 };
 
-// Helper function to calculate new key path when renaming
 function calculateNewKeyPath(oldKey: string, newFileName: string): string {
   const pathParts = oldKey.split("/");
-  pathParts.pop(); // Remove the original filename
+  pathParts.pop();
 
   return pathParts.length > 0
     ? `${pathParts.join("/")}/${newFileName}`
     : newFileName;
 }
 
-// Move a file to a different folder
 export const moveFile = async (
   file: FileObject,
   targetPath: string,
   uploadType: string,
 ): Promise<FileObject> => {
-  // Don't do anything if moving to the same folder
   if (file.path === targetPath) {
     return file;
   }
 
   try {
-    // Make API call to move file
     const response = await axios.put<FileOperationResponse>("/api/files/move", {
       fileId: file.id,
       uploadType,
@@ -264,13 +248,11 @@ export const moveFile = async (
       bucket: file.cosBucket,
     });
 
-    // Get the new key from the response, or calculate it if not provided
     const newKey =
       response.data.newKey || calculateNewKeyForMove(file.fileName, targetPath);
 
     toast.success(`Moved "${file.fileName}" to ${targetPath}`);
 
-    // Update the file with new path and key
     return {
       ...file,
       path: targetPath,
@@ -286,14 +268,12 @@ export const moveFile = async (
   }
 };
 
-// Helper function to calculate new key when moving
 function calculateNewKeyForMove(fileName: string, targetPath: string): string {
   return targetPath === "/"
     ? fileName
     : `${targetPath.substring(1)}/${fileName}`;
 }
 
-// Function to handle folder deletion
 export const deleteFolder = async (
   folderPath: string,
   uploadType: string,
@@ -320,7 +300,6 @@ export const deleteFolder = async (
   }
 };
 
-// Upload file interface
 interface UploadResult {
   fileName: string;
   fileType: string;
@@ -329,7 +308,6 @@ interface UploadResult {
   recordId?: number;
 }
 
-// Function to handle file upload
 export const uploadFile = async (
   file: File,
   uploadType: string,
@@ -338,7 +316,6 @@ export const uploadFile = async (
   onProgress?: (progress: number) => void,
 ): Promise<UploadResult> => {
   try {
-    // Step 1: Get pre-signed URL
     const { data: urlData } = await axios.post<PresignedUrlResponse>(
       "/api/upload/getPresignedUrl",
       {
@@ -358,11 +335,9 @@ export const uploadFile = async (
     let uploadSuccess = false;
     let recordId: number | undefined;
 
-    // Create abort controller for upload cancellation
     const controller = new AbortController();
 
     try {
-      // Create a FormData object to send the file directly
       const formData = new FormData();
       formData.append("file", file);
 
@@ -374,7 +349,6 @@ export const uploadFile = async (
         formData.append("key", urlData.key);
       }
 
-      // Use the direct upload endpoint
       const uploadResult = await axios.post<FileOperationResponse>(
         "/api/upload/directUpload",
         formData,
@@ -393,12 +367,12 @@ export const uploadFile = async (
         },
       );
       uploadSuccess = true;
-      recordId = uploadResult.data.recordId; // Assuming the API returns a record ID
+      recordId = uploadResult.data.recordId;
 
       if (!uploadSuccess) {
         throw new Error("Direct upload failed");
       }
-      // If the upload is successful, we can return the file details
+
       return {
         fileName: file.name,
         fileType: file.type,
@@ -411,7 +385,7 @@ export const uploadFile = async (
         "Direct upload failed, trying pre-signed URL method:",
         directUploadError,
       );
-      // Fall back to pre-signed URL method
+
       if (!urlData.presignedUrl) {
         throw new Error("No presigned URL available for fallback upload");
       }
@@ -430,7 +404,7 @@ export const uploadFile = async (
         signal: controller.signal,
       });
       uploadSuccess = true;
-      recordId = Date.now(); // Mock record ID
+      recordId = Date.now();
     }
 
     if (!uploadSuccess) {

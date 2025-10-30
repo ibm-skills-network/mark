@@ -15,10 +15,10 @@ export function decodeIfBase64(value: string | null): string | null {
     return value;
   }
 }
-export function decodeFields(fields: {[key: string]: string | null;}): {
+export function decodeFields(fields: { [key: string]: string | null }): {
   [key: string]: string | null;
 } {
-  const decodedFields: {[key: string]: string | null;} = {};
+  const decodedFields: { [key: string]: string | null } = {};
 
   for (const key in fields) {
     decodedFields[key] = decodeIfBase64(fields[key]);

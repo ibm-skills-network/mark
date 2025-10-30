@@ -9,9 +9,9 @@ import { IssueSeverity } from "@/config/types";
  * Get or create a chat session for today
  */
 export async function getOrCreateTodayChat(
-userId: string,
-assignmentId?: number)
-: Promise<any> {
+  userId: string,
+  assignmentId?: number,
+): Promise<any> {
   try {
     const url = `${getBaseApiPath("v1")}/chats/today`;
 
@@ -21,16 +21,16 @@ assignmentId?: number)
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "user-session": userSessionHeader || ""
+        "user-session": userSessionHeader || "",
       },
       body: JSON.stringify({
         userId,
-        assignmentId
-      })
+        assignmentId,
+      }),
     });
 
     if (!res.ok) {
-      const errorBody = (await res.json()) as {message: string;};
+      const errorBody = (await res.json()) as { message: string };
       throw new Error(errorBody.message || "Failed to get or create chat");
     }
 
@@ -44,11 +44,11 @@ assignmentId?: number)
  * Add a message to a chat
  */
 export async function addMessageToChat(
-chatId: string,
-role: "USER" | "ASSISTANT" | "SYSTEM",
-content: string,
-toolCalls?: any)
-: Promise<any> {
+  chatId: string,
+  role: "USER" | "ASSISTANT" | "SYSTEM",
+  content: string,
+  toolCalls?: any,
+): Promise<any> {
   try {
     const url = `${getBaseApiPath("v1")}/chats/${chatId}/messages`;
 
@@ -58,17 +58,17 @@ toolCalls?: any)
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "user-session": userSessionHeader || ""
+        "user-session": userSessionHeader || "",
       },
       body: JSON.stringify({
         role,
         content,
-        toolCalls
-      })
+        toolCalls,
+      }),
     });
 
     if (!res.ok) {
-      const errorBody = (await res.json()) as {message: string;};
+      const errorBody = (await res.json()) as { message: string };
       throw new Error(errorBody.message || "Failed to add message to chat");
     }
 
@@ -86,7 +86,7 @@ function getUserSessionHeader() {
 
       const cookies = document.cookie.split(";");
       const userSessionCookie = cookies.find((c) =>
-      c.trim().startsWith("userSession=")
+        c.trim().startsWith("userSession="),
       );
       if (userSessionCookie) {
         return userSessionCookie.split("=")[1];
@@ -100,18 +100,18 @@ function getUserSessionHeader() {
 }
 export class MarkChatService {
   static async reportIssue(
-  issueType: string,
-  description: string,
-  details: {
-    assignmentId?: number;
-    attemptId?: number;
-    userRole?: "author" | "learner" | "system";
-    severity?: IssueSeverity;
-    category?: string;
-    [key: string]: any;
-  } = {},
-  cookieHeader?: string)
-  : Promise<{content: string;reportId?: number;issueNumber?: number;}> {
+    issueType: string,
+    description: string,
+    details: {
+      assignmentId?: number;
+      attemptId?: number;
+      userRole?: "author" | "learner" | "system";
+      severity?: IssueSeverity;
+      category?: string;
+      [key: string]: any;
+    } = {},
+    cookieHeader?: string,
+  ): Promise<{ content: string; reportId?: number; issueNumber?: number }> {
     try {
       const title = `[${details.userRole?.toUpperCase() || "USER"}] ${issueType.charAt(0).toUpperCase() + issueType.slice(1)} Issue Report`;
 
@@ -125,21 +125,21 @@ export class MarkChatService {
           userRole: details.userRole,
           severity: details.severity || determineIssueSeverity(issueType),
           category: details.category || "Chat Report",
-          ...details
+          ...details,
         },
-        cookieHeader
+        cookieHeader,
       );
 
       return {
         content:
-        result.content ||
-        `Thank you for your report. Our team will review it shortly.`,
+          result.content ||
+          `Thank you for your report. Our team will review it shortly.`,
         reportId: result.reportId,
-        issueNumber: result.issueNumber
+        issueNumber: result.issueNumber,
       };
     } catch (error) {
       return {
-        content: `There was an error submitting your issue report. Please try again later. (Error: ${error.message})`
+        content: `There was an error submitting your issue report. Please try again later. (Error: ${error.message})`,
       };
     }
   }
@@ -152,7 +152,7 @@ export class MarkChatService {
           params.questionType,
           params.questionText,
           params.totalPoints || 10,
-          params.options || []
+          params.options || [],
         );
 
       case "modifyQuestion":
@@ -161,13 +161,13 @@ export class MarkChatService {
           params.questionId,
           params.questionText,
           params.totalPoints,
-          params.questionType
+          params.questionType,
         );
 
       case "deleteQuestion":
         return await executeAuthorStoreOperation(
           "deleteQuestion",
-          params.questionId
+          params.questionId,
         );
 
       case "addRubric":
@@ -175,14 +175,14 @@ export class MarkChatService {
           "addRubric",
           params.questionId,
           params.rubricQuestion,
-          params.criteria
+          params.criteria,
         );
 
       case "generateQuestionVariant":
         return await executeAuthorStoreOperation(
           "generateQuestionVariant",
           params.questionId,
-          params.variantType || "REWORDED"
+          params.variantType || "REWORDED",
         );
 
       case "generateQuestionsFromObjectives":
@@ -190,7 +190,7 @@ export class MarkChatService {
           "generateQuestionsFromObjectives",
           params.learningObjectives,
           params.questionTypes,
-          params.count || 5
+          params.count || 5,
         );
 
       default:
@@ -199,88 +199,88 @@ export class MarkChatService {
   }
 
   static generateSuggestions(
-  userRole: "author" | "learner",
-  context: any)
-  : string[] {
+    userRole: "author" | "learner",
+    context: any,
+  ): string[] {
     if (userRole === "author") {
       const focusedQuestionId = context.focusedQuestionId;
-      const questionType = focusedQuestionId ?
-      context.getCurrentQuestionInfo()?.type :
-      null;
+      const questionType = focusedQuestionId
+        ? context.getCurrentQuestionInfo()?.type
+        : null;
 
       if (focusedQuestionId) {
         if (
-        questionType === "MULTIPLE_CORRECT" ||
-        questionType === "SINGLE_CORRECT")
-        {
+          questionType === "MULTIPLE_CORRECT" ||
+          questionType === "SINGLE_CORRECT"
+        ) {
           return [
-          "Improve this multiple choice question",
-          "Add more answer options",
-          "Generate a variant of this question",
-          "Make the distractors more challenging",
-          "Fix the scoring for this question"];
-
+            "Improve this multiple choice question",
+            "Add more answer options",
+            "Generate a variant of this question",
+            "Make the distractors more challenging",
+            "Fix the scoring for this question",
+          ];
         } else if (questionType === "TEXT") {
           return [
-          "Create a rubric for this question",
-          "Improve the question prompt",
-          "Add specific evaluation criteria",
-          "Suggest sample answer for this question",
-          "Set appropriate word count limits"];
-
+            "Create a rubric for this question",
+            "Improve the question prompt",
+            "Add specific evaluation criteria",
+            "Suggest sample answer for this question",
+            "Set appropriate word count limits",
+          ];
         } else if (questionType === "TRUE_FALSE") {
           return [
-          "Create variations of this true/false question",
-          "Convert to multiple choice format",
-          "Add explanation for the correct answer",
-          "Make the statement more nuanced",
-          "Create a related question pair"];
-
+            "Create variations of this true/false question",
+            "Convert to multiple choice format",
+            "Add explanation for the correct answer",
+            "Make the statement more nuanced",
+            "Create a related question pair",
+          ];
         }
 
         return [
-        "Improve this question",
-        "Create a variant of this question",
-        "Add a detailed rubric",
-        "Clarify the instructions",
-        "Adjust the scoring"];
-
+          "Improve this question",
+          "Create a variant of this question",
+          "Add a detailed rubric",
+          "Clarify the instructions",
+          "Adjust the scoring",
+        ];
       }
 
       return [
-      "Generate multiple-choice questions about...",
-      "Create a mix of question types for...",
-      "Design a text response question about...",
-      "Add learning objectives for this assignment",
-      "Generate questions based on these learning outcomes..."];
-
+        "Generate multiple-choice questions about...",
+        "Create a mix of question types for...",
+        "Design a text response question about...",
+        "Add learning objectives for this assignment",
+        "Generate questions based on these learning outcomes...",
+      ];
     } else {
       if (context.isFeedbackMode) {
         return [
-        "Explain why I lost points on this question",
-        "Help me understand this feedback",
-        "How can I improve my answer next time?",
-        "Is there a specific concept I'm missing?",
-        "Can you explain why this answer choice was incorrect?"];
-
+          "Explain why I lost points on this question",
+          "Help me understand this feedback",
+          "How can I improve my answer next time?",
+          "Is there a specific concept I'm missing?",
+          "Can you explain why this answer choice was incorrect?",
+        ];
       }
 
       if (context.isGradedAssignment) {
         return [
-        "What's the main focus of this question?",
-        "Can you clarify what this question is asking?",
-        "What concepts should I review for this question?",
-        "Help me understand what's required here",
-        "What approach should I take for this type of question?"];
-
+          "What's the main focus of this question?",
+          "Can you clarify what this question is asking?",
+          "What concepts should I review for this question?",
+          "Help me understand what's required here",
+          "What approach should I take for this type of question?",
+        ];
       } else {
         return [
-        "Can you give me a hint for this problem?",
-        "What concepts does this question test?",
-        "I'm stuck on this part, can you help?",
-        "How should I approach this question?",
-        "Explain the key points I should address"];
-
+          "Can you give me a hint for this problem?",
+          "What concepts does this question test?",
+          "I'm stuck on this part, can you help?",
+          "How should I approach this question?",
+          "Explain the key points I should address",
+        ];
       }
     }
   }
@@ -290,9 +290,9 @@ export class MarkChatService {
   }
 
   static generateFeedbackResponse(
-  questionData: any,
-  feedbackData: any)
-  : string {
+    questionData: any,
+    feedbackData: any,
+  ): string {
     const { question, type, pointsEarned, totalPoints } = questionData;
 
     let response = `## Feedback for "${question}"\n\n`;
@@ -317,8 +317,8 @@ export class MarkChatService {
 
       response += "\n### Suggestions for Improvement:\n";
       response +=
-      feedbackData.suggestions ||
-      "Focus on addressing all aspects of the question and providing complete explanations.";
+        feedbackData.suggestions ||
+        "Focus on addressing all aspects of the question and providing complete explanations.";
     }
 
     return response;
@@ -331,26 +331,26 @@ function determineIssueSeverity(issueType: string): IssueSeverity {
   issueType = issueType.toLowerCase();
 
   if (
-  issueType.includes("critical") ||
-  issueType.includes("severe") ||
-  issueType.includes("urgent"))
-  {
+    issueType.includes("critical") ||
+    issueType.includes("severe") ||
+    issueType.includes("urgent")
+  ) {
     return "critical";
   }
 
   if (
-  issueType.includes("bug") ||
-  issueType.includes("error") ||
-  issueType.includes("technical"))
-  {
+    issueType.includes("bug") ||
+    issueType.includes("error") ||
+    issueType.includes("technical")
+  ) {
     return "error";
   }
 
   if (
-  issueType.includes("grading") ||
-  issueType.includes("warning") ||
-  issueType.includes("concern"))
-  {
+    issueType.includes("grading") ||
+    issueType.includes("warning") ||
+    issueType.includes("concern")
+  ) {
     return "warning";
   }
 

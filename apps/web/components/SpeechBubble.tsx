@@ -62,12 +62,10 @@ const SpeechBubble = ({ bubble, onDismiss, position }: SpeechBubbleProps) => {
     }
   };
 
-  // Calculate bubble position to be naturally connected to Mark
-  const markSize = 66; // Mark's button size (50px image + 16px padding)
-  const bubbleOffset = 20; // Distance from Mark's edge
-  const bubbleWidth = 280; // Approximate bubble width
+  const markSize = 66;
+  const bubbleOffset = 20;
+  const bubbleWidth = 280;
 
-  // Smart positioning: left side by default, right side if near left edge
   const isNearLeftEdge = position.x < bubbleWidth + 50;
   const isNearRightEdge =
     typeof window !== "undefined" &&
@@ -76,13 +74,11 @@ const SpeechBubble = ({ bubble, onDismiss, position }: SpeechBubbleProps) => {
   let bubbleX, bubbleY, arrowPosition, arrowClasses;
 
   if (isNearLeftEdge) {
-    // Position bubble to the right of Mark
     bubbleX = position.x + markSize + bubbleOffset;
     bubbleY = position.y + markSize / 2;
     arrowPosition = "left";
     arrowClasses = `absolute -left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 rotate-45 border-l-2 border-t-2`;
   } else {
-    // Position bubble to the left of Mark (default)
     bubbleX = position.x - bubbleOffset;
     bubbleY = position.y + markSize / 2;
     arrowPosition = "right";
@@ -107,7 +103,7 @@ const SpeechBubble = ({ bubble, onDismiss, position }: SpeechBubbleProps) => {
         exit={{ scale: 0, opacity: 0 }}
         animate={{
           ...getAnimationProps(bubble.type).animate,
-          // Smooth movement as Mark is dragged
+
           transition: {
             ...getAnimationProps(bubble.type).animate?.transition,
             x: { type: "spring", stiffness: 200, damping: 20 },
@@ -118,7 +114,6 @@ const SpeechBubble = ({ bubble, onDismiss, position }: SpeechBubbleProps) => {
         <div
           className={`relative max-w-xs p-3 rounded-lg border-2 shadow-lg ${getBubbleStyle(bubble.type)}`}
         >
-          {/* Speech bubble arrow pointing to Mark - dynamically positioned */}
           <div className={`${arrowClasses} ${getBubbleStyle(bubble.type)}`} />
 
           <div className="flex items-start justify-between gap-2">

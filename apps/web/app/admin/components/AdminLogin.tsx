@@ -8,8 +8,8 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle } from
-"@/components/ui/card";
+  CardTitle,
+} from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Loader2,
@@ -17,8 +17,8 @@ import {
   Shield,
   Info,
   Users,
-  MessageSquare } from
-"lucide-react";
+  MessageSquare,
+} from "lucide-react";
 
 interface AdminLoginProps {
   onAuthenticated: (sessionToken: string) => void;
@@ -42,9 +42,9 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
       const response = await fetch("/api/v1/auth/admin/send-code", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email }),
       });
 
       const data = await response.json();
@@ -71,9 +71,9 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
       const response = await fetch("/api/v1/auth/admin/verify-code", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, code })
+        body: JSON.stringify({ email, code }),
       });
 
       const data = await response.json();
@@ -81,7 +81,6 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
       if (!response.ok) {
         throw new Error(data.message || "Failed to verify code");
       }
-
 
       localStorage.setItem("adminSessionToken", data.sessionToken);
       localStorage.setItem("adminEmail", email);
@@ -116,7 +115,6 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            
             <div className="space-y-3 mb-6">
               <Alert className="border-blue-200 bg-blue-50">
                 <Mail className="h-4 w-4 text-blue-600" />
@@ -151,24 +149,24 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  disabled={loading} />
-
+                  disabled={loading}
+                />
               </div>
 
-              {error &&
-              <Alert variant="destructive">
+              {error && (
+                <Alert variant="destructive">
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-              }
+              )}
 
-              {success &&
-              <Alert>
+              {success && (
+                <Alert>
                   <Mail className="h-4 w-4" />
                   <AlertTitle>Success</AlertTitle>
                   <AlertDescription>{success}</AlertDescription>
                 </Alert>
-              }
+              )}
 
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -177,8 +175,8 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
             </form>
           </CardContent>
         </Card>
-      </div>);
-
+      </div>
+    );
   }
 
   return (
@@ -199,28 +197,28 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
                 placeholder="123456"
                 value={code}
                 onChange={(e) =>
-                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
                 }
                 required
                 disabled={loading}
                 className="text-center text-lg tracking-widest"
-                maxLength={6} />
-
+                maxLength={6}
+              />
             </div>
 
-            {error &&
-            <Alert variant="destructive">
+            {error && (
+              <Alert variant="destructive">
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
-            }
+            )}
 
             <div className="space-y-2">
               <Button
                 type="submit"
                 className="w-full"
-                disabled={loading || code.length !== 6}>
-
+                disabled={loading || code.length !== 6}
+              >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Verify Code
               </Button>
@@ -230,8 +228,8 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
                 variant="outline"
                 className="w-full"
                 onClick={handleBackToEmail}
-                disabled={loading}>
-
+                disabled={loading}
+              >
                 Back to Email
               </Button>
             </div>
@@ -242,13 +240,13 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
               variant="link"
               onClick={handleBackToEmail}
               disabled={loading}
-              className="text-sm text-gray-600">
-
+              className="text-sm text-gray-600"
+            >
               Use different email
             </Button>
           </div>
         </CardContent>
       </Card>
-    </div>);
-
+    </div>
+  );
 }

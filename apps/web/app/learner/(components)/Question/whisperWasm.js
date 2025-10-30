@@ -4,8 +4,8 @@ export const loadWhisperModule = async () => {
 
   const imports = {
     env: {
-      memory: new WebAssembly.Memory({ initial: 256 })
-    }
+      memory: new WebAssembly.Memory({ initial: 256 }),
+    },
   };
 
   const { instance } = await WebAssembly.instantiate(buffer, imports);
@@ -19,7 +19,7 @@ export const transcribeAudioBuffer = async (audioBuffer, wasmInstance) => {
   const wasmMemory = new Uint8Array(
     exports.memory.buffer,
     ptr,
-    audioBuffer.byteLength
+    audioBuffer.byteLength,
   );
   wasmMemory.set(new Uint8Array(audioBuffer));
 
@@ -28,7 +28,7 @@ export const transcribeAudioBuffer = async (audioBuffer, wasmInstance) => {
     ptr,
     audioBuffer.byteLength,
     outputPtr,
-    10240
+    10240,
   );
 
   if (resultCode !== 0) {

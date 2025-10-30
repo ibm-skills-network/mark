@@ -10,15 +10,15 @@ import { useAuthorStore } from "@/stores/author";
 import {
   ChevronRightIcon,
   ExclamationTriangleIcon,
-  XMarkIcon } from
-"@heroicons/react/24/outline";
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
   useState,
   type ComponentPropsWithoutRef,
-  type FC } from
-"react";
+  type FC,
+} from "react";
 
 interface Props extends ComponentPropsWithoutRef<"nav"> {
   assignmentId?: string;
@@ -29,20 +29,20 @@ interface Props extends ComponentPropsWithoutRef<"nav"> {
 export const FooterNavigation: FC<Props> = ({
   assignmentId,
   nextStep = "config",
-  currentStepId = 1
+  currentStepId = 1,
 }) => {
   const router = useRouter();
   const [activeAssignmentId, questions] = useAuthorStore((state) => [
-  state.activeAssignmentId,
-  state.questions]
-  );
+    state.activeAssignmentId,
+    state.questions,
+  ]);
   const setFocusedQuestionId = useAuthorStore(
-    (state) => state.setFocusedQuestionId
+    (state) => state.setFocusedQuestionId,
   );
   const [showErrorModal, setShowErrorModal] = useState(false);
   const validateAssignmentSetup = useAuthorStore((state) => state.validate);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
-    questions as Question[]
+    questions as Question[],
   );
   const changesSummary = useChangesSummary();
   const hasChanges = changesSummary !== "No changes detected.";
@@ -51,7 +51,7 @@ export const FooterNavigation: FC<Props> = ({
   const hasEmptyQuestion = questions?.some((q) => q.type === "EMPTY");
 
   const { isValid, message, step, invalidQuestionId } =
-  questionsAreReadyToBePublished();
+    questionsAreReadyToBePublished();
 
   const pageRouterUsingSteps = (step: number | null) => {
     switch (true) {
@@ -69,38 +69,34 @@ export const FooterNavigation: FC<Props> = ({
   function handleNavigate() {
     setShowErrorModal(false);
 
-
     if (step !== null && step !== undefined && step !== currentStepId) {
       const nextPage = pageRouterUsingSteps(step);
 
       if (nextPage) {
         router.push(nextPage);
 
-
         if (invalidQuestionId) {
           setFocusedQuestionId(invalidQuestionId);
 
-
           setTimeout(() => {
             const element = document.getElementById(
-              `question-title-${invalidQuestionId}`
+              `question-title-${invalidQuestionId}`,
             );
             if (element) {
               element.scrollIntoView({
                 behavior: "smooth",
                 block: "center",
-                inline: "center"
+                inline: "center",
               });
             } else {
-
               const questionElement = document.getElementById(
-                `question-${invalidQuestionId}`
+                `question-${invalidQuestionId}`,
               );
               if (questionElement) {
                 questionElement.scrollIntoView({
                   behavior: "smooth",
                   block: "start",
-                  inline: "nearest"
+                  inline: "nearest",
                 });
               }
             }
@@ -110,18 +106,17 @@ export const FooterNavigation: FC<Props> = ({
         router.push(`/author/${activeAssignmentId}`);
       }
     } else if (invalidQuestionId) {
-
       setFocusedQuestionId(invalidQuestionId);
 
       setTimeout(() => {
         const element = document.getElementById(
-          `question-title-${invalidQuestionId}`
+          `question-title-${invalidQuestionId}`,
         );
         if (element) {
           element.scrollIntoView({
             behavior: "smooth",
             block: "center",
-            inline: "center"
+            inline: "center",
           });
         }
       }, 100);
@@ -136,13 +131,10 @@ export const FooterNavigation: FC<Props> = ({
       return;
     }
 
-
     if (!isValid) {
-
       if (step !== null && step !== undefined && step !== currentStepId) {
         setShowErrorModal(true);
       } else {
-
         handleNavigate();
       }
       return;
@@ -153,15 +145,15 @@ export const FooterNavigation: FC<Props> = ({
   const getStatusMessage = () => {
     if (isLoading) return { text: "Loading questions...", type: "loading" };
     if (questions?.length === 0 && step === 2)
-    return { text: "You need to add at least one question", type: "error" };
+      return { text: "You need to add at least one question", type: "error" };
     if (hasEmptyQuestion)
-    return { text: "Some questions have incomplete fields", type: "error" };
+      return { text: "Some questions have incomplete fields", type: "error" };
     if (!isValid)
-    return {
-      text: message,
-      type: "error",
-      hasAction: step !== currentStepId
-    };
+      return {
+        text: message,
+        type: "error",
+        hasAction: step !== currentStepId,
+      };
     if (!hasChanges) return { text: "No changes detected.", type: "warning" };
     return { text: "Ready to continue", type: "success" };
   };
@@ -174,83 +166,76 @@ export const FooterNavigation: FC<Props> = ({
         <Button
           version="secondary"
           RightIcon={ChevronRightIcon}
-          onClick={goToNextStep}>
-
+          onClick={goToNextStep}
+        >
           Next
         </Button>
       </footer>
 
-      
-      {showErrorModal &&
-      <div className="fixed inset-0 z-50 overflow-y-auto">
+      {showErrorModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            
             <div
-            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-            onClick={() => setShowErrorModal(false)} />
-
-
-            
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              
-              <button
+              className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
               onClick={() => setShowErrorModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+            />
 
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              >
                 <XMarkIcon className="h-6 w-6" />
               </button>
 
-              
               <div className="flex items-center mb-4">
-                {statusMessage.type === "error" &&
-              <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
-              }
-                {statusMessage.type === "warning" &&
-              <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-2" />
-              }
+                {statusMessage.type === "error" && (
+                  <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
+                )}
+                {statusMessage.type === "warning" && (
+                  <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-2" />
+                )}
                 <h3 className="text-lg font-semibold text-gray-900">
                   {statusMessage.type === "error" ? "Error" : "Warning"}
                 </h3>
               </div>
 
-              
               <div className="mb-6">
                 <TooltipMessage
-                isLoading={isLoading}
-                questionsLength={questions?.length}
-                hasEmptyQuestion={hasEmptyQuestion}
-                isValid={isValid}
-                message={statusMessage.text}
-                submitting={false}
-                hasChanges={hasChanges}
-                changesSummary={changesSummary}
-                invalidQuestionId={invalidQuestionId}
-                onNavigate={handleNavigate}
-                showAction={false} />
-
+                  isLoading={isLoading}
+                  questionsLength={questions?.length}
+                  hasEmptyQuestion={hasEmptyQuestion}
+                  isValid={isValid}
+                  message={statusMessage.text}
+                  submitting={false}
+                  hasChanges={hasChanges}
+                  changesSummary={changesSummary}
+                  invalidQuestionId={invalidQuestionId}
+                  onNavigate={handleNavigate}
+                  showAction={false}
+                />
               </div>
 
-              
               <div className="flex justify-end gap-3">
                 <button
-                onClick={() => setShowErrorModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
-
+                  onClick={() => setShowErrorModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+                >
                   Close
                 </button>
-                {statusMessage.hasAction &&
-              <button
-                onClick={handleNavigate}
-                className="px-4 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500">
-
+                {statusMessage.hasAction && (
+                  <button
+                    onClick={handleNavigate}
+                    className="px-4 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500"
+                  >
                     Take me there
                   </button>
-              }
+                )}
               </div>
             </div>
           </div>
         </div>
-      }
-    </>);
-
+      )}
+    </>
+  );
 };

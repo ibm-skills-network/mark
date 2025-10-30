@@ -24,12 +24,12 @@ function URLQuestion(props: Props) {
   const validateURL = (str: string) => {
     const pattern = new RegExp(
       "^(https?:\\/\\/)?" +
-      "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" +
-      "((\\d{1,3}\\.){3}\\d{1,3}))" +
-      "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" +
-      "(\\?[;&a-z\\d%_.~+=-]*)?" +
-      "(\\#[-a-z\\d_]*)?$",
-      "i"
+        "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" +
+        "((\\d{1,3}\\.){3}\\d{1,3}))" +
+        "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" +
+        "(\\?[;&a-z\\d%_.~+=-]*)?" +
+        "(\\#[-a-z\\d_]*)?$",
+      "i",
     );
     return pattern.test(str);
   };
@@ -43,15 +43,15 @@ function URLQuestion(props: Props) {
         className={cn(
           "w-full p-2 border rounded",
           !validURL ? "border-red-500" : "border-gray-300",
-          className
+          className,
         )}
         value={url}
         placeholder="Enter website URL"
-        onChange={handleURLChange} />
+        onChange={handleURLChange}
+      />
 
-
-      {showError &&
-      <div className="absolute top-full left-0 mt-1 z-10 bg-red-50 border border-red-200 rounded-md shadow-lg p-3 min-w-max">
+      {showError && (
+        <div className="absolute top-full left-0 mt-1 z-10 bg-red-50 border border-red-200 rounded-md shadow-lg p-3 min-w-max">
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
               <span className="text-white text-xs">!</span>
@@ -62,9 +62,9 @@ function URLQuestion(props: Props) {
           </div>
           <div className="absolute -top-1 left-4 w-2 h-2 bg-red-50 border-l border-t border-red-200 transform rotate-45"></div>
         </div>
-      }
-    </div>);
-
+      )}
+    </div>
+  );
 }
 
 export default URLQuestion;

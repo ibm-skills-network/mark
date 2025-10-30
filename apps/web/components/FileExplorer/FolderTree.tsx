@@ -1,4 +1,3 @@
-// Completely rewritten FolderTree.tsx with isolated chevron click handling
 import React, { useState } from "react";
 import {
   IconFolder,
@@ -30,7 +29,6 @@ interface FolderTreeProps {
   dropTarget?: string | null;
 }
 
-// This is a completely separate chevron component to fully isolate the toggle behavior
 const ChevronToggle: React.FC<{
   isExpanded: boolean;
   onClick: (e: React.MouseEvent) => void;
@@ -54,7 +52,6 @@ const ChevronToggle: React.FC<{
   );
 };
 
-// Isolated folder component to prevent re-renders affecting other folders
 const FolderItem: React.FC<{
   folder: FolderStructure;
   depth: number;
@@ -80,7 +77,6 @@ const FolderItem: React.FC<{
   onDragLeave,
   onDrop,
 }) => {
-  // Local state to avoid dependencies on outside renders
   const [lastClickTime, setLastClickTime] = useState(0);
 
   const isCurrentFolder = folder.path === currentPath;
@@ -90,12 +86,10 @@ const FolderItem: React.FC<{
     (folder.files && folder.files.length > 0) ||
     !!folder.isEmpty;
 
-  // Dedicated handler for chevron clicks with debounce
   const handleChevronClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
 
-    // Debounce to prevent multiple rapid clicks
     const now = Date.now();
     if (now - lastClickTime < 300) {
       return;
@@ -105,7 +99,6 @@ const FolderItem: React.FC<{
     onToggleFolder(folder.path);
   };
 
-  // Separate handler for folder clicks to navigate
   const handleFolderClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onFolderClick(folder.path);
@@ -125,14 +118,12 @@ const FolderItem: React.FC<{
         } ${isDropTarget ? "bg-purple-50 border border-purple-300" : ""}`}
         onContextMenu={(e) => onContextMenu(e, folder)}
       >
-        {/* Completely separate chevron component */}
         <ChevronToggle
           isExpanded={isExpanded}
           onClick={handleChevronClick}
           visible={hasContent}
         />
 
-        {/* Folder icon and label */}
         <div
           className="flex items-center flex-1 truncate py-0.5 ml-1"
           onClick={handleFolderClick}
@@ -150,7 +141,6 @@ const FolderItem: React.FC<{
           </span>
         </div>
 
-        {/* Context menu trigger (dots menu) */}
         <div className="opacity-0 group-hover:opacity-100 ml-1">
           <button
             className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-200"
@@ -163,7 +153,6 @@ const FolderItem: React.FC<{
           </button>
         </div>
 
-        {/* Count badge */}
         {hasContent && (
           <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">
             {(folder.folders?.length || 0) +
@@ -200,7 +189,6 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     name: string;
   } | null>(null);
 
-  // Show context menu for folder
   const handleFolderContextMenu = (
     e: React.MouseEvent,
     folder: FolderStructure,
@@ -215,7 +203,6 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     });
   };
 
-  // Handle when dots menu is clicked
   const handleDotsClick = (e: React.MouseEvent, folder: FolderStructure) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -227,12 +214,10 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     });
   };
 
-  // Copy folder path
   const handleCopyPath = (path: string) => {
     void navigator.clipboard.writeText(path);
   };
 
-  // Handle folder deletion with confirmation
   const handleDeleteFolder = (path: string) => {
     if (
       window.confirm(
@@ -243,7 +228,6 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     }
   };
 
-  // Recursive function to render folder tree with isolated components
   const renderTree = (folder: FolderStructure, depth = 0) => {
     const isExpanded = !!folder.expanded;
 
@@ -269,16 +253,13 @@ const FolderTree: React.FC<FolderTreeProps> = ({
           }
         />
 
-        {/* Render children only if expanded */}
         {isExpanded && (
           <div className="folder-contents">
-            {/* Recurse for subfolders */}
             {folder.folders &&
               folder.folders.map((subFolder) =>
                 renderTree(subFolder, depth + 1),
               )}
 
-            {/* Render files in this folder */}
             {folder.files &&
               folder.files.map((file) => (
                 <div
@@ -314,7 +295,6 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     <div className="folder-tree">
       {renderTree(folderStructure)}
 
-      {/* Context Menu */}
       {contextMenuPos && (
         <FolderContextMenu
           folderName={contextMenuPos.name}

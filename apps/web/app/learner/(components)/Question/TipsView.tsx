@@ -6,15 +6,15 @@ import { TagIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import {
   ArrowRightIcon,
   LanguageIcon,
-  TagIcon as SolidTagIcon } from
-"@heroicons/react/24/solid";
+  TagIcon as SolidTagIcon,
+} from "@heroicons/react/24/solid";
 import React, { useEffect, useState } from "react";
 
 function TipsView() {
   const { setTips, persistTips, setPersistTips } = useAppConfig((state) => ({
     setTips: state.setTips,
     persistTips: state.persistTips,
-    setPersistTips: state.setPersistTips
+    setPersistTips: state.setPersistTips,
   }));
 
   const [isMobile, setIsMobile] = useState(false);
@@ -37,8 +37,8 @@ function TipsView() {
             <h1 className="text-gray-800 text-lg">Tips</h1>
             <XMarkIcon
               className="h-6 w-6 text-gray-600 cursor-pointer"
-              onClick={() => setTips(false)} />
-
+              onClick={() => setTips(false)}
+            />
           </div>
           <div className="flex flex-col gap-y-2 border-y py-2">
             <h1 className="text-gray-800 text-lg pb-2">Language Assistance</h1>
@@ -50,30 +50,30 @@ function TipsView() {
               <LanguageIcon className="h-6 w-6 text-gray-600" />
               <div
                 className={cn(
-                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200"
+                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200",
                 )}
-                aria-checked={false}>
-
+                aria-checked={false}
+              >
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"
-                  )} />
-
+                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0",
+                  )}
+                />
               </div>
               <LanguageIcon className="h-6 w-6 text-violet-600" />
               <div
                 className={cn(
-                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600"
+                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600",
                 )}
-                aria-checked={true}>
-
+                aria-checked={true}
+              >
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"
-                  )} />
-
+                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5",
+                  )}
+                />
               </div>
             </div>
             <p className="text-gray-600 text-xs">
@@ -101,13 +101,14 @@ function TipsView() {
               type="checkbox"
               className="text-violet-600 h-4 w-4"
               onChange={() => setPersistTips(!persistTips)}
-              checked={persistTips} />
+              checked={persistTips}
+            />
 
             <p className="text-gray-600 text-sm">Don't Show This Again</p>
           </div>
         </div>
-      </div>);
-
+      </div>
+    );
   }
 
   return (
@@ -116,8 +117,8 @@ function TipsView() {
         <h1 className="text-gray-800 text-lg">Tips</h1>
         <XMarkIcon
           className="h-6 w-6 text-gray-600 cursor-pointer hover:cursor-pointer"
-          onClick={() => setTips(false)} />
-
+          onClick={() => setTips(false)}
+        />
       </div>
       <div className="flex flex-col gap-y-2 border-y py-2">
         <h1 className="text-gray-800 text-lg pb-2">Language Assistance</h1>
@@ -129,30 +130,30 @@ function TipsView() {
           <LanguageIcon className="h-6 w-6 text-gray-600" />
           <div
             className={cn(
-              "relative inline-flex h-5 w-10 flex-shrink-0  rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200"
+              "relative inline-flex h-5 w-10 flex-shrink-0  rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200",
             )}
-            aria-checked={false}>
-
+            aria-checked={false}
+          >
             <span
               aria-hidden="true"
               className={cn(
-                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"
-              )} />
-
+                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0",
+              )}
+            />
           </div>
           <LanguageIcon className="h-6 w-6 text-violet-600" />
           <div
             className={cn(
-              "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600"
+              "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-violet-600",
             )}
-            aria-checked={true}>
-
+            aria-checked={true}
+          >
             <span
               aria-hidden="true"
               className={cn(
-                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"
-              )} />
-
+                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5",
+              )}
+            />
           </div>
         </div>
         <p className="text-gray-600 text-xs">
@@ -178,10 +179,10 @@ function TipsView() {
               className="absolute top-0 right-0 w-4 h-4 bg-violet-500"
               style={{
                 clipPath: "polygon(100% 0, 0 0, 100% 100%)",
-                borderTopRightRadius: "0.25rem"
+                borderTopRightRadius: "0.25rem",
               }}
-              aria-hidden="true">
-            </div>
+              aria-hidden="true"
+            ></div>
             <div className="font-bold text-lg">1</div>
           </div>
         </div>
@@ -191,12 +192,13 @@ function TipsView() {
           type="checkbox"
           className="text-violet-600 h-4 w-4"
           onChange={() => setPersistTips(!persistTips)}
-          checked={persistTips} />
+          checked={persistTips}
+        />
 
         <p className="text-gray-600 text-sm">Don't Show This Again</p>
       </div>
-    </div>);
-
+    </div>
+  );
 }
 
 export default TipsView;

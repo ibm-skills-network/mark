@@ -13,34 +13,34 @@ declare global {
     authorStoreBridge?: {
       getState: () => any;
       createQuestion: (
-      questionType: string,
-      questionText: string,
-      totalPoints?: number,
-      options?: Array<{text: string;isCorrect: boolean;points?: number;}>)
-      => any;
+        questionType: string,
+        questionText: string,
+        totalPoints?: number,
+        options?: Array<{ text: string; isCorrect: boolean; points?: number }>,
+      ) => any;
       modifyQuestion: (
-      questionId: number,
-      questionText?: string,
-      totalPoints?: number,
-      questionType?: string)
-      => any;
+        questionId: number,
+        questionText?: string,
+        totalPoints?: number,
+        questionType?: string,
+      ) => any;
       setQuestionChoices: (
-      questionId: number,
-      choices: Array<{text: string;isCorrect: boolean;points?: number;}>,
-      variantId?: number)
-      => any;
+        questionId: number,
+        choices: Array<{ text: string; isCorrect: boolean; points?: number }>,
+        variantId?: number,
+      ) => any;
       addRubric: (
-      questionId: number,
-      rubricQuestion: string,
-      criteria: Array<{description: string;points: number;}>)
-      => any;
+        questionId: number,
+        rubricQuestion: string,
+        criteria: Array<{ description: string; points: number }>,
+      ) => any;
       generateQuestionVariant: (questionId: number, variantType: string) => any;
       deleteQuestion: (questionId: number) => any;
       generateQuestionsFromObjectives: (
-      learningObjectives: string,
-      questionTypes: string[],
-      count: number)
-      => any;
+        learningObjectives: string,
+        questionTypes: string[],
+        count: number,
+      ) => any;
       updateLearningObjectives: (learningObjectives: string) => any;
       setQuestionTitle: (questionId: number, title: string) => any;
     };
@@ -75,11 +75,11 @@ export default function AuthorStoreBridge() {
         },
 
         createQuestion: (
-        questionType,
-        questionText,
-        totalPoints = 10,
-        options = []) =>
-        {
+          questionType,
+          questionText,
+          totalPoints = 10,
+          options = [],
+        ) => {
           console.group("Bridge: createQuestion");
 
           try {
@@ -98,23 +98,23 @@ export default function AuthorStoreBridge() {
 
             let choices = [];
             if (
-            options &&
-            Array.isArray(options) &&
-            options.length > 0 &&
-            ["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(questionType))
-            {
+              options &&
+              Array.isArray(options) &&
+              options.length > 0 &&
+              ["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(questionType)
+            ) {
               choices = options.map((option) => ({
                 choice: option.text || "",
                 isCorrect: option.isCorrect || false,
                 points:
-                option.points !== undefined ?
-                option.points :
-                questionType === "MULTIPLE_CORRECT" ?
-                option.isCorrect ?
-                1 :
-                -1 :
-                0,
-                feedback: ""
+                  option.points !== undefined
+                    ? option.points
+                    : questionType === "MULTIPLE_CORRECT"
+                      ? option.isCorrect
+                        ? 1
+                        : -1
+                      : 0,
+                feedback: "",
               }));
             }
 
@@ -129,22 +129,22 @@ export default function AuthorStoreBridge() {
               scoring: {
                 type: "CRITERIA_BASED" as const,
                 rubrics: [],
-                showRubricsToLearner: true
+                showRubricsToLearner: true,
               },
               randomizedChoices: choices.length > 0 ? true : undefined,
-              index: (authorStore.questions.length || 0) + 1
+              index: (authorStore.questions.length || 0) + 1,
             };
 
             authorStore.addQuestion(newQuestion);
 
             if (
-            authorStore.questionOrder &&
-            !authorStore.questionOrder.includes(newQuestionId))
-            {
+              authorStore.questionOrder &&
+              !authorStore.questionOrder.includes(newQuestionId)
+            ) {
               authorStore.setQuestionOrder([
-              ...authorStore.questionOrder,
-              newQuestionId]
-              );
+                ...authorStore.questionOrder,
+                newQuestionId,
+              ]);
             }
 
             if (authorStore.setUpdatedAt) {
@@ -156,24 +156,24 @@ export default function AuthorStoreBridge() {
             return {
               success: true,
               message: `Successfully created a new ${questionType} question with ID ${newQuestionId}.`,
-              questionId: newQuestionId
+              questionId: newQuestionId,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Error creating question: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
 
         modifyQuestion: (
-        questionId,
-        questionText,
-        totalPoints,
-        questionType) =>
-        {
+          questionId,
+          questionText,
+          totalPoints,
+          questionType,
+        ) => {
           console.group("Bridge: modifyQuestion");
 
           try {
@@ -185,7 +185,7 @@ export default function AuthorStoreBridge() {
             }
 
             const question = authorStore.questions.find(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
             if (!question) {
               throw new Error(`Question with ID ${questionId} not found`);
@@ -193,11 +193,11 @@ export default function AuthorStoreBridge() {
 
             const modification: OptionalQuestion = {};
             if (questionText !== undefined && questionText !== null)
-            modification.question = questionText;
+              modification.question = questionText;
             if (totalPoints !== undefined && totalPoints !== null)
-            modification.totalPoints = totalPoints;
+              modification.totalPoints = totalPoints;
             if (questionType !== undefined && questionType !== null)
-            modification.type = questionType as QuestionType;
+              modification.type = questionType as QuestionType;
 
             authorStore.modifyQuestion(questionId, modification);
 
@@ -209,14 +209,14 @@ export default function AuthorStoreBridge() {
 
             return {
               success: true,
-              message: `Successfully modified question ${questionId}.`
+              message: `Successfully modified question ${questionId}.`,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Error modifying question: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
@@ -240,7 +240,7 @@ export default function AuthorStoreBridge() {
             }
 
             const question = authorStore.questions.find(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
             if (!question) {
               throw new Error(`Question with ID ${questionId} not found`);
@@ -251,10 +251,10 @@ export default function AuthorStoreBridge() {
             }
 
             if (
-            !["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(question.type))
-            {
+              !["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(question.type)
+            ) {
               authorStore.modifyQuestion(questionId, {
-                type: "SINGLE_CORRECT"
+                type: "SINGLE_CORRECT",
               });
             }
 
@@ -262,14 +262,14 @@ export default function AuthorStoreBridge() {
               choice: choice.text || "",
               isCorrect: choice.isCorrect || false,
               points:
-              choice.points !== undefined ?
-              choice.points :
-              question.type === "MULTIPLE_CORRECT" ?
-              choice.isCorrect ?
-              1 :
-              -1 :
-              0,
-              feedback: ""
+                choice.points !== undefined
+                  ? choice.points
+                  : question.type === "MULTIPLE_CORRECT"
+                    ? choice.isCorrect
+                      ? 1
+                      : -1
+                    : 0,
+              feedback: "",
             }));
 
             authorStore.setChoices(questionId, formattedChoices, variantId);
@@ -282,14 +282,14 @@ export default function AuthorStoreBridge() {
 
             return {
               success: true,
-              message: `Successfully updated choices for question ${questionId}${variantId ? ` variant ${variantId}` : ""}.`
+              message: `Successfully updated choices for question ${questionId}${variantId ? ` variant ${variantId}` : ""}.`,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Error setting question choices: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
@@ -306,7 +306,7 @@ export default function AuthorStoreBridge() {
             }
 
             const question = authorStore.questions.find(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
             if (!question) {
               throw new Error(`Question with ID ${questionId} not found`);
@@ -316,7 +316,7 @@ export default function AuthorStoreBridge() {
 
             const scoring = question.scoring || {
               type: "CRITERIA_BASED",
-              rubrics: []
+              rubrics: [],
             };
             const rubricIndex = (scoring.rubrics?.length || 1) - 1;
 
@@ -325,7 +325,7 @@ export default function AuthorStoreBridge() {
                 questionId,
                 0,
                 rubricIndex,
-                rubricQuestion
+                rubricQuestion,
               );
             }
 
@@ -333,13 +333,13 @@ export default function AuthorStoreBridge() {
               const formattedCriteria = criteria.map((criterion, index) => ({
                 id: index + 1,
                 description: criterion.description,
-                points: criterion.points || 0
+                points: criterion.points || 0,
               }));
 
               authorStore.setCriterias(
                 questionId,
                 rubricIndex,
-                formattedCriteria
+                formattedCriteria,
               );
             }
 
@@ -350,14 +350,14 @@ export default function AuthorStoreBridge() {
 
             return {
               success: true,
-              message: `Successfully added rubric to question ${questionId}.`
+              message: `Successfully added rubric to question ${questionId}.`,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Failed to add rubric: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
@@ -374,15 +374,15 @@ export default function AuthorStoreBridge() {
             }
 
             const question = authorStore.questions.find(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
             if (!question) {
               throw new Error(`Question with ID ${questionId} not found`);
             }
 
             const variantId =
-            Math.max(0, ...(question.variants || []).map((v) => v.id || 0)) +
-            1;
+              Math.max(0, ...(question.variants || []).map((v) => v.id || 0)) +
+              1;
 
             const newVariant = {
               id: variantId,
@@ -390,12 +390,12 @@ export default function AuthorStoreBridge() {
               type: question.type,
               variantContent: question.question,
               choices: question.choices ? [...question.choices] : [],
-              scoring: question.scoring ?
-              { ...question.scoring } :
-              { type: "CRITERIA_BASED" as const, rubrics: [] },
+              scoring: question.scoring
+                ? { ...question.scoring }
+                : { type: "CRITERIA_BASED" as const, rubrics: [] },
               createdAt: new Date().toISOString(),
               variantType: variantType as "REWORDED" | "REPHRASED",
-              randomizedChoices: question.randomizedChoices
+              randomizedChoices: question.randomizedChoices,
             };
 
             authorStore.addVariant(questionId, newVariant);
@@ -409,14 +409,14 @@ export default function AuthorStoreBridge() {
             return {
               success: true,
               message: `Successfully created ${variantType.toLowerCase()} variant for question ${questionId}.`,
-              variantId: variantId
+              variantId: variantId,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Failed to generate variant: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
@@ -433,7 +433,7 @@ export default function AuthorStoreBridge() {
             }
 
             const questionExists = authorStore.questions.some(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
             if (!questionExists) {
               throw new Error(`Question with ID ${questionId} not found`);
@@ -443,7 +443,7 @@ export default function AuthorStoreBridge() {
 
             if (authorStore.questionOrder) {
               const updatedOrder = authorStore.questionOrder.filter(
-                (id) => id !== questionId
+                (id) => id !== questionId,
               );
               authorStore.setQuestionOrder(updatedOrder);
             }
@@ -456,23 +456,23 @@ export default function AuthorStoreBridge() {
 
             return {
               success: true,
-              message: `Successfully deleted question ${questionId}.`
+              message: `Successfully deleted question ${questionId}.`,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Failed to delete question: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
 
         generateQuestionsFromObjectives: (
-        learningObjectives,
-        questionTypes,
-        count) =>
-        {
+          learningObjectives,
+          questionTypes,
+          count,
+        ) => {
           console.group("Bridge: generateQuestionsFromObjectives");
 
           try {
@@ -484,16 +484,16 @@ export default function AuthorStoreBridge() {
 
             count = count || 5;
             questionTypes =
-            questionTypes &&
-            Array.isArray(questionTypes) &&
-            questionTypes.length > 0 ?
-            questionTypes :
-            ["SINGLE_CORRECT", "MULTIPLE_CORRECT", "TEXT", "TRUE_FALSE"];
+              questionTypes &&
+              Array.isArray(questionTypes) &&
+              questionTypes.length > 0
+                ? questionTypes
+                : ["SINGLE_CORRECT", "MULTIPLE_CORRECT", "TEXT", "TRUE_FALSE"];
 
             let generatedCount = 0;
             const questionIds = [];
             const startId =
-            Math.max(0, ...authorStore.questions.map((q) => q.id || 0)) + 1;
+              Math.max(0, ...authorStore.questions.map((q) => q.id || 0)) + 1;
 
             for (let i = 0; i < count; i++) {
               const qType = questionTypes[i % questionTypes.length];
@@ -511,33 +511,33 @@ export default function AuthorStoreBridge() {
                 scoring: {
                   type: "CRITERIA_BASED" as const,
                   rubrics: [],
-                  showRubricsToLearner: true
-                }
+                  showRubricsToLearner: true,
+                },
               };
 
               if (qType === "SINGLE_CORRECT" || qType === "MULTIPLE_CORRECT") {
                 newQuestion.choices = [
-                {
-                  choice: "Option A",
-                  isCorrect: true,
-                  points: qType === "MULTIPLE_CORRECT" ? 1 : 0
-                },
-                {
-                  choice: "Option B",
-                  isCorrect: false,
-                  points: qType === "MULTIPLE_CORRECT" ? -1 : 0
-                },
-                {
-                  choice: "Option C",
-                  isCorrect: false,
-                  points: qType === "MULTIPLE_CORRECT" ? -1 : 0
-                },
-                {
-                  choice: "Option D",
-                  isCorrect: false,
-                  points: qType === "MULTIPLE_CORRECT" ? -1 : 0
-                }];
-
+                  {
+                    choice: "Option A",
+                    isCorrect: true,
+                    points: qType === "MULTIPLE_CORRECT" ? 1 : 0,
+                  },
+                  {
+                    choice: "Option B",
+                    isCorrect: false,
+                    points: qType === "MULTIPLE_CORRECT" ? -1 : 0,
+                  },
+                  {
+                    choice: "Option C",
+                    isCorrect: false,
+                    points: qType === "MULTIPLE_CORRECT" ? -1 : 0,
+                  },
+                  {
+                    choice: "Option D",
+                    isCorrect: false,
+                    points: qType === "MULTIPLE_CORRECT" ? -1 : 0,
+                  },
+                ];
               }
 
               if (qType === "TRUE_FALSE") {
@@ -547,7 +547,7 @@ export default function AuthorStoreBridge() {
               newQuestion.scoring = {
                 type: "CRITERIA_BASED",
                 rubrics: [],
-                showRubricsToLearner: true
+                showRubricsToLearner: true,
               };
 
               authorStore.addQuestion(newQuestion);
@@ -557,9 +557,9 @@ export default function AuthorStoreBridge() {
 
             if (authorStore.questionOrder) {
               authorStore.setQuestionOrder([
-              ...authorStore.questionOrder,
-              ...questionIds]
-              );
+                ...authorStore.questionOrder,
+                ...questionIds,
+              ]);
             }
 
             if (authorStore.setUpdatedAt) {
@@ -571,14 +571,14 @@ export default function AuthorStoreBridge() {
             return {
               success: true,
               message: `Successfully generated ${generatedCount} questions based on your learning objectives.`,
-              questionIds: questionIds
+              questionIds: questionIds,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Failed to generate questions: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
@@ -599,14 +599,14 @@ export default function AuthorStoreBridge() {
 
             return {
               success: true,
-              message: `Successfully updated learning objectives.`
+              message: `Successfully updated learning objectives.`,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Failed to update learning objectives: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
         },
@@ -623,7 +623,7 @@ export default function AuthorStoreBridge() {
             }
 
             const questionExists = authorStore.questions.some(
-              (q) => q.id === questionId
+              (q) => q.id === questionId,
             );
             if (!questionExists) {
               throw new Error(`Question with ID ${questionId} not found`);
@@ -639,17 +639,17 @@ export default function AuthorStoreBridge() {
 
             return {
               success: true,
-              message: `Successfully updated title for question ${questionId}.`
+              message: `Successfully updated title for question ${questionId}.`,
             };
           } catch (error) {
             console.groupEnd();
             return {
               success: false,
               message: `Failed to update title: ${error.message}`,
-              error: error.message
+              error: error.message,
             };
           }
-        }
+        },
       };
 
       const authorOperationHandler = (e) => {
@@ -670,10 +670,10 @@ export default function AuthorStoreBridge() {
                 result: {
                   success: false,
                   message: `Operation ${operation} not found in bridge`,
-                  error: "Operation not found"
-                }
-              }
-            })
+                  error: "Operation not found",
+                },
+              },
+            }),
           );
           return;
         }
@@ -685,9 +685,9 @@ export default function AuthorStoreBridge() {
             new CustomEvent("author-store-result", {
               detail: {
                 requestId,
-                result
-              }
-            })
+                result,
+              },
+            }),
           );
         } catch (error) {
           window.dispatchEvent(
@@ -697,10 +697,10 @@ export default function AuthorStoreBridge() {
                 result: {
                   success: false,
                   message: `Error executing ${operation}: ${error.message}`,
-                  error: error.message
-                }
-              }
-            })
+                  error: error.message,
+                },
+              },
+            }),
           );
         }
       };
@@ -713,7 +713,7 @@ export default function AuthorStoreBridge() {
       return () => {
         window.removeEventListener(
           "author-store-operation",
-          authorOperationHandler
+          authorOperationHandler,
         );
         delete window.authorStoreBridge;
         window._authorStoreBridgeInitialized = false;
