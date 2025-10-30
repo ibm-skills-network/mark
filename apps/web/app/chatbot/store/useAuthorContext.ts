@@ -42,7 +42,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     focusedQuestionId,
     learningObjectives,
     fileUploaded,
-    setUpdatedAt,
+    setUpdatedAt
   } = useAuthorStore(
     (state) => ({
       name: state.name,
@@ -55,9 +55,9 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       focusedQuestionId: state.focusedQuestionId,
       learningObjectives: state.learningObjectives,
       fileUploaded: state.fileUploaded,
-      setUpdatedAt: state.setUpdatedAt,
+      setUpdatedAt: state.setUpdatedAt
     }),
-    shallow,
+    shallow
   );
 
   const questionStates = useQuestionStore((state) => state.questionStates);
@@ -68,7 +68,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     questionCount: 0,
     hasLearningObjectives: false,
     hasFocusedQuestion: false,
-    hasUploadedFiles: false,
+    hasUploadedFiles: false
   });
 
   const forceUpdate = useCallback(() => {
@@ -95,12 +95,12 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       name: name || "Untitled Assignment",
       questionCount: Array.isArray(questions) ? questions.length : 0,
       hasLearningObjectives: Boolean(
-        learningObjectives && learningObjectives.trim() !== "",
+        learningObjectives && learningObjectives.trim() !== ""
       ),
       hasFocusedQuestion: Boolean(focusedQuestionId),
-      hasUploadedFiles: Array.isArray(fileUploaded)
-        ? fileUploaded.length > 0
-        : false,
+      hasUploadedFiles: Array.isArray(fileUploaded) ?
+      fileUploaded.length > 0 :
+      false
     });
   }, [name, questions, learningObjectives, focusedQuestionId, fileUploaded]);
 
@@ -113,8 +113,8 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
 
     contextContent += `Assignment: ${name || "Untitled Assignment"}\n`;
     contextContent += `Assignment ID: ${
-      activeAssignmentId || "Not saved yet"
-    }\n`;
+    activeAssignmentId || "Not saved yet"}\n`;
+
     contextContent += `Number of Questions: ${Array.isArray(questions) ? questions.length : 0}\n`;
 
     if (learningObjectives) {
@@ -131,14 +131,14 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
 
     contextContent += `\nASSIGNMENT STRUCTURE:\n`;
     contextContent += `- Introduction: ${
-      introduction ? "Defined" : "Not defined"
-    }\n`;
+    introduction ? "Defined" : "Not defined"}\n`;
+
     contextContent += `- Instructions: ${
-      instructions ? "Defined" : "Not defined"
-    }\n`;
+    instructions ? "Defined" : "Not defined"}\n`;
+
     contextContent += `- Grading Criteria: ${
-      gradingCriteriaOverview ? "Defined" : "Not defined"
-    }\n`;
+    gradingCriteriaOverview ? "Defined" : "Not defined"}\n`;
+
 
     if (Array.isArray(questions) && questions.length > 0) {
       contextContent += "\nQUESTIONS OVERVIEW:\n";
@@ -146,25 +146,25 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       contextContent += "Question List:\n";
 
       const safeQuestions = [...questions].filter(
-        (q) => q && typeof q === "object",
+        (q) => q && typeof q === "object"
       );
 
       const orderedQuestions =
-        Array.isArray(questionOrder) && questionOrder.length > 0
-          ? safeQuestions.sort((a, b) => {
-              const aIndex = questionOrder.indexOf(a.id);
-              const bIndex = questionOrder.indexOf(b.id);
-              if (aIndex === -1) return 1;
-              if (bIndex === -1) return -1;
-              return aIndex - bIndex;
-            })
-          : safeQuestions;
+      Array.isArray(questionOrder) && questionOrder.length > 0 ?
+      safeQuestions.sort((a, b) => {
+        const aIndex = questionOrder.indexOf(a.id);
+        const bIndex = questionOrder.indexOf(b.id);
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      }) :
+      safeQuestions;
 
       orderedQuestions.forEach((q, idx) => {
         const questionType = q.type || "Unknown";
         contextContent += `${idx + 1}. [ID: ${q.id}] ${
-          q.question ? q.question.substring(0, 50) + "..." : "Untitled Question"
-        } (${questionType})\n`;
+        q.question ? q.question.substring(0, 50) + "..." : "Untitled Question"} (${
+        questionType})\n`;
       });
 
       if (currentQuestion) {
@@ -173,41 +173,41 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
         contextContent += `Type: ${currentQuestion.type}\n`;
         contextContent += `Points: ${currentQuestion.totalPoints || 0}\n`;
         contextContent += `Question Text: ${
-          currentQuestion.question || "No question text"
-        }\n`;
+        currentQuestion.question || "No question text"}\n`;
+
 
         if (
-          (currentQuestion.type === "SINGLE_CORRECT" ||
-            currentQuestion.type === "MULTIPLE_CORRECT") &&
-          currentQuestion.choices &&
-          Array.isArray(currentQuestion.choices)
-        ) {
+        (currentQuestion.type === "SINGLE_CORRECT" ||
+        currentQuestion.type === "MULTIPLE_CORRECT") &&
+        currentQuestion.choices &&
+        Array.isArray(currentQuestion.choices))
+        {
           contextContent += "\nAnswer Choices:\n";
           currentQuestion.choices.forEach((choice, index) => {
             const correctMark = choice.isCorrect ? "✓" : "✗";
             contextContent += `${index + 1}. ${correctMark} ${
-              choice.choice || "Empty choice"
-            } (${choice.points || 0} points)\n`;
+            choice.choice || "Empty choice"} (${
+            choice.points || 0} points)\n`;
           });
         }
 
         if (currentQuestion.type === "TRUE_FALSE") {
           contextContent += `\nTrue/False Answer: ${
-            currentQuestion.answer ? "True" : "False"
-          }\n`;
+          currentQuestion.answer ? "True" : "False"}\n`;
+
         }
 
         if (hasRubrics(currentQuestion)) {
           contextContent += "\nRubrics:\n";
           currentQuestion.scoring.rubrics.forEach((rubric, rIndex) => {
             contextContent += `Rubric ${rIndex + 1}: ${
-              rubric.rubricQuestion || "No rubric question"
-            }\n`;
+            rubric.rubricQuestion || "No rubric question"}\n`;
+
             if (Array.isArray(rubric.criteria)) {
               rubric.criteria.forEach((criterion, cIndex) => {
                 contextContent += `- Criterion ${cIndex + 1}: ${
-                  criterion.description || "No description"
-                } (${criterion.points || 0} points)\n`;
+                criterion.description || "No description"} (${
+                criterion.points || 0} points)\n`;
               });
             }
           });
@@ -221,7 +221,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
 
     contextContent += "\nAUTHOR CAPABILITIES:\n";
     contextContent +=
-      "- Create new questions (multiple choice, text response, true/false, etc.)\n";
+    "- Create new questions (multiple choice, text response, true/false, etc.)\n";
     contextContent += "- Modify existing questions\n";
     contextContent += "- Generate question variants\n";
     contextContent += "- Create or modify scoring rubrics\n";
@@ -229,36 +229,36 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
 
     contextContent += "\nREQUIRED BEHAVIOR:\n";
     contextContent +=
-      "1. Follow instructional design best practices when helping with assignment creation\n";
+    "1. Follow instructional design best practices when helping with assignment creation\n";
     contextContent +=
-      "2. Focus on creating clear, pedagogically sound questions\n";
+    "2. Focus on creating clear, pedagogically sound questions\n";
     contextContent +=
-      "3. Suggest improvements to question wording, answer choices, and rubrics\n";
+    "3. Suggest improvements to question wording, answer choices, and rubrics\n";
     contextContent +=
-      "4. Provide detailed explanations when generating content\n";
+    "4. Provide detailed explanations when generating content\n";
     contextContent +=
-      "5. When suggesting questions, provide complete question text and answer options\n";
+    "5. When suggesting questions, provide complete question text and answer options\n";
     contextContent +=
-      "6. Use tools to implement changes when the author approves your suggestions\n";
+    "6. Use tools to implement changes when the author approves your suggestions\n";
 
     return {
       id: `system-context-${Date.now()}`,
       role: "system",
-      content: contextContent,
+      content: contextContent
     };
   }, [
-    name,
-    activeAssignmentId,
-    questions,
-    learningObjectives,
-    fileUploaded,
-    introduction,
-    instructions,
-    gradingCriteriaOverview,
-    questionOrder,
-    currentQuestion,
-    hasRubrics,
-  ]);
+  name,
+  activeAssignmentId,
+  questions,
+  learningObjectives,
+  fileUploaded,
+  introduction,
+  instructions,
+  gradingCriteriaOverview,
+  questionOrder,
+  currentQuestion,
+  hasRubrics]
+  );
 
   const getCurrentQuestionInfo = useCallback(() => {
     if (!currentQuestion) return null;
@@ -269,12 +269,12 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       question: currentQuestion.question,
       totalPoints: currentQuestion.totalPoints,
       hasChoices: Boolean(
-        currentQuestion.choices && currentQuestion.choices.length > 0,
+        currentQuestion.choices && currentQuestion.choices.length > 0
       ),
       hasRubrics: hasRubrics(currentQuestion),
       hasVariants: Boolean(
-        currentQuestion.variants && currentQuestion.variants.length > 0,
-      ),
+        currentQuestion.variants && currentQuestion.variants.length > 0
+      )
     };
   }, [currentQuestion, hasRubrics]);
 
@@ -285,18 +285,18 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       id: q.id,
       type: q.type,
       question: q.question,
-      totalPoints: q.totalPoints,
+      totalPoints: q.totalPoints
     }));
   }, [questions]);
 
   const getGenerationCapabilities = useCallback(() => {
     return {
       canGenerateQuestions:
-        (learningObjectives && learningObjectives.length > 0) ||
-        (Array.isArray(fileUploaded) && fileUploaded.length > 0),
+      learningObjectives && learningObjectives.length > 0 ||
+      Array.isArray(fileUploaded) && fileUploaded.length > 0,
       hasLearningObjectives:
-        learningObjectives && learningObjectives.length > 0,
-      hasUploadedFiles: Array.isArray(fileUploaded) && fileUploaded.length > 0,
+      learningObjectives && learningObjectives.length > 0,
+      hasUploadedFiles: Array.isArray(fileUploaded) && fileUploaded.length > 0
     };
   }, [learningObjectives, fileUploaded]);
 
@@ -312,21 +312,21 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       focusedQuestionId,
       learningObjectives,
       fileUploaded: Array.isArray(fileUploaded) ? fileUploaded : [],
-      currentQuestion,
+      currentQuestion
     };
   }, [
-    name,
-    introduction,
-    instructions,
-    gradingCriteriaOverview,
-    questions,
-    questionOrder,
-    activeAssignmentId,
-    focusedQuestionId,
-    learningObjectives,
-    fileUploaded,
-    currentQuestion,
-  ]);
+  name,
+  introduction,
+  instructions,
+  gradingCriteriaOverview,
+  questions,
+  questionOrder,
+  activeAssignmentId,
+  focusedQuestionId,
+  learningObjectives,
+  fileUploaded,
+  currentQuestion]
+  );
 
   return {
     getContextMessage,
@@ -338,6 +338,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     getGenerationCapabilities,
     activeAssignmentId,
     focusedQuestionId,
-    forceUpdate,
+    forceUpdate
   };
 };

@@ -9,8 +9,8 @@ import {
   PencilIcon,
   PlusIcon,
   SparklesIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+  XMarkIcon } from
+"@heroicons/react/24/outline";
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -22,21 +22,21 @@ interface SectionProps {
   questionFromParent: QuestionAuthorStore;
   addChoice: (questionId: number, choice: Choice, variantId?: number) => void;
   removeChoice: (
-    questionId: number,
-    choiceIndex: number,
-    variantId?: number,
-  ) => void;
+  questionId: number,
+  choiceIndex: number,
+  variantId?: number)
+  => void;
   setChoices: (
-    questionId: number,
-    choices: Choice[],
-    variantId?: number,
-  ) => void;
+  questionId: number,
+  choices: Choice[],
+  variantId?: number)
+  => void;
   modifyChoice: (
-    questionId: number,
-    choiceIndex: number,
-    updatedChoice: Partial<Choice>,
-    variantId?: number,
-  ) => void;
+  questionId: number,
+  choiceIndex: number,
+  updatedChoice: Partial<Choice>,
+  variantId?: number)
+  => void;
   variantMode: boolean;
 }
 
@@ -50,13 +50,13 @@ function Section({
   removeChoice,
   setChoices,
   modifyChoice,
-  variantMode,
+  variantMode
 }: SectionProps) {
   const [setCriteriaMode] = useQuestionStore((state) => [
-    state.setCriteriaMode,
-  ]);
+  state.setCriteriaMode]
+  );
   const criteriaMode = useQuestionStore(
-    (state) => state.questionStates[questionId]?.criteriaMode,
+    (state) => state.questionStates[questionId]?.criteriaMode
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -69,13 +69,13 @@ function Section({
   const { choices, type } = question;
 
   const [localChoices, setLocalChoices] = useState(
-    choices?.map((choice) => choice?.choice ?? "") || [],
+    choices?.map((choice) => choice?.choice ?? "") || []
   );
   const [localFeedback, setLocalFeedback] = useState(
-    choices?.map((choice) => choice?.feedback ?? "") || [],
+    choices?.map((choice) => choice?.feedback ?? "") || []
   );
   const [localPoints, setLocalPoints] = useState(
-    choices?.map((choice) => choice?.points?.toString() ?? "") || [],
+    choices?.map((choice) => choice?.points?.toString() ?? "") || []
   );
 
   const textAreaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
@@ -93,11 +93,11 @@ function Section({
     textAreaRefs.current = textAreaRefs.current.slice(0, choices?.length || 0);
     pointsTextAreaRefs.current = pointsTextAreaRefs.current.slice(
       0,
-      choices?.length || 0,
+      choices?.length || 0
     );
     feedbackTextAreaRefs.current = feedbackTextAreaRefs.current.slice(
       0,
-      choices?.length || 0,
+      choices?.length || 0
     );
 
     textAreaRefs.current.forEach((ref) => {
@@ -115,7 +115,7 @@ function Section({
     setLocalChoices(choices?.map((choice) => choice?.choice ?? "") || []);
     setLocalFeedback(choices?.map((choice) => choice?.feedback ?? "") || []);
     setLocalPoints(
-      choices?.map((choice) => choice?.points?.toString() ?? "") || [],
+      choices?.map((choice) => choice?.points?.toString() ?? "") || []
     );
 
     setTimeout(() => {
@@ -140,9 +140,9 @@ function Section({
   };
 
   const handleChoiceChange = (
-    choiceIndex: number,
-    updatedChoice: Partial<Choice>,
-  ) => {
+  choiceIndex: number,
+  updatedChoice: Partial<Choice>) =>
+  {
     modifyChoice(questionId, choiceIndex, updatedChoice, variantId);
   };
 
@@ -155,7 +155,7 @@ function Section({
       const newCorrectStatus = !choices[choiceIndex].isCorrect;
       handleChoiceChange(choiceIndex, {
         isCorrect: newCorrectStatus,
-        points: newCorrectStatus ? 1 : 0,
+        points: newCorrectStatus ? 1 : 0
       });
 
       choices.forEach((_, index) => {
@@ -169,23 +169,23 @@ function Section({
         handleChoiceChange(choiceIndex, {
           isCorrect: newCorrectStatus,
           points:
-            choices[choiceIndex].points > 0 ? choices[choiceIndex].points : 1,
+          choices[choiceIndex].points > 0 ? choices[choiceIndex].points : 1
         });
       } else {
         handleChoiceChange(choiceIndex, {
           isCorrect: newCorrectStatus,
           points:
-            choices[choiceIndex].points < 0 ? choices[choiceIndex].points : -1,
+          choices[choiceIndex].points < 0 ? choices[choiceIndex].points : -1
         });
       }
     }
   };
 
   const handleKeyDown = (
-    index: number,
-    column: string,
-    event: React.KeyboardEvent,
-  ) => {
+  index: number,
+  column: string,
+  event: React.KeyboardEvent) =>
+  {
     if (event.key === "Enter") {
       if (event.shiftKey) {
         return;
@@ -223,12 +223,12 @@ function Section({
   };
 
   const handleBackspacePress = (
-    choiceIndex: number,
-    event: React.KeyboardEvent,
-  ) => {
+  choiceIndex: number,
+  event: React.KeyboardEvent) =>
+  {
     const value = (
-      event.currentTarget as HTMLTextAreaElement | HTMLInputElement
-    ).value;
+    event.currentTarget as HTMLTextAreaElement | HTMLInputElement).
+    value;
 
     if (event.key === "Backspace" && value === "") {
       if (backspaceTimerRef.current) {
@@ -246,7 +246,7 @@ function Section({
 
         setTimeout(() => {
           const prevChoiceInput = document.getElementById(
-            `choice-${questionId}-${choiceIndex - 1}`,
+            `choice-${questionId}-${choiceIndex - 1}`
           );
           if (prevChoiceInput) {
             prevChoiceInput.focus();
@@ -263,7 +263,7 @@ function Section({
     if (nextIndex < choices.length) {
       setTimeout(() => {
         const nextInput = document.getElementById(
-          `${column}-${questionId}-${nextIndex}`,
+          `${column}-${questionId}-${nextIndex}`
         );
         if (nextInput) {
           nextInput.focus();
@@ -273,7 +273,7 @@ function Section({
       handleAddChoice();
       setTimeout(() => {
         const newInput = document.getElementById(
-          `${column}-${questionId}-${choices.length}`,
+          `${column}-${questionId}-${choices.length}`
         );
         if (newInput) {
           newInput.focus();
@@ -292,7 +292,7 @@ function Section({
           choice: choice.choice,
           isCorrect: choice.isCorrect,
           points: choice.points,
-          feedback: choice.feedback,
+          feedback: choice.feedback
         }));
         setChoices(questionId, parsedChoices, variantId);
         toast.success("Choices generated successfully!");
@@ -343,26 +343,26 @@ function Section({
     if (!choices) {
       if (type === "MULTIPLE_CORRECT") {
         setChoices(questionId, [
-          { choice: "", isCorrect: true, points: 1 },
-          { choice: "", isCorrect: false, points: -1 },
-          { choice: "", isCorrect: false, points: -1 },
-          { choice: "", isCorrect: false, points: -1 },
-        ]);
+        { choice: "", isCorrect: true, points: 1 },
+        { choice: "", isCorrect: false, points: -1 },
+        { choice: "", isCorrect: false, points: -1 },
+        { choice: "", isCorrect: false, points: -1 }]
+        );
       } else if (choices?.some((choice) => choice?.points === 0)) {
         const updatedChoices = choices?.map((choice) =>
-          choice.points === 0 ? { ...choice, points: -1 } : choice,
+        choice.points === 0 ? { ...choice, points: -1 } : choice
         );
         setChoices(questionId, updatedChoices);
       } else if (type === "SINGLE_CORRECT") {
         setChoices(questionId, [
-          { choice: "", isCorrect: true, points: 1 },
-          { choice: "", isCorrect: false, points: 0 },
-          { choice: "", isCorrect: false, points: 0 },
-          { choice: "", isCorrect: false, points: 0 },
-        ]);
+        { choice: "", isCorrect: true, points: 1 },
+        { choice: "", isCorrect: false, points: 0 },
+        { choice: "", isCorrect: false, points: 0 },
+        { choice: "", isCorrect: false, points: 0 }]
+        );
       } else if (choices?.some((choice) => choice?.points === -1)) {
         const updatedChoices = choices?.map((choice) =>
-          choice.points === -1 ? { ...choice, points: 0 } : choice,
+        choice.points === -1 ? { ...choice, points: 0 } : choice
         );
         setChoices(questionId, updatedChoices);
       }
@@ -394,305 +394,305 @@ function Section({
                 <span>Feedback</span>
 
                 <div className="flex items-center">
-                  {!preview && criteriaMode && (
-                    <Tooltip
-                      content="Generate choices with AI"
-                      className="cursor-pointer"
-                      distance={-10.5}
-                      direction="x"
-                      up={-1.8}
-                    >
+                  {!preview && criteriaMode &&
+                  <Tooltip
+                    content="Generate choices with AI"
+                    className="cursor-pointer"
+                    distance={-10.5}
+                    direction="x"
+                    up={-1.8}>
+
                       <div className="flex justify-end">
                         <button
-                          className="text-gray-500 rounded-full hover:bg-gray-100 w-6 h-6 flex items-center justify-center"
-                          onClick={handleAiClick}
-                          disabled={loading}
-                        >
+                        className="text-gray-500 rounded-full hover:bg-gray-100 w-6 h-6 flex items-center justify-center"
+                        onClick={handleAiClick}
+                        disabled={loading}>
+
                           <SparklesIcon className="w-4 h-4 stroke-violet-600 fill-violet-600" />
                         </button>
                       </div>
                     </Tooltip>
-                  )}
+                  }
                 </div>
               </div>
             </th>
           </tr>
         </thead>
 
-        {criteriaMode || choices?.length > 0 ? (
-          <>
+        {criteriaMode || choices?.length > 0 ?
+        <>
             <tbody>
-              {choices?.map((choice, index) => (
-                <tr
-                  key={`row-${questionId}-${index}`}
-                  id={`row-${questionId}-${index}`}
-                  className="border-b"
-                >
+              {choices?.map((choice, index) =>
+            <tr
+              key={`row-${questionId}-${index}`}
+              id={`row-${questionId}-${index}`}
+              className="border-b">
+
                   <td className={`p-3 border-r`}>
-                    {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
-                    ) : (
-                      <div className="flex items-center gap-2">
+                    {loading ?
+                <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div> :
+
+                <div className="flex items-center gap-2">
                         <div className="flex flex-col items-center space-y-1">
                           <button
-                            type="button"
-                            onClick={() => {
-                              if (index > 0) {
-                                const updatedChoices = [...choices];
-                                const temp = updatedChoices[index];
-                                updatedChoices[index] =
-                                  updatedChoices[index - 1];
-                                updatedChoices[index - 1] = temp;
-                                setChoices(questionId, updatedChoices);
-                              }
-                            }}
-                            disabled={index === 0}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-                          >
+                      type="button"
+                      onClick={() => {
+                        if (index > 0) {
+                          const updatedChoices = [...choices];
+                          const temp = updatedChoices[index];
+                          updatedChoices[index] =
+                          updatedChoices[index - 1];
+                          updatedChoices[index - 1] = temp;
+                          setChoices(questionId, updatedChoices);
+                        }
+                      }}
+                      disabled={index === 0}
+                      className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+
                             <ChevronUpIcon className="h-4 w-4 text-gray-600" />
                           </button>
 
                           <button
-                            type="button"
-                            onClick={() => {
-                              if (index < choices.length - 1) {
-                                const updatedChoices = [...choices];
-                                const temp = updatedChoices[index];
-                                updatedChoices[index] =
-                                  updatedChoices[index + 1];
-                                updatedChoices[index + 1] = temp;
-                                setChoices(questionId, updatedChoices);
-                              }
-                            }}
-                            disabled={index === choices.length - 1}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-                          >
+                      type="button"
+                      onClick={() => {
+                        if (index < choices.length - 1) {
+                          const updatedChoices = [...choices];
+                          const temp = updatedChoices[index];
+                          updatedChoices[index] =
+                          updatedChoices[index + 1];
+                          updatedChoices[index + 1] = temp;
+                          setChoices(questionId, updatedChoices);
+                        }
+                      }}
+                      disabled={index === choices.length - 1}
+                      className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+
                             <ChevronDownIcon className="h-4 w-4 text-gray-600" />
                           </button>
                         </div>
 
-                        {type === "SINGLE_CORRECT" ? (
-                          <input
-                            type="radio"
-                            name={`correctChoice-${question.id ?? questionId}`}
-                            checked={choice.isCorrect}
-                            onChange={() => handleChoiceToggle(index)}
-                            disabled={preview}
-                            className="focus:ring-violet-500 text-violet-600"
-                          />
-                        ) : (
-                          <input
-                            type="checkbox"
-                            checked={choice.isCorrect}
-                            onChange={() => handleChoiceToggle(index)}
-                            disabled={preview}
-                            className="focus:ring-violet-500 text-violet-600"
-                          />
-                        )}
+                        {type === "SINGLE_CORRECT" ?
+                  <input
+                    type="radio"
+                    name={`correctChoice-${question.id ?? questionId}`}
+                    checked={choice.isCorrect}
+                    onChange={() => handleChoiceToggle(index)}
+                    disabled={preview}
+                    className="focus:ring-violet-500 text-violet-600" /> :
+
+
+                  <input
+                    type="checkbox"
+                    checked={choice.isCorrect}
+                    onChange={() => handleChoiceToggle(index)}
+                    disabled={preview}
+                    className="focus:ring-violet-500 text-violet-600" />
+
+                  }
                       </div>
-                    )}
+                }
                   </td>
 
                   <td className="p-3 border-r">
-                    {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
-                    ) : (
-                      <div className="flex items-center">
+                    {loading ?
+                <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div> :
+
+                <div className="flex items-center">
                         <textarea
-                          ref={(el) => {
-                            pointsTextAreaRefs.current[index] = el;
-                          }}
-                          id={`points-${questionId}-${index}`}
-                          value={localPoints[index]}
-                          onChange={(e) => {
-                            const updatedPoints = [...localPoints];
-                            updatedPoints[index] = e.target.value;
-                            setLocalPoints(updatedPoints);
-                            resizeTextArea(e.target);
-                          }}
-                          onBlur={() =>
-                            handleChoiceChange(index, {
-                              points: parseInt(localPoints[index], 10) || 0,
-                            })
-                          }
-                          placeholder="Points"
-                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
-                          disabled={preview}
-                          onKeyDown={(event) =>
-                            handleKeyDown(index, "points", event)
-                          }
-                          rows={1}
-                        />
+                    ref={(el) => {
+                      pointsTextAreaRefs.current[index] = el;
+                    }}
+                    id={`points-${questionId}-${index}`}
+                    value={localPoints[index]}
+                    onChange={(e) => {
+                      const updatedPoints = [...localPoints];
+                      updatedPoints[index] = e.target.value;
+                      setLocalPoints(updatedPoints);
+                      resizeTextArea(e.target);
+                    }}
+                    onBlur={() =>
+                    handleChoiceChange(index, {
+                      points: parseInt(localPoints[index], 10) || 0
+                    })
+                    }
+                    placeholder="Points"
+                    className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
+                    disabled={preview}
+                    onKeyDown={(event) =>
+                    handleKeyDown(index, "points", event)
+                    }
+                    rows={1} />
+
                         <div className="flex flex-col items-center space-y-1">
                           <button
-                            type="button"
-                            onClick={() => {
-                              const updatedPoints = [...localPoints];
-                              updatedPoints[index] = (
-                                parseInt(localPoints[index], 10) || 0
-                              ).toString();
-                              handleChoiceChange(index, {
-                                points: parseInt(updatedPoints[index], 10) + 1,
-                              });
-                              setLocalPoints(updatedPoints);
-                            }}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-                          >
+                      type="button"
+                      onClick={() => {
+                        const updatedPoints = [...localPoints];
+                        updatedPoints[index] = (
+                        parseInt(localPoints[index], 10) || 0).
+                        toString();
+                        handleChoiceChange(index, {
+                          points: parseInt(updatedPoints[index], 10) + 1
+                        });
+                        setLocalPoints(updatedPoints);
+                      }}
+                      className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+
                             <ChevronUpIcon className="h-4 w-4 text-gray-600" />
                           </button>
                           <button
-                            type="button"
-                            onClick={() => {
-                              const updatedPoints = [...localPoints];
-                              updatedPoints[index] = (
-                                parseInt(localPoints[index], 10) || 0
-                              ).toString();
-                              handleChoiceChange(index, {
-                                points: parseInt(updatedPoints[index], 10) - 1,
-                              });
-                              setLocalPoints(updatedPoints);
-                            }}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-                          >
+                      type="button"
+                      onClick={() => {
+                        const updatedPoints = [...localPoints];
+                        updatedPoints[index] = (
+                        parseInt(localPoints[index], 10) || 0).
+                        toString();
+                        handleChoiceChange(index, {
+                          points: parseInt(updatedPoints[index], 10) - 1
+                        });
+                        setLocalPoints(updatedPoints);
+                      }}
+                      className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+
                             <ChevronDownIcon className="h-4 w-4 text-gray-600" />
                           </button>
                         </div>
                       </div>
-                    )}
+                }
                   </td>
 
                   <td className="p-3 border-r">
-                    {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
-                    ) : (
-                      <textarea
-                        ref={(el) => {
-                          textAreaRefs.current[index] = el;
-                        }}
-                        id={`choice-${questionId}-${index}`}
-                        value={localChoices[index]}
-                        onChange={(e) => {
-                          const updatedChoices = [...localChoices];
-                          updatedChoices[index] = e.target.value;
-                          setLocalChoices(updatedChoices);
-                          resizeTextArea(e.target);
-                        }}
-                        onBlur={() =>
-                          handleChoiceChange(index, {
-                            choice: localChoices[index],
-                          })
-                        }
-                        placeholder="Enter a choice."
-                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
-                        disabled={preview}
-                        onKeyDown={(event) =>
-                          handleKeyDown(index, "choice", event)
-                        }
-                        rows={1}
-                      />
-                    )}
+                    {loading ?
+                <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div> :
+
+                <textarea
+                  ref={(el) => {
+                    textAreaRefs.current[index] = el;
+                  }}
+                  id={`choice-${questionId}-${index}`}
+                  value={localChoices[index]}
+                  onChange={(e) => {
+                    const updatedChoices = [...localChoices];
+                    updatedChoices[index] = e.target.value;
+                    setLocalChoices(updatedChoices);
+                    resizeTextArea(e.target);
+                  }}
+                  onBlur={() =>
+                  handleChoiceChange(index, {
+                    choice: localChoices[index]
+                  })
+                  }
+                  placeholder="Enter a choice."
+                  className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
+                  disabled={preview}
+                  onKeyDown={(event) =>
+                  handleKeyDown(index, "choice", event)
+                  }
+                  rows={1} />
+
+                }
                   </td>
                   <td className="p-3">
-                    {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
-                    ) : (
-                      <div className="flex items-center gap-x-2">
+                    {loading ?
+                <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div> :
+
+                <div className="flex items-center gap-x-2">
                         <textarea
-                          ref={(el) => {
-                            feedbackTextAreaRefs.current[index] = el;
-                          }}
-                          id={`feedback-${questionId}-${index}`}
-                          value={localFeedback[index]}
-                          onChange={(e) => {
-                            const updatedFeedback = [...localFeedback];
-                            updatedFeedback[index] = e.target.value;
-                            setLocalFeedback(updatedFeedback);
-                            resizeTextArea(e.target);
-                          }}
-                          onBlur={() =>
-                            handleChoiceChange(index, {
-                              feedback: localFeedback[index],
-                            })
-                          }
-                          placeholder="Provide feedback for this choice."
-                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
-                          disabled={preview}
-                          onKeyDown={(event) =>
-                            handleKeyDown(index, "feedback", event)
-                          }
-                          rows={1}
-                        />
+                    ref={(el) => {
+                      feedbackTextAreaRefs.current[index] = el;
+                    }}
+                    id={`feedback-${questionId}-${index}`}
+                    value={localFeedback[index]}
+                    onChange={(e) => {
+                      const updatedFeedback = [...localFeedback];
+                      updatedFeedback[index] = e.target.value;
+                      setLocalFeedback(updatedFeedback);
+                      resizeTextArea(e.target);
+                    }}
+                    onBlur={() =>
+                    handleChoiceChange(index, {
+                      feedback: localFeedback[index]
+                    })
+                    }
+                    placeholder="Provide feedback for this choice."
+                    className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
+                    disabled={preview}
+                    onKeyDown={(event) =>
+                    handleKeyDown(index, "feedback", event)
+                    }
+                    rows={1} />
+
                         <button
-                          type="button"
-                          onClick={() => handleRemoveChoice(index)}
-                          disabled={preview}
-                        >
+                    type="button"
+                    onClick={() => handleRemoveChoice(index)}
+                    disabled={preview}>
+
                           <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
                         </button>
                       </div>
-                    )}
+                }
                   </td>
                 </tr>
-              ))}
+            )}
             </tbody>
-            {!preview && (
-              <tfoot>
+            {!preview &&
+          <tfoot>
                 <tr>
                   <td colSpan={4}>
                     <button
-                      type="button"
-                      disabled={disableAddChoice}
-                      className="w-full text-left text-sm text-gray-600 p-3 hover:bg-gray-100 flex items-center"
-                      onClick={handleAddChoice}
-                    >
+                  type="button"
+                  disabled={disableAddChoice}
+                  className="w-full text-left text-sm text-gray-600 p-3 hover:bg-gray-100 flex items-center"
+                  onClick={handleAddChoice}>
+
                       <PlusIcon className="h-4 w-4 mr-2 text-gray-500" />
                       Add Option
                     </button>
                   </td>
                 </tr>
               </tfoot>
-            )}
-          </>
-        ) : (
-          <tbody>
+          }
+          </> :
+
+        <tbody>
             <tr className="border-b border-gray-200 w-full">
               <td colSpan={4} className="py-2 px-4 text-center">
                 <div className="flex justify-center items-center gap-x-4">
-                  {loading ? (
-                    <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
-                  ) : !preview ? (
-                    <>
+                  {loading ?
+                <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div> :
+                !preview ?
+                <>
                       <button
-                        className="text-gray-500"
-                        onClick={handleAiClick}
-                        disabled={loading}
-                      >
+                    className="text-gray-500"
+                    onClick={handleAiClick}
+                    disabled={loading}>
+
                         <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                         Generate choices with AI
                       </button>
                       <span className="text-gray-500">OR</span>
                       <button
-                        className="text-gray-500"
-                        onClick={() => {
-                          setCriteriaMode(questionId, "CUSTOM");
-                          handleManualChoices();
-                        }}
-                        disabled={loading}
-                      >
+                    className="text-gray-500"
+                    onClick={() => {
+                      setCriteriaMode(questionId, "CUSTOM");
+                      handleManualChoices();
+                    }}
+                    disabled={loading}>
+
                         <PencilIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
                         Create choices from scratch
                       </button>
-                    </>
-                  ) : (
-                    <p className="text-gray-500 typography-body">
+                    </> :
+
+                <p className="text-gray-500 typography-body">
                       No criteria set up yet.
                     </p>
-                  )}
+                }
                 </div>
               </td>
             </tr>
           </tbody>
-        )}
+        }
       </table>
       <WarningAlert
         isOpen={modalOpen}
@@ -700,10 +700,10 @@ function Section({
         onConfirm={handleConfirm}
         description="This will overwrite your current rubric. Are you sure you want to proceed?"
         confirmText="Confirm"
-        cancelText="Cancel"
-      />
-    </div>
-  );
+        cancelText="Cancel" />
+
+    </div>);
+
 }
 
 export default Section;

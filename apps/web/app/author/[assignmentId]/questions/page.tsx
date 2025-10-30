@@ -1,8 +1,8 @@
 import AuthorQuestionsPage from "@/app/author/(components)/AuthorQuestionsPage";
 
 interface Props {
-  params: { assignmentId: string };
-  searchParams: { defaultQuestionRetries: string };
+  params: {assignmentId: string;};
+  searchParams: {defaultQuestionRetries: string;};
 }
 
 function Component(props: Props) {
@@ -11,9 +11,9 @@ function Component(props: Props) {
   return (
     <AuthorQuestionsPage
       assignmentId={~~params.assignmentId}
-      defaultQuestionRetries={~~defaultQuestionRetries}
-    />
-  );
+      defaultQuestionRetries={~~defaultQuestionRetries} />);
+
+
 }
 
 export default Component;

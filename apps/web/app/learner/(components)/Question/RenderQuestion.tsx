@@ -26,12 +26,12 @@ const RenderQuestion: FC<Props> = (props) => {
       return <TextQuestion question={question} />;
     case "SINGLE_CORRECT":
       return (
-        <MultipleChoiceQuestion isSingleCorrect={true} question={question} />
-      );
+        <MultipleChoiceQuestion isSingleCorrect={true} question={question} />);
+
     case "MULTIPLE_CORRECT":
       return (
-        <MultipleChoiceQuestion isSingleCorrect={false} question={question} />
-      );
+        <MultipleChoiceQuestion isSingleCorrect={false} question={question} />);
+
     case "TRUE_FALSE":
       return <TrueFalseQuestion question={question} />;
     case "URL":
@@ -42,9 +42,9 @@ const RenderQuestion: FC<Props> = (props) => {
           question={question}
           responseType={question.responseType}
           onFileChange={onFileChange}
-          removeFileUpload={removeFileUpload}
-        />
-      );
+          removeFileUpload={removeFileUpload} />);
+
+
     case "CODE":
       return (
         <FileCodeUploadSection
@@ -54,9 +54,9 @@ const RenderQuestion: FC<Props> = (props) => {
           question={question}
           onFileChange={onFileChange}
           addFileUpload={addFileUpload}
-          removeFileUpload={removeFileUpload}
-        />
-      );
+          removeFileUpload={removeFileUpload} />);
+
+
     case "LINK_FILE":
       return (
         <FileLinkUploadSection
@@ -64,9 +64,9 @@ const RenderQuestion: FC<Props> = (props) => {
           questionType={questionType}
           responseType={question.responseType}
           question={question}
-          onModeChange={onModeChange}
-        />
-      );
+          onModeChange={onModeChange} />);
+
+
     default:
       return null;
   }

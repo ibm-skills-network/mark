@@ -11,8 +11,8 @@ function Submitted() {
         business days.
       </p>
       <Button>Go to Dashboard</Button>
-    </main>
-  );
+    </main>);
+
 }
 
 export default Submitted;

@@ -13,8 +13,8 @@ import type {
   QuestionAuthorStore,
   QuestionVariants,
   Rubric,
-  Scoring,
-} from "@/config/types";
+  Scoring } from
+"@/config/types";
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
@@ -28,33 +28,33 @@ import {
   DragOverlay,
   PointerSensor,
   useSensor,
-  useSensors,
-} from "@dnd-kit/core";
+  useSensors } from
+"@dnd-kit/core";
 import {
   arrayMove,
   SortableContext,
   useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+  verticalListSortingStrategy } from
+"@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Menu, Transition } from "@headlessui/react";
 import {
   ChevronDownIcon,
   ListBulletIcon,
-  PencilIcon,
-} from "@heroicons/react/20/solid";
+  PencilIcon } from
+"@heroicons/react/20/solid";
 import {
   ArrowUpTrayIcon,
   CodeBracketIcon,
   DocumentArrowUpIcon,
-  DocumentArrowDownIcon,
-} from "@heroicons/react/24/outline";
+  DocumentArrowDownIcon } from
+"@heroicons/react/24/outline";
 import {
   Bars3BottomLeftIcon,
   LinkIcon,
   SparklesIcon,
-  TrashIcon,
-} from "@heroicons/react/24/solid";
+  TrashIcon } from
+"@heroicons/react/24/solid";
 import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import React, {
@@ -64,8 +64,8 @@ import React, {
   useMemo,
   useRef,
   useState,
-  type FC,
-} from "react";
+  type FC } from
+"react";
 import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
@@ -73,12 +73,12 @@ import Question from "./Question";
 import { handleJumpToQuestionTitle } from "@/app/Helpers/handleJumpToQuestion";
 import ImportModal from "../ImportModal";
 type ClientSnapshot = {
-  browser: { name?: string; version?: string; ua?: string };
+  browser: {name?: string;version?: string;ua?: string;};
   os?: string;
   deviceType: "mobile" | "tablet" | "desktop" | "unknown";
   isMobile: boolean;
-  screen: { width: number | null; height: number | null; dpr: number | null };
-  hardware: { cores: number | null; memoryGB: number | null };
+  screen: {width: number | null;height: number | null;dpr: number | null;};
+  hardware: {cores: number | null;memoryGB: number | null;};
   network: {
     downlinkMbps: number | null;
     effectiveType: string | null;
@@ -89,11 +89,11 @@ type ClientSnapshot = {
 
 function parseBrowser(ua: string) {
   const pairs = [
-    [/Edg\/([\d.]+)/i, "Edge"],
-    [/Chrome\/([\d.]+)/i, "Chrome"],
-    [/Version\/([\d.]+).*Safari/i, "Safari"],
-    [/Firefox\/([\d.]+)/i, "Firefox"],
-  ];
+  [/Edg\/([\d.]+)/i, "Edge"],
+  [/Chrome\/([\d.]+)/i, "Chrome"],
+  [/Version\/([\d.]+).*Safari/i, "Safari"],
+  [/Firefox\/([\d.]+)/i, "Firefox"]];
+
   for (const [re, name] of pairs) {
     const m = ua.match(re as RegExp);
     if (m) return { name, version: m[1] };
@@ -118,22 +118,22 @@ function getOS(ua: string) {
 }
 function getNetworkInfo() {
   const c: any =
-    (navigator as any).connection ||
-    (navigator as any).mozConnection ||
-    (navigator as any).webkitConnection;
+  (navigator as any).connection ||
+  (navigator as any).mozConnection ||
+  (navigator as any).webkitConnection;
   return {
     downlinkMbps: c?.downlink ?? null,
     effectiveType: c?.effectiveType ?? null,
-    rttMs: c?.rtt ?? null,
+    rttMs: c?.rtt ?? null
   };
 }
 
 export async function buildClientSnapshot(): Promise<ClientSnapshot> {
   const uaData: any = (navigator as any).userAgentData;
   const ua = navigator.userAgent ?? "";
-  const { name, version } = uaData
-    ? { name: uaData.brands?.[0]?.brand, version: uaData.brands?.[0]?.version }
-    : parseBrowser(ua);
+  const { name, version } = uaData ?
+  { name: uaData.brands?.[0]?.brand, version: uaData.brands?.[0]?.version } :
+  parseBrowser(ua);
 
   const deviceType = uaData?.mobile ? "mobile" : detectDeviceType(ua);
 
@@ -145,14 +145,14 @@ export async function buildClientSnapshot(): Promise<ClientSnapshot> {
     screen: {
       width: screen?.width ?? null,
       height: screen?.height ?? null,
-      dpr: devicePixelRatio ?? null,
+      dpr: devicePixelRatio ?? null
     },
     hardware: {
       cores: navigator.hardwareConcurrency ?? null,
-      memoryGB: (navigator as any).deviceMemory ?? null,
+      memoryGB: (navigator as any).deviceMemory ?? null
     },
     network: getNetworkInfo(),
-    timezone: Intl.DateTimeFormat().resolvedOptions?.().timeZone ?? null,
+    timezone: Intl.DateTimeFormat().resolvedOptions?.().timeZone ?? null
   };
 }
 
@@ -169,26 +169,26 @@ interface Over {
 
 const AuthorQuestionsPage: FC<Props> = ({
   assignmentId,
-  defaultQuestionRetries,
+  defaultQuestionRetries
 }) => {
   const router = useRouter();
   useBeforeUnload(
-    "Are you sure you want to leave this page? You will lose any unsaved changes.",
+    "Are you sure you want to leave this page? You will lose any unsaved changes."
   );
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
-    state.focusedQuestionId,
-    state.setFocusedQuestionId,
-  ]);
-  const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
+  state.focusedQuestionId,
+  state.setFocusedQuestionId]
+  );
+  const [handleToggleTable, setHandleToggleTable] = useState(true);
   const questions = useAuthorStore((state) => state.questions, shallow);
 
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const addQuestion = useAuthorStore((state) => state.addQuestion);
   const activeAssignmentId = useAuthorStore(
-    (state) => state.activeAssignmentId,
+    (state) => state.activeAssignmentId
   );
   const setActiveAssignmentId = useAuthorStore(
-    (state) => state.setActiveAssignmentId,
+    (state) => state.setActiveAssignmentId
   );
   const checkedOutVersion = useAuthorStore((state) => state.checkedOutVersion);
   const versions = useAuthorStore((state) => state.versions);
@@ -197,7 +197,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 
   const [isMassVariationLoading, setIsMassVariationLoading] = useState(false);
   const [questionVariationNumber, setQuestionVariationNumber] =
-    useState<number>(null);
+  useState<number>(null);
   const setName = useAuthorStore((state) => state.setName);
   const focusRef = useRef(focusedQuestionId);
   const [collapseAll, setCollapseAll] = useState(false);
@@ -209,52 +209,52 @@ const AuthorQuestionsPage: FC<Props> = ({
 
   async function testSnapshot() {
     const snap = await buildClientSnapshot();
-    setClient(snap); // show on page
+    setClient(snap);
   }
   const questionTypes = useMemo(
     () => [
-      {
-        value: "MULTIPLE_CORRECT",
-        label: "Multiple Select",
-        icon: <IconCheckbox className="w-5 h-5" />,
-      },
+    {
+      value: "MULTIPLE_CORRECT",
+      label: "Multiple Select",
+      icon: <IconCheckbox className="w-5 h-5" />
+    },
 
-      {
-        value: "SINGLE_CORRECT",
-        label: "Multiple Choice",
-        icon: <MultipleChoiceSVG className="w-5 h-5 " />,
-      },
+    {
+      value: "SINGLE_CORRECT",
+      label: "Multiple Choice",
+      icon: <MultipleChoiceSVG className="w-5 h-5 " />
+    },
 
-      {
-        value: "TRUE_FALSE",
-        label: "True/False",
-        icon: <IconCircleCheck className="w-5 h-5" />,
-      },
-      {
-        value: "TEXT",
-        label: "Text Response",
-        icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />,
-      },
-      {
-        value: "URL",
-        label: "URL Link",
-        icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />,
-      },
-      {
-        value: "UPLOAD",
-        label: "Upload",
-        icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
-      },
-      {
-        value: "LINK_FILE",
-        label: "File or Link",
-        icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
-      },
-    ],
-    [],
+    {
+      value: "TRUE_FALSE",
+      label: "True/False",
+      icon: <IconCircleCheck className="w-5 h-5" />
+    },
+    {
+      value: "TEXT",
+      label: "Text Response",
+      icon: <Bars3BottomLeftIcon className="w-5 h-5 stroke-gray-500" />
+    },
+    {
+      value: "URL",
+      label: "URL Link",
+      icon: <LinkIcon className="w-5 h-5  stroke-gray-500" />
+    },
+    {
+      value: "UPLOAD",
+      label: "Upload",
+      icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />
+    },
+    {
+      value: "LINK_FILE",
+      label: "File or Link",
+      icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />
+    }],
+
+    []
   );
 
-  // Ensure versions are always fresh on page load
+
   useEffect(() => {
     if (assignmentId) {
       loadVersions().catch(console.error);
@@ -262,19 +262,19 @@ const AuthorQuestionsPage: FC<Props> = ({
   }, [assignmentId, loadVersions]);
 
   useEffect(() => {
-    // If there's a checked out version, always fetch that version's data
-    // But only after versions have been loaded
+
+
     if (checkedOutVersion && versions.length > 0) {
       if (assignmentId !== activeAssignmentId) {
         setActiveAssignmentId(assignmentId);
       }
-      // Re-fetch the checked out version's data to ensure sync
+
       const fetchCheckedOutVersion = async () => {
         try {
           const { checkoutVersion } = useAuthorStore.getState();
           await checkoutVersion(
             checkedOutVersion.id,
-            checkedOutVersion.versionNumber,
+            checkedOutVersion.versionNumber
           );
         } catch (error) {
           console.error("Failed to fetch checked out version:", error);
@@ -287,61 +287,61 @@ const AuthorQuestionsPage: FC<Props> = ({
     if (assignmentId !== activeAssignmentId) {
       const fetchAssignment = async () => {
         try {
-          // Check if there's a checked-out version - if so, fetch that instead of latest
+
           const currentCheckedOutVersion =
-            useAuthorStore.getState().checkedOutVersion;
+          useAuthorStore.getState().checkedOutVersion;
 
           if (currentCheckedOutVersion) {
-            // There's a checked-out version, fetch that version's data
+
             const { checkoutVersion } = useAuthorStore.getState();
             await checkoutVersion(
               currentCheckedOutVersion.id,
-              currentCheckedOutVersion.versionNumber,
+              currentCheckedOutVersion.versionNumber
             );
             setActiveAssignmentId(assignmentId);
             return;
           }
 
-          // No checked-out version, fetch the current/latest assignment
+
           const assignment = await getAssignment(assignmentId);
           if (assignment) {
             setActiveAssignmentId(assignmentId);
             setName(assignment.name || "Untitled Assignment");
-            //the scoring object is unified to use same fields
+
             const unifyScoringRubrics = (
-              scoring: Scoring,
-              defaultQuestionText: string,
-            ): Scoring => {
+            scoring: Scoring,
+            defaultQuestionText: string)
+            : Scoring => {
               if (!scoring || scoring.type !== "CRITERIA_BASED") {
                 return {
                   type: "CRITERIA_BASED" as const,
                   rubrics: [
-                    {
-                      rubricQuestion: stripHtml(defaultQuestionText),
-                      criteria: [],
-                    },
-                  ],
+                  {
+                    rubricQuestion: stripHtml(defaultQuestionText),
+                    criteria: []
+                  }]
+
                 };
               }
 
               if (scoring.rubrics?.length) {
                 const refinedRubrics = scoring.rubrics.map((rubric: Rubric) => {
                   const rubricCriteria =
-                    rubric.criteria?.map((c: Criteria, i: number) => ({
-                      ...c,
-                      id: i,
-                    })) ?? [];
+                  rubric.criteria?.map((c: Criteria, i: number) => ({
+                    ...c,
+                    id: i
+                  })) ?? [];
                   return {
                     ...rubric,
                     rubricQuestion: stripHtml(
-                      rubric.rubricQuestion || defaultQuestionText,
+                      rubric.rubricQuestion || defaultQuestionText
                     ),
-                    criteria: rubricCriteria,
+                    criteria: rubricCriteria
                   };
                 });
                 return {
                   ...scoring,
-                  rubrics: refinedRubrics,
+                  rubrics: refinedRubrics
                 };
               }
 
@@ -349,112 +349,112 @@ const AuthorQuestionsPage: FC<Props> = ({
                 const criteriaWithId = scoring.criteria.map(
                   (c: Criteria, i: number) => ({
                     ...c,
-                    id: i,
-                  }),
+                    id: i
+                  })
                 );
                 return {
                   type: "CRITERIA_BASED",
                   rubrics: [
-                    {
-                      rubricQuestion: stripHtml(defaultQuestionText),
-                      criteria: criteriaWithId,
-                    },
-                  ],
+                  {
+                    rubricQuestion: stripHtml(defaultQuestionText),
+                    criteria: criteriaWithId
+                  }]
+
                 };
               }
 
               return {
                 type: "CRITERIA_BASED",
                 rubrics: [
-                  {
-                    rubricQuestion: stripHtml(defaultQuestionText),
-                    criteria: [],
-                  },
-                ],
+                {
+                  rubricQuestion: stripHtml(defaultQuestionText),
+                  criteria: []
+                }]
+
               };
             };
 
             const rawQuestions = (assignment.questions ??
-              []) as QuestionAuthorStore[];
+            []) as QuestionAuthorStore[];
 
             const sanitizedQuestionOrder = Array.isArray(
-              assignment.questionOrder,
-            )
-              ? (assignment.questionOrder
-                  .map((value) => {
-                    if (typeof value === "number" && Number.isFinite(value)) {
-                      return value;
-                    }
+              assignment.questionOrder
+            ) ?
+            assignment.questionOrder.
+            map((value) => {
+              if (typeof value === "number" && Number.isFinite(value)) {
+                return value;
+              }
 
-                    if (typeof value === "string") {
-                      const parsed = Number.parseInt(value, 10);
-                      if (!Number.isNaN(parsed)) {
-                        return parsed;
-                      }
-                    }
+              if (typeof value === "string") {
+                const parsed = Number.parseInt(value, 10);
+                if (!Number.isNaN(parsed)) {
+                  return parsed;
+                }
+              }
 
-                    return null;
-                  })
-                  .filter(
-                    (value): value is number => value !== null,
-                  ) as number[])
-              : [];
+              return null;
+            }).
+            filter(
+              (value): value is number => value !== null
+            ) as number[] :
+            [];
 
-            // Process all questions first
+
             const allProcessedQuestions: QuestionAuthorStore[] =
-              rawQuestions.map((question, index) => {
-                const unifiedQuestionScoring = unifyScoringRubrics(
-                  question.scoring,
-                  question.question,
-                );
+            rawQuestions.map((question, index) => {
+              const unifiedQuestionScoring = unifyScoringRubrics(
+                question.scoring,
+                question.question
+              );
 
-                unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
+              unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
+                rubric.criteria.sort(
+                  (a: Criteria, b: Criteria) => a.points - b.points
+                );
+              });
+
+              const parsedVariants: QuestionVariants[] =
+              question.variants?.map((variant: QuestionVariants) => {
+                const unifiedVariantScoring = unifyScoringRubrics(
+                  variant.scoring,
+                  variant.variantContent ?? question.question
+                );
+                unifiedVariantScoring.rubrics?.forEach((rubric: Rubric) => {
                   rubric.criteria.sort(
-                    (a: Criteria, b: Criteria) => a.points - b.points,
+                    (a: Criteria, b: Criteria) => a.points - b.points
                   );
                 });
 
-                const parsedVariants: QuestionVariants[] =
-                  question.variants?.map((variant: QuestionVariants) => {
-                    const unifiedVariantScoring = unifyScoringRubrics(
-                      variant.scoring,
-                      variant.variantContent ?? question.question,
-                    );
-                    unifiedVariantScoring.rubrics?.forEach((rubric: Rubric) => {
-                      rubric.criteria.sort(
-                        (a: Criteria, b: Criteria) => a.points - b.points,
-                      );
-                    });
-
-                    return {
-                      ...variant,
-                      choices:
-                        typeof variant.choices === "string"
-                          ? (JSON.parse(variant.choices) as Choice[])
-                          : variant.choices,
-                      scoring: unifiedVariantScoring,
-                    };
-                  }) ?? [];
-
                 return {
-                  ...question,
-                  alreadyInBackend: true,
-                  index: index + 1,
-                  variants: parsedVariants,
-                  scoring: unifiedQuestionScoring,
+                  ...variant,
+                  choices:
+                  typeof variant.choices === "string" ?
+                  JSON.parse(variant.choices) as Choice[] :
+                  variant.choices,
+                  scoring: unifiedVariantScoring
                 };
-              });
+              }) ?? [];
+
+              return {
+                ...question,
+                alreadyInBackend: true,
+                index: index + 1,
+                variants: parsedVariants,
+                scoring: unifiedQuestionScoring
+              };
+            });
 
             let questions: QuestionAuthorStore[];
             if (sanitizedQuestionOrder.length > 0) {
-              const orderedQuestions = sanitizedQuestionOrder
-                .map((questionId) =>
-                  allProcessedQuestions.find((q) => q.id === questionId),
-                )
-                .filter((q): q is QuestionAuthorStore => q !== undefined);
+              const orderedQuestions = sanitizedQuestionOrder.
+              map((questionId) =>
+              allProcessedQuestions.find((q) => q.id === questionId)
+              ).
+              filter((q): q is QuestionAuthorStore => q !== undefined);
 
               const remainingQuestions = allProcessedQuestions.filter(
-                (q) => !sanitizedQuestionOrder.includes(q.id),
+                (q) => !sanitizedQuestionOrder.includes(q.id)
               );
 
               questions = [...orderedQuestions, ...remainingQuestions];
@@ -464,7 +464,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 
             questions = questions.map((q, index) => ({
               ...q,
-              index: index + 1,
+              index: index + 1
             }));
 
             if (questions.length > 0) {
@@ -484,26 +484,26 @@ const AuthorQuestionsPage: FC<Props> = ({
       void fetchAssignment();
     }
   }, [
-    assignmentId,
-    activeAssignmentId,
-    setActiveAssignmentId,
-    setName,
-    setQuestions,
-    setFocusedQuestionId,
-    checkedOutVersion,
-    versions,
-  ]);
+  assignmentId,
+  activeAssignmentId,
+  setActiveAssignmentId,
+  setName,
+  setQuestions,
+  setFocusedQuestionId,
+  checkedOutVersion,
+  versions]
+  );
 
   useEffect(() => {
     const currentQuestionOrder = useAuthorStore.getState().questionOrder;
     const questionIds = questions.map((q) => q.id);
 
     if (
-      !currentQuestionOrder ||
-      currentQuestionOrder.length === 0 ||
-      currentQuestionOrder.some((id) => !questionIds.includes(id)) ||
-      questionIds.some((id) => !currentQuestionOrder.includes(id))
-    ) {
+    !currentQuestionOrder ||
+    currentQuestionOrder.length === 0 ||
+    currentQuestionOrder.some((id) => !questionIds.includes(id)) ||
+    questionIds.some((id) => !currentQuestionOrder.includes(id)))
+    {
       useAuthorStore.getState().setQuestionOrder(questionIds);
     }
   }, [questions]);
@@ -526,16 +526,16 @@ const AuthorQuestionsPage: FC<Props> = ({
    *   - "UPLOAD"
    */
   const handleAddTextBox = (
-    type:
-      | "TEXT"
-      | "SINGLE_CORRECT"
-      | "MULTIPLE_CORRECT"
-      | "TRUE_FALSE"
-      | "URL"
-      | "CODE"
-      | "UPLOAD"
-      | "LINK_FILE",
-  ) => {
+  type:
+  "TEXT" |
+  "SINGLE_CORRECT" |
+  "MULTIPLE_CORRECT" |
+  "TRUE_FALSE" |
+  "URL" |
+  "CODE" |
+  "UPLOAD" |
+  "LINK_FILE") =>
+  {
     const question: CreateQuestionRequest = {
       question: "",
       totalPoints: 1,
@@ -543,8 +543,8 @@ const AuthorQuestionsPage: FC<Props> = ({
       type: type,
       scoring: {
         type: "CRITERIA_BASED",
-        criteria: [],
-      },
+        criteria: []
+      }
     };
     const questionId = generateTempQuestionId();
     if (!questionId) {
@@ -556,26 +556,26 @@ const AuthorQuestionsPage: FC<Props> = ({
       question: "",
       id: questionId,
       choices:
-        type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT"
-          ? [
-              {
-                choice: "",
-                isCorrect: true,
-                points: 1,
-              },
-              {
-                choice: "",
-                isCorrect: false,
-                points: type === "SINGLE_CORRECT" ? 0 : -1,
-              },
-            ]
-          : undefined,
+      type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT" ?
+      [
+      {
+        choice: "",
+        isCorrect: true,
+        points: 1
+      },
+      {
+        choice: "",
+        isCorrect: false,
+        points: type === "SINGLE_CORRECT" ? 0 : -1
+      }] :
+
+      undefined,
       alreadyInBackend: false,
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? 1,
       index: questions.length + 1,
       randomizedChoices:
-        type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT" ? true : null,
+      type === "MULTIPLE_CORRECT" || type === "SINGLE_CORRECT" ? true : null
     });
     setFocusedQuestionId(questionId);
     toast.success("Question has been added!");
@@ -589,14 +589,14 @@ const AuthorQuestionsPage: FC<Props> = ({
 
     const nonEditableQuestions = questions.filter(
       (question) =>
-        question.responseType === "PRESENTATION" ||
-        question.responseType === "LIVE_RECORDING",
+      question.responseType === "PRESENTATION" ||
+      question.responseType === "LIVE_RECORDING"
     );
 
     const editableQuestions = questions.filter(
       (question) =>
-        question.responseType !== "PRESENTATION" &&
-        question.responseType !== "LIVE_RECORDING",
+      question.responseType !== "PRESENTATION" &&
+      question.responseType !== "LIVE_RECORDING"
     );
 
     setIsMassVariationLoading(true);
@@ -604,14 +604,14 @@ const AuthorQuestionsPage: FC<Props> = ({
     const questionsWithVariants = await generateQuestionVariant(
       editableQuestions,
       questionVariationNumber,
-      assignmentId,
+      assignmentId
     );
 
     if (questionsWithVariants) {
       const combinedQuestions = [
-        ...questionsWithVariants,
-        ...nonEditableQuestions,
-      ];
+      ...questionsWithVariants,
+      ...nonEditableQuestions];
+
       setQuestions(combinedQuestions);
       toast.success("Variants generated successfully!");
     } else {
@@ -632,8 +632,8 @@ const AuthorQuestionsPage: FC<Props> = ({
       numRetries: defaultQuestionRetries ?? 1,
       type: "EMPTY",
       scoring: {
-        type: "CRITERIA_BASED",
-      },
+        type: "CRITERIA_BASED"
+      }
     };
     const questionId = generateTempQuestionId();
     if (!questionId) {
@@ -648,7 +648,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? -1,
       randomizedChoices: true,
-      index: questions.length + 1,
+      index: questions.length + 1
     });
     setFocusedQuestionId(questionId);
     toast.success("Question has been added!");
@@ -678,32 +678,32 @@ const AuthorQuestionsPage: FC<Props> = ({
         scoring: question.scoring,
         numRetries: question.numRetries,
         index: Number(question.index) + 1,
-        randomizedChoices: question.randomizedChoices,
+        randomizedChoices: question.randomizedChoices
       };
 
       const questionIndex = Number(question.index);
       const updatedQuestions = [
-        ...questions.slice(0, questionIndex),
-        newQuestion,
-        ...questions.slice(questionIndex),
-      ];
+      ...questions.slice(0, questionIndex),
+      newQuestion,
+      ...questions.slice(questionIndex)];
+
 
       updatedQuestions.forEach((q, index) => {
         q.index = index + 1;
       });
 
       setQuestions(updatedQuestions);
-      useAuthorStore
-        .getState()
-        .setQuestionOrder(updatedQuestions.map((q) => q.id));
+      useAuthorStore.
+      getState().
+      setQuestionOrder(updatedQuestions.map((q) => q.id));
       setFocusedQuestionId(questionId);
       toast.success("Question duplicated successfully!");
     });
   };
 
-  const DragHandle = () => (
-    <GripVertical height={16} width={16} className="cursor-move" />
-  );
+  const DragHandle = () =>
+  <GripVertical height={16} width={16} className="cursor-move" />;
+
 
   /**
    * Sets the focus on a specific question.
@@ -725,24 +725,24 @@ const AuthorQuestionsPage: FC<Props> = ({
   const SortableItem = React.memo(
     ({
       question,
-      questionIndex,
-    }: {
-      question: QuestionAuthorStore;
-      questionIndex: number;
-    }) => {
+      questionIndex
+
+
+
+    }: {question: QuestionAuthorStore;questionIndex: number;}) => {
       const {
         attributes,
         listeners,
         setNodeRef,
         transform,
         transition,
-        isDragging,
+        isDragging
       } = useSortable({ id: question.id });
 
       const style = {
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0 : 1,
+        opacity: isDragging ? 0 : 1
       };
 
       return (
@@ -751,21 +751,21 @@ const AuthorQuestionsPage: FC<Props> = ({
           style={style}
           className="col-span-4 md:col-start-3 md:col-end-11 gap-5 mb-8"
           id={`item-${question.id}`}
-          {...attributes}
-        >
+          {...attributes}>
+
           <div
             className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-200 w-full ${
-              focusedQuestionId === question.id
-                ? "border-1 border-violet-600 shadow-md"
-                : "shadow-sm"
-            }`}
-            onClick={() => handleFocus(question.id)}
-          >
+            focusedQuestionId === question.id ?
+            "border-1 border-violet-600 shadow-md" :
+            "shadow-sm"}`
+            }
+            onClick={() => handleFocus(question.id)}>
+
             <div className="absolute flex self-center max-w-8 w-8 px-2 left-0">
               <div
                 className="opacity-0 group-hover:opacity-100 transition-all"
-                {...listeners}
-              >
+                {...listeners}>
+
                 <DragHandle />
               </div>
             </div>
@@ -777,41 +777,41 @@ const AuthorQuestionsPage: FC<Props> = ({
               duplicateThisQuestion={duplicateThisQuestion}
               questionIndex={questionIndex + 1}
               collapse={collapseAll}
-              isFocusedQuestion={focusedQuestionId === question.id}
-            />
+              isFocusedQuestion={focusedQuestionId === question.id} />
+
           </div>
-        </div>
-      );
+        </div>);
+
     },
     (prevProps, nextProps) => {
       return (
         prevProps.question.id === nextProps.question.id &&
         prevProps.question === nextProps.question &&
-        prevProps.questionIndex === nextProps.questionIndex
-      );
-    },
+        prevProps.questionIndex === nextProps.questionIndex);
+
+    }
   );
 
   const SortableList = React.memo(
-    ({ questions }: { questions: QuestionAuthorStore[] }) => {
+    ({ questions }: {questions: QuestionAuthorStore[];}) => {
       return (
         <SortableContext
           items={questions.map((question) => question.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {questions.map((question, index) => (
-            <SortableItem
-              key={`item-${question.id}`}
-              question={question}
-              questionIndex={index}
-            />
-          ))}
-        </SortableContext>
-      );
+          strategy={verticalListSortingStrategy}>
+
+          {questions.map((question, index) =>
+          <SortableItem
+            key={`item-${question.id}`}
+            question={question}
+            questionIndex={index} />
+
+          )}
+        </SortableContext>);
+
     },
     (prevProps, nextProps) => {
       return prevProps.questions === nextProps.questions;
-    },
+    }
   );
 
   /**
@@ -820,7 +820,7 @@ const AuthorQuestionsPage: FC<Props> = ({
    * @param active - The active question being sorted.
    * @param over - The question being sorted over.
    */
-  const onSortEnd = ({ active, over }: { active: Active; over: Over }) => {
+  const onSortEnd = ({ active, over }: {active: Active;over: Over;}) => {
     setActiveId(null);
 
     if (active.id !== over.id) {
@@ -842,14 +842,14 @@ const AuthorQuestionsPage: FC<Props> = ({
 
       if (questionsChanged) {
         setQuestions(finalQuestions);
-        useAuthorStore
-          .getState()
-          .setQuestionOrder(finalQuestions.map((q) => q.id));
+        useAuthorStore.
+        getState().
+        setQuestionOrder(finalQuestions.map((q) => q.id));
       }
     }
   };
 
-  const handleDragStart = ({ active }: { active: Active }) => {
+  const handleDragStart = ({ active }: {active: Active;}) => {
     setActiveId(active.id as number);
   };
 
@@ -876,18 +876,18 @@ const AuthorQuestionsPage: FC<Props> = ({
    * @returns {number} The calculated total points
    */
   const calculateTotalPoints = (question: QuestionAuthorStore): number => {
-    // For choice-based questions, calculate from choices
+
     if (
-      question.type === "SINGLE_CORRECT" ||
-      question.type === "MULTIPLE_CORRECT" ||
-      question.type === "TRUE_FALSE"
-    ) {
+    question.type === "SINGLE_CORRECT" ||
+    question.type === "MULTIPLE_CORRECT" ||
+    question.type === "TRUE_FALSE")
+    {
       if (question.choices && question.choices.length > 0) {
         const totalFromChoices = question.choices.reduce((acc, choice) => {
           return choice.points > 0 ? acc + choice.points : acc;
         }, 0);
 
-        // For TRUE_FALSE, ensure at least 1 point if calculated total is 0
+
         if (question.type === "TRUE_FALSE" && totalFromChoices === 0) {
           return 1;
         }
@@ -895,29 +895,29 @@ const AuthorQuestionsPage: FC<Props> = ({
         return totalFromChoices;
       }
 
-      // Default points for choice-based questions without choices
+
       return 1;
     }
 
-    // For AI-graded questions (TEXT, URL, UPLOAD, LINK_FILE), calculate from rubrics
+
     if (
-      question.type === "TEXT" ||
-      question.type === "URL" ||
-      question.type === "UPLOAD" ||
-      question.type === "LINK_FILE"
-    ) {
+    question.type === "TEXT" ||
+    question.type === "URL" ||
+    question.type === "UPLOAD" ||
+    question.type === "LINK_FILE")
+    {
       if (question.scoring?.rubrics && question.scoring.rubrics.length > 0) {
         const totalFromRubrics = question.scoring.rubrics.reduce(
           (acc, rubric) => {
             if (rubric.criteria && rubric.criteria.length > 0) {
               const maxRubricPoints = Math.max(
-                ...rubric.criteria.map((c) => c.points || 0),
+                ...rubric.criteria.map((c) => c.points || 0)
               );
               return acc + maxRubricPoints;
             }
             return acc;
           },
-          0,
+          0
         );
 
         if (totalFromRubrics > 0) {
@@ -925,11 +925,11 @@ const AuthorQuestionsPage: FC<Props> = ({
         }
       }
 
-      // Default points for AI-graded questions without rubrics (medium difficulty)
+
       return question.type === "TEXT" ? 10 : 10;
     }
 
-    // For other question types or fallback
+
     return question.totalPoints || 1;
   };
 
@@ -940,156 +940,156 @@ const AuthorQuestionsPage: FC<Props> = ({
    * @param {Object} options - Import options including replaceExisting flag
    */
   const handleImportQuestions = (
-    importedQuestions: QuestionAuthorStore[],
-    options: {
-      replaceExisting: boolean;
-      appendToExisting: boolean;
-      validateQuestions: boolean;
-      importChoices: boolean;
-      importRubrics: boolean;
-      importConfig: boolean;
-      importAssignmentSettings: boolean;
-    },
-    assignmentData?: {
-      questions?: QuestionAuthorStore[];
-      assignment?: any;
-      config?: any;
-      feedbackConfig?: any;
-      gradingCriteria?: any;
-    },
-  ) => {
+  importedQuestions: QuestionAuthorStore[],
+  options: {
+    replaceExisting: boolean;
+    appendToExisting: boolean;
+    validateQuestions: boolean;
+    importChoices: boolean;
+    importRubrics: boolean;
+    importConfig: boolean;
+    importAssignmentSettings: boolean;
+  },
+  assignmentData?: {
+    questions?: QuestionAuthorStore[];
+    assignment?: any;
+    config?: any;
+    feedbackConfig?: any;
+    gradingCriteria?: any;
+  }) =>
+  {
     try {
-      // Process imported questions with proper total points calculation
+
       const processedQuestions = importedQuestions.map((q, index) => {
-        // Calculate total points for the question
+
         const calculatedTotalPoints = calculateTotalPoints(q);
 
-        // Ensure proper scoring structure for AI-graded questions
+
         let updatedScoring = q.scoring;
         if (
-          q.type === "TEXT" ||
-          q.type === "URL" ||
-          q.type === "UPLOAD" ||
-          q.type === "LINK_FILE"
-        ) {
+        q.type === "TEXT" ||
+        q.type === "URL" ||
+        q.type === "UPLOAD" ||
+        q.type === "LINK_FILE")
+        {
           if (
-            !updatedScoring ||
-            !updatedScoring.rubrics ||
-            updatedScoring.rubrics.length === 0
-          ) {
+          !updatedScoring ||
+          !updatedScoring.rubrics ||
+          updatedScoring.rubrics.length === 0)
+          {
             updatedScoring = {
               type: "CRITERIA_BASED",
               rubrics: [
+              {
+                rubricQuestion: q.question || "Rate the response",
+                criteria: [
                 {
-                  rubricQuestion: q.question || "Rate the response",
-                  criteria: [
-                    {
-                      id: 0,
-                      points: calculatedTotalPoints,
-                      description: "Excellent response meeting all criteria",
-                    },
-                    {
-                      id: 1,
-                      points: Math.floor(calculatedTotalPoints * 0.7),
-                      description: "Good response meeting most criteria",
-                    },
-                    {
-                      id: 2,
-                      points: Math.floor(calculatedTotalPoints * 0.4),
-                      description:
-                        "Satisfactory response meeting some criteria",
-                    },
-                    {
-                      id: 3,
-                      points: 0,
-                      description: "Poor response not meeting criteria",
-                    },
-                  ],
+                  id: 0,
+                  points: calculatedTotalPoints,
+                  description: "Excellent response meeting all criteria"
                 },
-              ],
+                {
+                  id: 1,
+                  points: Math.floor(calculatedTotalPoints * 0.7),
+                  description: "Good response meeting most criteria"
+                },
+                {
+                  id: 2,
+                  points: Math.floor(calculatedTotalPoints * 0.4),
+                  description:
+                  "Satisfactory response meeting some criteria"
+                },
+                {
+                  id: 3,
+                  points: 0,
+                  description: "Poor response not meeting criteria"
+                }]
+
+              }]
+
             };
           }
         }
 
-        // For choice-based questions, remove scoring (they don't use rubrics)
+
         if (
-          q.type === "SINGLE_CORRECT" ||
-          q.type === "MULTIPLE_CORRECT" ||
-          q.type === "TRUE_FALSE"
-        ) {
+        q.type === "SINGLE_CORRECT" ||
+        q.type === "MULTIPLE_CORRECT" ||
+        q.type === "TRUE_FALSE")
+        {
           updatedScoring = {
             type: "CRITERIA_BASED",
-            criteria: [],
+            criteria: []
           };
         }
 
         return {
           ...q,
-          id: generateTempQuestionId(), // Use existing ID generation function
+          id: generateTempQuestionId(),
           assignmentId: assignmentId,
           alreadyInBackend: false,
           index: questions.length + index + 1,
           totalPoints: calculatedTotalPoints,
           scoring: updatedScoring,
           numRetries: q.numRetries || defaultQuestionRetries || 1,
-          responseType: q.responseType,
+          responseType: q.responseType
         };
       });
 
-      // Add imported questions to existing ones or replace them based on options
-      const updatedQuestions = options.replaceExisting
-        ? processedQuestions
-        : [...questions, ...processedQuestions];
 
-      // Update indices for all questions
+      const updatedQuestions = options.replaceExisting ?
+      processedQuestions :
+      [...questions, ...processedQuestions];
+
+
       updatedQuestions.forEach((q, index) => {
         q.index = index + 1;
       });
 
       setQuestions(updatedQuestions);
-      useAuthorStore
-        .getState()
-        .setQuestionOrder(updatedQuestions.map((q) => q.id));
+      useAuthorStore.
+      getState().
+      setQuestionOrder(updatedQuestions.map((q) => q.id));
 
-      // Handle assignment settings if requested
+
       let importMessage = `Successfully imported ${importedQuestions.length} question(s)!`;
       if (options.importAssignmentSettings && assignmentData) {
         let settingsUpdated = false;
 
         if (assignmentData.assignment) {
-          // Update assignment metadata if available
+
           if (
-            assignmentData.assignment.name &&
-            assignmentData.assignment.name !== "Imported Assignment"
-          ) {
+          assignmentData.assignment.name &&
+          assignmentData.assignment.name !== "Imported Assignment")
+          {
             setName(assignmentData.assignment.name);
             settingsUpdated = true;
           }
           if (assignmentData.assignment.introduction) {
-            useAuthorStore
-              .getState()
-              .setIntroduction(assignmentData.assignment.introduction);
+            useAuthorStore.
+            getState().
+            setIntroduction(assignmentData.assignment.introduction);
             settingsUpdated = true;
           }
           if (assignmentData.assignment.instructions) {
-            useAuthorStore
-              .getState()
-              .setInstructions(assignmentData.assignment.instructions);
+            useAuthorStore.
+            getState().
+            setInstructions(assignmentData.assignment.instructions);
             settingsUpdated = true;
           }
-          // Check for gradingCriteria in assignment object
+
           if (assignmentData.assignment.gradingCriteria) {
-            useAuthorStore
-              .getState()
-              .setGradingCriteriaOverview(
-                assignmentData.assignment.gradingCriteria,
-              );
+            useAuthorStore.
+            getState().
+            setGradingCriteriaOverview(
+              assignmentData.assignment.gradingCriteria
+            );
             settingsUpdated = true;
           }
         }
 
         if (assignmentData.config) {
-          // Update assignment configuration if available
+
           const configStore = useAssignmentConfig.getState();
 
           if (assignmentData.config.graded !== undefined) {
@@ -1102,27 +1102,27 @@ const AuthorQuestionsPage: FC<Props> = ({
           }
           if (assignmentData.config.attemptsBeforeCoolDown !== undefined) {
             configStore.setAttemptsBeforeCoolDown(
-              assignmentData.config.attemptsBeforeCoolDown,
+              assignmentData.config.attemptsBeforeCoolDown
             );
             settingsUpdated = true;
           }
           if (
-            assignmentData.config.retakeAttemptCoolDownMinutes !== undefined
-          ) {
+          assignmentData.config.retakeAttemptCoolDownMinutes !== undefined)
+          {
             configStore.setRetakeAttemptCoolDownMinutes(
-              assignmentData.config.retakeAttemptCoolDownMinutes,
+              assignmentData.config.retakeAttemptCoolDownMinutes
             );
             settingsUpdated = true;
           }
           if (assignmentData.config.allotedTimeMinutes !== undefined) {
             configStore.setAllotedTimeMinutes(
-              assignmentData.config.allotedTimeMinutes,
+              assignmentData.config.allotedTimeMinutes
             );
             settingsUpdated = true;
           }
           if (assignmentData.config.timeEstimateMinutes !== undefined) {
             configStore.setTimeEstimateMinutes(
-              assignmentData.config.timeEstimateMinutes,
+              assignmentData.config.timeEstimateMinutes
             );
             settingsUpdated = true;
           }
@@ -1132,71 +1132,71 @@ const AuthorQuestionsPage: FC<Props> = ({
           }
           if (assignmentData.config.numberOfQuestionsPerAttempt !== undefined) {
             configStore.setNumberOfQuestionsPerAttempt(
-              assignmentData.config.numberOfQuestionsPerAttempt,
+              assignmentData.config.numberOfQuestionsPerAttempt
             );
             settingsUpdated = true;
           }
           if (assignmentData.config.displayOrder !== undefined) {
             configStore.setDisplayOrder(
-              assignmentData.config.displayOrder as "DEFINED" | "RANDOM",
+              assignmentData.config.displayOrder as "DEFINED" | "RANDOM"
             );
             settingsUpdated = true;
           }
           if (assignmentData.config.questionDisplay !== undefined) {
             configStore.setQuestionDisplay(
-              assignmentData.config.questionDisplay as any,
+              assignmentData.config.questionDisplay as any
             );
             settingsUpdated = true;
           }
           if (assignmentData.config.strictTimeLimit !== undefined) {
             configStore.setStrictTimeLimit(
-              assignmentData.config.strictTimeLimit,
+              assignmentData.config.strictTimeLimit
             );
             settingsUpdated = true;
           }
         }
 
-        // Check for root-level gradingCriteria
+
         if (assignmentData.gradingCriteria) {
-          useAuthorStore
-            .getState()
-            .setGradingCriteriaOverview(assignmentData.gradingCriteria);
+          useAuthorStore.
+          getState().
+          setGradingCriteriaOverview(assignmentData.gradingCriteria);
           settingsUpdated = true;
         }
 
-        // Import feedback configuration if available
+
         if (assignmentData.feedbackConfig) {
           const feedbackConfigStore = useAssignmentFeedbackConfig.getState();
 
           if (assignmentData.feedbackConfig.verbosityLevel !== undefined) {
             feedbackConfigStore.setVerbosityLevel(
-              assignmentData.feedbackConfig.verbosityLevel as any,
+              assignmentData.feedbackConfig.verbosityLevel as any
             );
             settingsUpdated = true;
           }
           if (
-            assignmentData.feedbackConfig.showSubmissionFeedback !== undefined
-          ) {
+          assignmentData.feedbackConfig.showSubmissionFeedback !== undefined)
+          {
             feedbackConfigStore.setShowSubmissionFeedback(
-              assignmentData.feedbackConfig.showSubmissionFeedback,
+              assignmentData.feedbackConfig.showSubmissionFeedback
             );
             settingsUpdated = true;
           }
           if (assignmentData.feedbackConfig.showQuestionScore !== undefined) {
             feedbackConfigStore.setShowQuestionScore(
-              assignmentData.feedbackConfig.showQuestionScore,
+              assignmentData.feedbackConfig.showQuestionScore
             );
             settingsUpdated = true;
           }
           if (assignmentData.feedbackConfig.showAssignmentScore !== undefined) {
             feedbackConfigStore.setShowAssignmentScore(
-              assignmentData.feedbackConfig.showAssignmentScore,
+              assignmentData.feedbackConfig.showAssignmentScore
             );
             settingsUpdated = true;
           }
           if (assignmentData.feedbackConfig.showQuestions !== undefined) {
             feedbackConfigStore.setShowQuestion(
-              assignmentData.feedbackConfig.showQuestions,
+              assignmentData.feedbackConfig.showQuestions
             );
             settingsUpdated = true;
           }
@@ -1207,7 +1207,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         }
       }
 
-      // Focus on the first imported question
+
       if (processedQuestions.length > 0) {
         setFocusedQuestionId(processedQuestions[0].id);
       }
@@ -1224,67 +1224,67 @@ const AuthorQuestionsPage: FC<Props> = ({
       sensors={useSensors(useSensor(PointerSensor))}
       collisionDetection={closestCenter}
       onDragEnd={onSortEnd}
-      onDragStart={handleDragStart}
-    >
+      onDragStart={handleDragStart}>
+
       <div className="grid grid-cols-4 gap-x-4 mx-6 md:grid-cols-12 md:mx-8 md:gap-x-6 mt-8 min-h-[90vh] pb-56 grid-rows-[auto,auto,auto]">
-        {questions.length > 0 && (
-          <>
+        {questions.length > 0 &&
+        <>
             <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-1 md:col-end-3 hidden lg:block text-nowrap">
               <div className="sticky top-4 space-y-4">
                 <NavigationBox
-                  setQuestions={setQuestions}
-                  questions={questions}
-                  focusedQuestionId={focusedQuestionId}
-                  handleToggleTable={handleToggleTable}
-                  setHandleToggleTable={setHandleToggleTable}
-                  onSelectQuestion={(index) => {
-                    setFocusedQuestionId(questions[index].id);
-                  }}
-                />
+                setQuestions={setQuestions}
+                questions={questions}
+                focusedQuestionId={focusedQuestionId}
+                handleToggleTable={handleToggleTable}
+                setHandleToggleTable={setHandleToggleTable}
+                onSelectQuestion={(index) => {
+                  setFocusedQuestionId(questions[index].id);
+                }} />
+
                 <button
-                  onClick={() => setIsReportModalOpen(true)}
-                  className="block px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
-                >
+                onClick={() => setIsReportModalOpen(true)}
+                className="block px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600">
+
                   <span className="text-sm font-medium">Report Issue</span>
                 </button>
               </div>
             </div>
           </>
-        )}
+        }
         <div
           className={`col-span-4 md:col-span-4 md:col-start-3 md:col-end-11 flex flex-col ${
-            questions.length === 0 ? "justify-center" : ""
-          }`}
-        >
-          {questions.length > 0 ? (
-            <>
+          questions.length === 0 ? "justify-center" : ""}`
+          }>
+
+          {questions.length > 0 ?
+          <>
               <SortableList questions={questions} />
               <DragOverlay>
-                {activeId ? (
-                  <SortableItem
-                    question={questions.find((q) => q.id === activeId)}
-                    questionIndex={questions.findIndex(
-                      (q) => q.id === activeId,
-                    )}
-                  />
-                ) : null}
+                {activeId ?
+              <SortableItem
+                question={questions.find((q) => q.id === activeId)}
+                questionIndex={questions.findIndex(
+                  (q) => q.id === activeId
+                )} /> :
+
+              null}
               </DragOverlay>
-            </>
-          ) : (
-            <div className="col-span-4 md:col-start-5 md:col-end-8 pb-16">
+            </> :
+
+          <div className="col-span-4 md:col-start-5 md:col-end-8 pb-16">
               <p className="text-center text-gray-500 text-2xl leading-5 my-12">
                 Begin writing the questions for your assignment below.
               </p>
             </div>
-          )}
+          }
 
           <div className="mx-auto items-center justify-center mb-8 hover:no-underline typography-btn flex transition-all focus:none disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 col-span-4 md:col-start-5 md:col-end-8 w-fit gap-x-2">
             <div className="bg-white w-fit whitespace-nowrap border-gray-200 border border-solid shadow-sm hover:shadow-md rounded-md flex justify-center items-center">
               <button
                 type="button"
                 className="hover:no-underline text-gray-600 hover:text-gray-600 typography-btn px-4 py-2 border-r border-solid border-r-gray-200 border-l-0 border-t-0 border-b-0 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-l-md focus:rounded-md bg-white hover:bg-gray-100 ring-offset-white "
-                onClick={() => handleAddEmptyQuestion()}
-              >
+                onClick={() => handleAddEmptyQuestion()}>
+
                 Add Question
               </button>
               <Menu as="div" className="relative inline-block text-left">
@@ -1299,40 +1299,40 @@ const AuthorQuestionsPage: FC<Props> = ({
                   enterTo="transform opacity-100 scale-100"
                   leave="transition ease-in duration-75"
                   leaveFrom="transform opacity-100 scale-100"
-                  leaveTo="transform opacity-0 scale-95"
-                >
-                  {/* menu for adding question button */}
+                  leaveTo="transform opacity-0 scale-95">
+
+                  
                   <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-sm hover:shadow-md transition-all ring-1 ring-black ring-opacity-5 focus:outline-none">
                     <div className="py-1">
-                      {questionTypes.map((qt) => (
-                        <Menu.Item key={qt.value}>
-                          {({ active }) => (
-                            <button
-                              onClick={() =>
-                                handleAddTextBox(
-                                  qt.value as
-                                    | "TEXT"
-                                    | "SINGLE_CORRECT"
-                                    | "MULTIPLE_CORRECT"
-                                    | "TRUE_FALSE"
-                                    | "URL"
-                                    | "LINK_FILE"
-                                    | "UPLOAD"
-                                    | "CODE",
-                                )
-                              }
-                              className={`${
-                                active
-                                  ? "bg-gray-100 text-gray-600"
-                                  : "text-gray-600"
-                              } group flex items-center w-full py-2 px-4 gap-1.5 typography-body`}
-                            >
+                      {questionTypes.map((qt) =>
+                      <Menu.Item key={qt.value}>
+                          {({ active }) =>
+                        <button
+                          onClick={() =>
+                          handleAddTextBox(
+                            qt.value as
+                            "TEXT" |
+                            "SINGLE_CORRECT" |
+                            "MULTIPLE_CORRECT" |
+                            "TRUE_FALSE" |
+                            "URL" |
+                            "LINK_FILE" |
+                            "UPLOAD" |
+                            "CODE"
+                          )
+                          }
+                          className={`${
+                          active ?
+                          "bg-gray-100 text-gray-600" :
+                          "text-gray-600"} group flex items-center w-full py-2 px-4 gap-1.5 typography-body`
+                          }>
+
                               <div className="size-5">{qt.icon}</div>
                               {qt.label}
                             </button>
-                          )}
+                        }
                         </Menu.Item>
-                      ))}
+                      )}
                     </div>
                   </Menu.Items>
                 </Transition>
@@ -1340,8 +1340,8 @@ const AuthorQuestionsPage: FC<Props> = ({
             </div>
             <button
               onClick={() => setFileUploadModalOpen(true)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg hover:shadow-md transition-all items-center gap-x-2 justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-violet-100 text-violet-800 hover:bg-violet-100 hover:text-violet-600"
-            >
+              className="px-4 py-2.5 border border-gray-300 rounded-lg hover:shadow-md transition-all items-center gap-x-2 justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-violet-100 text-violet-800 hover:bg-violet-100 hover:text-violet-600">
+
               <SparklesIcon className="w-4 h-4 text-violet-600" />
               <span className="text-sm font-medium text-nowrap">
                 Generate Questions using AI (Beta)
@@ -1349,8 +1349,8 @@ const AuthorQuestionsPage: FC<Props> = ({
             </button>
             <button
               onClick={() => setIsImportModalOpen(true)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg hover:shadow-md transition-all items-center gap-x-2 justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-purple-100 text-purple-800 hover:bg-purple-100 hover:text-purple-600"
-            >
+              className="px-4 py-2.5 border border-gray-300 rounded-lg hover:shadow-md transition-all items-center gap-x-2 justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-purple-100 text-purple-800 hover:bg-purple-100 hover:text-purple-600">
+
               <DocumentArrowDownIcon className="w-4 h-4 text-purple-600" />
               <span className="text-sm font-medium">
                 Import Assignment (Beta){" "}
@@ -1358,26 +1358,26 @@ const AuthorQuestionsPage: FC<Props> = ({
             </button>
           </div>
         </div>
-        {/* next button */}
-        {questions.length > 0 && (
-          <div className="col-span-4 md:col-span-8 lg:col-span-12 md:col-start-3 md:col-end-11 lg:col-start-3 lg:col-end-11 row-start-3 flex flex-col justify-end mb-10">
+        
+        {questions.length > 0 &&
+        <div className="col-span-4 md:col-span-8 lg:col-span-12 md:col-start-3 md:col-end-11 lg:col-start-3 lg:col-end-11 row-start-3 flex flex-col justify-end mb-10">
             <FooterNavigation nextStep="config" />
           </div>
-        )}
+        }
 
-        {/* side menu bar */}
+        
         <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
           <div className="flex flex-col sticky top-0 gap-4 items-center px-4 pb-4">
-            {questions.length > 0 && (
-              <>
+            {questions.length > 0 &&
+            <>
                 <button
-                  onClick={() => setCollapseAll(!collapseAll)}
-                  className={`px-4 py-2 border border-gray-300 text-wrap rounded-lg shadow-md transition-all duration-300 ease-in-out w-full text-sm font-medium ${
-                    collapseAll
-                      ? "bg-violet-600 text-white"
-                      : "bg-white text-violet-600"
-                  } hover:bg-violet-100`}
-                >
+                onClick={() => setCollapseAll(!collapseAll)}
+                className={`px-4 py-2 border border-gray-300 text-wrap rounded-lg shadow-md transition-all duration-300 ease-in-out w-full text-sm font-medium ${
+                collapseAll ?
+                "bg-violet-600 text-white" :
+                "bg-white text-violet-600"} hover:bg-violet-100`
+                }>
+
                   {collapseAll ? "Expand Questions" : "Collapse Questions"}
                 </button>
                 <div className="flex flex-col w-full bg-white p-4 rounded-lg shadow-sm border border-gray-300">
@@ -1385,50 +1385,50 @@ const AuthorQuestionsPage: FC<Props> = ({
                     Mass Variations
                   </span>
                   <Dropdown
-                    options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as number[]}
-                    selectedItem={questionVariationNumber}
-                    setSelectedItem={setQuestionVariationNumber}
-                    items={[
-                      { value: 1, label: "1" },
-                      { value: 2, label: "2" },
-                      { value: 3, label: "3" },
-                      { value: 4, label: "4" },
-                      { value: 5, label: "5" },
-                      { value: 6, label: "6" },
-                      { value: 7, label: "7" },
-                      { value: 8, label: "8" },
-                      { value: 9, label: "9" },
-                      { value: 10, label: "10" },
-                    ]}
-                  />
+                  options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as number[]}
+                  selectedItem={questionVariationNumber}
+                  setSelectedItem={setQuestionVariationNumber}
+                  items={[
+                  { value: 1, label: "1" },
+                  { value: 2, label: "2" },
+                  { value: 3, label: "3" },
+                  { value: 4, label: "4" },
+                  { value: 5, label: "5" },
+                  { value: 6, label: "6" },
+                  { value: 7, label: "7" },
+                  { value: 8, label: "8" },
+                  { value: 9, label: "9" },
+                  { value: 10, label: "10" }]
+                  } />
+
                   <p className="text-gray-500 mt-2 text-wrap">
                     Variation(s) will automatically generate on all existing
                     questions using AI. These variants are editable.
                   </p>
 
                   <button
-                    className="mt-4 px-4 py-2 bg-violet-50 text-white justify-center items-center text-wrap rounded-lg border hover:bg-violet-100 transition-colors duration-300 ease-in-out flex flex-col md:flex-row"
-                    onClick={() => {
-                      void handleMassVariation(questions);
-                    }}
-                  >
-                    {isMassVariationLoading ? (
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 flex justify-center items-center"></div>
-                    ) : (
-                      <>
+                  className="mt-4 px-4 py-2 bg-violet-50 text-white justify-center items-center text-wrap rounded-lg border hover:bg-violet-100 transition-colors duration-300 ease-in-out flex flex-col md:flex-row"
+                  onClick={() => {
+                    void handleMassVariation(questions);
+                  }}>
+
+                    {isMassVariationLoading ?
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 flex justify-center items-center"></div> :
+
+                  <>
                         <SparklesIcon className="w-4 h-4 mr-2 text-violet-800" />
                         <span className="mr-2 text-violet-800">
                           Add Mass Variants
                         </span>
                       </>
-                    )}
+                  }
                   </button>
                 </div>
 
                 <button
-                  onClick={() => setFileUploadModalOpen(true)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
-                >
+                onClick={() => setFileUploadModalOpen(true)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600">
+
                   <span className="flex items-center gap-2 text-wrap">
                     <div className="flex items-center gap-1">
                       <SparklesIcon className="w-4 h-4 text-violet-600" />
@@ -1440,9 +1440,9 @@ const AuthorQuestionsPage: FC<Props> = ({
                 </button>
 
                 <button
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-purple-100 hover:text-purple-600"
-                >
+                onClick={() => setIsImportModalOpen(true)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-purple-100 hover:text-purple-600">
+
                   <span className="flex items-center gap-2 text-wrap">
                     <div className="flex items-center gap-1">
                       <DocumentArrowDownIcon className="w-4 h-4 text-purple-600" />
@@ -1453,35 +1453,35 @@ const AuthorQuestionsPage: FC<Props> = ({
                   </span>
                 </button>
               </>
-            )}
+            }
           </div>
         </div>
       </div>
-      {isReportModalOpen && (
-        <ReportModal
-          assignmentId={assignmentId}
-          isReportModalOpen={isReportModalOpen}
-          setIsReportModalOpen={setIsReportModalOpen}
-          isAuthor={true}
-        />
-      )}
+      {isReportModalOpen &&
+      <ReportModal
+        assignmentId={assignmentId}
+        isReportModalOpen={isReportModalOpen}
+        setIsReportModalOpen={setIsReportModalOpen}
+        isAuthor={true} />
 
-      {fileUploadModalOpen && (
-        <FileUploadModal
-          onClose={() => setFileUploadModalOpen(false)}
-          questionId={focusedQuestionId}
-        />
-      )}
+      }
 
-      {isImportModalOpen && (
-        <ImportModal
-          isOpen={isImportModalOpen}
-          onClose={() => setIsImportModalOpen(false)}
-          onImport={handleImportQuestions}
-        />
-      )}
-    </DndContext>
-  );
+      {fileUploadModalOpen &&
+      <FileUploadModal
+        onClose={() => setFileUploadModalOpen(false)}
+        questionId={focusedQuestionId} />
+
+      }
+
+      {isImportModalOpen &&
+      <ImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleImportQuestions} />
+
+      }
+    </DndContext>);
+
 };
 
 interface NavigationBoxProps {
@@ -1517,9 +1517,9 @@ interface SortableNavItemProps {
   selectedQuestions: number[];
   tocRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
 }
-const DragHandle = () => (
-  <GripVertical height={16} width={16} className="cursor-move" />
-);
+const DragHandle = () =>
+<GripVertical height={16} width={16} className="cursor-move" />;
+
 const SortableNavItem = ({
   question,
   questionIndex,
@@ -1527,14 +1527,14 @@ const SortableNavItem = ({
   isDeleting,
   handleCheckboxChange,
   selectedQuestions,
-  tocRefs,
+  tocRefs
 }: SortableNavItemProps) => {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id: question.id });
+  useSortable({ id: question.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition
   };
 
   return (
@@ -1549,10 +1549,10 @@ const SortableNavItem = ({
       key={question?.id}
       id={`toc-${question?.id}`}
       className={` truncate py-2 text-gray-600 hover:text-violet-600 typography-body transition-colors unselectable duration-300 ${
-        focusedQuestionId === question.id ? "font-bold text-violet-800 " : ""
-      }`}
-      {...attributes}
-    >
+      focusedQuestionId === question.id ? "font-bold text-violet-800 " : ""}`
+      }
+      {...attributes}>
+
       <div className="flex items-center justify-between max-w-[calc(100%-0.4rem)]">
         <div className="flex items-center max-w-[calc(100%-1rem)]">
           <div {...listeners}>
@@ -1560,27 +1560,27 @@ const SortableNavItem = ({
           </div>
           <span className="truncate block ml-2">
             {question.question.trim() === "" ||
-            question.question.trim() === "<p></p>"
-              ? `${questionIndex + 1}. Untitled`
-              : `${questionIndex + 1}. ${question.question
-                  .replace(/<\/?[^>]+(>|$)/g, "")
-                  .trim()}`}
+            question.question.trim() === "<p></p>" ?
+            `${questionIndex + 1}. Untitled` :
+            `${questionIndex + 1}. ${question.question.
+            replace(/<\/?[^>]+(>|$)/g, "").
+            trim()}`}
           </span>
         </div>
-        {isDeleting && (
-          <div className="flex items-center">
+        {isDeleting &&
+        <div className="flex items-center">
             <input
-              type="checkbox"
-              className="cursor-pointer rounded-sm text-violet-600 focus:ring-violet-600"
-              checked={selectedQuestions.includes(question.id)}
-              onChange={() => handleCheckboxChange(question.id)}
-              onClick={(e) => e.stopPropagation()}
-            />
+            type="checkbox"
+            className="cursor-pointer rounded-sm text-violet-600 focus:ring-violet-600"
+            checked={selectedQuestions.includes(question.id)}
+            onChange={() => handleCheckboxChange(question.id)}
+            onClick={(e) => e.stopPropagation()} />
+
           </div>
-        )}
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 /**
@@ -1604,38 +1604,38 @@ const SortableNavList = ({
   isDeleting,
   handleCheckboxChange,
   selectedQuestions,
-  tocRefs,
+  tocRefs
 }: SortableNavListProps) => {
   return (
     <SortableContext
       items={questions.map((question) => question.id)}
-      strategy={verticalListSortingStrategy}
-    >
-      {questions.map((question: QuestionAuthorStore, index: number) => (
-        <div
-          key={`nav-item-${question.id}`}
-          onClick={() => {
-            onSelectQuestion(index);
-            setTimeout(() => {
-              handleJumpToQuestionTitle(`${question.id}`);
-            }, 0);
-          }}
-        >
+      strategy={verticalListSortingStrategy}>
+
+      {questions.map((question: QuestionAuthorStore, index: number) =>
+      <div
+        key={`nav-item-${question.id}`}
+        onClick={() => {
+          onSelectQuestion(index);
+          setTimeout(() => {
+            handleJumpToQuestionTitle(`${question.id}`);
+          }, 0);
+        }}>
+
           <SortableNavItem
-            index={index}
-            question={question}
-            onSelectQuestion={onSelectQuestion}
-            focusedQuestionId={focusedQuestionId}
-            isDeleting={isDeleting}
-            handleCheckboxChange={handleCheckboxChange}
-            selectedQuestions={selectedQuestions}
-            tocRefs={tocRefs}
-            questionIndex={index}
-          />
+          index={index}
+          question={question}
+          onSelectQuestion={onSelectQuestion}
+          focusedQuestionId={focusedQuestionId}
+          isDeleting={isDeleting}
+          handleCheckboxChange={handleCheckboxChange}
+          selectedQuestions={selectedQuestions}
+          tocRefs={tocRefs}
+          questionIndex={index} />
+
         </div>
-      ))}
-    </SortableContext>
-  );
+      )}
+    </SortableContext>);
+
 };
 
 const NavigationBox: FC<NavigationBoxProps> = ({
@@ -1644,7 +1644,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
   focusedQuestionId,
   handleToggleTable,
   setQuestions,
-  setHandleToggleTable,
+  setHandleToggleTable
 }) => {
   const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1652,9 +1652,9 @@ const NavigationBox: FC<NavigationBoxProps> = ({
 
   const handleCheckboxChange = (questionId: number) => {
     setSelectedQuestions((prevSelected: number[]) =>
-      prevSelected.includes(questionId)
-        ? prevSelected.filter((id: number) => id !== questionId)
-        : [...prevSelected, questionId],
+    prevSelected.includes(questionId) ?
+    prevSelected.filter((id: number) => id !== questionId) :
+    [...prevSelected, questionId]
     );
   };
 
@@ -1672,7 +1672,7 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     }
 
     const updatedQuestions = questions.filter(
-      (q) => !deletedQuestionIds.includes(q.id),
+      (q) => !deletedQuestionIds.includes(q.id)
     );
     updatedQuestions.forEach((q, index) => {
       q.index = index + 1;
@@ -1687,11 +1687,11 @@ const NavigationBox: FC<NavigationBoxProps> = ({
 
   const handleNavSortEnd = ({
     active,
-    over,
-  }: {
-    active: Active;
-    over: Over;
-  }) => {
+    over
+
+
+
+  }: {active: Active;over: Over;}) => {
     if (active.id !== over.id) {
       const oldIndex = questions.findIndex((q) => q.id === active.id);
       const newIndex = questions.findIndex((q) => q.id === over.id);
@@ -1701,9 +1701,9 @@ const NavigationBox: FC<NavigationBoxProps> = ({
         q.index = index + 1;
       });
       setQuestions(updatedQuestions);
-      useAuthorStore
-        .getState()
-        .setQuestionOrder(updatedQuestions.map((q) => q.id));
+      useAuthorStore.
+      getState().
+      setQuestionOrder(updatedQuestions.map((q) => q.id));
     }
   };
 
@@ -1711,85 +1711,85 @@ const NavigationBox: FC<NavigationBoxProps> = ({
     <DndContext
       sensors={useSensors(useSensor(PointerSensor))}
       collisionDetection={closestCenter}
-      onDragEnd={handleNavSortEnd}
-    >
+      onDragEnd={handleNavSortEnd}>
+
       <div
         className={`sticky top-4 p-3 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all bg-white overflow-y-scroll duration-300 ease-in-out ${
-          handleToggleTable ? "w-full max-h-[700px]" : "w-12"
-        } scrollbar-hide`}
-      >
+        handleToggleTable ? "w-full max-h-[700px]" : "w-12"} scrollbar-hide`
+        }>
+
         <button
           onClick={() => setHandleToggleTable(!handleToggleTable)}
-          className="flex items-center justify-between text-gray-600 hover:text-violet-700 transition-colors duration-300"
-        >
+          className="flex items-center justify-between text-gray-600 hover:text-violet-700 transition-colors duration-300">
+
           <ListBulletIcon className="w-5 h-5 text-gray-500" />
         </button>
-        {handleToggleTable && (
-          <div className="absolute top-3.5 right-3 flex items-center gap-2">
-            {isDeleting ? (
-              <>
+        {handleToggleTable &&
+        <div className="absolute top-3.5 right-3 flex items-center gap-2">
+            {isDeleting ?
+          <>
                 <button
-                  onClick={() => {
-                    if (selectedQuestions.length === questions.length) {
-                      setSelectedQuestions([]);
-                    }
-                    setSelectedQuestions(
-                      selectedQuestions.length === questions.length
-                        ? []
-                        : questions.map((q) => q.id),
-                    );
-                  }}
-                  className="text-gray-500 hover:text-violet-600 transition-colors duration-300"
-                >
+              onClick={() => {
+                if (selectedQuestions.length === questions.length) {
+                  setSelectedQuestions([]);
+                }
+                setSelectedQuestions(
+                  selectedQuestions.length === questions.length ?
+                  [] :
+                  questions.map((q) => q.id)
+                );
+              }}
+              className="text-gray-500 hover:text-violet-600 transition-colors duration-300">
+
                   Select All
                 </button>
 
-                {selectedQuestions.length > 0 ? (
-                  <button
-                    onClick={handleDeleteSelected}
-                    className="text-red-500 transition-colors duration-300"
-                  >
+                {selectedQuestions.length > 0 ?
+            <button
+              onClick={handleDeleteSelected}
+              className="text-red-500 transition-colors duration-300">
+
                     <TrashIcon className="w-5 h-5" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setIsDeleting(false)}
-                    className="text-gray-500 transition-colors duration-300"
-                  >
+                  </button> :
+
+            <button
+              onClick={() => setIsDeleting(false)}
+              className="text-gray-500 transition-colors duration-300">
+
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 text-gray-500 hover:text-red-500"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 text-gray-500 hover:text-red-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor">
+
                       <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12" />
+
                     </svg>
                   </button>
-                )}
-              </>
-            ) : (
-              <button
-                onClick={() => setIsDeleting(true)}
-                className="text-gray-500 hover:text-red-500 transition-colors duration-300"
-              >
+            }
+              </> :
+
+          <button
+            onClick={() => setIsDeleting(true)}
+            className="text-gray-500 hover:text-red-500 transition-colors duration-300">
+
                 <PencilIcon className="w-5 h-5" />
               </button>
-            )}
+          }
           </div>
-        )}
+        }
         <div
           className={`transition-max-h duration-300 text-left ease-in-out ${
-            handleToggleTable
-              ? "max-h-[calc(100vh-8rem)] overflow-y-auto mt-2"
-              : "max-h-0 overflow-hidden"
-          }`}
-        >
+          handleToggleTable ?
+          "max-h-[calc(100vh-8rem)] overflow-y-auto mt-2" :
+          "max-h-0 overflow-hidden"}`
+          }>
+
           <SortableNavList
             questions={questions}
             onSelectQuestion={onSelectQuestion}
@@ -1800,12 +1800,12 @@ const NavigationBox: FC<NavigationBoxProps> = ({
             handleToggleTable={false}
             setQuestions={setQuestions}
             setHandleToggleTable={setHandleToggleTable}
-            tocRefs={tocRefs}
-          />
+            tocRefs={tocRefs} />
+
         </div>
       </div>
-    </DndContext>
-  );
+    </DndContext>);
+
 };
 
 export default AuthorQuestionsPage;

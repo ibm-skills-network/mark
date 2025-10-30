@@ -32,7 +32,7 @@ export const openFileInNewTab = async (fileUrl: string, octokit: Octokit) => {
       owner,
       repo,
       path,
-      ref: branch,
+      ref: branch
     });
 
     if (response.data && "content" in response.data) {
@@ -50,7 +50,7 @@ export const openFileInNewTab = async (fileUrl: string, octokit: Octokit) => {
     }
   } catch (error) {
     toast.error(
-      "Could not open the file. Check that the file exists and that you have the necessary permissions.",
+      "Could not open the file. Check that the file exists and that you have the necessary permissions."
     );
   }
 };

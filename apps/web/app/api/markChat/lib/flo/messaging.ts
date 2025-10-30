@@ -90,7 +90,7 @@ export class MessagingClient {
         await this.connect();
       } else {
         throw new Error(
-          `Failed to connect to NATS after ${this.maxReconnectAttempts} attempts`,
+          `Failed to connect to NATS after ${this.maxReconnectAttempts} attempts`
         );
       }
     }

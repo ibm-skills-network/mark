@@ -23,13 +23,13 @@ const QuestionScore: FC<Props> = (props) => {
     <div className={textColor}>
       Scored{" "}
       <span className="font-bold">
-        {Number.isInteger(earnedPoints)
-          ? earnedPoints
-          : earnedPoints.toFixed(1)}{" "}
+        {Number.isInteger(earnedPoints) ?
+        earnedPoints :
+        earnedPoints.toFixed(1)}{" "}
       </span>
       out of {totalPoints} points
-    </div>
-  );
+    </div>);
+
 };
 
 export default QuestionScore;

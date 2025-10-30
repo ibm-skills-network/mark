@@ -15,9 +15,9 @@ function Breadcrumbs(props: Props) {
   const {
     homeHref = "/",
     pages = [
-      { name: "Projects", href: "#", current: false },
-      { name: "Project Nero", href: "#", current: true },
-    ],
+    { name: "Projects", href: "#", current: false },
+    { name: "Project Nero", href: "#", current: true }]
+
   } = props;
 
   return (
@@ -31,26 +31,26 @@ function Breadcrumbs(props: Props) {
             </a>
           </div>
         </li>
-        {pages.map((page) => (
-          <li key={page.name}>
+        {pages.map((page) =>
+        <li key={page.name}>
             <div className="flex items-center">
               <ChevronRightIcon
-                className="h-5 w-5 flex-shrink-0 text-gray-400"
-                aria-hidden="true"
-              />
+              className="h-5 w-5 flex-shrink-0 text-gray-400"
+              aria-hidden="true" />
+
               <a
-                href={page.href}
-                className="ml-4 text-sm font-medium leading-5 text-gray-500 hover:text-gray-700"
-                aria-current={page.current ? "page" : undefined}
-              >
+              href={page.href}
+              className="ml-4 text-sm font-medium leading-5 text-gray-500 hover:text-gray-700"
+              aria-current={page.current ? "page" : undefined}>
+
                 {page.name}
               </a>
             </div>
           </li>
-        ))}
+        )}
       </ol>
-    </nav>
-  );
+    </nav>);
+
 }
 
 export default Breadcrumbs;

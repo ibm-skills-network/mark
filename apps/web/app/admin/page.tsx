@@ -20,7 +20,7 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAdminAccess = async () => {
       try {
-        // First, check if we have a valid admin session token
+
         const adminToken = localStorage.getItem("adminSessionToken");
         const adminEmail = localStorage.getItem("adminEmail");
         const expiresAt = localStorage.getItem("adminExpiresAt");
@@ -29,44 +29,44 @@ export default function AdminPage() {
           const expireDate = new Date(expiresAt);
 
           if (expireDate > new Date()) {
-            // Session appears valid, let's verify it with the backend
+
             try {
               const response = await fetch(
                 "/api/v1/reports/feedback?page=1&limit=1",
                 {
                   headers: {
-                    "x-admin-token": adminToken,
-                  },
-                },
+                    "x-admin-token": adminToken
+                  }
+                }
               );
 
               if (response.ok) {
-                // Session is valid with backend
+
                 setSessionToken(adminToken);
                 setIsAuthenticated(true);
                 setUserRole("admin");
                 setIsLoading(false);
 
-                // If user already has valid session and there's a returnTo parameter, redirect
+
                 if (returnTo) {
                   router.push(returnTo);
                 }
                 return;
               } else {
-                // Session invalid, clear it
+
                 localStorage.removeItem("adminSessionToken");
                 localStorage.removeItem("adminEmail");
                 localStorage.removeItem("adminExpiresAt");
               }
             } catch (apiError) {
               console.error("Error validating session with backend:", apiError);
-              // Clear potentially invalid session
+
               localStorage.removeItem("adminSessionToken");
               localStorage.removeItem("adminEmail");
               localStorage.removeItem("adminExpiresAt");
             }
           } else {
-            // Session expired, clear it
+
             localStorage.removeItem("adminSessionToken");
             localStorage.removeItem("adminEmail");
             localStorage.removeItem("adminExpiresAt");
@@ -74,7 +74,7 @@ export default function AdminPage() {
         }
       } catch (error) {
         console.error("Failed to check admin access:", error);
-        // Will show login form
+
       } finally {
         setIsLoading(false);
       }
@@ -88,7 +88,7 @@ export default function AdminPage() {
     setIsAuthenticated(true);
     setUserRole("admin");
 
-    // Redirect to the original destination if returnTo parameter exists
+
     if (returnTo) {
       router.push(returnTo);
     }
@@ -102,26 +102,26 @@ export default function AdminPage() {
         await fetch("/api/v1/auth/admin/logout", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify({ sessionToken: adminToken }),
+          body: JSON.stringify({ sessionToken: adminToken })
         });
       } catch (error) {
         console.error("Failed to logout:", error);
       }
     }
 
-    // Clear local storage
+
     localStorage.removeItem("adminSessionToken");
     localStorage.removeItem("adminEmail");
     localStorage.removeItem("adminExpiresAt");
 
-    // Reset state
+
     setSessionToken(null);
     setIsAuthenticated(false);
     setUserRole(null);
 
-    // Redirect to home page
+
     router.push("/");
   };
 
@@ -137,8 +137,8 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       <OptimizedAdminDashboard
         sessionToken={sessionToken}
-        onLogout={handleLogout}
-      />
-    </div>
-  );
+        onLogout={handleLogout} />
+
+    </div>);
+
 }

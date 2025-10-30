@@ -2,8 +2,8 @@
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
-  useLearnerStore,
-} from "@/stores/learner";
+  useLearnerStore } from
+"@/stores/learner";
 import { useEffect, useState } from "react";
 import { shallow } from "zustand/shallow";
 
@@ -51,7 +51,7 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     showSubmissionFeedback,
     totalPointsEarned,
     totalPointsPossible,
-    expiresAt,
+    expiresAt
   } = useLearnerStore(
     (state) => ({
       questions: state.questions,
@@ -61,28 +61,28 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       totalPointsEarned: state.totalPointsEarned,
       totalPointsPossible: state.totalPointsPossible,
       expiresAt: state.expiresAt,
-      setActiveQuestionNumber: state.setActiveQuestionNumber,
+      setActiveQuestionNumber: state.setActiveQuestionNumber
     }),
-    shallow,
+    shallow
   );
 
   const { assignmentDetails, grade } = useAssignmentDetails(
     (state) => ({
       assignmentDetails: state.assignmentDetails,
-      grade: state.grade,
+      grade: state.grade
     }),
-    shallow,
+    shallow
   );
 
   const { listOfAttempts, assignmentId, assignmentName } =
-    useLearnerOverviewStore(
-      (state) => ({
-        listOfAttempts: state.listOfAttempts,
-        assignmentId: state.assignmentId,
-        assignmentName: state.assignmentName,
-      }),
-      shallow,
-    );
+  useLearnerOverviewStore(
+    (state) => ({
+      listOfAttempts: state.listOfAttempts,
+      assignmentId: state.assignmentId,
+      assignmentName: state.assignmentName
+    }),
+    shallow
+  );
 
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
   const [assignmentMeta, setAssignmentMeta] = useState<{
@@ -98,15 +98,15 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
   const isFeedbackMode = showSubmissionFeedback === true;
 
   const currentAttempt = listOfAttempts.find(
-    (attempt) => attempt.id === activeAttemptId,
+    (attempt) => attempt.id === activeAttemptId
   );
 
   const calculateAttemptsRemaining = (): number => {
     if (
-      !assignmentDetails ||
-      !assignmentDetails.numAttempts ||
-      assignmentDetails.numAttempts < 0
-    ) {
+    !assignmentDetails ||
+    !assignmentDetails.numAttempts ||
+    assignmentDetails.numAttempts < 0)
+    {
       return -1;
     }
 
@@ -133,7 +133,7 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         type: assignmentDetails.graded ? "graded" : "practice",
         passingGrade: assignmentDetails.passingGrade,
         numAttempts: assignmentDetails.numAttempts,
-        attemptsRemaining: calculateAttemptsRemaining(),
+        attemptsRemaining: calculateAttemptsRemaining()
       });
     }
   }, [assignmentDetails, listOfAttempts]);
@@ -142,17 +142,17 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     let contextContent = "MARK ASSISTANT CONTEXT:\n\n";
 
     contextContent += `Assignment: ${
-      assignmentDetails?.name || assignmentName || "Current assignment"
-    }\n`;
+    assignmentDetails?.name || assignmentName || "Current assignment"}\n`;
+
     contextContent += `Assignment ID: ${
-      assignmentId || assignmentDetails?.id || "Unknown"
-    }\n`;
+    assignmentId || assignmentDetails?.id || "Unknown"}\n`;
+
     contextContent += `Type: ${
-      isGradedAssignment ? "Graded" : "Practice"
-    } assignment\n`;
+    isGradedAssignment ? "Graded" : "Practice"} assignment\n`;
+
     contextContent += `Status: ${
-      isFeedbackMode ? "Feedback Review" : "In Progress"
-    }\n`;
+    isFeedbackMode ? "Feedback Review" : "In Progress"}\n`;
+
 
     contextContent += `Current Attempt ID: ${activeAttemptId || "N/A"}\n`;
     if (assignmentDetails?.numAttempts && assignmentDetails.numAttempts > 0) {
@@ -167,7 +167,7 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       const now = new Date();
       const timeRemaining = Math.max(
         0,
-        Math.floor((expiresAtDate.getTime() - now.getTime()) / 60000),
+        Math.floor((expiresAtDate.getTime() - now.getTime()) / 60000)
       );
 
       contextContent += `Time Remaining: Approximately ${timeRemaining} minutes\n`;
@@ -178,24 +178,24 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     if (isFeedbackMode) {
       contextContent += "MODE: FEEDBACK ANALYSIS\n";
       contextContent += `Overall Grade: ${
-        grade !== null ? grade : totalPointsEarned
-      }/${totalPointsPossible} points\n`;
+      grade !== null ? grade : totalPointsEarned}/${
+      totalPointsPossible} points\n`;
       contextContent += `Passing Grade: ${
-        assignmentDetails?.passingGrade || 50
-      }%\n`;
+      assignmentDetails?.passingGrade || 50}%\n`;
+
 
       const percentage =
-        grade !== null
-          ? (grade / (totalPointsPossible || 100)) * 100
-          : (totalPointsEarned / (totalPointsPossible || 100)) * 100;
+      grade !== null ?
+      grade / (totalPointsPossible || 100) * 100 :
+      totalPointsEarned / (totalPointsPossible || 100) * 100;
       const passed = percentage >= (assignmentDetails?.passingGrade || 50);
 
       contextContent += `Student Status: ${
-        passed ? "PASSED" : "NOT PASSED"
-      }\n\n`;
+      passed ? "PASSED" : "NOT PASSED"}\n\n`;
+
 
       contextContent +=
-        "The learner is reviewing their feedback. You can help explain assessment results, clarify rubric items, and suggest improvements for future assignments.\n\n";
+      "The learner is reviewing their feedback. You can help explain assessment results, clarify rubric items, and suggest improvements for future assignments.\n\n";
 
       if (questions && questions.length > 0) {
         contextContent += "FEEDBACK SUMMARY:\n";
@@ -205,11 +205,11 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
 
           const questionPoints = q.totalPoints || 0;
           const earnedPoints =
-            q.questionResponses?.reduce(
-              (acc: number, response: any) =>
-                acc + (response.pointsEarned || 0),
-              0,
-            ) || 0;
+          q.questionResponses?.reduce(
+            (acc: number, response: any) =>
+            acc + (response.pointsEarned || 0),
+            0
+          ) || 0;
 
           contextContent += `Question ${q.id}: ${earnedPoints}/${questionPoints} points\n`;
           contextContent += `Type: ${q.type}\n`;
@@ -218,18 +218,18 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
           if (q.learnerTextResponse) {
             contextContent += `Learner's text response: ${q.learnerTextResponse.replace(
               /<[^>]*>/g,
-              "",
+              ""
             )}\n`;
           }
           if (q.learnerChoices && q.learnerChoices.length > 0) {
             contextContent += `Learner's selected choices: ${q.learnerChoices.join(
-              ", ",
+              ", "
             )}\n`;
           }
           if (q.learnerAnswerChoice !== undefined) {
             contextContent += `Learner's answer: ${
-              q.learnerAnswerChoice ? "True" : "False"
-            }\n`;
+            q.learnerAnswerChoice ? "True" : "False"}\n`;
+
           }
 
           if (q.questionResponses && q.questionResponses.length > 0) {
@@ -247,23 +247,23 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
 
       contextContent += "REGRADING INFORMATION:\n";
       contextContent +=
-        "- The learner can request regrading if they believe their assessment was scored incorrectly\n";
+      "- The learner can request regrading if they believe their assessment was scored incorrectly\n";
       contextContent +=
-        "- You can help create a regrading request using the requestRegrading tool\n";
+      "- You can help create a regrading request using the requestRegrading tool\n";
       contextContent +=
-        "- Clearly explain the regrading process to the learner\n\n";
+      "- Clearly explain the regrading process to the learner\n\n";
     } else {
       contextContent += "MODE: ASSIGNMENT ASSISTANCE\n";
 
       if (isGradedAssignment) {
         contextContent += "This is a GRADED assignment. You should:\n";
         contextContent +=
-          "- Only provide general guidance, NOT specific answers\n";
+        "- Only provide general guidance, NOT specific answers\n";
         contextContent += "- Focus on clarifying concepts and requirements\n";
         contextContent +=
-          "- Encourage critical thinking rather than giving solutions\n";
+        "- Encourage critical thinking rather than giving solutions\n";
         contextContent +=
-          "- Avoid directly answering questions in a way that would undermine assessment\n";
+        "- Avoid directly answering questions in a way that would undermine assessment\n";
       } else {
         contextContent += "This is a PRACTICE assignment. You can:\n";
         contextContent += "- Provide detailed explanations and hints\n";
@@ -291,66 +291,66 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         if (currentQuestion.learnerTextResponse) {
           contextContent += `Text Response: ${currentQuestion.learnerTextResponse.replace(
             /<[^>]*>/g,
-            "",
+            ""
           )}\n`;
         }
 
         if (
-          currentQuestion.learnerChoices &&
-          currentQuestion.learnerChoices.length > 0
-        ) {
+        currentQuestion.learnerChoices &&
+        currentQuestion.learnerChoices.length > 0)
+        {
           contextContent += `Selected Choices: ${currentQuestion.learnerChoices.join(
-            ", ",
+            ", "
           )}\n`;
         }
 
         if (currentQuestion.learnerAnswerChoice !== undefined) {
           contextContent += `Answer: ${
-            currentQuestion.learnerAnswerChoice ? "True" : "False"
-          }\n`;
+          currentQuestion.learnerAnswerChoice ? "True" : "False"}\n`;
+
         }
 
         if (
-          currentQuestion.learnerFileResponse &&
-          currentQuestion.learnerFileResponse.length > 0
-        ) {
-          contextContent += `Uploaded Files: ${currentQuestion.learnerFileResponse
-            .map((f: any) => f.filename)
-            .join(", ")}\n`;
+        currentQuestion.learnerFileResponse &&
+        currentQuestion.learnerFileResponse.length > 0)
+        {
+          contextContent += `Uploaded Files: ${currentQuestion.learnerFileResponse.
+          map((f: any) => f.filename).
+          join(", ")}\n`;
         }
       }
     }
 
     contextContent += "\nISSUE REPORTING:\n";
     contextContent +=
-      "- The learner can report technical issues, content problems, or grading concerns\n";
+    "- The learner can report technical issues, content problems, or grading concerns\n";
     contextContent +=
-      "- You can help create a report using the reportIssue tool\n";
+    "- You can help create a report using the reportIssue tool\n";
     contextContent +=
-      "- Make sure to collect specific details about the issue\n\n";
+    "- Make sure to collect specific details about the issue\n\n";
 
     contextContent += "REQUIRED BEHAVIOR:\n";
     contextContent += "1. Answer ONLY questions related to this assignment\n";
     contextContent +=
-      "2. If the learner asks about unrelated topics, politely redirect them to the assignment\n";
+    "2. If the learner asks about unrelated topics, politely redirect them to the assignment\n";
     contextContent +=
-      "3. Be encouraging, supportive, and clear in your explanations\n";
+    "3. Be encouraging, supportive, and clear in your explanations\n";
     contextContent += `4. For ${
-      isGradedAssignment ? "graded" : "practice"
-    } assignments, ${
-      isGradedAssignment
-        ? "provide guidance without giving direct answers"
-        : "help the learner understand concepts and improve their work"
-    }\n`;
+    isGradedAssignment ? "graded" : "practice"} assignments, ${
+
+    isGradedAssignment ?
+    "provide guidance without giving direct answers" :
+    "help the learner understand concepts and improve their work"}\n`;
+
     contextContent +=
-      "5. Take regrade requests and issue reports seriously - these are important tools for learners\n";
+    "5. Take regrade requests and issue reports seriously - these are important tools for learners\n";
     contextContent +=
-      "6. When using tools, clearly explain to the learner what you're doing and what will happen next\n";
+    "6. When using tools, clearly explain to the learner what you're doing and what will happen next\n";
 
     return {
       id: `system-context-${Date.now()}`,
       role: "system",
-      content: contextContent,
+      content: contextContent
     };
   };
 
@@ -364,12 +364,12 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       points: currentQuestion.totalPoints,
       hasResponse: Boolean(
         currentQuestion.learnerTextResponse ||
-          (currentQuestion.learnerChoices &&
-            currentQuestion.learnerChoices.length > 0) ||
-          currentQuestion.learnerAnswerChoice !== undefined ||
-          (currentQuestion.learnerFileResponse &&
-            currentQuestion.learnerFileResponse.length > 0),
-      ),
+        currentQuestion.learnerChoices &&
+        currentQuestion.learnerChoices.length > 0 ||
+        currentQuestion.learnerAnswerChoice !== undefined ||
+        currentQuestion.learnerFileResponse &&
+        currentQuestion.learnerFileResponse.length > 0
+      )
     };
   };
 
@@ -389,6 +389,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       if (questionNumber > 0 && questionNumber <= questions.length) {
         setCurrentQuestion(questions[questionNumber - 1]);
       }
-    },
+    }
   };
 };

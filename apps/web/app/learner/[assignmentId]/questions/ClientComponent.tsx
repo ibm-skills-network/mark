@@ -5,8 +5,8 @@ import type {
   Assignment,
   AssignmentDetails,
   QuestionStore,
-  ReplaceAssignmentRequest,
-} from "@/config/types";
+  ReplaceAssignmentRequest } from
+"@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
@@ -19,10 +19,10 @@ interface ClientLearnerLayoutProps {
 
 const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   assignmentId,
-  role,
+  role
 }) => {
   const setAssignmentDetails = useAssignmentDetails(
-    (state) => state.setAssignmentDetails,
+    (state) => state.setAssignmentDetails
   );
   const setRole = useLearnerStore((state) => state.setRole);
   useEffect(() => {
@@ -30,17 +30,17 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   }, [role]);
   const assignmentDetails = getStoredData(
     "assignmentConfig",
-    {},
+    {}
   ) as AssignmentDetails;
   const allQuestions = getStoredData("questions", []) as QuestionStore[];
   const numberOfQuestionsPerAttempt =
-    assignmentDetails?.numberOfQuestionsPerAttempt || null;
+  assignmentDetails?.numberOfQuestionsPerAttempt || null;
   const questions: QuestionStore[] =
-    numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
-      ? allQuestions
-          .sort(() => 0.5 - Math.random())
-          .slice(0, numberOfQuestionsPerAttempt)
-      : allQuestions;
+  numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0 ?
+  allQuestions.
+  sort(() => 0.5 - Math.random()).
+  slice(0, numberOfQuestionsPerAttempt) :
+  allQuestions;
   useEffect(() => {
     setAssignmentDetails({
       ...assignmentDetails,
@@ -50,13 +50,13 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       published: assignmentDetails.published || false,
       questionOrder: assignmentDetails.questionOrder || [],
       updatedAt:
-        typeof assignmentDetails.updatedAt === "string"
-          ? Date.parse(assignmentDetails.updatedAt)
-          : assignmentDetails.updatedAt || Date.now(),
+      typeof assignmentDetails.updatedAt === "string" ?
+      Date.parse(assignmentDetails.updatedAt) :
+      assignmentDetails.updatedAt || Date.now(),
       passingGrade: assignmentDetails.passingGrade || 0,
       showSubmissionFeedback: assignmentDetails.showSubmissionFeedback || false,
       showQuestionScore: assignmentDetails.showQuestionScore || false,
-      showAssignmentScore: assignmentDetails.showAssignmentScore || false,
+      showAssignmentScore: assignmentDetails.showAssignmentScore || false
     });
   }, [assignmentDetails, setAssignmentDetails]);
 
@@ -70,17 +70,17 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
           questions,
           assignmentDetails,
           expiresAt:
-            assignmentDetails?.strictTimeLimit === true
-              ? new Date(
-                  Date.now() +
-                    (assignmentDetails?.allotedTimeMinutes || 0) * 60000,
-                ).toISOString()
-              : null,
+          assignmentDetails?.strictTimeLimit === true ?
+          new Date(
+            Date.now() +
+            (assignmentDetails?.allotedTimeMinutes || 0) * 60000
+          ).toISOString() :
+          null
         }}
-        assignmentId={assignmentId}
-      />
-    </main>
-  );
+        assignmentId={assignmentId} />
+
+    </main>);
+
 };
 
 export default ClientLearnerLayout;

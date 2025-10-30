@@ -3,8 +3,8 @@ import type {
   Question,
   QuestionType,
   QuestionVariants,
-  Scoring,
-} from "../../config/types";
+  Scoring } from
+"../../config/types";
 import { useDebugLog } from "../../lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
@@ -28,16 +28,16 @@ const choiceTypes = new Set(["SINGLE_CORRECT", "MULTIPLE_CORRECT"]);
  * It returns a function that returns a ValidationResult.
  */
 export const useQuestionsAreReadyToBePublished = (
-  questions: Question[],
-): (() => ValidationResult) => {
+questions: Question[])
+: (() => ValidationResult) => {
   const debugLog = useDebugLog();
   const assignmentConfig = useAssignmentConfig((state) => state);
   const introduction = useAuthorStore((state) => state.introduction);
 
   const validateBasicFields = (
-    q: Question,
-    index: number,
-  ): ValidationError | null => {
+  q: Question,
+  index: number)
+  : ValidationError | null => {
     if (!q.question?.trim()) {
       return { message: `Question ${index + 1} text is empty.`, step: 0 };
     }
@@ -47,7 +47,7 @@ export const useQuestionsAreReadyToBePublished = (
     if (q.totalPoints == null) {
       return {
         message: `Question ${index + 1} total points are missing.`,
-        step: 0,
+        step: 0
       };
     }
     if (q.assignmentId == null) {
@@ -57,17 +57,17 @@ export const useQuestionsAreReadyToBePublished = (
   };
 
   const validateChoices = (
-    choices: Choice[] | undefined,
-    index: number,
-    type: QuestionType,
-  ): ValidationError | null => {
+  choices: Choice[] | undefined,
+  index: number,
+  type: QuestionType)
+  : ValidationError | null => {
     if (!choices || !Array.isArray(choices) || choices.length === 0) {
       return { message: `Question ${index + 1} has no choices.`, step: 0 };
     }
     if (choiceTypes.has(type) && choices.length < 2) {
       return {
         message: `Question ${index + 1} must have at least 2 choices.`,
-        step: 0,
+        step: 0
       };
     }
     for (let i = 0; i < choices.length; i++) {
@@ -75,17 +75,17 @@ export const useQuestionsAreReadyToBePublished = (
       if (!choiceText?.trim()) {
         return {
           message: `Question ${index + 1} has an empty choice text.`,
-          step: 0,
+          step: 0
         };
       }
       if (
-        points === undefined ||
-        points === null ||
-        typeof points !== "number"
-      ) {
+      points === undefined ||
+      points === null ||
+      typeof points !== "number")
+      {
         return {
           message: `Question ${index + 1} has a choice with invalid points.`,
-          step: 0,
+          step: 0
         };
       }
     }
@@ -93,9 +93,9 @@ export const useQuestionsAreReadyToBePublished = (
       if (!choices.some((choice) => choice.isCorrect)) {
         return {
           message: `Question ${
-            index + 1
-          } must have at least one correct choice.`,
-          step: 0,
+          index + 1} must have at least one correct choice.`,
+
+          step: 0
         };
       }
     }
@@ -103,23 +103,23 @@ export const useQuestionsAreReadyToBePublished = (
   };
 
   const validateScoring = (
-    scoring: Scoring | undefined,
-    index: number,
-  ): ValidationError | null => {
+  scoring: Scoring | undefined,
+  index: number)
+  : ValidationError | null => {
     if (!scoring) {
       return {
         message: `Question ${index + 1} requires scoring configuration.`,
-        step: 0,
+        step: 0
       };
     }
     if (
-      !scoring.rubrics ||
-      !Array.isArray(scoring.rubrics) ||
-      scoring.rubrics.length === 0
-    ) {
+    !scoring.rubrics ||
+    !Array.isArray(scoring.rubrics) ||
+    scoring.rubrics.length === 0)
+    {
       return {
         message: `Question ${index + 1} scoring rubrics are missing.`,
-        step: 0,
+        step: 0
       };
     }
     for (let r = 0; r < scoring.rubrics.length; r++) {
@@ -127,19 +127,19 @@ export const useQuestionsAreReadyToBePublished = (
       if (!rubric?.rubricQuestion?.trim()) {
         return {
           message: `Question ${index + 1} rubric ${r + 1} question is empty.`,
-          step: 0,
+          step: 0
         };
       }
       if (
-        !rubric.criteria ||
-        !Array.isArray(rubric.criteria) ||
-        rubric.criteria.length === 0
-      ) {
+      !rubric.criteria ||
+      !Array.isArray(rubric.criteria) ||
+      rubric.criteria.length === 0)
+      {
         return {
           message: `Question ${index + 1} rubric ${
-            r + 1
-          } criteria are missing.`,
-          step: 0,
+          r + 1} criteria are missing.`,
+
+          step: 0
         };
       }
       for (let c = 0; c < rubric.criteria.length; c++) {
@@ -147,21 +147,21 @@ export const useQuestionsAreReadyToBePublished = (
         if (!crit.description?.trim()) {
           return {
             message: `Question ${index + 1} rubric ${r + 1} criteria ${
-              c + 1
-            } description is empty.`,
-            step: 0,
+            c + 1} description is empty.`,
+
+            step: 0
           };
         }
         if (
-          crit.points === undefined ||
-          crit.points === null ||
-          typeof crit.points !== "number"
-        ) {
+        crit.points === undefined ||
+        crit.points === null ||
+        typeof crit.points !== "number")
+        {
           return {
             message: `Question ${index + 1} rubric ${r + 1} criteria ${
-              c + 1
-            } points are invalid.`,
-            step: 0,
+            c + 1} points are invalid.`,
+
+            step: 0
           };
         }
       }
@@ -170,22 +170,22 @@ export const useQuestionsAreReadyToBePublished = (
   };
 
   const validateVariants = (
-    variants: QuestionVariants[],
-    qType: QuestionType,
-    index: number,
-  ): ValidationError | null => {
+  variants: QuestionVariants[],
+  qType: QuestionType,
+  index: number)
+  : ValidationError | null => {
     for (let v = 0; v < variants.length; v++) {
       const variant = variants[v];
       if (!variant.variantContent?.trim()) {
         return {
           message: `Question ${index + 1} variant ${v + 1} content is empty.`,
-          step: 0,
+          step: 0
         };
       }
       if (variant.scoring === undefined && textTypes.has(qType)) {
         return {
           message: `Question ${index + 1} variant ${v + 1} scoring is required.`,
-          step: 0,
+          step: 0
         };
       }
       if (variant.scoring && textTypes.has(qType)) {
@@ -195,23 +195,23 @@ export const useQuestionsAreReadyToBePublished = (
         }
       }
       if (
-        (variant.choices && choiceTypes.has(qType)) ||
-        qType === "TRUE_FALSE"
-      ) {
+      variant.choices && choiceTypes.has(qType) ||
+      qType === "TRUE_FALSE")
+      {
         if (!Array.isArray(variant.choices)) {
           return {
             message: `Question ${index + 1} variant ${
-              v + 1
-            } choices are not in the correct format.`,
-            step: 0,
+            v + 1} choices are not in the correct format.`,
+
+            step: 0
           };
         }
         if (qType === "TRUE_FALSE" && variant.choices.length !== 1) {
           return {
             message: `Question ${index + 1} variant ${
-              v + 1
-            } must have exactly 1 choices.`,
-            step: 0,
+            v + 1} must have exactly 1 choices.`,
+
+            step: 0
           };
         }
         const choiceError = validateChoices(variant.choices, index, qType);
@@ -291,46 +291,46 @@ export const useQuestionsAreReadyToBePublished = (
         isValid = false;
       }
       if (
-        assignmentConfig.numAttempts == null ||
-        assignmentConfig.numAttempts < -1
-      ) {
+      assignmentConfig.numAttempts == null ||
+      assignmentConfig.numAttempts < -1)
+      {
         message = `Please enter a valid number of attempts.`;
         debugLog(message);
         step = 1;
         isValid = false;
       }
       if (
-        assignmentConfig.attemptsBeforeCoolDown == null ||
-        assignmentConfig.attemptsBeforeCoolDown < -1
-      ) {
+      assignmentConfig.attemptsBeforeCoolDown == null ||
+      assignmentConfig.attemptsBeforeCoolDown < -1)
+      {
         message = `Please enter a valid number of attempts before cooldown period.`;
         debugLog(message);
         step = 3;
         isValid = false;
       }
       if (
-        assignmentConfig.retakeAttemptCoolDownMinutes == null ||
-        assignmentConfig.retakeAttemptCoolDownMinutes < -1
-      ) {
+      assignmentConfig.retakeAttemptCoolDownMinutes == null ||
+      assignmentConfig.retakeAttemptCoolDownMinutes < -1)
+      {
         message = `Please enter a valid number of minutes for the cooldown period.`;
         debugLog(message);
         step = 3;
         isValid = false;
       }
       if (
-        assignmentConfig.passingGrade == null ||
-        assignmentConfig.passingGrade <= 0 ||
-        assignmentConfig.passingGrade > 100
-      ) {
+      assignmentConfig.passingGrade == null ||
+      assignmentConfig.passingGrade <= 0 ||
+      assignmentConfig.passingGrade > 100)
+      {
         message = `Passing grade must be between 1 and 100.`;
         debugLog(message);
         step = 1;
         isValid = false;
       }
       if (
-        !assignmentConfig.displayOrder &&
-        assignmentConfig.numberOfQuestionsPerAttempt !== null
-      ) {
+      !assignmentConfig.displayOrder &&
+      assignmentConfig.numberOfQuestionsPerAttempt !== null)
+      {
         message = `Question order is required.`;
         debugLog(message);
         step = 1;
@@ -348,7 +348,7 @@ export const useQuestionsAreReadyToBePublished = (
       isValid,
       message,
       step,
-      invalidQuestionId,
+      invalidQuestionId
     };
   }, [questions, debugLog, assignmentConfig, introduction]);
 

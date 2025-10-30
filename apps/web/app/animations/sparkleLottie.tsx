@@ -6,8 +6,8 @@ import {
   useEffect,
   useRef,
   type ComponentPropsWithoutRef,
-  type FC,
-} from "react";
+  type FC } from
+"react";
 import sparkle from "./sparkle";
 
 const Lottie = dynamic(() => import("lottie-react"), { ssr: false });
@@ -28,9 +28,9 @@ const Component: FC<Props> = () => {
       animationData={sparkle}
       rendererSettings={{ preserveAspectRatio: "xMidYMid slice" }}
       autoplay
-      loop
-    />
-  );
+      loop />);
+
+
 };
 
 export default Component;

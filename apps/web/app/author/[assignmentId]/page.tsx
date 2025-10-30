@@ -5,12 +5,12 @@ import MainContent from "../(components)/StepOne/MainContent";
 
 const DynamicSuccessPage = dynamic(
   () => import("../(components)/SuccessPage"),
-  { ssr: false },
+  { ssr: false }
 );
 
 interface Props {
-  params: { assignmentId: string };
-  searchParams: { submissionTime?: string };
+  params: {assignmentId: string;};
+  searchParams: {submissionTime?: string;};
 }
 
 function Component(props: Props) {
@@ -20,23 +20,23 @@ function Component(props: Props) {
 
   return (
     <main className="main-author-container">
-      {submissionTime ? (
-        <DynamicSuccessPage />
-      ) : (
-        <>
+      {submissionTime ?
+      <DynamicSuccessPage /> :
+
+      <>
           <PageTitle
-            title="Let's set up your assignment!"
-            description="Responses in this section will be shown to learners."
-          />
+          title="Let's set up your assignment!"
+          description="Responses in this section will be shown to learners." />
+
           <MainContent />
           <FooterNavigation
-            assignmentId={String(assignmentId)}
-            nextStep="questions"
-          />
+          assignmentId={String(assignmentId)}
+          nextStep="questions" />
+
         </>
-      )}
-    </main>
-  );
+      }
+    </main>);
+
 }
 
 export default Component;

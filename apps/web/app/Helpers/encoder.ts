@@ -1,7 +1,7 @@
-export function encodeFields(fields: { [key: string]: string | null }): {
+export function encodeFields(fields: {[key: string]: string | null;}): {
   [key: string]: string | null;
 } {
-  const encodedFields: { [key: string]: string | null } = {};
+  const encodedFields: {[key: string]: string | null;} = {};
 
   for (const key in fields) {
     if (fields[key]) {

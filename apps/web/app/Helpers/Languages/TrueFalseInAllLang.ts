@@ -1,7 +1,7 @@
 export const trueFalseTranslations: Record<
   string,
-  { true: string; false: string }
-> = {
+  {true: string;false: string;}> =
+{
   en: { true: "True", false: "False" },
   id: { true: "Benar", false: "Salah" },
   de: { true: "Wahr", false: "Falsch" },
@@ -24,5 +24,5 @@ export const trueFalseTranslations: Record<
   ko: { true: "참", false: "거짓" },
   "zh-CN": { true: "真", false: "假" },
   "zh-TW": { true: "真", false: "假" },
-  ja: { true: "真", false: "偽" },
+  ja: { true: "真", false: "偽" }
 };

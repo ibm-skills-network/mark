@@ -5,9 +5,9 @@ import { useAuthorStore } from "@/stores/author";
 import { useMemo } from "react";
 
 function safeCompare<T>(
-  a: T | null | undefined,
-  b: T | null | undefined,
-): boolean {
+a: T | null | undefined,
+b: T | null | undefined)
+: boolean {
   if (a == null && b == null) return true;
 
   if (a == null || b == null) return false;
@@ -20,11 +20,11 @@ function safeCompare<T>(
 }
 
 function safeArrayCompare<T>(
-  a: T[] | null | undefined,
-  b: T[] | null | undefined,
-  compareFn?: (itemA: T, itemB: T) => boolean,
-): boolean {
-  // Normalize null/undefined to empty arrays for comparison
+a: T[] | null | undefined,
+b: T[] | null | undefined,
+compareFn?: (itemA: T, itemB: T) => boolean)
+: boolean {
+
   const normalizeArray = (arr: T[] | null | undefined): T[] => {
     if (arr == null) return [];
     return arr;
@@ -40,7 +40,7 @@ function safeArrayCompare<T>(
   if (compareFn) {
     for (let i = 0; i < normalizedA.length; i++) {
       const matchFound = normalizedB.some((bItem) =>
-        compareFn(normalizedA[i], bItem),
+      compareFn(normalizedA[i], bItem)
       );
       if (!matchFound) return false;
     }
@@ -52,13 +52,13 @@ function safeArrayCompare<T>(
 
 export function useChangesSummary(): string {
   const originalAssignment = useAuthorStore(
-    (state) => state.originalAssignment,
+    (state) => state.originalAssignment
   );
   const questions = useAuthorStore((state) => state.questions);
   const introduction = useAuthorStore((state) => state.introduction);
   const instructions = useAuthorStore((state) => state.instructions);
   const gradingCriteriaOverview = useAuthorStore(
-    (state) => state.gradingCriteriaOverview,
+    (state) => state.gradingCriteriaOverview
   );
   const questionOrder = useAuthorStore((state) => state.questionOrder);
 
@@ -74,7 +74,7 @@ export function useChangesSummary(): string {
     displayOrder,
     strictTimeLimit,
     graded,
-    numberOfQuestionsPerAttempt,
+    numberOfQuestionsPerAttempt
   } = useAssignmentConfig();
 
   const {
@@ -83,7 +83,7 @@ export function useChangesSummary(): string {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    correctAnswerVisibility,
+    correctAnswerVisibility
   } = useAssignmentFeedbackConfig();
 
   const changesSummary = useMemo(() => {
@@ -92,46 +92,46 @@ export function useChangesSummary(): string {
     const diffs: string[] = [];
 
     if (!safeCompare(introduction, originalAssignment.introduction))
-      diffs.push("Modified introduction.");
+    diffs.push("Modified introduction.");
 
     if (!safeCompare(instructions, originalAssignment.instructions))
-      diffs.push("Changed instructions.");
+    diffs.push("Changed instructions.");
     if (!safeCompare(showQuestions, originalAssignment.showQuestions))
-      diffs.push("Changed question visibility.");
+    diffs.push("Changed question visibility.");
 
     if (
-      !safeCompare(
-        gradingCriteriaOverview,
-        originalAssignment.gradingCriteriaOverview,
-      )
-    )
-      diffs.push("Updated grading criteria overview.");
+    !safeCompare(
+      gradingCriteriaOverview,
+      originalAssignment.gradingCriteriaOverview
+    ))
+
+    diffs.push("Updated grading criteria overview.");
 
     if (
-      !safeCompare(
-        showSubmissionFeedback,
-        originalAssignment.showSubmissionFeedback,
-      )
-    )
-      diffs.push("Changed submission feedback visibility.");
+    !safeCompare(
+      showSubmissionFeedback,
+      originalAssignment.showSubmissionFeedback
+    ))
+
+    diffs.push("Changed submission feedback visibility.");
 
     if (!safeCompare(showQuestionScore, originalAssignment.showQuestionScore))
-      diffs.push("Changed question score visibility.");
+    diffs.push("Changed question score visibility.");
 
     if (
-      !safeCompare(showAssignmentScore, originalAssignment.showAssignmentScore)
-    )
-      diffs.push("Changed assignment score visibility.");
+    !safeCompare(showAssignmentScore, originalAssignment.showAssignmentScore))
+
+    diffs.push("Changed assignment score visibility.");
 
     if (
-      !safeCompare(
-        correctAnswerVisibility,
-        originalAssignment.correctAnswerVisibility ?? "ALWAYS",
-      )
-    )
-      diffs.push("Changed correct answer visibility.");
+    !safeCompare(
+      correctAnswerVisibility,
+      originalAssignment.correctAnswerVisibility ?? "ALWAYS"
+    ))
 
-    // check if question order is different
+    diffs.push("Changed correct answer visibility.");
+
+
     if (!safeArrayCompare(questionOrder, originalAssignment.questionOrder)) {
       diffs.push("Modified question order.");
     }
@@ -141,7 +141,7 @@ export function useChangesSummary(): string {
 
     const addedQuestions = currentQuestions?.filter(
       (question) =>
-        !originalQuestions.some((origQ) => origQ.id === question?.id),
+      !originalQuestions.some((origQ) => origQ.id === question?.id)
     );
 
     if (addedQuestions.length > 0) {
@@ -149,7 +149,7 @@ export function useChangesSummary(): string {
     }
 
     const deletedQuestions = originalQuestions.filter(
-      (origQ) => !currentQuestions.some((q) => q?.id === origQ.id),
+      (origQ) => !currentQuestions.some((q) => q?.id === origQ.id)
     );
 
     if (deletedQuestions.length > 0) {
@@ -160,15 +160,15 @@ export function useChangesSummary(): string {
       if (!question) return;
 
       const originalQuestion = originalQuestions.find(
-        (orig) => orig?.id === question.id,
+        (orig) => orig?.id === question.id
       );
 
       if (!originalQuestion) return;
 
       if (
-        !safeCompare(question.type, originalQuestion.type) &&
-        question.type !== "EMPTY"
-      ) {
+      !safeCompare(question.type, originalQuestion.type) &&
+      question.type !== "EMPTY")
+      {
         diffs.push(`Changed question type for question ${question.id}.`);
       }
 
@@ -185,17 +185,17 @@ export function useChangesSummary(): string {
         const originalRubrics = originalQuestion.scoring?.rubrics || [];
 
         if (currentRubrics.length === 0 && originalRubrics.length === 0)
-          return true;
+        return true;
 
         return currentRubrics.every((currentRubric, index) => {
           const origRubric = originalRubrics[index];
 
           if (
-            !safeCompare(
-              currentRubric?.rubricQuestion,
-              origRubric?.rubricQuestion,
-            )
-          ) {
+          !safeCompare(
+            currentRubric?.rubricQuestion,
+            origRubric?.rubricQuestion
+          ))
+          {
             return false;
           }
 
@@ -208,50 +208,50 @@ export function useChangesSummary(): string {
             const origCrit = origCriteria[critIndex];
             return (
               safeCompare(currentCrit.description, origCrit.description) &&
-              safeCompare(currentCrit.points, origCrit.points)
-            );
+              safeCompare(currentCrit.points, origCrit.points));
+
           });
         });
       };
 
       if (
-        (question.scoring?.rubrics || []).length > 0 ||
-        (originalQuestion.scoring?.rubrics || []).length > 0
-      ) {
+      (question.scoring?.rubrics || []).length > 0 ||
+      (originalQuestion.scoring?.rubrics || []).length > 0)
+      {
         if (!compareRubrics()) {
           diffs.push(`Updated scoring criteria for question ${question.id}.`);
         }
       }
 
       if (
-        !safeCompare(
-          question.scoring?.showRubricsToLearner,
-          originalQuestion.scoring?.showRubricsToLearner,
-        )
-      ) {
+      !safeCompare(
+        question.scoring?.showRubricsToLearner,
+        originalQuestion.scoring?.showRubricsToLearner
+      ))
+      {
         diffs.push(
-          `Changed "show rubric to learner" setting for question ${question.id}.`,
+          `Changed "show rubric to learner" setting for question ${question.id}.`
         );
       }
 
       if (
-        !safeCompare(
-          question.scoring?.showPoints,
-          originalQuestion.scoring?.showPoints,
-        )
-      ) {
+      !safeCompare(
+        question.scoring?.showPoints,
+        originalQuestion.scoring?.showPoints
+      ))
+      {
         diffs.push(
-          `Changed "show points to learner" setting for question ${question.id}.`,
+          `Changed "show points to learner" setting for question ${question.id}.`
         );
       }
 
-      // Compare randomized choices
+
       if (
-        !safeCompare(
-          question.randomizedChoices,
-          originalQuestion.randomizedChoices,
-        )
-      ) {
+      !safeCompare(
+        question.randomizedChoices,
+        originalQuestion.randomizedChoices
+      ))
+      {
         diffs.push(`Updated randomized choices for question ${question.id}.`);
       }
 
@@ -264,33 +264,33 @@ export function useChangesSummary(): string {
       }
 
       if (
-        !safeCompare(question.maxCharacters, originalQuestion.maxCharacters)
-      ) {
+      !safeCompare(question.maxCharacters, originalQuestion.maxCharacters))
+      {
         diffs.push(`Updated max characters for question ${question.id}.`);
       }
 
       if (
-        !safeCompare(
-          question.videoPresentationConfig,
-          originalQuestion.videoPresentationConfig,
-        ) &&
-        (question.videoPresentationConfig ||
-          originalQuestion.videoPresentationConfig)
-      ) {
+      !safeCompare(
+        question.videoPresentationConfig,
+        originalQuestion.videoPresentationConfig
+      ) && (
+      question.videoPresentationConfig ||
+      originalQuestion.videoPresentationConfig))
+      {
         diffs.push(
-          `Updated video presentation config for question ${question.id}.`,
+          `Updated video presentation config for question ${question.id}.`
         );
       }
 
       if (
-        !safeCompare(
-          question.liveRecordingConfig,
-          originalQuestion.liveRecordingConfig,
-        ) &&
-        (question.liveRecordingConfig || originalQuestion.liveRecordingConfig)
-      ) {
+      !safeCompare(
+        question.liveRecordingConfig,
+        originalQuestion.liveRecordingConfig
+      ) && (
+      question.liveRecordingConfig || originalQuestion.liveRecordingConfig))
+      {
         diffs.push(
-          `Updated live recording config for question ${question.id}.`,
+          `Updated live recording config for question ${question.id}.`
         );
       }
 
@@ -298,31 +298,31 @@ export function useChangesSummary(): string {
       const origVariants = originalQuestion.variants || [];
 
       const getVariantKey = (variant: QuestionVariants) =>
-        variant.variantContent;
+      variant.variantContent;
 
       const addedVariants = newVariants.filter(
         (variant) =>
-          !origVariants.some(
-            (orig) => getVariantKey(orig) === getVariantKey(variant),
-          ),
+        !origVariants.some(
+          (orig) => getVariantKey(orig) === getVariantKey(variant)
+        )
       );
 
       if (addedVariants.length > 0) {
         diffs.push(
-          `Added ${addedVariants.length} variant(s) for question ${question.id}.`,
+          `Added ${addedVariants.length} variant(s) for question ${question.id}.`
         );
       }
 
       const deletedVariants = origVariants.filter(
         (orig) =>
-          !newVariants.some(
-            (variant) => getVariantKey(variant) === getVariantKey(orig),
-          ),
+        !newVariants.some(
+          (variant) => getVariantKey(variant) === getVariantKey(orig)
+        )
       );
 
       if (deletedVariants.length > 0) {
         diffs.push(
-          `Deleted ${deletedVariants.length} variant(s) for question ${question.id}.`,
+          `Deleted ${deletedVariants.length} variant(s) for question ${question.id}.`
         );
       }
 
@@ -330,46 +330,46 @@ export function useChangesSummary(): string {
         if (!variant) return;
 
         const matchingOrig = origVariants.find(
-          (orig) => orig && getVariantKey(orig) === getVariantKey(variant),
+          (orig) => orig && getVariantKey(orig) === getVariantKey(variant)
         );
 
         if (matchingOrig) {
           if (
-            !safeCompare(
-              variant.randomizedChoices,
-              matchingOrig.randomizedChoices,
-            )
-          ) {
+          !safeCompare(
+            variant.randomizedChoices,
+            matchingOrig.randomizedChoices
+          ))
+          {
             diffs.push(
-              `Modified randomized choices for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Modified randomized choices for variant "${variant.variantContent}" in question ${question.id}.`
             );
           }
           if (
-            !safeArrayCompare(
-              variant.choices as Choice[],
-              matchingOrig.choices as Choice[],
-            )
-          ) {
+          !safeArrayCompare(
+            variant.choices as Choice[],
+            matchingOrig.choices as Choice[]
+          ))
+          {
             diffs.push(
-              `Modified choices for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Modified choices for variant "${variant.variantContent}" in question ${question.id}.`
             );
           }
 
           if (!safeCompare(variant.scoring, matchingOrig.scoring)) {
             diffs.push(
-              `Modified scoring for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Modified scoring for variant "${variant.variantContent}" in question ${question.id}.`
             );
           }
 
           if (!safeCompare(variant.maxWords, matchingOrig.maxWords)) {
             diffs.push(
-              `Updated max words for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Updated max words for variant "${variant.variantContent}" in question ${question.id}.`
             );
           }
 
           if (!safeCompare(variant.maxCharacters, matchingOrig.maxCharacters)) {
             diffs.push(
-              `Updated max characters for variant "${variant.variantContent}" in question ${question.id}.`,
+              `Updated max characters for variant "${variant.variantContent}" in question ${question.id}.`
             );
           }
         }
@@ -381,11 +381,11 @@ export function useChangesSummary(): string {
     }
 
     if (
-      !safeCompare(
-        numberOfQuestionsPerAttempt,
-        originalAssignment.numberOfQuestionsPerAttempt,
-      )
-    ) {
+    !safeCompare(
+      numberOfQuestionsPerAttempt,
+      originalAssignment.numberOfQuestionsPerAttempt
+    ))
+    {
       diffs.push("Updated number of questions per attempt.");
     }
 
@@ -394,20 +394,20 @@ export function useChangesSummary(): string {
     }
 
     if (
-      !safeCompare(
-        attemptsBeforeCoolDown,
-        originalAssignment.attemptsBeforeCoolDown,
-      )
-    ) {
+    !safeCompare(
+      attemptsBeforeCoolDown,
+      originalAssignment.attemptsBeforeCoolDown
+    ))
+    {
       diffs.push("Updated number of attempts before cooldown period.");
     }
 
     if (
-      !safeCompare(
-        retakeAttemptCoolDownMinutes,
-        originalAssignment.retakeAttemptCoolDownMinutes,
-      )
-    ) {
+    !safeCompare(
+      retakeAttemptCoolDownMinutes,
+      originalAssignment.retakeAttemptCoolDownMinutes
+    ))
+    {
       diffs.push("Updated the cooldown time before retries allowed.");
     }
 
@@ -416,15 +416,15 @@ export function useChangesSummary(): string {
     }
 
     if (
-      !safeCompare(timeEstimateMinutes, originalAssignment.timeEstimateMinutes)
-    ) {
+    !safeCompare(timeEstimateMinutes, originalAssignment.timeEstimateMinutes))
+    {
       diffs.push("Updated time estimate.");
     }
 
     if (
-      !safeCompare(allotedTimeMinutes, originalAssignment.allotedTimeMinutes) &&
-      allotedTimeMinutes
-    ) {
+    !safeCompare(allotedTimeMinutes, originalAssignment.allotedTimeMinutes) &&
+    allotedTimeMinutes)
+    {
       diffs.push(`Set alloted time to ${allotedTimeMinutes} minutes.`);
     }
 
@@ -438,28 +438,28 @@ export function useChangesSummary(): string {
 
     return diffs.length > 0 ? diffs.join(" ") : "No changes detected.";
   }, [
-    originalAssignment,
-    questions,
-    introduction,
-    instructions,
-    gradingCriteriaOverview,
-    questionDisplay,
-    questionVariationNumber,
-    numAttempts,
-    attemptsBeforeCoolDown,
-    retakeAttemptCoolDownMinutes,
-    passingGrade,
-    timeEstimateMinutes,
-    allotedTimeMinutes,
-    displayOrder,
-    strictTimeLimit,
-    graded,
-    verbosityLevel,
-    showSubmissionFeedback,
-    showQuestionScore,
-    showAssignmentScore,
-    showQuestions,
-    numberOfQuestionsPerAttempt,
-  ]);
+  originalAssignment,
+  questions,
+  introduction,
+  instructions,
+  gradingCriteriaOverview,
+  questionDisplay,
+  questionVariationNumber,
+  numAttempts,
+  attemptsBeforeCoolDown,
+  retakeAttemptCoolDownMinutes,
+  passingGrade,
+  timeEstimateMinutes,
+  allotedTimeMinutes,
+  displayOrder,
+  strictTimeLimit,
+  graded,
+  verbosityLevel,
+  showSubmissionFeedback,
+  showQuestionScore,
+  showAssignmentScore,
+  showQuestions,
+  numberOfQuestionsPerAttempt]
+  );
   return changesSummary;
 }

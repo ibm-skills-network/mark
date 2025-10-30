@@ -10,7 +10,7 @@ const TimerExpiredModal: FC<Props> = (props) => {
   const {} = props;
 
   const activeAssignmentId = useAssignmentDetails(
-    (state) => state.assignmentDetails?.id,
+    (state) => state.assignmentDetails?.id
   );
 
   return (
@@ -18,12 +18,12 @@ const TimerExpiredModal: FC<Props> = (props) => {
       className="relative z-10"
       aria-labelledby="modal-title"
       role="dialog"
-      aria-modal="true"
-    >
+      aria-modal="true">
+
       <div
         className="bg-gray-500 bg-opacity-75 transition-opacity fixed inset-0 opacity-100"
-        aria-hidden="true"
-      />
+        aria-hidden="true" />
+
 
       <div className="z-10 w-screen overflow-y-auto transition-opacity fixed inset-0 opacity-100">
         <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -36,20 +36,20 @@ const TimerExpiredModal: FC<Props> = (props) => {
                   viewBox="0 0 24 24"
                   stroke-width="1.5"
                   stroke="currentColor"
-                  aria-hidden="true"
-                >
+                  aria-hidden="true">
+
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                  />
+                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+
                 </svg>
               </div>
               <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
                 <h3
                   className="text-xl font-semibold leading-6 text-gray-900"
-                  id="modal-title"
-                >
+                  id="modal-title">
+
                   Timer Expired
                 </h3>
                 <div className="mt-3">
@@ -63,22 +63,22 @@ const TimerExpiredModal: FC<Props> = (props) => {
             <div className="mt-6 sm:ml-10 sm:mt-5 sm:flex sm:pl-4">
               <Link
                 href={`${pathname}/learner/${activeAssignmentId}`}
-                className="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:w-auto"
-              >
+                className="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:w-auto">
+
                 Assignment Home
               </Link>
               <Link
                 href={"https://author.skills.network/courses"}
-                className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:ml-3 sm:mt-0 sm:w-auto"
-              >
+                className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:ml-3 sm:mt-0 sm:w-auto">
+
                 Back to course
               </Link>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default TimerExpiredModal;

@@ -53,18 +53,18 @@ export const useMarkChatStore = create<MarkChatState>()(
       userRole: "learner",
       setUserRole: (role) => set({ userRole: role }),
       addMessage: (message: ChatMessage) =>
-        set((s) => ({
-          messages: [...s.messages, message],
-        })),
+      set((s) => ({
+        messages: [...s.messages, message]
+      })),
 
       messages: [
-        {
-          id: "assistant-initial",
-          role: "assistant",
-          content:
-            "Hello, I'm Mark! How can I help you with your assignment today?",
-        },
-      ],
+      {
+        id: "assistant-initial",
+        role: "assistant",
+        content:
+        "Hello, I'm Mark! How can I help you with your assignment today?"
+      }],
+
 
       userInput: "",
       setUserInput: (val) => set({ userInput: val }),
@@ -72,7 +72,7 @@ export const useMarkChatStore = create<MarkChatState>()(
       usage: {
         functionCalls: 0,
         totalMessagesSent: 0,
-        kbLookups: 0,
+        kbLookups: 0
       },
 
       isTyping: false,
@@ -80,20 +80,20 @@ export const useMarkChatStore = create<MarkChatState>()(
 
       isExecutingClientSide: false,
       setIsExecutingClientSide: (value) =>
-        set({ isExecutingClientSide: value }),
+      set({ isExecutingClientSide: value }),
 
       resetChat: () =>
-        set({
-          messages: [
-            {
-              id: "assistant-initial",
-              role: "assistant",
-              content:
-                "Hello, I'm Mark! How can I help you with your assignment today?",
-            },
-          ],
-          userInput: "",
-        }),
+      set({
+        messages: [
+        {
+          id: "assistant-initial",
+          role: "assistant",
+          content:
+          "Hello, I'm Mark! How can I help you with your assignment today?"
+        }],
+
+        userInput: ""
+      }),
 
       executeOperations: async function (operations) {
         if (!operations || operations.length === 0) return;
@@ -104,34 +104,34 @@ export const useMarkChatStore = create<MarkChatState>()(
           const operationMsg: ChatMessage = {
             id: `system-operations-${Date.now()}`,
             role: "system",
-            content: `Executing ${operations.length} operations...`,
+            content: `Executing ${operations.length} operations...`
           };
 
           set((s) => ({
-            messages: [...s.messages, operationMsg],
+            messages: [...s.messages, operationMsg]
           }));
 
           const results = [];
 
           for (const op of operations) {
             try {
-              // Handle showReportPreview specially - don't process through store operations
+
               if (op.function === "showReportPreview") {
-                // This will be handled by the React component directly
+
                 results.push({
                   success: true,
                   function: op.function,
                   result: {
                     success: true,
-                    message: "Report preview form will be displayed",
-                  },
+                    message: "Report preview form will be displayed"
+                  }
                 });
                 continue;
               }
 
               const result = await authorStoreUtils.runAuthorOperation(
                 op.function,
-                op.params,
+                op.params
               );
 
               results.push({ success: true, function: op.function, result });
@@ -139,7 +139,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               results.push({
                 success: false,
                 function: op.function,
-                error: error.message || "Unknown error",
+                error: error.message || "Unknown error"
               });
             }
           }
@@ -147,28 +147,28 @@ export const useMarkChatStore = create<MarkChatState>()(
           const resultMsg: ChatMessage = {
             id: `assistant-operations-${Date.now()}`,
             role: "assistant",
-            content: processOperationResults(results),
+            content: processOperationResults(results)
           };
 
           set((s) => ({
             messages: [
-              ...s.messages.filter((m) => m.id !== operationMsg.id),
-              resultMsg,
-            ],
+            ...s.messages.filter((m) => m.id !== operationMsg.id),
+            resultMsg],
+
             usage: {
               ...s.usage,
-              functionCalls: s.usage.functionCalls + operations.length,
-            },
+              functionCalls: s.usage.functionCalls + operations.length
+            }
           }));
         } catch (error) {
           const errorMsg: ChatMessage = {
             id: `assistant-error-${Date.now()}`,
             role: "assistant",
-            content: `❌ Error executing operations: ${error.message || "An unknown error occurred"}. Please try again.`,
+            content: `❌ Error executing operations: ${error.message || "An unknown error occurred"}. Please try again.`
           };
 
           set((s) => ({
-            messages: [...s.messages, errorMsg],
+            messages: [...s.messages, errorMsg]
           }));
         } finally {
           set({ isExecutingClientSide: false });
@@ -179,7 +179,7 @@ export const useMarkChatStore = create<MarkChatState>()(
         try {
           const result = await authorStoreUtils.runAuthorOperation(
             functionName,
-            args,
+            args
           );
 
           return result;
@@ -197,19 +197,19 @@ export const useMarkChatStore = create<MarkChatState>()(
         const userMsg: ChatMessage = {
           id: `user-${Date.now()}`,
           role: "user",
-          content: trimmed,
+          content: trimmed
         };
 
         set({
           messages: [...messages, userMsg],
           userInput: "",
           usage: { ...usage, totalMessagesSent: usage.totalMessagesSent + 1 },
-          isTyping: true,
+          isTyping: true
         });
 
         try {
           const conversationMessages = messages.filter(
-            (msg) => msg.role !== "system" || !msg.id.includes("context"),
+            (msg) => msg.role !== "system" || !msg.id.includes("context")
           );
 
           if (useStreaming) {
@@ -219,8 +219,8 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: messages,
-              }),
+                conversation: messages
+              })
             });
 
             if (!response.ok) {
@@ -234,10 +234,10 @@ export const useMarkChatStore = create<MarkChatState>()(
             const newId = `assistant-${Date.now()}`;
             set((s) => ({
               messages: [
-                ...s.messages,
-                { id: newId, role: "assistant", content: "" },
-              ],
-              isTyping: true,
+              ...s.messages,
+              { id: newId, role: "assistant", content: "" }],
+
+              isTyping: true
             }));
 
             const reader = response.body.getReader();
@@ -254,14 +254,14 @@ export const useMarkChatStore = create<MarkChatState>()(
                 accumulatedContent += chunk;
 
                 const markerMatch = accumulatedContent.match(
-                  /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
+                  /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/
                 );
                 let contentToDisplay = accumulatedContent;
 
                 if (markerMatch) {
                   contentToDisplay = accumulatedContent.replace(
                     /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
-                    "",
+                    ""
                   );
                 }
 
@@ -271,7 +271,7 @@ export const useMarkChatStore = create<MarkChatState>()(
                   if (idx !== -1) {
                     clone[idx] = {
                       ...clone[idx],
-                      content: contentToDisplay,
+                      content: contentToDisplay
                     };
                   }
                   return { messages: clone };
@@ -282,7 +282,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               set({ isTyping: false });
 
               const markerMatch = accumulatedContent.match(
-                /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
+                /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/
               );
 
               if (markerMatch) {
@@ -291,7 +291,7 @@ export const useMarkChatStore = create<MarkChatState>()(
 
                   const cleanContent = accumulatedContent.replace(
                     /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
-                    "",
+                    ""
                   );
 
                   set((s) => {
@@ -301,7 +301,7 @@ export const useMarkChatStore = create<MarkChatState>()(
                       clone[idx] = {
                         ...clone[idx],
                         content: cleanContent,
-                        toolCalls: operations, // Add toolCalls to the message
+                        toolCalls: operations
                       };
                     }
                     return { messages: clone };
@@ -311,7 +311,7 @@ export const useMarkChatStore = create<MarkChatState>()(
                 } catch (err) {
                   console.error(
                     "Error processing client execution marker:",
-                    err,
+                    err
                   );
                 }
               }
@@ -323,8 +323,8 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: messages,
-              }),
+                conversation: messages
+              })
             });
 
             if (!resp.ok) throw new Error(resp.statusText);
@@ -337,12 +337,12 @@ export const useMarkChatStore = create<MarkChatState>()(
               const assistantMsg: ChatMessage = {
                 id: `assistant-${Date.now()}`,
                 role: "assistant",
-                content: `I'll help you with that by using the ${functionName} tool.`,
+                content: `I'll help you with that by using the ${functionName} tool.`
               };
 
               set((s) => ({
                 messages: [...s.messages, assistantMsg],
-                isTyping: false,
+                isTyping: false
               }));
 
               await get().executeAuthorOperation(functionName, functionArgs);
@@ -350,32 +350,32 @@ export const useMarkChatStore = create<MarkChatState>()(
               set((s) => ({
                 usage: {
                   ...s.usage,
-                  functionCalls: s.usage.functionCalls + 1,
-                },
+                  functionCalls: s.usage.functionCalls + 1
+                }
               }));
 
               if (data.reply) {
                 const assistantMsg: ChatMessage = {
                   id: `assistant-${Date.now()}`,
                   role: "assistant",
-                  content: data.reply,
+                  content: data.reply
                 };
 
                 set((s) => ({
                   messages: [...s.messages, assistantMsg],
-                  isTyping: false,
+                  isTyping: false
                 }));
               }
             } else {
               const assistantMsg: ChatMessage = {
                 id: `assistant-${Date.now()}`,
                 role: "assistant",
-                content: data.reply || "I'm not sure how to respond to that.",
+                content: data.reply || "I'm not sure how to respond to that."
               };
 
               set((s) => ({
                 messages: [...s.messages, assistantMsg],
-                isTyping: false,
+                isTyping: false
               }));
             }
           }
@@ -383,12 +383,12 @@ export const useMarkChatStore = create<MarkChatState>()(
           const errorMsg: ChatMessage = {
             id: `assistant-error-${Date.now()}`,
             role: "assistant",
-            content: `Sorry, I encountered an error: ${err.message}. Please try again or refresh the page if the problem persists.`,
+            content: `Sorry, I encountered an error: ${err.message}. Please try again or refresh the page if the problem persists.`
           };
 
           set((s) => ({
             messages: [...s.messages, errorMsg],
-            isTyping: false,
+            isTyping: false
           }));
         }
       },
@@ -401,30 +401,30 @@ export const useMarkChatStore = create<MarkChatState>()(
 
         if (!results.length) {
           return [
-            {
-              id: `kb-none-${Date.now()}`,
-              role: "assistant",
-              content: `No specific information found for "${query}". I'll use my general knowledge to help.`,
-            },
-          ];
+          {
+            id: `kb-none-${Date.now()}`,
+            role: "assistant",
+            content: `No specific information found for "${query}". I'll use my general knowledge to help.`
+          }];
+
         }
 
         return results.map((item: any) => ({
           id: `kb-${item.id}-${Date.now()}`,
           role: "assistant",
-          content: `**${item.title}**\n\n${item.description}`,
+          content: `**${item.title}**\n\n${item.description}`
         }));
-      },
+      }
     }),
     {
       name: "mark-chat-store",
       partialize: (state) => ({
         userRole: state.userRole,
         messages: state.messages.filter((msg) => msg.role !== "system"),
-        usage: state.usage,
-      }),
-    },
-  ),
+        usage: state.usage
+      })
+    }
+  )
 );
 
 function processOperationResults(results) {
@@ -443,7 +443,7 @@ function processOperationResults(results) {
 
   results.forEach((result, index) => {
     const functionName =
-      result.function.charAt(0).toUpperCase() + result.function.slice(1);
+    result.function.charAt(0).toUpperCase() + result.function.slice(1);
 
     if (result.success) {
       message += `${index + 1}. ${functionName}: Successfully completed`;

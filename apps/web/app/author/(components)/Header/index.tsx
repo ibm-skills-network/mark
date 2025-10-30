@@ -17,15 +17,15 @@ import {
   Question,
   QuestionAuthorStore,
   QuestionVariants,
-  ReplaceAssignmentRequest,
-} from "@/config/types";
+  ReplaceAssignmentRequest } from
+"@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
 import {
   getAssignment,
   getUser,
   publishAssignment,
-  subscribeToJobStatus,
-} from "@/lib/talkToBackend";
+  subscribeToJobStatus } from
+"@/lib/talkToBackend";
 import { mergeData } from "@/lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -47,26 +47,26 @@ function normalizeAssignment(assignment: Assignment): Assignment {
   assignment.questions.forEach((q: Question) => {
     if (q.scoring && q.scoring.criteria) {
       q.scoring.rubrics = [
-        {
-          rubricQuestion: q.question,
-          criteria: q.scoring.criteria,
-        },
-      ];
+      {
+        rubricQuestion: q.question,
+        criteria: q.scoring.criteria
+      }];
+
       delete q.scoring.criteria;
     }
 
     q.variants.forEach((variant: QuestionVariants) => {
       if (variant.scoring && variant.scoring.criteria) {
         variant.scoring.rubrics = [
-          {
-            rubricQuestion: variant.variantContent,
-            criteria: variant.scoring.criteria.map((crit: Criteria, idx) => ({
-              description: crit.description,
-              points: crit.points,
-              id: idx + 1,
-            })),
-          },
-        ];
+        {
+          rubricQuestion: variant.variantContent,
+          criteria: variant.scoring.criteria.map((crit: Criteria, idx) => ({
+            description: crit.description,
+            points: crit.points,
+            id: idx + 1
+          }))
+        }];
+
         delete variant.scoring.criteria;
       }
     });
@@ -86,105 +86,105 @@ function AuthorHeader() {
     setUserRole("author");
   }, [setUserRole]);
   const [
-    setActiveAssignmentId,
-    questions,
-    setPageState,
-    setAuthorStore,
-    activeAssignmentId,
-    name,
-  ] = useAuthorStore((state) => [
-    state.setActiveAssignmentId,
-    state.questions,
-    state.setPageState,
-    state.setAuthorStore,
-    state.activeAssignmentId,
-    state.name,
-  ]);
+  setActiveAssignmentId,
+  questions,
+  setPageState,
+  setAuthorStore,
+  activeAssignmentId,
+  name] =
+  useAuthorStore((state) => [
+  state.setActiveAssignmentId,
+  state.questions,
+  state.setPageState,
+  state.setAuthorStore,
+  state.activeAssignmentId,
+  state.name]
+  );
 
   const loadVersions = useAuthorStore((state) => state.loadVersions);
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
-    questions as Question[],
+    questions as Question[]
   );
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
-    state.setAssignmentConfigStore,
-  ]);
+  state.setAssignmentConfigStore]
+  );
   const [setAssignmentFeedbackConfigStore] = useAssignmentFeedbackConfig(
-    (state) => [state.setAssignmentFeedbackConfigStore],
+    (state) => [state.setAssignmentFeedbackConfigStore]
   );
   const [
-    introduction,
-    instructions,
-    gradingCriteriaOverview,
-    questionOrder,
-    originalAssignment,
-  ] = useAuthorStore((state) => [
-    state.introduction,
-    state.instructions,
-    state.gradingCriteriaOverview,
-    state.questionOrder,
-    state.originalAssignment,
-  ]);
+  introduction,
+  instructions,
+  gradingCriteriaOverview,
+  questionOrder,
+  originalAssignment] =
+  useAuthorStore((state) => [
+  state.introduction,
+  state.instructions,
+  state.gradingCriteriaOverview,
+  state.questionOrder,
+  state.originalAssignment]
+  );
   const [
-    numAttempts,
-    retakeAttemptCoolDownMinutes,
-    attemptsBeforeCoolDown,
-    passingGrade,
-    displayOrder,
-    graded,
-    questionDisplay,
-    timeEstimateMinutes,
-    allotedTimeMinutes,
-    updatedAt,
-    numberOfQuestionsPerAttempt,
-  ] = useAssignmentConfig((state) => [
-    state.numAttempts,
-    state.retakeAttemptCoolDownMinutes,
-    state.attemptsBeforeCoolDown,
-    state.passingGrade,
-    state.displayOrder,
-    state.graded,
-    state.questionDisplay,
-    state.timeEstimateMinutes,
-    state.allotedTimeMinutes,
-    state.updatedAt,
-    state.numberOfQuestionsPerAttempt,
-  ]);
+  numAttempts,
+  retakeAttemptCoolDownMinutes,
+  attemptsBeforeCoolDown,
+  passingGrade,
+  displayOrder,
+  graded,
+  questionDisplay,
+  timeEstimateMinutes,
+  allotedTimeMinutes,
+  updatedAt,
+  numberOfQuestionsPerAttempt] =
+  useAssignmentConfig((state) => [
+  state.numAttempts,
+  state.retakeAttemptCoolDownMinutes,
+  state.attemptsBeforeCoolDown,
+  state.passingGrade,
+  state.displayOrder,
+  state.graded,
+  state.questionDisplay,
+  state.timeEstimateMinutes,
+  state.allotedTimeMinutes,
+  state.updatedAt,
+  state.numberOfQuestionsPerAttempt]
+  );
   const [
-    showSubmissionFeedback,
-    showQuestionScore,
-    showAssignmentScore,
-    showQuestions,
-    correctAnswerVisibility,
-  ] = useAssignmentFeedbackConfig((state) => [
-    state.showSubmissionFeedback,
-    state.showQuestionScore,
-    state.showAssignmentScore,
-    state.showQuestions,
-    state.correctAnswerVisibility,
-  ]);
+  showSubmissionFeedback,
+  showQuestionScore,
+  showAssignmentScore,
+  showQuestions,
+  correctAnswerVisibility] =
+  useAssignmentFeedbackConfig((state) => [
+  state.showSubmissionFeedback,
+  state.showQuestionScore,
+  state.showAssignmentScore,
+  state.showQuestions,
+  state.correctAnswerVisibility]
+  );
   const role = useAuthorStore((state) => state.role);
 
   const [showAreYouSureModal, setShowAreYouSureModal] =
-    useState<boolean>(false);
+  useState<boolean>(false);
   const [showDraftModal, setShowDraftModal] = useState<boolean>(false);
   const [draftName, setDraftName] = useState<string>("");
 
   const deleteAuthorStore = useAuthorStore((state) => state.deleteStore);
   const deleteAssignmentConfigStore = useAssignmentConfig(
-    (state) => state.deleteStore,
+    (state) => state.deleteStore
   );
   const deleteAssignmentFeedbackConfigStore = useAssignmentFeedbackConfig(
-    (state) => state.deleteStore,
+    (state) => state.deleteStore
   );
   const changesSummary = useChangesSummary();
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
   const [currentMessage, setCurrentMessage] = useState<string>(
-    "Initializing publishing...",
+    "Initializing publishing..."
   );
   const [progressStatus, setProgressStatus] =
-    useState<JobStatus>("In Progress");
+  useState<JobStatus>("In Progress");
 
   const SyncAssignment = async () => {
     try {
@@ -196,7 +196,7 @@ function AuthorHeader() {
         const { checkoutVersion } = useAuthorStore.getState();
         await checkoutVersion(
           checkedOutVersion.id,
-          checkedOutVersion.versionNumber,
+          checkedOutVersion.versionNumber
         );
         toast.success("Assignment synced with checked out version");
         return;
@@ -209,42 +209,42 @@ function AuthorHeader() {
       }
       const newAssignment = normalizeAssignment({ ...assignment });
       const questions: QuestionAuthorStore[] =
-        newAssignment.questions?.map(
-          (question: QuestionAuthorStore, index: number) => {
-            const parsedVariants: QuestionVariants[] =
-              question.variants?.map((variant: QuestionVariants) => ({
-                ...variant,
-                choices:
-                  typeof variant.choices === "string"
-                    ? (JSON.parse(variant.choices) as Choice[])
-                    : variant.choices,
-              })) || [];
+      newAssignment.questions?.map(
+        (question: QuestionAuthorStore, index: number) => {
+          const parsedVariants: QuestionVariants[] =
+          question.variants?.map((variant: QuestionVariants) => ({
+            ...variant,
+            choices:
+            typeof variant.choices === "string" ?
+            JSON.parse(variant.choices) as Choice[] :
+            variant.choices
+          })) || [];
 
-            const rubricArray = question.scoring?.rubrics?.map((rubric) => {
-              return {
-                rubricQuestion: stripHtml(rubric.rubricQuestion),
-                criteria: rubric.criteria.map((crit, idx) => {
-                  return {
-                    description: crit.description,
-                    points: crit.points,
-                    id: idx + 1,
-                  };
-                }),
-              };
-            });
-
+          const rubricArray = question.scoring?.rubrics?.map((rubric) => {
             return {
-              ...question,
-              alreadyInBackend: true,
-              variants: parsedVariants,
-              scoring: {
-                type: "CRITERIA_BASED",
-                rubrics: rubricArray || [],
-              },
-              index: index + 1,
+              rubricQuestion: stripHtml(rubric.rubricQuestion),
+              criteria: rubric.criteria.map((crit, idx) => {
+                return {
+                  description: crit.description,
+                  points: crit.points,
+                  id: idx + 1
+                };
+              })
             };
-          },
-        ) || [];
+          });
+
+          return {
+            ...question,
+            alreadyInBackend: true,
+            variants: parsedVariants,
+            scoring: {
+              type: "CRITERIA_BASED",
+              rubrics: rubricArray || []
+            },
+            index: index + 1
+          };
+        }
+      ) || [];
 
       newAssignment.questions = questions;
 
@@ -254,7 +254,7 @@ function AuthorHeader() {
       useAssignmentConfig.getState().setAssignmentConfigStore({
         numAttempts: newAssignment.numAttempts,
         retakeAttemptCoolDownMinutes:
-          newAssignment.retakeAttemptCoolDownMinutes,
+        newAssignment.retakeAttemptCoolDownMinutes,
         attemptsBeforeCoolDown: newAssignment.attemptsBeforeCoolDown,
         passingGrade: newAssignment.passingGrade,
         displayOrder: newAssignment.displayOrder,
@@ -264,12 +264,12 @@ function AuthorHeader() {
         allotedTimeMinutes: newAssignment.allotedTimeMinutes,
         updatedAt: newAssignment.updatedAt,
         showQuestions: newAssignment.showQuestions,
-        showSubmissionFeedback: newAssignment.showSubmissionFeedback,
+        showSubmissionFeedback: newAssignment.showSubmissionFeedback
       });
 
       if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
-          questionVariationNumber: newAssignment.questionVariationNumber,
+          questionVariationNumber: newAssignment.questionVariationNumber
         });
       }
 
@@ -277,7 +277,7 @@ function AuthorHeader() {
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
         showQuestionScore: newAssignment.showQuestionScore,
         showAssignmentScore: newAssignment.showAssignmentScore,
-        correctAnswerVisibility: newAssignment.correctAnswerVisibility,
+        correctAnswerVisibility: newAssignment.correctAnswerVisibility
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
@@ -290,8 +290,8 @@ function AuthorHeader() {
   };
 
   const fetchAssignment = async () => {
-    // Check if there's a checked out version - if so, fetch that version's data
-    // But wait for versions to be loaded first
+
+
     const state = useAuthorStore.getState();
     const checkedOutVersion = state.checkedOutVersion;
     const versions = state.versions;
@@ -301,7 +301,7 @@ function AuthorHeader() {
         const { checkoutVersion } = useAuthorStore.getState();
         await checkoutVersion(
           checkedOutVersion.id,
-          checkedOutVersion.versionNumber,
+          checkedOutVersion.versionNumber
         );
         setPageState("success");
         return;
@@ -312,14 +312,14 @@ function AuthorHeader() {
       }
     }
 
-    // If checkedOutVersion exists but versions aren't loaded yet, wait
+
     if (checkedOutVersion && versions.length === 0) {
-      // Wait a bit for versions to load, then retry
+
       await new Promise((resolve) => setTimeout(resolve, 100));
-      return fetchAssignment(); // Retry
+      return fetchAssignment();
     }
 
-    // Otherwise, load the regular assignment
+
     const assignment = await getAssignment(parseInt(assignmentId, 10));
     if (assignment) {
       const newAssignment = normalizeAssignment({ ...assignment });
@@ -328,20 +328,20 @@ function AuthorHeader() {
 
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
-        newAssignment,
+        newAssignment
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
-        ...cleanedAuthorData,
+        ...cleanedAuthorData
       });
 
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
-        newAssignment,
+        newAssignment
       );
       if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
-          questionVariationNumber: newAssignment.questionVariationNumber,
+          questionVariationNumber: newAssignment.questionVariationNumber
         });
       }
       const {
@@ -349,19 +349,19 @@ function AuthorHeader() {
         ...cleanedAssignmentConfigData
       } = mergedAssignmentConfigData;
       setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
+        ...cleanedAssignmentConfigData
       });
 
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
-        newAssignment,
+        newAssignment
       );
       const {
         updatedAt: assignmentFeedbackUpdatedAt,
         ...cleanedAssignmentFeedbackData
       } = mergedAssignmentFeedbackData;
       setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
+        ...cleanedAssignmentFeedbackData
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
@@ -387,7 +387,7 @@ function AuthorHeader() {
         void fetchAssignment();
       } else {
         toast.error(
-          "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
+          "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment."
         );
       }
     };
@@ -395,7 +395,7 @@ function AuthorHeader() {
     void fetchData();
   }, [assignmentId, router]);
 
-  // Listen for draft activation publishing events from VersionTreeView
+
   useEffect(() => {
     const handleTriggerHeaderPublish = (event: any) => {
       const {
@@ -403,27 +403,27 @@ function AuthorHeader() {
         publishImmediately,
         versionNumber,
         updateExisting,
-        afterPublish,
+        afterPublish
       } = event.detail;
 
-      // Store the afterPublish callback for later use
+
       const originalAfterPublish = afterPublish;
 
-      // Call handlePublishButton with the provided parameters
-      handlePublishButton(description, publishImmediately)
-        .then(() => {
-          // After successful publishing, execute the callback if provided
-          if (
-            originalAfterPublish &&
-            typeof originalAfterPublish === "function"
-          ) {
-            originalAfterPublish();
-          }
-        })
-        .catch((error) => {
-          console.error("Header publishing failed:", error);
-          toast.error("Failed to publish version through header");
-        });
+
+      handlePublishButton(description, publishImmediately).
+      then(() => {
+
+        if (
+        originalAfterPublish &&
+        typeof originalAfterPublish === "function")
+        {
+          originalAfterPublish();
+        }
+      }).
+      catch((error) => {
+        console.error("Header publishing failed:", error);
+        toast.error("Failed to publish version through header");
+      });
     };
 
     window.addEventListener("triggerHeaderPublish", handleTriggerHeaderPublish);
@@ -431,54 +431,54 @@ function AuthorHeader() {
     return () => {
       window.removeEventListener(
         "triggerHeaderPublish",
-        handleTriggerHeaderPublish,
+        handleTriggerHeaderPublish
       );
     };
   }, [handlePublishButton]);
 
   function calculateTotalPoints(questions: QuestionAuthorStore[]) {
     return questions.map((question: QuestionAuthorStore) => {
-      const totalPoints = question.scoring?.rubrics
-        ? question.scoring.rubrics.reduce(
-            (sum, rubric) =>
-              sum +
-              Math.max(...rubric.criteria.map((crit) => crit.points || 0)),
-            0,
-          )
-        : 0;
+      const totalPoints = question.scoring?.rubrics ?
+      question.scoring.rubrics.reduce(
+        (sum, rubric) =>
+        sum +
+        Math.max(...rubric.criteria.map((crit) => crit.points || 0)),
+        0
+      ) :
+      0;
       return {
         ...question,
-        totalPoints,
+        totalPoints
       };
     });
   }
 
   async function handlePublishButton(
-    description?: string,
-    publishImmediately = true,
-    versionNumber?: string,
-  ): Promise<void> {
+  description?: string,
+  publishImmediately = true,
+  versionNumber?: string)
+  : Promise<void> {
     setSubmitting(true);
     setJobProgress(0);
     setCurrentMessage(
-      publishImmediately ? "Initializing publishing..." : "Creating version...",
+      publishImmediately ? "Initializing publishing..." : "Creating version..."
     );
     setProgressStatus("In Progress");
 
     const role = await getUserRole();
     if (role !== "author") {
       toast.error(
-        "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
+        "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment."
       );
       setSubmitting(false);
       return;
     }
 
     let clonedCurrentQuestions = JSON.parse(
-      JSON.stringify(questions),
+      JSON.stringify(questions)
     ) as QuestionAuthorStore[];
     const clonedOriginalQuestions = JSON.parse(
-      JSON.stringify(originalAssignment.questions),
+      JSON.stringify(originalAssignment.questions)
     ) as QuestionAuthorStore[];
 
     function removeEphemeralFields(questionArray: QuestionAuthorStore[]) {
@@ -501,18 +501,18 @@ function AuthorHeader() {
     clonedCurrentQuestions = calculateTotalPoints(clonedCurrentQuestions);
 
     const questionsAreDifferent =
-      JSON.stringify(clonedCurrentQuestions) !==
-      JSON.stringify(clonedOriginalQuestions);
+    JSON.stringify(clonedCurrentQuestions) !==
+    JSON.stringify(clonedOriginalQuestions);
 
     const encodedFields = encodeFields({
       introduction,
       instructions,
-      gradingCriteriaOverview,
+      gradingCriteriaOverview
     }) as {
       introduction: string;
       instructions: string;
       gradingCriteriaOverview: string;
-    } & { [key: string]: string | null };
+    } & {[key: string]: string | null;};
 
     const assignmentData: ReplaceAssignmentRequest = {
       ...encodedFields,
@@ -534,17 +534,17 @@ function AuthorHeader() {
       showAssignmentScore,
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
-      questions: questionsAreDifferent
-        ? processQuestions(clonedCurrentQuestions)
-        : null,
+      questions: questionsAreDifferent ?
+      processQuestions(clonedCurrentQuestions) :
+      null,
       versionDescription: description,
-      versionNumber: versionNumber,
+      versionNumber: versionNumber
     };
     if (assignmentData.introduction === null) {
       toast.error(
-        publishImmediately
-          ? "Introduction is required to publish the assignment."
-          : "Introduction is required to create a version.",
+        publishImmediately ?
+        "Introduction is required to publish the assignment." :
+        "Introduction is required to create a version."
       );
       setSubmitting(false);
       return;
@@ -552,7 +552,7 @@ function AuthorHeader() {
     try {
       const response = await publishAssignment(
         activeAssignmentId,
-        assignmentData,
+        assignmentData
       );
       if (response?.jobId) {
         await subscribeToJobStatus(
@@ -562,7 +562,7 @@ function AuthorHeader() {
             setCurrentMessage(progress);
             setQuestions(clonedCurrentQuestions);
           },
-          setQuestions,
+          setQuestions
         );
         if (publishImmediately) {
           toast.success("Questions published successfully!");
@@ -571,7 +571,7 @@ function AuthorHeader() {
         }
         setProgressStatus("Completed");
 
-        // Reload versions to reflect the new version
+
         try {
           await loadVersions();
         } catch (error) {
@@ -579,24 +579,24 @@ function AuthorHeader() {
         }
       } else {
         toast.error(
-          publishImmediately
-            ? "Failed to start the publishing process. Please try again."
-            : "Failed to create version. Please try again.",
+          publishImmediately ?
+          "Failed to start the publishing process. Please try again." :
+          "Failed to create version. Please try again."
         );
         setProgressStatus("Failed");
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
         toast.error(
-          publishImmediately
-            ? `Error during publishing: ${error.message}`
-            : `Error creating version: ${error.message}`,
+          publishImmediately ?
+          `Error during publishing: ${error.message}` :
+          `Error creating version: ${error.message}`
         );
       } else {
         toast.error(
-          publishImmediately
-            ? "An unknown error occurred during publishing."
-            : "An unknown error occurred while creating version.",
+          publishImmediately ?
+          "An unknown error occurred during publishing." :
+          "An unknown error occurred while creating version."
         );
       }
       setProgressStatus("Failed");
@@ -625,8 +625,8 @@ function AuthorHeader() {
   };
 
   const handleSaveChanges = async (
-    customDraftName?: string,
-  ): Promise<boolean> => {
+  customDraftName?: string)
+  : Promise<boolean> => {
     if (!activeAssignmentId) {
       toast.error("No assignment selected");
       return false;
@@ -636,14 +636,14 @@ function AuthorHeader() {
       const { saveDraft } = await import("@/lib/author");
       const draftData = {
         draftName:
-          customDraftName || `Manual save - ${new Date().toLocaleString()}`,
+        customDraftName || `Manual save - ${new Date().toLocaleString()}`,
         assignmentData: {
           name,
           introduction,
           instructions,
-          gradingCriteriaOverview,
+          gradingCriteriaOverview
         },
-        questionsData: questions,
+        questionsData: questions
       };
 
       const result = await saveDraft(activeAssignmentId, draftData);
@@ -674,9 +674,9 @@ function AuthorHeader() {
     <>
       <div
         className={`fixed z-50 transition-all duration-300 ease-in-out ${
-          isChatbotOpen ? "left-0 right-[25vw]" : "w-full"
-        }`}
-      >
+        isChatbotOpen ? "left-0 right-[25vw]" : "w-full"}`
+        }>
+
         <header className="border-b border-gray-300 bg-white px-2 sm:px-4 md:px-6 py-2 md:py-4 flex flex-col">
           <div className="flex flex-col flex-wrap lg:flex-nowrap md:flex-row md:items-center justify-between gap-2 md:gap-2">
             <div className="flex flex-row items-center space-x-4">
@@ -693,65 +693,65 @@ function AuthorHeader() {
 
             <Nav
               currentStepId={currentStepId}
-              setCurrentStepId={setCurrentStepId}
-            />
+              setCurrentStepId={setCurrentStepId} />
+
 
             <div className="flex flex-wrap items-center md:ml-auto gap-2 sm:gap-4 mt-2 md:mt-0 ml-auto">
               <CheckLearnerSideButton
-                disabled={!questionsAreReadyToBePublished}
-              />
+                disabled={!questionsAreReadyToBePublished} />
 
-              {/* Admin Insights Button - Only show for admins/authors when assignment exists */}
+
+              
               {(role === "admin" || role === "author") &&
-                activeAssignmentId && (
-                  <button
-                    onClick={() =>
-                      window.open(
-                        `/admin/insights/${activeAssignmentId}`,
-                        "_blank",
-                      )
-                    }
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md"
-                    title="View admin insights and analytics for this assignment"
-                  >
+              activeAssignmentId &&
+              <button
+                onClick={() =>
+                window.open(
+                  `/admin/insights/${activeAssignmentId}`,
+                  "_blank"
+                )
+                }
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md"
+                title="View admin insights and analytics for this assignment">
+
                     <BarChart3 className="w-4 h-4" />
                     <span className="hidden sm:inline">Admin Insights</span>
                   </button>
-                )}
+              }
 
               <SubmitQuestionsButton
                 handlePublishButton={handlePublishButton}
                 submitting={submitting}
                 questionsAreReadyToBePublished={questionsAreReadyToBePublished}
-                currentStepId={currentStepId}
-              />
+                currentStepId={currentStepId} />
+
 
               <SaveAndPublishButton
                 handlePublishButton={handlePublishButton}
                 submitting={submitting}
                 questionsAreReadyToBePublished={questionsAreReadyToBePublished}
-                currentStepId={currentStepId}
-              />
+                currentStepId={currentStepId} />
+
             </div>
           </div>
 
-          {submitting && (
-            <div className="mt-4">
+          {submitting &&
+          <div className="mt-4">
               <ProgressBar
-                progress={jobProgress}
-                currentMessage={currentMessage}
-                status={progressStatus}
-              />
+              progress={jobProgress}
+              currentMessage={currentMessage}
+              status={progressStatus} />
+
             </div>
-          )}
+          }
         </header>
       </div>
 
-      {showAreYouSureModal && (
-        <Modal
-          onClose={() => setShowAreYouSureModal(false)}
-          Title="Are you sure you want to sync with the latest published version?"
-        >
+      {showAreYouSureModal &&
+      <Modal
+        onClose={() => setShowAreYouSureModal(false)}
+        Title="Are you sure you want to sync with the latest published version?">
+
           <div className="p-4 space-y-4">
             <p className="typography-body">
               Syncing with the latest published version will discard any changes
@@ -759,66 +759,66 @@ function AuthorHeader() {
             </p>
             <div className="flex flex-wrap justify-end gap-2">
               <button
-                onClick={() => setShowAreYouSureModal(false)}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
-              >
+              onClick={() => setShowAreYouSureModal(false)}
+              className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800">
+
                 Cancel
               </button>
               <button
-                onClick={handleConfirmSync}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
-              >
+              onClick={handleConfirmSync}
+              className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800">
+
                 Sync
               </button>
             </div>
           </div>
         </Modal>
-      )}
+      }
 
-      {showDraftModal && (
-        <Modal onClose={handleCancelSaveDraft} Title="Save as Draft">
+      {showDraftModal &&
+      <Modal onClose={handleCancelSaveDraft} Title="Save as Draft">
           <div className="p-4 space-y-4">
             <p className="typography-body">
               Enter a name for this draft to help you identify it later.
             </p>
             <div className="space-y-2">
               <label
-                htmlFor="draft-name"
-                className="block text-sm font-medium text-gray-700"
-              >
+              htmlFor="draft-name"
+              className="block text-sm font-medium text-gray-700">
+
                 Draft Name (Optional)
               </label>
               <input
-                id="draft-name"
-                type="text"
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                placeholder={`Draft - ${new Date().toLocaleDateString()}`}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+              id="draft-name"
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              placeholder={`Draft - ${new Date().toLocaleDateString()}`}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+
               <p className="text-xs text-gray-500">
                 If left empty, a default name with timestamp will be used.
               </p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               <button
-                onClick={handleCancelSaveDraft}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 border-gray-300 bg-white hover:bg-gray-50"
-              >
+              onClick={handleCancelSaveDraft}
+              className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 border-gray-300 bg-white hover:bg-gray-50">
+
                 Cancel
               </button>
               <button
-                onClick={handleConfirmSaveDraft}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-blue-500 focus:ring-2 focus:outline-none transition-all text-white border-blue-600 bg-blue-600 hover:bg-blue-700 hover:border-blue-700"
-              >
+              onClick={handleConfirmSaveDraft}
+              className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-blue-500 focus:ring-2 focus:outline-none transition-all text-white border-blue-600 bg-blue-600 hover:bg-blue-700 hover:border-blue-700">
+
                 Save Draft
               </button>
             </div>
           </div>
         </Modal>
-      )}
-    </>
-  );
+      }
+    </>);
+
 }
 
 export default AuthorHeader;

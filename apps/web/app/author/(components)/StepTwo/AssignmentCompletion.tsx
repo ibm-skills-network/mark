@@ -12,34 +12,34 @@ type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const [numAttempts, setNumAttempts, passingGrade, setPassingGrade, errors] =
-    useAssignmentConfig((state) => [
-      state.numAttempts,
-      state.setNumAttempts,
-      state.passingGrade,
-      state.setPassingGrade,
-      state.errors,
-    ]);
+  useAssignmentConfig((state) => [
+  state.numAttempts,
+  state.setNumAttempts,
+  state.passingGrade,
+  state.setPassingGrade,
+  state.errors]
+  );
 
   const dropdownItems = [
-    { value: 1, label: "1" },
-    { value: 2, label: "2" },
-    { value: 3, label: "3" },
-    { value: 4, label: "4" },
-    { value: 5, label: "5" },
-    { value: 6, label: "6" },
-    { value: 7, label: "7" },
-    { value: 8, label: "8" },
-    { value: 9, label: "9" },
-    { value: 10, label: "10" },
-    { value: -1, label: "unlimited" },
-  ];
+  { value: 1, label: "1" },
+  { value: 2, label: "2" },
+  { value: 3, label: "3" },
+  { value: 4, label: "4" },
+  { value: 5, label: "5" },
+  { value: 6, label: "6" },
+  { value: 7, label: "7" },
+  { value: 8, label: "8" },
+  { value: 9, label: "9" },
+  { value: 10, label: "10" },
+  { value: -1, label: "unlimited" }];
+
 
   return (
     <SectionWithTitle
       title={stepTwoSections.completion.title}
       className="flex flex-col gap-y-6"
-      required
-    >
+      required>
+
       <div className="flex flex-col gap-y-1">
         <label htmlFor="attempts" className="text-gray-600 flex gap-x-1">
           How many attempts do learners have for this assignment?
@@ -50,16 +50,16 @@ const Component: FC<Props> = () => {
         <Dropdown<number>
           items={dropdownItems}
           selectedItem={numAttempts}
-          setSelectedItem={setNumAttempts}
-        />
-        {errors.numAttempts && (
-          <p
-            className="text-red-500 text-sm"
-            id={`error-${errors.numAttempts}`}
-          >
+          setSelectedItem={setNumAttempts} />
+
+        {errors.numAttempts &&
+        <p
+          className="text-red-500 text-sm"
+          id={`error-${errors.numAttempts}`}>
+
             {errors.numAttempts}
           </p>
-        )}
+        }
       </div>
       <div className="flex flex-col gap-y-1">
         <p className=" text-gray-600">
@@ -74,23 +74,23 @@ const Component: FC<Props> = () => {
             max={100}
             step={5}
             onChange={(e) => setPassingGrade(~~e.target.value)}
-            value={passingGrade || ""}
-          />
+            value={passingGrade || ""} />
+
           <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
             %
           </span>
         </div>
-        {errors.passingGrade && (
-          <p
-            className="text-red-500 text-sm"
-            id={`error-${errors.passingGrade}`}
-          >
+        {errors.passingGrade &&
+        <p
+          className="text-red-500 text-sm"
+          id={`error-${errors.passingGrade}`}>
+
             {errors.passingGrade}
           </p>
-        )}
+        }
       </div>
-    </SectionWithTitle>
-  );
+    </SectionWithTitle>);
+
 };
 
 export default Component;

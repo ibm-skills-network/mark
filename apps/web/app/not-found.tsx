@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Not Found",
+  title: "Not Found"
 };
 
 export default function NotFound() {
@@ -13,6 +13,6 @@ export default function NotFound() {
           <a href="/">{"<- Back to home"}</a>
         </div>
       </section>
-    </main>
-  );
+    </main>);
+
 }

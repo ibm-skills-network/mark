@@ -9,24 +9,24 @@ export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
     numAttempts,
     passingGrade,
     allotedTimeMinutes,
-    displayOrder,
+    displayOrder
   } = useAssignmentConfig((state) => ({
     questionDisplay: state.questionDisplay,
     graded: state.graded,
     numAttempts: state.numAttempts,
     passingGrade: state.passingGrade,
     allotedTimeMinutes: state.allotedTimeMinutes,
-    displayOrder: state.displayOrder,
+    displayOrder: state.displayOrder
   }));
 
   const { introduction, instructions, questionOrder, updatedAt, questions } =
-    useAuthorStore((state) => ({
-      introduction: state.introduction,
-      instructions: state.instructions,
-      questionOrder: state.questionOrder,
-      updatedAt: state.updatedAt,
-      questions: state.questions,
-    }));
+  useAuthorStore((state) => ({
+    introduction: state.introduction,
+    instructions: state.instructions,
+    questionOrder: state.questionOrder,
+    updatedAt: state.updatedAt,
+    questions: state.questions
+  }));
 
   return {
     questionDisplay,
@@ -40,6 +40,6 @@ export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
     questionOrder,
     published: false,
     updatedAt: updatedAt,
-    questions: questions,
+    questions: questions
   };
 };

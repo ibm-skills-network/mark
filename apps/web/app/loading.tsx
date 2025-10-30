@@ -3,11 +3,11 @@
 import dynamic from "next/dynamic";
 import React, { FC } from "react";
 
-const DynamicLoading = dynamic<{ animationData: any }>(
+const DynamicLoading = dynamic<{animationData: any;}>(
   () => import("@/components/Loading"),
   {
-    ssr: false,
-  },
+    ssr: false
+  }
 );
 interface LoadingPageProps {
   animationData: object;

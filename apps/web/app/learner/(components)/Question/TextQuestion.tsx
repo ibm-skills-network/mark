@@ -19,9 +19,9 @@ function TextQuestion(props: Props) {
       setValue={(value) => setTextResponse(value, question.id)}
       placeholder="Type your answer here"
       maxWords={maxWords}
-      maxCharacters={maxCharacters}
-    />
-  );
+      maxCharacters={maxCharacters} />);
+
+
 }
 
 export default TextQuestion;

@@ -12,9 +12,9 @@ function TrueFalseQuestion(props: Props) {
   const learnerAnswerChoice = question.learnerAnswerChoice;
 
   const userPreferredLanguage =
-    useLearnerStore((state) => state.userPreferedLanguage) || "en";
+  useLearnerStore((state) => state.userPreferedLanguage) || "en";
   const langTranslations =
-    trueFalseTranslations[userPreferredLanguage] || trueFalseTranslations["en"];
+  trueFalseTranslations[userPreferredLanguage] || trueFalseTranslations["en"];
 
   const handleChoiceClick = (choice: boolean) => {
     setAnswerChoice(choice, question.id);
@@ -29,8 +29,8 @@ function TrueFalseQuestion(props: Props) {
           value="true"
           checked={learnerAnswerChoice === true}
           onChange={() => handleChoiceClick(true)}
-          className="mr-2 accent-violet-600 text-violet-600"
-        />
+          className="mr-2 accent-violet-600 text-violet-600" />
+
         {langTranslations.true}
       </label>
       <label className="flex items-center w-full p-2 mb-2 rounded">
@@ -40,12 +40,12 @@ function TrueFalseQuestion(props: Props) {
           value="false"
           checked={learnerAnswerChoice === false}
           onChange={() => handleChoiceClick(false)}
-          className="mr-2 accent-violet-600 text-violet-600"
-        />
+          className="mr-2 accent-violet-600 text-violet-600" />
+
         {langTranslations.false}
       </label>
-    </div>
-  );
+    </div>);
+
 }
 
 export default TrueFalseQuestion;

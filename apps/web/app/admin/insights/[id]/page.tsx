@@ -11,8 +11,8 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SelectValue } from
+"@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -20,8 +20,8 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  TableRow } from
+"@/components/ui/table";
 import {
   ArrowLeft,
   Users,
@@ -42,12 +42,12 @@ import {
   X,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown,
-} from "lucide-react";
+  ArrowDown } from
+"lucide-react";
 import {
   getCurrentAdminUser,
-  getDetailedAssignmentInsights,
-} from "@/lib/shared";
+  getDetailedAssignmentInsights } from
+"@/lib/shared";
 import { FeedbackModal } from "@/components/modals/FeedbackModal";
 import { ReportModal } from "@/components/modals/ReportModal";
 import { formatPricePerMillionTokens } from "@/config/constants";
@@ -92,7 +92,7 @@ interface DetailedInsightData {
     responseCount: number;
     insight: string;
     variants: number;
-    translations: Array<{ languageCode: string }>;
+    translations: Array<{languageCode: string;}>;
   }>;
   attempts: Array<{
     id: number;
@@ -205,14 +205,14 @@ export default function AssignmentInsightsPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showDetailedUsage, setShowDetailedUsage] = useState(false);
 
-  // Attempts filtering state
+
   const [attemptSearch, setAttemptSearch] = useState("");
   const [attemptStatusFilter, setAttemptStatusFilter] = useState("all");
   const [attemptGradeFilter, setAttemptGradeFilter] = useState("all");
   const [attemptSortBy, setAttemptSortBy] = useState("createdAt");
   const [attemptSortOrder, setAttemptSortOrder] = useState("desc");
 
-  // Modal states
+
   const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
@@ -226,7 +226,7 @@ export default function AssignmentInsightsPage() {
 
       if (!sessionToken) {
         router.push(
-          `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`,
+          `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`
         );
         return;
       }
@@ -242,12 +242,12 @@ export default function AssignmentInsightsPage() {
         setLoading(true);
         const response = await getDetailedAssignmentInsights(
           sessionToken,
-          parseInt(assignmentId),
+          parseInt(assignmentId)
         );
         setData(response);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to fetch insights",
+          err instanceof Error ? err.message : "Failed to fetch insights"
         );
       } finally {
         setLoading(false);
@@ -262,7 +262,7 @@ export default function AssignmentInsightsPage() {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
-      maximumFractionDigits: 4,
+      maximumFractionDigits: 4
     }).format(amount);
   };
 
@@ -272,11 +272,11 @@ export default function AssignmentInsightsPage() {
       month: "short",
       day: "numeric",
       hour: "2-digit",
-      minute: "2-digit",
+      minute: "2-digit"
     });
   };
 
-  // Modal handlers
+
   const openFeedbackModal = (feedback: any) => {
     setSelectedFeedback(feedback);
     setIsFeedbackModalOpen(true);
@@ -304,37 +304,37 @@ export default function AssignmentInsightsPage() {
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
-  // Filter and sort attempts
+
   const getFilteredAndSortedAttempts = () => {
     if (!data?.attempts) return [];
 
     const filtered = data.attempts.filter((attempt) => {
-      // Search filter
+
       const searchMatch =
-        attemptSearch === "" ||
-        attempt.userId.toLowerCase().includes(attemptSearch.toLowerCase());
+      attemptSearch === "" ||
+      attempt.userId.toLowerCase().includes(attemptSearch.toLowerCase());
 
-      // Status filter
+
       const statusMatch =
-        attemptStatusFilter === "all" ||
-        (attemptStatusFilter === "submitted" && attempt.submitted) ||
-        (attemptStatusFilter === "in-progress" && !attempt.submitted);
+      attemptStatusFilter === "all" ||
+      attemptStatusFilter === "submitted" && attempt.submitted ||
+      attemptStatusFilter === "in-progress" && !attempt.submitted;
 
-      // Grade filter
+
       const gradeMatch =
-        attemptGradeFilter === "all" ||
-        (attemptGradeFilter === "passed" &&
-          attempt.grade !== null &&
-          attempt.grade >= 0.6) ||
-        (attemptGradeFilter === "failed" &&
-          attempt.grade !== null &&
-          attempt.grade < 0.6) ||
-        (attemptGradeFilter === "ungraded" && attempt.grade === null);
+      attemptGradeFilter === "all" ||
+      attemptGradeFilter === "passed" &&
+      attempt.grade !== null &&
+      attempt.grade >= 0.6 ||
+      attemptGradeFilter === "failed" &&
+      attempt.grade !== null &&
+      attempt.grade < 0.6 ||
+      attemptGradeFilter === "ungraded" && attempt.grade === null;
 
       return searchMatch && statusMatch && gradeMatch;
     });
 
-    // Sort attempts
+
     filtered.sort((a, b) => {
       let aValue: any, bValue: any;
 
@@ -386,48 +386,48 @@ export default function AssignmentInsightsPage() {
             Loading detailed insights...
           </div>
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   if (error || !data) {
     const isAuthError =
-      error?.includes("Invalid or expired admin session") ||
-      error?.includes("authentication") ||
-      error?.includes("Unauthorized");
+    error?.includes("Invalid or expired admin session") ||
+    error?.includes("authentication") ||
+    error?.includes("Unauthorized");
 
     return (
       <div className="container mx-auto p-6">
         <div className="flex flex-col items-center justify-center py-12 gap-4">
           <div className="text-red-600">Error: {error || "No data found"}</div>
-          {isAuthError && (
-            <Button
-              onClick={() =>
-                router.push(
-                  `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`,
-                )
-              }
-              className="flex items-center gap-2"
-            >
+          {isAuthError &&
+          <Button
+            onClick={() =>
+            router.push(
+              `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`
+            )
+            }
+            className="flex items-center gap-2">
+
               <ArrowLeft className="h-4 w-4" />
               Go to Admin Login
             </Button>
-          )}
+          }
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
+      
       <div className="flex items-center gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{data.assignment.name}</h1>
             <Badge
-              variant={data.assignment.published ? "default" : "secondary"}
-            >
+              variant={data.assignment.published ? "default" : "secondary"}>
+
               {data.assignment.published ? "Published" : "Draft"}
             </Badge>
           </div>
@@ -437,7 +437,7 @@ export default function AssignmentInsightsPage() {
         </div>
       </div>
 
-      {/* Key Metrics */}
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="pt-4">
@@ -487,9 +487,9 @@ export default function AssignmentInsightsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Completion Rate</p>
                 <p className="text-2xl font-bold">
-                  {data.analytics.totalAttempts > 0
-                    ? `${Math.round((data.analytics.completedAttempts / data.analytics.totalAttempts) * 100)}%`
-                    : "N/A"}
+                  {data.analytics.totalAttempts > 0 ?
+                  `${Math.round(data.analytics.completedAttempts / data.analytics.totalAttempts * 100)}%` :
+                  "N/A"}
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-orange-600" />
@@ -503,9 +503,9 @@ export default function AssignmentInsightsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Avg Grade</p>
                 <p className="text-2xl font-bold">
-                  {data.analytics.averageGrade > 0
-                    ? `${data.analytics.averageGrade.toFixed(2)}%`
-                    : "N/A"}
+                  {data.analytics.averageGrade > 0 ?
+                  `${data.analytics.averageGrade.toFixed(2)}%` :
+                  "N/A"}
                 </p>
               </div>
               <BarChart3 className="h-8 w-8 text-purple-600" />
@@ -519,9 +519,9 @@ export default function AssignmentInsightsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Rating</p>
                 <p className="text-2xl font-bold">
-                  {data.analytics.averageRating > 0
-                    ? data.analytics.averageRating.toFixed(1)
-                    : "N/A"}
+                  {data.analytics.averageRating > 0 ?
+                  data.analytics.averageRating.toFixed(1) :
+                  "N/A"}
                 </p>
               </div>
               <Star className="h-8 w-8 text-yellow-500" />
@@ -530,17 +530,17 @@ export default function AssignmentInsightsPage() {
         </Card>
       </div>
 
-      {/* Detailed Tabs */}
+      
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="space-y-6"
-      >
+        className="space-y-6">
+
         <TabsList
           className={`
         grid w-full ${isUserAdmin ? "grid-cols-7" : "grid-cols-6"} border-b mb-4
-        `}
-        >
+        `}>
+
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="authors">Authors</TabsTrigger>
           <TabsTrigger value="questions">Questions</TabsTrigger>
@@ -550,10 +550,10 @@ export default function AssignmentInsightsPage() {
           {isUserAdmin && <TabsTrigger value="reports">Reports</TabsTrigger>}
         </TabsList>
 
-        {/* Overview Tab */}
+        
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Assignment Details */}
+            
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -607,7 +607,7 @@ export default function AssignmentInsightsPage() {
               </CardContent>
             </Card>
 
-            {/* Advanced Cost Breakdown */}
+            
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -617,7 +617,7 @@ export default function AssignmentInsightsPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Cost per Attempt */}
+                  
                   <div className="text-center">
                     <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3">
                       <TrendingUp className="h-6 w-6 text-blue-600" />
@@ -626,19 +626,19 @@ export default function AssignmentInsightsPage() {
                       Cost per Attempt
                     </div>
                     <div className="text-2xl font-bold text-blue-700">
-                      {data.analytics.totalAttempts > 0
-                        ? formatCurrency(
-                            data.analytics.totalCost /
-                              data.analytics.totalAttempts,
-                          )
-                        : "N/A"}
+                      {data.analytics.totalAttempts > 0 ?
+                      formatCurrency(
+                        data.analytics.totalCost /
+                        data.analytics.totalAttempts
+                      ) :
+                      "N/A"}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       {data.analytics.totalAttempts} total attempts
                     </div>
                   </div>
 
-                  {/* Authoring Costs */}
+                  
                   <div className="text-center">
                     <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mx-auto mb-3">
                       <FileText className="h-6 w-6 text-green-600" />
@@ -648,18 +648,18 @@ export default function AssignmentInsightsPage() {
                     </div>
                     <div className="text-2xl font-bold text-green-700">
                       {formatCurrency(
-                        data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
+                        data.aiUsage.
+                        filter((usage) =>
+                        [
+                        "TRANSLATION",
+                        "QUESTION_GENERATION",
+                        "ASSIGNMENT_GENERATION"].
+                        includes(usage.usageType)
+                        ).
+                        reduce(
+                          (sum, usage) => sum + (usage.totalCost || 0),
+                          0
+                        )
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
@@ -667,7 +667,7 @@ export default function AssignmentInsightsPage() {
                     </div>
                   </div>
 
-                  {/* Learner Grading Costs */}
+                  
                   <div className="text-center">
                     <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3">
                       <Users className="h-6 w-6 text-purple-600" />
@@ -677,18 +677,18 @@ export default function AssignmentInsightsPage() {
                     </div>
                     <div className="text-2xl font-bold text-purple-700">
                       {formatCurrency(
-                        data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "LIVE_RECORDING_FEEDBACK",
-                              "GRADING_VALIDATION",
-                              "ASSIGNMENT_GRADING",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
+                        data.aiUsage.
+                        filter((usage) =>
+                        [
+                        "LIVE_RECORDING_FEEDBACK",
+                        "GRADING_VALIDATION",
+                        "ASSIGNMENT_GRADING"].
+                        includes(usage.usageType)
+                        ).
+                        reduce(
+                          (sum, usage) => sum + (usage.totalCost || 0),
+                          0
+                        )
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
@@ -697,72 +697,72 @@ export default function AssignmentInsightsPage() {
                   </div>
                 </div>
 
-                {/* Detailed Breakdown */}
+                
                 <div className="mt-6 pt-6 border-t">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Authoring Breakdown */}
+                    
                     <div>
                       <h4 className="font-semibold text-sm mb-3 text-green-700">
                         Authoring Details
                       </h4>
                       <div className="space-y-2">
-                        {data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType),
-                          )
-                          .map((usage, index) => (
-                            <div
-                              key={index}
-                              className="flex justify-between items-center py-1"
-                            >
+                        {data.aiUsage.
+                        filter((usage) =>
+                        [
+                        "TRANSLATION",
+                        "QUESTION_GENERATION",
+                        "ASSIGNMENT_GENERATION"].
+                        includes(usage.usageType)
+                        ).
+                        map((usage, index) =>
+                        <div
+                          key={index}
+                          className="flex justify-between items-center py-1">
+
                               <span className="text-xs text-muted-foreground">
-                                {usage.usageType
-                                  .replace("_", " ")
-                                  .toLowerCase()
-                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                {usage.usageType.
+                            replace("_", " ").
+                            toLowerCase().
+                            replace(/\b\w/g, (l) => l.toUpperCase())}
                               </span>
                               <span className="text-sm font-mono">
                                 {formatCurrency(usage.totalCost || 0)}
                               </span>
                             </div>
-                          ))}
+                        )}
                       </div>
                     </div>
 
-                    {/* Grading Breakdown */}
+                    
                     <div>
                       <h4 className="font-semibold text-sm mb-3 text-purple-700">
                         Grading Details
                       </h4>
                       <div className="space-y-2">
-                        {data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "LIVE_RECORDING_FEEDBACK",
-                              "GRADING_VALIDATION",
-                              "ASSIGNMENT_GRADING",
-                            ].includes(usage.usageType),
-                          )
-                          .map((usage, index) => (
-                            <div
-                              key={index}
-                              className="flex justify-between items-center py-1"
-                            >
+                        {data.aiUsage.
+                        filter((usage) =>
+                        [
+                        "LIVE_RECORDING_FEEDBACK",
+                        "GRADING_VALIDATION",
+                        "ASSIGNMENT_GRADING"].
+                        includes(usage.usageType)
+                        ).
+                        map((usage, index) =>
+                        <div
+                          key={index}
+                          className="flex justify-between items-center py-1">
+
                               <span className="text-xs text-muted-foreground">
-                                {usage.usageType
-                                  .replace("_", " ")
-                                  .toLowerCase()
-                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                {usage.usageType.
+                            replace("_", " ").
+                            toLowerCase().
+                            replace(/\b\w/g, (l) => l.toUpperCase())}
                               </span>
                               <span className="text-sm font-mono">
                                 {formatCurrency(usage.totalCost || 0)}
                               </span>
                             </div>
-                          ))}
+                        )}
                       </div>
                     </div>
                   </div>
@@ -771,9 +771,9 @@ export default function AssignmentInsightsPage() {
             </Card>
           </div>
 
-          {/* Performance Insights */}
-          {data.analytics.performanceInsights.length > 0 && (
-            <Card>
+          
+          {data.analytics.performanceInsights.length > 0 &&
+          <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5" />
@@ -782,23 +782,23 @@ export default function AssignmentInsightsPage() {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {data.analytics.performanceInsights.map((insight, index) => (
-                    <li key={index} className="flex items-start gap-2">
+                  {data.analytics.performanceInsights.map((insight, index) =>
+                <li key={index} className="flex items-start gap-2">
                       <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                       <span className="text-sm">{insight}</span>
                     </li>
-                  ))}
+                )}
                 </ul>
               </CardContent>
             </Card>
-          )}
+          }
         </TabsContent>
 
-        {/* Authors Tab */}
+        
         <TabsContent value="authors" className="space-y-6">
-          {data.authorActivity && data.authorActivity.totalAuthors > 0 ? (
-            <div className="space-y-6">
-              {/* Author Summary Cards */}
+          {data.authorActivity && data.authorActivity.totalAuthors > 0 ?
+          <div className="space-y-6">
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                   <CardContent className="pt-4">
@@ -812,10 +812,10 @@ export default function AssignmentInsightsPage() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {
-                            data.authorActivity.authors.filter(
-                              (a) => a.isActiveContributor,
-                            ).length
-                          }{" "}
+                        data.authorActivity.authors.filter(
+                          (a) => a.isActiveContributor
+                        ).length
+                        }{" "}
                           active contributors
                         </p>
                       </div>
@@ -836,7 +836,7 @@ export default function AssignmentInsightsPage() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {data.authorActivity.authors[0]?.totalAssignments ||
-                            0}{" "}
+                        0}{" "}
                           assignments
                         </p>
                       </div>
@@ -854,9 +854,9 @@ export default function AssignmentInsightsPage() {
                         </p>
                         <p className="text-2xl font-bold">
                           {data.authorActivity.authors.reduce(
-                            (sum, a) => sum + a.totalAssignments,
-                            0,
-                          )}
+                          (sum, a) => sum + a.totalAssignments,
+                          0
+                        )}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           by all authors combined
@@ -868,9 +868,9 @@ export default function AssignmentInsightsPage() {
                 </Card>
               </div>
 
-              {/* Activity Insights */}
-              {data.authorActivity.activityInsights.length > 0 && (
-                <Card>
+              
+              {data.authorActivity.activityInsights.length > 0 &&
+            <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Activity className="h-5 w-5" />
@@ -880,19 +880,19 @@ export default function AssignmentInsightsPage() {
                   <CardContent>
                     <ul className="space-y-2">
                       {data.authorActivity.activityInsights.map(
-                        (insight, index) => (
-                          <li key={index} className="flex items-start gap-2">
+                    (insight, index) =>
+                    <li key={index} className="flex items-start gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                             <span className="text-sm">{insight}</span>
                           </li>
-                        ),
-                      )}
+
+                  )}
                     </ul>
                   </CardContent>
                 </Card>
-              )}
+            }
 
-              {/* Detailed Authors Table */}
+              
               <Card>
                 <CardHeader>
                   <CardTitle>Author Activity Details</CardTitle>
@@ -918,16 +918,16 @@ export default function AssignmentInsightsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.authorActivity.authors.map((author) => (
-                        <TableRow key={author.userId}>
+                      {data.authorActivity.authors.map((author) =>
+                    <TableRow key={author.userId}>
                           <TableCell className="font-mono text-sm">
                             <div className="flex items-center gap-2">
                               <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
                                 <span className="text-xs font-semibold text-indigo-600">
-                                  {author.userId
-                                    .split("@")[0]
-                                    ?.substring(0, 2)
-                                    .toUpperCase() || "AU"}
+                                  {author.userId.
+                              split("@")[0]?.
+                              substring(0, 2).
+                              toUpperCase() || "AU"}
                                 </span>
                               </div>
                               <div>
@@ -942,12 +942,12 @@ export default function AssignmentInsightsPage() {
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge
-                              variant={
-                                author.activityScore > 10
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
+                          variant={
+                          author.activityScore > 10 ?
+                          "default" :
+                          "secondary"
+                          }>
+
                               {author.activityScore}
                             </Badge>
                           </TableCell>
@@ -958,17 +958,17 @@ export default function AssignmentInsightsPage() {
                             {author.totalQuestions}
                           </TableCell>
                           <TableCell className="text-center font-mono">
-                            {author.totalAIUsage > 1000
-                              ? "Ridiculous Usage!"
-                              : author.totalAIUsage > 500
-                                ? "Very High Usage"
-                                : author.totalAIUsage > 100
-                                  ? "High Usage"
-                                  : author.totalAIUsage > 50
-                                    ? "Moderate Usage"
-                                    : author.totalAIUsage > 0
-                                      ? "Low Usage"
-                                      : "No Usage"}
+                            {author.totalAIUsage > 1000 ?
+                        "Ridiculous Usage!" :
+                        author.totalAIUsage > 500 ?
+                        "Very High Usage" :
+                        author.totalAIUsage > 100 ?
+                        "High Usage" :
+                        author.totalAIUsage > 50 ?
+                        "Moderate Usage" :
+                        author.totalAIUsage > 0 ?
+                        "Low Usage" :
+                        "No Usage"}
                           </TableCell>
                           <TableCell className="text-center font-mono">
                             {author.totalFeedback}
@@ -978,36 +978,36 @@ export default function AssignmentInsightsPage() {
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge
-                              variant={
-                                author.isActiveContributor
-                                  ? "default"
-                                  : "outline"
-                              }
-                            >
-                              {author.isActiveContributor
-                                ? "Active"
-                                : "Occasional"}
+                          variant={
+                          author.isActiveContributor ?
+                          "default" :
+                          "outline"
+                          }>
+
+                              {author.isActiveContributor ?
+                          "Active" :
+                          "Occasional"}
                             </Badge>
                           </TableCell>
                         </TableRow>
-                      ))}
+                    )}
                     </TableBody>
                   </Table>
                 </CardContent>
               </Card>
-            </div>
-          ) : (
-            <Card>
+            </div> :
+
+          <Card>
               <CardContent className="pt-4">
                 <div className="text-center text-muted-foreground py-8">
                   No author information available for this assignment
                 </div>
               </CardContent>
             </Card>
-          )}
+          }
         </TabsContent>
 
-        {/* Questions Tab */}
+        
         <TabsContent value="questions">
           <Card>
             <CardHeader>
@@ -1028,8 +1028,8 @@ export default function AssignmentInsightsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.questions.map((question) => (
-                    <TableRow key={question.id}>
+                  {data.questions.map((question) =>
+                  <TableRow key={question.id}>
                       <TableCell className="max-w-xs">
                         <div className="truncate" title={question.question}>
                           {question.question}
@@ -1046,12 +1046,12 @@ export default function AssignmentInsightsPage() {
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge
-                          variant={
-                            question.correctPercentage < 50
-                              ? "destructive"
-                              : "default"
-                          }
-                        >
+                        variant={
+                        question.correctPercentage < 50 ?
+                        "destructive" :
+                        "default"
+                        }>
+
                           {Math.round(question.correctPercentage)}%
                         </Badge>
                       </TableCell>
@@ -1068,14 +1068,14 @@ export default function AssignmentInsightsPage() {
                         {question.translations.length}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Attempts Tab */}
+        
         <TabsContent value="attempts" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1090,46 +1090,46 @@ export default function AssignmentInsightsPage() {
                   variant="outline"
                   onClick={clearAttemptFilters}
                   disabled={
-                    attemptSearch === "" &&
-                    attemptStatusFilter === "all" &&
-                    attemptGradeFilter === "all"
+                  attemptSearch === "" &&
+                  attemptStatusFilter === "all" &&
+                  attemptGradeFilter === "all"
                   }
-                  className="flex items-center gap-2"
-                >
+                  className="flex items-center gap-2">
+
                   <X className="h-4 w-4" />
                   Clear Filters
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Search and Filters */}
+              
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Search */}
+                
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     placeholder="Search by user ID..."
                     value={attemptSearch}
                     onChange={(e) => setAttemptSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                  {attemptSearch && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAttemptSearch("")}
-                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-                    >
+                    className="pl-9" />
+
+                  {attemptSearch &&
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAttemptSearch("")}
+                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0">
+
                       <X className="h-3 w-3" />
                     </Button>
-                  )}
+                  }
                 </div>
 
-                {/* Status Filter */}
+                
                 <Select
                   value={attemptStatusFilter}
-                  onValueChange={setAttemptStatusFilter}
-                >
+                  onValueChange={setAttemptStatusFilter}>
+
                   <SelectTrigger>
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
@@ -1140,11 +1140,11 @@ export default function AssignmentInsightsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Grade Filter */}
+                
                 <Select
                   value={attemptGradeFilter}
-                  onValueChange={setAttemptGradeFilter}
-                >
+                  onValueChange={setAttemptGradeFilter}>
+
                   <SelectTrigger>
                     <SelectValue placeholder="Filter by grade" />
                   </SelectTrigger>
@@ -1156,12 +1156,12 @@ export default function AssignmentInsightsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Sort */}
+                
                 <div className="flex gap-2">
                   <Select
                     value={attemptSortBy}
-                    onValueChange={setAttemptSortBy}
-                  >
+                    onValueChange={setAttemptSortBy}>
+
                     <SelectTrigger className="flex-1">
                       <SelectValue placeholder="Sort by" />
                     </SelectTrigger>
@@ -1175,22 +1175,22 @@ export default function AssignmentInsightsPage() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      setAttemptSortOrder(
-                        attemptSortOrder === "asc" ? "desc" : "asc",
-                      )
+                    setAttemptSortOrder(
+                      attemptSortOrder === "asc" ? "desc" : "asc"
+                    )
                     }
-                    className="flex items-center gap-1"
-                  >
-                    {attemptSortOrder === "asc" ? (
-                      <ArrowUp className="h-4 w-4" />
-                    ) : (
-                      <ArrowDown className="h-4 w-4" />
-                    )}
+                    className="flex items-center gap-1">
+
+                    {attemptSortOrder === "asc" ?
+                    <ArrowUp className="h-4 w-4" /> :
+
+                    <ArrowDown className="h-4 w-4" />
+                    }
                   </Button>
                 </div>
               </div>
 
-              {/* Summary Stats */}
+              
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">
@@ -1217,147 +1217,147 @@ export default function AssignmentInsightsPage() {
                 <div className="text-center">
                   <div className="text-2xl font-bold text-purple-600">
                     {
-                      filteredAttempts.filter(
-                        (a) => a.grade !== null && a.grade >= 0.6,
-                      ).length
+                    filteredAttempts.filter(
+                      (a) => a.grade !== null && a.grade >= 0.6
+                    ).length
                     }
                   </div>
                   <div className="text-sm text-muted-foreground">Passed</div>
                 </div>
               </div>
 
-              {/* Table */}
+              
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead
                       className="cursor-pointer"
-                      onClick={() => setAttemptSortBy("userId")}
-                    >
+                      onClick={() => setAttemptSortBy("userId")}>
+
                       <div className="flex items-center gap-1">
                         User ID
-                        {attemptSortBy === "userId" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
+                        {attemptSortBy === "userId" && (
+                        attemptSortOrder === "asc" ?
+                        <ArrowUp className="h-3 w-3" /> :
+
+                        <ArrowDown className="h-3 w-3" />)
+                        }
                       </div>
                     </TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead
                       className="text-center cursor-pointer"
-                      onClick={() => setAttemptSortBy("grade")}
-                    >
+                      onClick={() => setAttemptSortBy("grade")}>
+
                       <div className="flex items-center justify-center gap-1">
                         Grade
-                        {attemptSortBy === "grade" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
+                        {attemptSortBy === "grade" && (
+                        attemptSortOrder === "asc" ?
+                        <ArrowUp className="h-3 w-3" /> :
+
+                        <ArrowDown className="h-3 w-3" />)
+                        }
                       </div>
                     </TableHead>
                     <TableHead
                       className="cursor-pointer"
-                      onClick={() => setAttemptSortBy("createdAt")}
-                    >
+                      onClick={() => setAttemptSortBy("createdAt")}>
+
                       <div className="flex items-center gap-1">
                         Started
-                        {attemptSortBy === "createdAt" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
+                        {attemptSortBy === "createdAt" && (
+                        attemptSortOrder === "asc" ?
+                        <ArrowUp className="h-3 w-3" /> :
+
+                        <ArrowDown className="h-3 w-3" />)
+                        }
                       </div>
                     </TableHead>
                     <TableHead
                       className="cursor-pointer"
-                      onClick={() => setAttemptSortBy("timeSpent")}
-                    >
+                      onClick={() => setAttemptSortBy("timeSpent")}>
+
                       <div className="flex items-center gap-1">
                         Time Spent
-                        {attemptSortBy === "timeSpent" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
+                        {attemptSortBy === "timeSpent" && (
+                        attemptSortOrder === "asc" ?
+                        <ArrowUp className="h-3 w-3" /> :
+
+                        <ArrowDown className="h-3 w-3" />)
+                        }
                       </div>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAttempts.length === 0 ? (
-                    <TableRow>
+                  {filteredAttempts.length === 0 ?
+                  <TableRow>
                       <TableCell
-                        colSpan={6}
-                        className="text-center py-8 text-muted-foreground"
-                      >
+                      colSpan={6}
+                      className="text-center py-8 text-muted-foreground">
+
                         No attempts match the current filters
                       </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredAttempts.map((attempt) => (
-                      <TableRow key={attempt.id}>
+                    </TableRow> :
+
+                  filteredAttempts.map((attempt) =>
+                  <TableRow key={attempt.id}>
                         <TableCell className="font-mono text-xs">
                           {attempt.userId}
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={
-                              attempt.submitted ? "default" : "secondary"
-                            }
-                          >
+                        variant={
+                        attempt.submitted ? "default" : "secondary"
+                        }>
+
                             {attempt.submitted ? "Submitted" : "In Progress"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
-                          {attempt.grade !== null ? (
-                            <span
-                              className={
-                                attempt.grade >= 0.6
-                                  ? "text-green-600 font-semibold"
-                                  : "text-red-600 font-semibold"
-                              }
-                            >
+                          {attempt.grade !== null ?
+                      <span
+                        className={
+                        attempt.grade >= 0.6 ?
+                        "text-green-600 font-semibold" :
+                        "text-red-600 font-semibold"
+                        }>
+
                               {Math.round(attempt.grade * 100)}%
-                            </span>
-                          ) : (
-                            "N/A"
-                          )}
+                            </span> :
+
+                      "N/A"
+                      }
                         </TableCell>
                         <TableCell>{formatDate(attempt.createdAt)}</TableCell>
                         <TableCell>
                           {attempt.timeSpent !== null &&
-                          attempt.timeSpent !== undefined
-                            ? formatDuration(attempt.timeSpent)
-                            : "N/A"}
+                      attempt.timeSpent !== undefined ?
+                      formatDuration(attempt.timeSpent) :
+                      "N/A"}
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
+                  )
+                  }
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Feedback Tab */}
+        
         <TabsContent value="feedback">
           <Card>
             <CardHeader>
               <CardTitle>User Feedback</CardTitle>
             </CardHeader>
             <CardContent>
-              {data.feedback.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">
+              {data.feedback.length === 0 ?
+              <div className="text-center text-muted-foreground py-8">
                   No feedback received yet
-                </div>
-              ) : (
-                <Table>
+                </div> :
+
+              <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>User</TableHead>
@@ -1372,73 +1372,73 @@ export default function AssignmentInsightsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.feedback.map((feedback) => (
-                      <TableRow key={feedback.id}>
+                    {data.feedback.map((feedback) =>
+                  <TableRow key={feedback.id}>
                         <TableCell className="font-mono text-xs">
                           {feedback.userId}
                         </TableCell>
                         <TableCell className="text-center">
-                          {feedback.assignmentRating ? (
-                            <div className="flex items-center justify-end gap-1">
+                          {feedback.assignmentRating ?
+                      <div className="flex items-center justify-end gap-1">
                               <Star className="h-3 w-3 text-yellow-500 fill-current" />
                               {feedback.assignmentRating}
-                            </div>
-                          ) : (
-                            "N/A"
-                          )}
+                            </div> :
+
+                      "N/A"
+                      }
                         </TableCell>
                         <TableCell className="text-center">
-                          {feedback.aiGradingRating ? (
-                            <div className="flex items-center justify-end gap-1">
+                          {feedback.aiGradingRating ?
+                      <div className="flex items-center justify-end gap-1">
                               <Star className="h-3 w-3 text-yellow-500 fill-current" />
                               {feedback.aiGradingRating}
-                            </div>
-                          ) : (
-                            "N/A"
-                          )}
+                            </div> :
+
+                      "N/A"
+                      }
                         </TableCell>
                         <TableCell className="text-center">
-                          {feedback.aiFeedbackRating ? (
-                            <div className="flex items-center justify-end gap-1">
+                          {feedback.aiFeedbackRating ?
+                      <div className="flex items-center justify-end gap-1">
                               <Star className="h-3 w-3 text-yellow-500 fill-current" />
                               {feedback.aiFeedbackRating}
-                            </div>
-                          ) : (
-                            "N/A"
-                          )}
+                            </div> :
+
+                      "N/A"
+                      }
                         </TableCell>
                         <TableCell className="max-w-xs">
                           <div
-                            className="truncate"
-                            title={feedback.comments || ""}
-                          >
+                        className="truncate"
+                        title={feedback.comments || ""}>
+
                             {feedback.comments || "No comments"}
                           </div>
                         </TableCell>
                         <TableCell>{formatDate(feedback.createdAt)}</TableCell>
                         <TableCell>
                           <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openFeedbackModal(feedback)}
-                          >
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openFeedbackModal(feedback)}>
+
                             View Details
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                  )}
                   </TableBody>
                 </Table>
-              )}
+              }
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* AI Usage Tab */}
+        
         <TabsContent value="ai-usage" className="space-y-6">
-          {/* Cost Category Summary */}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Authoring Costs */}
+            
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-700">
@@ -1449,47 +1449,47 @@ export default function AssignmentInsightsPage() {
               <CardContent>
                 <div className="text-3xl font-bold text-green-700 mb-4">
                   {formatCurrency(
-                    data.aiUsage
-                      .filter((usage) =>
-                        [
-                          "TRANSLATION",
-                          "QUESTION_GENERATION",
-                          "ASSIGNMENT_GENERATION",
-                        ].includes(usage.usageType),
-                      )
-                      .reduce((sum, usage) => sum + (usage.totalCost || 0), 0),
+                    data.aiUsage.
+                    filter((usage) =>
+                    [
+                    "TRANSLATION",
+                    "QUESTION_GENERATION",
+                    "ASSIGNMENT_GENERATION"].
+                    includes(usage.usageType)
+                    ).
+                    reduce((sum, usage) => sum + (usage.totalCost || 0), 0)
                   )}
                 </div>
                 <div className="space-y-2">
-                  {data.aiUsage
-                    .filter((usage) =>
-                      [
-                        "TRANSLATION",
-                        "QUESTION_GENERATION",
-                        "ASSIGNMENT_GENERATION",
-                      ].includes(usage.usageType),
-                    )
-                    .map((usage, index) => (
-                      <div
-                        key={index}
-                        className="flex justify-between items-center"
-                      >
+                  {data.aiUsage.
+                  filter((usage) =>
+                  [
+                  "TRANSLATION",
+                  "QUESTION_GENERATION",
+                  "ASSIGNMENT_GENERATION"].
+                  includes(usage.usageType)
+                  ).
+                  map((usage, index) =>
+                  <div
+                    key={index}
+                    className="flex justify-between items-center">
+
                         <span className="text-sm text-muted-foreground">
-                          {usage.usageType
-                            .replace("_", " ")
-                            .toLowerCase()
-                            .replace(/\b\w/g, (l) => l.toUpperCase())}
+                          {usage.usageType.
+                      replace("_", " ").
+                      toLowerCase().
+                      replace(/\b\w/g, (l) => l.toUpperCase())}
                         </span>
                         <span className="font-mono text-sm">
                           {formatCurrency(usage.totalCost || 0)}
                         </span>
                       </div>
-                    ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Grading Costs */}
+            
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-purple-700">
@@ -1500,48 +1500,48 @@ export default function AssignmentInsightsPage() {
               <CardContent>
                 <div className="text-3xl font-bold text-purple-700 mb-4">
                   {formatCurrency(
-                    data.aiUsage
-                      .filter((usage) =>
-                        [
-                          "LIVE_RECORDING_FEEDBACK",
-                          "GRADING_VALIDATION",
-                          "ASSIGNMENT_GRADING",
-                        ].includes(usage.usageType),
-                      )
-                      .reduce((sum, usage) => sum + (usage.totalCost || 0), 0),
+                    data.aiUsage.
+                    filter((usage) =>
+                    [
+                    "LIVE_RECORDING_FEEDBACK",
+                    "GRADING_VALIDATION",
+                    "ASSIGNMENT_GRADING"].
+                    includes(usage.usageType)
+                    ).
+                    reduce((sum, usage) => sum + (usage.totalCost || 0), 0)
                   )}
                 </div>
                 <div className="space-y-2">
-                  {data.aiUsage
-                    .filter((usage) =>
-                      [
-                        "LIVE_RECORDING_FEEDBACK",
-                        "GRADING_VALIDATION",
-                        "ASSIGNMENT_GRADING",
-                      ].includes(usage.usageType),
-                    )
-                    .map((usage, index) => (
-                      <div
-                        key={index}
-                        className="flex justify-between items-center"
-                      >
+                  {data.aiUsage.
+                  filter((usage) =>
+                  [
+                  "LIVE_RECORDING_FEEDBACK",
+                  "GRADING_VALIDATION",
+                  "ASSIGNMENT_GRADING"].
+                  includes(usage.usageType)
+                  ).
+                  map((usage, index) =>
+                  <div
+                    key={index}
+                    className="flex justify-between items-center">
+
                         <span className="text-sm text-muted-foreground">
-                          {usage.usageType
-                            .replace("_", " ")
-                            .toLowerCase()
-                            .replace(/\b\w/g, (l) => l.toUpperCase())}
+                          {usage.usageType.
+                      replace("_", " ").
+                      toLowerCase().
+                      replace(/\b\w/g, (l) => l.toUpperCase())}
                         </span>
                         <span className="font-mono text-sm">
                           {formatCurrency(usage.totalCost || 0)}
                         </span>
                       </div>
-                    ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* AI Usage Table */}
+          
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -1554,14 +1554,14 @@ export default function AssignmentInsightsPage() {
                 <Button
                   variant="outline"
                   onClick={() => setShowDetailedUsage(!showDetailedUsage)}
-                  className="flex items-center gap-2"
-                >
+                  className="flex items-center gap-2">
+
                   {showDetailedUsage ? "Hide Details" : "Show Details"}
-                  {showDetailedUsage ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
+                  {showDetailedUsage ?
+                  <ChevronUp className="h-4 w-4" /> :
+
+                  <ChevronDown className="h-4 w-4" />
+                  }
                 </Button>
               </div>
             </CardHeader>
@@ -1572,8 +1572,8 @@ export default function AssignmentInsightsPage() {
                     <TableHead>Usage Type</TableHead>
                     <TableHead>Model Used</TableHead>
                     <TableHead className="text-center">Total Cost</TableHead>
-                    {showDetailedUsage && (
-                      <>
+                    {showDetailedUsage &&
+                    <>
                         <TableHead className="text-center">Tokens In</TableHead>
                         <TableHead className="text-center">
                           Tokens Out
@@ -1586,57 +1586,57 @@ export default function AssignmentInsightsPage() {
                         </TableHead>
                         <TableHead>Last Used On</TableHead>
                       </>
-                    )}
+                    }
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.aiUsage.map((usage, index) => (
-                    <TableRow key={index}>
+                  {data.aiUsage.map((usage, index) =>
+                  <TableRow key={index}>
                       <TableCell>
                         <Badge
-                          variant="outline"
-                          className={
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType)
-                              ? "border-green-300 text-green-700"
-                              : [
-                                    "LIVE_RECORDING_FEEDBACK",
-                                    "GRADING_VALIDATION",
-                                    "ASSIGNMENT_GRADING",
-                                  ].includes(usage.usageType)
-                                ? "border-purple-300 text-purple-700"
-                                : ""
-                          }
-                        >
+                        variant="outline"
+                        className={
+                        [
+                        "TRANSLATION",
+                        "QUESTION_GENERATION",
+                        "ASSIGNMENT_GENERATION"].
+                        includes(usage.usageType) ?
+                        "border-green-300 text-green-700" :
+                        [
+                        "LIVE_RECORDING_FEEDBACK",
+                        "GRADING_VALIDATION",
+                        "ASSIGNMENT_GRADING"].
+                        includes(usage.usageType) ?
+                        "border-purple-300 text-purple-700" :
+                        ""
+                        }>
+
                           {usage.usageType.replace("_", " ")}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
                           <Badge variant="secondary">{usage.modelUsed}</Badge>
-                          {showDetailedUsage && (
-                            <div className="text-xs text-muted-foreground">
+                          {showDetailedUsage &&
+                        <div className="text-xs text-muted-foreground">
                               In:{" "}
                               {formatPricePerMillionTokens(
-                                usage.inputTokenPrice,
-                              )}
+                            usage.inputTokenPrice
+                          )}
                               /1M | Out:{" "}
                               {formatPricePerMillionTokens(
-                                usage.outputTokenPrice,
-                              )}
+                            usage.outputTokenPrice
+                          )}
                               /1M
                             </div>
-                          )}
+                        }
                         </div>
                       </TableCell>
                       <TableCell className="text-center font-mono font-semibold text-green-600">
                         {formatCurrency(usage.totalCost)}
                       </TableCell>
-                      {showDetailedUsage && (
-                        <>
+                      {showDetailedUsage &&
+                    <>
                           <TableCell className="text-center font-mono">
                             {usage.tokensIn.toLocaleString()}
                           </TableCell>
@@ -1659,21 +1659,21 @@ export default function AssignmentInsightsPage() {
                             </div>
                           </TableCell>
                         </>
-                      )}
+                    }
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
 
-              {/* Detailed Calculation Steps - only shown when details are expanded */}
-              {showDetailedUsage && (
-                <div className="mt-6 space-y-4">
+              
+              {showDetailedUsage &&
+              <div className="mt-6 space-y-4">
                   <h3 className="text-lg font-semibold">Calculation Details</h3>
-                  {data.aiUsage.map((usage, index) => (
-                    <div
-                      key={index}
-                      className="border rounded-lg p-4 bg-slate-50"
-                    >
+                  {data.aiUsage.map((usage, index) =>
+                <div
+                  key={index}
+                  className="border rounded-lg p-4 bg-slate-50">
+
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline">{usage.usageType}</Badge>
@@ -1695,27 +1695,27 @@ export default function AssignmentInsightsPage() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                )}
                 </div>
-              )}
+              }
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Reports Tab */}
-        {isUserAdmin && (
-          <TabsContent value="reports">
+        
+        {isUserAdmin &&
+        <TabsContent value="reports">
             <Card>
               <CardHeader>
                 <CardTitle>Issue Reports</CardTitle>
               </CardHeader>
               <CardContent>
-                {data.reports.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-8">
+                {data.reports.length === 0 ?
+              <div className="text-center text-muted-foreground py-8">
                     No reports submitted
-                  </div>
-                ) : (
-                  <Table>
+                  </div> :
+
+              <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Issue Type</TableHead>
@@ -1726,63 +1726,63 @@ export default function AssignmentInsightsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.reports.map((report) => (
-                        <TableRow key={report.id}>
+                      {data.reports.map((report) =>
+                  <TableRow key={report.id}>
                           <TableCell>
                             <Badge variant="outline">{report.issueType}</Badge>
                           </TableCell>
                           <TableCell className="max-w-xs">
                             <div
-                              className="truncate"
-                              title={report.description}
-                            >
+                        className="truncate"
+                        title={report.description}>
+
                               {report.description}
                             </div>
                           </TableCell>
                           <TableCell>
                             <Badge
-                              variant={
-                                report.status === "OPEN"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                            >
+                        variant={
+                        report.status === "OPEN" ?
+                        "destructive" :
+                        "default"
+                        }>
+
                               {report.status}
                             </Badge>
                           </TableCell>
                           <TableCell>{formatDate(report.createdAt)}</TableCell>
                           <TableCell>
                             <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openReportModal(report)}
-                            >
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openReportModal(report)}>
+
                               View Details
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                  )}
                     </TableBody>
                   </Table>
-                )}
+              }
               </CardContent>
             </Card>
           </TabsContent>
-        )}
+        }
       </Tabs>
 
-      {/* Modals */}
+      
       <FeedbackModal
         feedback={selectedFeedback}
         isOpen={isFeedbackModalOpen}
-        onClose={closeFeedbackModal}
-      />
+        onClose={closeFeedbackModal} />
+
 
       <ReportModal
         report={selectedReport}
         isOpen={isReportModalOpen}
-        onClose={closeReportModal}
-      />
-    </div>
-  );
+        onClose={closeReportModal} />
+
+    </div>);
+
 }
