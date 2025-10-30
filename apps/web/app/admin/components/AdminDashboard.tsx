@@ -75,6 +75,7 @@ function AdminDashboardContent({
     end: string;
   }>({ start: "", end: "" });
   const [showCustomDatePopover, setShowCustomDatePopover] = useState(false);
+  const [isOpeningCustomDate, setIsOpeningCustomDate] = useState(false);
   const [quickActionResults, setQuickActionResults] = useState<any[] | null>(
     null,
   );
@@ -184,10 +185,16 @@ function AdminDashboardContent({
         break;
       }
       case "custom": {
-        setShowCustomDatePopover(true);
+        setIsOpeningCustomDate(true);
+        setTimeout(() => {
+          setShowCustomDatePopover(true);
+          setTimeout(() => setIsOpeningCustomDate(false), 200);
+        }, 0);
         return;
       }
       case "all": {
+        delete newFilters.startDate;
+        delete newFilters.endDate;
         break;
       }
       default: {
@@ -890,7 +897,12 @@ function AdminDashboardContent({
 
             <Popover
               open={showCustomDatePopover}
-              onOpenChange={setShowCustomDatePopover}
+              onOpenChange={(open) => {
+                if (!open && isOpeningCustomDate) {
+                  return;
+                }
+                setShowCustomDatePopover(open);
+              }}
             >
               <PopoverTrigger asChild>
                 <span />

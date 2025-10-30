@@ -32,11 +32,13 @@ export default function AdminPage() {
             // Session appears valid, let's verify it with the backend
             try {
               const response = await fetch(
-                "/api/v1/reports/feedback?page=1&limit=1",
+                "/api/v1/auth/admin/me",
                 {
+                  method: "POST",
                   headers: {
-                    "x-admin-token": adminToken,
+                    "Content-Type": "application/json",
                   },
+                  body: JSON.stringify({ sessionToken: adminToken }),
                 },
               );
 
@@ -53,17 +55,25 @@ export default function AdminPage() {
                 }
                 return;
               } else {
-                // Session invalid, clear it
+                // Session invalid with backend, clear it
+                console.warn("Session validation failed:", response.status);
                 localStorage.removeItem("adminSessionToken");
                 localStorage.removeItem("adminEmail");
                 localStorage.removeItem("adminExpiresAt");
               }
             } catch (apiError) {
               console.error("Error validating session with backend:", apiError);
-              // Clear potentially invalid session
-              localStorage.removeItem("adminSessionToken");
-              localStorage.removeItem("adminEmail");
-              localStorage.removeItem("adminExpiresAt");
+              // Don't clear session on network errors
+              // Trust local expiration and let user continue
+              setSessionToken(adminToken);
+              setIsAuthenticated(true);
+              setUserRole("admin");
+              setIsLoading(false);
+
+              if (returnTo) {
+                router.push(returnTo);
+              }
+              return;
             }
           } else {
             // Session expired, clear it

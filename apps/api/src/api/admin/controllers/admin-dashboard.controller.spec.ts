@@ -155,11 +155,6 @@ describe("AdminDashboardController (Integration)", () => {
     // Inject mock userSession into all requests
     app.use((request_: any, res: any, next: any) => {
       request_.userSession = mockUserSession;
-      request_.adminSession = {
-        email: "admin@test.com",
-        role: UserRole.ADMIN,
-        sessionToken: "test-token",
-      };
       next();
     });
 
@@ -364,7 +359,8 @@ describe("AdminDashboardController (Integration)", () => {
         mockUserSession,
         1,
         10,
-        undefined
+        undefined,
+        false
       );
     });
 
@@ -498,7 +494,7 @@ describe("AdminDashboardController (Integration)", () => {
       expect(response.body).toEqual(mockInsights);
       expect(
         mockAdminService.getDetailedAssignmentInsights
-      ).toHaveBeenCalledWith(mockUserSession, 1);
+      ).toHaveBeenCalledWith(mockUserSession, 1, false);
     });
 
     it("should cache detailed assignment insights", async () => {
@@ -578,9 +574,11 @@ describe("AdminDashboardController (Integration)", () => {
       expect(response.body).toEqual(mockResult);
       expect(mockAdminService.executeQuickAction).toHaveBeenCalledWith(
         {
-          email: "admin@test.com",
+          userId: "test-user-123",
           role: UserRole.ADMIN,
           sessionToken: "test-token",
+          assignmentId: 1,
+          groupId: "test-group",
         },
         "top-assignments-by-cost",
         10

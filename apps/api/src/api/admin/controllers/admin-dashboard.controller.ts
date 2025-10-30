@@ -28,14 +28,6 @@ import { Roles } from "src/auth/role/roles.global.guard";
 import { ScheduledTasksService } from "../../scheduled-tasks/services/scheduled-tasks.service";
 import { AdminService } from "../admin.service";
 
-interface AdminSessionRequest extends Request {
-  adminSession: {
-    email: string;
-    role: UserRole;
-    sessionToken: string;
-  };
-}
-
 interface AssignmentAnalyticsResponse {
   data: Array<{
     id: number;
@@ -171,13 +163,13 @@ export class AdminDashboardController {
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   async executeQuickAction(
-    @Req() request: AdminSessionRequest,
+    @Req() request: UserSessionRequest,
     @Param("action") action: string,
     @Query("limit", new DefaultValuePipe(DEFAULT_LIMIT), ParseIntPipe) limit: number,
   ): Promise<any> {
     const validatedLimit = this.validateLimit(limit);
     return this.adminService.executeQuickAction(
-      request.adminSession,
+      request.userSession,
       action,
       validatedLimit,
     );
@@ -277,7 +269,7 @@ export class AdminDashboardController {
     description: "Forbidden - Admin access required",
   })
   async manualDraftCleanup(
-    @Req() request: AdminSessionRequest,
+    @Req() request: UserSessionRequest,
     @Query("daysOld", new DefaultValuePipe(60), ParseIntPipe) daysOld: number,
   ) {
     try {

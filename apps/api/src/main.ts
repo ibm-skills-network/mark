@@ -111,10 +111,15 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle("API")
       .setDescription("API Description")
+      .addBearerAuth(
+        { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+        "bearer"
+      )
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api", app, document, {
       customSiteTitle: "API Docs",
+
       customCss: ".swagger-ui .topbar .topbar-wrapper { display: none; }",
     });
 
@@ -191,7 +196,6 @@ async function bootstrap() {
 
     process.on("unhandledRejection", (reason, promise) => {
       logger.error("Unhandled Rejection at:", promise, "reason:", reason);
-      void shutdown("UNHANDLED_REJECTION");
     });
 
     /**
@@ -199,7 +203,7 @@ async function bootstrap() {
      */
     logger.log("Application bootstrap completed successfully");
     logger.log(
-      `Swagger documentation available at: http://localhost:${port}/api`,
+      `Swagger documentation available at: http://localhost:${port}/api`
     );
     logger.log(`Health check endpoints:`);
     logger.log(`  - http://localhost:${port}/health`);

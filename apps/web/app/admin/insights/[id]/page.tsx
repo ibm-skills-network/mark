@@ -423,6 +423,14 @@ export default function AssignmentInsightsPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="flex-1">
+          <Button
+            variant="outline"
+            className="mb-4"
+            onClick={() => router.push("/admin")}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to dashboard
+          </Button>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{data.assignment.name}</h1>
             <Badge
@@ -649,7 +657,7 @@ export default function AssignmentInsightsPage() {
                     <div className="text-2xl font-bold text-green-700">
                       {formatCurrency(
                         data.aiUsage
-                          .filter((usage) =>
+                          ?.filter((usage) =>
                             [
                               "TRANSLATION",
                               "QUESTION_GENERATION",
@@ -678,7 +686,7 @@ export default function AssignmentInsightsPage() {
                     <div className="text-2xl font-bold text-purple-700">
                       {formatCurrency(
                         data.aiUsage
-                          .filter((usage) =>
+                          ?.filter((usage) =>
                             [
                               "LIVE_RECORDING_FEEDBACK",
                               "GRADING_VALIDATION",
@@ -707,7 +715,7 @@ export default function AssignmentInsightsPage() {
                       </h4>
                       <div className="space-y-2">
                         {data.aiUsage
-                          .filter((usage) =>
+                          ?.filter((usage) =>
                             [
                               "TRANSLATION",
                               "QUESTION_GENERATION",
@@ -740,7 +748,7 @@ export default function AssignmentInsightsPage() {
                       </h4>
                       <div className="space-y-2">
                         {data.aiUsage
-                          .filter((usage) =>
+                          ?.filter((usage) =>
                             [
                               "LIVE_RECORDING_FEEDBACK",
                               "GRADING_VALIDATION",
@@ -1450,7 +1458,7 @@ export default function AssignmentInsightsPage() {
                 <div className="text-3xl font-bold text-green-700 mb-4">
                   {formatCurrency(
                     data.aiUsage
-                      .filter((usage) =>
+                      ?.filter((usage) =>
                         [
                           "TRANSLATION",
                           "QUESTION_GENERATION",
@@ -1462,7 +1470,7 @@ export default function AssignmentInsightsPage() {
                 </div>
                 <div className="space-y-2">
                   {data.aiUsage
-                    .filter((usage) =>
+                    ?.filter((usage) =>
                       [
                         "TRANSLATION",
                         "QUESTION_GENERATION",
@@ -1501,7 +1509,7 @@ export default function AssignmentInsightsPage() {
                 <div className="text-3xl font-bold text-purple-700 mb-4">
                   {formatCurrency(
                     data.aiUsage
-                      .filter((usage) =>
+                      ?.filter((usage) =>
                         [
                           "LIVE_RECORDING_FEEDBACK",
                           "GRADING_VALIDATION",
@@ -1513,7 +1521,7 @@ export default function AssignmentInsightsPage() {
                 </div>
                 <div className="space-y-2">
                   {data.aiUsage
-                    .filter((usage) =>
+                    ?.filter((usage) =>
                       [
                         "LIVE_RECORDING_FEEDBACK",
                         "GRADING_VALIDATION",
@@ -1590,7 +1598,7 @@ export default function AssignmentInsightsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.aiUsage.map((usage, index) => (
+                  {data.aiUsage?.map((usage, index) => (
                     <TableRow key={index}>
                       <TableCell>
                         <Badge
@@ -1669,7 +1677,7 @@ export default function AssignmentInsightsPage() {
               {showDetailedUsage && (
                 <div className="mt-6 space-y-4">
                   <h3 className="text-lg font-semibold">Calculation Details</h3>
-                  {data.aiUsage.map((usage, index) => (
+                  {data.aiUsage?.map((usage, index) => (
                     <div
                       key={index}
                       className="border rounded-lg p-4 bg-slate-50"

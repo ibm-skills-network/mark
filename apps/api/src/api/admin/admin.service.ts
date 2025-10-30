@@ -1269,14 +1269,16 @@ export class AdminService {
                 questionInsights: [],
                 performanceInsights,
                 costBreakdown,
-                detailedCostBreakdown: costData.detailedBreakdown.map(
-                  (detail) => ({
-                    ...detail,
-                    usageDate: detail.usageDate.toISOString(),
-                    pricingEffectiveDate:
-                      detail.pricingEffectiveDate.toISOString(),
-                  })
-                ),
+                ...(details && {
+                  detailedCostBreakdown: costData.detailedBreakdown.map(
+                    (detail) => ({
+                      ...detail,
+                      usageDate: detail.usageDate.toISOString(),
+                      pricingEffectiveDate:
+                        detail.pricingEffectiveDate.toISOString(),
+                    })
+                  ),
+                }),
               },
             };
           })
@@ -1342,18 +1344,39 @@ export class AdminService {
         }
 
         let assignmentIds: number[] = [];
+        const hasDateFilter = filters?.startDate || filters?.endDate;
+
         if (!isAdmin) {
           const assignments = await this.prisma.assignment.findMany({
             where: assignmentWhere,
             select: { id: true },
           });
           assignmentIds = assignments.map((a) => a.id);
-        } else if (filters?.assignmentId || filters?.assignmentName) {
-          const assignments = await this.prisma.assignment.findMany({
-            where: assignmentWhere,
-            select: { id: true },
-          });
-          assignmentIds = assignments.map((a) => a.id);
+        } else if (filters?.assignmentId || filters?.assignmentName || hasDateFilter) {
+          if (hasDateFilter) {
+            const attemptsInDateRange = await this.prisma.assignmentAttempt.groupBy({
+              by: ["assignmentId"],
+              where: {
+                ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+              },
+            });
+            const assignmentIdsWithActivity = attemptsInDateRange.map((a) => a.assignmentId);
+
+            const assignments = await this.prisma.assignment.findMany({
+              where: {
+                ...assignmentWhere,
+                id: { in: assignmentIdsWithActivity },
+              },
+              select: { id: true },
+            });
+            assignmentIds = assignments.map((a) => a.id);
+          } else {
+            const assignments = await this.prisma.assignment.findMany({
+              where: assignmentWhere,
+              select: { id: true },
+            });
+            assignmentIds = assignments.map((a) => a.id);
+          }
         }
 
         const [
@@ -1367,11 +1390,17 @@ export class AdminService {
           aiUsageStats,
           averageAssignmentRating,
         ] = await Promise.all([
-          this.prisma.assignment.count({ where: assignmentWhere }),
+          hasDateFilter && assignmentIds.length >= 0
+            ? Promise.resolve(assignmentIds.length)
+            : this.prisma.assignment.count({ where: assignmentWhere }),
 
-          this.prisma.assignment.count({
-            where: { ...assignmentWhere, published: true },
-          }),
+          hasDateFilter && assignmentIds.length >= 0
+            ? this.prisma.assignment.count({
+                where: { id: { in: assignmentIds }, published: true },
+              })
+            : this.prisma.assignment.count({
+                where: { ...assignmentWhere, published: true },
+              }),
 
           isAdmin || assignmentIds.length > 0
             ? this.prisma.assignmentAttempt
@@ -1728,11 +1757,12 @@ export class AdminService {
             );
           }
 
-          // Batched aggregation: get all question stats in 2 queries instead of 3N queries
+          // Batched aggregation: get all question stats only if details requested
           let questionInsights = [];
 
-          try {
-            const questionIds = assignment.questions.map(q => q.id);
+          if (details) {
+            try {
+              const questionIds = assignment.questions.map(q => q.id);
 
             // Single query to get total responses and average points for all questions
             const responseStats = await this.prisma.questionResponse.groupBy({
@@ -1823,6 +1853,7 @@ export class AdminService {
                 languageCode: t.languageCode,
               })) || [],
             }));
+            }
           }
 
           const uniqueLearners = await this.prisma.assignmentAttempt.groupBy({
@@ -1973,8 +2004,9 @@ export class AdminService {
               status: report.status,
               createdAt: report.createdAt.toISOString(),
             })),
-            aiUsage: aiUsageWithCost,
-            costCalculationDetails: {
+            ...(details && {
+              aiUsage: aiUsageWithCost,
+              costCalculationDetails: {
               totalCost: Math.round(totalCost * 100) / 100,
               breakdown: costData.detailedBreakdown.map((detail) => ({
                 usageType: detail.usageType || "Unknown",
@@ -2051,7 +2083,8 @@ export class AdminService {
                   other: Math.round(costData.costBreakdown.other * 100) / 100,
                 },
               },
-            },
+              },
+            }),
             authorActivity: {
               totalAuthors: authorActivity.totalAuthors,
               authors: authorActivity.authors,
