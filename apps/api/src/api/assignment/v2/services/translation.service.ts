@@ -63,22 +63,20 @@ interface BatchProcessResult {
 export class TranslationService {
   private readonly logger = new Logger(TranslationService.name);
   private readonly languageTranslation: boolean;
-  private readonly limiter: Bottleneck; // default high-throughput
-  private readonly watsonxLimiter: Bottleneck; // conservative for IBM Watsonx
+  private readonly limiter: Bottleneck;
+  private readonly watsonxLimiter: Bottleneck;
   private useWatsonxLimiterForTranslation = false;
 
-  // Performance optimized settings
-  private readonly MAX_BATCH_SIZE = 100; // Increased for better throughput
-  private readonly CONCURRENCY_LIMIT = 50; // Increased concurrency
+  private readonly MAX_BATCH_SIZE = 100;
+  private readonly CONCURRENCY_LIMIT = 50;
   private readonly MAX_RETRY_ATTEMPTS = 2;
-  private readonly RETRY_DELAY_BASE = 100; // Reduced delay for faster retries
-  private readonly STATUS_UPDATE_INTERVAL = 20; // Reduced DB calls
-  private readonly OPERATION_TIMEOUT = 30_000; // 30 seconds per operation
-  private readonly JOB_TIMEOUT = 600_000; // 10 minutes for large jobs
-  private readonly MAX_STUCK_OPERATIONS = 15; // Allow more stuck operations
-  private readonly ADAPTIVE_BATCH_SIZE = true; // Enable adaptive batching
+  private readonly RETRY_DELAY_BASE = 100;
+  private readonly STATUS_UPDATE_INTERVAL = 20;
+  private readonly OPERATION_TIMEOUT = 30_000;
+  private readonly JOB_TIMEOUT = 600_000;
+  private readonly MAX_STUCK_OPERATIONS = 15;
+  private readonly ADAPTIVE_BATCH_SIZE = true;
 
-  // Track stuck operations and performance
   private stuckOperations = new Set<string>();
   private jobStartTimes = new Map<number, number>();
   private jobCancellationFlags = new Map<number, boolean>();
@@ -111,10 +109,9 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
-    // More conservative limiter for Watsonx-backed translations
     this.watsonxLimiter = new Bottleneck({
       maxConcurrent: 8,
-      minTime: 50, // ~20 rps spacing
+      minTime: 50,
       reservoir: 20,
       reservoirRefreshInterval: 1000,
       reservoirRefreshAmount: 20,
@@ -123,7 +120,7 @@ export class TranslationService {
       timeout: this.OPERATION_TIMEOUT,
     });
     setInterval(() => this.checkLimiterHealth(), 30_000);
-    setInterval(() => this.checkJobTimeouts(), 60_000); // Check every minute
+    setInterval(() => this.checkJobTimeouts(), 60_000);
   }
 
   /**
@@ -286,7 +283,6 @@ export class TranslationService {
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    // Get all questions and variants
     const questions = await this.prisma.question.findMany({
       where: {
         assignmentId,
@@ -303,7 +299,6 @@ export class TranslationService {
     });
 
     for (const question of questions) {
-      // Check question translations
       const questionTranslations = question.translations.filter(
         (t) => t.variantId === null,
       );
@@ -323,7 +318,6 @@ export class TranslationService {
         });
       }
 
-      // Check variant translations
       for (const variant of question.variants) {
         const variantTranslations = question.translations.filter(
           (t) => t.variantId === variant.id,
@@ -363,23 +357,20 @@ export class TranslationService {
     assignmentId: number,
   ): Promise<boolean> {
     try {
-      // Just check if we have recent translations (created in last 24 hours)
       const recentTranslationsCount =
         await this.prisma.assignmentTranslation.count({
           where: {
             assignmentId,
             updatedAt: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // 24 hours ago
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
             },
           },
         });
 
-      // If we have recent translations, assume they're good
       if (recentTranslationsCount > 0) {
         return true;
       }
 
-      // Otherwise, do a quick count check
       const totalTranslations = await this.prisma.assignmentTranslation.count({
         where: { assignmentId },
       });
@@ -391,7 +382,7 @@ export class TranslationService {
       this.logger.error(
         `Error in quick translation validation: ${errorMessage}`,
       );
-      return true; // Default to assuming it's okay
+      return true;
     }
   }
 
@@ -419,7 +410,6 @@ export class TranslationService {
       needsRetranslation: boolean;
     }> = [];
     try {
-      // Get all assignment translations
       const assignmentTranslations =
         await this.prisma.assignmentTranslation.findMany({
           where: { assignmentId },
@@ -431,9 +421,7 @@ export class TranslationService {
           },
         });
 
-      // Check each translation for language consistency
       for (const translation of assignmentTranslations) {
-        // Skip if no translated content exists
         if (
           !translation.translatedName &&
           !translation.translatedIntroduction &&
@@ -442,7 +430,6 @@ export class TranslationService {
           continue;
         }
 
-        // Use the most substantial text for language detection
         const textToCheck =
           translation.translatedIntroduction ||
           translation.translatedInstructions ||
@@ -456,7 +443,6 @@ export class TranslationService {
           );
 
           if (detectedLanguage && detectedLanguage !== "unknown") {
-            // Normalize language codes for comparison
             const normalizedDetected = detectedLanguage
               .toLowerCase()
               .split("-")[0];
@@ -483,7 +469,6 @@ export class TranslationService {
         }
       }
 
-      // Check question and variant translations using batch processing
       const translations = await this.prisma.translation.findMany({
         where: {
           question: {
@@ -497,11 +482,10 @@ export class TranslationService {
           questionId: true,
           variantId: true,
         },
-        take: 20, // Reduced sample size for faster validation
+        take: 20,
       });
 
       if (translations.length > 0) {
-        // Batch language detection for all translation texts
         const textsToCheck = translations
           .filter((t): t is typeof t & { translatedText: string } =>
             Boolean(t.translatedText),
@@ -556,7 +540,7 @@ export class TranslationService {
         `Error validating language consistency: ${errorMessage}`,
       );
       return {
-        isConsistent: true, // Default to consistent on error
+        isConsistent: true,
         mismatchedLanguages: [],
         details: [],
       };
@@ -575,12 +559,10 @@ export class TranslationService {
     assignmentId: number,
     languageCode: string,
   ): Promise<boolean> {
-    // English is always available
     if (languageCode.toLowerCase() === "en") {
       return true;
     }
 
-    // Check if assignment translation exists
     const assignmentTranslation =
       await this.prisma.assignmentTranslation.findFirst({
         where: { assignmentId, languageCode },
@@ -590,7 +572,6 @@ export class TranslationService {
       return false;
     }
 
-    // Get all questions and variants for this assignment
     const questions = await this.prisma.question.findMany({
       where: {
         assignmentId,
@@ -606,21 +587,17 @@ export class TranslationService {
     });
 
     if (questions.length === 0) {
-      // No questions, so assignment translation is sufficient
       return true;
     }
 
-    // Get all question and variant IDs
     const questionIds = questions.map((q) => q.id);
     const variantIds = questions.flatMap((q) => q.variants.map((v) => v.id));
     const requiredCount = questionIds.length + variantIds.length;
 
     if (requiredCount === 0) {
-      // No content to translate
       return true;
     }
 
-    // Count actual translations for this language
     const translationCount = await this.prisma.translation.count({
       where: {
         languageCode,
@@ -844,7 +821,6 @@ export class TranslationService {
       try {
         this.stuckOperations.add(operationId);
 
-        // Create timeout promise
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => {
             reject(
@@ -855,7 +831,6 @@ export class TranslationService {
           }, this.OPERATION_TIMEOUT);
         });
 
-        // Race between operation and timeout
         const result = await Promise.race([
           translationFunction(),
           timeoutPromise,
@@ -870,7 +845,6 @@ export class TranslationService {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
-        // Check if this is a timeout error
         const isTimeout = errorMessage.includes("timed out");
 
         if (attempts >= maxAttempts) {
@@ -878,7 +852,6 @@ export class TranslationService {
             `Failed ${operationName} after ${maxAttempts} attempts: ${errorMessage}`,
           );
 
-          // Track persistently stuck operations
           if (isTimeout) {
             this.handleStuckOperation(operationName);
           }
@@ -886,7 +859,6 @@ export class TranslationService {
           throw error;
         }
 
-        // Longer backoff for timeout errors
         const baseDelay = isTimeout
           ? this.RETRY_DELAY_BASE * 2
           : this.RETRY_DELAY_BASE;
@@ -1031,7 +1003,6 @@ export class TranslationService {
       )}`,
     );
 
-    // Delete existing translations for the specified languages
     await this.prisma.assignmentTranslation.deleteMany({
       where: {
         assignmentId,
@@ -1048,7 +1019,6 @@ export class TranslationService {
       },
     });
 
-    // Get assignment data
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       select: {
@@ -1066,7 +1036,6 @@ export class TranslationService {
       );
     }
 
-    // Retranslate assignment for specific languages
     const progressTracker = jobId
       ? this.initializeProgressTracker(
           jobId,
@@ -1100,11 +1069,10 @@ export class TranslationService {
           return false;
         }
       },
-      10, // Smaller batch size for targeted retranslation
-      25, // Lower concurrency
+      10,
+      25,
     );
 
-    // Get all questions and variants
     const questions = await this.prisma.question.findMany({
       where: {
         assignmentId,
@@ -1117,7 +1085,6 @@ export class TranslationService {
       },
     });
 
-    // Retranslate questions and variants
     if (jobId) {
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
@@ -1134,7 +1101,6 @@ export class TranslationService {
       ) * languageCodes.length;
 
     for (const question of questions) {
-      // Retranslate question
       for (const lang of languageCodes) {
         await this.generateAndStoreTranslation(
           assignmentId,
@@ -1161,7 +1127,6 @@ export class TranslationService {
         }
       }
 
-      // Retranslate variants
       for (const variant of question.variants) {
         for (const lang of languageCodes) {
           await this.generateAndStoreTranslation(
@@ -1230,7 +1195,6 @@ export class TranslationService {
       return;
     }
 
-    // Track job start time for timeout monitoring
     if (jobId) {
       this.jobStartTimes.set(jobId, Date.now());
     }
@@ -1293,7 +1257,6 @@ export class TranslationService {
       supportedLanguages,
       async (lang: string) => {
         try {
-          // Check for job cancellation
           if (jobId && this.isJobCancelled(jobId)) {
             this.logger.warn(
               `Job ${jobId} cancelled, stopping translation for ${lang}`,
@@ -1353,7 +1316,6 @@ export class TranslationService {
       `Assignment #${assignmentId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
 
-    // Clean up job tracking
     if (jobId) {
       this.cleanupCancelledJob(jobId);
     }
@@ -1388,12 +1350,9 @@ export class TranslationService {
       return;
     }
 
-    // Track job start time only for valid job IDs
     if (hasValidJobId) {
       this.jobStartTimes.set(jobId, Date.now());
     }
-
-    // Don't interfere with main job progress - let parent job handle progress updates
 
     const normalizedText = question.question.trim();
     const normalizedChoices = question.choices ?? null;
@@ -1432,7 +1391,6 @@ export class TranslationService {
       supportedLanguages.length,
     );
 
-    // Only delete existing translations if content has changed or forced
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
         where: {
@@ -1441,7 +1399,6 @@ export class TranslationService {
         },
       });
     } else {
-      // Check if translations already exist for this question
       const existingTranslations = await this.prisma.translation.findMany({
         where: {
           questionId: questionId,
@@ -1458,7 +1415,6 @@ export class TranslationService {
       );
 
       if (missingLanguages.length === 0) {
-        // All translations already exist - no need to retranslate
         if (hasValidJobId) {
           this.cleanupCancelledJob(jobId);
         }
@@ -1518,9 +1474,7 @@ export class TranslationService {
       this.CONCURRENCY_LIMIT,
     );
 
-    // Question translation complete - parent job will handle final status updates
     if (hasValidJobId) {
-      // Clean up job tracking
       this.cleanupCancelledJob(jobId);
     }
 
@@ -1560,16 +1514,12 @@ export class TranslationService {
       return;
     }
 
-    // Track job start time only for valid job IDs
     if (hasValidJobId) {
       this.jobStartTimes.set(jobId, Date.now());
     }
-    // Don't interfere with main job progress - let parent job handle progress updates
-
     const normalizedText = variant.variantContent.trim();
     const normalizedChoices = variant.choices ?? null;
 
-    // Check if translations already exist for this variant (unless forced)
     if (!forceRetranslation) {
       const existingTranslations = await this.prisma.translation.findMany({
         where: {
@@ -1588,7 +1538,6 @@ export class TranslationService {
       );
 
       if (missingLanguages.length === 0) {
-        // Variant already translated - let parent job handle progress
         return;
       }
     }
@@ -1619,7 +1568,6 @@ export class TranslationService {
       supportedLanguages.length,
     );
 
-    // Only delete existing translations if content has changed (forceRetranslation = true)
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
         where: {
@@ -1681,9 +1629,7 @@ export class TranslationService {
       this.CONCURRENCY_LIMIT,
     );
 
-    // Variant translation complete - parent job will handle final status updates
     if (hasValidJobId) {
-      // Clean up job tracking
       this.cleanupCancelledJob(jobId);
     }
 
@@ -1888,7 +1834,6 @@ export class TranslationService {
     try {
       await Promise.all(translationPromises);
 
-      // Only create assignment translation if all fields were translated successfully
       await this.prisma.assignmentTranslation.upsert({
         where: {
           assignmentId_languageCode: {
@@ -1929,7 +1874,6 @@ export class TranslationService {
       this.logger.warn(
         `Skipping assignment translation creation for ${lang} due to translation failure for assignment ${assignment.id}: ${errorMessage}`,
       );
-      // Don't create assignment translation for this language
       throw translationError;
     }
   }
@@ -1959,7 +1903,6 @@ export class TranslationService {
     sourceLanguage: string,
     targetLanguage: string,
   ): Promise<void> {
-    // Parse originalChoices if it's a string (from database JSON)
     let parsedChoices: Choice[] | null = null;
     if (originalChoices) {
       if (typeof originalChoices === "string") {
@@ -1972,63 +1915,13 @@ export class TranslationService {
       } else if (Array.isArray(originalChoices)) {
         parsedChoices = originalChoices as Choice[];
       } else {
-        // Handle case where originalChoices is some other type
         this.logger.warn(
           `Unexpected type for originalChoices: ${typeof originalChoices}`,
         );
         parsedChoices = null;
       }
     }
-    // Check if we need to reuse existing translation
-    // Only reuse if it's from the same assignment (context-aware)
-    // const existingTranslation = await this.prisma.translation.findFirst({
-    //   where: {
-    //     question: {
-    //       assignmentId: assignmentId, // Same assignment context
-    //     },
-    //     languageCode: targetLanguage,
-    //     untranslatedText: originalText,
-    //     untranslatedChoices: { equals: this.prepareJsonValue(originalChoices) },
-    //   },
-    //   orderBy: { createdAt: "desc" },
-    // });
-
-    // if (existingTranslation) {
-    //   // Reuse existing translation for this exact content
-    //   try {
-    //     await this.prisma.translation.create({
-    //       data: {
-    //         questionId,
-    //         variantId,
-    //         languageCode: targetLanguage,
-    //         untranslatedText: originalText,
-    //         untranslatedChoices: this.prepareJsonValue(originalChoices),
-    //         translatedText: existingTranslation.translatedText, // Reuse existing translation
-    //         translatedChoices: existingTranslation.translatedChoices,
-    //       },
-    //     });
-    //   } catch (createError) {
-    //     // Check if record now exists due to race condition
-    //     const existingRecord = await this.prisma.translation.findFirst({
-    //       where: {
-    //         questionId,
-    //         variantId,
-    //         languageCode: targetLanguage,
-    //       },
-    //     });
-
-    //     if (!existingRecord) {
-    //       // If still no existing record, re-throw the original error
-    //       throw createError;
-    //     }
-    //     // If record exists now, silently continue (race condition resolved)
-    //   }
-    //   return;
-    // }
-
-    // No existing translation found - generate new one
     if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
-      // Same language - store original content
       try {
         await this.prisma.translation.create({
           data: {
@@ -2042,7 +1935,6 @@ export class TranslationService {
           },
         });
       } catch (createError) {
-        // Check if record now exists due to race condition
         const existingRecord = await this.prisma.translation.findFirst({
           where: {
             questionId,
@@ -2052,20 +1944,16 @@ export class TranslationService {
         });
 
         if (!existingRecord) {
-          // If still no existing record, re-throw the original error
           throw createError;
         }
-        // If record exists now, silently continue (race condition resolved)
       }
       return;
     }
 
-    // Different language - translate it
     const translationPromises: Array<Promise<any>> = [];
     let translatedText: string = originalText;
     let translatedChoices: Choice[] | null = parsedChoices;
 
-    // Translate the text
     translationPromises.push(
       this.executeWithOptimizedRetry(
         `translateQuestionText-${questionId}-${targetLanguage}`,
@@ -2090,7 +1978,6 @@ export class TranslationService {
         }),
     );
 
-    // Translate the choices if they exist
     if (
       parsedChoices &&
       Array.isArray(parsedChoices) &&
@@ -2122,7 +2009,6 @@ export class TranslationService {
     try {
       await Promise.all(translationPromises);
 
-      // Create new translation record only if all translations succeeded
       try {
         await this.prisma.translation.create({
           data: {
@@ -2136,7 +2022,6 @@ export class TranslationService {
           },
         });
       } catch (createError) {
-        // Check if record now exists due to race condition
         const existingRecord = await this.prisma.translation.findFirst({
           where: {
             questionId,
@@ -2146,17 +2031,13 @@ export class TranslationService {
         });
 
         if (!existingRecord) {
-          // If still no existing record, re-throw the original error
           throw createError;
         }
-        // If record exists now, silently continue (race condition resolved)
         this.logger.debug(
           `Translation record already exists for question ${questionId} in ${targetLanguage} (race condition resolved)`,
         );
       }
     } catch (translationError) {
-      // If any translation failed, don't create the translation record
-      // This language will not be available for this question/variant
       this.logger.warn(
         `Skipping translation record creation for ${targetLanguage} due to translation failure for question ${questionId}${
           variantId ? ` variant ${variantId}` : ""

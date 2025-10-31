@@ -58,6 +58,7 @@ const CheckboxWithTooltip: FC<CheckboxWithTooltipProps> = ({
       onChange={(e) => onChange && onChange(e.target.checked)}
       className="h-4 w-4 text-purple-600 border-gray-300 rounded"
     />
+
     <label htmlFor={id} className="font-medium">
       {label}
     </label>
@@ -67,13 +68,14 @@ const CheckboxWithTooltip: FC<CheckboxWithTooltipProps> = ({
     </div>
   </div>
 );
+
 interface TimeLimitInputWithTooltipProps {
   id: string;
   name: string;
   label: string;
   tooltipText: string;
   defaultValue?: number;
-  /** Controlled value */
+
   value?: number;
   min?: number;
   max?: number;
@@ -130,6 +132,7 @@ const TimeLimitInputWithTooltip: FC<TimeLimitInputWithTooltipProps> = ({
         }}
         className="h-8 w-18 text-violet-600 border-gray-300 rounded"
       />
+
       <div className="tooltip">
         <span className="tooltiptext">{tooltipText}</span>
         <InformationCircleIcon className="h-5 w-5 text-gray-500 hover:text-gray-700 cursor-pointer" />
@@ -206,6 +209,7 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
               }
               checked={question?.liveRecordingConfig?.evaluateBodyLanguage}
             />
+
             <CheckboxWithTooltip
               id="aiAssistance"
               name="aiAssistance"
@@ -242,6 +246,7 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
               : question?.liveRecordingConfig?.evaluateTimeManagement
           }
         />
+
         <TimeLimitInputWithTooltip
           id="timeLimit"
           name="timeLimit"
@@ -857,16 +862,14 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         </div>
       )}
 
-      {/* Show Rubrics to Learner toggle, only for certain question types */}
       {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) && (
-        // outside div for text and 2 buttons
         <div className="flex flex-col justify-between gap-2 my-3">
           <div>
             <p className="text-gray-700  leading-7 text-lg font-semibold tracking-normal">
               Rubric
             </p>
           </div>
-          {/* the section for 3 buttons */}
+
           <div className="flex lg:flex-row flex-col gap-2">
             <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
               <span className="text-gray-600 typography-body">
@@ -950,7 +953,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      //ensure the value is most current
                       const current = useAuthorStore
                         .getState()
                         .questions.find((q) => q.id === questionId);
@@ -982,7 +984,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         </div>
       )}
 
-      {/* Criteria Header displayed for the first question */}
       {showCriteriaHeader &&
         questionIndex === 1 &&
         !variantMode &&
@@ -1021,7 +1022,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           </div>
         )}
 
-      {/* Render different question types */}
       {questionType === "MULTIPLE_CORRECT" ||
       questionType === "SINGLE_CORRECT" ? (
         <MultipleAnswerSection
@@ -1038,7 +1038,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         />
       ) : questionType === "TRUE_FALSE" ? (
         <div className="flex justify-center items-center space-x-6 mt-6">
-          {/* True Button */}
           <button
             type="button"
             disabled={preview}
@@ -1052,7 +1051,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             True
           </button>
 
-          {/* False Button */}
           <button
             type="button"
             disabled={preview}
@@ -1066,7 +1064,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             False
           </button>
 
-          {/* Points Input */}
           <div className="relative flex items-center">
             <input
               type="number"
@@ -1078,6 +1075,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               onBlur={() => updatePointsTrueFalse(questionId, localPoints)}
               style={{ width: `${localPoints?.toString()?.length + 5}ch` }}
             />
+
             <span className="ml-2 text-gray-600">pts</span>
           </div>
         </div>
@@ -1093,7 +1091,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             setTargetTime={setTargetTime}
             setEvaluateSlidesQuality={setEvaluateSlidesQuality}
           />
-          {/* Use RubricSwitcher to render the appropriate rubric */}
+
           <RubricSwitcher
             questionType={questionType}
             questionIndex={questionIndex}
@@ -1116,6 +1114,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             inProgressRubricIndex={inProgressRubricIndex}
             handleExtendRubric={handleExtendRubric}
           />
+
           <WarningAlert
             isOpen={isModalOpen}
             onClose={handleCancel}

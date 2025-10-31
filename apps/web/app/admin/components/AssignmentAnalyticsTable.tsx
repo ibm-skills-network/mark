@@ -95,11 +95,10 @@ export function AssignmentAnalyticsTable({
     setError(null);
 
     try {
-      // Always fetch all data for tanstack table to handle pagination/filtering
       const response = await getAssignmentAnalytics(
         sessionToken,
         1,
-        1000, // Get all data for client-side table operations
+        1000,
         undefined,
       );
       setData(response.data);
@@ -128,7 +127,7 @@ export function AssignmentAnalyticsTable({
     if (onClearQuickActionResults) {
       onClearQuickActionResults();
     }
-    // Also fetch fresh data
+
     fetchData();
   };
 
@@ -146,12 +145,10 @@ export function AssignmentAnalyticsTable({
     }
   };
 
-  // Use Quick Action results if available, otherwise use regular data
   const rawData = quickActionResults || data;
   const isShowingQuickActionResults = !!quickActionResults;
   const currentQuickActionTitle = quickActionTitle;
 
-  // Helper functions
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -166,14 +163,11 @@ export function AssignmentAnalyticsTable({
   };
 
   const navigateToInsights = (assignmentId: number) => {
-    // open new window
     window.open(`/admin/insights/${assignmentId}`, "_blank");
   };
 
-  // Create column helper for type safety
   const columnHelper = createColumnHelper<AssignmentAnalyticsData>();
 
-  // Define table columns
   const columns = useMemo<ColumnDef<AssignmentAnalyticsData, any>[]>(
     () => [
       columnHelper.accessor("name", {
@@ -186,6 +180,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -203,6 +198,7 @@ export function AssignmentAnalyticsTable({
             {getValue() ? "Published" : "Draft"}
           </Badge>
         ),
+
         enableSorting: true,
         filterFn: "equals",
       }),
@@ -254,6 +250,7 @@ export function AssignmentAnalyticsTable({
             )}
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -267,6 +264,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -282,6 +280,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -371,6 +370,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -392,10 +392,10 @@ export function AssignmentAnalyticsTable({
         ),
       }),
     ],
+
     [formatCurrency, formatPercentage, navigateToInsights],
   );
 
-  // Create table instance
   const table = useReactTable({
     data: rawData,
     columns,
@@ -414,14 +414,11 @@ export function AssignmentAnalyticsTable({
       pagination: tablePagination,
     },
     globalFilterFn: (row, _columnId, value) => {
-      // Search in assignment name and ID
       const assignment = row.original;
       const searchValue = value.toLowerCase();
 
-      // Search in assignment name
       const nameMatch = assignment.name.toLowerCase().includes(searchValue);
 
-      // Search in assignment ID (convert to string)
       const idMatch = assignment.id.toString().includes(searchValue);
 
       return nameMatch || idMatch;
@@ -456,13 +453,11 @@ export function AssignmentAnalyticsTable({
 
   return (
     <div className="p-6 space-y-6">
-      {/* Enhanced Filters */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Filters & Search</CardTitle>
             <div className="flex items-center gap-2">
-              {/* Quick Actions */}
               {!isShowingQuickActionResults && (
                 <QuickActions
                   sessionToken={sessionToken}
@@ -470,7 +465,6 @@ export function AssignmentAnalyticsTable({
                 />
               )}
 
-              {/* Quick Action Results */}
               {isShowingQuickActionResults && (
                 <div className="flex items-center gap-2">
                   <Badge
@@ -502,7 +496,6 @@ export function AssignmentAnalyticsTable({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Global Search */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">
               Global Search
@@ -515,6 +508,7 @@ export function AssignmentAnalyticsTable({
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="pl-10"
               />
+
               {globalFilter && (
                 <Button
                   variant="ghost"
@@ -528,9 +522,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
 
-          {/* Quick Filters Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Status Filter */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Status Filter
@@ -565,7 +557,6 @@ export function AssignmentAnalyticsTable({
               </select>
             </div>
 
-            {/* Page Size */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Items per Page
@@ -589,7 +580,6 @@ export function AssignmentAnalyticsTable({
           {showFilters && (
             <div className="space-y-4 border-t pt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Date Range */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">
                     Date Range
@@ -622,7 +612,6 @@ export function AssignmentAnalyticsTable({
                   </div>
                 </div>
 
-                {/* Assignment Filters */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">
                     Assignment
@@ -639,6 +628,7 @@ export function AssignmentAnalyticsTable({
                         )
                       }
                     />
+
                     <Input
                       type="text"
                       placeholder="Assignment Name"
@@ -650,7 +640,6 @@ export function AssignmentAnalyticsTable({
                   </div>
                 </div>
 
-                {/* User Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">
                     User
@@ -666,7 +655,6 @@ export function AssignmentAnalyticsTable({
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-2 pt-4">
                 <Button onClick={applyFilters} size="sm">
                   Apply Advanced Filters
@@ -680,7 +668,6 @@ export function AssignmentAnalyticsTable({
                 </Button>
               </div>
 
-              {/* Active Filters Summary */}
               {hasActiveFilters && (
                 <div className="border-t pt-4">
                   <div className="text-sm text-muted-foreground mb-2">
@@ -718,7 +705,6 @@ export function AssignmentAnalyticsTable({
             </div>
           )}
 
-          {/* Active Filters */}
           {(globalFilter ||
             table.getColumn("published")?.getFilterValue() !== undefined) && (
             <div className="border-t pt-4">
@@ -757,7 +743,6 @@ export function AssignmentAnalyticsTable({
         </CardContent>
       </Card>
 
-      {/* Summary Stats - Based on Filtered Data */}
       {rawData && rawData.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-4">
@@ -853,7 +838,6 @@ export function AssignmentAnalyticsTable({
         </div>
       )}
 
-      {/* Analytics Table */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -876,7 +860,6 @@ export function AssignmentAnalyticsTable({
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Table */}
               <div className="overflow-hidden rounded-lg border border-gray-200">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -908,6 +891,7 @@ export function AssignmentAnalyticsTable({
                                       asc: (
                                         <SortAsc className="h-3 w-3 text-gray-400" />
                                       ),
+
                                       desc: (
                                         <SortDesc className="h-3 w-3 text-gray-400" />
                                       ),
@@ -951,7 +935,6 @@ export function AssignmentAnalyticsTable({
                 </div>
               </div>
 
-              {/* Empty State */}
               {table.getFilteredRowModel().rows.length === 0 &&
                 rawData.length > 0 && (
                   <div className="text-center py-12">
@@ -967,7 +950,6 @@ export function AssignmentAnalyticsTable({
                   </div>
                 )}
 
-              {/* Pagination */}
               {table.getPageCount() > 1 && (
                 <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
                   <div className="flex items-center space-x-2">

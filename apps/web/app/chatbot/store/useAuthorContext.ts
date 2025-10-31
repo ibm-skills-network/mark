@@ -115,6 +115,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     contextContent += `Assignment ID: ${
       activeAssignmentId || "Not saved yet"
     }\n`;
+
     contextContent += `Number of Questions: ${Array.isArray(questions) ? questions.length : 0}\n`;
 
     if (learningObjectives) {
@@ -133,9 +134,11 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     contextContent += `- Introduction: ${
       introduction ? "Defined" : "Not defined"
     }\n`;
+
     contextContent += `- Instructions: ${
       instructions ? "Defined" : "Not defined"
     }\n`;
+
     contextContent += `- Grading Criteria: ${
       gradingCriteriaOverview ? "Defined" : "Not defined"
     }\n`;
@@ -203,6 +206,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
             contextContent += `Rubric ${rIndex + 1}: ${
               rubric.rubricQuestion || "No rubric question"
             }\n`;
+
             if (Array.isArray(rubric.criteria)) {
               rubric.criteria.forEach((criterion, cIndex) => {
                 contextContent += `- Criterion ${cIndex + 1}: ${

@@ -3,19 +3,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 export interface UserBehaviorData {
-  // Time tracking
   pageLoadTime: number;
   timeOnCurrentQuestion: number;
   timeIdle: number;
   lastActivityTime: number;
 
-  // Interaction patterns
   hasTypedRecently: boolean;
   hasScrolledRecently: boolean;
   hasClickedRecently: boolean;
   mouseMovements: number;
 
-  // Context detection
   currentContext: {
     userRole: "author" | "learner" | null;
     assignmentName?: string;
@@ -27,34 +24,31 @@ export interface UserBehaviorData {
     hasBeenIdleTooLong?: boolean;
   };
 
-  // Help patterns
   shouldOfferHelp: boolean;
   helpReason: string;
   suggestedMessage: string;
 }
 
 export interface BehaviorTriggers {
-  idleTimeThreshold: number; // milliseconds
-  stuckTimeThreshold: number; // milliseconds
-  helpOfferCooldown: number; // milliseconds
+  idleTimeThreshold: number;
+  stuckTimeThreshold: number;
+  helpOfferCooldown: number;
 }
 
 const defaultTriggers: BehaviorTriggers = {
-  idleTimeThreshold: 15000, // 15 seconds (reduced from 30)
-  stuckTimeThreshold: 45000, // 45 seconds on same question (reduced from 60)
-  helpOfferCooldown: 60000, // 1 minute between help offers (reduced from 2 minutes)
+  idleTimeThreshold: 15000,
+  stuckTimeThreshold: 45000,
+  helpOfferCooldown: 60000,
 };
 
 export const useUserBehaviorMonitor = (
   userRole: "author" | "learner" | null,
   contextData: {
-    // Author context
     assignmentName?: string;
     questions?: any[];
     focusedQuestionId?: string | number;
     activeAssignmentId?: string | number;
 
-    // Learner context
     currentQuestion?: any;
     assignmentMeta?: any;
     currentQuestionIndex?: number;
@@ -94,7 +88,6 @@ export const useUserBehaviorMonitor = (
     clicking: null as NodeJS.Timeout | null,
   });
 
-  // Extract subject/topic from actual context data
   const getContextualInfo = useCallback(() => {
     let subject = "this topic";
     let context = "";
@@ -148,7 +141,6 @@ export const useUserBehaviorMonitor = (
     return { subject, context, questionInfo };
   }, [userRole, contextData]);
 
-  // Activity tracking functions
   const trackMouseMovement = useCallback(() => {
     setBehaviorData((prev) => ({
       ...prev,
@@ -213,7 +205,6 @@ export const useUserBehaviorMonitor = (
     }, 10000);
   }, []);
 
-  // Help suggestion logic using real context data
   const generateHelpSuggestion = useCallback(
     (behaviorContext: UserBehaviorData["currentContext"], reason: string) => {
       const { subject, context, questionInfo } = getContextualInfo();
@@ -296,7 +287,6 @@ export const useUserBehaviorMonitor = (
     [userRole, getContextualInfo],
   );
 
-  // Main monitoring effect
   useEffect(() => {
     const monitoringInterval = setInterval(() => {
       const now = Date.now();
@@ -320,7 +310,6 @@ export const useUserBehaviorMonitor = (
           hasBeenIdleTooLong: timeSinceLastActivity > config.idleTimeThreshold,
         };
 
-        // Determine if we should offer help
         const timeSinceLastHelpOffer = now - lastHelpOfferTime.current;
         const canOfferHelp = timeSinceLastHelpOffer > config.helpOfferCooldown;
 
@@ -328,7 +317,6 @@ export const useUserBehaviorMonitor = (
         let helpReason = "";
 
         if (canOfferHelp) {
-          // Simplified idle detection - just check if user has been idle, don't require no typing/scrolling
           if (newContext.hasBeenIdleTooLong) {
             shouldOfferHelp = true;
             helpReason = "idle_too_long";
@@ -357,7 +345,7 @@ export const useUserBehaviorMonitor = (
             : prev.suggestedMessage,
         };
       });
-    }, 2000); // Check every 2 seconds
+    }, 2000);
 
     return () => clearInterval(monitoringInterval);
   }, [
@@ -368,7 +356,6 @@ export const useUserBehaviorMonitor = (
     generateHelpSuggestion,
   ]);
 
-  // Event listeners
   useEffect(() => {
     document.addEventListener("mousemove", trackMouseMovement);
     document.addEventListener("keydown", trackTyping);
@@ -383,7 +370,6 @@ export const useUserBehaviorMonitor = (
     };
   }, [trackMouseMovement, trackTyping, trackScrolling, trackClicking]);
 
-  // Cleanup timers
   useEffect(() => {
     return () => {
       if (mouseMovementTimer.current) clearTimeout(mouseMovementTimer.current);

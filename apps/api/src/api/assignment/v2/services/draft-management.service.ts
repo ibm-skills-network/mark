@@ -94,10 +94,6 @@ export class DraftManagementService {
       draftName: saveDraftDto.draftName,
     });
 
-    // Verify assignment exists and user has access
-    // await this.verifyAssignmentAccess(assignmentId, userSession);
-
-    // Get the base assignment for reference
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: { questions: { where: { isDeleted: false } } },
@@ -111,7 +107,6 @@ export class DraftManagementService {
       saveDraftDto.draftName || `Draft - ${new Date().toLocaleString()}`;
 
     return await this.prisma.$transaction(async (tx) => {
-      // Create assignment draft
       const assignmentDraft = await tx.assignmentDraft.create({
         data: {
           assignmentId,
@@ -216,7 +211,6 @@ export class DraftManagementService {
       userId: userSession.userId,
     });
 
-    // Verify draft exists and user owns it
     const existingDraft = await this.prisma.assignmentDraft.findUnique({
       where: { id: draftId },
     });
@@ -337,9 +331,6 @@ export class DraftManagementService {
     assignmentId: number,
     userSession: UserSession,
   ): Promise<DraftSummary[]> {
-    // Verify assignment access
-    // await this.verifyAssignmentAccess(assignmentId, userSession);
-
     const drafts = await this.prisma.assignmentDraft.findMany({
       where: {
         assignmentId,
@@ -500,9 +491,6 @@ export class DraftManagementService {
     _draftName?: string;
     _draftUpdatedAt?: Date;
   }> {
-    // Verify assignment access
-    // await this.verifyAssignmentAccess(assignmentId, userSession);
-
     const latestDraft = await this.prisma.assignmentDraft.findFirst({
       where: {
         assignmentId,

@@ -156,7 +156,6 @@ export class AssignmentServiceV1 {
     let result: any;
 
     if (isLearner) {
-      // For learners, fetch the active published version
       const assignment = await this.prisma.assignment.findUnique({
         where: { id },
         include: {
@@ -172,11 +171,9 @@ export class AssignmentServiceV1 {
         throw new NotFoundException(`Assignment with Id ${id} not found.`);
       }
 
-      // If there's an active version, use it; otherwise fall back to main assignment
       if (assignment.currentVersion) {
         const version = assignment.currentVersion;
 
-        // Convert versioned data to the expected assignment format
         result = {
           id: assignment.id,
           name: version.name,
@@ -221,11 +218,10 @@ export class AssignmentServiceV1 {
             liveRecordingConfig: qv.liveRecordingConfig,
             displayOrder: qv.displayOrder,
             isDeleted: false,
-            variants: [], // Question versions don't have variants in the same structure
+            variants: [],
           })),
         };
       } else {
-        // Fallback to main assignment if no current version
         result = await this.prisma.assignment.findUnique({
           where: { id },
           include: {
@@ -236,7 +232,6 @@ export class AssignmentServiceV1 {
         });
       }
     } else {
-      // For authors, use the main assignment table (current editing state)
       result = await this.prisma.assignment.findUnique({
         where: { id },
         include: {
@@ -298,7 +293,6 @@ export class AssignmentServiceV1 {
   }
 
   async list(userSession: UserSession): Promise<AssignmentResponseDto[]> {
-    // If user is an author, only show assignments they've authored
     if (userSession.role === UserRole.AUTHOR) {
       const authoredAssignments = await this.prisma.assignment.findMany({
         where: {
@@ -313,7 +307,6 @@ export class AssignmentServiceV1 {
       return authoredAssignments;
     }
 
-    // For non-authors (learners, admins), show assignments from their group
     const results = await this.prisma.assignmentGroup.findMany({
       where: { groupId: userSession.groupId },
       include: {
@@ -717,9 +710,7 @@ export class AssignmentServiceV1 {
             },
           });
 
-          // Store the user as an author of this assignment
           try {
-            // Check if this author relationship already exists to avoid duplicates
             const existingAuthor = await this.prisma.assignmentAuthor.findFirst(
               {
                 where: {
@@ -738,7 +729,6 @@ export class AssignmentServiceV1 {
               });
             }
           } catch (error) {
-            // Log but don't fail the publishing process if author tracking fails
             this.logger.warn(
               `Failed to store assignment author: ${
                 error instanceof Error ? error.message : "Unknown error"

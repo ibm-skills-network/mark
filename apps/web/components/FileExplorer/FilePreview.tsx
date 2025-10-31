@@ -58,7 +58,6 @@ const FilePreview = ({
   const [error, setError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
 
-  // Image/PDF specific states
   const [scale, setScale] = useState(1.0);
   const [rotation, setRotation] = useState(0);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -98,14 +97,12 @@ const FilePreview = ({
     }
   };
 
-  // Open file in new tab using direct URL
   const openInNewTab = () => {
     if (content?.url) {
       window.open(content.url, "_blank");
     }
   };
 
-  // Zoom and pan handlers
   const handleZoomIn = () => setScale((prev) => Math.min(prev * 1.2, 5));
   const handleZoomOut = () => setScale((prev) => Math.max(prev / 1.2, 0.1));
   const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
@@ -115,7 +112,6 @@ const FilePreview = ({
     setPosition({ x: 0, y: 0 });
   };
 
-  // Mouse drag handlers for pan
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (getFileType() === "image" && scale > 1) {
@@ -142,7 +138,6 @@ const FilePreview = ({
     setIsDragging(false);
   }, []);
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
@@ -210,10 +205,8 @@ const FilePreview = ({
       return;
     }
 
-    // Default download behavior using direct URLs
     try {
       if (file.content) {
-        // Download from existing content
         const blob = new Blob([file.content], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -226,7 +219,6 @@ const FilePreview = ({
         return;
       }
 
-      // Use direct download
       if (file.cosKey && file.cosBucket) {
         await downloadFile(file.cosKey, file.cosBucket, file.fileName);
       } else {
@@ -242,7 +234,6 @@ const FilePreview = ({
 
   const renderImage = () => {
     if (!content?.url) {
-      // show loading for some time. If the image is not loaded, show error
       if (isLoading) {
         return (
           <div className="h-full flex items-center justify-center">
@@ -311,7 +302,6 @@ const FilePreview = ({
           />
         </div>
 
-        {/* Image controls */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg p-2 shadow-lg flex gap-1">
             <button
@@ -367,7 +357,6 @@ const FilePreview = ({
           )}
         </div>
 
-        {/* Debug info overlay */}
         {showDebug && (
           <div className="absolute top-4 left-4 bg-black/90 text-white p-3 rounded-lg max-w-sm text-xs max-h-96 overflow-auto">
             <div className="mb-2 font-bold">Debug Info:</div>
@@ -386,7 +375,6 @@ const FilePreview = ({
           </div>
         )}
 
-        {/* Pan indicator */}
         {scale > 1 && (
           <div className="absolute bottom-4 right-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg px-3 py-1 shadow-lg flex items-center gap-1">
             <span className="text-xs">Drag to pan</span>
@@ -680,12 +668,10 @@ const FilePreview = ({
 
     const fileType = getFileType();
 
-    // If we have text content, show it
     if (content?.content || file.content) {
       return renderTextContent();
     }
 
-    // Handle specific file types
     switch (fileType) {
       case "image":
         return renderImage();
@@ -709,7 +695,6 @@ const FilePreview = ({
             : "w-full max-w-6xl max-h-[90vh] rounded-xl"
         }`}
       >
-        {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {getFileIcon()}
@@ -761,10 +746,8 @@ const FilePreview = ({
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-hidden">{renderContent()}</div>
 
-        {/* Footer */}
         <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
           <button
             onClick={onPrevious}

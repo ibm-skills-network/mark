@@ -50,7 +50,7 @@ export class HealthService {
       () =>
         this.disk.checkStorage("storage", {
           path: "/",
-          thresholdPercent: 0.9, // Alert if disk is 90% full
+          thresholdPercent: 0.9,
         }),
       () => this.databaseHealthIndicator.checkDatabase("database"),
     ]);

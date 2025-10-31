@@ -115,6 +115,7 @@ const Question: FC<QuestionProps> = ({
       "Student must show their work and state the correct answer",
       "By default, learners will be given 0 points if they do not meet any of the criteria.",
     ],
+
     criteriaIds: question.scoring?.criteria?.map(
       (c, index) => c.id || index + 1,
     ) || [1, 2],
@@ -138,25 +139,21 @@ const Question: FC<QuestionProps> = ({
     }
   }, [collapse, isFocusedQuestion]);
 
-  // Function to update the main question state
   const handleUpdateQuestionState = (
     params: UpdateQuestionStateParams,
     variantMode = false,
   ) => {
-    //if showSubQuestionsToLearner is undefined, use false as default
     const showSubQuestions =
       params.showSubQuestionsToLearner !== undefined
         ? params.showSubQuestionsToLearner
         : (question.scoring?.showSubQuestionsToLearner ?? false);
 
-    //if showRubricsToLearner is undefined, use false as default
     const showRubrics = showSubQuestions
       ? params.showRubricsToLearner !== undefined
         ? params.showRubricsToLearner
         : (question.scoring?.showRubricsToLearner ?? false)
       : false;
 
-    //if showRubrics is false, showPoints uses false as default
     const showPoints = showRubrics
       ? params.showPoints !== undefined
         ? params.showPoints
@@ -331,7 +328,6 @@ const Question: FC<QuestionProps> = ({
     }
   };
 
-  // Handle the blur event for the index input, updating the question order
   const handleIndexBlur = useCallback(() => {
     if (inputValue !== "") {
       const parsedValue = parseInt(inputValue, 10);
@@ -395,6 +391,7 @@ const Question: FC<QuestionProps> = ({
         icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
+
     [],
   );
   const responseTypes = useMemo(
@@ -435,6 +432,7 @@ const Question: FC<QuestionProps> = ({
         label: "Other",
       },
     ],
+
     [],
   );
   const toggleRandomizedChoicesMode = useAuthorStore(
@@ -504,6 +502,7 @@ const Question: FC<QuestionProps> = ({
                         className="w-5 h-5"
                         style={{ color: "#F59E0B" }}
                       />
+
                       <span className="typography-body text-center text-gray-600">
                         Select Type
                       </span>
@@ -732,6 +731,7 @@ const Question: FC<QuestionProps> = ({
                       );
                     }}
                   />
+
                   {countMode === "CHARACTER" ? (
                     <div className="flex items-center">
                       <span className="text-gray-600 typography-body">
@@ -777,6 +777,7 @@ const Question: FC<QuestionProps> = ({
                           width: `${maxCharacters?.toString()?.length + 1}ch`,
                         }}
                       />
+
                       <button
                         className="items-center"
                         onClick={() => {
@@ -854,6 +855,7 @@ const Question: FC<QuestionProps> = ({
                           }ch`,
                         }}
                       />
+
                       <button
                         onClick={() => {
                           setShowWordCountInput(questionId, false);
@@ -898,6 +900,7 @@ const Question: FC<QuestionProps> = ({
                       );
                     }}
                   />
+
                   <span
                     className="text-gray-600 typography-body"
                     onClick={() => {
@@ -1039,6 +1042,7 @@ const Question: FC<QuestionProps> = ({
                       "Student must show their work and state the correct answer",
                       "By default, learners will be given 0 points if they do not meet any of the criteria.",
                     ],
+
                     criteriaIds: [1, 2],
                   },
             );

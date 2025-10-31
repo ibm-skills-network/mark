@@ -239,7 +239,7 @@ export type UpdateQuestionStateParams = {
   questionTitle?: string;
   showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
-  //if the points will be shown in the rubric
+
   showPoints?: boolean;
   rubrics?: Rubric[];
   questionCriteria?: {
@@ -482,7 +482,6 @@ export interface QuestionAuthorStore extends Question {
   index?: number;
   alreadyInBackend?: boolean;
   showPoints?: boolean;
-  //set with a button on the frontend
 }
 
 /**

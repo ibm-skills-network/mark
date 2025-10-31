@@ -72,7 +72,6 @@ export function learnerTools(cookieHeader: string) {
           .describe("The severity of the issue"),
       }),
       execute: async ({ issueType, description, assignmentId, severity }) => {
-        // Return a client execution request for form preview instead of immediate submission
         return JSON.stringify({
           clientExecution: true,
           function: "showReportPreview",
@@ -500,7 +499,6 @@ export function authorTools(cookieHeader: string) {
           .describe("The severity of the issue"),
       }),
       execute: async ({ issueType, description, assignmentId, severity }) => {
-        // Return a client execution request for form preview instead of immediate submission
         return JSON.stringify({
           clientExecution: true,
           function: "showReportPreview",
@@ -818,7 +816,11 @@ TOOL USAGE:
 - Use submitSuggestion for platform improvement ideas
 - Use submitInquiry for general questions or inquiries
 
-IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
+IMPORTANT: ${
+      assignmentId
+        ? `When calling tools that require assignmentId, always use ${assignmentId}`
+        : "Assignment ID information is not available in the current context"
+    }
 
 RESPONSE STYLE:
 - Warm, encouraging, and patient
@@ -858,7 +860,6 @@ export async function POST(req) {
       (msg) => msg.role === "system" && msg.id?.includes("context"),
     );
 
-    // Extract assignment mode and submission status from context
     let assignmentMode = "unknown";
     let isSubmitted = false;
 
@@ -1002,7 +1003,6 @@ export async function POST(req) {
           const toolResults = (await result.toolResults) || [];
           for (const toolResult of toolResults) {
             if (toolResult && toolResult.result) {
-              // Handle report, feedback, suggestion, and inquiry tool results
               if (
                 [
                   "reportIssue",
@@ -1017,13 +1017,11 @@ export async function POST(req) {
                     parsedResult.clientExecution &&
                     parsedResult.function === "showReportPreview"
                   ) {
-                    // Add to client executions for report preview
                     trackedClientExecutions.push({
                       function: parsedResult.function,
                       params: parsedResult.params,
                     });
                   } else {
-                    // Regular tool result - add to content if not already there
                     if (!fullContent.includes(toolResult.result)) {
                       const toolResponse = `\n\n${toolResult.result}`;
                       fullContent += toolResponse;
@@ -1033,7 +1031,6 @@ export async function POST(req) {
                     }
                   }
                 } catch (e) {
-                  // If parsing fails, treat as regular result
                   if (!fullContent.includes(toolResult.result)) {
                     const toolResponse = `\n\n${toolResult.result}`;
                     fullContent += toolResponse;

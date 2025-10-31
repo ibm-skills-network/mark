@@ -31,6 +31,7 @@ function TrueFalseQuestion(props: Props) {
           onChange={() => handleChoiceClick(true)}
           className="mr-2 accent-violet-600 text-violet-600"
         />
+
         {langTranslations.true}
       </label>
       <label className="flex items-center w-full p-2 mb-2 rounded">
@@ -42,6 +43,7 @@ function TrueFalseQuestion(props: Props) {
           onChange={() => handleChoiceClick(false)}
           className="mr-2 accent-violet-600 text-violet-600"
         />
+
         {langTranslations.false}
       </label>
     </div>

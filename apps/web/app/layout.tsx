@@ -17,6 +17,7 @@ export const metadata: Metadata = {
     "online learning",
     "online courses",
   ],
+
   authors: [
     {
       name: "Skills Network",

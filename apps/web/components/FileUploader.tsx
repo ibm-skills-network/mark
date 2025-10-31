@@ -14,7 +14,7 @@ import {
   generateUploadUrl,
   getFileType,
   uploadWithPresignedUrl,
-} from "@/lib/shared"; // Import the new shared functions
+} from "@/lib/shared";
 import { UploadType, UploadContext, UploadRequest } from "@/config/types";
 import { toast } from "sonner";
 interface FileData {
@@ -163,7 +163,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         [file.key]: "deleting",
       }));
 
-      // Use the shared function instead of direct axios call
       await deleteFile(uploadType, undefined, file.key);
 
       setDeleteStatus((prev) => ({ ...prev, [file.key]: "deleted" }));
@@ -364,7 +363,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         </div>
       )}
 
-      {/* Previously uploaded files section */}
       {existingFiles.length > 0 && (
         <div className="mt-6 w-full">
           <div className="flex justify-between items-center mb-2">
@@ -389,7 +387,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                   transition={{ duration: 0.3 }}
                 >
                   <div className="flex items-center justify-between space-x-3 px-4">
-                    {/* File Icon and Details */}
                     <div className="flex items-center space-x-3">
                       <IconFile size={32} className="text-gray-500" />
                       <div>
@@ -402,7 +399,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                       </div>
                     </div>
 
-                    {/* Delete Button */}
                     <div className="flex items-center space-x-2">
                       {deleteStatus[file.key] === "deleting" ? (
                         <IconLoader2

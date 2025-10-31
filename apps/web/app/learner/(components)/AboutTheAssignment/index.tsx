@@ -168,7 +168,6 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       setIsCooldown(false);
       return;
     }
-    console.log("Latest attempt:", latestAttempt);
 
     const fallbackCreatedAt = latestAttempt.createdAt
       ? new Date(latestAttempt.createdAt).getTime()

@@ -51,7 +51,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
     try {
-      // Ensure learnerUrlResponse is a string and not empty
       const urlResponse =
         typeof requestDto.learnerUrlResponse === "string"
           ? requestDto.learnerUrlResponse.trim()
@@ -80,7 +79,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
 
       return true;
     } catch (error) {
-      // If localization service fails, provide fallback error messages
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -119,7 +117,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         urlFetchResponse =
           await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
       } catch {
-        // If both methods fail, create a fallback response
         return this.createFallbackResponse(
           question,
           learnerResponse,
@@ -181,7 +178,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         context.language,
       );
     } catch {
-      // If LLM grading fails, return fallback response
       return this.createFallbackResponse(
         question,
         learnerResponse,
@@ -203,7 +199,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         gradingModel.gradingRationale || "URL content evaluated",
     };
 
-    // Record grading for audit and consistency (successful case)
     await this.recordGrading(
       question,
       {
@@ -227,7 +222,7 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     errorType: string,
   ): CreateQuestionResponseAttemptResponseDto {
     const maxPoints = question.totalPoints || 0;
-    const fallbackPoints = maxPoints > 0 ? Math.floor(maxPoints * 0.5) : 0; // 50% fallback credit or 0 if no points
+    const fallbackPoints = maxPoints > 0 ? Math.floor(maxPoints * 0.5) : 0;
 
     const errorMessages: Record<string, string> = {
       url_fetch_completely_failed: "Unable to access the provided URL",
@@ -348,7 +343,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
                     return { body, isFunctional: true };
                   }
                 } catch {
-                  // Ignore errors
                   return { body: "", isFunctional: false };
                 }
               }

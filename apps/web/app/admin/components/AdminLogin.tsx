@@ -82,7 +82,6 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
         throw new Error(data.message || "Failed to verify code");
       }
 
-      // Store session token
       localStorage.setItem("adminSessionToken", data.sessionToken);
       localStorage.setItem("adminEmail", email);
       localStorage.setItem("adminExpiresAt", data.expiresAt);
@@ -116,7 +115,6 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Important Notes */}
             <div className="space-y-3 mb-6">
               <Alert className="border-blue-200 bg-blue-50">
                 <Mail className="h-4 w-4 text-blue-600" />

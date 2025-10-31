@@ -205,14 +205,12 @@ export default function AssignmentInsightsPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showDetailedUsage, setShowDetailedUsage] = useState(false);
 
-  // Attempts filtering state
   const [attemptSearch, setAttemptSearch] = useState("");
   const [attemptStatusFilter, setAttemptStatusFilter] = useState("all");
   const [attemptGradeFilter, setAttemptGradeFilter] = useState("all");
   const [attemptSortBy, setAttemptSortBy] = useState("createdAt");
   const [attemptSortOrder, setAttemptSortOrder] = useState("desc");
 
-  // Modal states
   const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
@@ -276,7 +274,6 @@ export default function AssignmentInsightsPage() {
     });
   };
 
-  // Modal handlers
   const openFeedbackModal = (feedback: any) => {
     setSelectedFeedback(feedback);
     setIsFeedbackModalOpen(true);
@@ -304,23 +301,19 @@ export default function AssignmentInsightsPage() {
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
-  // Filter and sort attempts
   const getFilteredAndSortedAttempts = () => {
     if (!data?.attempts) return [];
 
     const filtered = data.attempts.filter((attempt) => {
-      // Search filter
       const searchMatch =
         attemptSearch === "" ||
         attempt.userId.toLowerCase().includes(attemptSearch.toLowerCase());
 
-      // Status filter
       const statusMatch =
         attemptStatusFilter === "all" ||
         (attemptStatusFilter === "submitted" && attempt.submitted) ||
         (attemptStatusFilter === "in-progress" && !attempt.submitted);
 
-      // Grade filter
       const gradeMatch =
         attemptGradeFilter === "all" ||
         (attemptGradeFilter === "passed" &&
@@ -334,7 +327,6 @@ export default function AssignmentInsightsPage() {
       return searchMatch && statusMatch && gradeMatch;
     });
 
-    // Sort attempts
     filtered.sort((a, b) => {
       let aValue: any, bValue: any;
 
@@ -420,7 +412,6 @@ export default function AssignmentInsightsPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3">
@@ -437,7 +428,6 @@ export default function AssignmentInsightsPage() {
         </div>
       </div>
 
-      {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="pt-4">
@@ -530,7 +520,6 @@ export default function AssignmentInsightsPage() {
         </Card>
       </div>
 
-      {/* Detailed Tabs */}
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
@@ -550,10 +539,8 @@ export default function AssignmentInsightsPage() {
           {isUserAdmin && <TabsTrigger value="reports">Reports</TabsTrigger>}
         </TabsList>
 
-        {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Assignment Details */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -607,7 +594,6 @@ export default function AssignmentInsightsPage() {
               </CardContent>
             </Card>
 
-            {/* Advanced Cost Breakdown */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -617,7 +603,6 @@ export default function AssignmentInsightsPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Cost per Attempt */}
                   <div className="text-center">
                     <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3">
                       <TrendingUp className="h-6 w-6 text-blue-600" />
@@ -638,7 +623,6 @@ export default function AssignmentInsightsPage() {
                     </div>
                   </div>
 
-                  {/* Authoring Costs */}
                   <div className="text-center">
                     <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mx-auto mb-3">
                       <FileText className="h-6 w-6 text-green-600" />
@@ -667,7 +651,6 @@ export default function AssignmentInsightsPage() {
                     </div>
                   </div>
 
-                  {/* Learner Grading Costs */}
                   <div className="text-center">
                     <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3">
                       <Users className="h-6 w-6 text-purple-600" />
@@ -697,10 +680,8 @@ export default function AssignmentInsightsPage() {
                   </div>
                 </div>
 
-                {/* Detailed Breakdown */}
                 <div className="mt-6 pt-6 border-t">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Authoring Breakdown */}
                     <div>
                       <h4 className="font-semibold text-sm mb-3 text-green-700">
                         Authoring Details
@@ -733,7 +714,6 @@ export default function AssignmentInsightsPage() {
                       </div>
                     </div>
 
-                    {/* Grading Breakdown */}
                     <div>
                       <h4 className="font-semibold text-sm mb-3 text-purple-700">
                         Grading Details
@@ -771,7 +751,6 @@ export default function AssignmentInsightsPage() {
             </Card>
           </div>
 
-          {/* Performance Insights */}
           {data.analytics.performanceInsights.length > 0 && (
             <Card>
               <CardHeader>
@@ -794,11 +773,9 @@ export default function AssignmentInsightsPage() {
           )}
         </TabsContent>
 
-        {/* Authors Tab */}
         <TabsContent value="authors" className="space-y-6">
           {data.authorActivity && data.authorActivity.totalAuthors > 0 ? (
             <div className="space-y-6">
-              {/* Author Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                   <CardContent className="pt-4">
@@ -868,7 +845,6 @@ export default function AssignmentInsightsPage() {
                 </Card>
               </div>
 
-              {/* Activity Insights */}
               {data.authorActivity.activityInsights.length > 0 && (
                 <Card>
                   <CardHeader>
@@ -892,7 +868,6 @@ export default function AssignmentInsightsPage() {
                 </Card>
               )}
 
-              {/* Detailed Authors Table */}
               <Card>
                 <CardHeader>
                   <CardTitle>Author Activity Details</CardTitle>
@@ -1007,7 +982,6 @@ export default function AssignmentInsightsPage() {
           )}
         </TabsContent>
 
-        {/* Questions Tab */}
         <TabsContent value="questions">
           <Card>
             <CardHeader>
@@ -1075,7 +1049,6 @@ export default function AssignmentInsightsPage() {
           </Card>
         </TabsContent>
 
-        {/* Attempts Tab */}
         <TabsContent value="attempts" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1102,9 +1075,7 @@ export default function AssignmentInsightsPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Search and Filters */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Search */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
@@ -1113,6 +1084,7 @@ export default function AssignmentInsightsPage() {
                     onChange={(e) => setAttemptSearch(e.target.value)}
                     className="pl-9"
                   />
+
                   {attemptSearch && (
                     <Button
                       variant="ghost"
@@ -1125,7 +1097,6 @@ export default function AssignmentInsightsPage() {
                   )}
                 </div>
 
-                {/* Status Filter */}
                 <Select
                   value={attemptStatusFilter}
                   onValueChange={setAttemptStatusFilter}
@@ -1140,7 +1111,6 @@ export default function AssignmentInsightsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Grade Filter */}
                 <Select
                   value={attemptGradeFilter}
                   onValueChange={setAttemptGradeFilter}
@@ -1156,7 +1126,6 @@ export default function AssignmentInsightsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Sort */}
                 <div className="flex gap-2">
                   <Select
                     value={attemptSortBy}
@@ -1190,7 +1159,6 @@ export default function AssignmentInsightsPage() {
                 </div>
               </div>
 
-              {/* Summary Stats */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">
@@ -1226,7 +1194,6 @@ export default function AssignmentInsightsPage() {
                 </div>
               </div>
 
-              {/* Table */}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1345,7 +1312,6 @@ export default function AssignmentInsightsPage() {
           </Card>
         </TabsContent>
 
-        {/* Feedback Tab */}
         <TabsContent value="feedback">
           <Card>
             <CardHeader>
@@ -1434,11 +1400,8 @@ export default function AssignmentInsightsPage() {
           </Card>
         </TabsContent>
 
-        {/* AI Usage Tab */}
         <TabsContent value="ai-usage" className="space-y-6">
-          {/* Cost Category Summary */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Authoring Costs */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-700">
@@ -1489,7 +1452,6 @@ export default function AssignmentInsightsPage() {
               </CardContent>
             </Card>
 
-            {/* Grading Costs */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-purple-700">
@@ -1541,7 +1503,6 @@ export default function AssignmentInsightsPage() {
             </Card>
           </div>
 
-          {/* AI Usage Table */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -1665,7 +1626,6 @@ export default function AssignmentInsightsPage() {
                 </TableBody>
               </Table>
 
-              {/* Detailed Calculation Steps - only shown when details are expanded */}
               {showDetailedUsage && (
                 <div className="mt-6 space-y-4">
                   <h3 className="text-lg font-semibold">Calculation Details</h3>
@@ -1702,7 +1662,6 @@ export default function AssignmentInsightsPage() {
           </Card>
         </TabsContent>
 
-        {/* Reports Tab */}
         {isUserAdmin && (
           <TabsContent value="reports">
             <Card>
@@ -1771,7 +1730,6 @@ export default function AssignmentInsightsPage() {
         )}
       </Tabs>
 
-      {/* Modals */}
       <FeedbackModal
         feedback={selectedFeedback}
         isOpen={isFeedbackModalOpen}

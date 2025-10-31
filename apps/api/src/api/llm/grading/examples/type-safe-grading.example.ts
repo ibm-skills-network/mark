@@ -17,7 +17,6 @@ export class TypeSafeGradingExample {
   ) {}
 
   async demonstrateTypeSafeGrading(): Promise<void> {
-    // Define rubric with full type safety
     const rubric: RubricCriterion[] = [
       {
         id: "accuracy",
@@ -40,7 +39,6 @@ export class TypeSafeGradingExample {
       },
     ];
 
-    // Create fully typed grading context
     const gradingContext: GradingContextData = {
       questionId: "q_001",
       learnerAnswer:
@@ -53,11 +51,9 @@ export class TypeSafeGradingExample {
     };
 
     try {
-      // Execute grading with full type safety
       const result =
         await this.gradingService.executeGradingPipeline(gradingContext);
 
-      // Type-safe result handling
       if (result.success && result.finalGrade) {
         this.logSuccessfulGrading(result.finalGrade);
         this.analyzeGradingMetrics(result);
@@ -65,7 +61,6 @@ export class TypeSafeGradingExample {
         this.handleGradingErrors(result.errors, result.warnings);
       }
 
-      // Get system health with proper typing
       const systemHealth = this.gradingService.getSystemHealth();
       this.logSystemHealth(systemHealth);
     } catch (error) {
@@ -82,7 +77,6 @@ export class TypeSafeGradingExample {
       processingSteps: finalGrade.processingSteps,
     });
 
-    // Type-safe criteria analysis
     for (const award of finalGrade.grade.criteriaAwards) {
       this.logger.debug(
         `Criterion ${award.criterionId}: ${award.awarded}/${award.maxPoints}`,
@@ -113,7 +107,6 @@ export class TypeSafeGradingExample {
 
     this.logger.log("Performance analysis", performanceMetrics);
 
-    // Risk-based alerting
     if (result.riskLevel === "high") {
       this.logger.warn(
         "High-risk grading detected - manual review recommended",
@@ -209,8 +202,7 @@ export class TypeSafeGradingExample {
   }
 
   demonstrateAdvancedMetrics(): void {
-    // Get detailed metrics with time window
-    const metrics = this.gradingService.getMetrics(3_600_000); // Last hour
+    const metrics = this.gradingService.getMetrics(3_600_000);
 
     this.logger.log("Advanced metrics analysis", {
       requestCount: metrics.requestCount,
@@ -237,7 +229,6 @@ export class TypeSafeGradingExample {
   }
 }
 
-// Example usage with proper error handling
 export async function runTypeSafeGradingExample(
   gradingService: EnhancedAutomatedGradingService,
   monitoringService: MonitoringService,

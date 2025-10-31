@@ -396,7 +396,7 @@ describe("AssignmentRepository", () => {
         expect(result.questions.length).toBe(1);
         expect(result.questions[0].question).toBe("Version question 1");
         expect(result.questions[0].totalPoints).toBe(15);
-        expect(result.questions[0].id).toBe(-100); // Negative ID for version questions
+        expect(result.questions[0].id).toBe(-100);
       });
 
       it("should use versions[0] when currentVersion is not active", async () => {
@@ -443,7 +443,6 @@ describe("AssignmentRepository", () => {
           ],
         };
 
-        // Mock questions in the assignment
         mockAssignment.questions = [
           {
             id: 5,
@@ -478,7 +477,7 @@ describe("AssignmentRepository", () => {
         expect(result.questions.length).toBe(1);
         expect(result.questions[0].question).toBe("Active version question");
         expect(result.questions[0].totalPoints).toBe(20);
-        expect(result.questions[0].id).toBe(5); // Uses questionId when available
+        expect(result.questions[0].id).toBe(5);
         expect((result.questions[0] as any).variants).toBeDefined();
         expect((result.questions[0] as any).variants.length).toBe(1);
       });
@@ -598,7 +597,6 @@ describe("AssignmentRepository", () => {
 
         expect(result.questions).toBeDefined();
         expect(result.questions.length).toBe(3);
-        // Should be sorted by displayOrder first, then by id
         expect(result.questions[0].question).toBe(
           "Question with display order 1",
         );
@@ -615,11 +613,11 @@ describe("AssignmentRepository", () => {
         const mockAssignment = {
           ...createMockAssignment({ id: assignmentId }),
           questions: [],
-          questionOrder: [3, 2, 1], // Original order
+          questionOrder: [3, 2, 1],
           currentVersion: {
             id: 10,
             isActive: true,
-            questionOrder: [1, 2, 3], // Version order should take precedence
+            questionOrder: [1, 2, 3],
             questionVersions: [],
           },
           versions: [],
@@ -646,7 +644,7 @@ describe("AssignmentRepository", () => {
           currentVersion: {
             id: 10,
             isActive: true,
-            questionOrder: [], // Empty version order
+            questionOrder: [],
             questionVersions: [],
           },
           versions: [],
@@ -688,7 +686,7 @@ describe("AssignmentRepository", () => {
         currentVersion: {
           id: 10,
           isActive: true,
-          questionVersions: null, // null instead of empty array
+          questionVersions: null,
         },
         versions: [],
       };
@@ -721,7 +719,7 @@ describe("AssignmentRepository", () => {
               type: QuestionType.SINGLE_CORRECT,
               question: "Question with null displayOrder",
               totalPoints: 10,
-              displayOrder: null, // null displayOrder
+              displayOrder: null,
               responseType: null,
               maxWords: null,
               scoring: null,
@@ -739,7 +737,7 @@ describe("AssignmentRepository", () => {
               type: QuestionType.SINGLE_CORRECT,
               question: "Question with undefined displayOrder",
               totalPoints: 10,
-              displayOrder: undefined, // undefined displayOrder
+              displayOrder: undefined,
               responseType: null,
               maxWords: null,
               scoring: null,
@@ -767,7 +765,6 @@ describe("AssignmentRepository", () => {
 
       expect(result.questions).toBeDefined();
       expect(result.questions.length).toBe(2);
-      // Should sort by ID when displayOrder is null/undefined
       expect(result.questions[0].id).toBe(-100);
       expect(result.questions[1].id).toBe(-200);
     });
@@ -787,7 +784,6 @@ describe("AssignmentRepository", () => {
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
-      // Should default to author view when no userSession provided
       expect((result as GetAssignmentResponseDto).questions).toBeDefined();
     });
 
@@ -795,7 +791,7 @@ describe("AssignmentRepository", () => {
       const assignmentId = 1;
       const mockAssignment = {
         ...createMockAssignment({ id: assignmentId }),
-        questions: undefined, // undefined questions
+        questions: undefined,
       };
 
       jest
@@ -821,8 +817,8 @@ describe("AssignmentRepository", () => {
             question: "Question with invalid JSON scoring",
             type: QuestionType.SINGLE_CORRECT,
             isDeleted: false,
-            scoring: '{"type":"AUTO", invalid json', // Invalid JSON
-            choices: "not json at all", // Invalid JSON
+            scoring: '{"type":"AUTO", invalid json',
+            choices: "not json at all",
             variants: [],
             assignmentId: 1,
           },
@@ -878,7 +874,7 @@ describe("AssignmentRepository", () => {
 
       expect(result.questions).toBeDefined();
       expect(result.questions.length).toBe(1000);
-      expect(end - start).toBeLessThan(5000); // Should complete within 5 seconds
+      expect(end - start).toBeLessThan(5000);
     });
   });
 
@@ -933,7 +929,6 @@ describe("AssignmentRepository", () => {
         createMockAssignment({ id: 2, name: "Authored Assignment 2" }),
       ];
 
-      // Mock the assignment.findMany for authors
       const mockAssignmentFindMany = jest
         .fn()
         .mockResolvedValue(mockAuthorAssignments);
@@ -1248,16 +1243,15 @@ describe("AssignmentRepository", () => {
           id: assignmentId,
           name: "Original Assignment",
           introduction: "Original intro",
-          attemptsBeforeCoolDown: 3, // From assignment
+          attemptsBeforeCoolDown: 3,
         }),
         questions: [],
         currentVersion: {
           id: 10,
           isActive: true,
-          name: "Version Assignment", // Should override
-          // introduction is undefined in version, should fall back to assignment
-          attemptsBeforeCoolDown: 5, // Should override assignment
-          retakeAttemptCoolDownMinutes: 10, // Should override default
+          name: "Version Assignment",
+          attemptsBeforeCoolDown: 5,
+          retakeAttemptCoolDownMinutes: 10,
           questionVersions: [],
         },
         versions: [],
@@ -1272,12 +1266,12 @@ describe("AssignmentRepository", () => {
         sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
-      expect(result.name).toBe("Version Assignment"); // From version (primary)
-      expect(result.introduction).toBe("Original intro"); // From assignment (secondary)
-      expect(result.attemptsBeforeCoolDown).toBe(5); // From version (primary)
-      expect(result.retakeAttemptCoolDownMinutes).toBe(10); // From version (primary)
-      expect(result.passingGrade).toBe(50); // From defaults
-      expect(result.graded).toBe(false); // From defaults
+      expect(result.name).toBe("Version Assignment");
+      expect(result.introduction).toBe("Original intro");
+      expect(result.attemptsBeforeCoolDown).toBe(5);
+      expect(result.retakeAttemptCoolDownMinutes).toBe(10);
+      expect(result.passingGrade).toBe(50);
+      expect(result.graded).toBe(false);
     });
 
     it("should handle null and undefined values in field merging correctly", async () => {
@@ -1285,16 +1279,16 @@ describe("AssignmentRepository", () => {
       const mockAssignment = {
         ...createMockAssignment({
           id: assignmentId,
-          name: null, // null in assignment
-          introduction: undefined, // undefined in assignment
+          name: null,
+          introduction: undefined,
         }),
         questions: [],
         currentVersion: {
           id: 10,
           isActive: true,
-          name: undefined, // undefined in version
-          introduction: null, // null in version
-          graded: null, // null should not override default
+          name: undefined,
+          introduction: null,
+          graded: null,
           questionVersions: [],
         },
         versions: [],
@@ -1309,10 +1303,9 @@ describe("AssignmentRepository", () => {
         sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
-      // When both primary and secondary are null/undefined, should use defaults
-      expect(result.name).toBeNull(); // prefer() returns null when all are null/undefined
+      expect(result.name).toBeNull();
       expect(result.introduction).toBeNull();
-      expect(result.graded).toBe(false); // Should use default since version has null
+      expect(result.graded).toBe(false);
     });
 
     it("should handle all field types in FIELDS constant", async () => {
@@ -1323,7 +1316,6 @@ describe("AssignmentRepository", () => {
         currentVersion: {
           id: 10,
           isActive: true,
-          // Test various field types
           name: "Version Name",
           introduction: "Version Intro",
           instructions: "Version Instructions",
@@ -1361,7 +1353,6 @@ describe("AssignmentRepository", () => {
         sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
-      // Verify all fields are properly merged from version
       expect(result.name).toBe("Version Name");
       expect(result.introduction).toBe("Version Intro");
       expect(result.instructions).toBe("Version Instructions");
@@ -1393,17 +1384,17 @@ describe("AssignmentRepository", () => {
         ...createMockAssignment({
           id: assignmentId,
           name: "Assignment Name",
-          introduction: null, // null in assignment
-          attemptsBeforeCoolDown: undefined, // undefined in assignment
+          introduction: null,
+          attemptsBeforeCoolDown: undefined,
         }),
         questions: [],
         currentVersion: {
           id: 10,
           isActive: true,
-          name: null, // null in version, should fall back to assignment
-          introduction: "Version Introduction", // should override null assignment value
-          attemptsBeforeCoolDown: 3, // should override undefined assignment value
-          retakeAttemptCoolDownMinutes: undefined, // undefined in version, should use default
+          name: null,
+          introduction: "Version Introduction",
+          attemptsBeforeCoolDown: 3,
+          retakeAttemptCoolDownMinutes: undefined,
           questionVersions: [],
         },
         versions: [],
@@ -1418,11 +1409,10 @@ describe("AssignmentRepository", () => {
         sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
-      // This test verifies the merging logic works correctly in practice
-      expect(result.name).toBe("Assignment Name"); // Falls back to assignment when version is null
-      expect(result.introduction).toBe("Version Introduction"); // Version overrides null assignment
-      expect(result.attemptsBeforeCoolDown).toBe(3); // Version overrides undefined assignment
-      expect(result.retakeAttemptCoolDownMinutes).toBe(5); // Uses default when both are null/undefined
+      expect(result.name).toBe("Assignment Name");
+      expect(result.introduction).toBe("Version Introduction");
+      expect(result.attemptsBeforeCoolDown).toBe(3);
+      expect(result.retakeAttemptCoolDownMinutes).toBe(5);
     });
 
     it("should maintain data integrity across different user roles", async () => {
@@ -1445,13 +1435,11 @@ describe("AssignmentRepository", () => {
         .spyOn(prismaService.assignment, "findUnique")
         .mockResolvedValue(mockAssignment);
 
-      // Test author view
       const authorResult = (await repository.findById(
         assignmentId,
         sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
-      // Test learner view
       const learnerResult = await repository.findById(
         assignmentId,
         sampleLearnerSession,
@@ -1459,7 +1447,7 @@ describe("AssignmentRepository", () => {
 
       expect(authorResult.questions).toBeDefined();
       expect(authorResult.questions.length).toBe(1);
-      expect(learnerResult.questions).toBeUndefined(); // Learners shouldn't see questions
+      expect(learnerResult.questions).toBeUndefined();
       expect(authorResult.success).toBe(true);
       expect(learnerResult.success).toBe(true);
     });

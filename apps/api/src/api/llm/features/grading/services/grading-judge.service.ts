@@ -1,4 +1,3 @@
-// src/llm/features/grading/services/grading-judge.service.ts
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
@@ -71,7 +70,7 @@ const judgeParserCache = new WeakMap<any, StructuredOutputParser<any>>();
 @Injectable()
 export class GradingJudgeService implements IGradingJudgeService {
   private readonly logger: Logger;
-  private readonly maxJudgeTimeout = 120_000; // Increased from 60s to 120s
+  private readonly maxJudgeTimeout = 120_000;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -96,7 +95,6 @@ export class GradingJudgeService implements IGradingJudgeService {
       const parser = this.getOrCreateParser();
       const formatInstructions = parser.getFormatInstructions();
 
-      // REMOVED: Arithmetic calculations - Judge LLM should not do mathematical validation
       this.logger.info(
         `Judge will focus on qualitative assessment only, ignoring mathematical calculations`,
       );
@@ -129,7 +127,6 @@ export class GradingJudgeService implements IGradingJudgeService {
         },
       });
 
-      // Use validation-optimized model selection (gpt-4o-mini for validation tasks)
       const selectedModel = await this.llmResolver.getModelForValidationTask(
         "text_grading",
         (
@@ -210,8 +207,6 @@ export class GradingJudgeService implements IGradingJudgeService {
     parsedResponse: ParsedJudgeResponse,
     input: GradingJudgeInput,
   ): GradingJudgeResult {
-    // REMOVED: Mathematical validation - Judge LLM should not do arithmetic
-    // The Judge LLM should only focus on qualitative aspects like fairness and rubric adherence
     this.logger.info(
       `Judge focusing on qualitative assessment only. Ignoring mathematical calculations.`,
     );
@@ -225,18 +220,13 @@ export class GradingJudgeService implements IGradingJudgeService {
     if (!parsedResponse.approved) {
       result.corrections = {};
 
-      // Focus only on qualitative issues, not arithmetic
       if (parsedResponse.fairnessScore < 5) {
-        // Only reject for severe unfairness
         result.issues = [
           `Grading appears unfair (fairness score: ${parsedResponse.fairnessScore}/10)`,
         ];
       } else if (!parsedResponse.rubricAdherence) {
-        // Check if it's a real rubric error or just subjective disagreement
         const rubricScores = input.proposedGrading.rubricScores || [];
         const hasInvalidPoints = rubricScores.some((score) => {
-          // This would need actual validation against criteria
-          // For now, just check if points are reasonable
           return (
             score.pointsAwarded < 0 || score.pointsAwarded > score.maxPoints
           );
@@ -245,7 +235,6 @@ export class GradingJudgeService implements IGradingJudgeService {
         if (hasInvalidPoints) {
           result.issues = ["Invalid rubric point values used"];
         } else {
-          // If rubric values are technically valid, don't reject for subjective disagreement
           this.logger.info(
             "Judge disagrees with rubric scoring but values are valid. Approving.",
           );
@@ -258,7 +247,6 @@ export class GradingJudgeService implements IGradingJudgeService {
         }
       }
 
-      // Don't add corrections for subjective disagreements
       if (
         parsedResponse.suggestedFeedbackChanges &&
         parsedResponse.fairnessScore < 5

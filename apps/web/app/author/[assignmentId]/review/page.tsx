@@ -51,7 +51,6 @@ const CONFIG_KEYS_TO_OMIT = [
   "questions",
 ];
 
-// Helper function to determine if a validation error is question-related
 const isQuestionRelatedValidationError = (message: string): boolean => {
   const questionRelatedErrors = [
     "question",
@@ -61,13 +60,13 @@ const isQuestionRelatedValidationError = (message: string): boolean => {
     "description",
     "text",
   ];
+
   const hasQuestionIssue = questionRelatedErrors.some((error) =>
     message.toLowerCase().includes(error.toLowerCase()),
   );
   return hasQuestionIssue;
 };
 
-// Issues Modal Component
 const IssuesModal = ({
   isOpen,
   onClose,
@@ -92,7 +91,6 @@ const IssuesModal = ({
   onNavigateToConfig: () => void;
 }) => {
   if (!isOpen) return null;
-  console.log("questionIssues", questionIssues);
 
   const totalIssues = Object.keys(questionIssues).length;
   const hasValidationError = !isValid && message;
@@ -101,7 +99,6 @@ const IssuesModal = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
-        {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
@@ -117,9 +114,7 @@ const IssuesModal = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {/* Show configuration error only if it's not a question-specific issue */}
           {!isValid &&
             message &&
             !isQuestionRelatedValidationError(message) && (
@@ -148,7 +143,6 @@ const IssuesModal = ({
               </div>
             )}
 
-          {/* Show note about question-related validation errors */}
           {!isValid &&
             message &&
             Object.keys(questionIssues).length > 0 &&
@@ -207,7 +201,6 @@ const IssuesModal = ({
                           <span className="text-sm text-red-700">{issue}</span>
                         </div>
 
-                        {/* Auto-fix button for fixable issues */}
                         {canAutoFix(issue) && (
                           <button
                             onClick={() =>
@@ -229,7 +222,6 @@ const IssuesModal = ({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-600">
@@ -249,7 +241,6 @@ const IssuesModal = ({
   );
 };
 
-// Helper function to determine if an issue can be auto-fixed
 const canAutoFix = (issue: string): boolean => {
   const autoFixableIssues = [
     "Question type not selected",
@@ -260,22 +251,22 @@ const canAutoFix = (issue: string): boolean => {
     "description is empty",
     "question is empty",
   ];
+
   return autoFixableIssues.some((fixable) => issue.includes(fixable));
 };
 
-// Component to show before/after comparison
 const ChangeComparison = ({
   label,
   before,
   after,
   type = "text",
-  onNavigate, // Added this prop
+  onNavigate,
 }: {
   label: string;
   before: unknown;
   after: unknown;
   type?: "text" | "markdown" | "boolean" | "number" | "questionOrder";
-  onNavigate?: () => void; // Added this type
+  onNavigate?: () => void;
 }) => {
   const hasChanged = JSON.stringify(before) !== JSON.stringify(after);
 
@@ -330,7 +321,7 @@ const ChangeComparison = ({
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
         <h6 className="text-sm font-medium text-gray-600">{label}</h6>
-        {onNavigate && ( // Added navigation button
+        {onNavigate && (
           <button
             onClick={onNavigate}
             className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
@@ -376,7 +367,6 @@ const ChangeComparison = ({
   );
 };
 
-// Section component for changes mode
 const ChangesSection = ({
   title,
   link,
@@ -412,7 +402,6 @@ const ChangesSection = ({
   );
 };
 
-// Original Section component for full view
 const Section = ({
   title,
   content,
@@ -481,7 +470,6 @@ const Section = ({
   );
 };
 
-// Component to show question changes
 const QuestionChanges = ({
   originalQuestion,
   currentQuestion,
@@ -497,7 +485,6 @@ const QuestionChanges = ({
 }) => {
   const changes = [];
 
-  // Check for title changes
   if (changeDetails.some((d) => d.includes("Updated question text"))) {
     changes.push(
       <ChangeComparison
@@ -510,7 +497,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for type changes
   if (changeDetails.some((d) => d.includes("Changed question type"))) {
     changes.push(
       <ChangeComparison
@@ -522,7 +508,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for response type changes
   if (changeDetails.some((d) => d.includes("Changed response type"))) {
     changes.push(
       <ChangeComparison
@@ -534,7 +519,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for max words/characters changes
   if (changeDetails.some((d) => d.includes("Updated max words"))) {
     changes.push(
       <ChangeComparison
@@ -559,7 +543,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for randomized choices changes
   if (changeDetails.some((d) => d.includes("Updated randomized choices"))) {
     changes.push(
       <ChangeComparison
@@ -572,7 +555,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for show rubrics to learner changes
   if (
     changeDetails.some((d) => d.includes('Changed "show rubric to learner"'))
   ) {
@@ -587,7 +569,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for show points changes
   if (
     changeDetails.some((d) => d.includes('Changed "show points to learner"'))
   ) {
@@ -602,13 +583,10 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for choices changes (for multiple choice questions)
   if (changeDetails.some((d) => d.includes("Modified choices"))) {
-    // Double-check if there are actually meaningful differences
     const originalChoices = originalQuestion.choices || [];
     const currentChoices = currentQuestion.choices || [];
 
-    // Only show if there are actual differences in non-empty arrays or meaningful changes
     const hasActualChanges =
       originalChoices.length > 0 || currentChoices.length > 0;
 
@@ -691,7 +669,6 @@ const QuestionChanges = ({
     }
   }
 
-  // Check for rubric changes
   if (changeDetails.some((d) => d.includes("Updated scoring criteria"))) {
     changes.push(
       <div key="rubrics" className="mb-4">
@@ -705,7 +682,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for presentation/recording config changes
   if (
     changeDetails.some((d) => d.includes("Updated video presentation config"))
   ) {
@@ -734,7 +710,6 @@ const QuestionChanges = ({
     );
   }
 
-  // Check for variant changes
   const variantChanges = changeDetails.filter((d) => d.includes("variant"));
   if (variantChanges.length > 0) {
     changes.push(
@@ -837,10 +812,9 @@ function Component() {
   const { isValid, message, invalidQuestionId } =
     questionsAreReadyToBePublished();
 
-  // Parse changes from the summary
   const changes = useMemo(() => {
     const changesArray = changesSummary.split(". ").filter((c) => c);
-    // remove "no changes detected" message
+
     const filteredChanges = changesArray.filter(
       (c) => c !== "No changes detected.",
     );
@@ -924,7 +898,6 @@ function Component() {
       .filter((idx) => idx !== null);
   };
 
-  // Helper function to format question order for display
   const formatQuestionOrder = (
     order: number[],
     allQuestions: QuestionAuthorStore[],
@@ -934,7 +907,7 @@ function Component() {
       ? `Questions: ${indices.join(", ")}`
       : "Default order";
   };
-  // Identify problematic questions
+
   const questionIssues = useMemo(() => {
     const issues: Record<number, string[]> = {};
 
@@ -967,9 +940,7 @@ function Component() {
         if (!q.scoring?.rubrics || q.scoring.rubrics.length === 0) {
           qIssues.push("No rubrics defined");
         } else {
-          // Check each rubric
           q.scoring.rubrics.forEach((rubric, rubricIndex) => {
-            // Check if rubric question is empty
             if (!rubric.rubricQuestion || rubric.rubricQuestion.trim() === "") {
               qIssues.push(`Rubric ${rubricIndex + 1} question is empty`);
             }
@@ -977,7 +948,6 @@ function Component() {
             if (!rubric.criteria || rubric.criteria.length === 0) {
               qIssues.push(`Rubric ${rubricIndex + 1} has no criteria defined`);
             } else {
-              // Check each criteria in the rubric
               rubric.criteria.forEach((criteria, criteriaIndex) => {
                 if (
                   !criteria.description ||
@@ -1001,12 +971,10 @@ function Component() {
     return issues;
   }, [questions]);
 
-  // Get question-specific changes
   const getQuestionChanges = (questionId: number) => {
     return changes.details.filter((d) => d.includes(`question ${questionId}`));
   };
 
-  // Handle navigation to fix a specific question
   const handleNavigateToFix = (questionId: number) => {
     setIsIssuesModalOpen(false);
     router.push(`/author/${activeAssignmentId}/questions`);
@@ -1021,21 +989,18 @@ function Component() {
     }, 500);
   };
 
-  // Handle navigation to config page
   const handleNavigateToConfig = () => {
     router.push(`/author/${activeAssignmentId}/config`);
   };
 
-  // Handle auto-fix functionality
   const handleAutoFix = (questionId: number, issue: string) => {
     const question = questions?.find((q) => q.id === questionId);
     if (!question) return;
 
     let updatedQuestion = { ...question };
 
-    // Auto-fix based on issue type
     if (issue.includes("Question type not selected")) {
-      updatedQuestion.type = "TEXT"; // Default to text question
+      updatedQuestion.type = "TEXT";
     }
 
     if (issue.includes("Question title is empty")) {
@@ -1053,7 +1018,6 @@ function Component() {
       ];
     }
 
-    // Handle rubric-related issues
     if (issue.includes("No rubrics defined")) {
       updatedQuestion.scoring = {
         ...updatedQuestion.scoring,
@@ -1073,7 +1037,6 @@ function Component() {
     }
 
     if (issue.includes("has no criteria defined")) {
-      // Extract rubric index from issue text like "Rubric 1 has no criteria defined"
       const rubricMatch = issue.match(/Rubric (\d+)/);
       if (rubricMatch && updatedQuestion.scoring?.rubrics) {
         const rubricIndex = parseInt(rubricMatch[1]) - 1;
@@ -1090,7 +1053,6 @@ function Component() {
     }
 
     if (issue.includes("description is empty")) {
-      // Extract rubric and criteria indices from issue text like "Rubric 1 criteria 1 description is empty"
       const match = issue.match(/Rubric (\d+) criteria (\d+)/);
       if (match && updatedQuestion.scoring?.rubrics) {
         const rubricIndex = parseInt(match[1]) - 1;
@@ -1108,7 +1070,6 @@ function Component() {
     }
 
     if (issue.includes("question is empty")) {
-      // Extract rubric index from issue text like "Rubric 1 question is empty"
       const rubricMatch = issue.match(/Rubric (\d+)/);
       if (rubricMatch && updatedQuestion.scoring?.rubrics) {
         const rubricIndex = parseInt(rubricMatch[1]) - 1;
@@ -1119,17 +1080,13 @@ function Component() {
       }
     }
 
-    // Update the question in the store
     replaceQuestion(questionId, updatedQuestion);
 
-    // Show a success message (you could replace this with a toast notification)
     alert(`Auto-fixed: ${issue}`);
   };
 
-  // Handle export functionality
   const handleExport = async (exportOptions: ExportOptions) => {
     try {
-      // Prepare the export data based on selected options
       const exportData: any = {};
 
       if (exportOptions.includeAssignmentData) {
@@ -1188,23 +1145,19 @@ function Component() {
         });
       }
 
-      // Generate filename with timestamp
       const timestamp = new Date().toISOString().split("T")[0];
       const filename = `assignment-${activeAssignmentId}-${timestamp}`;
 
-      // Handle different export formats
       if (exportOptions.format === "json") {
         const blob = new Blob([JSON.stringify(exportData, null, 2)], {
           type: "application/json",
         });
         downloadFile(blob, `${filename}.json`);
       } else if (exportOptions.format === "csv") {
-        // Convert to CSV format (simplified)
         const csvContent = convertToCSV(exportData);
         const blob = new Blob([csvContent], { type: "text/csv" });
         downloadFile(blob, `${filename}.csv`);
       } else if (exportOptions.format === "pdf") {
-        // Generate actual PDF
         await generatePDF(exportData, filename);
       }
     } catch (error) {
@@ -1213,7 +1166,6 @@ function Component() {
     }
   };
 
-  // Helper function to download file
   const downloadFile = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1225,7 +1177,6 @@ function Component() {
     URL.revokeObjectURL(url);
   };
 
-  // Helper function to convert data to CSV
   const convertToCSV = (data: any) => {
     let csv = "";
 
@@ -1245,7 +1196,6 @@ function Component() {
     return csv;
   };
 
-  // Helper function to format data for PDF/text export
   const formatForPDF = (data: any) => {
     let content = "ASSIGNMENT EXPORT\n";
     content += "=".repeat(50) + "\n\n";
@@ -1283,13 +1233,10 @@ function Component() {
     return content;
   };
 
-  // Helper function to generate PDF using browser's print functionality
   const generatePDF = async (data: any, filename: string) => {
     try {
-      // Create a formatted HTML content for PDF
       const htmlContent = formatForPDF(data);
 
-      // Create a new window with the content
       const printWindow = window.open("", "_blank");
       if (!printWindow) {
         throw new Error(
@@ -1297,7 +1244,6 @@ function Component() {
         );
       }
 
-      // Write the HTML content with proper styling
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -1374,11 +1320,10 @@ function Component() {
 
       printWindow.document.close();
 
-      // Focus on the new window
       printWindow.focus();
     } catch (error) {
       console.error("PDF generation failed:", error);
-      // Fallback to text export
+
       const pdfContent = formatForPDF(data);
       const blob = new Blob([pdfContent], { type: "text/plain" });
       downloadFile(blob, `${filename}.txt`);
@@ -1386,7 +1331,6 @@ function Component() {
     }
   };
 
-  // Helper function to format data as HTML
   const formatDataAsHTML = (data: any) => {
     let html = "";
 
@@ -1456,7 +1400,6 @@ function Component() {
       <div className="flex items-center justify-between mb-6">
         <Title>Review</Title>
         <div className="flex items-center gap-4">
-          {/* Status Summary */}
           <div className="flex items-center gap-3">
             {changes.details.length ? (
               <span className="flex items-center gap-2 text-sm">
@@ -1488,7 +1431,7 @@ function Component() {
                     questionIssueCount + (hasConfigError ? 1 : 0);
 
                   if (totalIssues === 0) {
-                    return "Issues found"; // Fallback, shouldn't happen
+                    return "Issues found";
                   }
 
                   if (questionIssueCount > 0 && hasConfigError) {
@@ -1505,7 +1448,6 @@ function Component() {
             )}
           </div>
 
-          {/* Export Button */}
           <button
             onClick={() => setIsExportModalOpen(true)}
             className="px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2"
@@ -1514,7 +1456,6 @@ function Component() {
             Export
           </button>
 
-          {/* View Mode Toggle */}
           <div className="flex items-center bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setViewMode("changes")}
@@ -1548,7 +1489,6 @@ function Component() {
         </div>
       </div>
 
-      {/* Changes Summary */}
       {changes.details.length ? (
         <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
           <h3 className="font-semibold text-purple-900 mb-2">
@@ -1579,7 +1519,6 @@ function Component() {
 
       {viewMode === "full" ? (
         <>
-          {/* Full View Mode */}
           <Section
             title="About this Assignment"
             content={introduction}
@@ -1615,7 +1554,6 @@ function Component() {
         </>
       ) : (
         <>
-          {/* Changes View Mode */}
           {changes.introduction && originalAssignment && (
             <ChangesSection
               title="About this Assignment"
@@ -1661,7 +1599,6 @@ function Component() {
             />
           )}
 
-          {/* Configuration Changes */}
           {(changes.graded ||
             changes.allotedTime ||
             changes.timeEstimate ||
@@ -1885,7 +1822,6 @@ function Component() {
         </>
       )}
 
-      {/* Questions Section */}
       <div className="mt-8 text-center">
         <div className="flex items-center justify-between  text-center mb-4">
           {changes.questionsAdded ||
@@ -1918,7 +1854,6 @@ function Component() {
         </div>
 
         {viewMode === "full" ? (
-          // Full view - show all questions
           questions && questions.length > 0 ? (
             questions.map((question, index) => {
               const hasIssues = questionIssues[question.id];
@@ -1986,9 +1921,7 @@ function Component() {
             <p className="text-gray-500">No questions added yet.</p>
           )
         ) : (
-          // Changes view - show only changed questions with before/after
           <>
-            {/* Show new questions */}
             {questions?.map((question, index) => {
               const originalQuestion = originalAssignment?.questions?.find(
                 (q) => q.id === question.id,
@@ -2021,7 +1954,6 @@ function Component() {
               );
             })}
 
-            {/* Show modified questions */}
             {originalAssignment?.questions &&
               questions?.map((question, index) => {
                 const originalQuestion = originalAssignment.questions.find(
@@ -2057,7 +1989,6 @@ function Component() {
                 );
               })}
 
-            {/* Show deleted questions */}
             {originalAssignment?.questions?.map((origQuestion, index) => {
               const stillExists = questions?.some(
                 (q) => q.id === origQuestion.id,
@@ -2089,14 +2020,12 @@ function Component() {
         )}
       </div>
 
-      {/* Export Modal */}
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         onExport={handleExport}
       />
 
-      {/* Issues Modal */}
       <IssuesModal
         isOpen={isIssuesModalOpen}
         onClose={() => setIsIssuesModalOpen(false)}

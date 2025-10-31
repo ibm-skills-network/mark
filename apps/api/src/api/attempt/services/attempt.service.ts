@@ -52,10 +52,9 @@ export class AttemptServiceV2 {
     authCookie: string,
     request: UserSessionRequest,
   ): Promise<{ gradingJobId: number; message: string }> {
-    // Create a grading job without attemptId for author preview
     const gradingJob = await this.prisma.gradingJob.create({
       data: {
-        attemptId: null, // No attempt for author mode
+        attemptId: null,
         assignmentId,
         userId: request.userSession.userId,
         status: "Pending",
@@ -79,7 +78,6 @@ export class AttemptServiceV2 {
     authCookie: string,
     request: UserSessionRequest,
   ): Promise<{ gradingJobId: number; message: string }> {
-    // Create a grading job in the database
     const gradingJob = await this.prisma.gradingJob.create({
       data: {
         attemptId,
@@ -107,16 +105,14 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
-      // Update job status to processing
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Processing",
         progress: "Starting author preview grading...",
         percentage: 0,
       });
 
-      // Call the submission service for author preview
       const result = await this.submissionService.updateAssignmentAttempt(
-        -1, // Fake attempt ID for author mode
+        -1,
         assignmentId,
         updateDto,
         authCookie,
@@ -131,7 +127,6 @@ export class AttemptServiceV2 {
         },
       );
 
-      // Update job status to completed
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Completed",
         progress: "Author preview completed successfully",
@@ -139,7 +134,6 @@ export class AttemptServiceV2 {
         result,
       });
     } catch (error) {
-      // Update job status to failed
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       await this.updateGradingJobStatus(gradingJobId, {
@@ -185,7 +179,6 @@ export class AttemptServiceV2 {
         },
       );
 
-      // Update job status to completed
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Completed",
         progress: "Grading completed successfully",
@@ -193,7 +186,6 @@ export class AttemptServiceV2 {
         result,
       });
     } catch (error) {
-      // Update job status to failed
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       await this.updateGradingJobStatus(gradingJobId, {
@@ -239,7 +231,6 @@ export class AttemptServiceV2 {
       },
     });
 
-    // Emit status update to SSE stream
     this.emitGradingJobStatusUpdate(gradingJobId, statusUpdate);
   }
 
@@ -262,11 +253,7 @@ export class AttemptServiceV2 {
     let heartbeatInterval: NodeJS.Timeout;
     let isStreamActive = true;
 
-    // Enhanced stream with heartbeat and intelligent polling
     return new Observable<MessageEvent>((subscriber) => {
-      console.log(`Starting enhanced stream for grading job ${gradingJobId}`);
-
-      // Send initial connection message
       subscriber.next({
         type: "update",
         data: JSON.stringify({
@@ -276,7 +263,6 @@ export class AttemptServiceV2 {
         }),
       } as MessageEvent);
 
-      // Start heartbeat mechanism
       heartbeatInterval = setInterval(() => {
         if (isStreamActive && Date.now() - lastUpdateTime > 15_000) {
           subscriber.next({
@@ -288,9 +274,7 @@ export class AttemptServiceV2 {
             }),
           } as MessageEvent);
         }
-      }, 10_000); // Heartbeat every 10 seconds
-
-      // Get initial status
+      }, 10_000);
       this.getInitialGradingJobStatus(gradingJobId)
         .then((initialEvent) => {
           if (initialEvent && isStreamActive) {
@@ -313,10 +297,9 @@ export class AttemptServiceV2 {
           } as MessageEvent);
         });
 
-      // Intelligent polling with backoff
-      let pollInterval = 2000; // Start with 2 second polling
+      let pollInterval = 2000;
       let consecutiveErrors = 0;
-      const maxPollInterval = 15_000; // Max 15 seconds between polls
+      const maxPollInterval = 15_000;
 
       const pollJob = async () => {
         if (!isStreamActive) return;
@@ -327,7 +310,7 @@ export class AttemptServiceV2 {
           if (statusEvent && isStreamActive) {
             lastUpdateTime = Date.now();
             consecutiveErrors = 0;
-            pollInterval = Math.max(2000, pollInterval - 1000); // Decrease interval on success
+            pollInterval = Math.max(2000, pollInterval - 1000);
 
             subscriber.next(statusEvent);
 
@@ -335,12 +318,8 @@ export class AttemptServiceV2 {
               ?.status;
 
             if (status === "Completed" || status === "Failed") {
-              console.log(
-                `Grading job ${gradingJobId} finished with status: ${status}`,
-              );
               isStreamActive = false;
 
-              // Send final completion event
               setTimeout(() => {
                 subscriber.next({
                   type: "finalize",
@@ -357,7 +336,7 @@ export class AttemptServiceV2 {
           }
         } catch (error) {
           consecutiveErrors++;
-          pollInterval = Math.min(maxPollInterval, pollInterval + 2000); // Increase interval on error
+          pollInterval = Math.min(maxPollInterval, pollInterval + 2000);
 
           console.error(
             `Poll error for job ${gradingJobId} (attempt ${consecutiveErrors}):`,
@@ -376,7 +355,6 @@ export class AttemptServiceV2 {
             } as MessageEvent);
           }
 
-          // If too many consecutive errors, consider the job failed
           if (consecutiveErrors >= 10) {
             console.error(
               `Too many consecutive errors for job ${gradingJobId}, terminating stream`,
@@ -396,10 +374,8 @@ export class AttemptServiceV2 {
         }
       };
 
-      // Start polling after a short delay
       setTimeout(() => void pollJob(), 1000);
 
-      // Listen to manual status updates
       const statusSubscription = statusSubject.asObservable().subscribe({
         next: (event) => {
           if (isStreamActive) {
@@ -422,11 +398,7 @@ export class AttemptServiceV2 {
         },
       });
 
-      // Cleanup function
       return () => {
-        console.log(
-          `Cleaning up enhanced stream for grading job ${gradingJobId}`,
-        );
         isStreamActive = false;
 
         if (heartbeatInterval) {
@@ -629,10 +601,9 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
     response: ExpressResponse,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
-    // Send periodic heartbeat to keep connection alive
     const heartbeatInterval = setInterval(() => {
       response.write(`:heartbeat\n\n`);
-    }, 30_000); // Every 30 seconds
+    }, 30_000);
 
     try {
       const result = await this.submissionService.updateAssignmentAttempt(

@@ -41,18 +41,14 @@ function QuestionPage(props: Props) {
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
 
   useEffect(() => {
-    setTipsVersion("v1.0"); // change this version to update the tips
+    setTipsVersion("v1.0");
   }, []);
 
   useEffect(() => {
     const fetchAssignment = async () => {
-      //backend call to get the assignment details
       const assignment = await getAssignment(assignmentId);
 
       if (assignment) {
-        // Only set assignment details if they are different from the current state
-        // Fetched assignment will be stored in the global state, assignmentDetails
-        // Set the global state only if it is different from the fetched assignment
         if (
           !assignmentDetails ||
           assignmentDetails.id !== assignment.id ||
@@ -106,11 +102,8 @@ function QuestionPage(props: Props) {
 
     debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
 
-    // Use setQuestions to merge fresh assignment data with existing user responses
-    // This preserves any responses the user has already entered
     setQuestions(questionsWithStatus);
 
-    // Update other store properties that don't contain user responses
     const currentStoreUpdate = {
       activeAttemptId: id,
       expiresAt: normalizedExpiresAt,

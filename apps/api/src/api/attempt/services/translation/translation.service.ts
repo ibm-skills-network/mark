@@ -129,8 +129,6 @@ export class TranslationService {
       }
     }
 
-    // Add English (original) content to the translation map
-    // English content is not stored as translations but as original content
     for (const question of assignmentQuestions) {
       const questionKey = `question-${question.id}`;
       if (!translationMap.has(questionKey)) {
@@ -145,7 +143,6 @@ export class TranslationService {
       }
     }
 
-    // Add English content for variants
     for (const qv of assignmentAttempt.questionVariants) {
       if (qv.questionVariant) {
         const variantKey = `variant-${qv.questionVariant.id}`;
@@ -250,7 +247,7 @@ export class TranslationService {
     const baseQuestion = await this.questionService.findOne(variant.questionId);
 
     return {
-      id: baseQuestion.id, // Use the original question's ID, not the variant's ID
+      id: baseQuestion.id,
       question: variant.variantContent,
       type: baseQuestion.type,
       assignmentId: baseQuestion.assignmentId,

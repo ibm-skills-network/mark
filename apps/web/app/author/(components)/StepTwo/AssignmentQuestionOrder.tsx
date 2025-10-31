@@ -94,6 +94,7 @@ const Component: FC<Props> = () => {
           <RadioDot
             active={displayOrder === "RANDOM" && !selectedRandomQuestions}
           />
+
           <p
             className={cn(
               "leading-5 transition-all",
@@ -165,6 +166,7 @@ const Component: FC<Props> = () => {
               setNumberOfQuestionsPerAttempt(value);
             }}
           />
+
           {showPopup && <Popup message={popupMessage} />}
         </div>
         <p className="text-gray-500 text-left">

@@ -99,7 +99,6 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
 
-    // GPT-5-nano has minimal image token usage for cost optimization
     const estimatedImageTokens = 100;
 
     this.logger.debug(
@@ -115,7 +114,7 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
               type: "image_url",
               image_url: {
                 url: processedImageData,
-                detail: options?.imageDetail || "low", // Default to low detail for nano
+                detail: options?.imageDetail || "low",
               },
             },
           ],

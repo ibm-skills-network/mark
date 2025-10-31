@@ -20,7 +20,8 @@ export class LocalizationService {
     const translations: Record<string, any> = {
       en: {
         noResponse: "You did not provide a response to this question.",
-
+        expectedTextResponse:
+          "Expected a text response, but did not receive one.",
         expectedUrlResponse:
           "Expected a URL response, but did not receive one.",
         invalidUrl: "Invalid URL: {url}",
@@ -45,6 +46,8 @@ export class LocalizationService {
       },
       ar: {
         noResponse: "لم تقدم إجابة على هذا السؤال.",
+        expectedTextResponse:
+          "كان من المتوقع الحصول على نص، ولكن لم يتم الحصول عليه.",
         expectedUrlResponse:
           "كان من المتوقع الحصول على رابط، ولكن لم يتم الحصول عليه.",
         invalidUrl: "رابط غير صالح: {url}",
@@ -67,6 +70,7 @@ export class LocalizationService {
       },
       id: {
         noResponse: "Anda tidak memberikan jawaban untuk pertanyaan ini.",
+        expectedTextResponse: "Diharapkan respons teks, tetapi tidak diterima.",
         expectedUrlResponse: "Diharapkan respons URL, tetapi tidak diterima.",
         invalidUrl: "URL tidak valid: {url}",
         unableToFetchUrl: "Tidak dapat mengambil konten dari URL: {url}",
@@ -87,6 +91,8 @@ export class LocalizationService {
       },
       de: {
         noResponse: "Sie haben keine Antwort auf diese Frage gegeben.",
+        expectedTextResponse:
+          "Eine Textantwort wurde erwartet, aber nicht erhalten.",
         expectedUrlResponse:
           "Eine URL-Antwort wurde erwartet, aber nicht erhalten.",
         invalidUrl: "Ungültige URL: {url}",
@@ -110,6 +116,8 @@ export class LocalizationService {
       },
       es: {
         noResponse: "No proporcionaste una respuesta a esta pregunta.",
+        expectedTextResponse:
+          "Se esperaba una respuesta de texto, pero no se recibió.",
         expectedUrlResponse:
           "Se esperaba una respuesta URL, pero no se recibió.",
         invalidUrl: "URL inválida: {url}",
@@ -133,6 +141,8 @@ export class LocalizationService {
       },
       fr: {
         noResponse: "Vous n'avez pas répondu à cette question.",
+        expectedTextResponse:
+          "Une réponse texte était attendue, mais non reçue.",
         expectedUrlResponse: "Une réponse URL était attendue, mais non reçue.",
         invalidUrl: "URL invalide: {url}",
         unableToFetchUrl: "Impossible de récupérer le contenu de l'URL: {url}",

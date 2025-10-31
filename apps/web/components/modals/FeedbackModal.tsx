@@ -90,7 +90,6 @@ export function FeedbackModal({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* User Information */}
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">User ID:</span>
@@ -99,7 +98,6 @@ export function FeedbackModal({
             </code>
           </div>
 
-          {/* Submission Date */}
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Submitted:</span>
@@ -108,7 +106,6 @@ export function FeedbackModal({
 
           <Separator />
 
-          {/* Ratings Section */}
           <div className="space-y-4">
             <h4 className="font-medium">Ratings</h4>
             <div className="space-y-3">
@@ -116,10 +113,12 @@ export function FeedbackModal({
                 rating={feedback.assignmentRating}
                 label="Assignment Rating"
               />
+
               <StarRating
                 rating={feedback.aiGradingRating}
                 label="AI Grading Rating"
               />
+
               <StarRating
                 rating={feedback?.aiFeedbackRating}
                 label="AI Feedback Rating"
@@ -129,7 +128,6 @@ export function FeedbackModal({
 
           <Separator />
 
-          {/* Comments Section */}
           <div className="space-y-3">
             <h4 className="font-medium">Comments</h4>
             <div className="bg-muted p-4 rounded-lg">
@@ -139,7 +137,6 @@ export function FeedbackModal({
             </div>
           </div>
 
-          {/* Metadata */}
           <Separator />
           <div className="text-xs text-muted-foreground">
             <div className="flex justify-between">

@@ -106,7 +106,6 @@ export default function LLMAssignmentsPage() {
         }),
       ]);
 
-      // Responses are auto-decoded (base64/comp:) by apiClient
       setFeatures(featuresData.data || []);
       setModels(modelsData.data || []);
     } catch (err) {
@@ -119,12 +118,10 @@ export default function LLMAssignmentsPage() {
   const handleModelChange = (featureKey: string, modelKey: string) => {
     const newChanges = new Map(changes);
 
-    // Find the current assignment
     const feature = features.find((f) => f.featureKey === featureKey);
     const currentModelKey = feature?.assignedModel?.modelKey;
 
     if (currentModelKey === modelKey) {
-      // No change from current assignment
       newChanges.delete(featureKey);
     } else {
       newChanges.set(featureKey, modelKey);
@@ -171,7 +168,7 @@ export default function LLMAssignmentsPage() {
           `Successfully updated ${result.data.successful} assignments`,
         );
         setChanges(new Map());
-        await fetchData(); // Refresh data
+        await fetchData();
       } else {
         throw new Error(result.message || "Failed to save assignments");
       }
@@ -239,13 +236,11 @@ export default function LLMAssignmentsPage() {
       "video_grading",
     ];
 
-    const visionModels = ["gpt-4.1-mini"]; // Vision-capable models
+    const visionModels = ["gpt-4.1-mini"];
 
     if (visionCapableFeatures.includes(feature.featureKey)) {
-      // For vision features, show all models (including vision models)
       return models.filter((m) => m.isActive);
     } else {
-      // For non-vision features, exclude vision-only models
       return models.filter(
         (m) => m.isActive && !visionModels.includes(m.modelKey),
       );
@@ -268,7 +263,6 @@ export default function LLMAssignmentsPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -299,7 +293,6 @@ export default function LLMAssignmentsPage() {
         </div>
       </div>
 
-      {/* Status Messages */}
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -314,7 +307,6 @@ export default function LLMAssignmentsPage() {
         </Alert>
       )}
 
-      {/* Feature Assignments Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -433,14 +425,12 @@ export default function LLMAssignmentsPage() {
         </CardContent>
       </Card>
 
-      {/* Available Models Summary */}
       <Card>
         <CardHeader>
           <CardTitle>Available Models</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {/* Group models by provider */}
             {Object.entries(
               models.reduce(
                 (acc, model) => {

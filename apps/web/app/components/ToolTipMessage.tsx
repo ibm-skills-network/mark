@@ -43,6 +43,7 @@ const TooltipMessage: FC<TooltipMessageProps> = ({
         )}
       </>
     );
+
   if (submitting) return "Mark is analyzing your questions...";
   if (!hasChanges) return "No changes detected.";
 

@@ -204,7 +204,6 @@ export class AssignmentRepository {
   async findAllForUser(
     userSession: UserSession,
   ): Promise<AssignmentResponseDto[]> {
-    // If user is an author, only show assignments they've authored
     if (userSession.role === UserRole.AUTHOR) {
       const authoredAssignments = await this.prisma.assignment.findMany({
         where: {
@@ -219,7 +218,6 @@ export class AssignmentRepository {
       return authoredAssignments;
     }
 
-    // For non-authors (learners, admins), show assignments from their group
     const results = await this.prisma.assignmentGroup.findMany({
       where: { groupId: userSession.groupId },
       include: {

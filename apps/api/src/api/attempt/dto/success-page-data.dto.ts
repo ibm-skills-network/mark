@@ -20,19 +20,19 @@ export class SuccessPageQuestionDto {
   earnedPoints: number;
 
   @ApiProperty()
-  learnerResponse?: any; // The actual response given by the user
+  learnerResponse?: any;
 
   @ApiProperty()
-  choices?: any[]; // For multiple choice questions
+  choices?: any[];
 
   @ApiProperty()
-  correctAnswer?: any; // Only included if visibility allows
+  correctAnswer?: any;
 
   @ApiProperty()
-  feedback?: string; // AI/instructor feedback
+  feedback?: string;
 
   @ApiProperty()
-  scoring?: any; // Rubric info if needed
+  scoring?: any;
 }
 
 export class SuccessPageDataDto {
@@ -46,7 +46,7 @@ export class SuccessPageDataDto {
   isAuthor: boolean;
 
   @ApiProperty()
-  grade: number; // Percentage (0-100)
+  grade: number;
 
   @ApiProperty()
   totalPointsEarned: number;
@@ -70,7 +70,7 @@ export class SuccessPageDataDto {
   correctAnswerVisibility: "NEVER" | "ALWAYS" | "ON_PASS";
 
   @ApiProperty()
-  comments?: string; // Instructor comments
+  comments?: string;
 
   @ApiProperty()
   preferredLanguage: string;

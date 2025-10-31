@@ -7,7 +7,6 @@ export class S3Service {
   private s3ClientSouth: S3;
 
   constructor() {
-    // US East client (primary)
     this.s3ClientEast = new S3({
       endpoint: process.env.IBM_COS_ENDPOINT ?? "",
       credentials: {
@@ -19,7 +18,6 @@ export class S3Service {
       region: process.env.IBM_COS_REGION ?? "us-east",
     });
 
-    // US South client (secondary)
     this.s3ClientSouth = new S3({
       endpoint: process.env.IBM_COS_ENDPOINT_SOUTH ?? "",
       credentials: {
@@ -33,11 +31,9 @@ export class S3Service {
   }
 
   private getS3Client(bucket: string): S3 {
-    // Route to us-south if bucket is production learner submissions
     if (bucket === process.env.IBM_COS_LEARNER_BUCKET_PROD) {
       return this.s3ClientSouth;
     }
-    // Default to us-east for all other buckets
     return this.s3ClientEast;
   }
   async getObjectMetadata(
@@ -86,7 +82,7 @@ export class S3Service {
       Bucket: string;
       Key: string;
       Expires?: number;
-      [key: string]: any; // Allow additional parameters
+      [key: string]: any;
     },
   ): string {
     const bucket = parameters.Bucket;

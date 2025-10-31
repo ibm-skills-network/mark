@@ -1,7 +1,6 @@
-// files.module.ts
 import { Module } from "@nestjs/common";
 import { MulterModule } from "@nestjs/platform-express";
-import { memoryStorage } from "multer"; // ← import this
+import { memoryStorage } from "multer";
 
 import { PrismaService } from "src/database/prisma.service";
 import { FilesController } from "./files.controller";

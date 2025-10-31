@@ -124,7 +124,6 @@ export class QuestionService {
         randomizedChoices: true,
         videoPresentationConfig: true,
         liveRecordingConfig: true,
-        // Exclude 'answer' field to prevent exposure of correct answers
       },
     });
 
@@ -134,7 +133,7 @@ export class QuestionService {
 
     return {
       ...result,
-      answer: undefined, // Explicitly exclude answer
+      answer: undefined,
       scoring: result.scoring
         ? (result.scoring as unknown as ScoringDto)
         : undefined,
@@ -349,7 +348,6 @@ export class QuestionService {
 
     let translatedChoices: Choice[] | undefined;
 
-    // If the question has choices, translate them as well
     if (question.choices && question.choices.length > 0) {
       translatedChoices =
         await this.llmFacadeService.generateChoicesTranslation(

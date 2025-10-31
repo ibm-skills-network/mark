@@ -92,6 +92,7 @@ export const useMarkChatStore = create<MarkChatState>()(
                 "Hello, I'm Mark! How can I help you with your assignment today?",
             },
           ],
+
           userInput: "",
         }),
 
@@ -115,9 +116,7 @@ export const useMarkChatStore = create<MarkChatState>()(
 
           for (const op of operations) {
             try {
-              // Handle showReportPreview specially - don't process through store operations
               if (op.function === "showReportPreview") {
-                // This will be handled by the React component directly
                 results.push({
                   success: true,
                   function: op.function,
@@ -155,6 +154,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               ...s.messages.filter((m) => m.id !== operationMsg.id),
               resultMsg,
             ],
+
             usage: {
               ...s.usage,
               functionCalls: s.usage.functionCalls + operations.length,
@@ -237,6 +237,7 @@ export const useMarkChatStore = create<MarkChatState>()(
                 ...s.messages,
                 { id: newId, role: "assistant", content: "" },
               ],
+
               isTyping: true,
             }));
 
@@ -301,7 +302,7 @@ export const useMarkChatStore = create<MarkChatState>()(
                       clone[idx] = {
                         ...clone[idx],
                         content: cleanContent,
-                        toolCalls: operations, // Add toolCalls to the message
+                        toolCalls: operations,
                       };
                     }
                     return { messages: clone };

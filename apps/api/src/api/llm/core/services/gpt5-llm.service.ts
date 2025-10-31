@@ -94,7 +94,6 @@ export class Gpt5LlmService implements IMultimodalLlmProvider {
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
 
-    // GPT-5 has improved image token estimation
     const estimatedImageTokens = 200;
 
     this.logger.debug(

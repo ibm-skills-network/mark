@@ -128,17 +128,14 @@ export class QuestionGenerationService implements IQuestionGenerationService {
     const difficultyLevel = this.mapAssignmentTypeToDifficulty(assignmentType);
     const questionCounts = this.getQuestionCountsByType(questionsToGenerate);
 
-    // Fast path: if no questions requested, return empty array
     if (Object.values(questionCounts).every((count) => count === 0)) {
       return [];
     }
 
-    // Create batches for concurrent generation
     const batches = this.createQuestionBatches(questionCounts);
     const allQuestions: IGeneratedQuestion[] = [];
     const batchPromises: Promise<QuestionGenerationResult>[] = [];
 
-    // Generate questions in parallel batches
     for (const batch of batches) {
       const batchPromise = this.generateQuestionBatch({
         assignmentId: assignmentId,
@@ -150,7 +147,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       });
       batchPromises.push(batchPromise);
 
-      // Process in groups to control concurrency
       if (batchPromises.length >= this.BATCH_CONCURRENCY) {
         const results = await Promise.all(batchPromises);
         for (const result of results) {
@@ -160,7 +156,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       }
     }
 
-    // Process any remaining batches
     if (batchPromises.length > 0) {
       const results = await Promise.all(batchPromises);
       for (const result of results) {
@@ -168,7 +163,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       }
     }
 
-    // Final validation and ensure all required questions are included
     return this.finalizeQuestionSet(
       allQuestions,
       questionCounts,
@@ -232,10 +226,8 @@ export class QuestionGenerationService implements IQuestionGenerationService {
     let success = false;
     const errors: string[] = [];
 
-    // For each attempt
     for (let attempt = 0; attempt < this.MAX_GENERATION_RETRIES; attempt++) {
       try {
-        // Create prompt focused on current batch
         const parser = this.createOutputParser(types);
         const prompt = this.createBatchPrompt(
           types,
@@ -246,7 +238,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           parser.getFormatInstructions(),
         );
 
-        // Process prompt through LLM
         this.logger.debug(
           `Generating questions for assignment ID: ${assignmentId}`,
         );
@@ -257,7 +248,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           "question_generation",
         );
 
-        // Parse response
         const parsed = (await parser.parse(response)) as {
           questions: IGeneratedQuestion[];
         };
@@ -265,14 +255,12 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           throw new Error("Invalid response format");
         }
 
-        // Process and validate questions
         const rawQuestions = parsed.questions;
         const processedQuestions = this.processGeneratedQuestions(
           rawQuestions,
           assignmentId,
         );
 
-        // Create a subset of questionsToGenerate for validation
         const batchRequirements: Partial<EnhancedQuestionsToGenerate> = {};
         for (const [index, type] of types.entries()) {
           const count = counts[index];
@@ -308,7 +296,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           }
         }
 
-        // Validate the generated questions
         const validationResult = await this.validatorService.validateQuestions(
           assignmentId,
           processedQuestions,
@@ -319,7 +306,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
         );
 
         if (validationResult.isValid) {
-          // Apply improvements if available
           generatedQuestions = validationResult.hasImprovements
             ? await this.refineQuestions(
                 processedQuestions,
@@ -330,23 +316,17 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           success = true;
           break;
         } else {
-          // Store validation issues for potential refinement
           errors.push(
             `Validation failed: ${JSON.stringify(validationResult.issues)}`,
           );
 
-          // Try to regenerate only the failed questions for next attempt
           if (attempt < this.MAX_GENERATION_RETRIES - 1) {
-            // Keep successful questions for the next round
             const validIndices = new Set(
               Object.keys(validationResult.issues).map(Number),
             );
             generatedQuestions = processedQuestions.filter(
               (_, index) => !validIndices.has(index),
             );
-
-            // Adjust the prompt based on validation issues
-            // This is a simplified approach - in a real system you'd want more sophisticated prompt adjustment
           }
         }
       } catch (error) {
@@ -359,7 +339,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       }
     }
 
-    // If we failed completely, use template questions as fallback
     if (!success && generatedQuestions.length < totalCount) {
       this.logger.warn("Generation failed, using fallbacks");
       const fallbacks = this.generateFallbackQuestions(
@@ -544,7 +523,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       [QuestionType.LINK_FILE]: "LINK_FILE",
     };
 
-    // Generate type-specific instructions
     for (const [index, type] of types.entries()) {
       const count = counts[index];
 
@@ -610,7 +588,6 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       }
     }
 
-    // Extract content samples
     const contentSample = content ? content.slice(0, 500) : "";
     const objectivesSample = learningObjectives || "";
 
@@ -668,7 +645,7 @@ FORMAT INSTRUCTIONS:
     assignmentId: number,
   ): IGeneratedQuestion[] {
     return rawQuestions.map((question, index) => ({
-      id: Math.floor(Math.random() * 1_000_000) + index, // Generate a safer ID within 32-bit integer range
+      id: Math.floor(Math.random() * 1_000_000) + index,
       assignmentId,
       question: question.question?.replaceAll("```", "").trim(),
       totalPoints: question.totalPoints || this.getDefaultPoints(question.type),
@@ -701,7 +678,7 @@ FORMAT INSTRUCTIONS:
             id: 1,
             choice: "true",
             isCorrect: true,
-            points: 1, // Always 1 point for correct answer
+            points: 1,
             feedback: "This statement is correct based on the concept.",
           },
         ];
@@ -786,14 +763,12 @@ FORMAT INSTRUCTIONS:
               error instanceof Error ? error.message : "Unknown error"
             }`,
           );
-          // Keep the original if refinement fails
         }
       })();
 
       refinementPromises.push(refinementPromise);
     }
 
-    // Wait for all refinements to complete
     await Promise.all(refinementPromises);
     return refinedQuestions;
   }
@@ -885,16 +860,13 @@ FORMAT INSTRUCTIONS:
     content?: string,
     learningObjectives?: string,
   ): IGeneratedQuestion[] {
-    // Group questions by type
     const questionsByType: Record<QuestionType, IGeneratedQuestion[]> =
       {} as Record<QuestionType, IGeneratedQuestion[]>;
 
-    // Initialize with empty arrays
     for (const type of Object.values(QuestionType)) {
       questionsByType[type] = [];
     }
 
-    // Group questions
     for (const question of questions) {
       if (!questionsByType[question.type]) {
         questionsByType[question.type] = [];
@@ -904,20 +876,16 @@ FORMAT INSTRUCTIONS:
 
     const finalQuestions: IGeneratedQuestion[] = [];
 
-    // For each required type
     for (const [typeString, requiredCount] of Object.entries(requiredCounts)) {
       const type = typeString as QuestionType;
       if (requiredCount <= 0) continue;
 
-      // Sort available questions by quality
       const availableQuestions = this.sortQuestionsByQuality(
         questionsByType[type],
       );
 
-      // Take the best ones
       const selectedQuestions = availableQuestions.slice(0, requiredCount);
 
-      // If we don't have enough, create fallbacks
       if (selectedQuestions.length < requiredCount) {
         const missingCount = requiredCount - selectedQuestions.length;
         const fallbacks = this.generateFallbackQuestionsOfType(
@@ -935,7 +903,6 @@ FORMAT INSTRUCTIONS:
       finalQuestions.push(...selectedQuestions);
     }
 
-    // Ensure unique IDs
     return finalQuestions.map((q, index) => ({
       ...q,
       id: q.id || Date.now() + index,
@@ -947,9 +914,6 @@ FORMAT INSTRUCTIONS:
     questions: IGeneratedQuestion[],
   ): IGeneratedQuestion[] {
     return [...questions].sort((a, b) => {
-      // Sort by quality heuristics
-
-      // Prioritize questions without issues
       const aHasIssues = this.questionHasIssues(a);
       const bHasIssues = this.questionHasIssues(b);
 
@@ -957,7 +921,6 @@ FORMAT INSTRUCTIONS:
         return aHasIssues ? 1 : -1;
       }
 
-      // Next, prefer non-template questions
       const aIsTemplate = this.isTemplateQuestion(a);
       const bIsTemplate = this.isTemplateQuestion(b);
 
@@ -965,7 +928,6 @@ FORMAT INSTRUCTIONS:
         return aIsTemplate ? 1 : -1;
       }
 
-      // Finally, prefer longer questions (assuming more detailed)
       return (b.question?.length || 0) - (a.question?.length || 0);
     });
   }
@@ -1030,7 +992,6 @@ FORMAT INSTRUCTIONS:
         return true;
       }
 
-      // Check for duplicate choices
       const choiceTexts = question.choices.map((c) =>
         c.choice?.toLowerCase().trim(),
       );
@@ -1058,7 +1019,6 @@ FORMAT INSTRUCTIONS:
           return true;
         }
 
-        // Check for duplicate point values
         const points = rubric.criteria.map((c) => c.points);
         if (new Set(points).size !== points.length) {
           return true;
@@ -1117,7 +1077,7 @@ FORMAT INSTRUCTIONS:
           difficultyLevel,
           keyTerms,
           assignmentId,
-          index + 1, // Use small sequential integers as IDs
+          index + 1,
         ),
       );
     }
@@ -1138,7 +1098,6 @@ FORMAT INSTRUCTIONS:
       .join(" ");
     const termSet = new Set<string>();
 
-    // Extract capitalized terms (potential key concepts)
     const matches =
       combinedText.match(/[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){0,2}/g) || [];
     for (const match of matches) {
@@ -1159,7 +1118,6 @@ FORMAT INSTRUCTIONS:
       }
     }
 
-    // If we have less than 3 terms, find common words
     if (termSet.size < 3) {
       const words = combinedText.toLowerCase().split(/\s+/);
       const wordCounts: Record<string, number> = {};
@@ -1194,7 +1152,6 @@ FORMAT INSTRUCTIONS:
     const term = keyTerms.length > 0 ? keyTerms[0] : "the concept";
     const levelText = difficultyLevel.toString().toLowerCase();
 
-    // Create question text based on type and key terms
     let questionText: string;
 
     switch (type) {
@@ -1242,7 +1199,6 @@ FORMAT INSTRUCTIONS:
       scoring: this.getDefaultScoring(type, difficultyLevel),
     };
 
-    // Add type-specific properties
     switch (type) {
       case QuestionType.SINGLE_CORRECT: {
         return {
@@ -1255,7 +1211,6 @@ FORMAT INSTRUCTIONS:
           ),
         };
       }
-
       case QuestionType.MULTIPLE_CORRECT: {
         return {
           ...baseQuestion,
@@ -1267,7 +1222,6 @@ FORMAT INSTRUCTIONS:
           ),
         };
       }
-
       case QuestionType.TRUE_FALSE: {
         return {
           ...baseQuestion,
@@ -1282,7 +1236,6 @@ FORMAT INSTRUCTIONS:
           ],
         };
       }
-
       case QuestionType.TEXT: {
         return {
           ...baseQuestion,
@@ -1295,7 +1248,6 @@ FORMAT INSTRUCTIONS:
           ),
         };
       }
-
       case QuestionType.URL:
       case QuestionType.UPLOAD:
       case QuestionType.LINK_FILE: {
@@ -1308,7 +1260,6 @@ FORMAT INSTRUCTIONS:
           ),
         };
       }
-
       default: {
         return baseQuestion;
       }
@@ -1326,7 +1277,7 @@ FORMAT INSTRUCTIONS:
             id: 1,
             choice: `${term} is a fundamental concept that forms the foundation of this subject area.`,
             isCorrect: true,
-            points: 1, // Always 1 point
+            points: 1,
             feedback: `This is correct. ${term} is indeed a fundamental concept in this subject area.`,
           },
           {
@@ -1359,14 +1310,14 @@ FORMAT INSTRUCTIONS:
             id: 1,
             choice: `${term} is essential for understanding the core principles of this subject.`,
             isCorrect: true,
-            points: 1, // Each correct choice gets 1 point
+            points: 1,
             feedback: `This is correct. ${term} is essential for understanding this subject's core principles.`,
           },
           {
             id: 2,
             choice: `${term} has practical applications in real-world scenarios related to this subject.`,
             isCorrect: true,
-            points: 1, // Each correct choice gets 1 point
+            points: 1,
             feedback: `This is correct. ${term} does have important real-world applications in this field.`,
           },
           {
@@ -1447,7 +1398,6 @@ FORMAT INSTRUCTIONS:
       ],
     };
 
-    // Add a third rubric based on question type
     switch (type) {
       case QuestionType.TEXT: {
         baseRubric.rubrics.push({
@@ -1475,7 +1425,6 @@ FORMAT INSTRUCTIONS:
         });
         break;
       }
-
       case QuestionType.URL: {
         baseRubric.rubrics.push({
           rubricQuestion: "Resource Quality",
@@ -1500,7 +1449,6 @@ FORMAT INSTRUCTIONS:
         });
         break;
       }
-
       case QuestionType.UPLOAD:
       case QuestionType.LINK_FILE: {
         baseRubric.rubrics.push({
@@ -1683,7 +1631,7 @@ FORMAT INSTRUCTIONS:
             id: 1,
             choice: `This is the correct answer with appropriate ${levelText}-level complexity`,
             isCorrect: true,
-            points: 1, // Always 1 point
+            points: 1,
             feedback: `This is correct. It demonstrates understanding at the ${levelText} level.`,
           },
           {
@@ -1715,14 +1663,14 @@ FORMAT INSTRUCTIONS:
             id: 1,
             choice: `This is the first correct answer`,
             isCorrect: true,
-            points: 1, // Each correct choice gets 1 point
+            points: 1,
             feedback: `This is correct. It accurately describes one aspect of the concept.`,
           },
           {
             id: 2,
             choice: `This is the second correct answer`,
             isCorrect: true,
-            points: 1, // Each correct choice gets 1 point
+            points: 1,
             feedback: `This is also correct. It captures another important aspect.`,
           },
           {
@@ -1747,7 +1695,7 @@ FORMAT INSTRUCTIONS:
             id: 1,
             choice: "true",
             isCorrect: true,
-            points: 1, // Always 1 point
+            points: 1,
             feedback: `This statement is correct based on the concept.`,
           },
         ];
@@ -2278,15 +2226,11 @@ FORMAT INSTRUCTIONS:
       return {};
     }
 
-    // Estimate token count (rough approximation: 1 token ≈ 4 characters)
     const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
 
-    // Prepare questions with smart text handling
     const preparedQuestions = questions.map((q) => {
       const tokens = estimateTokens(q.questionText);
-      // If question is very long, intelligently extract key information
       if (tokens > 150) {
-        // Extract first sentence and key phrases
         const sentences = q.questionText.match(/[^!.?]+[!.?]+/g) || [
           q.questionText,
         ];
@@ -2300,13 +2244,11 @@ FORMAT INSTRUCTIONS:
       return q;
     });
 
-    // Calculate batch size dynamically based on content
     const totalEstimatedTokens = preparedQuestions.reduce(
       (sum, q) => sum + estimateTokens(q.questionText),
       0,
     );
 
-    // Target ~80k tokens per batch (leaving room for template and response)
     const TARGET_TOKENS_PER_BATCH = 80_000;
     const estimatedQuestionsPerBatch = Math.max(
       10,
@@ -2315,7 +2257,6 @@ FORMAT INSTRUCTIONS:
       ),
     );
 
-    // If there are too many questions, process in chunks
     if (questions.length > estimatedQuestionsPerBatch) {
       this.logger.info(
         `Processing ${questions.length} questions in batches of ~${estimatedQuestionsPerBatch} ` +
@@ -2344,7 +2285,6 @@ FORMAT INSTRUCTIONS:
               error instanceof Error ? error.message : "Unknown error"
             }`,
           );
-          // Add empty dependencies for failed batch to avoid breaking the flow
           for (const q of batch) {
             dependencies[q.id] = [];
           }
@@ -2456,13 +2396,11 @@ FORMAT INSTRUCTIONS:
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
 
-        // Check if this is a token limit error
         const isTokenLimitError =
           errorMessage.includes("maximum context length") ||
           errorMessage.includes("token");
 
         if (isTokenLimitError && questions.length > 10) {
-          // If we hit token limits, split into smaller batches recursively
           this.logger.warn(
             `Token limit exceeded for ${questions.length} questions. Splitting into smaller batches...`,
           );
@@ -2486,7 +2424,6 @@ FORMAT INSTRUCTIONS:
                   : "Unknown error"
               }`,
             );
-            // Fall through to return fallback
             break;
           }
         }

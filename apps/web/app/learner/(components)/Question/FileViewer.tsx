@@ -43,6 +43,7 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             {file.content}
           </FeedbackFormatter>
         );
+
       case "py":
       case "js":
       case "ts":
@@ -60,6 +61,7 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             {file.content}
           </SyntaxHighlighter>
         );
+
       case "jpg":
       case "jpeg":
       case "png":
@@ -74,6 +76,7 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
             />
           </div>
         );
+
       default:
         return (
           <FeedbackFormatter className="whitespace-pre-wrap p-4">

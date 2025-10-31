@@ -114,6 +114,7 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
                       ),
                   ) * 1.5
                 }rem`,
+
                 wordBreak: "break-word",
                 whiteSpace: "pre-wrap",
                 overflow: "hidden",

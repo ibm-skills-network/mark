@@ -124,7 +124,6 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
         learnerFileResponse: [
           {
             filename: "test.pdf",
-            // Missing key and bucket
           },
         ],
         language: "en",
@@ -141,7 +140,6 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
           {
             key: "some-key",
             bucket: "some-bucket",
-            // Missing filename
           },
         ],
         language: "en",

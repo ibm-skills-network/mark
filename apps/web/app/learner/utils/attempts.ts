@@ -168,8 +168,6 @@ export const normalizeAttemptTimestamps = <T extends AttemptWithTiming>(
     }
   }
 
-  // If the attempt is already submitted and we still don't have a reliable
-  // expiresAt, fall back to the last update time which reflects completion.
   if (
     isAttemptSubmitted(attempt as AssignmentAttempt) &&
     !normalizedExpiresAt &&

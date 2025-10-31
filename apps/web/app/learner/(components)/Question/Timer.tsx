@@ -125,7 +125,7 @@ function Timer(props: Props) {
           return file;
         }),
         learnerPresentationResponse: q.presentationResponse ?? null,
-        selectedLanguage: q.selectedLanguage, // Include question-specific language selection
+        selectedLanguage: q.selectedLanguage,
       }),
     );
 

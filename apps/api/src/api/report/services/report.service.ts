@@ -133,7 +133,6 @@ export class ReportsService {
           },
         },
       );
-      // data.id is the installation id
       this.ghInstallationIdCache = Number(data.id);
       return this.ghInstallationIdCache;
     } catch (error) {
@@ -202,7 +201,6 @@ export class ReportsService {
 
     const where: Prisma.AssignmentFeedbackWhereInput = {};
 
-    // If user is an author, only show feedback for their assignments
     if (userSession && userSession.role === UserRole.AUTHOR) {
       where.assignment = {
         AssignmentAuthor: {
@@ -788,7 +786,6 @@ export class ReportsService {
       if (issueType === "critical") issueSeverity = "critical";
       if (issueType === "grading") issueSeverity = "warning";
     }
-    // check if the user reported more than 5 issues in the last 24 hours
     const recentReports = await this.prisma.report.findMany({
       where: {
         createdAt: {
@@ -948,7 +945,6 @@ Another user has reported a nearly identical issue:
 ${description}
 `;
 
-        // Include screenshot in duplicate report comment if provided
         const screenshotUrl = additionalDetails?.screenshotUrl;
         if (screenshotUrl && typeof screenshotUrl === "string") {
           const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
@@ -1000,7 +996,6 @@ Screenshot Key: \`${screenshotUrl}\`
 
         if (issue.state === "closed") {
           await this.checkGitHubIssueStatus(parentIssueNumber);
-          // Parent closure reason can be used if needed for future enhancements
         }
       } else if (highSimilarityReport?.issueNumber) {
         const labels = ["chat-report", "related-issue"];
@@ -1246,7 +1241,6 @@ A new related issue has been created: #${issue.number}
           isDuplicate: potentialDuplicate !== undefined,
         };
       } catch (error) {
-        // Handle any errors that occur during the fallback report creation
         console.error("Error creating fallback report:", error);
       }
 
@@ -2495,7 +2489,6 @@ ${description}
     userId: string,
     bucket?: string,
   ) {
-    // Find the report and verify the user owns it
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
     });
@@ -2508,14 +2501,12 @@ ${description}
       throw new NotFoundException(`Report with ID ${reportId} not found`);
     }
 
-    // Add screenshot URL to the GitHub issue if it exists
     if (report.issueNumber) {
       try {
         const token = await this.getInstallationToken();
         const owner = process.env.GITHUB_OWNER;
         const repo = process.env.GITHUB_REPO;
 
-        // Construct the full COS URL for the screenshot
         const debugBucket = bucket || process.env.IBM_COS_DEBUG_BUCKET;
         const cosEndpoint = process.env.IBM_COS_ENDPOINT;
         const fullScreenshotUrl = `${cosEndpoint}/${debugBucket}/${screenshotUrl}`;
@@ -2545,7 +2536,6 @@ ${description}
       }
     }
 
-    // Update the report's comments to include the screenshot URL
     const currentComments = report.comments || "";
     const screenshotComment = `\n[Screenshot: ${screenshotUrl}]`;
 

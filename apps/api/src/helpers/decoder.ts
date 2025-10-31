@@ -3,7 +3,6 @@
 export function decodeIfBase64(value: string | null): string | null {
   if (!value) return null;
 
-  // Support 'comp:' prefix used by the web client for large strings
   if (value.startsWith("comp:")) {
     try {
       const base64Data = value.slice(5);

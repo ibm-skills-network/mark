@@ -25,7 +25,6 @@ export class GradingThresholdService {
     const responseLength = responseText.trim().length;
     const wordCount = this.countWords(responseText);
 
-    // Skip JudgeLLM for multimedia types that don't need text validation
     if (responseType === "VIDEO" || responseType === "AUDIO") {
       return {
         shouldUseJudgeLLM: false,
@@ -33,7 +32,6 @@ export class GradingThresholdService {
       };
     }
 
-    // Simple length-based check
     if (responseLength < 50) {
       return {
         shouldUseJudgeLLM: false,

@@ -18,7 +18,6 @@ import { ModerationService } from "./core/services/moderation.service";
 import { OpenAiLlmMiniService } from "./core/services/openai-llm-mini.service";
 import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.service";
 import { OpenAiLlmService } from "./core/services/openai-llm.service";
-// import { LlamaLlmService } from "./core/services/llama-llm.service";
 import { PromptProcessorService } from "./core/services/prompt-processor.service";
 import { TokenCounterService } from "./core/services/token-counter.service";
 import { UsageTrackerService } from "./core/services/usage-tracking.service";
@@ -75,7 +74,6 @@ import {
     Llama3370bInstructLlmService,
     Llama4MaverickLlmService,
     MistralMedium2505LlmService,
-    // LlamaLlmService,
     LlmRouter,
     {
       provide: ALL_LLM_PROVIDERS,
@@ -92,7 +90,6 @@ import {
         p10: Llama3370bInstructLlmService,
         p11: Llama4MaverickLlmService,
         p12: MistralMedium2505LlmService,
-        // p13: LlamaLlmService,
       ) => {
         return [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12];
       },
@@ -109,7 +106,6 @@ import {
         Llama3370bInstructLlmService,
         Llama4MaverickLlmService,
         MistralMedium2505LlmService,
-        // LlamaLlmService,
       ],
     },
     S3Service,

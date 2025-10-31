@@ -6,7 +6,7 @@ import { PrismaService } from "./prisma.service";
 describe("DatabaseModule", () => {
   const originalDatabaseUrl = process.env.DATABASE_URL;
   const fallbackDatabaseUrl =
-    originalDatabaseUrl ?? "postgresql://user:pass@localhost:5432/test"; // pragma: allowlist secret
+    originalDatabaseUrl ?? "postgresql://user:pass@localhost:5432/test";
 
   beforeAll(() => {
     process.env.DATABASE_URL = fallbackDatabaseUrl;

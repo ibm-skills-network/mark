@@ -36,7 +36,6 @@ export class LLMResolverService {
    * This method includes caching for performance
    */
   async resolveModelForFeature(featureKey: string): Promise<string | null> {
-    // Check cache first
     const cached = this.modelCache.get(featureKey);
     if (cached && Date.now() - cached.cachedAt < this.CACHE_TTL) {
       this.logger.debug(
@@ -46,15 +45,10 @@ export class LLMResolverService {
     }
 
     try {
-      // Get assigned model from service
       const modelKey =
         await this.assignmentService.getAssignedModel(featureKey);
-      console.log(
-        `Resolving model for feature ${featureKey}, assigned: ${modelKey}`,
-      );
 
       if (modelKey) {
-        // Cache the result
         this.modelCache.set(featureKey, {
           modelKey,
           cachedAt: Date.now(),
@@ -85,7 +79,6 @@ export class LLMResolverService {
   ): Promise<Map<string, string | null>> {
     const results = new Map<string, string | null>();
 
-    // Process all features in parallel
     const promises = featureKeys.map(async (featureKey) => {
       const modelKey = await this.resolveModelForFeature(featureKey);
       return { featureKey, modelKey };
@@ -147,9 +140,6 @@ export class LLMResolverService {
     fallbackModel = "gpt-4o-mini",
   ): Promise<string> {
     const resolvedModel = await this.resolveModelForFeature(featureKey);
-    console.log(
-      `Resolving model for feature ${featureKey}, resolved: ${resolvedModel}`,
-    );
     if (resolvedModel) {
       return resolvedModel;
     }
@@ -164,7 +154,6 @@ export class LLMResolverService {
    * Get model based on task complexity analysis
    */
   async getModelForComplexity(context: TaskComplexityContext): Promise<string> {
-    // First try to get specifically assigned model
     const assignedModel = await this.resolveModelForFeature(context.featureKey);
     if (assignedModel) {
       this.logger.debug(
@@ -173,7 +162,6 @@ export class LLMResolverService {
       return assignedModel;
     }
 
-    // Analyze task complexity and select appropriate model
     const complexity = this.analyzeTaskComplexity(context);
     const selectedModel = this.selectModelForComplexity(complexity);
 
@@ -189,12 +177,10 @@ export class LLMResolverService {
   private analyzeTaskComplexity(
     context: TaskComplexityContext,
   ): TaskComplexity {
-    // Use custom complexity if provided
     if (context.customComplexity) {
       return context.customComplexity;
     }
 
-    // Define simple task patterns
     const simpleTaskPatterns = [
       "validation",
       "judge",
@@ -214,12 +200,10 @@ export class LLMResolverService {
       "translation",
     ];
 
-    // Check for validation-only tasks (always simple)
     if (context.isValidationOnly) {
       return "simple";
     }
 
-    // Check feature key patterns
     const featureKey = context.featureKey.toLowerCase();
 
     if (simpleTaskPatterns.some((pattern) => featureKey.includes(pattern))) {
@@ -230,23 +214,17 @@ export class LLMResolverService {
       return "complex";
     }
 
-    // Analyze based on context characteristics
     let complexityScore = 0;
 
-    // Input length factor
     if (context.inputLength) {
-      if (context.inputLength > 10_000)
-        complexityScore += 2; // Large input = complex
+      if (context.inputLength > 10_000) complexityScore += 2;
       else if (context.inputLength > 2000) complexityScore += 1;
     }
 
-    // Reasoning requirement
     if (context.requiresReasoning) complexityScore += 2;
 
-    // Multiple criteria evaluation
     if (context.hasMultipleCriteria) complexityScore += 1;
 
-    // Response type complexity
     if (context.responseType) {
       const complexResponseTypes = [
         "CODE",
@@ -260,7 +238,6 @@ export class LLMResolverService {
       }
     }
 
-    // Determine complexity based on score
     return complexityScore >= 2 ? "complex" : "simple";
   }
 
@@ -271,13 +248,13 @@ export class LLMResolverService {
     switch (complexity) {
       case "simple": {
         return "gpt-4o-mini";
-      } // Fast, cost-effective for simple tasks
+      }
       case "complex": {
         return "gpt-4o";
-      } // More capable for complex reasoning
+      }
       default: {
         return "gpt-4o-mini";
-      } // Default to mini for efficiency
+      }
     }
   }
 

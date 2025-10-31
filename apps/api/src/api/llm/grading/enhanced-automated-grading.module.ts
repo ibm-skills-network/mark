@@ -14,16 +14,13 @@ import { MonitoringService } from "./services/monitoring.service";
 
 @Module({
   providers: [
-    // Main service
     EnhancedAutomatedGradingService,
 
-    // Core services
     EvidenceService,
     EnhancedPolicyService,
     MetaDeciderService,
     MonitoringService,
 
-    // Graph nodes
     EnhancedGradeNode,
     EnhancedValidateNode,
     JudgeNode,

@@ -102,30 +102,25 @@ const ImportModal: React.FC<ImportModalProps> = ({
     const assignment: any = {};
 
     try {
-      // Parse XML using DOMParser
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(olxText, "text/xml");
 
-      // Check for parsing errors
       const parserError = xmlDoc.querySelector("parsererror");
       if (parserError) {
         throw new Error("Invalid XML format");
       }
 
-      // Check if this is QTI format
       const questestinterop = xmlDoc.querySelector("questestinterop");
       if (questestinterop) {
         return parseQTIFormat(xmlDoc);
       }
 
-      // Original OLX parsing logic (keep existing code for backward compatibility)
       const sequential = xmlDoc.querySelector("sequential");
       if (sequential) {
         assignment.name =
           sequential.getAttribute("display_name") || "Imported Assignment";
       }
 
-      // Parse HTML sections for instructions
       const htmlElements = xmlDoc.querySelectorAll("html");
       htmlElements.forEach((html) => {
         const displayName = html.getAttribute("display_name");
@@ -140,7 +135,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
         }
       });
 
-      // Parse problem elements (original OLX logic)
       const problems = xmlDoc.querySelectorAll("problem");
       problems.forEach((problem, index) => {
         const question: Partial<QuestionAuthorStore> = {
@@ -161,7 +155,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           question.question = displayName;
         }
 
-        // Check for multiple choice response
         const multipleChoice = problem.querySelector("multiplechoiceresponse");
         const choiceResponse = problem.querySelector("choiceresponse");
 
@@ -176,14 +169,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
             question.question = label.textContent.trim();
           }
 
-          // Parse choices
           const choices: any[] = [];
           const choiceElements = problem.querySelectorAll("choice");
           choiceElements.forEach((choice) => {
             const isCorrect = choice.getAttribute("correct") === "true";
             const choiceHint = choice.querySelector("choicehint");
 
-            // Get choice text without the choicehint content
             const choiceText = Array.from(choice.childNodes)
               .filter((node) => node.nodeType === Node.TEXT_NODE)
               .map((node) => node.textContent?.trim())
@@ -203,7 +194,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           }
         }
 
-        // Check for string response (text input)
         const stringResponse = problem.querySelector("stringresponse");
         if (stringResponse) {
           question.type = "TEXT";
@@ -218,12 +208,11 @@ const ImportModal: React.FC<ImportModalProps> = ({
           if (textline) {
             const size = textline.getAttribute("size");
             if (size) {
-              question.maxCharacters = parseInt(size) * 5; // Rough estimation
+              question.maxCharacters = parseInt(size) * 5;
             }
           }
         }
 
-        // Parse solutions for rubrics
         const solution = problem.querySelector("solution");
         if (solution) {
           const solutionText = solution.textContent?.trim() || "";
@@ -260,18 +249,15 @@ const ImportModal: React.FC<ImportModalProps> = ({
     };
   };
 
-  // New function to handle QTI XML format
   const parseQTIFormat = (xmlDoc: Document): ParsedData => {
     const questions: QuestionAuthorStore[] = [];
     const assignment: any = {};
 
-    // Get assessment info
     const assessment = xmlDoc.querySelector("assessment");
     if (assessment) {
       assignment.name = assessment.getAttribute("title") || "QTI Import";
     }
 
-    // Parse items (questions)
     const items = xmlDoc.querySelectorAll("item");
     items.forEach((item, index) => {
       const question: Partial<QuestionAuthorStore> = {
@@ -287,18 +273,15 @@ const ImportModal: React.FC<ImportModalProps> = ({
         scoring: { type: "CRITERIA_BASED", criteria: [] },
       };
 
-      // Get question text from presentation > material > mattext
       const presentation = item.querySelector("presentation");
       if (presentation) {
         const material = presentation.querySelector("material > mattext");
         if (material) {
-          // Remove CDATA wrapper and HTML tags for cleaner text
           let questionText = material.textContent || "";
           questionText = questionText.replace(/<[^>]*>/g, "").trim();
           question.question = questionText;
         }
 
-        // Check if it's a multiple choice question (response_lid)
         const responseLid = presentation.querySelector("response_lid");
         if (responseLid) {
           const cardinality = responseLid.getAttribute("rcardinality");
@@ -306,7 +289,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
             cardinality === "Single" ? "SINGLE_CORRECT" : "MULTIPLE_CORRECT";
           question.responseType = "OTHER" as ResponseType;
 
-          // Parse choices
           const choices: any[] = [];
           const responseLabels =
             presentation.querySelectorAll("response_label");
@@ -321,14 +303,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
               choiceText = choiceText.replace(/<[^>]*>/g, "").trim();
             }
 
-            // Check if this choice is correct by looking in resprocessing
             const isCorrect = isChoiceCorrect(item, labelId);
 
             choices.push({
               choice: choiceText,
               isCorrect,
               points: isCorrect ? 1 : 0,
-              feedback: "", // QTI format doesn't typically include choice hints
+              feedback: "",
             });
           });
 
@@ -337,16 +318,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
           }
         }
 
-        // Check if it's a text response question (response_str)
         const responseStr = presentation.querySelector("response_str");
         if (responseStr) {
           question.type = "TEXT";
           question.responseType = "OTHER" as ResponseType;
 
-          // Look for correct answers in resprocessing
           const correctAnswers = getCorrectTextAnswers(item);
           if (correctAnswers.length > 0) {
-            // Store sample answers as choices for reference
             question.choices = correctAnswers.map((answer) => ({
               choice: answer,
               isCorrect: true,
@@ -365,7 +343,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
     };
   };
 
-  // Helper function to check if a choice is correct in QTI format
   const isChoiceCorrect = (item: Element, labelId: string): boolean => {
     const resprocessing = item.querySelector("resprocessing");
     if (!resprocessing) return false;
@@ -426,9 +403,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
             "Unrecognized text file format. Expected Coursera format with section headers like [QUESTIONS].",
           );
         }
-        // } else if (file.name.endsWith(".yaml") || file.name.endsWith(".yml")) {
-        //   // Parse Coursera YAML format with enhanced detection
-        //   data = parseCourseraYAML(text);
       } else if (file.name.endsWith(".xml")) {
         data = parseOLX(text);
       } else if (file.name.endsWith(".docx")) {
@@ -445,7 +419,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
         );
       }
 
-      // Validate that we got some questions
       if (!data.questions || data.questions.length === 0) {
         throw new Error(
           "No questions found in the file. Please check the file format and content.",
@@ -470,12 +443,10 @@ const ImportModal: React.FC<ImportModalProps> = ({
     }
   };
 
-  // Enhanced parseCourseraYAML function to handle the actual Coursera format
   const parseCourseraYAML = (yamlText: string): ParsedData => {
     try {
       const yamlData = parseYAML(yamlText);
 
-      // Check if it's the Coursera variations format (array of objects with variations)
       if (
         Array.isArray(yamlData) &&
         yamlData.length > 0 &&
@@ -484,12 +455,10 @@ const ImportModal: React.FC<ImportModalProps> = ({
         return parseCourseraVariationsFormat(yamlData);
       }
 
-      // Check if it's our custom YAML export format
       if (yamlData.assignment && yamlData.questions) {
         return parseCustomYAMLFormat(yamlData);
       }
 
-      // Fallback to generic parsing
       throw new Error(
         "Unrecognized YAML format. Expected either Coursera variations format or custom export format.",
       );
@@ -501,58 +470,52 @@ const ImportModal: React.FC<ImportModalProps> = ({
     }
   };
 
-  // Enhanced parseCourseraVariationsFormat to handle the actual structure
   const parseCourseraVariationsFormat = (yamlData: any[]): ParsedData => {
     const questions: QuestionAuthorStore[] = [];
 
     yamlData.forEach((item: any, index: number) => {
       if (!item.variations || !Array.isArray(item.variations)) return;
 
-      // Process each variation (usually just one per question)
       item.variations.forEach((variation: any) => {
         const question: Partial<QuestionAuthorStore> = {
           id: generateTempQuestionId(),
           alreadyInBackend: false,
           assignmentId: 0,
-          index: questions.length + 1, // Use running count instead of index
+          index: questions.length + 1,
           numRetries: 1,
           question: variation.prompt || "",
-          totalPoints: 1, // Default points
+          totalPoints: 1,
           scoring: { type: "CRITERIA_BASED", criteria: [] },
         };
 
-        // Map Coursera question types to our types
         switch (variation.typeName) {
           case "multipleChoice":
             question.type = "SINGLE_CORRECT";
-            question.responseType = "OTHER" as ResponseType; // Multiple choice uses OTHER response type
+            question.responseType = "OTHER" as ResponseType;
             break;
           case "text":
             question.type = "TEXT";
-            question.responseType = "OTHER" as ResponseType; // Text questions map to OTHER response
+            question.responseType = "OTHER" as ResponseType;
             break;
           case "checkbox":
             question.type = "MULTIPLE_CORRECT";
-            question.responseType = "OTHER" as ResponseType; // Multiple correct uses OTHER response type
+            question.responseType = "OTHER" as ResponseType;
             break;
           default:
             question.type = "TEXT";
             question.responseType = "OTHER" as ResponseType;
         }
 
-        // Parse options for multiple choice questions
         if (variation.options && Array.isArray(variation.options)) {
           question.choices = variation.options.map((option: any) => ({
             choice: option.answer || "",
             isCorrect: option.isCorrect || false,
             points: option.isCorrect ? 1 : 0,
-            feedback: option.feedback || "", // Store feedback if available
+            feedback: option.feedback || "",
           }));
         }
 
-        // Parse answers for text questions
         if (variation.answers && Array.isArray(variation.answers)) {
-          // For text questions, we can store sample answers as reference
           const correctAnswers = variation.answers.filter(
             (answer: any) => answer.isCorrect,
           );
@@ -564,7 +527,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
               feedback: answer.feedback || "",
             }));
           } else {
-            // If no correct answers marked, include all as reference
             question.choices = variation.answers.map((answer: any) => ({
               choice: answer.answer || "",
               isCorrect: answer.isCorrect || false,
@@ -574,19 +536,14 @@ const ImportModal: React.FC<ImportModalProps> = ({
           }
         }
 
-        // Store default feedback in question metadata if available
         if (variation.defaultFeedback) {
-          // Since there's no dedicated feedback field, we can store it in a comment
           question.question =
             question.question +
             (question.question ? "\n\n" : "") +
             `[Default Feedback: ${variation.defaultFeedback}]`;
         }
 
-        // Handle shuffle options setting
         if (variation.shuffleOptions !== undefined) {
-          // Store this information in question metadata if needed
-          // You might want to add a shuffleOptions field to your QuestionAuthorStore type
         }
 
         questions.push(question as QuestionAuthorStore);
@@ -603,7 +560,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
     };
   };
 
-  // CSV parsing not implemented yet
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const parseCSV = (csvText: string): ParsedData => {
     const lines = csvText.split("\n").filter((line) => line.trim());
@@ -615,7 +571,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
       if (line === "Questions") {
         currentSection = "questions";
-        i++; // Skip header line
+        i++;
         continue;
       }
 
@@ -649,7 +605,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
               type: "CRITERIA_BASED",
               criteria: [],
             },
-            // Add default choices for choice-based questions
+
             choices:
               questionType === "SINGLE_CORRECT" ||
               questionType === "MULTIPLE_CORRECT" ||
@@ -689,13 +645,11 @@ const ImportModal: React.FC<ImportModalProps> = ({
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
 
-      // Detect sections
       if (line.startsWith("[") && line.endsWith("]")) {
         currentSection = line;
         continue;
       }
 
-      // Parse assignment metadata
       if (currentSection === "[ASSIGNMENT_METADATA]" && line.includes(":")) {
         const [key, ...valueParts] = line.split(":");
         const value = valueParts.join(":").trim();
@@ -704,7 +658,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           assignment.learningObjectives = value;
       }
 
-      // Parse assignment config
       if (currentSection === "[ASSIGNMENT_CONFIG]" && line.includes(":")) {
         const [key, ...valueParts] = line.split(":");
         const value = valueParts.join(":").trim();
@@ -723,7 +676,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           config.numberOfQuestionsPerAttempt = parseInt(value) || null;
       }
 
-      // Parse instructions
       if (currentSection === "[ASSIGNMENT_INSTRUCTIONS]") {
         if (!assignment.introduction) assignment.introduction = "";
         if (line) assignment.introduction += line + "\n";
@@ -734,16 +686,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
         if (line) assignment.instructions += line + "\n";
       }
 
-      // Parse grading criteria
       if (currentSection === "[GRADING_CRITERIA]") {
         if (!assignment.gradingCriteria) assignment.gradingCriteria = "";
         if (line) assignment.gradingCriteria += line + "\n";
       }
 
-      // Parse questions
       if (currentSection === "[QUESTIONS]") {
         if (line.startsWith("Question_")) {
-          // Save previous question
           if (currentQuestion) {
             if (currentChoices.length > 0) {
               currentQuestion.choices = currentChoices;
@@ -762,7 +711,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
             } as QuestionAuthorStore);
           }
 
-          // Start new question
           currentQuestion = {
             type: "TEXT" as QuestionType,
             question: "",
@@ -807,7 +755,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
               break;
           }
         } else if (line.match(/^\s*[A-Z]\.\s+/) && currentQuestion) {
-          // Parse choice
           const choiceMatch = line.match(
             /^\s*([A-Z])\.\s+(.+?)(\s+\[CORRECT\])?(\s+\((\d+)\s+pts\))?$/,
           );
@@ -830,7 +777,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
       }
     }
 
-    // Save last question
     if (currentQuestion) {
       if (currentChoices.length > 0) {
         currentQuestion.choices = currentChoices;
@@ -856,13 +802,11 @@ const ImportModal: React.FC<ImportModalProps> = ({
     };
   };
 
-  // Parse our custom YAML export format
   const parseCustomYAMLFormat = (yamlData: any): ParsedData => {
     const questions: QuestionAuthorStore[] = [];
     let assignment: any = {};
     let config: any = {};
 
-    // Parse assignment metadata
     if (yamlData.assignment) {
       const assignmentData = yamlData.assignment;
       assignment = {
@@ -872,7 +816,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
         instructions: assignmentData.learner_instructions,
       };
 
-      // Parse config from assignment data
       config = {
         graded: assignmentData.assignment_type === "graded",
         numAttempts:
@@ -887,7 +830,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
       };
     }
 
-    // Parse questions
     if (yamlData.questions && Array.isArray(yamlData.questions)) {
       yamlData.questions.forEach((questionData: any, index: number) => {
         const question: Partial<QuestionAuthorStore> = {
@@ -905,7 +847,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           scoring: { type: "CRITERIA_BASED", criteria: [] },
         };
 
-        // Parse choices if they exist
         if (questionData.choices && Array.isArray(questionData.choices)) {
           question.choices = questionData.choices.map((choice: any) => ({
             choice: choice.text || choice.id || "",
@@ -914,7 +855,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           }));
         }
 
-        // Parse rubrics if they exist
         if (questionData.rubrics && Array.isArray(questionData.rubrics)) {
           const rubrics = questionData.rubrics.map((rubric: any) => ({
             rubricQuestion: rubric.rubric_question || "",
@@ -938,11 +878,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
     };
   };
 
-  // Enhanced YAML parser that can handle both object and array root structures
   const parseYAML = (yamlText: string): any => {
     const lines = yamlText.split("\n");
 
-    // Check if this is a root-level array (starts with -)
     const firstNonEmptyLine = lines.find(
       (line) => line.trim() && !line.trim().startsWith("#"),
     );
@@ -955,7 +893,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
     }
   };
 
-  // Parse YAML when root is an array (like Coursera format)
   const parseYAMLArray = (lines: string[]): any[] => {
     const result: any[] = [];
     let currentItem: any = null;
@@ -969,13 +906,11 @@ const ImportModal: React.FC<ImportModalProps> = ({
       const indent = line.length - line.trimStart().length;
 
       if (trimmedLine.startsWith("-")) {
-        // New array item
         if (currentItem !== null) {
           result.push(currentItem);
         }
         currentItem = {};
 
-        // Check if there's content after the dash
         const contentAfterDash = trimmedLine.substring(1).trim();
         if (contentAfterDash) {
           const colonIndex = contentAfterDash.indexOf(":");
@@ -986,34 +921,30 @@ const ImportModal: React.FC<ImportModalProps> = ({
           }
         }
       } else if (currentItem && trimmedLine.includes(":")) {
-        // Property of current item
         const colonIndex = trimmedLine.indexOf(":");
         const key = trimmedLine.substring(0, colonIndex).trim();
         const value = trimmedLine.substring(colonIndex + 1).trim();
 
         if (value === "" || value === "[]") {
-          // Check if next line starts an array
           if (i + 1 < lines.length && lines[i + 1].trim().startsWith("-")) {
             const nestedArray: any[] = [];
-            i++; // Move to the array start
+            i++;
 
-            // Parse nested array
             while (i < lines.length) {
               const nextLine = lines[i];
               const nextTrimmed = nextLine.trim();
               const nextIndent = nextLine.length - nextLine.trimStart().length;
 
               if (!nextTrimmed || nextIndent <= indent) {
-                i--; // Back up one line
+                i--;
                 break;
               }
 
               if (nextTrimmed.startsWith("-")) {
                 const itemContent = nextTrimmed.substring(1).trim();
                 if (itemContent === "") {
-                  // Complex object in nested array
                   const nestedItem: any = {};
-                  i++; // Move to properties
+                  i++;
 
                   while (i < lines.length) {
                     const propLine = lines[i];
@@ -1022,7 +953,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                       propLine.length - propLine.trimStart().length;
 
                     if (!propTrimmed || propIndent <= nextIndent) {
-                      i--; // Back up
+                      i--;
                       break;
                     }
 
@@ -1062,7 +993,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
     return result;
   };
 
-  // Parse YAML when root is an object
   const parseYAMLObject = (lines: string[]): any => {
     const result: any = {};
     let currentObj = result;
@@ -1082,13 +1012,10 @@ const ImportModal: React.FC<ImportModalProps> = ({
         const key = trimmedLine.substring(0, colonIndex).trim();
         const value = trimmedLine.substring(colonIndex + 1).trim();
 
-        // Determine nesting level
         const level = Math.floor(indent / 2);
 
-        // Adjust current path based on indentation
         currentPath = currentPath.slice(0, level);
 
-        // Navigate to the correct nested object
         currentObj = result;
         for (const pathKey of currentPath) {
           if (!currentObj[pathKey]) currentObj[pathKey] = {};
@@ -1096,7 +1023,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
         }
 
         if (value === "" || value === "[]") {
-          // This might be the start of an array or nested object
           if (i + 1 < lines.length && lines[i + 1].trim().startsWith("-")) {
             currentObj[key] = [];
             currentArray = currentObj[key];
@@ -1108,15 +1034,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
           currentObj[key] = parseYAMLValue(value);
         }
       } else if (trimmedLine.startsWith("-")) {
-        // Array item
         if (currentArray) {
           const itemText = trimmedLine.substring(1).trim();
           if (itemText === "") {
-            // This is a complex object in the array
             const arrayItem: any = {};
             currentArray.push(arrayItem);
 
-            // Parse nested object properties
             let j = i + 1;
             while (j < lines.length) {
               const nextLine = lines[j];
@@ -1146,14 +1069,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
     return result;
   };
 
-  // Parse individual YAML values with type conversion
   const parseYAMLValue = (value: string): any => {
     if (value === "null") return null;
     if (value === "true") return true;
     if (value === "false") return false;
     if (!isNaN(Number(value)) && value !== "") return Number(value);
 
-    // Remove quotes if present
     return value.replace(/^["']|["']$/g, "");
   };
   const validateQuestions = (
@@ -1190,7 +1111,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
         });
       }
 
-      // Validate that choices have proper points for choice-based questions
       if (
         (question.type === "SINGLE_CORRECT" ||
           question.type === "MULTIPLE_CORRECT" ||
@@ -1224,7 +1144,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
         });
       }
 
-      // Check for missing or invalid totalPoints
       if (!question.totalPoints || question.totalPoints <= 0) {
         errors.push({
           questionIndex: index,
@@ -1241,7 +1160,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
     setImportOptions((prev) => {
       const newOptions = { ...prev, [option]: !prev[option] };
 
-      // Handle mutual exclusivity for replace/append
       if (option === "replaceExisting" && newOptions.replaceExisting) {
         newOptions.appendToExisting = false;
       } else if (option === "appendToExisting" && newOptions.appendToExisting) {
@@ -1257,7 +1175,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
     let questionsToImport = parsedData.questions;
 
-    // Filter based on options
     if (!importOptions.importChoices) {
       questionsToImport = questionsToImport.map((q) => ({
         ...q,
@@ -1293,7 +1210,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <DocumentArrowUpIcon className="w-6 h-6 text-purple-600" />
@@ -1309,11 +1225,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6">
           {importStep === "upload" && (
             <div className="space-y-6">
-              {/* File Upload Area */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Select File to Import
@@ -1376,7 +1290,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 )}
               </div>
 
-              {/* File Format Information */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-2">
                   Supported Formats
@@ -1390,14 +1303,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     <strong>Open edX OLX (.xml):</strong> Open Learning XML
                     format
                   </li>
-                  {/* <li>
-                    <strong>Microsoft Word (.docx):</strong> Word documents
-                    (conversion in progress)
-                  </li>
-                  <li>
-                    <strong>IMS QTI (.zip):</strong> QTI question packages
-                    (conversion in progress)
-                  </li> */}
                 </ul>
               </div>
             </div>
@@ -1405,7 +1310,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
           {importStep === "configure" && parsedData && (
             <div className="space-y-6">
-              {/* Import Summary */}
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <h3 className="font-medium text-purple-900 mb-2">
                   Import Summary
@@ -1438,14 +1342,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 </div>
               </div>
 
-              {/* Import Options */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Import Options
                 </h3>
 
                 <div className="space-y-3">
-                  {/* Replace vs Append */}
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
                       <input
@@ -1457,6 +1359,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                         }
                         className="text-purple-600 focus:ring-purple-500"
                       />
+
                       <label
                         htmlFor="append"
                         className="font-medium text-gray-900"
@@ -1474,6 +1377,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                         }
                         className="text-purple-600 focus:ring-purple-500"
                       />
+
                       <label
                         htmlFor="replace"
                         className="font-medium text-gray-900"
@@ -1483,7 +1387,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Other Options */}
                   {[
                     {
                       id: "importChoices",
@@ -1524,6 +1427,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                         }
                         className="mt-0.5 text-purple-600 focus:ring-purple-500"
                       />
+
                       <div>
                         <label
                           htmlFor={option.id}
@@ -1540,7 +1444,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 </div>
               </div>
 
-              {/* Warning */}
               {importOptions.replaceExisting && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-center gap-2">
@@ -1557,7 +1460,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
           <button
             onClick={handleClose}

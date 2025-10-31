@@ -84,7 +84,7 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
         "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
       },
       multiple: false,
-      maxSize: 10 * 1024 * 1024, // 10MB
+      maxSize: 10 * 1024 * 1024,
       onDropRejected: (rejectedFiles) => {
         const error = rejectedFiles[0]?.errors[0];
         if (error?.code === "file-too-large") {
@@ -617,11 +617,9 @@ const ChatMessages = ({
     new Set(),
   );
 
-  // Handle client executions outside of the render loop
   React.useEffect(() => {
     if (onClientExecution) {
       filteredMessages.forEach((msg) => {
-        // Only process messages that haven't been processed yet
         if (
           !processedMessageIds.has(msg.id) &&
           msg.role === "assistant" &&
@@ -633,7 +631,7 @@ const ChatMessages = ({
               onClientExecution(toolCall);
             }
           });
-          // Mark this message as processed
+
           setProcessedMessageIds((prev) => new Set(prev).add(msg.id));
         }
       });
@@ -694,6 +692,7 @@ const ChatHistoryDrawer = ({
             className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50"
             onClick={onClose}
           />
+
           <motion.div
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
@@ -792,14 +791,12 @@ export const MarkChat = () => {
   const learnerContext = useLearnerContext();
   const authorContext = useAuthorContext();
 
-  // Get author store data
   const authorStore = useAuthorStore((state) => ({
     name: state.name,
     questions: state.questions,
     activeAssignmentId: state.activeAssignmentId,
   }));
 
-  // Prepare context data for behavior monitoring
   const contextData = React.useMemo(() => {
     if (userRole === "author") {
       return {
@@ -835,11 +832,9 @@ export const MarkChat = () => {
     learnerContext.isFeedbackMode,
   ]);
 
-  // Behavior monitoring for proactive help
   const { behaviorData, resetHelpOffer, getChatMessage } =
     useUserBehaviorMonitor(userRole, contextData);
 
-  // Proactive help system
   useEffect(() => {
     if (behaviorData.shouldOfferHelp && !isChatbotOpen) {
       const { helpReason, currentContext } = behaviorData;
@@ -859,7 +854,6 @@ export const MarkChat = () => {
           sayProactiveHelp(subject, userRole);
       }
 
-      // Reset help offer after showing
       setTimeout(() => resetHelpOffer(), 1000);
     }
   }, [
@@ -929,7 +923,7 @@ export const MarkChat = () => {
     setShowReports(true);
   }, []);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
-  const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 }); // Real-time position during drag
+  const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [hasMoved, setHasMoved] = useState(false);
   const [isDocked, setIsDocked] = useState(false);
@@ -948,7 +942,6 @@ export const MarkChat = () => {
     );
   }, []);
 
-  // Motion sickness tracking
   const [motionData, setMotionData] = useState({
     dragCount: 0,
     dragStartTime: 0,
@@ -958,7 +951,6 @@ export const MarkChat = () => {
     continuousDragTime: 0,
   });
 
-  // Helper function to constrain position to viewport
   const constrainToViewport = useCallback((position) => {
     if (typeof window === "undefined") return position;
 
@@ -977,7 +969,6 @@ export const MarkChat = () => {
     };
   }, []);
 
-  // Load saved position on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("mark-chat-position");
@@ -988,7 +979,6 @@ export const MarkChat = () => {
           setDragPosition(constrainedPos);
           setCurrentPosition(constrainedPos);
         } catch (e) {
-          // Default to bottom-right if parsing fails
           const defaultPos = constrainToViewport({
             x: window.innerWidth - 80,
             y: window.innerHeight - 80,
@@ -997,7 +987,6 @@ export const MarkChat = () => {
           setCurrentPosition(defaultPos);
         }
       } else {
-        // Default position: very bottom-right
         const defaultPos = constrainToViewport({
           x: window.innerWidth - 80,
           y: window.innerHeight - 80,
@@ -1008,7 +997,6 @@ export const MarkChat = () => {
     }
   }, [constrainToViewport]);
 
-  // Handle window resize to keep chatbot in bounds
   useEffect(() => {
     const handleResize = () => {
       setDragPosition((prev) => constrainToViewport(prev));
@@ -1024,7 +1012,7 @@ export const MarkChat = () => {
   const handleDragStart = useCallback(
     (e, data) => {
       setHasMoved(false);
-      setIsDragging(false); // Reset dragging state
+      setIsDragging(false);
       setDragStartPosition({ x: data.x, y: data.y });
       setDragStartTime(Date.now());
       setMotionData((prev) => ({
@@ -1040,13 +1028,11 @@ export const MarkChat = () => {
 
   const handleDrag = useCallback(
     (e, data) => {
-      // Calculate distance from start position
       const distanceFromStart = Math.sqrt(
         Math.pow(data.x - dragStartPosition.x, 2) +
           Math.pow(data.y - dragStartPosition.y, 2),
       );
 
-      // Calculate time elapsed since drag start
       const timeElapsed = Date.now() - dragStartTime;
 
       const MOBILE_DRAG_THRESHOLD = 25;
@@ -1066,10 +1052,8 @@ export const MarkChat = () => {
         setIsDragging(true);
       }
 
-      // Update real-time position for speech bubble
       setCurrentPosition({ x: data.x, y: data.y });
 
-      // Calculate distance moved
       setMotionData((prev) => {
         const distance = Math.sqrt(
           Math.pow(data.x - prev.lastPosition.x, 2) +
@@ -1079,20 +1063,13 @@ export const MarkChat = () => {
         const currentTime = Date.now();
         const dragDuration = currentTime - prev.dragStartTime;
 
-        // Check for motion sickness conditions (much more lenient)
         const shouldGetSick =
-          // Dragged for more than 5 seconds continuously (increased from 2)
           dragDuration > 5000 ||
-          // Moved more than 500 pixels total in this drag (increased from 300)
           newTotalDistance > 500 ||
-          // Been dragged more than 6 times in 30 seconds (more lenient)
           (prev.dragCount > 6 &&
             currentTime - prev.lastMotionSickTime < 30000) ||
-          // Very fast movement - only if extremely fast (increased threshold)
           (dragDuration > 1000 && newTotalDistance / dragDuration > 1.0);
 
-        // Much longer cooldown period: 15 seconds between complaints (increased from 5)
-        // Also add random chance: only 30% chance to complain even if conditions are met
         if (
           shouldGetSick &&
           currentTime - prev.lastMotionSickTime > 15000 &&
@@ -1120,9 +1097,8 @@ export const MarkChat = () => {
   const handleDragStop = useCallback(
     (e, data) => {
       if (hasMoved) {
-        // Constrain position to viewport bounds with some padding
         const padding = 10;
-        const buttonSize = 66; // Approximate size of the button
+        const buttonSize = 66;
 
         const constrainedPosition = {
           x: Math.max(
@@ -1135,18 +1111,14 @@ export const MarkChat = () => {
           ),
         };
 
-        // Check if position should be docked to edges
-        const dockThreshold = 50; // Distance from edge to trigger docking
+        const dockThreshold = 50;
         const dockedPosition = { ...constrainedPosition };
         let docked = false;
 
-        // Dock to left edge
         if (constrainedPosition.x < dockThreshold) {
           dockedPosition.x = padding;
           docked = true;
-        }
-        // Dock to right edge
-        else if (
+        } else if (
           constrainedPosition.x >
           window.innerWidth - buttonSize - dockThreshold
         ) {
@@ -1154,13 +1126,10 @@ export const MarkChat = () => {
           docked = true;
         }
 
-        // Dock to top edge
         if (constrainedPosition.y < dockThreshold) {
           dockedPosition.y = padding;
           docked = true;
-        }
-        // Dock to bottom edge
-        else if (
+        } else if (
           constrainedPosition.y >
           window.innerHeight - buttonSize - dockThreshold
         ) {
@@ -1171,7 +1140,7 @@ export const MarkChat = () => {
         setIsDocked(docked);
 
         setDragPosition(dockedPosition);
-        setCurrentPosition(dockedPosition); // Keep positions in sync
+        setCurrentPosition(dockedPosition);
         if (typeof window !== "undefined") {
           localStorage.setItem(
             "mark-chat-position",
@@ -1179,13 +1148,11 @@ export const MarkChat = () => {
           );
         }
 
-        // Rarely say something excited about the new position (reduced from 30% to 10%)
         if (Math.random() < 0.1) {
-          setTimeout(() => sayExcited(), 800); // Also increased delay
+          setTimeout(() => sayExcited(), 800);
         }
       }
 
-      // Reset states
       setTimeout(() => {
         setIsDragging(false);
         setHasMoved(false);
@@ -1637,6 +1604,7 @@ export const MarkChat = () => {
       "design",
       "develop",
     ];
+
     const questionPatterns = [
       "question",
       "multiple choice",
@@ -1650,6 +1618,7 @@ export const MarkChat = () => {
       "assessment item",
       "mcq",
     ];
+
     const hasCreateIntent = createPatterns.some((pattern) =>
       lowerInput.includes(pattern),
     );
@@ -1689,6 +1658,7 @@ export const MarkChat = () => {
             "TEXT",
             "TRUE_FALSE",
           ],
+
           suggestedType: questionType,
         },
       });
@@ -2000,6 +1970,7 @@ export const MarkChat = () => {
     }. My attempt ID is ${
       learnerContext.activeAttemptId || "current attempt"
     }. I believe my answers were scored incorrectly because...`;
+
     setUserInput(regradePrompt);
     setSpecialActions({ show: false, type: null, data: null });
     textareaRef.current?.focus();
@@ -2010,6 +1981,7 @@ export const MarkChat = () => {
       const reportPrompt = `I'd like to report an issue with assignment ${
         learnerContext.assignmentId || "this assignment"
       }. The problem I'm experiencing is...`;
+
       setUserInput(reportPrompt);
       dismissAction("report", { assignmentId: learnerContext.assignmentId });
       textareaRef.current?.focus();
@@ -2104,7 +2076,6 @@ Please help me with this.`;
   const handleReportPreview = useCallback(
     async (action, value) => {
       if (action === "cancel") {
-        // When user cancels, dismiss the action so it doesn't reappear
         const actionData = specialActions.data || {};
         dismissAction(specialActions.type, {
           assignmentId: actionData.assignmentId,
@@ -2113,11 +2084,9 @@ Please help me with this.`;
       }
 
       if (action === "submit") {
-        // Submit the actual report with screenshot in a single request
         try {
           const reportData = value || specialActions.data;
 
-          // Create FormData for multipart request
           const formData = new FormData();
           formData.append("issueType", reportData.issueType);
           formData.append("description", reportData.description);
@@ -2132,7 +2101,6 @@ Please help me with this.`;
               "0",
           );
 
-          // Add screenshot file if present
           if (reportData.screenshot) {
             formData.append("screenshot", reportData.screenshot);
             toast.info("Submitting report with screenshot...");
@@ -2140,13 +2108,12 @@ Please help me with this.`;
             toast.info("Submitting report...");
           }
 
-          // Submit everything in one request
           const response = await fetch(`${getBaseApiPath("v1")}/reports`, {
             method: "POST",
             headers: {
               Cookie: document.cookie,
             },
-            credentials: "include", // pragma: allowlist secret
+            credentials: "include",
             body: formData,
           });
 
@@ -2159,7 +2126,6 @@ Please help me with this.`;
 
           const res = await response.json();
 
-          // Show result in chat
           const resultMessage =
             res?.content || "Report submitted successfully!";
           useMarkChatStore.getState().addMessage({
@@ -2169,7 +2135,6 @@ Please help me with this.`;
             timestamp: new Date().toISOString(),
           });
 
-          // Dismiss the action so it doesn't reappear after successful submission
           dismissAction("report", { assignmentId: reportData.assignmentId });
           setReportPreviewModal({ isOpen: false, type: "report", data: null });
 
@@ -2187,7 +2152,6 @@ Please help me with this.`;
         return;
       }
 
-      // Handle field updates including file upload
       if (typeof value !== "undefined") {
         setSpecialActions((prev) => ({
           ...prev,
@@ -2203,7 +2167,6 @@ Please help me with this.`;
 
   const handleClientExecution = useCallback((toolCall) => {
     if (toolCall.function === "showReportPreview") {
-      // Open the report preview modal instead of inline form
       setReportPreviewModal({
         isOpen: true,
         type: toolCall.params.type || "report",
@@ -2342,6 +2305,7 @@ Please help me with this.`;
               "Update the scoring for this question",
               "Make this question clearer",
             ];
+
           case "TEXT":
             return [
               "Add a detailed rubric for this question",
@@ -2351,6 +2315,7 @@ Please help me with this.`;
               "Set word count limits for this response",
               "Create a variant of this text question",
             ];
+
           case "TRUE_FALSE":
             return [
               "Convert this to multiple choice",
@@ -2360,6 +2325,7 @@ Please help me with this.`;
               "Add explanation for the correct answer",
               "Make this question clearer",
             ];
+
           default:
             return [
               "Improve this question",
@@ -2487,10 +2453,12 @@ Please help me with this.`;
               className="w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-bounce"
               style={{ animationDelay: "0ms" }}
             />
+
             <div
               className="w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-bounce"
               style={{ animationDelay: "300ms" }}
             />
+
             <div
               className="w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-bounce"
               style={{ animationDelay: "600ms" }}
@@ -2503,14 +2471,12 @@ Please help me with this.`;
 
   return (
     <>
-      {/* Mark's Speech Bubble */}
       <SpeechBubble
         bubble={activeBubble}
         onDismiss={dismissBubble}
         position={currentPosition}
       />
 
-      {/* Floating toggle button when panel is closed */}
       <AnimatePresence>
         {!isChatbotOpen && (
           <Draggable
@@ -2558,7 +2524,6 @@ Please help me with this.`;
         )}
       </AnimatePresence>
 
-      {/* Side panel */}
       <AnimatePresence>
         {isChatbotOpen && (
           <motion.div
@@ -2574,7 +2539,6 @@ Please help me with this.`;
             transition={{ type: "tween", duration: 0.3, ease: "easeInOut" }}
             className="h-full bg-white dark:bg-gray-900 shadow-2xl border-l md:border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden font-sans relative z-[9999]"
           >
-            {/* Header */}
             <div className="flex items-center justify-between p-3 md:p-4 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center space-x-2 md:space-x-3">
                 {MarkFace && (
@@ -2603,7 +2567,6 @@ Please help me with this.`;
               </button>
             </div>
 
-            {/* Action buttons bar */}
             <div className="flex items-center justify-between p-2 md:p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <div className="flex space-x-2">
                 <button
@@ -2640,9 +2603,7 @@ Please help me with this.`;
               </button>
             </div>
 
-            {/* Chat content */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Settings panel */}
               <AnimatePresence>
                 {showSettings && (
                   <SettingsPanel
@@ -2659,7 +2620,6 @@ Please help me with this.`;
                 )}
               </AnimatePresence>
 
-              {/* Messages area */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-950 relative">
                 <div className="absolute right-3 bottom-3 flex space-x-2">
                   {userInput.trim() !== "" && (
@@ -2711,7 +2671,6 @@ Please help me with this.`;
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input area */}
               <div className="border-t dark:border-gray-800 p-3 bg-white dark:bg-gray-900">
                 <AnimatePresence>
                   {showSuggestions && (
@@ -2723,7 +2682,6 @@ Please help me with this.`;
                   )}
                 </AnimatePresence>
 
-                {/* Report Preview Form - positioned right above input */}
                 <AnimatePresence>
                   {specialActions.show && (
                     <SpecialActionUI
@@ -2755,6 +2713,7 @@ Please help me with this.`;
                     style={{ maxHeight: "120px", overflowY: "auto" }}
                     disabled={isInitializing}
                   />
+
                   <div className="relative flex-col flex-1 ">
                     <motion.button
                       whileHover={{ scale: 1.1 }}

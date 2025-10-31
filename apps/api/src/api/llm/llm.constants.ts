@@ -1,12 +1,7 @@
-// src/llm/llm.constants.ts
-
-// LLM Provider tokens
 export const OPENAI_LLM_PROVIDER_4o = "OPENAI_LLM_PROVIDER_4o";
 export const OPENAI_LLM_PROVIDER_mini = "OPENAI_LLM_PROVIDER_mini";
-// export const LLAMA_LLM_PROVIDER = "LLAMA_LLM_PROVIDER";
 export const ALL_LLM_PROVIDERS = Symbol("ALL_LLM_PROVIDERS");
 
-// Core service tokens
 export const PROMPT_PROCESSOR = "PROMPT_PROCESSOR";
 export const MODERATION_SERVICE = "MODERATION_SERVICE";
 export const TOKEN_COUNTER = "TOKEN_COUNTER";
@@ -15,7 +10,6 @@ export const LLM_PRICING_SERVICE = "LLM_PRICING_SERVICE";
 export const LLM_ASSIGNMENT_SERVICE = "LLM_ASSIGNMENT_SERVICE";
 export const LLM_RESOLVER_SERVICE = "LLM_RESOLVER_SERVICE";
 
-// Grading service tokens
 export const TEXT_GRADING_SERVICE = "TEXT_GRADING_SERVICE";
 export const FILE_GRADING_SERVICE = "FILE_GRADING_SERVICE";
 export const IMAGE_GRADING_SERVICE = "IMAGE_GRADING_SERVICE";
@@ -26,23 +20,18 @@ export const VIDEO_PRESENTATION_GRADING_SERVICE =
 export const GRADING_JUDGE_SERVICE = "GRADING_JUDGE_SERVICE";
 export const GRADING_THRESHOLD_SERVICE = "GRADING_THRESHOLD_SERVICE";
 
-// Feature service tokens
 export const QUESTION_GENERATION_SERVICE = "QUESTION_GENERATION_SERVICE";
 export const RUBRIC_SERVICE = "RUBRIC_SERVICE";
 export const TRANSLATION_SERVICE = "TRANSLATION_SERVICE";
 export const VALIDATOR_SERVICE = "VALIDATOR_SERVICE";
 
-// Default model
 export const DEFAULT_LLM_MODEL = "gpt-4o";
 
-// Available LLM models
 export const AVAILABLE_MODELS = {
   OPENAI_GPT4O: "gpt-4o",
   OPENAI_GPT4O_MINI: "gpt-4o-mini",
-  // LLAMA_4_MAVERICK: "llama-4-maverick",
 } as const;
 
-// Response type specific instructions
 export const RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS = {
   CODE: `
     **Feedback Structure:**

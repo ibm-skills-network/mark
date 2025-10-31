@@ -195,12 +195,14 @@ export default function AssignmentAttempts() {
             View
           </button>
         ),
+
         ignoreRowClick: true,
         allowOverflow: false,
         button: true,
         width: "70px",
       },
     ],
+
     [],
   );
 

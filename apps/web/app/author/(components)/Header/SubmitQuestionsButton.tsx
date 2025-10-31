@@ -104,18 +104,15 @@ const SubmitQuestionsButton: FC<Props> = ({
   function handleNavigate() {
     setShowErrorModal(false);
 
-    // Navigate first
     if (step !== null && step !== undefined) {
       const nextPage = pageRouterUsingSteps(step);
 
       if (nextPage) {
         router.push(nextPage);
 
-        // If we have an invalidQuestionId, set it and scroll after navigation
         if (invalidQuestionId) {
           setFocusedQuestionId(invalidQuestionId);
 
-          // Wait for navigation and rendering to complete
           setTimeout(() => {
             const element = document.getElementById(
               `question-title-${invalidQuestionId}`,
@@ -127,7 +124,6 @@ const SubmitQuestionsButton: FC<Props> = ({
                 inline: "center",
               });
             } else {
-              // If question-title element doesn't exist, try the question element
               const questionElement = document.getElementById(
                 `question-${invalidQuestionId}`,
               );
@@ -139,13 +135,12 @@ const SubmitQuestionsButton: FC<Props> = ({
                 });
               }
             }
-          }, 500); // Give time for navigation and rendering
+          }, 500);
         }
       } else {
         router.push(`/author/${assignmentId}`);
       }
     } else if (invalidQuestionId) {
-      // If no step but we have an invalid question ID, we're already on the right page
       setFocusedQuestionId(invalidQuestionId);
 
       setTimeout(() => {
@@ -169,20 +164,16 @@ const SubmitQuestionsButton: FC<Props> = ({
       return;
     }
 
-    // Create draft immediately without showing modal
     await handleCreateDraftImmediately();
   };
 
   const handleCreateDraftImmediately = async () => {
     try {
-      // Generate version comparison for change analysis
       const versionComparison = await generateVersionComparison();
 
-      // Get recommended version using same logic as VersionSelectionModal
       const recommendedVersion = getRecommendedDraftVersion(versionComparison);
       const defaultDescription = `Draft created on ${new Date().toLocaleString()}`;
 
-      // Use createVersion from author store to save draft snapshot without triggering publish job
       if (createVersion) {
         const result = await createVersion(
           defaultDescription,
@@ -193,7 +184,7 @@ const SubmitQuestionsButton: FC<Props> = ({
 
         if (result) {
           toast.success("Draft saved successfully!");
-          // Navigate to version-tree after draft creation
+
           router.push(`/author/${assignmentId}/version-tree`);
         } else {
           toast.error("Failed to save draft. Please try again.");
@@ -204,14 +195,12 @@ const SubmitQuestionsButton: FC<Props> = ({
     } catch (error: any) {
       console.error("Failed to create draft:", error);
 
-      // If there's an error, fall back to showing the modal
       await handleShowVersionModal();
     }
   };
 
   const generateVersionComparison = async (): Promise<VersionComparison> => {
     if (!currentVersion) {
-      // No current version - assume this is a new assignment or first version
       return {
         fromVersion: {
           id: 0,
@@ -245,12 +234,11 @@ const SubmitQuestionsButton: FC<Props> = ({
             changeType: "added",
           },
         ],
+
         questionChanges: [],
       };
     }
 
-    // For now, provide a reasonable default comparison since we don't have
-    // a way to compare against current working state
     return {
       fromVersion: {
         ...currentVersion,
@@ -271,6 +259,7 @@ const SubmitQuestionsButton: FC<Props> = ({
           changeType: "modified",
         },
       ],
+
       questionChanges: [],
     };
   };
@@ -279,28 +268,23 @@ const SubmitQuestionsButton: FC<Props> = ({
     comparison: VersionComparison,
   ): string => {
     try {
-      // Get the latest version from existing versions
       const latestVersion = getLatestVersion(versions);
       const currentVersionString = latestVersion
         ? formatSemanticVersion(latestVersion)
         : "1.0.0";
 
-      // Analyze changes to determine version suggestion
       const changeAnalysis = analyzeChanges(comparison);
 
-      // Get version suggestions with isDraft=false to skip -rc suffix
       const suggestions = suggestNextVersion(
         currentVersionString,
         changeAnalysis,
         false,
       );
 
-      // Return the first (recommended) suggestion
       if (suggestions.length > 0) {
         return formatSemanticVersion(suggestions[0]);
       }
 
-      // Fallback to patch version without rc suffix
       const current = parseSemanticVersion(currentVersionString);
       return formatSemanticVersion({
         ...current,
@@ -308,7 +292,7 @@ const SubmitQuestionsButton: FC<Props> = ({
       });
     } catch (error) {
       console.error("Error generating recommended version:", error);
-      // Final fallback without rc suffix
+
       return "1.0.0";
     }
   };
@@ -339,7 +323,6 @@ const SubmitQuestionsButton: FC<Props> = ({
   const handleShowVersionModal = async () => {
     try {
       if (!currentVersion) {
-        // No current version - assume this is a new assignment or first version
         const defaultComparison: VersionComparison = {
           fromVersion: {
             id: 0,
@@ -373,6 +356,7 @@ const SubmitQuestionsButton: FC<Props> = ({
               changeType: "added",
             },
           ],
+
           questionChanges: [],
         };
         setVersionComparison(defaultComparison);
@@ -380,8 +364,6 @@ const SubmitQuestionsButton: FC<Props> = ({
         return;
       }
 
-      // For now, provide a reasonable default comparison since we don't have
-      // a way to compare against current working state
       const defaultComparison: VersionComparison = {
         fromVersion: {
           ...currentVersion,
@@ -402,13 +384,14 @@ const SubmitQuestionsButton: FC<Props> = ({
             changeType: "modified",
           },
         ],
+
         questionChanges: [],
       };
       setVersionComparison(defaultComparison);
       setShowVersionModal(true);
     } catch (error) {
       console.error("Failed to analyze changes:", error);
-      // Provide fallback comparison for when comparison fails
+
       const fallbackComparison: VersionComparison = {
         fromVersion: currentVersion
           ? {
@@ -448,6 +431,7 @@ const SubmitQuestionsButton: FC<Props> = ({
             changeType: "modified",
           },
         ],
+
         questionChanges: [],
       };
       setVersionComparison(fallbackComparison);
@@ -469,11 +453,10 @@ const SubmitQuestionsButton: FC<Props> = ({
             versionId,
             versionNumber,
             description,
-            true, // Force draft when updating
+            true,
           );
           setShowVersionModal(false);
 
-          // Navigate to version-tree after update
           router.push(`/author/${assignmentId}/version-tree`);
         } else {
           throw new Error("updateExistingVersion function not available");
@@ -482,7 +465,6 @@ const SubmitQuestionsButton: FC<Props> = ({
         await createVersion(description, true, versionNumber, shouldUpdate);
         setShowVersionModal(false);
 
-        // Navigate to version-tree after draft creation
         router.push(`/author/${assignmentId}/version-tree`);
       } else {
         console.error("createVersion function not available");
@@ -491,7 +473,6 @@ const SubmitQuestionsButton: FC<Props> = ({
     } catch (error: any) {
       console.error("Failed to save version:", error);
 
-      // Check if this is a version conflict error
       if (
         error.response?.status === 409 &&
         error.response?.data?.versionExists
@@ -516,17 +497,15 @@ const SubmitQuestionsButton: FC<Props> = ({
     if (!conflictDetails || !createVersion) return;
 
     try {
-      // Call createVersion with updateExisting flag
       await createVersion(
         conflictDetails.description,
         conflictDetails.isDraft,
         conflictDetails.requestedVersion,
-        true, // updateExisting flag
+        true,
       );
 
       setShowConflictModal(false);
       setConflictDetails(null);
-      // Don't call handlePublishButton when updating - createVersion with updateExisting handles the complete process
     } catch (error) {
       console.error("Failed to update existing version:", error);
       throw error;
@@ -536,11 +515,10 @@ const SubmitQuestionsButton: FC<Props> = ({
   const handleCreateNewVersion = () => {
     setShowConflictModal(false);
     setConflictDetails(null);
-    // Reopen the version selection modal to let user pick a different version number
+
     setShowVersionModal(true);
   };
 
-  // Hide modal when conditions change and button becomes enabled
   useEffect(() => {
     if (!disableButton) {
       setShowErrorModal(false);
@@ -550,7 +528,6 @@ const SubmitQuestionsButton: FC<Props> = ({
   return (
     <>
       <div className="space-y-3">
-        {/* Button */}
         <>
           <Tooltip
             content={
@@ -573,19 +550,15 @@ const SubmitQuestionsButton: FC<Props> = ({
         </>
       </div>
 
-      {/* Error Modal */}
       {showErrorModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            {/* Backdrop */}
             <div
               className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
               onClick={() => setShowErrorModal(false)}
             />
 
-            {/* Modal Content */}
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              {/* Close button */}
               <button
                 onClick={() => setShowErrorModal(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -593,7 +566,6 @@ const SubmitQuestionsButton: FC<Props> = ({
                 <XMarkIcon className="h-6 w-6" />
               </button>
 
-              {/* Modal Header */}
               <div className="flex items-center mb-4">
                 {statusMessage.type === "error" && (
                   <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
@@ -606,7 +578,6 @@ const SubmitQuestionsButton: FC<Props> = ({
                 </h3>
               </div>
 
-              {/* Modal Body */}
               <div className="mb-6">
                 <TooltipMessage
                   isLoading={isLoading}
@@ -619,11 +590,10 @@ const SubmitQuestionsButton: FC<Props> = ({
                   changesSummary={changesSummary}
                   invalidQuestionId={invalidQuestionId}
                   onNavigate={handleNavigate}
-                  showAction={false} // No action button in modal
+                  showAction={false}
                 />
               </div>
 
-              {/* Modal Footer */}
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowErrorModal(false)}
@@ -645,7 +615,6 @@ const SubmitQuestionsButton: FC<Props> = ({
         </div>
       )}
 
-      {/* Version Selection Modal */}
       <VersionSelectionModal
         isOpen={showVersionModal}
         onClose={() => setShowVersionModal(false)}
@@ -673,7 +642,6 @@ const SubmitQuestionsButton: FC<Props> = ({
         }
       />
 
-      {/* Version Conflict Modal */}
       {conflictDetails && (
         <VersionConflictModal
           isOpen={showConflictModal}

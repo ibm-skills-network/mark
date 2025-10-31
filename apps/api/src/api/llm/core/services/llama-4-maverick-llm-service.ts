@@ -35,7 +35,7 @@ export class Llama4MaverickLlmService implements IMultimodalLlmProvider {
       serviceUrl: "https://us-south.ml.cloud.ibm.com",
       projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
       watsonxAIAuthType: "iam",
-      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
+      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? Llama4MaverickLlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
       maxTokens: options?.maxTokens ?? 2000,
@@ -105,8 +105,6 @@ export class Llama4MaverickLlmService implements IMultimodalLlmProvider {
     const model = this.createChatModel(options);
 
     try {
-      // For now, process text only until proper multimodal support is implemented
-      // TODO: Implement proper multimodal message formatting for Llama 4 Maverick
       const result = await withWatsonxRateLimit(() =>
         model.invoke([new HumanMessage(textContent)]),
       );

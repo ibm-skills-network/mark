@@ -97,13 +97,11 @@ export class AdminAuthController {
   ): Promise<SendCodeResponse> {
     const { email } = request;
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       throw new BadRequestException("Invalid email format");
     }
 
-    // Check if email is authorized (admin or author)
     const isAuthorized =
       await this.adminVerificationService.isAuthorizedEmail(email);
     if (!isAuthorized) {
@@ -111,11 +109,9 @@ export class AdminAuthController {
     }
 
     try {
-      // Generate and store verification code
       const code =
         await this.adminVerificationService.generateAndStoreCode(email);
 
-      // Send email with verification code
       const emailSent = await this.adminEmailService.sendVerificationCode(
         email,
         code,
@@ -164,18 +160,15 @@ export class AdminAuthController {
   ): Promise<VerifyCodeResponse> {
     const { email, code } = request;
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       throw new BadRequestException("Invalid email format");
     }
 
-    // Validate code format (6 digits)
     if (!/^\d{6}$/.test(code)) {
       throw new BadRequestException("Invalid code format");
     }
 
-    // Check if email is authorized (admin or author)
     const isAuthorized =
       await this.adminVerificationService.isAuthorizedEmail(email);
     if (!isAuthorized) {
@@ -183,7 +176,6 @@ export class AdminAuthController {
     }
 
     try {
-      // Verify the code
       const isValidCode = await this.adminVerificationService.verifyCode(
         email,
         code,
@@ -193,12 +185,11 @@ export class AdminAuthController {
         throw new BadRequestException("Invalid or expired verification code");
       }
 
-      // Generate admin session token
       const sessionToken =
         await this.adminVerificationService.generateAdminSession(email);
       const expiresAt = new Date(
         Date.now() + 24 * 60 * 60 * 1000,
-      ).toISOString(); // 24 hours
+      ).toISOString();
 
       return {
         message: "Admin access granted",
@@ -262,20 +253,17 @@ export class AdminAuthController {
   ): Promise<{ message: string; success: boolean }> {
     const { email } = request;
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       throw new BadRequestException("Invalid email format");
     }
 
     try {
-      // Test connection first
       const connectionOk = await this.adminEmailService.testConnection();
       if (!connectionOk) {
         throw new BadRequestException("Email service not properly configured");
       }
 
-      // Send test email
       const emailSent = await this.adminEmailService.sendTestEmail(email);
       if (!emailSent) {
         throw new BadRequestException("Failed to send test email");

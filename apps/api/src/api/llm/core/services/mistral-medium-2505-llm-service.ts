@@ -32,7 +32,7 @@ export class MistralMedium2505LlmService implements IMultimodalLlmProvider {
       serviceUrl: "https://us-south.ml.cloud.ibm.com",
       projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
       watsonxAIAuthType: "iam",
-      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
+      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? MistralMedium2505LlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
       maxTokens: options?.maxTokens ?? 2000,
@@ -140,7 +140,9 @@ export class MistralMedium2505LlmService implements IMultimodalLlmProvider {
           JSON.parse(jsonContent);
           return jsonContent;
         } catch {
-          // Fall through
+          this.logger.warn(
+            "Could not parse JSON block from Mistral response, trying other methods",
+          );
         }
       }
 
@@ -151,7 +153,9 @@ export class MistralMedium2505LlmService implements IMultimodalLlmProvider {
           JSON.parse(jsonContent);
           return jsonContent;
         } catch {
-          // Fall through
+          this.logger.warn(
+            "Could not parse JSON object from Mistral response, returning original",
+          );
         }
       }
 

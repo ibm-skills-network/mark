@@ -21,6 +21,7 @@ function Component(props: Props) {
         title="Let's configure your assignment settings!"
         description="Set up the assignment parameters. You can review and edit these later"
       />
+
       <AssignmentType />
       <AssignmentTime />
       <AssignmentCompletion />

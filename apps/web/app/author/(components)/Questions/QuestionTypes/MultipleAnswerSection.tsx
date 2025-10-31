@@ -523,6 +523,7 @@ function Section({
                           }
                           rows={1}
                         />
+
                         <div className="flex flex-col items-center space-y-1">
                           <button
                             type="button"
@@ -622,6 +623,7 @@ function Section({
                           }
                           rows={1}
                         />
+
                         <button
                           type="button"
                           onClick={() => handleRemoveChoice(index)}

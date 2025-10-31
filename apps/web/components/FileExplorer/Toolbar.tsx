@@ -1,4 +1,3 @@
-// src/components/FileExplorer/Toolbar.tsx
 import React from "react";
 import {
   IconListDetails,
@@ -33,7 +32,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
 }) => {
   return (
     <div className="actions-toolbar flex space-x-2">
-      {/* View mode toggles */}
       <button
         className={`p-2 rounded-md ${
           viewMode === "list"
@@ -57,7 +55,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
         <IconLayoutGrid size={20} />
       </button>
 
-      {/* Refresh button */}
       <button
         className="p-2 text-gray-600 hover:text-purple-500 rounded-md hover:bg-gray-100"
         onClick={onRefresh}
@@ -66,7 +63,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
         <IconRefresh size={20} />
       </button>
 
-      {/* Actions available when not in read-only mode */}
       {!readOnly && (
         <>
           {onCreateFolder && (
@@ -91,7 +87,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
         </>
       )}
 
-      {/* Toggle sidebar button (only on mobile) */}
       {onToggleSidebar && (
         <button
           className="p-2 text-gray-600 hover:text-purple-500 rounded-md hover:bg-gray-100 md:hidden"

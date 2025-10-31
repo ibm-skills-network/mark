@@ -30,7 +30,6 @@ interface Draft {
 }
 
 export function useVersionControl() {
-  // Version control state
   const versions = useAuthorStore((state) => state.versions);
   const currentVersion = useAuthorStore((state) => state.currentVersion);
   const checkedOutVersion = useAuthorStore((state) => state.checkedOutVersion);
@@ -49,7 +48,6 @@ export function useVersionControl() {
     (state) => state.activeAssignmentId,
   );
 
-  // Draft state from author store
   const drafts = useAuthorStore((state) => state.drafts || []);
   const isLoadingDrafts = useAuthorStore(
     (state) => state.isLoadingDrafts || false,
@@ -61,7 +59,6 @@ export function useVersionControl() {
     (state) => state.hasAttemptedLoadDrafts || false,
   );
 
-  // Favorite versions state and actions
   const favoriteVersions = useAuthorStore(
     (state) => state.favoriteVersions || [],
   );
@@ -72,7 +69,6 @@ export function useVersionControl() {
     (state) => state.loadFavoriteVersions,
   );
 
-  // Draft actions
   const setDrafts = useAuthorStore((state) => state.setDrafts);
   const setIsLoadingDrafts = useAuthorStore(
     (state) => state.setIsLoadingDrafts,
@@ -84,7 +80,6 @@ export function useVersionControl() {
     (state) => state.setHasAttemptedLoadDrafts,
   );
 
-  // Version control actions
   const loadVersions = useAuthorStore((state) => state.loadVersions);
   const createVersion = useAuthorStore((state) => state.createVersion);
   const saveDraft = useAuthorStore((state) => state.saveDraft);
@@ -92,7 +87,6 @@ export function useVersionControl() {
   const activateVersion = useAuthorStore((state) => state.activateVersion);
   const compareVersions = useAuthorStore((state) => state.compareVersions);
   const getVersionHistory = useAuthorStore((state) => state.getVersionHistory);
-  const autoSave = useAuthorStore((state) => state.autoSave);
   const checkoutVersion = useAuthorStore((state) => state.checkoutVersion);
   const setSelectedVersion = useAuthorStore(
     (state) => state.setSelectedVersion,
@@ -107,7 +101,6 @@ export function useVersionControl() {
     (state) => state.updateVersionDescription,
   );
 
-  // Enhanced actions with user feedback
   const createVersionWithToast = useCallback(
     async (
       versionDescription?: string,
@@ -132,7 +125,6 @@ export function useVersionControl() {
                 : "New version created successfully!",
           );
 
-          // Force refresh versions to make sure UI updates
           await loadVersions();
 
           return newVersion;
@@ -142,7 +134,7 @@ export function useVersionControl() {
         }
       } catch (error) {
         toast.error("An error occurred while creating the version.");
-        throw error; // Re-throw to allow handling in component
+        throw error;
       }
     },
     [createVersion, loadVersions],
@@ -239,7 +231,7 @@ export function useVersionControl() {
 
         if (draftData) {
           const typedDraftData = draftData as unknown as DraftData;
-          // Load draft data into the author store - use direct setters to ensure overwrite
+
           const store = useAuthorStore.getState();
           store.setName(typedDraftData.name || "");
           store.setIntroduction(typedDraftData.introduction || "");
@@ -249,7 +241,6 @@ export function useVersionControl() {
           );
           store.setQuestions((typedDraftData.questions || []) as any);
 
-          // Also load settings into assignment config stores
           const { useAssignmentConfig } = await import(
             "@/stores/assignmentConfig"
           );
@@ -257,7 +248,6 @@ export function useVersionControl() {
             "@/stores/assignmentFeedbackConfig"
           );
 
-          // Update assignment config store with draft settings
           const assignmentConfigStore = useAssignmentConfig.getState();
           if (assignmentConfigStore.setAssignmentConfigStore) {
             (assignmentConfigStore.setAssignmentConfigStore as any)({
@@ -300,7 +290,6 @@ export function useVersionControl() {
             });
           }
 
-          // Update feedback config store with draft settings
           const feedbackConfigStore = useAssignmentFeedbackConfig.getState();
           if (feedbackConfigStore.setAssignmentFeedbackConfigStore) {
             (feedbackConfigStore.setAssignmentFeedbackConfigStore as any)({
@@ -365,13 +354,6 @@ export function useVersionControl() {
     [activeAssignmentId, setDrafts],
   );
 
-  // Auto-save functionality (disabled per user request)
-  const enableAutoSave = useCallback((_intervalMinutes = 5) => {
-    return () => {
-      // Auto-save is disabled
-    };
-  }, []);
-
   const updateExistingVersionWithToast = async (
     versionId: number,
     versionNumber: string,
@@ -385,20 +367,18 @@ export function useVersionControl() {
         throw new Error("No assignment selected");
       }
 
-      // Use createVersion with updateExisting: true to update the existing version's content
-      // This preserves the version number while updating content with current assignment data
       const updatedVersion = await createVersion(
         versionDescription,
         isDraft || false,
         versionNumber,
-        true, // updateExisting = true is key for updating instead of creating
-        versionId, // Pass the specific version ID to update
+        true,
+        versionId,
       );
 
       if (updatedVersion) {
         toast.dismiss();
         toast.success(`Version ${versionNumber} updated successfully`);
-        await loadVersions(); // Refresh the version list
+        await loadVersions();
       } else {
         throw new Error("Failed to update version");
       }
@@ -411,35 +391,29 @@ export function useVersionControl() {
     }
   };
 
-  // Auto-load versions when assignment changes - moved to store level to prevent multiple calls
   useEffect(() => {
     if (activeAssignmentId && !hasAttemptedLoadVersions) {
-      // Use store's loadVersions which has built-in protection against concurrent calls
       loadVersions().catch(() => {
-        // Handle error silently
+        toast.error("Failed to load versions");
       });
     }
   }, [activeAssignmentId, hasAttemptedLoadVersions, loadVersions]);
 
-  // Reset draft state when assignment changes
   useEffect(() => {
-    // Clear all draft state
     setDrafts([]);
     setIsLoadingDrafts(false);
     setDraftsLoadFailed(false);
     setHasAttemptedLoadDrafts(false);
-  }, [activeAssignmentId]); // Only depend on assignment ID
+  }, [activeAssignmentId]);
 
-  // Auto-load favorite versions when assignment changes
   useEffect(() => {
     if (activeAssignmentId) {
       loadFavoriteVersions().catch(() => {
-        // Handle error silently
+        toast.error("Failed to load favorite versions");
       });
     }
   }, [activeAssignmentId, loadFavoriteVersions]);
 
-  // Utility functions
   const getDraftVersions = useCallback(() => {
     return versions.filter((version) => version.isDraft);
   }, [versions]);
@@ -481,7 +455,6 @@ export function useVersionControl() {
     }
   }, []);
 
-  // Favorite version utility functions
   const isVersionFavorite = useCallback(
     (versionId: number) => {
       return favoriteVersions.includes(versionId);
@@ -493,22 +466,19 @@ export function useVersionControl() {
     return versions.filter((version) => favoriteVersions.includes(version.id));
   }, [versions, favoriteVersions]);
 
-  // Simplified force refresh function
   const forceRefreshDrafts = useCallback(async () => {
     if (!activeAssignmentId) {
       return;
     }
 
-    // Reset states and reload
     setHasAttemptedLoadDrafts(false);
     setDraftsLoadFailed(false);
     setDrafts([]);
   }, [activeAssignmentId]);
 
-  // Simplified debug functions
   const debugForceStateRefresh = useCallback(() => {
     const currentState = useAuthorStore.getState();
-    // Debug information available but not logged
+
     return {
       draftsCount: currentState.drafts?.length || 0,
       isLoading: currentState.isLoadingDrafts,
@@ -518,14 +488,12 @@ export function useVersionControl() {
     };
   }, [activeAssignmentId]);
 
-  // Force clear loading state function
   const forceClearLoadingState = useCallback(() => {
     setIsLoadingDrafts(false);
     setDraftsLoadFailed(false);
   }, []);
 
   return {
-    // State
     versions,
     currentVersion,
     checkedOutVersion,
@@ -537,16 +505,13 @@ export function useVersionControl() {
     hasUnsavedChanges,
     lastAutoSave,
 
-    // Draft State
     drafts,
     isLoadingDrafts,
     draftsLoadFailed,
     hasAttemptedLoadDrafts,
 
-    // Favorite Versions State
     favoriteVersions,
 
-    // Actions
     loadVersions,
     createVersion: createVersionWithToast,
     restoreVersion: restoreVersionWithToast,
@@ -554,26 +519,20 @@ export function useVersionControl() {
     compareVersions: compareVersionsWithToast,
     checkoutVersion: checkoutVersionWithToast,
     getVersionHistory,
-    autoSave,
-    enableAutoSave,
     updateExistingVersion: updateExistingVersionWithToast,
 
-    // Draft Actions
     loadDraft,
     deleteDraft,
     forceRefreshDrafts,
 
-    // Favorite Version Actions
     toggleFavoriteVersion,
     loadFavoriteVersions,
     updateVersionDescription,
 
-    // State setters
     setSelectedVersion,
     setVersionComparison,
     setHasUnsavedChanges,
 
-    // Utility functions
     getDraftVersions,
     getPublishedVersions,
     getLatestVersion,
@@ -582,7 +541,6 @@ export function useVersionControl() {
     isVersionFavorite,
     getFavoriteVersions,
 
-    // Debug functions
     debugForceStateRefresh,
     forceClearLoadingState,
   };

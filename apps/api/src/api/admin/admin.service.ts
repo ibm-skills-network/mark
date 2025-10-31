@@ -36,7 +36,7 @@ export class AdminService {
     string,
     { data: any; cachedAt: number }
   >();
-  private readonly INSIGHTS_CACHE_TTL = 1 * 60 * 1000; // 1 minute cache
+  private readonly INSIGHTS_CACHE_TTL = 1 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -95,7 +95,6 @@ export class AdminService {
   }
 
   async getBasicAssignmentAnalytics(assignmentId: number) {
-    // Check if the assignment exists
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
@@ -109,7 +108,6 @@ export class AdminService {
       throw new Error(`Assignment with ID ${assignmentId} not found`);
     }
 
-    // Get all attempts for this assignment
     const attempts = await this.prisma.assignmentAttempt.findMany({
       where: {
         assignmentId,
@@ -120,7 +118,6 @@ export class AdminService {
       },
     });
 
-    // Calculate average score
     const totalGrades = attempts.reduce(
       (sum, attempt) => sum + (attempt.grade || 0),
       0,
@@ -128,7 +125,6 @@ export class AdminService {
     const averageScore =
       attempts.length > 0 ? (totalGrades / attempts.length) * 100 : 0;
 
-    // Calculate median score
     const grades = attempts
       .map((attempt) => attempt.grade || 0)
       .sort((a, b) => a - b);
@@ -140,7 +136,6 @@ export class AdminService {
             : grades[medianIndex]) * 100
         : 0;
 
-    // Calculate completion rate
     const totalAttempts = attempts.length;
     const completedAttempts = attempts.filter(
       (attempt) => attempt.submitted,
@@ -148,7 +143,6 @@ export class AdminService {
     const completionRate =
       totalAttempts > 0 ? (completedAttempts / totalAttempts) * 100 : 0;
 
-    // Calculate average completion time
     const completionTimes = attempts
       .map((attempt) => {
         if (attempt.createdAt && attempt.expiresAt) {
@@ -166,9 +160,8 @@ export class AdminService {
         ? completionTimes.reduce((sum, time) => sum + time, 0) /
           completionTimes.length
         : 0;
-    const averageCompletionTime = Math.round(avgTimeMs / (1000 * 60)); // Convert to minutes
+    const averageCompletionTime = Math.round(avgTimeMs / (1000 * 60));
 
-    // Calculate score distribution
     const scoreRanges = [
       "0-10",
       "11-20",
@@ -190,7 +183,6 @@ export class AdminService {
       return { range, count };
     });
 
-    // Calculate question breakdown
     const questionBreakdown = assignment.questions.map((question) => {
       const responses = attempts.flatMap((attempt) =>
         attempt.questionResponses.filter(
@@ -222,7 +214,6 @@ export class AdminService {
       };
     });
 
-    // total number of unique users who attempted the assignment
     const uniqueUsers = new Set(attempts.map((attempt) => attempt.userId)).size;
 
     return {
@@ -280,12 +271,11 @@ export class AdminService {
         "Starting precomputation of insights for popular assignments",
       );
 
-      // Find the most accessed assignments in the last 7 days
       const popularAssignments = await this.prisma.assignmentAttempt.groupBy({
         by: ["assignmentId"],
         where: {
           createdAt: {
-            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
           },
         },
         _count: {
@@ -296,14 +286,13 @@ export class AdminService {
             assignmentId: "desc",
           },
         },
-        take: 20, // Top 20 most active assignments
+        take: 20,
       });
 
       this.logger.log(
         `Found ${popularAssignments.length} popular assignments to precompute`,
       );
 
-      // Create a mock admin session for precomputation
       const adminSession = {
         assignmentId: 1,
         role: UserRole.ADMIN,
@@ -311,7 +300,6 @@ export class AdminService {
         userId: "system-user",
       };
 
-      // Process assignments in smaller batches to avoid overwhelming the system
       const batchSize = 5;
       for (
         let index = 0;
@@ -323,7 +311,6 @@ export class AdminService {
         await Promise.all(
           batch.map(async (assignment) => {
             try {
-              // This will compute and cache the insights
               await this.getDetailedAssignmentInsights(
                 adminSession,
                 assignment.assignmentId,
@@ -340,9 +327,8 @@ export class AdminService {
           }),
         );
 
-        // Add a small delay between batches
         if (index + batchSize < popularAssignments.length) {
-          await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 second delay
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
 
@@ -402,16 +388,13 @@ export class AdminService {
     };
 
     for (const usage of aiUsageRecords) {
-      // Use the actual model key from the database if available
       let modelKey = usage.modelKey;
 
       if (!modelKey) {
-        // Log warning for missing model key - this shouldn't happen with new records
         this.logger.warn(
           `Missing model key for usage record from ${usage.createdAt.toISOString()}, falling back based on usage type`,
         );
 
-        // Fallback logic for older records without model key stored
         const usageType = usage.usageType?.toLowerCase() || "";
         if (usageType.includes("translation")) {
           modelKey = "gpt-4o-mini";
@@ -426,7 +409,7 @@ export class AdminService {
         ) {
           modelKey = "gpt-4o";
         } else {
-          modelKey = "gpt-4o-mini"; // Default for unknown types
+          modelKey = "gpt-4o-mini";
         }
       }
 
@@ -436,13 +419,12 @@ export class AdminService {
           usage.tokensIn,
           usage.tokensOut,
           usage.createdAt,
-          usage.usageType, // Pass usage type for upscaling-aware calculations
+          usage.usageType,
         );
 
       if (costBreakdown) {
         totalCost += costBreakdown.totalCost;
 
-        // Categorize costs by usage type
         const usageType = usage.usageType?.toLowerCase() || "other";
         if (usageType.includes("grading")) {
           costByType.grading += costBreakdown.totalCost;
@@ -457,7 +439,6 @@ export class AdminService {
           costByType.other += costBreakdown.totalCost;
         }
 
-        // Create detailed calculation steps for transparency (showing per million token pricing)
         const inputPricePerMillion = costBreakdown.inputTokenPrice * 1_000_000;
         const outputPricePerMillion =
           costBreakdown.outputTokenPrice * 1_000_000;
@@ -490,7 +471,6 @@ export class AdminService {
           calculationSteps,
         });
       } else {
-        // Enhanced fallback with proper logging and transparency
         this.logger.error(
           `No pricing found for ${modelKey} at ${usage.createdAt.toISOString()}, using emergency fallback`,
         );
@@ -537,7 +517,7 @@ export class AdminService {
           modelKey: `${modelKey} (fallback)`,
           inputTokenPrice: prices.input,
           outputTokenPrice: prices.output,
-          pricingEffectiveDate: new Date(), // Use current date for fallback
+          pricingEffectiveDate: new Date(),
           usageType: usage.usageType,
           calculationSteps,
         });
@@ -569,7 +549,6 @@ export class AdminService {
       (author: { userId: string }) => author.userId,
     );
 
-    // Get all assignments by these authors to understand their activity
     const authorAssignments = await this.prisma.assignment.findMany({
       where: {
         AssignmentAuthor: {
@@ -592,7 +571,6 @@ export class AdminService {
       },
     });
 
-    // Get assignment attempt counts separately since it's not a direct relation
     const attemptCounts = await this.prisma.assignmentAttempt.groupBy({
       by: ["assignmentId"],
       where: {
@@ -605,7 +583,6 @@ export class AdminService {
       },
     });
 
-    // Get recent activity for these authors (simplified approach)
     const validAssignmentIds = authorAssignments
       .map((a) => a.id)
       .filter(
@@ -630,7 +607,6 @@ export class AdminService {
           })
         : [];
 
-    // Analyze author contributions
     const authorStats = authorIds.map((authorId) => {
       const authoredAssignments = authorAssignments.filter((assignment) =>
         assignment.AssignmentAuthor.some(
@@ -652,13 +628,11 @@ export class AdminService {
         0,
       );
 
-      // Calculate total attempts from attempt counts
       const authorAssignmentIds = new Set(authoredAssignments.map((a) => a.id));
       const totalAttempts = attemptCounts
         .filter((count) => authorAssignmentIds.has(count.assignmentId))
         .reduce((sum, count) => sum + count._count.id, 0);
 
-      // Get recent activity for this author
       const authorRecentActivity = recentActivity.filter((attempt) =>
         authoredAssignments.some(
           (assignment) => assignment.id === attempt.assignmentId,
@@ -693,10 +667,8 @@ export class AdminService {
       };
     });
 
-    // Sort authors by activity score
     authorStats.sort((a, b) => b.activityScore - a.activityScore);
 
-    // Generate insights
     const activityInsights = [];
     const totalAuthors = authorStats.length;
     const activeAuthors = authorStats.filter(
@@ -801,7 +773,6 @@ export class AdminService {
     };
   }
 
-  // Method to get flagged submissions
   async getFlaggedSubmissions() {
     return this.prisma.regradingRequest.findMany({
       where: {
@@ -813,7 +784,6 @@ export class AdminService {
     });
   }
 
-  // Method to dismiss a flagged submission
   async dismissFlaggedSubmission(id: number) {
     return this.prisma.regradingRequest.update({
       where: { id },
@@ -823,7 +793,6 @@ export class AdminService {
     });
   }
 
-  // Method to get regrading requests
   async getRegradingRequests() {
     return this.prisma.regradingRequest.findMany({
       orderBy: {
@@ -832,7 +801,6 @@ export class AdminService {
     });
   }
 
-  // Method to approve a regrading request
   async approveRegradingRequest(id: number, newGrade: number) {
     const request = await this.prisma.regradingRequest.findUnique({
       where: { id },
@@ -842,7 +810,6 @@ export class AdminService {
       throw new Error(`Regrading request with ID ${id} not found`);
     }
 
-    // Update the regrading request status
     await this.prisma.regradingRequest.update({
       where: { id },
       data: {
@@ -850,18 +817,16 @@ export class AdminService {
       },
     });
 
-    // Update the assignment attempt grade
     await this.prisma.assignmentAttempt.update({
       where: { id: request.attemptId },
       data: {
-        grade: newGrade / 100, // Convert percentage to decimal
+        grade: newGrade / 100,
       },
     });
 
     return { success: true };
   }
 
-  // Method to reject a regrading request
   async rejectRegradingRequest(id: number, reason: string) {
     const request = await this.prisma.regradingRequest.findUnique({
       where: { id },
@@ -871,7 +836,6 @@ export class AdminService {
       throw new Error(`Regrading request with ID ${id} not found`);
     }
 
-    // Update the regrading request status
     await this.prisma.regradingRequest.update({
       where: { id },
       data: {
@@ -1035,12 +999,10 @@ export class AdminService {
     const isAdmin = adminSession.role === UserRole.ADMIN;
     const skip = (page - 1) * limit;
 
-    // Build where clause based on role and search
     const searchCondition = search
       ? {
           OR: [
             { name: { contains: search, mode: "insensitive" as const } },
-            // Check if search term is a number and search by ID
             ...(Number.isNaN(Number(search))
               ? []
               : [{ id: { equals: Number(search) } }]),
@@ -1061,12 +1023,10 @@ export class AdminService {
           }),
     };
 
-    // Get total count for pagination (separate optimized query)
     const totalCount = await this.prisma.assignment.count({
       where: whereClause,
     });
 
-    // Get assignments with only essential data for the list view
     const assignments = await this.prisma.assignment.findMany({
       where: whereClause,
       skip,
@@ -1094,12 +1054,9 @@ export class AdminService {
 
     const assignmentIds = assignments.map((a) => a.id);
 
-    // Batch fetch all analytics data with optimized queries
     const [attemptStats, uniqueLearnersStats, feedbackStats] =
       await Promise.all([
-        // Get attempt statistics in separate queries for accuracy
         Promise.all([
-          // Get total attempts count (all attempts)
           this.prisma.assignmentAttempt.groupBy({
             by: ["assignmentId"],
             where: {
@@ -1109,7 +1066,6 @@ export class AdminService {
               id: true,
             },
           }),
-          // Get completed attempts count and average grade (only submitted attempts)
           this.prisma.assignmentAttempt.groupBy({
             by: ["assignmentId"],
             where: {
@@ -1134,7 +1090,6 @@ export class AdminService {
           return { totalStatsMap, submittedStatsMap };
         }),
 
-        // Get unique learner counts in one query - use distinct users per assignment
         Promise.all(
           assignmentIds.map(async (assignmentId) => {
             const uniqueUsers = await this.prisma.assignmentAttempt.findMany({
@@ -1146,7 +1101,6 @@ export class AdminService {
           }),
         ),
 
-        // Get feedback statistics in one query
         this.prisma.assignmentFeedback.groupBy({
           by: ["assignmentId"],
           where: {
@@ -1167,8 +1121,6 @@ export class AdminService {
       uniqueLearnersStats.map((s) => [s.assignmentId, s.uniqueUsersCount]),
     );
     const feedbackMap = new Map(feedbackStats.map((s) => [s.assignmentId, s]));
-    // const questionMap = new Map(questionStats.map(s => [s.assignmentId, s]));
-
     const analyticsData = await Promise.all(
       assignments.map(async (assignment) => {
         const totalAttempts = totalStatsMap.get(assignment.id) || 0;
@@ -1176,12 +1128,9 @@ export class AdminService {
         const completedAttempts = submittedData?._count.id || 0;
         const uniqueLearners = uniqueLearnersMap.get(assignment.id) || 0;
         const feedback = feedbackMap.get(assignment.id);
-        // const questions = questionMap.get(assignment.id); // Future use
-
-        const averageGrade = (submittedData?._avg.grade || 0) * 100; // Convert to percentage
+        const averageGrade = (submittedData?._avg.grade || 0) * 100;
         const averageRating = feedback?._avg.assignmentRating || 0;
 
-        // Get detailed AI usage data for accurate cost calculation
         const aiUsageDetails = await this.prisma.aIUsage.findMany({
           where: { assignmentId: assignment.id },
           select: {
@@ -1193,11 +1142,9 @@ export class AdminService {
           },
         });
 
-        // Calculate accurate costs using historical pricing and actual models
         const costData = await this.calculateHistoricalCosts(aiUsageDetails);
         const totalCost = costData.totalCost;
 
-        // Generate simple performance insights
         const performanceInsights: string[] = [];
         if (totalAttempts > 0) {
           const completionRate = (completedAttempts / totalAttempts) * 100;
@@ -1223,7 +1170,6 @@ export class AdminService {
           }
         }
 
-        // Accurate cost breakdown based on actual usage types
         const costBreakdown = {
           grading: Math.round(costData.costBreakdown.grading * 100) / 100,
           questionGeneration:
@@ -1244,7 +1190,7 @@ export class AdminService {
           averageRating,
           published: assignment.published,
           insights: {
-            questionInsights: [], // Simplified - can be loaded on-demand
+            questionInsights: [],
             performanceInsights,
             costBreakdown,
             detailedCostBreakdown: costData.detailedBreakdown.map((detail) => ({
@@ -1274,7 +1220,6 @@ export class AdminService {
   ) {
     const isAdmin = adminSession.role === UserRole.ADMIN;
 
-    // Build base where clauses for different queries with filters
     const assignmentWhere: any = isAdmin
       ? {}
       : {
@@ -1285,7 +1230,6 @@ export class AdminService {
           },
         };
 
-    // Apply assignment filters
     if (filters?.assignmentId) {
       assignmentWhere.id = filters.assignmentId;
     }
@@ -1296,7 +1240,6 @@ export class AdminService {
       };
     }
 
-    // Build date filter for time-based queries
     const dateFilter: any = {};
     if (filters?.startDate || filters?.endDate) {
       if (filters.startDate) {
@@ -1307,7 +1250,6 @@ export class AdminService {
       }
     }
 
-    // For non-admins, we need to get assignment IDs first for attempt/feedback queries
     let assignmentIds: number[] = [];
     if (!isAdmin) {
       const assignments = await this.prisma.assignment.findMany({
@@ -1316,7 +1258,6 @@ export class AdminService {
       });
       assignmentIds = assignments.map((a) => a.id);
     } else if (filters?.assignmentId || filters?.assignmentName) {
-      // For admins with assignment filters, also get the filtered assignment IDs
       const assignments = await this.prisma.assignment.findMany({
         where: assignmentWhere,
         select: { id: true },
@@ -1324,7 +1265,6 @@ export class AdminService {
       assignmentIds = assignments.map((a) => a.id);
     }
 
-    // Optimized parallel queries
     const [
       totalAssignments,
       publishedAssignments,
@@ -1336,15 +1276,12 @@ export class AdminService {
       aiUsageStats,
       averageAssignmentRating,
     ] = await Promise.all([
-      // Total assignments
       this.prisma.assignment.count({ where: assignmentWhere }),
 
-      // Published assignments
       this.prisma.assignment.count({
         where: { ...assignmentWhere, published: true },
       }),
 
-      // Attempt statistics (total attempts + unique users in one query)
       isAdmin || assignmentIds.length > 0
         ? this.prisma.assignmentAttempt
             .aggregate({
@@ -1392,7 +1329,6 @@ export class AdminService {
             })
         : Promise.resolve({ totalAttempts: 0, totalUsers: 0 }),
 
-      // Total feedback
       isAdmin || assignmentIds.length > 0
         ? this.prisma.assignmentFeedback.count({
             where: {
@@ -1410,7 +1346,6 @@ export class AdminService {
           })
         : 0,
 
-      // Report counts (admin only)
       isAdmin
         ? this.prisma.report
             .aggregate({
@@ -1447,7 +1382,6 @@ export class AdminService {
             })
         : { totalReports: 0, openReports: 0 },
 
-      // Recent activity with assignment names in one query
       isAdmin || assignmentIds.length > 0
         ? this.prisma.assignmentAttempt.findMany({
             where: {
@@ -1475,7 +1409,6 @@ export class AdminService {
           })
         : [],
 
-      // total number of unique leaners
       isAdmin || assignmentIds.length > 0
         ? this.prisma.assignmentAttempt
             .groupBy({
@@ -1498,7 +1431,6 @@ export class AdminService {
             .then((users) => users.length)
         : 0,
 
-      // AI usage data for cost calculation
       isAdmin || assignmentIds.length > 0
         ? this.prisma.aIUsage.findMany({
             where: {
@@ -1528,7 +1460,6 @@ export class AdminService {
           })
         : [],
 
-      // Average Assignment Rating for all assignments
       isAdmin || assignmentIds.length > 0
         ? this.prisma.assignmentFeedback.aggregate({
             where: {
@@ -1548,11 +1479,9 @@ export class AdminService {
         : { _avg: { assignmentRating: 0 } },
     ]);
 
-    // Calculate total cost using historical pricing
     const costData = await this.calculateHistoricalCosts(aiUsageStats);
     const totalCost = costData.totalCost;
 
-    // Get assignment names for recent attempts
     const assignmentNames = new Map<number, string>();
     if (recentAttempts.length > 0) {
       const uniqueAssignmentIds = [
@@ -1603,19 +1532,16 @@ export class AdminService {
     assignmentId: number,
   ) {
     try {
-      // Check cache first
       const cachedInsights = this.getCachedInsights(assignmentId);
       if (cachedInsights) {
         return cachedInsights;
       }
-      // Validate assignmentId
       if (!assignmentId || assignmentId <= 0) {
         throw new Error(`Invalid assignment ID: ${assignmentId}`);
       }
 
       const isAdmin = adminSession.role === UserRole.ADMIN;
 
-      // Check if user has access to this assignment
       const assignment = await this.prisma.assignment.findFirst({
         where: {
           id: assignmentId,
@@ -1652,13 +1578,11 @@ export class AdminService {
         );
       }
 
-      // Get assignment attempts count and basic stats with error handling
       let totalAttempts = 0;
       let submittedAttempts = 0;
       let calculatedAverageGrade = 0;
 
       try {
-        // Get simple counts first
         totalAttempts = await this.prisma.assignmentAttempt.count({
           where: { assignmentId },
         });
@@ -1667,23 +1591,20 @@ export class AdminService {
           where: { assignmentId, submitted: true },
         });
 
-        // Get average grade with simple aggregation
         const gradeAvg = await this.prisma.assignmentAttempt.aggregate({
           where: { assignmentId, submitted: true },
           _avg: { grade: true },
         });
-        calculatedAverageGrade = (gradeAvg._avg.grade || 0) * 100; // Convert to percentage
+        calculatedAverageGrade = (gradeAvg._avg.grade || 0) * 100;
       } catch (error) {
         this.logger.error(
           `Error fetching attempt statistics for assignment ${assignmentId}:`,
           error,
         );
-        // Use fallback values (already initialized above)
       }
 
-      // Process question insights in batches to prevent connection pool exhaustion
       const questionInsights = [];
-      const batchSize = 3; // Process 3 questions at a time to avoid connection pool issues
+      const batchSize = 3;
 
       for (
         let index = 0;
@@ -1700,7 +1621,6 @@ export class AdminService {
               let averagePoints = 0;
 
               try {
-                // Get total response count for this question
                 totalResponses = await this.prisma.questionResponse.count({
                   where: {
                     questionId: question.id,
@@ -1709,7 +1629,6 @@ export class AdminService {
                 });
 
                 if (totalResponses > 0) {
-                  // Get count of correct responses using aggregate
                   correctCount = await this.prisma.questionResponse.count({
                     where: {
                       questionId: question.id,
@@ -1718,7 +1637,6 @@ export class AdminService {
                     },
                   });
 
-                  // Get average points using aggregate
                   const pointsAvg =
                     await this.prisma.questionResponse.aggregate({
                       where: {
@@ -1734,7 +1652,6 @@ export class AdminService {
                   `Error fetching response statistics for question ${question.id}:`,
                   error,
                 );
-                // Use fallback values (already initialized above)
               }
 
               const correctPercentage =
@@ -1765,7 +1682,6 @@ export class AdminService {
           );
           questionInsights.push(...batchResults);
 
-          // Add a small delay between batches to prevent connection pool exhaustion
           if (index + batchSize < assignment.questions.length) {
             await new Promise((resolve) => setTimeout(resolve, 100));
           }
@@ -1774,7 +1690,6 @@ export class AdminService {
             `Error processing question batch starting at index ${index}:`,
             error,
           );
-          // Continue with empty results for this batch to prevent total failure
           const fallbackResults = batch.map((question) => ({
             id: question.id,
             question: question.question,
@@ -1794,17 +1709,14 @@ export class AdminService {
         }
       }
 
-      // Calculate analytics
       const uniqueLearners = await this.prisma.assignmentAttempt.groupBy({
         by: ["userId"],
         where: { assignmentId },
       });
 
-      // Use the calculated stats instead of processing attempts array
       const completedAttempts = submittedAttempts;
       const averageGrade = calculatedAverageGrade;
 
-      // Calculate total cost using historical pricing
       const aiUsageRecords = assignment.AIUsage.map((usage) => ({
         tokensIn: usage.tokensIn,
         tokensOut: usage.tokensOut,
@@ -1816,7 +1728,6 @@ export class AdminService {
       const costData = await this.calculateHistoricalCosts(aiUsageRecords);
       const totalCost = costData.totalCost;
 
-      // Get author information and activity analysis
       const authorActivity = await this.getAuthorActivity(
         assignment.AssignmentAuthor,
       );
@@ -1854,7 +1765,6 @@ export class AdminService {
         };
       });
 
-      // Calculate average rating
       const ratings = assignment.AssignmentFeedback.map(
         (f) => f.assignmentRating,
       ).filter((r) => r !== null);
@@ -1863,13 +1773,11 @@ export class AdminService {
           ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
           : 0;
 
-      // Calculate total points for assignment
       const totalPoints = assignment.questions.reduce(
         (sum, q) => sum + q.totalPoints,
         0,
       );
 
-      // Cost breakdown from historical pricing data
       const costBreakdown = {
         grading: Math.round(costData.costBreakdown.grading * 100) / 100,
         questionGeneration:
@@ -1878,7 +1786,6 @@ export class AdminService {
         other: Math.round(costData.costBreakdown.other * 100) / 100,
       };
 
-      // Generate performance insights
       const performanceInsights: string[] = [];
       if (completedAttempts > 0 && totalAttempts > 0) {
         const completionRate = (completedAttempts / totalAttempts) * 100;
@@ -1958,7 +1865,7 @@ export class AdminService {
             modelUsed: detail.modelKey,
             inputTokenPrice: detail.inputTokenPrice,
             outputTokenPrice: detail.outputTokenPrice,
-            inputCost: Math.round(detail.inputCost * 100_000_000) / 100_000_000, // 8 decimal places
+            inputCost: Math.round(detail.inputCost * 100_000_000) / 100_000_000,
             outputCost:
               Math.round(detail.outputCost * 100_000_000) / 100_000_000,
             totalCost: Math.round(detail.totalCost * 100_000_000) / 100_000_000,
@@ -2030,7 +1937,6 @@ export class AdminService {
         },
       };
 
-      // Cache the result before returning
       this.setCachedInsights(assignmentId, insights);
 
       return insights;
@@ -2040,7 +1946,6 @@ export class AdminService {
         error,
       );
 
-      // Return a safe fallback response
       return {
         insights: {
           questionInsights: [],
@@ -2132,7 +2037,6 @@ export class AdminService {
   ) {
     const isAdmin = adminSession.role === UserRole.ADMIN;
 
-    // Build base where clauses for different queries
     const assignmentWhere: any = isAdmin
       ? {}
       : {
@@ -2217,7 +2121,7 @@ export class AdminService {
           select: { id: true },
         },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithCost = await Promise.all(
@@ -2226,7 +2130,6 @@ export class AdminService {
           assignment.AIUsage,
         );
 
-        // Get attempt count separately
         const attemptCount = await this.prisma.assignmentAttempt.count({
           where: { assignmentId: assignment.id },
         });
@@ -2256,7 +2159,6 @@ export class AdminService {
     assignmentWhere: any,
     limit: number,
   ) {
-    // First get assignments with basic info
     const assignments = await this.prisma.assignment.findMany({
       where: assignmentWhere,
       select: {
@@ -2266,10 +2168,9 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
-    // Get attempt data for each assignment
     const assignmentsWithAttempts = await Promise.all(
       assignments.map(async (assignment) => {
         const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -2323,7 +2224,7 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithLearnerCount = await Promise.all(
@@ -2391,10 +2292,9 @@ export class AdminService {
         },
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
-    // Get assignments with report data and sort by report count
     const assignmentsWithReports = await Promise.all(
       assignments.map(async (assignment) => {
         const attemptCount = await this.prisma.assignmentAttempt.count({
@@ -2451,7 +2351,7 @@ export class AdminService {
           },
         },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithRatings = await Promise.all(
@@ -2524,7 +2424,6 @@ export class AdminService {
   ) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // First, get assignments that have recent attempts
     const assignmentIds = await this.prisma.assignmentAttempt.findMany({
       where: {
         createdAt: { gte: sevenDaysAgo },
@@ -2545,7 +2444,7 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithActivity = await Promise.all(
@@ -2613,7 +2512,7 @@ export class AdminService {
           },
         },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithCostPerLearner = await Promise.all(
@@ -2666,7 +2565,7 @@ export class AdminService {
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
       },
-      take: Math.min(limit * 10, 1000), // Get more records for sorting, but cap at 1000
+      take: Math.min(limit * 10, 1000),
     });
 
     const assignmentsWithCompletionRate = await Promise.all(

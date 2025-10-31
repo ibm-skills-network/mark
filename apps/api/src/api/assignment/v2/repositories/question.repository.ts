@@ -96,7 +96,6 @@ export class QuestionRepository {
         isDeleted: questionData.isDeleted,
       };
 
-      // Create data needs assignment connection, use only plain values
       const createData: Prisma.QuestionCreateInput = {
         totalPoints: questionData.totalPoints,
         type: questionData.type,
@@ -124,7 +123,6 @@ export class QuestionRepository {
         update: updateData,
         create: createData,
       });
-      // Handle upsert operation with properly typed data
       return returnValue;
     } catch (error: unknown) {
       const errorMessage =

@@ -1,4 +1,3 @@
-// src/components/FileExplorer/FileList.tsx
 import React from "react";
 import {
   IconFolder,
@@ -64,7 +63,6 @@ const FileList: React.FC<FileListProps> = ({
   readOnly = false,
   dropTarget = null,
 }) => {
-  // Empty state - no files or folders
   if (files.length === 0 && folders.length === 0) {
     return (
       <div className="text-gray-500 p-8 text-center rounded-lg border border-gray-200 bg-gray-50">
@@ -79,7 +77,6 @@ const FileList: React.FC<FileListProps> = ({
     );
   }
 
-  // Render folders section
   const renderFolders = () => {
     if (folders.length === 0) return null;
 
@@ -120,6 +117,7 @@ const FileList: React.FC<FileListProps> = ({
                 size={viewMode === "grid" ? 24 : 20}
                 className="text-yellow-500 mr-3 flex-shrink-0"
               />
+
               <span className="truncate font-medium text-gray-700">
                 {folder.name}
               </span>
@@ -129,7 +127,7 @@ const FileList: React.FC<FileListProps> = ({
       </div>
     );
   };
-  // Grid view for files
+
   const renderFilesGrid = () => {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -148,14 +146,12 @@ const FileList: React.FC<FileListProps> = ({
               onDragStart={onDragStart ? () => onDragStart(file) : undefined}
               onDragEnd={onDragEnd}
             >
-              {/* Selection indicator */}
               {isSelected && (
                 <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
                   <IconCheck size={14} className="text-white" />
                 </div>
               )}
 
-              {/* File icon and name */}
               <div className="flex-1 min-w-0">
                 <h4
                   className="text-sm font-medium text-gray-800 truncate"
@@ -177,11 +173,9 @@ const FileList: React.FC<FileListProps> = ({
                 </p>
               </div>
 
-              {/* File details */}
               <div className="text-xs text-gray-500 flex justify-between items-center">
                 <span>{new Date(file.createdAt).toLocaleDateString()}</span>
 
-                {/* Action buttons */}
                 <div className="flex space-x-1">
                   <button
                     className="p-1 text-gray-400 hover:text-purple-600 rounded-full hover:bg-gray-100"
@@ -236,7 +230,6 @@ const FileList: React.FC<FileListProps> = ({
     );
   };
 
-  // List view for files
   const renderFilesList = () => {
     return (
       <div className="overflow-x-auto rounded-md border border-gray-200">
@@ -424,13 +417,10 @@ const FileList: React.FC<FileListProps> = ({
 
   return (
     <div className="file-list">
-      {/* Folders section */}
       {renderFolders()}
 
-      {/* Files section */}
       {files.length > 0 && (
         <div className="files-section">
-          {/* Files display - either grid or list */}
           {viewMode === "grid" ? renderFilesGrid() : renderFilesList()}
         </div>
       )}

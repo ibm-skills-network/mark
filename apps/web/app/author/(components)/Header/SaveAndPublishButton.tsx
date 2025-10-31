@@ -174,18 +174,15 @@ const SaveAndPublishButton: FC<Props> = ({
   function handleNavigate() {
     setShowErrorModal(false);
 
-    // Navigate first
     if (step !== null && step !== undefined) {
       const nextPage = pageRouterUsingSteps(step);
 
       if (nextPage) {
         router.push(nextPage);
 
-        // If we have an invalidQuestionId, set it and scroll after navigation
         if (invalidQuestionId) {
           setFocusedQuestionId(invalidQuestionId);
 
-          // Wait for navigation and rendering to complete
           setTimeout(() => {
             const element = document.getElementById(
               `question-title-${invalidQuestionId}`,
@@ -197,7 +194,6 @@ const SaveAndPublishButton: FC<Props> = ({
                 inline: "center",
               });
             } else {
-              // If question-title element doesn't exist, try the question element
               const questionElement = document.getElementById(
                 `question-${invalidQuestionId}`,
               );
@@ -209,13 +205,12 @@ const SaveAndPublishButton: FC<Props> = ({
                 });
               }
             }
-          }, 500); // Give time for navigation and rendering
+          }, 500);
         }
       } else {
         router.push(`/author/${assignmentId}`);
       }
     } else if (invalidQuestionId) {
-      // If no step but we have an invalid question ID, we're already on the right page
       setFocusedQuestionId(invalidQuestionId);
 
       setTimeout(() => {
@@ -268,7 +263,6 @@ const SaveAndPublishButton: FC<Props> = ({
   const handleShowPublishModal = async () => {
     try {
       if (!currentVersion) {
-        // No current version - assume this is a new assignment or first version
         const defaultComparison: VersionComparison = {
           fromVersion: {
             id: 0,
@@ -302,6 +296,7 @@ const SaveAndPublishButton: FC<Props> = ({
               changeType: "added",
             },
           ],
+
           questionChanges: [],
         };
         setVersionComparison(defaultComparison);
@@ -309,8 +304,6 @@ const SaveAndPublishButton: FC<Props> = ({
         return;
       }
 
-      // For now, provide a reasonable default comparison since we don't have
-      // a way to compare against current working state
       const defaultComparison: VersionComparison = {
         fromVersion: {
           ...currentVersion,
@@ -331,13 +324,14 @@ const SaveAndPublishButton: FC<Props> = ({
             changeType: "modified",
           },
         ],
+
         questionChanges: [],
       };
       setVersionComparison(defaultComparison);
       setShowPublishModal(true);
     } catch (error) {
       console.error("Failed to analyze changes:", error);
-      // Provide fallback comparison for when comparison fails
+
       const fallbackComparison: VersionComparison = {
         fromVersion: currentVersion
           ? {
@@ -377,6 +371,7 @@ const SaveAndPublishButton: FC<Props> = ({
             changeType: "modified",
           },
         ],
+
         questionChanges: [],
       };
       setVersionComparison(fallbackComparison);
@@ -393,13 +388,12 @@ const SaveAndPublishButton: FC<Props> = ({
   ) => {
     try {
       if (shouldUpdate && versionId) {
-        // Use the dedicated update function for existing versions
         if (updateExistingVersion) {
           await updateExistingVersion(
             versionId,
             versionNumber,
             description,
-            false, // Force publish instead of draft
+            false,
           );
           setShowPublishModal(false);
 
@@ -417,7 +411,6 @@ const SaveAndPublishButton: FC<Props> = ({
     } catch (error: any) {
       console.error("Failed to save version:", error);
 
-      // Check if this is a version conflict error
       if (
         error.response?.status === 409 &&
         error.response?.data?.versionExists
@@ -427,7 +420,7 @@ const SaveAndPublishButton: FC<Props> = ({
           existingVersion: conflictData.existingVersion,
           requestedVersion: versionNumber,
           description,
-          isDraft: false, // Always publish
+          isDraft: false,
         });
         setShowPublishModal(false);
         setShowConflictModal(true);
@@ -459,11 +452,10 @@ const SaveAndPublishButton: FC<Props> = ({
   const handleCreateNewVersion = () => {
     setShowConflictModal(false);
     setConflictDetails(null);
-    // Reopen the version selection modal to let user pick a different version number
+
     setShowPublishModal(true);
   };
 
-  // Hide modal when conditions change and button becomes enabled
   useEffect(() => {
     if (!disableButton) {
       setShowErrorModal(false);
@@ -473,7 +465,6 @@ const SaveAndPublishButton: FC<Props> = ({
   return (
     <>
       <div className="space-y-3">
-        {/* Button */}
         <>
           <Tooltip
             content={
@@ -500,19 +491,15 @@ const SaveAndPublishButton: FC<Props> = ({
         </>
       </div>
 
-      {/* Error Modal */}
       {showErrorModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            {/* Backdrop */}
             <div
               className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
               onClick={() => setShowErrorModal(false)}
             />
 
-            {/* Modal Content */}
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              {/* Close button */}
               <button
                 onClick={() => setShowErrorModal(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -520,7 +507,6 @@ const SaveAndPublishButton: FC<Props> = ({
                 <XMarkIcon className="h-6 w-6" />
               </button>
 
-              {/* Modal Header */}
               <div className="flex items-center mb-4">
                 {statusMessage.type === "error" && (
                   <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
@@ -533,7 +519,6 @@ const SaveAndPublishButton: FC<Props> = ({
                 </h3>
               </div>
 
-              {/* Modal Body */}
               <div className="mb-6">
                 <TooltipMessage
                   isLoading={isLoading}
@@ -546,11 +531,10 @@ const SaveAndPublishButton: FC<Props> = ({
                   changesSummary={changesSummary}
                   invalidQuestionId={invalidQuestionId}
                   onNavigate={handleNavigate}
-                  showAction={false} // No action button in modal
+                  showAction={false}
                 />
               </div>
 
-              {/* Modal Footer */}
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowErrorModal(false)}
@@ -572,7 +556,6 @@ const SaveAndPublishButton: FC<Props> = ({
         </div>
       )}
 
-      {/* Version Selection Modal */}
       <VersionSelectionModal
         isOpen={showPublishModal}
         onClose={() => setShowPublishModal(false)}
@@ -601,7 +584,6 @@ const SaveAndPublishButton: FC<Props> = ({
         forcePublish={true}
       />
 
-      {/* Version Conflict Modal */}
       {conflictDetails && (
         <VersionConflictModal
           isOpen={showConflictModal}
