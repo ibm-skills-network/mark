@@ -2342,24 +2342,14 @@ export class AttemptServiceV1 {
     learnerResponse: string;
   } {
     const choices = this.parseChoices(question.choices);
-    console.log(
-      `Handling single correct question response for question ID: ${question.id}`,
-    );
     const learnerChoice =
       createQuestionResponseAttemptRequestDto.learnerChoices[0];
-    console.log(
-      `Learner choice: ${learnerChoice}, Choices: ${JSON.stringify(choices)}`,
-    );
+
     const normalizedLearnerChoice = this.normalizeText(learnerChoice);
     const correctChoice = choices.find((choice) => choice.isCorrect);
-    console.log(
-      `Correct choice: ${correctChoice ? correctChoice.choice : "None"}`,
-    );
+
     const selectedChoice = choices.find(
       (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice,
-    );
-    console.log(
-      `Selected choice: ${selectedChoice ? selectedChoice.choice : "None"}`,
     );
 
     const data = {

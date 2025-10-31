@@ -1,5 +1,5 @@
 import { Module, Global } from "@nestjs/common";
-import { APP_INTERCEPTOR, Reflector } from "@nestjs/core";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { DataTransformInterceptor } from "./interceptors/data-transform.interceptor";
 
 /**
@@ -8,8 +8,6 @@ import { DataTransformInterceptor } from "./interceptors/data-transform.intercep
 @Global()
 @Module({
   providers: [
-    Reflector,
-    DataTransformInterceptor,
     {
       provide: APP_INTERCEPTOR,
       useClass: DataTransformInterceptor,

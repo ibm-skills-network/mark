@@ -2,7 +2,6 @@ import {
   DataTransformer,
   TransformConfig,
 } from "@/app/Helpers/data-transformer";
-import { API_DECODE_CONFIG } from "@/app/Helpers/transform-config";
 
 interface APIClientConfig {
   baseURL?: string;
@@ -225,7 +224,22 @@ export class APIError extends Error {
 export const apiClient = new APIClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "",
   autoTransform: true, // Frontend handles encoding requests and decoding responses
-  transformConfig: API_DECODE_CONFIG,
+  transformConfig: {
+    fields: [
+      "introduction",
+      "instructions",
+      "gradingCriteriaOverview",
+      "question",
+      "content",
+      "rubricQuestion",
+      "description",
+      "questions.scoring.rubrics.rubricQuestion",
+      "questions.scoring.rubrics.criteria.description",
+      "learnerTextResponse",
+      "learnerChoices",
+    ],
+    deep: true,
+  },
 });
 
 /**

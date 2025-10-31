@@ -1,32 +1,8 @@
-import type {
-  API_ENCODE_CONFIG,
-  API_DECODE_CONFIG,
-  FORM_DATA_CONFIG,
-  STORAGE_CONFIG,
-} from "./transform-config";
-
 export interface TransformConfig {
   fields?: string[];
   exclude?: string[];
   deep?: boolean;
   compressionLevel?: "none" | "light" | "heavy";
-}
-
-let _transformConfig:
-  | {
-      API_ENCODE_CONFIG: typeof API_ENCODE_CONFIG;
-      API_DECODE_CONFIG: typeof API_DECODE_CONFIG;
-      FORM_DATA_CONFIG: typeof FORM_DATA_CONFIG;
-      STORAGE_CONFIG: typeof STORAGE_CONFIG;
-    }
-  | undefined;
-
-function getTransformConfig() {
-  if (!_transformConfig) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _transformConfig = require("./transform-config");
-  }
-  return _transformConfig;
 }
 
 export interface TransformMetadata {
@@ -44,13 +20,22 @@ const transformCache = new Map<
   { data: any; metadata: TransformMetadata; expiry: number }
 >();
 const CACHE_TTL = 5 * 60 * 1000;
-const BASE64_REGEX = /^[A-Za-z0-9+/]+=*$/;
+const HTML_TAG_REGEX = /<\/?[a-z][\s\S]*>/i;
+const BASE64_FULL_REGEX = /^[A-Za-z0-9+/]+={0,2}$/;
+const BASE64_SEGMENT_REGEX = /[A-Za-z0-9+/=]{12,}/g;
 const MAX_BASE64_DEPTH = 5;
 
-/**
- * Check if a string contains mostly printable text
- * Used to validate that decoded base64 produces readable content
- */
+interface Base64Payload {
+  candidate: string;
+  decoded: string;
+}
+
+function padBase64(value: string): string {
+  const remainder = value.length % 4;
+  if (remainder === 0) return value;
+  return value + "=".repeat(4 - remainder);
+}
+
 function isPrintableText(value: string): boolean {
   if (!value) return true;
 
@@ -71,45 +56,24 @@ function isPrintableText(value: string): boolean {
   return printableCount / value.length >= 0.85;
 }
 
-/**
- * Strictly validate and decode a base64 string
- * Returns decoded string only if:
- * 1. Input is valid base64 format
- * 2. Decoded content is printable text
- * 3. Re-encoding produces the same result (round-trip validation)
- */
-function tryDecodeBase64(value: string): string | null {
-  if (!value || typeof value !== "string") return null;
-
-  const trimmed = value.trim();
-
-  if (trimmed.length < 4) return null;
-
-  if (!BASE64_REGEX.test(trimmed)) return null;
-
-  const paddingNeeded = (4 - (trimmed.length % 4)) % 4;
-  const padded = trimmed + "=".repeat(paddingNeeded);
-
+function decodeBase64String(value: string): string | null {
   try {
-    const binaryString = atob(padded);
+    const binaryString = atob(value);
     const bytes = new Uint8Array(binaryString.length);
     for (let index = 0; index < binaryString.length; index += 1) {
       bytes[index] = binaryString.charCodeAt(index);
     }
     const decoder = new TextDecoder();
     const decoded = decoder.decode(bytes);
-
     if (!isPrintableText(decoded)) {
       return null;
     }
 
     const encoder = new TextEncoder();
-    const encodedBytes = encoder.encode(decoded);
-    const binaryStr = Array.from(encodedBytes, (byte) =>
-      String.fromCharCode(byte),
-    ).join("");
-    const reencoded = btoa(binaryStr).replace(/=+$/g, "");
-    const normalizedInput = trimmed.replace(/=+$/g, "");
+    const reencoded = btoa(
+      String.fromCharCode(...Array.from(encoder.encode(decoded))),
+    ).replace(/=+$/g, "");
+    const normalizedInput = value.replace(/=+$/g, "");
 
     return reencoded === normalizedInput ? decoded : null;
   } catch {
@@ -117,22 +81,46 @@ function tryDecodeBase64(value: string): string | null {
   }
 }
 
-/**
- * Decode multiple layers of base64 encoding
- * Handles cases where data was encoded multiple times
- */
-function decodeBase64Layers(value: string): string {
-  if (!value || typeof value !== "string") return value;
+function findBase64Payload(rawValue: string): Base64Payload | null {
+  if (!rawValue) return null;
 
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+
+  const primaryCandidate =
+    trimmed.length >= 8 &&
+    BASE64_FULL_REGEX.test(trimmed) &&
+    decodeBase64String(trimmed);
+
+  if (typeof primaryCandidate === "string") {
+    return { candidate: trimmed, decoded: primaryCandidate };
+  }
+
+  const matches = trimmed.match(BASE64_SEGMENT_REGEX);
+  if (!matches) return null;
+
+  for (const match of matches) {
+    if (!match) continue;
+    const padded = padBase64(match);
+    const decoded = decodeBase64String(padded);
+    if (decoded !== null) {
+      return { candidate: padded, decoded };
+    }
+  }
+
+  return null;
+}
+
+function decodeBase64Layers(value: string): string {
   let current = value;
   let depth = 0;
 
   while (depth < MAX_BASE64_DEPTH) {
-    const decoded = tryDecodeBase64(current);
+    const payload = findBase64Payload(current);
+    if (!payload) break;
 
-    if (decoded === null || decoded === current) {
-      break;
-    }
+    const decoded = payload.decoded;
+    if (decoded === current) break;
 
     current = decoded;
     depth += 1;
@@ -248,20 +236,6 @@ function transformData(
       continue;
     }
 
-    if (typeof value === "string" && operation === "decode") {
-      const parsed = tryParseJSON(value);
-      if (parsed !== null && typeof parsed === "object") {
-        result[key] = transformData(
-          parsed,
-          config,
-          operation,
-          visited,
-          fieldPath,
-        );
-        continue;
-      }
-    }
-
     if (shouldTransformField(key, value, fields, fieldPath, operation)) {
       if (Array.isArray(value)) {
         result[key] = value.map((item, index) => {
@@ -292,19 +266,7 @@ function transformData(
 }
 
 /**
- * Try to parse a string as JSON, return null if it fails
- */
-function tryParseJSON(value: string): any {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Determine if a field should be transformed
- * Only transforms explicitly configured fields - no auto-detection
+ * Determine if a field should be transformed based on configuration and content
  */
 function shouldTransformField(
   key: string,
@@ -313,27 +275,26 @@ function shouldTransformField(
   fieldPath: string,
   operation: "encode" | "decode",
 ): boolean {
-  if (!fields || fields.length === 0) {
+  if (fields && fields.length > 0) {
+    return matchesConfiguredField(fields, key, fieldPath);
+  }
+
+  if (typeof value !== "string") {
     return false;
   }
 
-  const isConfigured = matchesConfiguredField(fields, key, fieldPath);
-  if (!isConfigured) {
-    return false;
+  const trimmedValue = value.trim();
+  const containsHtmlTags = HTML_TAG_REGEX.test(trimmedValue);
+  const base64Payload = findBase64Payload(value);
+
+  if (operation === "encode") {
+    const alreadyEncoded =
+      base64Payload !== null && base64Payload.candidate === trimmedValue;
+
+    return !alreadyEncoded && (value.length > 10 || containsHtmlTags);
   }
 
-  if (typeof value === "string") {
-    const trimmedValue = value.trim();
-    if (
-      operation === "encode" &&
-      /^\d+$/.test(trimmedValue) &&
-      trimmedValue.length <= 10
-    ) {
-      return false;
-    }
-  }
-
-  return true;
+  return base64Payload !== null;
 }
 
 function normalizeFieldPath(path: string): string[] {
@@ -372,6 +333,24 @@ function matchesConfiguredField(
 }
 
 /**
+ * Check if a string is already Base64 encoded
+ */
+function isAlreadyEncoded(value: string): boolean {
+  if (!value || typeof value !== "string") return false;
+
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.length % 4 !== 0 ||
+    !BASE64_FULL_REGEX.test(trimmed)
+  ) {
+    return false;
+  }
+
+  return decodeBase64String(trimmed) !== null;
+}
+
+/**
  * Encode a single value with optional compression for large strings
  */
 function encodeValue(value: any): string {
@@ -385,11 +364,7 @@ function encodeValue(value: any): string {
 
   const encoder = new TextEncoder();
   const encoded = encoder.encode(value);
-
-  const binaryString = Array.from(encoded, (byte) =>
-    String.fromCharCode(byte),
-  ).join("");
-  const base64 = btoa(binaryString);
+  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
 
   if (value.length > 1000) {
     return compressAndEncode(value);
@@ -416,6 +391,7 @@ function decodeValue(value: any): any {
         return fullyDecoded;
       }
     } catch (error) {
+      console.warn("Failed to decode compressed value:", error);
       return value;
     }
   }
@@ -438,11 +414,7 @@ function decodeValue(value: any): any {
 function compressAndEncode(value: string): string {
   const encoder = new TextEncoder();
   const encoded = encoder.encode(value);
-
-  const binaryString = Array.from(encoded, (byte) =>
-    String.fromCharCode(byte),
-  ).join("");
-  const base64 = btoa(binaryString);
+  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
   return "comp:" + base64;
 }
 
@@ -492,11 +464,7 @@ function generateCacheKey(
 
   const encoder = new TextEncoder();
   const encoded = encoder.encode(configHash + dataHash);
-
-  const binaryString = Array.from(encoded, (byte) =>
-    String.fromCharCode(byte),
-  ).join("");
-  const base64 = btoa(binaryString);
+  const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
 
   return `${operation || "transform"}_${base64}`;
 }
@@ -547,26 +515,63 @@ export function getCacheStats() {
  */
 export const DataTransformer = {
   encodeForAPI: (data: any, config?: TransformConfig) => {
-    const { API_ENCODE_CONFIG } = getTransformConfig();
-    const result = smartEncode(data, config || API_ENCODE_CONFIG);
+    const defaultConfig = {
+      fields: [
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+        "rubricQuestion",
+        "description",
+        "questions.choices.choice",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
+        "learnerTextResponse",
+        "learnerChoices",
+      ],
+
+      deep: true,
+    };
+    const result = smartEncode(data, config || defaultConfig);
     return result;
   },
 
   decodeFromAPI: (data: any, config?: TransformConfig) => {
-    const { API_DECODE_CONFIG } = getTransformConfig();
-    const result = smartDecode(data, config || API_DECODE_CONFIG);
+    const defaultConfig = {
+      fields: [
+        "introduction",
+        "instructions",
+        "gradingCriteriaOverview",
+        "question",
+        "content",
+        "rubricQuestion",
+        "questions.choices",
+        "questionVersions.choices",
+        "questionVersions.question",
+        "description",
+        "questions.choices.choice",
+        "questions.scoring.rubrics.rubricQuestion",
+        "questions.scoring.rubrics.criteria.description",
+      ],
+
+      deep: true,
+    };
+    const result = smartDecode(data, config || defaultConfig);
     return result;
   },
 
-  encodeFormData: (data: any, config?: TransformConfig) => {
-    const { FORM_DATA_CONFIG } = getTransformConfig();
-    return smartEncode(data, config || FORM_DATA_CONFIG);
-  },
+  encodeFormData: (data: any) =>
+    smartEncode(data, {
+      exclude: ["id", "createdAt", "updatedAt"],
+      deep: false,
+    }),
 
-  encodeForStorage: (data: any, config?: TransformConfig) => {
-    const { STORAGE_CONFIG } = getTransformConfig();
-    return smartEncode(data, config || STORAGE_CONFIG);
-  },
+  encodeForStorage: (data: any) =>
+    smartEncode(data, {
+      compressionLevel: "heavy",
+      deep: true,
+    }),
 
   clearCache: clearTransformCache,
   getStats: getCacheStats,

@@ -13,12 +13,12 @@ import { AppService } from "./app.service";
 import { AdminAuthModule } from "./auth/admin-auth.module";
 import { AuthModule } from "./auth/auth.module";
 import { UserSessionMiddleware } from "./auth/middleware/user.session.middleware";
-import { CommonModule } from "./common/common.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
+import { DataTransformMiddleware } from "./middleware/data-transform.middleware";
 import { routes } from "./routes";
 
 @Module({
@@ -26,7 +26,6 @@ import { routes } from "./routes";
     ConfigModule.forRoot(),
     WinstonModule.forRoot(winstonOptions),
     HealthModule,
-    CommonModule,
     ApiModule,
     ScheduledTasksModule,
     RouterModule.register(routes),
@@ -40,7 +39,7 @@ import { routes } from "./routes";
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(LoggerMiddleware)
+      .apply(DataTransformMiddleware, LoggerMiddleware)
       .forRoutes({ path: "*", method: RequestMethod.ALL })
       .apply(UserSessionMiddleware)
       .forRoutes(
