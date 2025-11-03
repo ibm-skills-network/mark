@@ -35,6 +35,9 @@ Install the following tools before getting started:
 ### Required Tools
 
 ```bash
+# Docker Desktop (includes Docker Compose)
+# Download from: https://www.docker.com/products/docker-desktop
+
 # Python and pip (for detect-secrets)
 python3 --version
 pip3 --version
@@ -156,6 +159,16 @@ dev.env
 
 ## Running Mark Locally
 
+> **📖 For detailed setup instructions with troubleshooting, see [SETUP.md](../SETUP.md)**
+
+### Quick Start
+
+```bash
+yarn start  # Runs db + setup + seed + dev in one command
+```
+
+### Step-by-Step
+
 ### Start the Database
 
 ```bash
@@ -173,8 +186,6 @@ yarn seed   # (Optional) Seeds test data
 
 ```bash
 yarn dev    # Starts all services in parallel
-# OR
-yarn start  # Runs db + setup + seed + dev
 ```
 
 ### Access the Application
