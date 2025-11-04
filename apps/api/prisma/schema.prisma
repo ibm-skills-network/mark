@@ -488,7 +488,10 @@ model RegradingRequest {
   attemptId         Int              /// The ID of the assignment attempt
   assignmentAttempt AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   regradingReason   String?          /// Reason for requesting regrading
+  proposedGrade     Float?           /// AI-proposed grade (0.0 to 1.0) for the regrading
+  questionIds       Int[]            @default([]) /// Array of question IDs the learner complained about (if applicable)
   regradingStatus   RegradingStatus  @default(PENDING) /// Status of the regrading request
+  processedBy       String?          /// Email of the author/admin who processed this request
   createdAt         DateTime         @default(now()) /// Timestamp for when the regrading request was created
   updatedAt         DateTime         @updatedAt       /// Timestamp for the last update to the regrading request
 }
@@ -682,6 +685,17 @@ model AdminSession {
   @@index([email])
   @@index([sessionToken])
   @@index([expiresAt])
+}
+
+/// This model stores author/admin settings and preferences
+model AuthorSettings {
+  id                          Int      @id @default(autoincrement())
+  userId                      String   @unique /// The email/userId of the author
+  emailOnRegradingRequest     Boolean  @default(true) /// Whether to email author when learners submit regrading requests
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@index([userId])
 }
 
 /// This model tracks the authors of assignments

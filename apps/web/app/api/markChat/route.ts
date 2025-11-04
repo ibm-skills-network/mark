@@ -120,7 +120,7 @@ IMPORTANT CAPABILITIES:
               function: {
                 name: "getQuestionDetails",
                 description:
-                  "Get detailed information about a specific question in the assignment",
+                  "ONLY use if question details are NOT in the context. Check FEEDBACK SUMMARY first - if question info is already there, DO NOT call this. Use this ONLY when you need additional details not available in the current context.",
                 parameters: {
                   type: "object",
                   properties: {
@@ -180,7 +180,7 @@ IMPORTANT CAPABILITIES:
               function: {
                 name: "requestRegrading",
                 description:
-                  "Submit a formal request for regrading an assignment",
+                  "Submit ONE regrading request with ALL question IDs. CRITICAL: Learner says 'questions 4 and 5' → Look in FEEDBACK SUMMARY for 'Question #4 (ID:6827)' and 'Question #5 (ID:6828)' → Call ONCE with questionIds: [6827, 6828]. DO NOT call this function multiple times! Submit ONE request with ALL IDs together.",
                 parameters: {
                   type: "object",
                   properties: {
@@ -196,7 +196,16 @@ IMPORTANT CAPABILITIES:
                     },
                     reason: {
                       type: "string",
-                      description: "The reason for requesting regrading",
+                      description:
+                        "Specific reason: facts, sources, rubric criteria. NOT vague.",
+                    },
+                    questionIds: {
+                      type: "array",
+                      items: {
+                        type: "number",
+                      },
+                      description:
+                        "REQUIRED: Put ALL database IDs in this single array. Example: Learner mentions 'questions 4 and 5' → Find 'Question #4 (ID:6827)' and 'Question #5 (ID:6828)' in FEEDBACK SUMMARY → Use [6827, 6828] in ONE request. NEVER split into multiple requests!",
                     },
                   },
                   required: ["reason"],

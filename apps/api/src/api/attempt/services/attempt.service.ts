@@ -1,8 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Injectable } from "@nestjs/common";
-import { GradingJob, ReportType } from "@prisma/client";
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { GradingJob, RegradingStatus, ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
 import { catchError, Observable, of, Subject } from "rxjs";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
@@ -25,6 +29,7 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
+import { EmailService } from "../../../common/services/email.service";
 import { PrismaService } from "../../../database/prisma.service";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
@@ -41,6 +46,7 @@ export class AttemptServiceV2 {
     private readonly regradingService: AttemptRegradingService,
     private readonly reportingService: AttemptReportingService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -283,10 +289,6 @@ export class AttemptServiceV2 {
           }
         })
         .catch((error) => {
-          console.error(
-            `Failed to get initial status for job ${gradingJobId}:`,
-            error,
-          );
           subscriber.next({
             type: "error",
             data: JSON.stringify({
@@ -334,14 +336,9 @@ export class AttemptServiceV2 {
               return;
             }
           }
-        } catch (error) {
+        } catch {
           consecutiveErrors++;
           pollInterval = Math.min(maxPollInterval, pollInterval + 2000);
-
-          console.error(
-            `Poll error for job ${gradingJobId} (attempt ${consecutiveErrors}):`,
-            error,
-          );
 
           if (consecutiveErrors >= 3) {
             subscriber.next({
@@ -356,9 +353,6 @@ export class AttemptServiceV2 {
           }
 
           if (consecutiveErrors >= 10) {
-            console.error(
-              `Too many consecutive errors for job ${gradingJobId}, terminating stream`,
-            );
             isStreamActive = false;
             subscriber.error(
               new Error(
@@ -384,7 +378,6 @@ export class AttemptServiceV2 {
           }
         },
         error: (error) => {
-          console.error(`Status subject error for job ${gradingJobId}:`, error);
           if (isStreamActive) {
             subscriber.next({
               type: "error",
@@ -410,10 +403,6 @@ export class AttemptServiceV2 {
       };
     }).pipe(
       catchError((error: Error) => {
-        console.error(
-          `Critical stream error for grading job ${gradingJobId}:`,
-          error,
-        );
         return of({
           type: "error",
           data: JSON.stringify({
@@ -462,7 +451,6 @@ export class AttemptServiceV2 {
       const job = await this.getGradingJob(gradingJobId);
 
       if (!job) {
-        console.warn(`Grading job ${gradingJobId} not found during polling`);
         return {
           type: "error",
           data: JSON.stringify({
@@ -486,11 +474,7 @@ export class AttemptServiceV2 {
         parsedResult = job.result
           ? JSON.parse(job.result as string)
           : undefined;
-      } catch (parseError) {
-        console.warn(
-          `Failed to parse job result for ${gradingJobId}:`,
-          parseError,
-        );
+      } catch {
         parsedResult = {
           error: "Result parsing failed",
           rawResult: job.result,
@@ -510,7 +494,6 @@ export class AttemptServiceV2 {
         }),
       } as MessageEvent;
     } catch (error) {
-      console.error(`Failed to poll grading job ${gradingJobId}:`, error);
       throw new Error(
         `Database error while polling job ${gradingJobId}: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -755,5 +738,165 @@ export class AttemptServiceV2 {
       description,
       userId,
     );
+  }
+
+  /**
+   * Update individual question grades for an attempt (author only)
+   */
+  async updateQuestionGrades(
+    assignmentId: number,
+    attemptId: number,
+    questionGrades: Record<string, number>,
+    regradingRequestId: number | undefined,
+    userSession: UserSession,
+  ) {
+    const attempt = await this.prisma.assignmentAttempt.findFirst({
+      where: {
+        id: attemptId,
+        assignmentId,
+      },
+      include: {
+        questionResponses: true,
+      },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Attempt ${attemptId} not found for assignment ${assignmentId}`,
+      );
+    }
+
+    const authorAssignment = await this.prisma.assignmentAuthor.findFirst({
+      where: {
+        assignmentId,
+        userId: userSession.userId,
+      },
+    });
+
+    if (!authorAssignment && userSession.role !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        "You do not have permission to modify grades for this assignment",
+      );
+    }
+
+    const updatePromises = Object.entries(questionGrades).map(
+      async ([questionResponseId, newPoints]) => {
+        const responseId = Number(questionResponseId);
+
+        const response = attempt.questionResponses.find(
+          (r) => r.id === responseId,
+        );
+        if (!response) {
+          throw new NotFoundException(
+            `Question response ${responseId} not found in attempt ${attemptId}`,
+          );
+        }
+
+        return this.prisma.questionResponse.update({
+          where: { id: responseId },
+          data: { points: newPoints },
+        });
+      },
+    );
+
+    await Promise.all(updatePromises);
+
+    const updatedResponses = await this.prisma.questionResponse.findMany({
+      where: { assignmentAttemptId: attemptId },
+    });
+
+    const questionIds = updatedResponses.map((r) => r.questionId);
+    const questions = await this.prisma.question.findMany({
+      where: { id: { in: questionIds } },
+      select: {
+        id: true,
+        totalPoints: true,
+      },
+    });
+
+    const questionPointsMap = new Map(
+      questions.map((q) => [q.id, q.totalPoints]),
+    );
+
+    const totalPossiblePoints = updatedResponses.reduce(
+      (sum, r) => sum + (questionPointsMap.get(r.questionId) || 0),
+      0,
+    );
+
+    const totalEarnedPoints = updatedResponses.reduce(
+      (sum, r) => sum + r.points,
+      0,
+    );
+
+    const newGrade =
+      totalPossiblePoints > 0 ? totalEarnedPoints / totalPossiblePoints : 0;
+
+    const oldGrade = attempt.grade || 0;
+
+    await this.prisma.assignmentAttempt.update({
+      where: { id: attemptId },
+      data: { grade: newGrade },
+    });
+
+    if (regradingRequestId) {
+      await this.prisma.regradingRequest.update({
+        where: { id: regradingRequestId },
+        data: { regradingStatus: RegradingStatus.COMPLETED },
+      });
+
+      await this.sendGradeUpdateNotification(
+        assignmentId,
+        attemptId,
+        attempt.userId,
+        oldGrade,
+        newGrade,
+      );
+    }
+
+    return {
+      success: true,
+      attemptId,
+      updatedGrade: newGrade * 100,
+      totalPoints: totalPossiblePoints,
+      earnedPoints: totalEarnedPoints,
+      questionsUpdated: Object.keys(questionGrades).length,
+    };
+  }
+
+  /**
+   * Send email notification to learner about grade update
+   * @private
+   */
+  private async sendGradeUpdateNotification(
+    assignmentId: number,
+    attemptId: number,
+    learnerUserId: string,
+    oldGrade: number,
+    newGrade: number,
+  ): Promise<void> {
+    try {
+      const assignment = await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { name: true },
+      });
+
+      if (!assignment) {
+        return;
+      }
+
+      const learnerEmail = learnerUserId;
+
+      await this.emailService.sendGradeUpdateNotification(
+        learnerEmail,
+        assignment.name,
+        assignmentId,
+        attemptId,
+        oldGrade,
+        newGrade,
+        "COMPLETED",
+      );
+    } catch {
+      // Handle error
+    }
   }
 }

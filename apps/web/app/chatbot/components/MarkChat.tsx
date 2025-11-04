@@ -609,7 +609,11 @@ const ChatMessages = ({
   onClientExecution,
 }) => {
   const filteredMessages = React.useMemo(
-    () => messages.filter((msg) => msg.role !== "system"),
+    () =>
+      messages.filter(
+        (msg) =>
+          msg.role !== "system" && msg.content && msg.content.trim() !== "",
+      ),
     [messages],
   );
 
@@ -2146,7 +2150,6 @@ Please help me with this.`;
             toast.success("Issue report submitted successfully!");
           }
         } catch (error) {
-          console.error("Error submitting report:", error);
           toast.error("Failed to submit report. Please try again.");
         }
         return;
@@ -2799,7 +2802,7 @@ Please help me with this.`;
         reportType={reportPreviewModal.type}
         initialData={reportPreviewModal.data}
         isAuthor={userRole === "author"}
-        attemptId={learnerContext.assignmentId}
+        attemptId={learnerContext.activeAttemptId}
         onSubmit={handleReportPreview}
       />
     </>

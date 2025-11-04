@@ -29,7 +29,7 @@
     "format:staged": "prettier --ignore-unknown --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md,html}\"",
     "lint": "turbo run lint -- --fix",
     "lint:staged": "turbo run lint:staged --",
-    "prepare": "husky install",
+    "prepare": "husky",
     "prisma:generate": "cd ./apps/api && source dev.env && prisma generate",
     "prisma:migrate": "cd ./apps/api && source dev.env && prisma migrate dev",
     "prisma:studio": "cd ./apps/api && source dev.env && prisma studio",
@@ -108,6 +108,7 @@
   "devDependencies": {
     "detect-secrets": "^1.0.6",
     "dotenv-cli": "^8.0.0",
+    "husky": "^9.1.7",
     "prettier": "^3.5.3",
     "prettier-plugin-sh": "^0.17.4",
     "turbo": "^2.0.3"

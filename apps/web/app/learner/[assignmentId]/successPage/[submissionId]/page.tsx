@@ -12,7 +12,6 @@ import {
 import {
   getCompletedAttempt,
   getFeedback,
-  getSuccessPageData,
   getUser,
   submitFeedback,
   submitRegradingRequest,
@@ -25,7 +24,7 @@ import Particles from "@tsparticles/react";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import Image, { StaticImageData } from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   buildStyles,
@@ -39,6 +38,9 @@ import ReportModal from "@/components/ReportModal";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
+import { AuthorGradeEditor } from "../components/AuthorGradeEditor";
+import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
+import { useChatbot } from "@/hooks/useChatbot";
 
 const DynamicConfetti = dynamic(() => import("react-confetti"), {
   ssr: false,
@@ -46,8 +48,18 @@ const DynamicConfetti = dynamic(() => import("react-confetti"), {
 
 function SuccessPage() {
   const pathname: string = usePathname();
+  const searchParams = useSearchParams();
   const attemptId = parseInt(pathname.split("/")?.[4], 10);
   const assignmentId = parseInt(pathname.split("/")?.[2], 10);
+
+  const isAuthorReview = searchParams.get("authorReview") === "true";
+  const regradingRequestId = searchParams.get("regradingRequestId");
+  const highlightQuestionIds = searchParams.get("highlightQuestionIds")
+    ? searchParams
+        .get("highlightQuestionIds")!
+        .split(",")
+        .map((id) => Number(id))
+    : [];
 
   const [questions, setQuestions] = useState([]);
   const [grade, setGrade] = useState(0);
@@ -85,6 +97,11 @@ function SuccessPage() {
   const [init, setInit] = useState(false);
   const [playAnimations, setPlayAnimations] = useState(true);
 
+  const [isEditingGrades, setIsEditingGrades] = useState(false);
+  const [modifiedGrades, setModifiedGrades] = useState<Record<number, number>>(
+    {},
+  );
+
   const [comments, setComments] = useState("");
   const [aiGradingRating, setAiGradingRating] = useState(0);
   const [assignmentRating, setAssignmentRating] = useState(0);
@@ -114,7 +131,10 @@ function SuccessPage() {
       const user = await getUser();
       setRole(user.role);
       setUserId(user.userId);
-      if (user.role === "learner") {
+      if (
+        user.role === "learner" ||
+        (user.role === "author" && isAuthorReview)
+      ) {
         try {
           const submissionDetails: AssignmentAttemptWithQuestions =
             await getCompletedAttempt(assignmentId, attemptId);
@@ -426,7 +446,6 @@ function SuccessPage() {
           className="absolute inset-0 z-0"
         />
       )}
-
       {init && grade >= 60 && grade < 90 && playAnimations && (
         <Particles
           id="sparkles"
@@ -434,7 +453,6 @@ function SuccessPage() {
           className="absolute inset-0 z-0"
         />
       )}
-
       {grade >= passingGrade && (
         <DynamicConfetti
           recycle={false}
@@ -596,34 +614,137 @@ function SuccessPage() {
           </div>
         )}
 
-        {(role === "learner" && showQuestions) ||
-        (role === "author" && showQuestions) ? (
+        {/* Author Review Mode - Grade Editor */}
+        {role === "author" && isAuthorReview && isEditingGrades && (
           <div className="mt-4">
-            {questions.map((question: QuestionStore, index: number) => (
-              <motion.div
-                className="p-4 sm:p-6  bg-white rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                key={question.id}
-              >
-                <Question
-                  number={index + 1}
-                  question={question}
-                  language={userPreferredLanguage}
-                  showSubmissionFeedback={showSubmissionFeedback}
-                  correctAnswerVisibility={correctAnswerVisibility}
-                  showCorrectAnswer={(() => {
-                    if (correctAnswerVisibility === "NEVER") return false;
-                    if (correctAnswerVisibility === "ALWAYS") return true;
-                    if (correctAnswerVisibility === "ON_PASS")
-                      return grade >= passingGrade;
-                    return false;
-                  })()}
-                />
-              </motion.div>
-            ))}
+            <AuthorGradeEditor
+              questions={questions.map((q, idx) => {
+                const feedbackArray = q.questionResponses?.[0]?.feedback;
+                const feedbackString = Array.isArray(feedbackArray)
+                  ? feedbackArray[0]?.feedback || ""
+                  : typeof feedbackArray === "string"
+                    ? feedbackArray
+                    : "";
+
+                return {
+                  questionId: q.id,
+                  questionNumber: idx + 1,
+                  questionText: q.question,
+                  totalPoints: q.totalPoints,
+                  earnedPoints: q.questionResponses?.[0]?.points ?? 0,
+                  feedback: feedbackString,
+                };
+              })}
+              attemptId={attemptId}
+              assignmentId={assignmentId}
+              regradingRequestId={regradingRequestId}
+              onSave={async (grades) => {
+                const questionGrades: Record<number, number> = {};
+                questions.forEach((q) => {
+                  if (
+                    grades[q.id] !== undefined &&
+                    q.questionResponses?.[0]?.id
+                  ) {
+                    questionGrades[q.questionResponses[0].id] = grades[q.id];
+                  }
+                });
+
+                const response = await fetch(
+                  `/api/v2/assignments/${assignmentId}/attempts/${attemptId}/question-grades`,
+                  {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({
+                      questionGrades,
+                      regradingRequestId: regradingRequestId
+                        ? Number(regradingRequestId)
+                        : undefined,
+                    }),
+                  },
+                );
+
+                if (!response.ok) {
+                  throw new Error("Failed to update grades");
+                }
+
+                const result = await response.json();
+
+                window.location.reload();
+              }}
+              onCancel={() => setIsEditingGrades(false)}
+            />
           </div>
-        ) : (
+        )}
+
+        {/* Enable Grade Editing Button for Authors */}
+        {role === "author" && isAuthorReview && !isEditingGrades && (
+          <div className="flex justify-center gap-4 mt-4">
+            <button
+              onClick={() =>
+                (window.location.href = "/admin/regrading-requests")
+              }
+              className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md transition font-semibold"
+            >
+              ← Back to Regrading Requests
+            </button>
+            <button
+              onClick={() => setIsEditingGrades(true)}
+              className="px-6 py-3 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md transition font-semibold"
+            >
+              Edit Question Grades
+            </button>
+          </div>
+        )}
+
+        {(role === "learner" && showQuestions) ||
+        (role === "author" &&
+          isAuthorReview &&
+          showQuestions &&
+          !isEditingGrades) ? (
+          <div className="mt-4">
+            {questions.map((question: QuestionStore, index: number) => {
+              const isHighlighted =
+                highlightQuestionIds.length > 0 &&
+                highlightQuestionIds.includes(question.id);
+              return (
+                <motion.div
+                  className={`p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6 ${
+                    isHighlighted
+                      ? "bg-orange-50 border-4 border-orange-400 ring-4 ring-orange-200"
+                      : "bg-white"
+                  }`}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={question.id}
+                >
+                  {isHighlighted && (
+                    <div className="mb-4 p-3 bg-orange-100 border-l-4 border-orange-500 rounded">
+                      <p className="text-orange-800 font-semibold flex items-center gap-2">
+                        <span className="text-xl">⚠️</span>
+                        <span>Learner complained about this question</span>
+                      </p>
+                    </div>
+                  )}
+                  <Question
+                    number={index + 1}
+                    question={question}
+                    language={userPreferredLanguage}
+                    showSubmissionFeedback={showSubmissionFeedback}
+                    correctAnswerVisibility={correctAnswerVisibility}
+                    showCorrectAnswer={(() => {
+                      if (correctAnswerVisibility === "NEVER") return false;
+                      if (correctAnswerVisibility === "ALWAYS") return true;
+                      if (correctAnswerVisibility === "ON_PASS")
+                        return grade >= passingGrade;
+                      return false;
+                    })()}
+                  />
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : role === "learner" || (role === "author" && !isAuthorReview) ? (
           <div className="flex flex-col items-center justify-center mt-4 sm:p-6  bg-white rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">
               Questions are hidden
@@ -632,18 +753,60 @@ function SuccessPage() {
               The author has chosen to hide the questions for this assignment.
             </p>
           </div>
-        )}
+        ) : null}
 
-        <div className="flex flex-wrap justify-between mb-10 px-5">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10 gap-x-28">
           {role === "learner" && (
-            <div className="flex items-center gap-x-4 justify-center">
-              <button
-                onClick={() => setIsReportModalOpen(true)}
-                className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition mb-2 sm:mb-0"
-              >
-                <div className="flex items-center gap-x-2">Report an issue</div>
-              </button>
-            </div>
+            <button
+              onClick={() => setIsReportModalOpen(true)}
+              className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition"
+            >
+              <div className="flex items-center gap-x-2">Report an issue</div>
+            </button>
+          )}
+          {role === "learner" && (
+            <button
+              onClick={() => {
+                const { setUserInput } = useMarkChatStore.getState();
+                setUserInput(
+                  "I would like to request regrading for this assignment. I believe the grading was not accurate and would like a review.",
+                );
+
+                const { open } = useChatbot.getState();
+                open();
+
+                setTimeout(() => {
+                  const chatInput = document.querySelector(
+                    'textarea[placeholder*="Type your message"]',
+                  );
+                  if (chatInput) {
+                    chatInput.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                  }
+                }, 300);
+              }}
+              className="px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-800 rounded-md transition font-semibold"
+            >
+              <div className="flex items-center gap-x-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                  />
+                </svg>
+                Request Regrading (beta)
+              </div>
+            </button>
           )}
           <Button
             onClick={() =>
@@ -653,7 +816,7 @@ function SuccessPage() {
                   ? (window.location.href = `/learner/${assignmentId}/?authorMode=true`)
                   : (window.location.href = "/")
             }
-            className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg mt-2"
+            className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg"
           >
             <svg
               className="w-5 h-5"
@@ -667,7 +830,6 @@ function SuccessPage() {
           </Button>
         </div>
       </div>
-
       <AnimatePresence>
         {isFeedbackModalOpen && (
           <Dialog

@@ -132,6 +132,9 @@ async function bootstrap() {
     await app.listen(port);
     logger.log(`Application is running on port ${port}`);
     logger.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+    logger.log(`Admin Side: http://localhost:3010/admin`);
+    logger.log(`Author Side: http://localhost:3010/author`);
+    logger.log(`Learner Side: http://localhost:3010/learner`);
 
     /**
      * Configure server timeouts for handling long-running requests
@@ -212,6 +215,5 @@ async function bootstrap() {
  * Using void operator to explicitly ignore the returned promise
  */
 void bootstrap().catch((error) => {
-  console.error("Fatal error during application startup:", error);
   process.exit(1);
 });

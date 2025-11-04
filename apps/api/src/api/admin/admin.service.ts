@@ -10,6 +10,7 @@ import {
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../database/prisma.service";
+import { EmailService } from "../../common/services/email.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
@@ -42,6 +43,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -785,55 +787,318 @@ export class AdminService {
   }
 
   async dismissFlaggedSubmission(id: number) {
-    return this.prisma.regradingRequest.update({
-      where: { id },
-      data: {
-        regradingStatus: "REJECTED",
-      },
-    });
-  }
-
-  async getRegradingRequests() {
-    return this.prisma.regradingRequest.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-  }
-
-  async approveRegradingRequest(id: number, newGrade: number) {
     const request = await this.prisma.regradingRequest.findUnique({
       where: { id },
+      include: {
+        assignment: { select: { name: true } },
+        assignmentAttempt: { select: { grade: true } },
+      },
     });
 
     if (!request) {
       throw new Error(`Regrading request with ID ${id} not found`);
     }
 
+    const currentGrade = request.assignmentAttempt.grade || 0;
+
+    const result = await this.prisma.regradingRequest.update({
+      where: { id },
+      data: {
+        regradingStatus: "REJECTED",
+      },
+    });
+
+    try {
+      await this.emailService.sendGradeUpdateNotification(
+        request.userId,
+        request.assignment.name,
+        request.assignmentId,
+        request.attemptId,
+        currentGrade,
+        currentGrade,
+        "REJECTED",
+      );
+    } catch (error) {
+      this.logger.error("Failed to send dismissal email:", error);
+    }
+
+    return result;
+  }
+
+  async getRegradingRequests() {
+    const requests = await this.prisma.regradingRequest.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        assignment: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        assignmentAttempt: {
+          select: {
+            id: true,
+            userId: true,
+            grade: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    return requests.map((request) => ({
+      ...request,
+      createdAt: request.createdAt?.toISOString() || null,
+      updatedAt: request.updatedAt?.toISOString() || null,
+      assignmentAttempt: request.assignmentAttempt
+        ? {
+            ...request.assignmentAttempt,
+            createdAt:
+              request.assignmentAttempt.createdAt?.toISOString() || null,
+          }
+        : null,
+    }));
+  }
+
+  async approveRegradingRequest(
+    id: number,
+    newGrade: number,
+    authorEmail?: string,
+  ) {
+    this.logger.log(
+      `[ApproveRegrading] Request ID: ${id}, New Grade: ${newGrade}, Author: ${authorEmail}`,
+    );
+
+    const request = await this.prisma.regradingRequest.findUnique({
+      where: { id },
+      include: {
+        assignment: { select: { name: true } },
+        assignmentAttempt: { select: { grade: true } },
+      },
+    });
+
+    if (!request) {
+      throw new Error(`Regrading request with ID ${id} not found`);
+    }
+
+    const oldGrade = request.assignmentAttempt.grade || 0;
+    this.logger.log(
+      `[ApproveRegrading] Attempt ID: ${request.attemptId}, Old Grade: ${oldGrade}, New Grade: ${newGrade}`,
+    );
+
     await this.prisma.regradingRequest.update({
       where: { id },
       data: {
         regradingStatus: "APPROVED",
+        processedBy: authorEmail || null,
+      },
+    });
+
+    const updatedAttempt = await this.prisma.assignmentAttempt.update({
+      where: { id: request.attemptId },
+      data: {
+        grade: newGrade,
+      },
+    });
+
+    this.logger.log(
+      `[ApproveRegrading] Grade updated successfully. New grade in DB: ${updatedAttempt.grade}`,
+    );
+
+    try {
+      await this.emailService.sendGradeUpdateNotification(
+        request.userId,
+        request.assignment.name,
+        request.assignmentId,
+        request.attemptId,
+        oldGrade,
+        newGrade,
+        "APPROVED",
+      );
+    } catch (error) {
+      this.logger.error("Failed to send approval email:", error);
+    }
+
+    return { success: true };
+  }
+
+  async rejectRegradingRequest(
+    id: number,
+    reason: string,
+    authorEmail?: string,
+  ) {
+    const request = await this.prisma.regradingRequest.findUnique({
+      where: { id },
+      include: {
+        assignment: { select: { name: true } },
+        assignmentAttempt: { select: { grade: true } },
+      },
+    });
+
+    if (!request) {
+      throw new Error(`Regrading request with ID ${id} not found`);
+    }
+
+    const currentGrade = request.assignmentAttempt.grade || 0;
+
+    await this.prisma.regradingRequest.update({
+      where: { id },
+      data: {
+        regradingStatus: "REJECTED",
+        regradingReason: reason,
+        processedBy: authorEmail || null,
+      },
+    });
+
+    try {
+      await this.emailService.sendGradeUpdateNotification(
+        request.userId,
+        request.assignment.name,
+        request.assignmentId,
+        request.attemptId,
+        currentGrade,
+        currentGrade,
+        "REJECTED",
+      );
+    } catch (error) {
+      this.logger.error("Failed to send rejection email:", error);
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Get regrading requests for assignments created by a specific author
+   */
+  async getAuthorRegradingRequests(authorId: string, assignmentId?: number) {
+    const authorAssignments = await this.prisma.assignmentAuthor.findMany({
+      where: {
+        userId: authorId,
+        ...(assignmentId && { assignmentId }),
+      },
+      select: {
+        assignmentId: true,
+      },
+    });
+
+    const assignmentIds = authorAssignments.map((aa) => aa.assignmentId);
+
+    if (assignmentIds.length === 0) {
+      return [];
+    }
+
+    const regradingRequests = await this.prisma.regradingRequest.findMany({
+      where: {
+        assignmentId: {
+          in: assignmentIds,
+        },
+      },
+      include: {
+        assignment: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        assignmentAttempt: {
+          select: {
+            id: true,
+            userId: true,
+            grade: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return regradingRequests;
+  }
+
+  /**
+   * Approve a regrading request (author-specific)
+   */
+  async approveAuthorRegradingRequest(
+    id: number,
+    newGrade: number,
+    authorId: string,
+  ) {
+    const request = await this.prisma.regradingRequest.findUnique({
+      where: { id },
+      include: {
+        assignment: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException(`Regrading request with ID ${id} not found`);
+    }
+
+    const authorAssignment = await this.prisma.assignmentAuthor.findFirst({
+      where: {
+        assignmentId: request.assignmentId,
+        userId: authorId,
+      },
+    });
+
+    if (!authorAssignment) {
+      throw new NotFoundException(
+        `You do not have permission to manage this regrading request`,
+      );
+    }
+
+    await this.prisma.regradingRequest.update({
+      where: { id },
+      data: {
+        regradingStatus: "APPROVED",
+        processedBy: authorId,
       },
     });
 
     await this.prisma.assignmentAttempt.update({
       where: { id: request.attemptId },
       data: {
-        grade: newGrade / 100,
+        grade: newGrade,
       },
     });
 
     return { success: true };
   }
 
-  async rejectRegradingRequest(id: number, reason: string) {
+  /**
+   * Reject a regrading request (author-specific)
+   */
+  async rejectAuthorRegradingRequest(
+    id: number,
+    reason: string,
+    authorId: string,
+  ) {
     const request = await this.prisma.regradingRequest.findUnique({
       where: { id },
+      include: {
+        assignment: true,
+      },
     });
 
     if (!request) {
-      throw new Error(`Regrading request with ID ${id} not found`);
+      throw new NotFoundException(`Regrading request with ID ${id} not found`);
+    }
+
+    const authorAssignment = await this.prisma.assignmentAuthor.findFirst({
+      where: {
+        assignmentId: request.assignmentId,
+        userId: authorId,
+      },
+    });
+
+    if (!authorAssignment) {
+      throw new NotFoundException(
+        `You do not have permission to manage this regrading request`,
+      );
     }
 
     await this.prisma.regradingRequest.update({
@@ -841,6 +1106,7 @@ export class AdminService {
       data: {
         regradingStatus: "REJECTED",
         regradingReason: reason,
+        processedBy: authorId,
       },
     });
 
@@ -2606,5 +2872,46 @@ export class AdminService {
         .sort((a, b) => b.completionRate - a.completionRate)
         .slice(0, limit),
     };
+  }
+
+  /**
+   * Get author settings
+   */
+  async getAuthorSettings(userId: string) {
+    let settings = await this.prisma.authorSettings.findUnique({
+      where: { userId },
+    });
+
+    if (!settings) {
+      settings = await this.prisma.authorSettings.create({
+        data: {
+          userId,
+          emailOnRegradingRequest: true,
+        },
+      });
+    }
+
+    return settings;
+  }
+
+  /**
+   * Update author settings
+   */
+  async updateAuthorSettings(
+    userId: string,
+    settingsDto: { emailOnRegradingRequest: boolean },
+  ) {
+    const settings = await this.prisma.authorSettings.upsert({
+      where: { userId },
+      update: {
+        emailOnRegradingRequest: settingsDto.emailOnRegradingRequest,
+      },
+      create: {
+        userId,
+        emailOnRegradingRequest: settingsDto.emailOnRegradingRequest,
+      },
+    });
+
+    return settings;
   }
 }
