@@ -63,13 +63,11 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // Modal states
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackData | null>(
     null,
   );
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
-  // Helper functions
   const getRatingStars = (rating: number) => {
     return "★".repeat(rating) + "☆".repeat(5 - rating);
   };
@@ -91,7 +89,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
     setError(null);
 
     try {
-      // Fetch all feedback for client-side filtering/pagination
       const data = await getAdminFeedback(
         { page: 1, limit: 1000 },
         undefined,
@@ -110,10 +107,8 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
     fetchFeedback();
   }, [sessionToken]);
 
-  // Create column helper
   const columnHelper = createColumnHelper<FeedbackData>();
 
-  // Define table columns
   const columns = useMemo<ColumnDef<FeedbackData, any>[]>(
     () => [
       columnHelper.display({
@@ -127,6 +122,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             </div>
           </div>
         ),
+
         enableSorting: true,
         sortingFn: (rowA, rowB) => {
           const a = rowA.original.assignment.name;
@@ -140,6 +136,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
         cell: ({ getValue }) => (
           <div className="font-mono text-sm">{getValue()}</div>
         ),
+
         enableSorting: true,
       }),
 
@@ -148,6 +145,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
         cell: ({ getValue }) => (
           <div className="max-w-xs truncate">{getValue()}</div>
         ),
+
         enableSorting: true,
       }),
 
@@ -194,6 +192,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             </div>
           </div>
         ),
+
         enableSorting: true,
         sortingFn: (rowA, rowB) => {
           const a =
@@ -236,6 +235,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             {(row.original.assignmentAttempt.grade * 100).toFixed(1)}%
           </Badge>
         ),
+
         enableSorting: true,
         sortingFn: (rowA, rowB) => {
           const a = rowA.original.assignmentAttempt.grade;
@@ -256,6 +256,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             </div>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -273,16 +274,15 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
         ),
       }),
     ],
+
     [getRatingStars, openFeedbackModal],
   );
 
-  // Create global filter function with dependencies
   const globalFilterFn = useMemo(() => {
     return (row: any, _columnId: string, value: string) => {
       const feedbackItem = row.original;
       const searchValue = value?.toLowerCase() || "";
 
-      // Apply assignment ID filter
       if (
         assignmentIdFilter &&
         feedbackItem.assignment.id.toString() !== assignmentIdFilter
@@ -290,7 +290,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
         return false;
       }
 
-      // Apply date range filter
       const itemDate = new Date(feedbackItem.createdAt);
       if (startDate && itemDate < new Date(startDate)) {
         return false;
@@ -299,10 +298,8 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
         return false;
       }
 
-      // If no search value, return true (item passes filters)
       if (!value) return true;
 
-      // Search in comments, user ID, assignment name, and contact info
       const commentsMatch = feedbackItem.comments
         .toLowerCase()
         .includes(searchValue);
@@ -331,7 +328,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
     };
   }, [assignmentIdFilter, startDate, endDate]);
 
-  // Create table instance
   const table = useReactTable({
     data: feedback,
     columns,
@@ -352,9 +348,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
     globalFilterFn,
   });
 
-  // Force re-filtering when custom filters change
   useEffect(() => {
-    // Trigger a re-render by toggling the global filter
     const currentFilter = globalFilter || "";
     table.setGlobalFilter(currentFilter + " ");
     table.setGlobalFilter(currentFilter);
@@ -431,7 +425,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Filters */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -445,7 +438,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Global Search */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">
               Global Search
@@ -458,6 +450,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="pl-10"
               />
+
               {globalFilter && (
                 <Button
                   variant="ghost"
@@ -471,9 +464,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             </div>
           </div>
 
-          {/* Quick Filters Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Contact Filter */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Contact Preference Filter
@@ -508,7 +499,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
               </select>
             </div>
 
-            {/* Assignment ID Filter */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Assignment ID
@@ -522,7 +512,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
               />
             </div>
 
-            {/* Page Size */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Items per Page
@@ -542,7 +531,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             </div>
           </div>
 
-          {/* Date Range Filters */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
@@ -576,7 +564,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             </div>
           </div>
 
-          {/* Active Filters */}
           {(globalFilter ||
             table.getColumn("allowContact")?.getFilterValue() !== undefined ||
             assignmentIdFilter ||
@@ -636,7 +623,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
         </CardContent>
       </Card>
 
-      {/* Table */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -654,7 +640,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Table */}
               <div className="overflow-hidden rounded-lg border border-gray-200">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -686,6 +671,7 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
                                       asc: (
                                         <SortAsc className="h-3 w-3 text-gray-400" />
                                       ),
+
                                       desc: (
                                         <SortDesc className="h-3 w-3 text-gray-400" />
                                       ),
@@ -729,7 +715,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
                 </div>
               </div>
 
-              {/* Empty State */}
               {table.getFilteredRowModel().rows.length === 0 &&
                 feedback.length > 0 && (
                   <div className="text-center py-12">
@@ -745,7 +730,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
                   </div>
                 )}
 
-              {/* Pagination */}
               {table.getPageCount() > 1 && (
                 <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
                   <div className="flex items-center space-x-2">
@@ -781,7 +765,6 @@ export function FeedbackTable({ sessionToken }: FeedbackTableProps) {
         </CardContent>
       </Card>
 
-      {/* Feedback Modal */}
       <FeedbackModal
         feedback={selectedFeedback}
         isOpen={isFeedbackModalOpen}

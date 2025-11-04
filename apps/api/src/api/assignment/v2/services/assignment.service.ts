@@ -196,13 +196,6 @@ export class AssignmentServiceV2 {
     userId: string,
   ): Promise<void> {
     try {
-      // Progress allocation:
-      // 0-10%: Initial setup
-      // 10-30%: Assignment update
-      // 30-80%: Questions processing (if needed)
-      // 80-90%: Translation (if needed)
-      // 90-100%: Finalization
-
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
         progress: "Updating assignment settings",
@@ -261,7 +254,6 @@ export class AssignmentServiceV2 {
           },
         });
       } catch (error) {
-        // Log but don't fail the publishing process if author tracking fails
         this.logger.warn(
           `Failed to store assignment author: ${
             error instanceof Error ? error.message : "Unknown error"
@@ -321,24 +313,18 @@ export class AssignmentServiceV2 {
           end: 90,
         });
       } else {
-        // Only check language consistency if no content changes and we have existing translations
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
           progress: "Checking for language consistency issues",
           percentage: 78,
         });
 
-        // Quick check to see if we have existing translations first
         const hasExistingTranslations =
           await this.prisma.assignmentTranslation.count({
             where: { assignmentId },
           });
 
         if (hasExistingTranslations > 0) {
-          // Use quick validation instead of expensive language detection
-          // const isValid = await this.translationService.quickValidateAssignmentTranslations(
-          //   assignmentId,
-          // );
           const isValid = true;
           if (isValid) {
             await this.jobStatusService.updateJobStatus(jobId, {
@@ -348,7 +334,6 @@ export class AssignmentServiceV2 {
               percentage: 85,
             });
           } else {
-            // Only do expensive validation if quick check fails
             this.logger.warn(
               `Quick validation failed for assignment ${assignmentId}, running full validation`,
             );
@@ -371,7 +356,6 @@ export class AssignmentServiceV2 {
                 )}`,
               );
 
-              // Language mismatch detected - force retranslation for affected languages
               await this.jobStatusService.updateJobStatus(jobId, {
                 status: "In Progress",
                 progress: `Language mismatch detected for ${languageValidation.mismatchedLanguages.length} languages, refreshing translations`,
@@ -401,7 +385,6 @@ export class AssignmentServiceV2 {
         }
       }
 
-      // Final translation validation
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
         progress: "Validating translation completeness",
@@ -419,11 +402,8 @@ export class AssignmentServiceV2 {
           { missingTranslations: translationCompleteness.missingTranslations },
         );
 
-        // Attempt to fix missing translations
         for (const missing of translationCompleteness.missingTranslations) {
           try {
-            // Note: We're not fixing missing translations here
-            // This is just logging for monitoring
             this.logger.warn(
               `Missing translations for ${
                 missing.variantId
@@ -466,7 +446,6 @@ export class AssignmentServiceV2 {
         return indexA - indexB;
       });
 
-      // Log the questions that were found after processing
       this.logger.info(
         `Found ${updatedQuestions.length} questions after processing for assignment ${assignmentId}`,
         {
@@ -474,7 +453,6 @@ export class AssignmentServiceV2 {
         },
       );
 
-      // Create a new version when publishing - AFTER questions are processed and committed
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
         progress: "Creating version snapshot",
@@ -491,7 +469,6 @@ export class AssignmentServiceV2 {
           role: "AUTHOR",
         } as unknown as UserSession;
 
-        // Check if there's an existing draft version to update/publish
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const existingDraft =
           await this.versionManagementService.getUserLatestDraft(
@@ -499,7 +476,6 @@ export class AssignmentServiceV2 {
             userSession,
           );
 
-        // Check for recently created unpublished versions (to prevent duplicates from frontend)
         const latestVersion =
           await this.versionManagementService.getLatestVersion(assignmentId);
 
@@ -510,7 +486,6 @@ export class AssignmentServiceV2 {
           updateDto.published &&
           existingDraft?._draftVersionId
         ) {
-          // If we have a draft and we're publishing, publish the existing draft
           // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
           const draftVersionId = existingDraft._draftVersionId;
           this.logger.info(
@@ -518,7 +493,6 @@ export class AssignmentServiceV2 {
             { draftVersionId },
           );
 
-          // Update the existing draft with current content first
           await this.versionManagementService.saveDraft(
             assignmentId,
             {
@@ -538,7 +512,6 @@ export class AssignmentServiceV2 {
             userSession,
           );
 
-          // Then publish the updated draft
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
             draftVersionId,
@@ -548,7 +521,6 @@ export class AssignmentServiceV2 {
           !latestVersion.published &&
           updateDto.published
         ) {
-          // There's a recently created unpublished version - publish it instead of creating new one
           this.logger.info(
             `Found recently created unpublished version ${latestVersion.versionNumber}, publishing it instead of creating duplicate`,
             {
@@ -562,7 +534,6 @@ export class AssignmentServiceV2 {
             latestVersion.id,
           );
         } else if (!existingDraft && updateDto.published) {
-          // No existing draft and no unpublished version - create new version directly
           this.logger.info(
             `No existing draft or unpublished version found, creating new version directly`,
           );
@@ -577,13 +548,12 @@ export class AssignmentServiceV2 {
               versionDescription:
                 updateDto.versionDescription ??
                 `Version - ${new Date().toLocaleDateString()}`,
-              isDraft: false, // Create as published directly
+              isDraft: false,
               shouldActivate: true,
             },
             userSession,
           );
         } else {
-          // Create or update draft version (not publishing)
           this.logger.info(`Saving as draft version`);
 
           versionResult = await this.versionManagementService.saveDraft(
@@ -616,7 +586,6 @@ export class AssignmentServiceV2 {
           },
         );
       } catch (versionError) {
-        // Log the full error details
         this.logger.error(
           `Failed to create version during publishing for assignment ${assignmentId}:`,
           {

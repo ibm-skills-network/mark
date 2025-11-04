@@ -251,7 +251,7 @@ function LearnerHeader() {
         undefined,
         handleProgressUpdate,
       );
-      // Process the response immediately after getting it
+
       if (res) {
         const { grade, feedbacksForQuestions } = res;
         setTotalPointsEarned(res.totalPointsEarned);
@@ -335,7 +335,6 @@ function LearnerHeader() {
     }
   }, [userPreferedLanguage]);
 
-  // Listen for custom submit event from question navigation
   useEffect(() => {
     const handleSubmitEvent = () => {
       CheckNoFlaggedQuestions();
@@ -354,9 +353,7 @@ function LearnerHeader() {
   return (
     <>
       <header className="border-b border-gray-300 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
-        {/* Mobile Layout */}
         <div className="flex flex-col gap-3 sm:hidden">
-          {/* Top row: Icon + Title */}
           <div className="flex items-center gap-3">
             <SNIcon />
             <Title className="text-base font-semibold truncate flex-1">
@@ -364,7 +361,6 @@ function LearnerHeader() {
             </Title>
           </div>
 
-          {/* Bottom row: Actions */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1">
               {!isSuccessPage && role === "learner" && (
@@ -425,7 +421,6 @@ function LearnerHeader() {
           ) : null}
         </div>
 
-        {/* Desktop Layout */}
         <div className="hidden sm:flex justify-between items-center h-full">
           <div className="flex">
             <div className="flex justify-center gap-x-6 items-center">

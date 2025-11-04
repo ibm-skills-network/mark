@@ -40,7 +40,7 @@ export function VersionControlPanel({
     formatVersionAge,
     getDraftVersions,
     getPublishedVersions,
-    // Draft functionality
+
     drafts,
     isLoadingDrafts,
     draftsLoadFailed,
@@ -52,15 +52,13 @@ export function VersionControlPanel({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load versions on mount - removed since useVersionControl hook handles this automatically
-
   const handleSave = async () => {
     setIsSaving(true);
     try {
       const success = await onSave();
       if (success) {
         toast.success("Changes saved successfully");
-        // Reload versions to show the new draft
+
         await loadVersions();
       } else {
         toast.error("Failed to save changes");
@@ -81,7 +79,6 @@ export function VersionControlPanel({
       if (success) {
         toast.success(`Restored to version ${versionNumber} as new draft`);
         setIsVersionMenuOpen(false);
-        // No need to reload - the store has been updated with the restored data
       } else {
         toast.error("Failed to restore version");
         console.error("❌ Restore version failed");
@@ -97,7 +94,6 @@ export function VersionControlPanel({
       const success = await loadDraft(draftId);
       if (success) {
         setIsVersionMenuOpen(false);
-        // Don't reload drafts - loadDraft already handles the data loading
       }
     } catch (error) {
       console.error("💥 Error in handleLoadDraft:", error);
@@ -114,10 +110,7 @@ export function VersionControlPanel({
     }
 
     try {
-      const success = await deleteDraft(draftId);
-      if (success) {
-        // No need to reload - deleteDraft already updates local state
-      }
+      await deleteDraft(draftId);
     } catch (error) {
       console.error("💥 Error in handleDeleteDraft:", error);
     }
@@ -142,7 +135,6 @@ export function VersionControlPanel({
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      {/* Enhanced Current Version Display */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
           <GitBranch className="h-4 w-4 text-blue-600" />
@@ -193,7 +185,6 @@ export function VersionControlPanel({
           </div>
         </div>
 
-        {/* Unsaved Changes Indicator */}
         {hasUnsavedChanges && (
           <div className="flex items-center gap-1 text-amber-600">
             <div className="h-2 w-2 bg-amber-500 rounded-full animate-pulse"></div>
@@ -202,9 +193,7 @@ export function VersionControlPanel({
         )}
       </div>
 
-      {/* Version Actions */}
       <div className="flex items-center gap-2">
-        {/* Version History */}
         <Button
           variant="ghost"
           size="sm"
@@ -216,7 +205,6 @@ export function VersionControlPanel({
           History ({versions.length + drafts.length})
         </Button>
 
-        {/* Version Menu */}
         <div className="relative">
           <Button
             variant="ghost"
@@ -236,7 +224,6 @@ export function VersionControlPanel({
                   Available Versions
                 </h3>
 
-                {/* Published Versions */}
                 {publishedVersions.length > 0 && (
                   <div className="mb-4">
                     <div className="text-xs font-medium text-gray-500 uppercase mb-2">
@@ -337,7 +324,6 @@ export function VersionControlPanel({
                   </div>
                 )}
 
-                {/* User Drafts */}
                 {drafts.length > 0 && (
                   <div>
                     <div className="text-xs font-medium text-gray-500 uppercase mb-2">
@@ -398,7 +384,6 @@ export function VersionControlPanel({
                   </div>
                 )}
 
-                {/* Draft Versions (from old version system) */}
                 {draftVersions.length > 0 && (
                   <div>
                     <div className="text-xs font-medium text-gray-500 uppercase mb-2">
@@ -506,7 +491,6 @@ export function VersionControlPanel({
         </div>
       </div>
 
-      {/* Click outside to close version menu */}
       {isVersionMenuOpen && (
         <div
           className="fixed inset-0 z-40"
@@ -514,7 +498,6 @@ export function VersionControlPanel({
         />
       )}
 
-      {/* Version History Modal */}
       {isHistoryOpen && (
         <VersionHistoryModal
           isOpen={isHistoryOpen}
@@ -582,6 +565,7 @@ function VersionHistoryModal({
                           : "text-gray-400"
                       }`}
                     />
+
                     <span
                       className={`font-semibold ${
                         version.id === currentVersion?.id

@@ -1,5 +1,3 @@
-// file.service.ts
-
 import { Injectable, Logger } from "@nestjs/common";
 import { S3 } from "aws-sdk";
 
@@ -37,11 +35,9 @@ export class FileService {
       this.logger.log(`Fetching file: ${key} from bucket: ${bucket}`);
       const response = await this.s3Client.getObject(parameters).promise();
 
-      // Convert Buffer to string
       const contentType = response.ContentType;
       const fileContent = response.Body.toString("utf8");
 
-      // For binary files we might want to handle differently
       if (
         contentType &&
         !contentType.includes("text/") &&
@@ -74,7 +70,6 @@ export class FileService {
     try {
       const fileExtension = filename.split(".").pop()?.toLowerCase();
 
-      // For text files, get direct content
       const textExtensions = [
         "txt",
         "md",
@@ -93,9 +88,7 @@ export class FileService {
         return await this.getFileContent(key, bucket);
       }
 
-      // For PDFs, we might need specialized processing using a PDF parser library
       if (fileExtension === "pdf") {
-        // This is a simplified approach - in production you'd use a PDF parser
         try {
           const content = await this.getFileContent(key, bucket);
           return content;
@@ -104,17 +97,14 @@ export class FileService {
         }
       }
 
-      // For images, we might want to skip content extraction entirely
       const imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp"];
       if (imageExtensions.includes(fileExtension)) {
         return `[Image file: ${filename}]`;
       }
 
-      // For other files, get a truncated version to avoid processing very large files
       const content = await this.getFileContent(key, bucket);
 
-      // Truncate content if it's too large (e.g., over 100KB)
-      const MAX_CONTENT_SIZE = 100 * 1024; // 100KB
+      const MAX_CONTENT_SIZE = 100 * 1024;
       if (content.length > MAX_CONTENT_SIZE) {
         return (
           content.slice(0, Math.max(0, MAX_CONTENT_SIZE)) +
@@ -141,7 +131,7 @@ export class FileService {
     return this.s3Client.getSignedUrl("getObject", {
       Bucket: bucket,
       Key: key,
-      Expires: 3600, // URL is valid for 1 hour
+      Expires: 3600,
     });
   }
 
@@ -152,11 +142,10 @@ export class FileService {
    * @returns A pre-signed URL with temporary access to the file
    */
   getFileAccessUrl(key: string, bucket: string): string {
-    // For LLM processing, we want to give a longer window of access
     return this.s3Client.getSignedUrl("getObject", {
       Bucket: bucket,
       Key: key,
-      Expires: 24 * 60 * 60, // URL is valid for 24 hours to ensure LLM has time to process
+      Expires: 24 * 60 * 60,
     });
   }
 }

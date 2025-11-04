@@ -47,7 +47,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Fetch the list of reports
   const fetchReports = async () => {
     setLoading(true);
     try {
@@ -65,7 +64,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
     void fetchReports();
   }, [userId]);
 
-  // Filter, search, sort
   useEffect(() => {
     let result = [...reports];
 
@@ -190,12 +188,10 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
       </p>
     ));
 
-  // Only render up to visibleCount
   const visibleReports = filteredReports.slice(0, visibleCount);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 max-w-4xl mx-auto h-[800px]">
-      {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">
           Your Reported Issues
@@ -209,7 +205,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
         </button>
       </div>
 
-      {/* Loading / Error */}
       {loading ? (
         <div className="flex flex-col items-center p-12">
           <div className="animate-spin h-12 w-12 border-b-2 border-purple-500 rounded-full" />
@@ -310,7 +305,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
           </div>
         </div>
       ) : (
-        /* Search, filters, and scrollable chunked list */
         <>
           <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <div className="relative flex-grow">
@@ -376,7 +370,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
             </div>
           ) : (
             <>
-              {/* Table headers for sort */}
               <div className="border-b border-gray-200 dark:border-gray-700 mb-3">
                 <div className="flex text-xs text-gray-500 dark:text-gray-400 py-2 px-3">
                   <div className="flex-grow">
@@ -406,7 +399,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
                 </div>
               </div>
 
-              {/* Scrollable chunked list */}
               <div className="max-h-[600px] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md">
                 <div className="space-y-2 p-2 animate-fadeIn">
                   {visibleReports.map((report) => (
@@ -452,7 +444,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
                 </div>
               </div>
 
-              {/* Load more */}
               {visibleCount < filteredReports.length && (
                 <div className="text-center mt-4">
                   <button

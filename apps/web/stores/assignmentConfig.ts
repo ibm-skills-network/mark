@@ -140,7 +140,6 @@ export const useAssignmentConfig = createWithEqualityFn<
             !state.displayOrder &&
             state.numberOfQuestionsPerAttempt === null
           ) {
-            // set default display order if not set
             state.displayOrder = "DEFINED";
           }
           if (!state.questionDisplay) {

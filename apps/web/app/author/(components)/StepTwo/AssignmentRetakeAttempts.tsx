@@ -34,6 +34,7 @@ const Component: FC<Props> = () => {
     { value: 10, label: "10" },
     { value: 0, label: "Never wait to retry" },
   ];
+
   const defaultCoolDownTimes = [
     { value: 5, label: "5 minutes" },
     { value: 10, label: "10 minutes" },
@@ -66,6 +67,7 @@ const Component: FC<Props> = () => {
           selectedItem={attemptsBeforeCoolDown}
           setSelectedItem={setAttemptsBeforeCoolDown}
         />
+
         {errors.attemptsBeforeCoolDown && (
           <p
             className="text-red-500 text-sm"
@@ -92,6 +94,7 @@ const Component: FC<Props> = () => {
             selectedItem={retakeAttemptCoolDownMinutes}
             setSelectedItem={setRetakeAttemptCoolDownMinutes}
           />
+
           {errors.retakeAttemptCoolDownMinutes && (
             <p
               className="text-red-500 text-sm"

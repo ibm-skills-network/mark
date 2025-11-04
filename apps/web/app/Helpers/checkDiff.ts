@@ -24,7 +24,6 @@ function safeArrayCompare<T>(
   b: T[] | null | undefined,
   compareFn?: (itemA: T, itemB: T) => boolean,
 ): boolean {
-  // Normalize null/undefined to empty arrays for comparison
   const normalizeArray = (arr: T[] | null | undefined): T[] => {
     if (arr == null) return [];
     return arr;
@@ -131,7 +130,6 @@ export function useChangesSummary(): string {
     )
       diffs.push("Changed correct answer visibility.");
 
-    // check if question order is different
     if (!safeArrayCompare(questionOrder, originalAssignment.questionOrder)) {
       diffs.push("Modified question order.");
     }
@@ -245,7 +243,6 @@ export function useChangesSummary(): string {
         );
       }
 
-      // Compare randomized choices
       if (
         !safeCompare(
           question.randomizedChoices,

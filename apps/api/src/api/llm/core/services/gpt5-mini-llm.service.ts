@@ -96,7 +96,6 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
 
-    // GPT-5-mini has optimized image token usage
     const estimatedImageTokens = 150;
 
     this.logger.debug(

@@ -71,7 +71,6 @@ export class ReportingService {
         const errorMessage =
           errorData?.message || `HTTP error ${response.status}`;
 
-        // Handle rate limiting specifically
         if (response.status === 429) {
           throw new Error(errorMessage);
         }
@@ -93,7 +92,6 @@ export class ReportingService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
 
-      // For rate limiting, show the specific message from the server
       if (
         errorMessage.includes("too many issues") ||
         errorMessage.includes("24 hours")

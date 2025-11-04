@@ -38,7 +38,6 @@ export function UnpublishedActivationModal({
             className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-yellow-100 rounded-lg">
@@ -59,7 +58,6 @@ export function UnpublishedActivationModal({
               </button>
             </div>
 
-            {/* Content */}
             <div className="mb-6">
               <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
                 <div className="flex">
@@ -122,7 +120,6 @@ export function UnpublishedActivationModal({
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex justify-end space-x-3">
               <button
                 onClick={onCancel}

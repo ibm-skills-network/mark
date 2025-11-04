@@ -20,7 +20,6 @@ export const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Check if breadcrumbs are overflowing
   useEffect(() => {
     const checkOverflow = () => {
       if (containerRef.current) {
@@ -28,7 +27,6 @@ export const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
           containerRef.current.scrollWidth > containerRef.current.clientWidth;
         setIsOverflowing(isScrollable);
 
-        // If overflowing, scroll to the end
         if (isScrollable) {
           containerRef.current.scrollLeft = containerRef.current.scrollWidth;
         }
@@ -43,7 +41,6 @@ export const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
     };
   }, [breadcrumbs]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -59,13 +56,12 @@ export const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
-  // Determine which breadcrumbs to show in dropdown vs main display
+
   const getVisibleBreadcrumbs = () => {
     if (!isOverflowing || breadcrumbs.length <= 2) {
       return { visible: breadcrumbs, hidden: [] };
     }
 
-    // Always show root and last two items
     const hidden = breadcrumbs.slice(1, -1);
     const visible = [breadcrumbs[0], ...breadcrumbs.slice(-1)];
 
@@ -96,7 +92,6 @@ export const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
                       />
                     </button>
 
-                    {/* Dropdown for hidden breadcrumbs */}
                     {showDropdown && (
                       <div
                         ref={dropdownRef}

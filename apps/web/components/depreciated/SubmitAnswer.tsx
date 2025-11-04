@@ -68,6 +68,7 @@ const SubmitAnswerComponent: FC<Props> = ({
             onChange={(e) => setAnswer(e.target.value)}
           />
         );
+
       case "URL":
         return (
           <input
@@ -76,6 +77,7 @@ const SubmitAnswerComponent: FC<Props> = ({
             onChange={(e) => setAnswer(e.target.value)}
           />
         );
+
       case "UPLOAD":
         return (
           <input
@@ -85,6 +87,7 @@ const SubmitAnswerComponent: FC<Props> = ({
             }
           />
         );
+
       default:
         return null;
     }

@@ -1,4 +1,3 @@
-// src/components/FileExplorer/RenameDialog.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { IconX } from "@tabler/icons-react";
 import { FileObject } from "@/stores/fileStore";
@@ -17,12 +16,10 @@ const RenameDialog: React.FC<RenameDialogProps> = ({
   const [newFileName, setNewFileName] = useState<string>(file.fileName);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus input on mount
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
 
-      // Select filename without extension
       const lastDotIndex = file.fileName.lastIndexOf(".");
       if (lastDotIndex > 0) {
         inputRef.current.setSelectionRange(0, lastDotIndex);
@@ -32,16 +29,13 @@ const RenameDialog: React.FC<RenameDialogProps> = ({
     }
   }, [file.fileName]);
 
-  // Handle form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate new filename
     if (!newFileName || newFileName.trim() === "") {
-      return; // Don't allow empty names
+      return;
     }
 
-    // Check if name actually changed
     if (newFileName === file.fileName) {
       onCancel();
       return;
@@ -50,7 +44,6 @@ const RenameDialog: React.FC<RenameDialogProps> = ({
     onRename(file, newFileName);
   };
 
-  // Handle key press
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       onCancel();

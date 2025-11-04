@@ -1,10 +1,9 @@
-// Define types to align with grading service output
 export type RubricScore = {
   rubricQuestion?: string;
   pointsAwarded?: number;
   maxPoints?: number;
   justification?: string;
-  criterionSelected?: string; // if you want to keep it
+  criterionSelected?: string;
 };
 
 export class FileBasedQuestionResponseModel {

@@ -28,6 +28,7 @@ function Component(props: Props) {
             title="Let's set up your assignment!"
             description="Responses in this section will be shown to learners."
           />
+
           <MainContent />
           <FooterNavigation
             assignmentId={String(assignmentId)}

@@ -19,7 +19,6 @@ export class ModerationService implements IModerationService {
   async validateContent(content: string): Promise<boolean> {
     if (!content) return true;
 
-    // Check if this appears to be legitimate educational/technical content
     if (this.isEducationalContent(content)) {
       this.logger.debug(
         "Content appears to be educational/technical, allowing with less strict moderation",
@@ -58,7 +57,6 @@ export class ModerationService implements IModerationService {
 
   private isEducationalContent(content: string): boolean {
     const educationalIndicators = [
-      // Security education keywords
       "xss",
       "cross-site scripting",
       "security",
@@ -73,7 +71,6 @@ export class ModerationService implements IModerationService {
       "security analysis",
       "ethical hacking",
 
-      // Technical/programming education
       "algorithm",
       "data structure",
       "programming",
@@ -87,7 +84,6 @@ export class ModerationService implements IModerationService {
       "analysis",
       "implementation",
 
-      // Academic indicators
       "research",
       "study",
       "analysis",
@@ -105,7 +101,6 @@ export class ModerationService implements IModerationService {
       lowerContent.includes(indicator),
     ).length;
 
-    // If multiple educational indicators are present, likely educational content
     return matchCount >= 2;
   }
 

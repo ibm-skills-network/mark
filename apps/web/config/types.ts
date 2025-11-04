@@ -240,7 +240,7 @@ export type UpdateQuestionStateParams = {
   questionTitle?: string;
   showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
-  //if the points will be shown in the rubric
+
   showPoints?: boolean;
   rubrics?: Rubric[];
   questionCriteria?: {

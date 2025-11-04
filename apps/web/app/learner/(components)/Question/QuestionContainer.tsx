@@ -68,7 +68,7 @@ function Component(props: Props) {
   };
   const showRubrics = question.scoring?.showRubricsToLearner ?? false;
   const showPoints = question.scoring?.showPoints ?? false;
-  // Get the questionStatus directly from the store
+
   const questionStatus = getQuestionStatusById
     ? getQuestionStatusById(questionId)
     : "unedited";
@@ -125,6 +125,7 @@ function Component(props: Props) {
     "翻訳中",
     "ترجمة",
   ];
+
   const setTranslationOn = useLearnerStore((state) => state.setTranslationOn);
   const toggleTranslation = () => {
     setTranslationOn(questionId, !translationOn);
@@ -169,7 +170,6 @@ function Component(props: Props) {
 
       setTranslatedQuestion(questionId, translation.translatedQuestion);
       if (translation.translatedChoices) {
-        // Extract choice text from Choice objects
         const choiceTexts = translation.translatedChoices.map((choice) =>
           typeof choice === "string"
             ? choice
@@ -193,7 +193,6 @@ function Component(props: Props) {
     if (question.selectedLanguage === userPreferedLanguageName) {
       setTranslatedQuestion(questionId, question.question);
       if (question.choices) {
-        // Extract choice text from Choice objects for consistency
         const choiceTexts = question.choices.map((choice) =>
           typeof choice === "string"
             ? choice
@@ -269,10 +268,8 @@ function Component(props: Props) {
         </div>
       </div>
 
-      {/* Question header with language toggle for all types */}
       <div className="flex flex-col sm:flex-row sm:justify-between gap-3">
         <div className="flex-grow">
-          {/* Original Question */}
           <div className="mb-2">
             <MarkdownViewer
               className="text-gray-800 px-2 border-gray-300 text-sm sm:text-base"
@@ -283,7 +280,6 @@ function Component(props: Props) {
             </MarkdownViewer>
           </div>
 
-          {/* Loading translation indicator */}
           {translationOn && loadingTranslation && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex items-center gap-2 mb-2">
@@ -304,6 +300,7 @@ function Component(props: Props) {
                 translationOn ? "text-violet-600" : "text-gray-600"
               }`}
             />
+
             <span className="text-sm text-gray-600 sm:hidden">Translation</span>
           </div>
           <button
@@ -333,10 +330,9 @@ function Component(props: Props) {
           showPoints={showPoints}
         />
       )}
-      {/* Render question based on type and translation state */}
+
       {translationOn ? (
         <>
-          {/* Split view for SINGLE_CORRECT and MULTIPLE_CORRECT */}
           {question.type === "SINGLE_CORRECT" ||
           question.type === "MULTIPLE_CORRECT" ? (
             <>
@@ -359,12 +355,10 @@ function Component(props: Props) {
                 )}
 
               <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-12 relative">
-                {/* Arrow indicator - only on desktop */}
                 <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
                   <ArrowRightIcon className="w-6 h-6 text-black" />
                 </div>
 
-                {/* Original Language Column */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-gray-200 pb-2">
                     <span className="text-sm font-medium text-gray-700">
@@ -391,7 +385,6 @@ function Component(props: Props) {
                   </div>
                 </div>
 
-                {/* Translated Language Column */}
                 <div className="space-y-3 border-t lg:border-t-0 pt-4 lg:pt-0">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-2">
                     <select
@@ -443,7 +436,6 @@ function Component(props: Props) {
               </div>
             </>
           ) : (
-            /* For other question types, show translation below */
             <div className="space-y-4">
               <div className="flex items-center justify-between border-t border-gray-200 pt-4">
                 <select
@@ -465,7 +457,6 @@ function Component(props: Props) {
                 {question.translatedQuestion || question.question}
               </MarkdownViewer>
 
-              {/* Original Answer Field */}
               <RenderQuestion
                 questionType={question.type}
                 question={{
@@ -483,7 +474,6 @@ function Component(props: Props) {
           )}
         </>
       ) : (
-        /* Translation OFF - show normal view */
         <RenderQuestion
           questionType={question.type}
           question={{
@@ -510,12 +500,12 @@ function Component(props: Props) {
               strokeWidth={2}
               className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
             />
+
             <span className="text-sm sm:text-base">Previous Question</span>
           </button>
           {questionNumber === lastQuestionNumber ? (
             <button
               onClick={() => {
-                // Dispatch a custom event to trigger submission
                 const submitEvent = new CustomEvent(
                   "triggerAssignmentSubmission",
                 );

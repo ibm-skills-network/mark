@@ -29,7 +29,7 @@ interface Props extends ComponentPropsWithoutRef<"nav"> {
 export const FooterNavigation: FC<Props> = ({
   assignmentId,
   nextStep = "config",
-  currentStepId = 1, // Assuming this is used on questions page by default
+  currentStepId = 1,
 }) => {
   const router = useRouter();
   const [activeAssignmentId, questions] = useAuthorStore((state) => [
@@ -69,18 +69,15 @@ export const FooterNavigation: FC<Props> = ({
   function handleNavigate() {
     setShowErrorModal(false);
 
-    // Navigate first
     if (step !== null && step !== undefined && step !== currentStepId) {
       const nextPage = pageRouterUsingSteps(step);
 
       if (nextPage) {
         router.push(nextPage);
 
-        // If we have an invalidQuestionId, set it and scroll after navigation
         if (invalidQuestionId) {
           setFocusedQuestionId(invalidQuestionId);
 
-          // Wait for navigation and rendering to complete
           setTimeout(() => {
             const element = document.getElementById(
               `question-title-${invalidQuestionId}`,
@@ -92,7 +89,6 @@ export const FooterNavigation: FC<Props> = ({
                 inline: "center",
               });
             } else {
-              // If question-title element doesn't exist, try the question element
               const questionElement = document.getElementById(
                 `question-${invalidQuestionId}`,
               );
@@ -104,13 +100,12 @@ export const FooterNavigation: FC<Props> = ({
                 });
               }
             }
-          }, 500); // Give time for navigation and rendering
+          }, 500);
         }
       } else {
         router.push(`/author/${activeAssignmentId}`);
       }
     } else if (invalidQuestionId) {
-      // If no step or same step, we're already on the right page
       setFocusedQuestionId(invalidQuestionId);
 
       setTimeout(() => {
@@ -136,13 +131,10 @@ export const FooterNavigation: FC<Props> = ({
       return;
     }
 
-    // Check if there are issues that need attention
     if (!isValid) {
-      // Only show modal if the error is not on the current page
       if (step !== null && step !== undefined && step !== currentStepId) {
         setShowErrorModal(true);
       } else {
-        // If error is on current page, just scroll to it
         handleNavigate();
       }
       return;
@@ -180,19 +172,15 @@ export const FooterNavigation: FC<Props> = ({
         </Button>
       </footer>
 
-      {/* Error Modal */}
       {showErrorModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            {/* Backdrop */}
             <div
               className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
               onClick={() => setShowErrorModal(false)}
             />
 
-            {/* Modal Content */}
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              {/* Close button */}
               <button
                 onClick={() => setShowErrorModal(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -200,7 +188,6 @@ export const FooterNavigation: FC<Props> = ({
                 <XMarkIcon className="h-6 w-6" />
               </button>
 
-              {/* Modal Header */}
               <div className="flex items-center mb-4">
                 {statusMessage.type === "error" && (
                   <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
@@ -213,7 +200,6 @@ export const FooterNavigation: FC<Props> = ({
                 </h3>
               </div>
 
-              {/* Modal Body */}
               <div className="mb-6">
                 <TooltipMessage
                   isLoading={isLoading}
@@ -230,7 +216,6 @@ export const FooterNavigation: FC<Props> = ({
                 />
               </div>
 
-              {/* Modal Footer */}
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowErrorModal(false)}

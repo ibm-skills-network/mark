@@ -17,7 +17,6 @@ import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { DraftSummary, VersionSummary } from "@/lib/author";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
-  // version control state
   "versions",
   "currentVersion",
   "selectedVersion",
@@ -28,13 +27,11 @@ const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   "lastAutoSave",
   "hasUnsavedChanges",
 
-  // drafts
   "drafts",
   "isLoadingDrafts",
   "draftsLoadFailed",
   "hasAttemptedLoadDrafts",
 
-  // favorites
   "favoriteVersions",
 ]);
 
@@ -72,23 +69,23 @@ export type AuthorState = {
   focusedQuestionId?: number | undefined;
   originalAssignment: AuthorAssignmentState;
   role?: string;
-  // Version control state
+
   versions: VersionSummary[];
-  currentVersion?: VersionSummary; // Currently active/published version
-  checkedOutVersion?: VersionSummary; // Currently checked out version (what user is working on)
-  selectedVersion?: VersionSummary; // Version selected for comparison/operations
+  currentVersion?: VersionSummary;
+  checkedOutVersion?: VersionSummary;
+  selectedVersion?: VersionSummary;
   versionComparison?: VersionComparison;
   isLoadingVersions: boolean;
   versionsLoadFailed: boolean;
   hasAttemptedLoadVersions: boolean;
   lastAutoSave?: Date;
   hasUnsavedChanges: boolean;
-  // Draft state
+
   drafts: any[];
   isLoadingDrafts: boolean;
   draftsLoadFailed: boolean;
   hasAttemptedLoadDrafts: boolean;
-  // Favorite versions
+
   favoriteVersions: number[];
 };
 
@@ -249,7 +246,6 @@ export type AuthorActions = {
     variantId?: number,
   ) => boolean;
 
-  // Version control actions
   loadVersions: () => Promise<void>;
   createVersion: (
     versionDescription?: string,
@@ -271,7 +267,6 @@ export type AuthorActions = {
     toVersionId: number,
   ) => Promise<void>;
   getVersionHistory: () => Promise<any[]>;
-  autoSave: () => Promise<void>;
   setVersions: (versions: VersionSummary[]) => void;
   setCurrentVersion: (version?: VersionSummary) => void;
   setCheckedOutVersion: (version?: VersionSummary) => void;
@@ -285,13 +280,11 @@ export type AuthorActions = {
   setHasUnsavedChanges: (hasChanges: boolean) => void;
   markAutoSave: () => void;
 
-  // Draft actions
   setDrafts: (drafts: DraftSummary[]) => void;
   setIsLoadingDrafts: (loading: boolean) => void;
   setDraftsLoadFailed: (failed: boolean) => void;
   setHasAttemptedLoadDrafts: (attempted: boolean) => void;
 
-  // Favorite version actions
   toggleFavoriteVersion: (versionId: number) => Promise<void>;
   setFavoriteVersions: (favorites: number[]) => void;
   loadFavoriteVersions: () => Promise<void>;
@@ -477,6 +470,7 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
                       ...state.questionStates[questionId]?.variants?.[
                         variantId
                       ],
+
                       isloading: value,
                     },
                   },
@@ -524,6 +518,7 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
                         ...state.questionStates[questionId]?.variants?.[
                           variantId
                         ],
+
                         toggleTitle: value,
                       },
                     },
@@ -569,7 +564,7 @@ export const useAuthorStore = createWithEqualityFn<
         setRole: (role) => set({ role }),
         learningObjectives: "",
         originalAssignment: null,
-        // Version control state initialization
+
         versions: [],
         currentVersion: undefined,
         checkedOutVersion: undefined,
@@ -580,12 +575,12 @@ export const useAuthorStore = createWithEqualityFn<
         hasAttemptedLoadVersions: false,
         lastAutoSave: undefined,
         hasUnsavedChanges: false,
-        // Draft state initialization
+
         drafts: [],
         isLoadingDrafts: false,
         draftsLoadFailed: false,
         hasAttemptedLoadDrafts: false,
-        // Favorite versions initialization
+
         favoriteVersions: [],
         removeRubric(questionId, rubricIndex, variantId) {
           set((state) => ({
@@ -1056,6 +1051,7 @@ export const useAuthorStore = createWithEqualityFn<
                   ...rubrics[rubricIndex].criteria,
                   criteria,
                 ];
+
                 return {
                   ...q,
                   rubrics,
@@ -1693,8 +1689,7 @@ export const useAuthorStore = createWithEqualityFn<
               : state.questions || [],
           }));
         },
-        // Centralized method for setting data from backend
-        // All backend data should go through this method or the apiClient
+
         setDataFromBackend: (data: Partial<AuthorAssignmentState>) => {
           set({ ...data, hasUnsavedChanges: true });
         },
@@ -1751,24 +1746,18 @@ export const useAuthorStore = createWithEqualityFn<
             const currentVersion = versions.find((v) => v.isActive);
             const currentState = get();
 
-            // Preserve the current checkedOutVersion if it exists and is still in the version list
-            // This ensures that when versions are refreshed, we don't lose the user's current checkout
             let checkedOutVersion = currentState.checkedOutVersion;
 
             if (checkedOutVersion) {
-              // Find the updated version object from the fresh list
               const existingCheckedOut = versions.find(
                 (v) => v.id === checkedOutVersion.id,
               );
               if (existingCheckedOut) {
-                // Use the fresh version object from the API
                 checkedOutVersion = existingCheckedOut;
               } else {
-                // If the checked out version no longer exists, fall back to current version
                 checkedOutVersion = currentVersion;
               }
             } else {
-              // If no version is checked out, default to the current active version
               checkedOutVersion = currentVersion;
             }
 
@@ -2073,13 +2062,6 @@ export const useAuthorStore = createWithEqualityFn<
 
             await updateConfigStores(versionData);
 
-            console.log(
-              "✅ Checked out version:",
-              versionToCheckout.versionNumber,
-              "ID:",
-              versionToCheckout.id,
-            );
-
             return true;
           } catch (error) {
             console.error("💥 Error checking out version:", error);
@@ -2208,13 +2190,10 @@ export const useAuthorStore = createWithEqualityFn<
 
               let updatedVersions: VersionSummary[];
               if (updateExisting) {
-                // Replace existing version in the list
-
                 updatedVersions = state.versions.map((v) =>
                   v.id === newVersion.id ? newVersion : v,
                 );
               } else {
-                // Add as new version
                 updatedVersions = [newVersion, ...state.versions];
               }
 
@@ -2229,17 +2208,10 @@ export const useAuthorStore = createWithEqualityFn<
                 const checkoutSuccess = await get().checkoutVersion(
                   newVersion.id,
                 );
-
-                if (checkoutSuccess) {
-                  console.log(
-                    "✅ Successfully checked out to published version",
-                  );
-                } else {
-                  console.warn(
-                    "⚠️ Checkout failed after publishing, setting checkedOutVersion manually",
-                  );
-                  set({ checkedOutVersion: newVersion });
+                if (!checkoutSuccess) {
+                  console.error("Failed to checkout newly created version");
                 }
+                set({ checkedOutVersion: newVersion });
               }
             }
 
@@ -2554,9 +2526,6 @@ export const useAuthorStore = createWithEqualityFn<
                   isActive: v.id === versionId,
                 })),
               });
-
-              // Don't reload page - just update local state
-              // window.location.reload(); // Removed
             }
 
             return activatedVersion;
@@ -2600,11 +2569,6 @@ export const useAuthorStore = createWithEqualityFn<
           }
         },
 
-        autoSave: async () => {
-          // Auto-save is disabled per user request
-        },
-
-        // Version control state setters
         setVersions: (versions) => set({ versions }),
         setCurrentVersion: (currentVersion) => set({ currentVersion }),
         setCheckedOutVersion: (checkedOutVersion) => set({ checkedOutVersion }),
@@ -2614,14 +2578,12 @@ export const useAuthorStore = createWithEqualityFn<
         setHasUnsavedChanges: (hasUnsavedChanges) => set({ hasUnsavedChanges }),
         markAutoSave: () => set({ lastAutoSave: new Date() }),
 
-        // Draft state setters
         setDrafts: (drafts) => set({ drafts }),
         setIsLoadingDrafts: (isLoadingDrafts) => set({ isLoadingDrafts }),
         setDraftsLoadFailed: (draftsLoadFailed) => set({ draftsLoadFailed }),
         setHasAttemptedLoadDrafts: (hasAttemptedLoadDrafts) =>
           set({ hasAttemptedLoadDrafts }),
 
-        // Favorite version actions implementation
         setFavoriteVersions: (favoriteVersions) => set({ favoriteVersions }),
 
         loadFavoriteVersions: async () => {
@@ -2629,7 +2591,6 @@ export const useAuthorStore = createWithEqualityFn<
           if (!state.activeAssignmentId) return;
 
           try {
-            // Load favorites from localStorage for now (could be API in future)
             const storageKey = `favorites-${state.activeAssignmentId}`;
             const storedFavorites = localStorage.getItem(storageKey);
             const favorites = storedFavorites
@@ -2652,17 +2613,13 @@ export const useAuthorStore = createWithEqualityFn<
 
             let newFavorites: number[];
             if (isFavorite) {
-              // Remove from favorites
               newFavorites = currentFavorites.filter((id) => id !== versionId);
             } else {
-              // Add to favorites
               newFavorites = [...currentFavorites, versionId];
             }
 
-            // Update state
             set({ favoriteVersions: newFavorites });
 
-            // Save to localStorage (could be API call in future)
             const storageKey = `favorites-${state.activeAssignmentId}`;
             localStorage.setItem(storageKey, JSON.stringify(newFavorites));
           } catch (error) {
@@ -2687,7 +2644,6 @@ export const useAuthorStore = createWithEqualityFn<
             );
 
             if (updatedVersion) {
-              // Update the version in the local state
               set({
                 versions: state.versions.map((v) =>
                   v.id === versionId
@@ -2721,12 +2677,8 @@ export const useAuthorStore = createWithEqualityFn<
           ? localStorage
           : {
               getItem: () => null,
-              setItem: () => {
-                // No-op for server-side
-              },
-              removeItem: () => {
-                // No-op for server-side
-              },
+              setItem: () => null,
+              removeItem: () => null,
             },
       ),
       partialize(state) {

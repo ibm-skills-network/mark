@@ -32,7 +32,7 @@ export interface CreateVersionDto {
   isDraft?: boolean;
   shouldActivate?: boolean;
   updateExisting?: boolean;
-  versionId?: number; // ID of the version to update when updateExisting is true
+  versionId?: number;
 }
 
 export interface CompareVersionsDto {
@@ -101,7 +101,6 @@ export class VersionManagementService {
    * Get the most recently created version for an assignment
    */
   async getLatestVersion(assignmentId: number): Promise<VersionSummary | null> {
-    // Verify assignment access
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: { AssignmentAuthor: true },
@@ -147,7 +146,6 @@ export class VersionManagementService {
       },
     );
 
-    // Log the key decision factors
     this.logger.info(`🔍 VERSION CREATE PARAMS:`, {
       updateExisting: createVersionDto.updateExisting,
       versionId: createVersionDto.versionId,
@@ -155,7 +153,6 @@ export class VersionManagementService {
       isDraft: createVersionDto.isDraft,
     });
 
-    // Verify assignment exists and user has access
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
@@ -175,18 +172,15 @@ export class VersionManagementService {
       createVersionDto,
     });
 
-    // If no legacy questions found, this might be a new assignment created through version control
     if (assignment.questions.length === 0) {
       this.logger.warn(
         `No legacy questions found for assignment ${assignmentId}. Creating version with empty questions.`,
       );
     }
 
-    // Handle version number - if not provided, generate a default one
     let versionNumber: string;
 
     if (createVersionDto.versionNumber) {
-      // Validate provided semantic version format
       const semanticVersionRegex = /^\d+\.\d+\.\d+(?:-rc\d+)?$/;
       if (!semanticVersionRegex.test(createVersionDto.versionNumber)) {
         throw new BadRequestException(
@@ -195,7 +189,6 @@ export class VersionManagementService {
       }
       versionNumber = createVersionDto.versionNumber;
     } else {
-      // Generate default version number (legacy behavior)
       const latestVersion = await this.prisma.assignmentVersion.findFirst({
         where: { assignmentId },
         orderBy: { createdAt: "desc" },
@@ -203,7 +196,6 @@ export class VersionManagementService {
       });
 
       if (latestVersion && /^\d+\.\d+\.\d+/.test(latestVersion.versionNumber)) {
-        // If latest version is semantic, increment patch version
         const match = latestVersion.versionNumber.match(/^(\d+)\.(\d+)\.(\d+)/);
         if (match) {
           const [, major, minor, patch] = match;
@@ -212,17 +204,14 @@ export class VersionManagementService {
           versionNumber = "1.0.0";
         }
       } else {
-        // Default to 1.0.0 for first version
         versionNumber = "1.0.0";
       }
 
-      // Add -rc suffix if it's a draft
       if (createVersionDto.isDraft) {
         versionNumber += "-rc1";
       }
     }
 
-    // Handle updateExisting with versionId first (highest priority)
     if (createVersionDto.updateExisting && createVersionDto.versionId) {
       this.logger.info(
         `🔄 UPDATE PATH: Updating existing version ${createVersionDto.versionId} directly for assignment ${assignmentId}`,
@@ -240,7 +229,6 @@ export class VersionManagementService {
       );
     }
 
-    // Check for duplicate version numbers and handle conflicts
     const originalVersionNumber = versionNumber;
     const finalVersionNumber = versionNumber;
     const wasAutoIncremented = false;
@@ -255,7 +243,6 @@ export class VersionManagementService {
 
     if (existingVersion) {
       if (createVersionDto.updateExisting) {
-        // Update existing version instead of creating new one (fallback to version number lookup)
         this.logger.info(
           `Updating existing version ${existingVersion.id} found by version number ${finalVersionNumber}`,
         );
@@ -266,7 +253,6 @@ export class VersionManagementService {
           userSession,
         );
       } else {
-        // Return a special response indicating the version exists
         const versionExistsError = new ConflictException({
           message: `Version ${finalVersionNumber} already exists for this assignment`,
           versionExists: true,
@@ -286,11 +272,9 @@ export class VersionManagementService {
       }
     }
 
-    // Update versionNumber to use the final (possibly incremented) version
     versionNumber = finalVersionNumber;
 
     return await this.prisma.$transaction(async (tx) => {
-      // Create assignment version
       const assignmentVersion = await tx.assignmentVersion.create({
         data: {
           assignmentId,
@@ -313,7 +297,7 @@ export class VersionManagementService {
           questionDisplay: assignment.questionDisplay,
           numberOfQuestionsPerAttempt: assignment.numberOfQuestionsPerAttempt,
           questionOrder: assignment.questionOrder,
-          published: !createVersionDto.isDraft, // Published only if not a draft
+          published: !createVersionDto.isDraft,
           showAssignmentScore: assignment.showAssignmentScore,
           showQuestionScore: assignment.showQuestionScore,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
@@ -331,7 +315,6 @@ export class VersionManagementService {
         },
       });
 
-      // Create question versions
       this.logger.info(
         `Creating ${assignment.questions.length} question versions for assignment version ${assignmentVersion.id}`,
       );
@@ -370,22 +353,18 @@ export class VersionManagementService {
         `Successfully created all ${assignment.questions.length} question versions`,
       );
 
-      // Update current version if should activate
       if (createVersionDto.shouldActivate) {
-        // Deactivate other versions
         await tx.assignmentVersion.updateMany({
           where: { assignmentId, id: { not: assignmentVersion.id } },
           data: { isActive: false },
         });
 
-        // Update assignment currentVersionId
         await tx.assignment.update({
           where: { id: assignmentId },
           data: { currentVersionId: assignmentVersion.id },
         });
       }
 
-      // Create version history entry
       await tx.versionHistory.create({
         data: {
           assignmentId,
@@ -430,7 +409,6 @@ export class VersionManagementService {
   }
 
   async listVersions(assignmentId: number): Promise<VersionSummary[]> {
-    // Verify assignment access
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: { AssignmentAuthor: true, currentVersion: true },
@@ -493,7 +471,6 @@ export class VersionManagementService {
       },
     );
 
-    // Fetch variants for each question that has a questionId
     const questionVersionsWithVariants = await Promise.all(
       version.questionVersions.map(async (qv) => {
         let variants = [];
@@ -543,7 +520,6 @@ export class VersionManagementService {
       }),
     );
 
-    // Transform the response to match the expected format
     return {
       id: version.id,
       versionNumber: version.versionNumber,
@@ -578,7 +554,6 @@ export class VersionManagementService {
       showQuestions: version.showQuestions,
       correctAnswerVisibility: version.correctAnswerVisibility,
       languageCode: version.languageCode,
-      // Use the enhanced questionVersions with variants
       questionVersions: questionVersionsWithVariants,
     };
   }
@@ -592,7 +567,6 @@ export class VersionManagementService {
       userId: userSession.userId,
     });
 
-    // Check if there's an existing draft version
     const existingDraft = await this.prisma.assignmentVersion.findFirst({
       where: {
         assignmentId,
@@ -630,7 +604,6 @@ export class VersionManagementService {
 
     return await this.prisma.$transaction(async (tx) => {
       if (restoreVersionDto.createAsNewVersion) {
-        // Create new version from restored data
         const nextVersionNumber = await this.getNextVersionNumber(
           assignmentId,
           tx,
@@ -660,7 +633,7 @@ export class VersionManagementService {
             numberOfQuestionsPerAttempt:
               versionToRestore.numberOfQuestionsPerAttempt,
             questionOrder: versionToRestore.questionOrder,
-            published: false, // New restored versions start unpublished
+            published: false,
             showAssignmentScore: versionToRestore.showAssignmentScore,
             showQuestionScore: versionToRestore.showQuestionScore,
             showSubmissionFeedback: versionToRestore.showSubmissionFeedback,
@@ -668,7 +641,7 @@ export class VersionManagementService {
             correctAnswerVisibility: versionToRestore.correctAnswerVisibility,
             languageCode: versionToRestore.languageCode,
             createdBy: userSession.userId,
-            isDraft: true, // Restored versions start as drafts
+            isDraft: true,
             versionDescription:
               restoreVersionDto.versionDescription ||
               `Restored from version ${versionToRestore.versionNumber}`,
@@ -676,7 +649,6 @@ export class VersionManagementService {
           },
         });
 
-        // Restore question versions
         for (const questionVersion of versionToRestore.questionVersions) {
           await tx.questionVersion.create({
             data: {
@@ -702,7 +674,6 @@ export class VersionManagementService {
           });
         }
 
-        // Create version history
         await tx.versionHistory.create({
           data: {
             assignmentId,
@@ -726,11 +697,9 @@ export class VersionManagementService {
           questionCount: versionToRestore.questionVersions.length,
         };
       } else {
-        // Activate existing version
         const isRcVersion = /-rc\d+$/.test(versionToRestore.versionNumber);
 
         if (isRcVersion) {
-          // For RC versions, publish as final version and activate
           return await this.activateRcVersion(
             assignmentId,
             restoreVersionDto.versionId,
@@ -738,7 +707,6 @@ export class VersionManagementService {
             tx,
           );
         } else {
-          // For regular versions, check if published before activation
           if (!versionToRestore.published) {
             throw new BadRequestException(
               `Version ${versionToRestore.versionNumber} cannot be activated because it has not been published yet. Please publish the version first before activating it.`,
@@ -760,7 +728,6 @@ export class VersionManagementService {
             data: { currentVersionId: restoreVersionDto.versionId },
           });
 
-          // Create version history
           await tx.versionHistory.create({
             data: {
               assignmentId,
@@ -809,12 +776,10 @@ export class VersionManagementService {
       );
     }
 
-    // Remove -rc suffix when publishing and handle conflicts
     let publishedVersionNumber = version.versionNumber;
     if (publishedVersionNumber.includes("-rc")) {
       publishedVersionNumber = publishedVersionNumber.replace(/-rc\d+$/, "");
 
-      // Check if the published version number already exists
       const existingPublishedVersion =
         await this.prisma.assignmentVersion.findFirst({
           where: {
@@ -825,7 +790,6 @@ export class VersionManagementService {
         });
 
       if (existingPublishedVersion) {
-        // Auto-increment patch version to resolve conflict
         const versionMatch = publishedVersionNumber.match(
           /^(\d+)\.(\d+)\.(\d+)$/,
         );
@@ -834,7 +798,6 @@ export class VersionManagementService {
           let newPatch = Number.parseInt(patch) + 1;
           let newVersionNumber = `${major}.${minor}.${newPatch}`;
 
-          // Keep incrementing until we find an available version number
           while (
             await this.prisma.assignmentVersion.findFirst({
               where: {
@@ -864,14 +827,12 @@ export class VersionManagementService {
     const wasAutoIncremented =
       publishedVersionNumber !== originalVersionNumber.replace(/-rc\d+$/, "");
 
-    // Update the version to mark it as published and no longer a draft
     const updatedVersion = await this.prisma.assignmentVersion.update({
       where: { id: versionId },
       data: {
         published: true,
         isDraft: false,
         versionNumber: publishedVersionNumber,
-        // Update description to note auto-increment if it happened
         versionDescription: wasAutoIncremented
           ? `${
               version.versionDescription || ""
@@ -897,7 +858,6 @@ export class VersionManagementService {
       createdBy: updatedVersion.createdBy,
       createdAt: updatedVersion.createdAt,
       questionCount: updatedVersion._count.questionVersions,
-      // Include additional info about auto-increment for frontend
       wasAutoIncremented,
       originalVersionNumber: wasAutoIncremented
         ? originalVersionNumber
@@ -962,9 +922,6 @@ export class VersionManagementService {
   }
 
   async getVersionHistory(assignmentId: number, _userSession: UserSession) {
-    // Verify access
-    // await this.verifyAssignmentAccess(assignmentId, userSession);
-
     return await this.prisma.versionHistory.findMany({
       where: { assignmentId },
       include: {
@@ -975,7 +932,6 @@ export class VersionManagementService {
     });
   }
 
-  // Private helper methods
   private async updateExistingDraft(
     draftId: number,
     saveDraftDto: SaveDraftDto,
@@ -1007,12 +963,10 @@ export class VersionManagementService {
         include: { _count: { select: { questionVersions: true } } },
       });
 
-      // Delete existing question versions for this draft
       await tx.questionVersion.deleteMany({
         where: { assignmentVersionId: draftId },
       });
 
-      // Create new question versions if provided
       if (saveDraftDto.questionsData && saveDraftDto.questionsData.length > 0) {
         for (const [
           index,
@@ -1074,7 +1028,6 @@ export class VersionManagementService {
       },
     );
 
-    // Get current assignment data
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
@@ -1087,14 +1040,13 @@ export class VersionManagementService {
     }
 
     return await this.prisma.$transaction(async (tx) => {
-      // Update the assignment version
       const updatedVersion = await tx.assignmentVersion.update({
         where: { id: versionId },
         data: {
           versionDescription: updateData.versionDescription,
           isDraft: updateData.isDraft ?? true,
           isActive: updateData.shouldActivate ?? false,
-          published: !(updateData.isDraft ?? true), // Published only if not a draft
+          published: !(updateData.isDraft ?? true),
           name: assignment.name,
           introduction: assignment.introduction,
           instructions: assignment.instructions,
@@ -1123,12 +1075,10 @@ export class VersionManagementService {
         include: { _count: { select: { questionVersions: true } } },
       });
 
-      // Delete existing question versions
       await tx.questionVersion.deleteMany({
         where: { assignmentVersionId: versionId },
       });
 
-      // Create new question versions with current data
       for (const [index, question] of assignment.questions.entries()) {
         await tx.questionVersion.create({
           data: {
@@ -1153,22 +1103,18 @@ export class VersionManagementService {
         });
       }
 
-      // Update current version if should activate
       if (updateData.shouldActivate) {
-        // Deactivate other versions
         await tx.assignmentVersion.updateMany({
           where: { assignmentId, id: { not: versionId } },
           data: { isActive: false },
         });
 
-        // Update assignment currentVersionId
         await tx.assignment.update({
           where: { id: assignmentId },
           data: { currentVersionId: versionId },
         });
       }
 
-      // Create version history entry
       await tx.versionHistory.create({
         data: {
           assignmentId,
@@ -1210,7 +1156,6 @@ export class VersionManagementService {
       return "1.0.0";
     }
 
-    // If it's already a semantic version, increment patch
     if (/^\d+\.\d+\.\d+(-rc\d+)?$/.test(lastVersion.versionNumber)) {
       const match = lastVersion.versionNumber.match(/^(\d+)\.(\d+)\.(\d+)/);
       if (match) {
@@ -1221,7 +1166,6 @@ export class VersionManagementService {
       }
     }
 
-    // Legacy numeric version or unrecognized format, start fresh
     return "1.0.0";
   }
 
@@ -1256,13 +1200,11 @@ export class VersionManagementService {
   private compareQuestionData(fromQuestions: any[], toQuestions: any[]) {
     const changes = [];
 
-    // Create maps for easier comparison
     const fromMap = new Map(
       fromQuestions.map((q) => [q.questionId || q.id, q]),
     );
     const toMap = new Map(toQuestions.map((q) => [q.questionId || q.id, q]));
 
-    // Find added questions
     for (const [questionId, question] of toMap) {
       if (!fromMap.has(questionId)) {
         changes.push({
@@ -1273,7 +1215,6 @@ export class VersionManagementService {
       }
     }
 
-    // Find removed questions
     for (const [questionId, question] of fromMap) {
       if (!toMap.has(questionId)) {
         changes.push({
@@ -1284,7 +1225,6 @@ export class VersionManagementService {
       }
     }
 
-    // Find modified questions
     for (const [questionId, fromQuestion] of fromMap) {
       const toQuestion = toMap.get(questionId);
       if (toQuestion) {
@@ -1301,7 +1241,6 @@ export class VersionManagementService {
           const fromValue = fromQuestion[field];
           const toValue = toQuestion[field];
 
-          // Deep comparison for objects
           const fromString =
             typeof fromValue === "object"
               ? JSON.stringify(fromValue)
@@ -1354,7 +1293,6 @@ export class VersionManagementService {
     saveDraftDto: SaveDraftDto,
     userSession: UserSession,
   ): Promise<VersionSummary> {
-    // Get the base assignment for reference
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: { AssignmentAuthor: true },
@@ -1365,15 +1303,13 @@ export class VersionManagementService {
     }
 
     return await this.prisma.$transaction(async (tx) => {
-      // Generate semantic version number for draft
       const lastVersion = await tx.assignmentVersion.findFirst({
         where: { assignmentId },
         orderBy: { createdAt: "desc" },
       });
 
-      let nextVersionNumber = "1.0.0-rc1"; // Default first draft version
+      let nextVersionNumber = "1.0.0-rc1";
       if (lastVersion && lastVersion.versionNumber) {
-        // If latest is semantic version, increment RC number
         if (/^\d+\.\d+\.\d+(-rc\d+)?$/.test(lastVersion.versionNumber)) {
           const rcMatch = lastVersion.versionNumber.match(/-rc(\d+)$/);
           if (rcMatch) {
@@ -1384,16 +1320,13 @@ export class VersionManagementService {
             const rcNumber = Number.parseInt(rcMatch[1], 10) + 1;
             nextVersionNumber = `${baseVersion}-rc${rcNumber}`;
           } else {
-            // No RC suffix, add RC1 to same version
             nextVersionNumber = `${lastVersion.versionNumber}-rc1`;
           }
         } else {
-          // Legacy numeric version, start semantic versioning
           nextVersionNumber = "1.0.0-rc1";
         }
       }
 
-      // Create assignment version with draft data
       const assignmentVersion = await tx.assignmentVersion.create({
         data: {
           assignmentId,
@@ -1439,7 +1372,6 @@ export class VersionManagementService {
         },
       });
 
-      // Create question versions if provided
       if (saveDraftDto.questionsData && saveDraftDto.questionsData.length > 0) {
         for (const [
           index,
@@ -1471,7 +1403,6 @@ export class VersionManagementService {
         }
       }
 
-      // Record in version history
       await tx.versionHistory.create({
         data: {
           assignmentId,
@@ -1528,8 +1459,6 @@ export class VersionManagementService {
     correctAnswerVisibility: string;
     languageCode: string | null;
   }> {
-    // await this.verifyAssignmentAccess(assignmentId, userSession);
-
     const latestDraft = await this.prisma.assignmentVersion.findFirst({
       where: {
         assignmentId,
@@ -1546,7 +1475,6 @@ export class VersionManagementService {
       return null;
     }
 
-    // Convert to assignment format
     return {
       id: assignmentId,
       name: latestDraft.name,
@@ -1609,8 +1537,6 @@ export class VersionManagementService {
       { userId: userSession.userId },
     );
 
-    // await this.verifyAssignmentAccess(assignmentId, userSession);
-
     const sourceVersion = await this.prisma.assignmentVersion.findUnique({
       where: { id: versionId, assignmentId },
       include: {
@@ -1629,7 +1555,6 @@ export class VersionManagementService {
     }
 
     return await this.prisma.$transaction(async (tx) => {
-      // Get or create a draft version to restore questions to
       let targetDraft = await tx.assignmentVersion.findFirst({
         where: {
           assignmentId,
@@ -1640,7 +1565,6 @@ export class VersionManagementService {
       });
 
       if (!targetDraft) {
-        // Create a new draft version
         const nextVersionNumber = await this.getNextVersionNumber(
           assignmentId,
           tx,
@@ -1684,7 +1608,6 @@ export class VersionManagementService {
         });
       }
 
-      // Restore the questions to the draft version
       for (const questionVersion of sourceVersion.questionVersions) {
         await tx.questionVersion.create({
           data: {
@@ -1708,14 +1631,12 @@ export class VersionManagementService {
           },
         });
 
-        // Unmark the question as deleted in the main table
         await tx.question.update({
           where: { id: questionVersion.questionId },
           data: { isDeleted: false },
         });
       }
 
-      // Record in version history
       await tx.versionHistory.create({
         data: {
           assignmentId,
@@ -1757,7 +1678,6 @@ export class VersionManagementService {
       userId: userSession.userId,
     });
 
-    // Verify the version exists and belongs to the assignment
     const version = await this.prisma.assignmentVersion.findFirst({
       where: {
         id: versionId,
@@ -1769,7 +1689,6 @@ export class VersionManagementService {
       throw new NotFoundException("Version not found");
     }
 
-    // Update the version description
     const updatedVersion = await this.prisma.assignmentVersion.update({
       where: { id: versionId },
       data: { versionDescription },
@@ -1808,7 +1727,6 @@ export class VersionManagementService {
       userId: userSession.userId,
     });
 
-    // Verify the version exists and belongs to the assignment
     const version = await this.prisma.assignmentVersion.findFirst({
       where: {
         id: versionId,
@@ -1820,12 +1738,11 @@ export class VersionManagementService {
       throw new NotFoundException("Version not found");
     }
 
-    // Check if the new version number already exists for this assignment
     const existingVersion = await this.prisma.assignmentVersion.findFirst({
       where: {
         assignmentId: assignmentId,
         versionNumber: versionNumber,
-        id: { not: versionId }, // Exclude the current version being updated
+        id: { not: versionId },
       },
     });
 
@@ -1835,7 +1752,6 @@ export class VersionManagementService {
       );
     }
 
-    // Update the version number
     const updatedVersion = await this.prisma.assignmentVersion.update({
       where: { id: versionId },
       data: { versionNumber },
@@ -1875,7 +1791,6 @@ export class VersionManagementService {
       },
     );
 
-    // First, verify the version exists and belongs to the assignment
     const version = await this.prisma.assignmentVersion.findFirst({
       where: {
         id: versionId,
@@ -1887,19 +1802,15 @@ export class VersionManagementService {
       throw new NotFoundException("Version not found");
     }
 
-    // Prevent deletion of active versions
     if (version.isActive) {
       throw new BadRequestException("Cannot delete the active version");
     }
 
-    // Use a transaction to ensure data integrity
     await this.prisma.$transaction(async (prisma) => {
-      // Delete associated question versions first (due to foreign key constraints)
       await prisma.questionVersion.deleteMany({
         where: { assignmentVersionId: versionId },
       });
 
-      // Delete the assignment version
       await prisma.assignmentVersion.delete({
         where: { id: versionId },
       });
@@ -1935,7 +1846,6 @@ export class VersionManagementService {
       },
     );
 
-    // Get the RC version
     const rcVersion = await prisma.assignmentVersion.findUnique({
       where: { id: rcVersionId, assignmentId },
       include: { questionVersions: { orderBy: { displayOrder: "asc" } } },
@@ -1949,10 +1859,8 @@ export class VersionManagementService {
       throw new BadRequestException("Version is not an RC version");
     }
 
-    // Calculate final version number by removing RC suffix
     let finalVersionNumber = rcVersion.versionNumber.replace(/-rc\d+$/, "");
 
-    // Check if final version already exists and auto-increment if needed
     const existingFinalVersion = await prisma.assignmentVersion.findFirst({
       where: {
         assignmentId,
@@ -1962,14 +1870,12 @@ export class VersionManagementService {
     });
 
     if (existingFinalVersion) {
-      // Auto-increment patch version to resolve conflict
       const versionMatch = finalVersionNumber.match(/^(\d+)\.(\d+)\.(\d+)$/);
       if (versionMatch) {
         const [, major, minor, patch] = versionMatch;
         let newPatch = Number.parseInt(patch) + 1;
         let newVersionNumber = `${major}.${minor}.${newPatch}`;
 
-        // Keep incrementing until we find an available version number
         while (
           await prisma.assignmentVersion.findFirst({
             where: {
@@ -1996,7 +1902,6 @@ export class VersionManagementService {
       finalVersion: finalVersionNumber,
     });
 
-    // Update the RC version to become the final published version
     const publishedVersion = await prisma.assignmentVersion.update({
       where: { id: rcVersionId },
       data: {
@@ -2010,25 +1915,21 @@ export class VersionManagementService {
       include: { questionVersions: true },
     });
 
-    // Deactivate all other versions
     await prisma.assignmentVersion.updateMany({
       where: { assignmentId, id: { not: rcVersionId } },
       data: { isActive: false },
     });
 
-    // Activate the newly published version
     await prisma.assignmentVersion.update({
       where: { id: rcVersionId },
       data: { isActive: true },
     });
 
-    // Update assignment current version
     await prisma.assignment.update({
       where: { id: assignmentId },
       data: { currentVersionId: rcVersionId },
     });
 
-    // Create version history
     await prisma.versionHistory.create({
       data: {
         assignmentId,
@@ -2069,7 +1970,6 @@ export class VersionManagementService {
     },
     userSession: UserSession,
   ): Promise<VersionSummary> {
-    // Verify assignment access
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: { AssignmentAuthor: true, questions: true },
@@ -2079,7 +1979,6 @@ export class VersionManagementService {
       throw new NotFoundException(`Assignment ${assignmentId} not found`);
     }
 
-    // Check for version conflicts
     const existingVersion = await this.prisma.assignmentVersion.findFirst({
       where: {
         assignmentId,
@@ -2095,7 +1994,6 @@ export class VersionManagementService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Create assignment version with snapshot data
         const assignmentVersion = await tx.assignmentVersion.create({
           data: {
             assignmentId,
@@ -2174,7 +2072,6 @@ export class VersionManagementService {
           },
         });
 
-        // Create question versions from snapshot
         const questionsData = draftData.questionsData || [];
 
         for (const [index, questionData] of questionsData.entries()) {

@@ -6,7 +6,6 @@ import {
   DataTransformer,
 } from "./data-transformer";
 
-// Mock TextEncoder/TextDecoder for testing
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
 
@@ -35,27 +34,27 @@ describe("DataTransformer Web App", () => {
       expect(result.metadata.encodedSize).toBeGreaterThan(0);
     });
 
-    it("should auto-detect fields to encode when no fields specified", () => {
+    it("should not transform fields when no explicit configuration provided", () => {
       const testData = {
         shortField: "short",
         longField:
-          "This is a very long field that should be automatically encoded",
+          "This is a very long field that will NOT be encoded without explicit config",
         number: 42,
       };
 
       const result = smartEncode(testData);
 
       expect(result.data.shortField).toBe(testData.shortField);
-      expect(result.data.longField).not.toBe(testData.longField);
+      expect(result.data.longField).toBe(testData.longField);
       expect(result.data.number).toBe(testData.number);
-      expect(result.metadata.fields).toContain("longField");
+      expect(result.metadata.fields).toHaveLength(0);
     });
 
-    it("should encode short HTML snippets to preserve markup", () => {
+    it("should encode short HTML snippets when explicitly configured", () => {
       const htmlSnippet = "<p>Hi</p>";
       const testData = { html: htmlSnippet };
 
-      const result = smartEncode(testData);
+      const result = smartEncode(testData, { fields: ["html"] });
 
       expect(result.data.html).not.toBe(htmlSnippet);
       const decoder = new TextDecoder();
@@ -70,11 +69,12 @@ describe("DataTransformer Web App", () => {
 
     it("should exclude specified fields from encoding", () => {
       const testData = {
-        shouldEncode: "This field should be encoded because it is long enough",
-        shouldExclude: "This field should be excluded even though it is long",
+        shouldEncode: "This field should be encoded because it is configured",
+        shouldExclude: "This field should be excluded",
       };
 
       const result = smartEncode(testData, {
+        fields: ["shouldEncode", "shouldExclude"],
         exclude: ["shouldExclude"],
       });
 
@@ -120,7 +120,7 @@ describe("DataTransformer Web App", () => {
         testData.level1.introduction,
       );
       expect(result.metadata.fields).toContain("introduction");
-      expect(result.metadata.fields).toHaveLength(1); // Only root level field
+      expect(result.metadata.fields).toHaveLength(1);
     });
 
     it("should handle arrays correctly", () => {
@@ -211,17 +211,21 @@ describe("DataTransformer Web App", () => {
       expect(typeof result.data.numberField).toBe("string");
     });
 
-    it("should skip already encoded base64 strings", () => {
-      const alreadyEncoded = btoa("test string");
+    it("should transform fields when explicitly configured", () => {
+      const plainText = "test string";
       const testData = {
-        encodedField: alreadyEncoded,
-        plainField: "This is a plain text field that should be encoded",
+        field1: plainText,
+        field2: "This is a plain text field",
       };
 
-      const result = smartEncode(testData);
+      const result = smartEncode(testData, {
+        fields: ["field1", "field2"],
+      });
 
-      expect(result.data.encodedField).toBe(alreadyEncoded);
-      expect(result.data.plainField).not.toBe(testData.plainField);
+      expect(result.data.field1).not.toBe(plainText);
+      expect(result.data.field2).not.toBe(testData.field2);
+      expect(result.metadata.fields).toContain("field1");
+      expect(result.metadata.fields).toContain("field2");
     });
 
     it("should not re-encode nested base64 strings", () => {
@@ -237,7 +241,7 @@ describe("DataTransformer Web App", () => {
     });
 
     it("should handle compression for large strings", () => {
-      const largeString = "a".repeat(1500); // Larger than 1000 chars
+      const largeString = "a".repeat(1500);
       const testData = { large: largeString };
 
       const result = smartEncode(testData, { fields: ["large"] });
@@ -249,17 +253,14 @@ describe("DataTransformer Web App", () => {
     it("should use caching for performance", () => {
       const testData = { field: "test data for caching" };
 
-      // Clear cache and get initial stats
       clearTransformCache();
       const initialStats = getCacheStats();
       expect(initialStats.size).toBe(0);
 
-      // First encode should add to cache
       const result1 = smartEncode(testData, { fields: ["field"] });
       const statsAfterFirst = getCacheStats();
       expect(statsAfterFirst.size).toBeGreaterThan(0);
 
-      // Second encode with same data should use cache
       const result2 = smartEncode(testData, { fields: ["field"] });
       expect(result2.data).toEqual(result1.data);
     });
@@ -282,7 +283,6 @@ describe("DataTransformer Web App", () => {
         compressionLevel: "heavy",
       });
 
-      // All should encode the field but potentially with different compression
       expect(noneResult.data.content).not.toBe(testData.content);
       expect(lightResult.data.content).not.toBe(testData.content);
       expect(heavyResult.data.content).not.toBe(testData.content);
@@ -308,32 +308,41 @@ describe("DataTransformer Web App", () => {
       expect(decoded.normalField).toBe(originalData.normalField);
     });
 
-    it("should automatically decode base64 strings without explicit configuration", () => {
+    it("should decode base64 strings with explicit configuration", () => {
       const html = "<div>Auto decode</div>";
       const encoder = new TextEncoder();
-      const encoded = encoder.encode(html);
-      const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
-      const testData = { html: base64 };
+      const bytes = encoder.encode(html);
+      const binaryString = String.fromCharCode(...bytes);
+      const encodedHtml = btoa(binaryString);
+      const testData = { html: encodedHtml };
 
-      const decoded = smartDecode(testData);
+      const decoded = smartDecode(testData, { fields: ["html"] });
 
       expect(decoded.html).toBe(html);
     });
 
-    it("should decode base64 payloads even when wrapped with stray characters", () => {
+    it("should NOT decode base64 payloads when wrapped with stray characters (safer behavior)", () => {
       const html = "<p>Remediated content</p>";
-      const base64 = btoa(html);
-      const decoded = smartDecode({ html: `r\uFFFD\uFFFD${base64}` });
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(html);
+      const binaryString = String.fromCharCode(...bytes);
+      const base64 = btoa(binaryString);
+      const corrupted = `r\uFFFD\uFFFD${base64}`;
+      const decoded = smartDecode({ html: corrupted }, { fields: ["html"] });
 
-      expect(decoded.html).toBe(html);
+      expect(decoded.html).toBe(corrupted);
     });
 
     it("should fully decode nested base64 layers", () => {
       const html = "<p>double decode</p>";
-      const once = btoa(html);
-      const twice = btoa(once);
-
-      const decoded = smartDecode({ html: twice });
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(html);
+      const binaryString = String.fromCharCode(...bytes);
+      const once = btoa(binaryString);
+      const bytes2 = encoder.encode(once);
+      const binaryString2 = String.fromCharCode(...bytes2);
+      const twice = btoa(binaryString2);
+      const decoded = smartDecode({ html: twice }, { fields: ["html"] });
 
       expect(decoded.html).toBe(html);
     });
@@ -348,7 +357,6 @@ describe("DataTransformer Web App", () => {
         fields: ["invalidBase64"],
       });
 
-      // Should fall back to original value when decode fails
       expect(result.invalidBase64).toBe(testData.invalidBase64);
       expect(result.validField).toBe(testData.validField);
     });
@@ -462,15 +470,12 @@ describe("DataTransformer Web App", () => {
     it("should use caching for performance", () => {
       const testData = { field: "encoded content" };
 
-      // Clear cache
       clearTransformCache();
 
-      // First decode should add to cache
       const result1 = smartDecode(testData, { fields: ["field"] });
       const statsAfterFirst = getCacheStats();
       expect(statsAfterFirst.size).toBeGreaterThan(0);
 
-      // Second decode with same data should use cache
       const result2 = smartDecode(testData, { fields: ["field"] });
       expect(result2).toEqual(result1);
     });
@@ -482,24 +487,21 @@ describe("DataTransformer Web App", () => {
         const plainText = "Hello world";
         const encoded = btoa(plainText);
 
-        // Test by encoding then checking auto-detection
         const testData = { field: encoded };
         const result = smartEncode(testData);
 
-        // If it's correctly identified as base64, it shouldn't be re-encoded
         expect(result.data.field).toBe(encoded);
         expect(result.metadata.fields).not.toContain("field");
       });
 
-      it("should correctly identify non-base64 strings", () => {
-        const plainText = "This is definitely not base64 encoded text";
+      it("should not encode unconfigured fields", () => {
+        const plainText = "This text won't be encoded";
         const testData = { field: plainText };
 
         const result = smartEncode(testData);
 
-        // Should be encoded since it's not already base64
-        expect(result.data.field).not.toBe(plainText);
-        expect(result.metadata.fields).toContain("field");
+        expect(result.data.field).toBe(plainText);
+        expect(result.metadata.fields).not.toContain("field");
       });
     });
 
@@ -516,17 +518,17 @@ describe("DataTransformer Web App", () => {
         expect(result.metadata.fields).toContain("target");
       });
 
-      it("should auto-detect long fields when no fields specified", () => {
+      it("should not transform fields when no configuration provided", () => {
         const testData = {
           short: "tiny",
-          long: "This is a very long string that should be automatically detected for encoding",
+          long: "This is a very long string that won't be transformed without configuration",
         };
 
         const result = smartEncode(testData);
 
         expect(result.data.short).toBe("tiny");
-        expect(result.data.long).not.toBe(testData.long);
-        expect(result.metadata.fields).toContain("long");
+        expect(result.data.long).toBe(testData.long);
+        expect(result.metadata.fields).toHaveLength(0);
       });
     });
   });
@@ -553,8 +555,6 @@ describe("DataTransformer Web App", () => {
     });
 
     it("should handle cache expiry", (done) => {
-      // This test would need to modify CACHE_TTL or mock Date.now()
-      // For now, just test that cache exists
       const testData = { field: "test data" };
       smartEncode(testData, { fields: ["field"] });
 
@@ -598,7 +598,6 @@ describe("DataTransformer Web App", () => {
 
         const result = DataTransformer.encodeForAPI(testData);
 
-        // Should encode the nested fields
         expect(result.data.questions.scoring.rubrics.rubricQuestion).not.toBe(
           testData.questions.scoring.rubrics.rubricQuestion,
         );
@@ -626,15 +625,14 @@ describe("DataTransformer Web App", () => {
     });
 
     describe("encodeFormData", () => {
-      it("should exclude specified fields and encode shallow", () => {
+      it("should exclude specified fields but not auto-encode", () => {
         const testData = {
           id: 123,
           createdAt: "2023-01-01",
           updatedAt: "2023-01-01",
-          longContent:
-            "This is content that should be encoded for form submission",
+          longContent: "This content won't be encoded without explicit config",
           nested: {
-            deepContent: "This should not be encoded due to deep: false",
+            deepContent: "This deep content also won't be encoded",
           },
         };
 
@@ -643,7 +641,7 @@ describe("DataTransformer Web App", () => {
         expect(result.data.id).toBe(testData.id);
         expect(result.data.createdAt).toBe(testData.createdAt);
         expect(result.data.updatedAt).toBe(testData.updatedAt);
-        expect(result.data.longContent).not.toBe(testData.longContent);
+        expect(result.data.longContent).toBe(testData.longContent);
         expect(result.data.nested.deepContent).toBe(
           testData.nested.deepContent,
         );
@@ -651,16 +649,14 @@ describe("DataTransformer Web App", () => {
     });
 
     describe("encodeForStorage", () => {
-      it("should apply heavy compression for storage", () => {
+      it("should apply heavy compression for storage when configured", () => {
         const testData = {
-          content:
-            "This content will be encoded for storage with heavy compression",
+          content: "This content will be encoded with configuration",
         };
 
         const result = DataTransformer.encodeForStorage(testData);
 
-        expect(result.data.content).not.toBe(testData.content);
-        expect(result.metadata.fields).toContain("content");
+        expect(result.data.content).toBe(testData.content);
       });
     });
   });
@@ -783,8 +779,8 @@ describe("DataTransformer Web App", () => {
       const decodeTime = performance.now() - decodeStartTime;
 
       expect(decoded).toEqual(largeDataset);
-      expect(encodeTime).toBeLessThan(5000); // Should complete within 5 seconds
-      expect(decodeTime).toBeLessThan(5000); // Should complete within 5 seconds
+      expect(encodeTime).toBeLessThan(5000);
+      expect(decodeTime).toBeLessThan(5000);
     });
   });
 });

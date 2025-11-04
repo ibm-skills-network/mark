@@ -35,7 +35,7 @@ export function QuickVersionActions({
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const publishedVersions = getPublishedVersions().slice(0, 5); // Show last 5 published versions
+  const publishedVersions = getPublishedVersions().slice(0, 5);
   const hasOtherVersions =
     publishedVersions.filter((v) => !v.isActive).length > 0;
 
@@ -49,7 +49,6 @@ export function QuickVersionActions({
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      {/* Save Button */}
       <Button
         onClick={onSave}
         disabled={!hasUnsavedChanges}
@@ -61,7 +60,6 @@ export function QuickVersionActions({
         Save
       </Button>
 
-      {/* Quick Version Actions */}
       {hasOtherVersions && (
         <div className="relative">
           <Button
@@ -81,6 +79,7 @@ export function QuickVersionActions({
                 className="fixed inset-0 z-40"
                 onClick={() => setIsDropdownOpen(false)}
               />
+
               <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px]">
                 <div className="p-3">
                   <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">

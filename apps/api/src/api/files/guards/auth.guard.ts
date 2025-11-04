@@ -21,9 +21,6 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException("Invalid assignment ID");
     }
 
-    console.log(
-      `AuthGuard: Checking access for assignment ID ${assignmentId} and group ID ${userSession.groupId}`,
-    );
     if (!userSession || !userSession.groupId) {
       throw new ForbiddenException("User session or group ID is missing");
     }
@@ -42,11 +39,6 @@ export class AuthGuard implements CanActivate {
         where: { id: assignmentId },
       }),
     ]);
-    console.log(
-      `AuthGuard: Found assignmentGroup: ${
-        assignmentGroup ? "exists" : "not found"
-      }, assignment: ${assignment ? "exists" : "not found"}`,
-    );
     if (!assignment) {
       throw new NotFoundException("Assignment not found");
     }

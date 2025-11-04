@@ -35,7 +35,6 @@ interface NavProps {
   setCurrentStepId: (id: number) => void;
 }
 
-// Component for the New Badge
 const NewBadge: FC<{ feature: WhatsNewFeature }> = ({ feature }) => {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -247,6 +246,7 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
           )}
         </>
       );
+
       return !isValid;
     }
     return false;
@@ -326,7 +326,6 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  {/* Background glow for active step */}
                   {isActive && (
                     <motion.div
                       className="absolute inset-0 rounded-lg bg-violet-100"
@@ -359,7 +358,6 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                   >
                     <Icon className={isActive ? "drop-shadow-sm" : ""} />
 
-                    {/* Completion checkmark */}
                     {isCompleted && !isActive && (
                       <motion.div
                         initial={{ scale: 0 }}

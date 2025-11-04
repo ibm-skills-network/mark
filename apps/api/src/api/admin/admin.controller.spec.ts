@@ -12,7 +12,7 @@ describe("AdminController", () => {
 
   beforeAll(() => {
     process.env.DATABASE_URL =
-      originalDatabaseUrl ?? "postgresql://user:pass@localhost:5432/test"; // pragma: allowlist secret
+      originalDatabaseUrl ?? "postgresql://user:pass@localhost:5432/test";
   });
 
   afterAll(() => {

@@ -68,8 +68,8 @@ export function VersionSelectionModal({
     useState<SemanticVersion | null>(null);
   const [customVersion, setCustomVersion] = useState("");
   const [description, setDescription] = useState("");
-  const [isDraft, setIsDraft] = useState<boolean | null>(null); // null = not chosen yet
-  const [isPersonalDraft, setIsPersonalDraft] = useState<boolean>(false); // true for personal draft, false for team draft version
+  const [isDraft, setIsDraft] = useState<boolean | null>(null);
+  const [isPersonalDraft, setIsPersonalDraft] = useState<boolean>(false);
   const [shouldUpdate, setShouldUpdate] = useState<boolean>(false);
   const [suggestions, setSuggestions] = useState<SemanticVersion[]>([]);
   const [changeAnalysis, setChangeAnalysis] =
@@ -79,9 +79,8 @@ export function VersionSelectionModal({
 
   useEffect(() => {
     if (isOpen) {
-      // Reset state when modal opens - skip choice step if forcePublish is true
       setStep(forcePublish ? "details" : "choice");
-      setIsDraft(forcePublish ? false : null); // If forcePublish is true, set isDraft to false
+      setIsDraft(forcePublish ? false : null);
       setIsPersonalDraft(false);
       setShouldUpdate(false);
       setSelectedVersion(null);
@@ -89,7 +88,6 @@ export function VersionSelectionModal({
       setDescription("");
       setShowCustomInput(false);
 
-      // Use provided comparison or create a fallback
       const effectiveComparison = comparison || {
         fromVersion: {
           id: 0,
@@ -123,6 +121,7 @@ export function VersionSelectionModal({
             changeType: "modified",
           },
         ],
+
         questionChanges: [],
       };
 
@@ -131,7 +130,6 @@ export function VersionSelectionModal({
     }
   }, [isOpen, comparison, currentVersions]);
 
-  // Update suggestions when draft choice changes
   useEffect(() => {
     if (changeAnalysis && isDraft !== null && !shouldUpdate) {
       const latestVersion = getLatestVersion(currentVersions);
@@ -147,21 +145,15 @@ export function VersionSelectionModal({
       setSuggestions(versionSuggestions);
       setSelectedVersion(versionSuggestions[0] || null);
     } else if (shouldUpdate) {
-      // For updates, show existing versions that can be updated
-      // Include: draft versions, active versions, and the current working version
       const updateableVersions = currentVersions
         .filter((v) => {
-          // For updates, show versions that can actually be updated:
-          // 1. Active versions (currently live)
-          // 2. Draft versions (RC versions) - even though API creates new ones, user expects to "update" them
-          // 3. Published versions that aren't active
           const canUpdate = v.isActive || v.isDraft || v.published;
           return canUpdate;
         })
         .map((v) => {
           try {
             const parsed = parseSemanticVersion(v.versionNumber);
-            // Store original version metadata with parsed version
+
             return {
               ...parsed,
               originalVersion: v,
@@ -175,7 +167,6 @@ export function VersionSelectionModal({
           (v): v is SemanticVersion & { originalVersion: any } => v !== null,
         )
         .sort((a, b) => {
-          // Prioritize working version at the top
           if (workingVersion) {
             const aIsWorking = a.originalVersion.id === workingVersion.id;
             const bIsWorking = b.originalVersion.id === workingVersion.id;
@@ -183,11 +174,10 @@ export function VersionSelectionModal({
             if (!aIsWorking && bIsWorking) return 1;
           }
 
-          // Then sort by version number descending (newest first)
           if (a.major !== b.major) return b.major - a.major;
           if (a.minor !== b.minor) return b.minor - a.minor;
           if (a.patch !== b.patch) return b.patch - a.patch;
-          // RC versions come after regular versions
+
           if (a.rc && !b.rc) return 1;
           if (!a.rc && b.rc) return -1;
           if (a.rc && b.rc) return b.rc - a.rc;
@@ -200,17 +190,13 @@ export function VersionSelectionModal({
   }, [changeAnalysis, isDraft, shouldUpdate, currentVersions]);
 
   const handleSave = async () => {
-    // Handle personal draft separately
     if (isPersonalDraft) {
       try {
-        // For personal drafts, we need to call the draft saving functionality directly
         const customDraftName =
           description || `Personal draft - ${new Date().toLocaleString()}`;
 
-        // Import and use the saveDraft function from the Header component logic
         const { saveDraft } = await import("@/lib/author");
 
-        // Get assignment data from stores (similar to Header component)
         const { useAuthorStore } = await import("@/stores/author");
         const { useAssignmentConfig } = await import(
           "@/stores/assignmentConfig"
@@ -255,18 +241,15 @@ export function VersionSelectionModal({
       }
     }
 
-    // Original version handling logic for non-personal drafts
     let versionToSave: string;
     let versionIdToUpdate: number | undefined;
     let isUpdatingPublishedVersion = false;
 
-    // Determine version and check if updating published version
     if (customVersion) {
       versionToSave = customVersion;
-      // For custom versions, we can't determine the ID, so let the backend handle it
     } else if (selectedVersion) {
       versionToSave = formatSemanticVersion(selectedVersion);
-      // Get the version ID for the specific version to update
+
       if (shouldUpdate && (selectedVersion as any).originalVersion) {
         const originalVersion = (selectedVersion as any).originalVersion;
         versionIdToUpdate = originalVersion.id;
@@ -276,7 +259,6 @@ export function VersionSelectionModal({
     } else if (suggestions.length > 0) {
       versionToSave = formatSemanticVersion(suggestions[0]);
 
-      // Get the version ID for auto-selected version
       if (shouldUpdate && (suggestions[0] as any).originalVersion) {
         const originalVersion = (suggestions[0] as any).originalVersion;
         versionIdToUpdate = originalVersion.id;
@@ -290,7 +272,6 @@ export function VersionSelectionModal({
           : `Auto-selected version ${versionToSave} based on your changes`,
       );
     } else if (!shouldUpdate) {
-      // Ultimate fallback - generate a default version (only for new versions)
       console.warn("No version suggestions available, using default version");
       const latestVersion = getLatestVersion(currentVersions);
       const currentVersionString = latestVersion
@@ -300,10 +281,9 @@ export function VersionSelectionModal({
       versionToSave = `${defaultVersion.major}.${defaultVersion.minor}.${defaultVersion.patch + 1}`;
       toast.success(`Using default version ${versionToSave} based on changes`);
     } else {
-      return; // No version available for update
+      return;
     }
 
-    // For published versions being updated, force them through publish process
     const effectiveIsDraft = shouldUpdate
       ? isUpdatingPublishedVersion
         ? false
@@ -321,20 +301,17 @@ export function VersionSelectionModal({
   };
 
   const handleSaveAsDraft = async () => {
-    // Handle personal draft separately
     if (isPersonalDraft) {
-      return handleSave(); // Use the same personal draft logic
+      return handleSave();
     }
 
     try {
-      // If custom version provided, use it directly
       if (customVersion) {
         await onSave(customVersion, description, true, shouldUpdate);
         onClose();
         return;
       }
 
-      // If no custom version but have selected version, use it
       if (selectedVersion) {
         const versionToSave = formatSemanticVersion(selectedVersion);
         await onSave(versionToSave, description, true, shouldUpdate);
@@ -342,7 +319,6 @@ export function VersionSelectionModal({
         return;
       }
 
-      // If no version provided at all, auto-select the first suggested version
       if (suggestions.length > 0) {
         const autoSelectedVersion = formatSemanticVersion(suggestions[0]);
         toast.success(
@@ -355,7 +331,6 @@ export function VersionSelectionModal({
         return;
       }
 
-      // Ultimate fallback - generate a default version (only for new versions)
       if (!shouldUpdate) {
         console.warn("No version suggestions available, using default version");
         const latestVersion = getLatestVersion(currentVersions);
@@ -376,14 +351,12 @@ export function VersionSelectionModal({
 
   const handleSaveAndPublish = async () => {
     try {
-      // If custom version provided, use it directly
       if (customVersion) {
         await onSave(customVersion, description, false, shouldUpdate);
         onClose();
         return;
       }
 
-      // If no custom version but have selected version, use it
       if (selectedVersion) {
         const versionToSave = formatSemanticVersion(selectedVersion);
         await onSave(versionToSave, description, false, shouldUpdate);
@@ -391,7 +364,6 @@ export function VersionSelectionModal({
         return;
       }
 
-      // If no version provided at all, auto-select the first suggested version
       if (suggestions.length > 0) {
         const autoSelectedVersion = formatSemanticVersion(suggestions[0]);
         toast.success(
@@ -404,7 +376,6 @@ export function VersionSelectionModal({
         return;
       }
 
-      // Ultimate fallback - generate a default version (only for new versions)
       if (!shouldUpdate) {
         console.warn("No version suggestions available, using default version");
         const latestVersion = getLatestVersion(currentVersions);
@@ -452,7 +423,6 @@ export function VersionSelectionModal({
       {isOpen && (
         <div className="fixed inset-0 z-[9999] overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 py-8">
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -461,7 +431,6 @@ export function VersionSelectionModal({
               onClick={onClose}
             />
 
-            {/* Modal */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -496,7 +465,6 @@ export function VersionSelectionModal({
                 </div>
 
                 {step === "choice" ? (
-                  // Step 1: Choose Draft or Publish
                   <div>
                     {changeAnalysis && (
                       <div
@@ -608,7 +576,6 @@ export function VersionSelectionModal({
                     </div>
                   </div>
                 ) : (
-                  // Step 2: Version Details
                   <div>
                     <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -707,14 +674,14 @@ export function VersionSelectionModal({
                                       <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
                                         Can Update
                                       </span>
-                                      {/* Show if this is a draft version (which will create new version) */}
+
                                       {(version as any).originalVersion
                                         ?.isDraft && (
                                         <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
                                           Will Create New
                                         </span>
                                       )}
-                                      {/* Show if this version will trigger publish process */}
+
                                       {(version as any).originalVersion
                                         ?.published &&
                                         !(version as any).originalVersion

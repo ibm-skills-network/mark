@@ -34,7 +34,7 @@ export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
       serviceUrl: "https://us-south.ml.cloud.ibm.com",
       projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
       watsonxAIAuthType: "iam",
-      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
+      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? GraniteVision322bLlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
       maxTokens: options?.maxTokens ?? 4096,
@@ -117,7 +117,6 @@ export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
           }),
         ]),
       );
-      console.log(result);
 
       const rawResponse = result.content.toString();
       const responseContent = this.extractJSONFromResponse(rawResponse);
@@ -148,7 +147,6 @@ export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
     const extracted = extractStructuredJSON(response);
     if (extracted !== response) return extracted;
 
-    // If still not valid JSON, log and return original
     this.logger.warn(
       "Could not extract valid JSON from Granite Vision response, returning original",
     );
@@ -161,27 +159,24 @@ export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
    */
   private estimateImageTokens(imageData: string): number {
     try {
-      // Extract base64 data if it's a data URL
       const base64Data = imageData.includes(",")
         ? imageData.split(",")[1]
         : imageData;
 
-      // Estimate image size in bytes (base64 is ~1.33x larger than binary)
       const estimatedBytes = (base64Data.length * 3) / 4;
 
-      // Estimation based on typical vision model token usage
       if (estimatedBytes < 50_000) {
-        return 100; // Small image
+        return 100;
       } else if (estimatedBytes < 200_000) {
-        return 300; // Medium image
+        return 300;
       } else if (estimatedBytes < 500_000) {
-        return 600; // Large image
+        return 600;
       } else {
-        return 900; // Very large image
+        return 900;
       }
     } catch (error) {
       this.logger.warn("Could not estimate image tokens, using default", error);
-      return 300; // Default estimate
+      return 300;
     }
   }
 
@@ -197,7 +192,6 @@ export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
       return imageData;
     }
 
-    // Detect image format from base64 header
     let mimeType = "image/jpeg";
     if (imageData.startsWith("/9j/")) {
       mimeType = "image/jpeg";

@@ -28,10 +28,12 @@ const RenderQuestion: FC<Props> = (props) => {
       return (
         <MultipleChoiceQuestion isSingleCorrect={true} question={question} />
       );
+
     case "MULTIPLE_CORRECT":
       return (
         <MultipleChoiceQuestion isSingleCorrect={false} question={question} />
       );
+
     case "TRUE_FALSE":
       return <TrueFalseQuestion question={question} />;
     case "URL":
@@ -45,6 +47,7 @@ const RenderQuestion: FC<Props> = (props) => {
           removeFileUpload={removeFileUpload}
         />
       );
+
     case "CODE":
       return (
         <FileCodeUploadSection
@@ -57,6 +60,7 @@ const RenderQuestion: FC<Props> = (props) => {
           removeFileUpload={removeFileUpload}
         />
       );
+
     case "LINK_FILE":
       return (
         <FileLinkUploadSection
@@ -67,6 +71,7 @@ const RenderQuestion: FC<Props> = (props) => {
           onModeChange={onModeChange}
         />
       );
+
     default:
       return null;
   }

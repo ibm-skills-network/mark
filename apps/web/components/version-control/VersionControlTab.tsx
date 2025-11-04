@@ -36,7 +36,7 @@ export function VersionControlTab() {
     formatVersionAge,
     getDraftVersions,
     getPublishedVersions,
-    // Draft functionality
+
     drafts,
     isLoadingDrafts,
     draftsLoadFailed,
@@ -45,13 +45,11 @@ export function VersionControlTab() {
     hasUnsavedChanges,
   } = useVersionControl();
 
-  // Modal states
   const [isCreateVersionModalOpen, setIsCreateVersionModalOpen] =
     useState(false);
   const [isCreateDraftModalOpen, setIsCreateDraftModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
 
-  // Form states
   const [versionDescription, setVersionDescription] = useState("");
   const [draftName, setDraftName] = useState("");
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
@@ -111,7 +109,6 @@ export function VersionControlTab() {
 
   return (
     <div className="space-y-6 mt-28 px-4 md:px-8">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Version Control</h2>
@@ -121,7 +118,6 @@ export function VersionControlTab() {
         </div>
       </div>
 
-      {/* Current Status */}
       <div className="grid gap-4 md:grid-cols-3">
         <div className="flex items-center space-x-2 rounded-lg border p-4">
           <GitBranch className="h-5 w-5 text-blue-600" />
@@ -172,7 +168,6 @@ export function VersionControlTab() {
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div className="flex gap-3">
         <Button
           onClick={() => setIsCreateDraftModalOpen(true)}
@@ -202,7 +197,6 @@ export function VersionControlTab() {
         </Button>
       </div>
 
-      {/* Version History */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Version History</h3>
 
@@ -323,7 +317,6 @@ export function VersionControlTab() {
         )}
       </div>
 
-      {/* Drafts Section */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">My Private Drafts</h3>
 
@@ -391,7 +384,6 @@ export function VersionControlTab() {
         )}
       </div>
 
-      {/* Create Version Modal */}
       {isCreateVersionModalOpen && (
         <Modal
           onClose={() => setIsCreateVersionModalOpen(false)}

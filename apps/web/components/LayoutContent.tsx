@@ -11,7 +11,6 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
-      {/* Main content area that shrinks when chatbot is open */}
       <div
         className={`flex-1 transition-all duration-300 ease-in-out overflow-auto ${
           isOpen ? "w-[75vw]" : "w-full"
@@ -24,10 +23,10 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
           expand={true}
           closeButton={true}
         />
+
         {children}
       </div>
 
-      {/* Chatbot panel */}
       <MarkChat />
     </div>
   );

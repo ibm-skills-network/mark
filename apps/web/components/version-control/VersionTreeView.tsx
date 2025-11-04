@@ -55,7 +55,6 @@ import {
 import { toast } from "sonner";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 
-// Table row type for versions
 interface VersionTableRow {
   id: number;
   versionNumber: string;
@@ -70,7 +69,7 @@ interface VersionTableRow {
   age: string;
   isCheckedOut: boolean;
   isFavorite: boolean;
-  actions: any; // for action buttons
+  actions: any;
 }
 
 interface Props {
@@ -81,7 +80,6 @@ export function VersionTreeView({ assignmentId }: Props) {
   const router = useRouter();
   const { isOpen: isChatbotOpen } = useChatbot();
 
-  // Modal and action states
   const [selectedVersion, setSelectedVersion] = useState<any>(null);
   const [selectedVersionDetails, setSelectedVersionDetails] =
     useState<any>(null);
@@ -109,7 +107,6 @@ export function VersionTreeView({ assignmentId }: Props) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
 
-  // Table states
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
@@ -117,7 +114,7 @@ export function VersionTreeView({ assignmentId }: Props) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
-    pageSize: 10, // Show 10 versions per page
+    pageSize: 10,
   });
 
   const versionControlHook = useVersionControl();
@@ -135,14 +132,12 @@ export function VersionTreeView({ assignmentId }: Props) {
     updateVersionDescription,
   } = versionControlHook;
 
-  // Handle potentially missing properties
   const checkedOutVersion =
     (versionControlHook as any).checkedOutVersion || null;
   const checkoutVersion =
     (versionControlHook as any).checkoutVersion ||
     (() => Promise.resolve(false));
 
-  // Helper functions for version data
   const getVersionQuestionCount = (version: any) => {
     return version?.questionVersions?.length || version?.questionCount || 0;
   };
@@ -159,7 +154,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     isDraft = false,
     overrideUnsaved = false,
   ) => {
-    // Check for unsaved changes first
     if (hasUnsavedChanges && !overrideUnsaved) {
       const targetName = isDraft
         ? version.name || "Draft"
@@ -175,11 +169,9 @@ export function VersionTreeView({ assignmentId }: Props) {
       return;
     }
 
-    // Proceed with original functionality
     await proceedWithNodeClick(version, isDraft);
   };
 
-  // Handle viewing details with proper data fetching
   const handleViewDetails = useCallback(
     async (version: any, isDraft = false) => {
       await handleNodeClick(version, isDraft, true);
@@ -195,7 +187,7 @@ export function VersionTreeView({ assignmentId }: Props) {
       } else {
         await checkoutVersion(version.id, version.versionNumber);
       }
-      // Navigate to questions page after checkout
+
       router.push(`/author/${assignmentId}/questions`);
     },
     [loadDraft, checkoutVersion, router, assignmentId],
@@ -203,13 +195,11 @@ export function VersionTreeView({ assignmentId }: Props) {
 
   const handleActivateVersion = useCallback(
     async (version: any) => {
-      if (version.isActive) return; // Already active
+      if (version.isActive) return;
 
-      // Check if this is an RC version
       const versionString = version.versionNumber?.toString() || "";
       const isRCVersion = version.versionNumber?.toString().includes("-rc");
 
-      // Check if version is published (not a draft and explicitly published)
       if (version.isDraft || (!version.published && !isRCVersion)) {
         setPendingActivationVersion(version);
         setShowUnpublishedModal(true);
@@ -217,11 +207,8 @@ export function VersionTreeView({ assignmentId }: Props) {
       }
 
       try {
-        // For RC versions and regular published versions, activate directly
-        // The backend will handle RC -> final version conversion
         await activateVersion(version.id);
 
-        // Show success message
         if (isRCVersion) {
           toast.success(
             `RC ${versionString} published and activated successfully!`,
@@ -230,7 +217,6 @@ export function VersionTreeView({ assignmentId }: Props) {
           toast.success(`Version ${versionString} activated successfully!`);
         }
 
-        // Refresh the version list to ensure UI is up to date
         await versionControlHook.loadVersions();
       } catch (error) {
         console.error("Failed to activate version:", error);
@@ -240,7 +226,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     [activateVersion, versionControlHook.loadVersions],
   );
 
-  // Prepare table data
   const tableData = useMemo((): VersionTableRow[] => {
     return versions.map((version) => ({
       id: version.id,
@@ -256,14 +241,12 @@ export function VersionTreeView({ assignmentId }: Props) {
       age: formatVersionAge(version.createdAt),
       isCheckedOut: checkedOutVersion?.id === version.id,
       isFavorite: isVersionFavorite(version.id),
-      actions: version, // pass the full version object for action buttons
+      actions: version,
     }));
   }, [versions, checkedOutVersion, isVersionFavorite, formatVersionAge]);
 
-  // Create column helper for type safety
   const columnHelper = createColumnHelper<VersionTableRow>();
 
-  // Define table columns
   const columns = useMemo<ColumnDef<VersionTableRow, any>[]>(
     () => [
       columnHelper.accessor("versionNumber", {
@@ -279,12 +262,14 @@ export function VersionTreeView({ assignmentId }: Props) {
                     : "bg-gray-400"
               }`}
             />
+
             <Tag className="h-4 w-4 text-indigo-600" />
             <span className="font-semibold text-gray-900">
               v{row.original.versionNumber}
             </span>
           </div>
         ),
+
         enableSorting: true,
         sortingFn: (rowA, rowB) =>
           semver.compare(
@@ -304,6 +289,7 @@ export function VersionTreeView({ assignmentId }: Props) {
             </p>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -355,6 +341,7 @@ export function VersionTreeView({ assignmentId }: Props) {
             <span className="font-medium text-gray-900">{getValue()}</span>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -368,6 +355,7 @@ export function VersionTreeView({ assignmentId }: Props) {
             </span>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -379,6 +367,7 @@ export function VersionTreeView({ assignmentId }: Props) {
             <span className="text-sm text-gray-700">{getValue()}</span>
           </div>
         ),
+
         enableSorting: true,
         sortingFn: (rowA, rowB) =>
           new Date(rowA.original.createdAt).getTime() -
@@ -433,6 +422,7 @@ export function VersionTreeView({ assignmentId }: Props) {
         ),
       }),
     ],
+
     [
       handleViewDetails,
       handleCheckoutVersion,
@@ -441,7 +431,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     ],
   );
 
-  // Create table instance
   const table = useReactTable({
     data: tableData,
     columns,
@@ -462,7 +451,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     globalFilterFn: "includesString",
   });
 
-  // Calculate stats
   const versionStats = useMemo(() => {
     const totalVersions = versions.length;
     const totalDrafts = drafts?.length || 0;
@@ -492,9 +480,8 @@ export function VersionTreeView({ assignmentId }: Props) {
 
   const proceedWithNodeClick = async (version: any, isDraft = false) => {
     setSelectedVersion(version);
-    setSelectedVersionDetails(null); // Clear previous details
+    setSelectedVersionDetails(null);
 
-    // If it's a draft, we don't need to fetch additional details
     if (isDraft) {
       setSelectedVersionDetails(version);
       return;
@@ -518,13 +505,12 @@ export function VersionTreeView({ assignmentId }: Props) {
       }
     } catch (error) {
       console.error("❌ Error fetching version details:", error);
-      setSelectedVersionDetails(version); // Fallback to basic version info
+      setSelectedVersionDetails(version);
     } finally {
       setIsLoadingDetails(false);
     }
   };
 
-  // Modal handlers for unsaved changes
   const handleSaveAndProceed = async () => {
     try {
       if (pendingAction) {
@@ -563,16 +549,12 @@ export function VersionTreeView({ assignmentId }: Props) {
     const versionString = versionToActivate.versionNumber?.toString() || "";
 
     try {
-      // Close the modal first
       setShowUnpublishedModal(false);
       setPendingActivationVersion(null);
 
-      // For drafts, we need to publish first then activate
       if (versionToActivate.isDraft) {
-        // First checkout the version to load its data
         await checkoutVersion(versionToActivate.id);
 
-        // Trigger the header publish functionality for drafts
         const headerPublishEvent = new CustomEvent("triggerHeaderPublish", {
           detail: {
             description: `Published draft ${versionString}`,
@@ -598,7 +580,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         });
         window.dispatchEvent(headerPublishEvent);
       } else {
-        // For unpublished versions, just activate directly (backend handles publishing)
         await activateVersion(versionToActivate.id);
         await versionControlHook.loadVersions();
         toast.success(
@@ -618,7 +599,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     setPendingActivationVersion(null);
   };
 
-  // Delete version handlers
   const handleDeleteVersion = (version: any) => {
     setVersionToDelete(version);
     setShowDeleteModal(true);
@@ -631,7 +611,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     try {
       const { deleteVersion } = await import("@/lib/author");
 
-      // If deleting active version, activate replacement first
       if (versionToDelete.isActive && replacementVersionId) {
         await activateVersion(replacementVersionId);
       }
@@ -659,7 +638,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     setReplacementVersionId(null);
   };
 
-  // Edit version number handlers
   const handleEditVersion = (version: any) => {
     setVersionToEdit(version);
     setNewVersionNumber(version.versionNumber?.toString() || "");
@@ -669,7 +647,6 @@ export function VersionTreeView({ assignmentId }: Props) {
   const confirmEditVersion = async () => {
     if (!versionToEdit || !newVersionNumber.trim()) return;
 
-    // Check for version conflicts
     const existingVersion = versions.find(
       (v) =>
         v.versionNumber?.toString() === newVersionNumber &&
@@ -682,7 +659,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     }
 
     try {
-      // Import the update function (we'll need to add this to the author lib)
       const { updateVersionNumber } = await import("@/lib/author");
       await updateVersionNumber(
         Number(assignmentId),
@@ -713,7 +689,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         isChatbotOpen ? "right-[25vw]" : "right-0"
       }`}
     >
-      {/* Header - Fixed */}
       <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 px-6 py-4 shadow-sm 2xl:mt-5 xl:mt-16 lg:mt-16 md:mt-32 sm:mt-32 mt-32">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4 gap-2">
@@ -742,7 +717,6 @@ export function VersionTreeView({ assignmentId }: Props) {
             </div>
             <div className="h-6 w-px bg-gray-300" />
 
-            {/* Legend */}
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-2 px-2 py-1 bg-green-50 rounded-full">
@@ -765,7 +739,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         </div>
       </div>
 
-      {/* Stats Dashboard */}
       <div className="px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-gray-100">
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
@@ -857,7 +830,6 @@ export function VersionTreeView({ assignmentId }: Props) {
       <div className="flex-1 overflow-y-auto">
         <div className="flex-1 p-6 overflow-y-auto">
           <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-20">
-            {/* Header */}
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -881,7 +853,6 @@ export function VersionTreeView({ assignmentId }: Props) {
               )}
             </div>
 
-            {/* Search and Filters */}
             <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center justify-between">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -892,6 +863,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                   onChange={(e) => setGlobalFilter(e.target.value)}
                   className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                 />
+
                 {globalFilter && (
                   <button
                     onClick={() => setGlobalFilter("")}
@@ -922,7 +894,6 @@ export function VersionTreeView({ assignmentId }: Props) {
               </div>
             </div>
 
-            {/* Table */}
             <div className="overflow-hidden rounded-lg border border-gray-200">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -954,6 +925,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                                     asc: (
                                       <SortAsc className="h-3 w-3 text-gray-400" />
                                     ),
+
                                     desc: (
                                       <SortDesc className="h-3 w-3 text-gray-400" />
                                     ),
@@ -998,7 +970,6 @@ export function VersionTreeView({ assignmentId }: Props) {
               </div>
             </div>
 
-            {/* Empty State */}
             {table.getFilteredRowModel().rows.length === 0 && (
               <div className="text-center py-12">
                 <div className="p-4 bg-gray-50 rounded-2xl mx-auto w-fit mb-4">
@@ -1026,7 +997,6 @@ export function VersionTreeView({ assignmentId }: Props) {
               </div>
             )}
 
-            {/* Pagination */}
             {table.getPageCount() > 1 && (
               <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
                 <div className="flex items-center space-x-2">
@@ -1057,7 +1027,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         </div>
       </div>
 
-      {/* Details Modal */}
       <AnimatePresence>
         {showDetails && selectedVersion && (
           <>
@@ -1087,7 +1056,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                   className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Modal Header */}
                   <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                     <div className="flex items-center justify-between">
                       <h2 className="text-xl font-semibold text-gray-900">
@@ -1105,10 +1073,8 @@ export function VersionTreeView({ assignmentId }: Props) {
                     </div>
                   </div>
 
-                  {/* Modal Content */}
                   <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
                     <div className="space-y-6">
-                      {/* Basic Info */}
                       <div className="grid grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1144,7 +1110,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                         </div>
                       </div>
 
-                      {/* Version Info */}
                       <div className="grid grid-cols-3 gap-6">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1205,7 +1170,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                         </div>
                       </div>
 
-                      {/* Description */}
                       {selectedVersion.versionDescription && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1222,7 +1186,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                         </div>
                       )}
 
-                      {/* Assignment Content */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
                           Assignment Content
@@ -1283,7 +1246,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                         )}
                       </div>
 
-                      {/* Questions Summary */}
                       {(selectedVersionDetails || selectedVersion)
                         ?.questionVersions &&
                         (selectedVersionDetails || selectedVersion)
@@ -1368,7 +1330,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                           </div>
                         )}
 
-                      {/* Configuration */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
                           Configuration
@@ -1579,7 +1540,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                     </div>
                   </div>
 
-                  {/* Modal Footer */}
                   <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3 ">
                     <button
                       onClick={() => setShowDetails(false)}
@@ -1624,7 +1584,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Unsaved Changes Modal */}
       <UnsavedChangesModal
         isOpen={showUnsavedModal}
         onClose={handleModalClose}
@@ -1634,7 +1593,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         targetName={pendingAction?.targetName}
       />
 
-      {/* Unpublished Activation Modal */}
       <UnpublishedActivationModal
         isOpen={showUnpublishedModal}
         onClose={handleCancelActivation}
@@ -1644,7 +1602,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         isSubmitting={isPublishing}
       />
 
-      {/* Delete Version Modal */}
       <AnimatePresence>
         {showDeleteModal && versionToDelete && (
           <motion.div
@@ -1784,7 +1741,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Edit Version Modal */}
       <AnimatePresence>
         {showEditModal && versionToEdit && (
           <motion.div
@@ -1821,6 +1777,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                   placeholder="e.g., 1.2.0, 2.0.0-rc1"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+
                 <p className="text-xs text-gray-500 mt-1">
                   Current: v{versionToEdit.versionNumber}
                 </p>
@@ -1849,7 +1806,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Favorites Modal */}
       <AnimatePresence>
         {showFavoritesModal && (
           <motion.div
@@ -1866,7 +1822,6 @@ export function VersionTreeView({ assignmentId }: Props) {
               className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header */}
               <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-yellow-50 to-amber-50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -1904,7 +1859,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                 </div>
               </div>
 
-              {/* Modal Content */}
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
                 {getFavoriteVersions().length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1923,7 +1877,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                             transition={{ delay: index * 0.1 }}
                             className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg p-6 border border-yellow-200 hover:border-yellow-300 transition-all duration-200 hover:shadow-lg relative"
                           >
-                            {/* Favorite Star Badge */}
                             <div className="absolute top-3 right-3">
                               <button
                                 onClick={() =>
@@ -2054,7 +2007,6 @@ export function VersionTreeView({ assignmentId }: Props) {
                 )}
               </div>
 
-              {/* Modal Footer */}
               <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
                 <button
                   onClick={() => setShowFavoritesModal(false)}

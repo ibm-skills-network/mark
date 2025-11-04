@@ -1,5 +1,4 @@
 /* eslint-disable unicorn/no-null */
-// src/llm/features/grading/services/presentation-grading.service.ts
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
@@ -49,18 +48,16 @@ export class PresentationGradingService implements IPresentationGradingService {
       responseType,
     } = presentationQuestionEvaluateModel;
 
-    // Basic guard: ensure question text is present
     if (!question) {
       throw new HttpException("Missing question data", HttpStatus.BAD_REQUEST);
     }
 
-    // If your guard rails only apply to the transcript, ensure it's at least a string
     const hasTranscript =
       learnerResponse?.transcript &&
       typeof learnerResponse.transcript === "string";
     const validateLearnerResponse = hasTranscript
       ? await this.moderationService.validateContent(learnerResponse.transcript)
-      : true; // If no transcript is given, you can skip or apply different rules
+      : true;
 
     if (!validateLearnerResponse) {
       throw new HttpException(
@@ -69,7 +66,6 @@ export class PresentationGradingService implements IPresentationGradingService {
       );
     }
 
-    // Optional fields: Provide fallbacks if missing
     const safeSpeechReport =
       learnerResponse?.speechReport ?? "No speech analysis provided.";
     const safeContentReport =
@@ -81,7 +77,6 @@ export class PresentationGradingService implements IPresentationGradingService {
     const safeBodyLangExplanation =
       learnerResponse?.bodyLanguageExplanation ?? "Not provided.";
 
-    // Define output schema with AEEG structure
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         points: z.number().describe("Points awarded based on the criteria"),
@@ -126,12 +121,11 @@ export class PresentationGradingService implements IPresentationGradingService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Build the prompt with partial variables, safely handling missing fields
     const prompt = new PromptTemplate({
       template: this.loadPresentationGradingTemplate(),
       inputVariables: [],
       partialVariables: {
-        question: () => question, // The main question text
+        question: () => question,
         assignment_instructions: () =>
           assignmentInstrctions ?? "No assignment instructions provided.",
         previous_questions_and_answers: () =>
@@ -151,7 +145,6 @@ export class PresentationGradingService implements IPresentationGradingService {
       },
     });
 
-    // Process the prompt through the LLM
     const response = await this.promptProcessor.processPromptForFeature(
       prompt,
       assignmentId,
@@ -160,10 +153,8 @@ export class PresentationGradingService implements IPresentationGradingService {
     );
 
     try {
-      // Parse the LLM output to get points & feedback
       const parsedResponse = await parser.parse(response);
 
-      // Combine the AEEG components into comprehensive feedback
       const aeegFeedback = `
 **Analysis:**
 ${parsedResponse.analysis}
@@ -178,7 +169,6 @@ ${parsedResponse.explanation}
 ${parsedResponse.guidance}
 `.trim();
 
-      // Return the response with combined feedback
       return {
         points: parsedResponse.points,
         feedback: aeegFeedback,
@@ -203,7 +193,6 @@ ${parsedResponse.guidance}
     liveRecordingData: LearnerLiveRecordingFeedback,
     assignmentId: number,
   ): Promise<string> {
-    // Define the parser with AEEG structure
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         feedback: z.string().nonempty("Feedback cannot be empty"),
@@ -224,7 +213,6 @@ ${parsedResponse.guidance}
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Safely handle optional fields using defaults when missing
     const safeSpeechReport =
       liveRecordingData.speechReport ?? "No speech analysis available.";
     const safeContentReport =
@@ -264,7 +252,6 @@ ${parsedResponse.guidance}
     });
 
     try {
-      // Process the prompt through the LLM
       const response = await this.promptProcessor.processPromptForFeature(
         prompt,
         assignmentId,
@@ -272,10 +259,8 @@ ${parsedResponse.guidance}
         "live_recording_feedback",
       );
 
-      // Parse the response
       const parsedResponse = await parser.parse(response);
 
-      // Combine AEEG components if returning structured feedback
       const aeegFeedback = `
 **Analysis:**
 ${parsedResponse.analysis}

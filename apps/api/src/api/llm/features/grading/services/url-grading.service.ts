@@ -127,7 +127,6 @@ export class UrlGradingService implements IUrlGradingService {
         }. Response: "${response?.slice(0, 200)}..."`,
       );
 
-      // Return a fallback response instead of throwing
       return this.createFallbackUrlResponse(
         totalPoints,
         "Failed to parse LLM response",
@@ -144,7 +143,6 @@ export class UrlGradingService implements IUrlGradingService {
   ): UrlBasedQuestionResponseModel {
     const fallbackPoints = totalPoints > 0 ? Math.floor(totalPoints * 0.5) : 0;
 
-    // Create object that matches the UrlBasedQuestionResponseModel structure
     return {
       points: fallbackPoints,
       feedback: `Automated grading temporarily unavailable. ${reason}. Partial credit (${fallbackPoints}/${totalPoints}) awarded pending manual review.`,
@@ -209,7 +207,6 @@ export class UrlGradingService implements IUrlGradingService {
     const maxRetries = 3;
     let lastError: Error | null = null;
 
-    // Try with default model (up to 3 attempts)
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         this.logger.debug(`URL grading LLM attempt ${attempt}/${maxRetries}`);
@@ -221,7 +218,6 @@ export class UrlGradingService implements IUrlGradingService {
           "url_grading",
         );
 
-        // Check if response is valid
         if (this.isValidLLMResponse(response)) {
           if (attempt > 1) {
             this.logger.info(
@@ -247,19 +243,16 @@ export class UrlGradingService implements IUrlGradingService {
         );
       }
 
-      // Wait before retry (exponential backoff)
       if (attempt < maxRetries) {
-        await this.delay(Math.pow(2, attempt - 1) * 1000); // 1s, 2s, 4s
+        await this.delay(Math.pow(2, attempt - 1) * 1000);
       }
     }
 
-    // Try with explicit fallback model using prompt processor's fallback mechanism
     try {
       this.logger.warn(
         `URL grading primary model failed after ${maxRetries} attempts, trying fallback approach`,
       );
 
-      // Since this service doesn't have direct model selection, we'll throw to let the strategy handle fallback
       throw lastError || new Error("All URL grading LLM attempts failed");
     } catch (fallbackError) {
       this.logger.error(

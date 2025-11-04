@@ -85,7 +85,6 @@ export class SaveDraftDto {
   @IsArray()
   questionsData?: Array<any>;
 
-  // version number
   @ApiPropertyOptional({
     description: "Semantic version number (e.g., '1.0.0' or '1.0.0-rc1')",
   })

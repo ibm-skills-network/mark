@@ -1,4 +1,3 @@
-// src/components/FileExplorer/FileExplorer.tsx
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -165,10 +164,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     moveFile: moveFileInStore,
   } = useFileStore();
 
-  // Refs
   const fileExplorerRef = useRef<HTMLDivElement>(null);
 
-  // Local component state
   const [fileStructure, setFileStructure] = useState<FolderStructure>({
     name: "Root",
     path: "/",
@@ -182,10 +179,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
   const [emptyFolders, setEmptyFolders] = useState<string[]>([]);
 
-  // Local selection state for confirmSelectionMode
   const [pendingSelection, setPendingSelection] = useState<FileObject[]>([]);
 
-  // UI state
   const [showUploader, setShowUploader] = useState<boolean>(false);
   const [breadcrumbs, setBreadcrumbs] = useState<
     { name: string; path: string }[]
@@ -195,30 +190,24 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
 
-  // Preview state
   const [showPreview, setShowPreview] = useState<boolean>(false);
   const [previewFile, setPreviewFile] = useState<FileObject | null>(null);
   const [previewContent, setPreviewContent] =
     useState<ExtendedFileContent | null>(null);
 
-  // Rename state
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
   const [renamedFile, setRenameFile] = useState<FileObject | null>(null);
 
-  // Create folder state
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderName, setNewFolderName] = useState<string>("");
 
-  // Drag and drop state
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [draggedFile, setDraggedFile] = useState<FileObject | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  // Search state
   const [searchResults, setSearchResults] = useState<FileObject[]>([]);
   const [isSearchActive, setIsSearchActive] = useState<boolean>(false);
 
-  // Error display
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -346,7 +335,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   }, [confirmSelectionMode, selectedFiles]);
 
-  // Handle folder navigation
   const navigateToFolder = (path: string) => {
     setCurrentPath(path);
     setBreadcrumbs(getBreadcrumbs(path));
@@ -354,7 +342,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
     setRecentFolders((prev) => {
       const filtered = prev.filter((p) => p !== path);
-      return [path, ...filtered].slice(0, 5); // Keep max 5 recent folders
+      return [path, ...filtered].slice(0, 5);
     });
 
     if (isMobile && drawerOpen) {
@@ -876,7 +864,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         ref={fileExplorerRef}
         className="bg-white p-3 md:p-6 rounded-lg shadow-xl w-full max-w-7xl h-[90vh] overflow-hidden"
       >
-        {/* Main error message display */}
         {errorMessage && (
           <div className="absolute top-4 right-4 z-50 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-md flex items-center justify-between">
             <span>{errorMessage}</span>
@@ -886,7 +873,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           </div>
         )}
 
-        {/* Header */}
         <div className="modal-header flex justify-between items-center mb-4">
           <div className="flex items-center">
             {isMobile && (
@@ -913,11 +899,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="file-explorer bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden h-[calc(100%_-_70px)] flex flex-col">
-          {/* Explorer Header */}
           <div className="explorer-header p-3 md:p-4 border-b border-gray-200">
-            {/* Navigation and breadcrumbs toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <BreadcrumbNav
                 breadcrumbs={breadcrumbs}
@@ -938,13 +921,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               />
             </div>
 
-            {/* Search bar */}
             <SearchBar searchTerm={searchTerm} onSearch={handleSearch} />
           </div>
 
-          {/* Explorer Content Area */}
           <div className="explorer-content flex flex-grow overflow-hidden">
-            {/* Mobile Drawer for Folders */}
             <AnimatePresence>
               {isMobile && drawerOpen && (
                 <motion.div
@@ -1005,7 +985,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                         dropTarget={dropTarget}
                       />
 
-                      {/* Recent Folders */}
                       {recentFolders.length > 1 && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
                           <h4 className="text-sm font-medium text-gray-500 mb-2">
@@ -1036,7 +1015,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               )}
             </AnimatePresence>
 
-            {/* Sidebar with folder tree (desktop only) */}
             <AnimatePresence>
               {showSidebar && !isMobile && (
                 <motion.div
@@ -1076,7 +1054,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     dropTarget={dropTarget}
                   />
 
-                  {/* Recent Folders */}
                   {recentFolders.length > 1 && (
                     <div className="mt-4 pt-2 border-t border-gray-200">
                       <h4 className="text-xs font-medium text-gray-500 mb-1">
@@ -1100,7 +1077,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               )}
             </AnimatePresence>
 
-            {/* Main content area */}
             <div className="explorer-main flex-1 p-3 md:p-4 overflow-y-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center h-full">
@@ -1125,7 +1101,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   </button>
                 </div>
               ) : isSearchActive ? (
-                // Search results
                 <SearchResults
                   searchTerm={searchTerm}
                   results={searchResults}
@@ -1141,7 +1116,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   readOnly={readOnly}
                 />
               ) : (
-                // Normal file/folder view
                 <FileList
                   files={currentFiles}
                   folders={currentFolders}
@@ -1171,7 +1145,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 />
               )}
 
-              {/* File uploader panel */}
               <AnimatePresence>
                 {showUploader && (
                   <motion.div
@@ -1206,7 +1179,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
           </div>
 
-          {/* Pending Selection Confirmation Bar (for confirm mode) */}
           {showConfirmationBar && (
             <div className="border-t border-gray-300 bg-purple-50 shadow-sm">
               <div className="p-4 flex flex-wrap items-center justify-between gap-3">
@@ -1236,7 +1208,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
           )}
 
-          {/* Original Selected Files Bar (for non-confirm mode) */}
           {!confirmSelectionMode && selectedFiles.length > 0 && (
             <div className="border-t border-gray-300 bg-gray-50 shadow-sm">
               <SelectedFilesBar
@@ -1256,7 +1227,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                           );
                           Promise.all(deletePromises)
                             .then(() => {
-                              // Remove all deleted files from store
                               selectedFiles.forEach((file) =>
                                 removeFile(file.id),
                               );
@@ -1282,7 +1252,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
         </div>
 
-        {/* Create Folder Dialog */}
         {isCreatingFolder && (
           <div
             className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-50"
@@ -1326,7 +1295,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           </div>
         )}
 
-        {/* File Preview Modal */}
         {showPreview && previewFile && previewContent && (
           <FilePreview
             file={{
@@ -1362,7 +1330,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           />
         )}
 
-        {/* Rename Dialog */}
         {isRenaming && renamedFile && (
           <RenameDialog
             file={renamedFile}

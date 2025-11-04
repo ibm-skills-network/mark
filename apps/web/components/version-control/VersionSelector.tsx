@@ -59,7 +59,6 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      {/* Current Version Display */}
       <div className="flex items-center gap-2 text-sm text-gray-600">
         <GitBranch className="h-4 w-4 text-gray-400" />
         <span>
@@ -70,7 +69,6 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
         </span>
       </div>
 
-      {/* Version Selector */}
       <Select onValueChange={handleVersionSelect} disabled={isLoadingVersions}>
         <SelectTrigger className="w-40 h-8 text-xs border-gray-300">
           <SelectValue placeholder="Switch version" />
@@ -118,12 +116,10 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
         </SelectContent>
       </Select>
 
-      {/* Loading State */}
       {isLoadingVersions && (
         <div className="text-xs text-gray-500">Loading...</div>
       )}
 
-      {/* Error State */}
       {versionsLoadFailed && (
         <div className="text-xs text-red-500">Failed to load versions</div>
       )}

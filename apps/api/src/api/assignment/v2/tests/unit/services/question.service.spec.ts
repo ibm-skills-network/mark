@@ -264,7 +264,7 @@ describe("QuestionService", () => {
           question.id,
           question,
           jobId,
-          true, // questionContentChanged should be true for unchanged content - will retranslate
+          true,
         );
       });
 
@@ -297,7 +297,7 @@ describe("QuestionService", () => {
           updatedQuestion.id,
           updatedQuestion,
           jobId,
-          true, // questionContentChanged should be true - will force retranslation
+          true,
         );
       });
     });

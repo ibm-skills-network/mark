@@ -146,7 +146,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
     let responseDto = new CreateQuestionResponseAttemptResponseDto();
     AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
 
-    // Fix mathematical inconsistency: ensure total points matches rubric scores sum
     let rubricSum = 0;
 
     if (Array.isArray(responseDto.metadata?.rubricScores)) {
@@ -188,7 +187,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       }
     }
 
-    // Iterative grading improvement with judge validation
     responseDto = await this.iterativeGradingWithJudge(
       question,
       learnerResponse,
@@ -214,10 +212,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       extractionStatus: this.getExtractionStatus(extractedFiles),
     };
 
-    // Judge validation is handled in iterativeGradingWithJudge method above
-    // This eliminates duplicate validation calls and reduces token usage
-
-    // Record grading for audit and consistency (non-blocking)
     try {
       await this.recordGrading(
         question,
@@ -229,14 +223,12 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
         "FileGradingStrategy",
       );
     } catch (error) {
-      // Log error but don't fail grading - audit is supplementary
       this.logger?.error("Grading audit failed but continuing with grading", {
         questionId: question.id,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
 
-      // Add audit failure to metadata for troubleshooting
       responseDto.metadata = {
         ...responseDto.metadata,
         auditFailure: {
@@ -436,17 +428,15 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
     initialResponseDto: CreateQuestionResponseAttemptResponseDto,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    const maxAttempts = 3; // Limit iterations to prevent infinite loops
+    const maxAttempts = 3;
     let currentResponseDto = initialResponseDto;
     let attempt = 1;
     let previousJudgeFeedback = "";
 
-    // Preserve original rubric scores to prevent mathematical inconsistencies
     const originalRubricScores = currentResponseDto.metadata?.rubricScores
       ? JSON.parse(JSON.stringify(currentResponseDto.metadata.rubricScores))
       : [];
 
-    // If no judge service available, return initial grading
     if (!this.gradingJudgeService) {
       this.logger?.debug("Judge service not available for iterative grading", {
         questionId: question.id,
@@ -462,7 +452,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       });
 
       try {
-        // Debug rubric scores before sending to judge
         this.logger?.debug("Debug: Rubric scores for judge validation", {
           questionId: question.id,
           attempt,
@@ -475,7 +464,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           rubricScores: currentResponseDto.metadata?.rubricScores || [],
         });
 
-        // Validate current grading with judge
         const judgeResult = await this.gradingJudgeService.validateGrading({
           question: question.question,
           learnerResponse: this.createLearnerResponseSummary(learnerResponse),
@@ -496,7 +484,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
             attempts: attempt,
           });
 
-          // Add metadata about judge validation
           currentResponseDto.metadata = {
             ...currentResponseDto.metadata,
             judgeValidated: true,
@@ -508,7 +495,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           return currentResponseDto;
         }
 
-        // Judge rejected - prepare feedback for re-grading
         const judgeFeedback = this.formatJudgeFeedback(
           judgeResult,
           previousJudgeFeedback,
@@ -522,7 +508,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           judgeFeedback: judgeResult.feedback,
         });
 
-        // If this is the last attempt, apply judge corrections directly
         if (attempt === maxAttempts) {
           this.logger?.warn(
             "Max attempts reached, applying judge corrections",
@@ -557,7 +542,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           return currentResponseDto;
         }
 
-        // CRITICAL FIX: Only adjust feedback, preserve rubric scores to prevent math inconsistencies
         this.logger?.info("Adjusting feedback only, preserving rubric scores", {
           questionId: question.id,
           attempt: attempt + 1,
@@ -565,7 +549,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           preservedRubricCount: originalRubricScores.length,
         });
 
-        // Create improved response with preserved rubric scores
         const improvedResponseDto =
           new CreateQuestionResponseAttemptResponseDto();
 
@@ -588,7 +571,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           mathCorrectedInJudge: true,
         };
 
-        // Only update feedback based on judge suggestions
         const enhancedFeedback = this.createEnhancedFeedback(
           currentResponseDto.feedback,
           judgeFeedback,
@@ -603,7 +585,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           error: error instanceof Error ? error.message : String(error),
         });
 
-        // On error, return current grading
         currentResponseDto.metadata = {
           ...currentResponseDto.metadata,
           judgeValidated: false,

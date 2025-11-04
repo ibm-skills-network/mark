@@ -144,12 +144,15 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     contextContent += `Assignment: ${
       assignmentDetails?.name || assignmentName || "Current assignment"
     }\n`;
+
     contextContent += `Assignment ID: ${
       assignmentId || assignmentDetails?.id || "Unknown"
     }\n`;
+
     contextContent += `Type: ${
       isGradedAssignment ? "Graded" : "Practice"
     } assignment\n`;
+
     contextContent += `Status: ${
       isFeedbackMode ? "Feedback Review" : "In Progress"
     }\n`;
@@ -342,6 +345,7 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         ? "provide guidance without giving direct answers"
         : "help the learner understand concepts and improve their work"
     }\n`;
+
     contextContent +=
       "5. Take regrade requests and issue reports seriously - these are important tools for learners\n";
     contextContent +=

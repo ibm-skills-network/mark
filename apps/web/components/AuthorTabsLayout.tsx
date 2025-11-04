@@ -19,12 +19,11 @@ export function AuthorTabsLayout({
   const router = useRouter();
   const { isOpen: isChatbotOpen } = useChatbot();
 
-  // Determine the current tab based on the pathname
   const getCurrentTab = () => {
     if (pathname.includes("/config")) return "config";
     if (pathname.includes("/questions")) return "questions";
     if (pathname.includes("/review")) return "review";
-    return "overview"; // Default to overview for the main page
+    return "overview";
   };
 
   const currentTab = getCurrentTab();

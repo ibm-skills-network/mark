@@ -64,7 +64,6 @@ export class CreateQuestionResponseAttemptResponseDto {
   })
   totalPoints?: number;
 
-  // points
   points?: number;
 
   @ApiProperty({

@@ -360,7 +360,6 @@ export class LLMAssignmentController {
       );
     }
 
-    // Validate each assignment has required fields
     for (const assignment of assignments) {
       if (!assignment.featureKey || !assignment.modelKey) {
         throw new HttpException(

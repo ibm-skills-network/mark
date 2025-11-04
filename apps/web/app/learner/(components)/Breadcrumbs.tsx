@@ -38,6 +38,7 @@ function Breadcrumbs(props: Props) {
                 className="h-5 w-5 flex-shrink-0 text-gray-400"
                 aria-hidden="true"
               />
+
               <a
                 href={page.href}
                 className="ml-4 text-sm font-medium leading-5 text-gray-500 hover:text-gray-700"

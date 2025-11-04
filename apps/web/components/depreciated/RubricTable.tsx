@@ -17,7 +17,6 @@ function RubricTableProps(props: RubricTableProps) {
   const handleButtonClick = (value: boolean) => {
     setInputEnabled(value);
   };
-  //////////////////////////////////////////////////
 
   return (
     <div className="w-[802px]">

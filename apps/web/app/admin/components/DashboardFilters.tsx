@@ -68,13 +68,11 @@ export function DashboardFilters({
 
   return (
     <div className="space-y-4 pb-4">
-      {/* Quick Actions */}
       <QuickActions
         sessionToken={sessionToken}
         onActionComplete={onQuickActionComplete}
       />
 
-      {/* Filters */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -113,7 +111,6 @@ export function DashboardFilters({
         {showFilters && (
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Date Range */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">
                   Date Range
@@ -146,7 +143,6 @@ export function DashboardFilters({
                 </div>
               </div>
 
-              {/* Assignment Filters */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">
                   Assignment
@@ -163,6 +159,7 @@ export function DashboardFilters({
                       )
                     }
                   />
+
                   <Input
                     type="text"
                     placeholder="Assignment Name"
@@ -174,7 +171,6 @@ export function DashboardFilters({
                 </div>
               </div>
 
-              {/* User Filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">
                   User
@@ -188,7 +184,6 @@ export function DashboardFilters({
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex gap-2 pt-4">
               <Button onClick={applyFilters} size="sm">
                 Apply Filters
@@ -202,7 +197,6 @@ export function DashboardFilters({
               </Button>
             </div>
 
-            {/* Active Filters Summary */}
             {hasActiveFilters && (
               <div className="border-t pt-4">
                 <div className="text-sm text-muted-foreground mb-2">

@@ -594,7 +594,6 @@ export class UpdateAssignmentQuestionsDto {
   })
   @IsOptional()
   updatedAt: Date;
-  // versionDescription
   @ApiProperty({
     description: "versionDescription",
     type: String,
@@ -604,7 +603,6 @@ export class UpdateAssignmentQuestionsDto {
   @IsString()
   versionDescription: string;
 
-  // versionNumber
   @ApiProperty({
     description:
       "versionNumber - the specific version number to create when publishing",

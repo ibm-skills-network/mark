@@ -1,4 +1,3 @@
-// Updated FileCard.tsx
 import React, { useState } from "react";
 import { formatFileSize } from "./utils/fileUtils";
 import { getFileIcon } from "./FileExplorer";
@@ -47,12 +46,10 @@ const FileCard: React.FC<FileCardProps> = ({
   } | null>(null);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
 
-    // If it's today, show time
     if (date.toDateString() === now.toDateString()) {
       return date.toLocaleTimeString(undefined, {
         hour: "2-digit",
@@ -60,7 +57,6 @@ const FileCard: React.FC<FileCardProps> = ({
       });
     }
 
-    // If it's this year, show month and day
     if (date.getFullYear() === now.getFullYear()) {
       return date.toLocaleDateString(undefined, {
         month: "short",
@@ -68,7 +64,6 @@ const FileCard: React.FC<FileCardProps> = ({
       });
     }
 
-    // Otherwise show short date
     return date.toLocaleDateString(undefined, {
       year: "2-digit",
       month: "numeric",
@@ -76,26 +71,23 @@ const FileCard: React.FC<FileCardProps> = ({
     });
   };
 
-  // Handle right click to show context menu
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Get the position from the event, not hardcoded
+
     setContextMenuPos({ x: e.clientX, y: e.clientY });
   };
 
-  // Handle when dots menu is clicked (for smaller screens/mobile)
   const handleDotsClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent file selection
-    // Get the position based on the dots button
+    e.stopPropagation();
+
     const rect = e.currentTarget.getBoundingClientRect();
-    // Position menu to the right of the button
+
     setContextMenuPos({
       x: rect.right,
       y: rect.top,
     });
   };
 
-  // Handle copying file path
   const handleCopyPath = () => {
     const pathToCopy = `${file.path === "/" ? "" : file.path}/${file.fileName}`;
     void navigator.clipboard.writeText(pathToCopy);
@@ -120,7 +112,6 @@ const FileCard: React.FC<FileCardProps> = ({
           onDragStart={() => onDragStart && onDragStart(file)}
           onDragEnd={onDragEnd}
         >
-          {/* Selection indicator */}
           {isSelected && (
             <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
               <IconCheck size={14} className="text-white" />
@@ -128,12 +119,10 @@ const FileCard: React.FC<FileCardProps> = ({
           )}
 
           <div className="flex flex-col">
-            {/* File icon */}
             <div className="file-icon-wrapper p-2 bg-gray-50 rounded-md mb-3 flex justify-center">
               {getFileIcon(file, 30)}
             </div>
 
-            {/* File info */}
             <div>
               <h4
                 className="text-sm font-medium text-gray-800 truncate mb-1"
@@ -148,7 +137,6 @@ const FileCard: React.FC<FileCardProps> = ({
             </div>
           </div>
 
-          {/* Quick action button */}
           {isHovered && (
             <button
               className="absolute top-2 right-2 p-1 rounded-full bg-white bg-opacity-80 border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-opacity-100"
@@ -159,7 +147,6 @@ const FileCard: React.FC<FileCardProps> = ({
           )}
         </div>
 
-        {/* Context Menu */}
         {contextMenuPos && (
           <ContextMenu
             file={file}
@@ -178,7 +165,6 @@ const FileCard: React.FC<FileCardProps> = ({
     );
   }
 
-  // List view
   return (
     <>
       <div
@@ -197,7 +183,6 @@ const FileCard: React.FC<FileCardProps> = ({
         onDragStart={() => onDragStart && onDragStart(file)}
         onDragEnd={onDragEnd}
       >
-        {/* Selection checkbox */}
         <div className="mr-2">
           <div
             className={`w-5 h-5 rounded border ${
@@ -210,7 +195,6 @@ const FileCard: React.FC<FileCardProps> = ({
           </div>
         </div>
 
-        {/* File icon and name */}
         <div className="flex items-center flex-1 min-w-0">
           <div className="mr-3">{getFileIcon(file, 22)}</div>
           <div>
@@ -227,7 +211,6 @@ const FileCard: React.FC<FileCardProps> = ({
           </div>
         </div>
 
-        {/* Actions menu */}
         {isHovered && (
           <div className="actions flex items-center space-x-1">
             {onShowInfo && (
@@ -252,7 +235,6 @@ const FileCard: React.FC<FileCardProps> = ({
         )}
       </div>
 
-      {/* Context Menu */}
       {contextMenuPos && (
         <ContextMenu
           file={file}

@@ -768,6 +768,7 @@ function SuccessPage() {
                       onChange={(e) => setAllowContact(e.target.checked)}
                       className="mr-2 h-4 w-4 text-violet-600 focus:ring-violet-500 border-gray-300 rounded"
                     />
+
                     <label htmlFor="allowContact" className="text-gray-700">
                       I would like to be contacted regarding my feedback
                     </label>

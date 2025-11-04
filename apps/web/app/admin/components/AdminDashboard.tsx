@@ -80,7 +80,6 @@ function AdminDashboardContent({
   );
   const [quickActionTitle, setQuickActionTitle] = useState<string>("");
 
-  // Price upscaling modal state
   const [isPriceUpscalingModalOpen, setIsPriceUpscalingModalOpen] =
     useState(false);
   const [globalUpscalingFactor, setGlobalUpscalingFactor] = useState("");
@@ -94,7 +93,6 @@ function AdminDashboardContent({
     OTHER: "",
   });
 
-  // TanStack Query hooks
   const {
     data: stats,
     isLoading: loadingStats,
@@ -267,14 +265,11 @@ function AdminDashboardContent({
     });
   };
 
-  // Example calculation for price impact
   const calculatePriceExample = () => {
-    // Use real dashboard data when available, otherwise fall back to sample data
     const useRealData = stats && stats.costBreakdown;
 
     const exampleUsage = useRealData
       ? {
-          // Map real dashboard data to usage types with estimated token usage
           TRANSLATION: {
             inputTokens: 1500,
             outputTokens: 800,
@@ -330,7 +325,6 @@ function AdminDashboardContent({
           },
         }
       : {
-          // Fallback sample data for demonstration
           TRANSLATION: {
             inputTokens: 1500,
             outputTokens: 800,
@@ -373,16 +367,13 @@ function AdminDashboardContent({
     for (const [usageType, usage] of Object.entries(exampleUsage)) {
       totalCurrentCost += usage.currentCost;
 
-      // Calculate scaling factor for this usage type
       let scalingFactor = 1;
 
-      // Apply global factor first
       const globalFactor = parseFloat(globalUpscalingFactor);
       if (globalFactor && globalFactor > 0) {
         scalingFactor *= globalFactor;
       }
 
-      // Apply usage-specific factor
       const usageFactorValue =
         usageTypeUpscaling[usageType as keyof typeof usageTypeUpscaling];
       const usageFactor = parseFloat(usageFactorValue);
@@ -414,7 +405,6 @@ function AdminDashboardContent({
   const handlePriceUpscaling = async () => {
     if (!sessionToken) return;
 
-    // Validate inputs
     const globalFactor = parseFloat(globalUpscalingFactor);
     if (globalUpscalingFactor && (isNaN(globalFactor) || globalFactor <= 0)) {
       alert("Global upscaling factor must be a positive number");
@@ -485,7 +475,6 @@ function AdminDashboardContent({
     }
   };
 
-  // Show error state
   if (statsError) {
     return (
       <div className="container mx-auto p-6 space-y-6">
@@ -551,7 +540,6 @@ function AdminDashboardContent({
           </Button>
           {isAdmin && (
             <>
-              {/* Current Upscaling Status */}
               {currentUpscaling && (
                 <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded border border-orange-200">
                   <TrendingUp className="h-3 w-3" />
@@ -599,7 +587,6 @@ function AdminDashboardContent({
                   </DialogHeader>
 
                   <div className="space-y-6">
-                    {/* Current Upscaling Status */}
                     {currentUpscaling && (
                       <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                         <TrendingUp className="h-5 w-5 text-blue-600 mt-0.5" />
@@ -646,7 +633,6 @@ function AdminDashboardContent({
                       </div>
                     )}
 
-                    {/* Global Upscaling */}
                     <div>
                       <Label
                         htmlFor="global-factor"
@@ -666,13 +652,13 @@ function AdminDashboardContent({
                         }
                         className="mt-1"
                       />
+
                       <p className="text-xs text-muted-foreground mt-1">
                         If set, this will be applied to all usage types
                         (multiplied with individual factors)
                       </p>
                     </div>
 
-                    {/* Usage Type Specific Upscaling */}
                     <div>
                       <Label className="text-sm font-medium mb-3 block">
                         Usage Type Specific Factors (optional)
@@ -715,7 +701,6 @@ function AdminDashboardContent({
                       </p>
                     </div>
 
-                    {/* Price Impact Example */}
                     {(globalUpscalingFactor ||
                       Object.values(usageTypeUpscaling).some((v) =>
                         v.trim(),
@@ -739,7 +724,6 @@ function AdminDashboardContent({
                                     : `Based on a typical assignment with average AI usage`}
                                 </p>
                                 <div className="space-y-3">
-                                  {/* Summary */}
                                   <div className="flex justify-between items-center p-3 bg-white rounded border">
                                     <div>
                                       <div className="text-sm font-medium">
@@ -766,7 +750,6 @@ function AdminDashboardContent({
                                     </div>
                                   </div>
 
-                                  {/* Detailed Breakdown */}
                                   <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto">
                                     {Object.entries(example.breakdown)
                                       .filter(([, data]) => data.factor !== 1)
@@ -811,7 +794,6 @@ function AdminDashboardContent({
                       </div>
                     )}
 
-                    {/* Action Buttons */}
                     <div className="flex justify-between pt-4">
                       <Button
                         variant="outline"
@@ -867,7 +849,6 @@ function AdminDashboardContent({
         </div>
       </div>
 
-      {/* Date Filter */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -971,7 +952,6 @@ function AdminDashboardContent({
         </div>
       </div>
 
-      {/* Stats Cards */}
       {loadingStats ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -1068,7 +1048,7 @@ function AdminDashboardContent({
                 </p>
               </CardContent>
             </Card>
-            {/* Reports stats only for admins */}
+
             {isAdmin && (
               <>
                 <Card className="relative overflow-hidden hover:shadow-lg transition-all duration-300 hover:scale-105 border hover:border-red-300">
@@ -1108,7 +1088,6 @@ function AdminDashboardContent({
             )}
           </div>
 
-          {/* Cost Breakdown */}
           <Card className="overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 border-b">
               <CardTitle className="flex items-center gap-2 text-xl">
@@ -1165,7 +1144,6 @@ function AdminDashboardContent({
         </div>
       )}
 
-      {/* Tab Navigation */}
       <div className="border-b">
         <div className="flex items-center justify-between mb-4">
           <nav className="flex space-x-8">
@@ -1189,7 +1167,7 @@ function AdminDashboardContent({
             >
               Feedback
             </Button>
-            {/* Reports tab only for admins */}
+
             {isAdmin && (
               <Button
                 variant="ghost"
@@ -1206,7 +1184,6 @@ function AdminDashboardContent({
         </div>
       </div>
 
-      {/* Tab Content */}
       <Card>
         <CardContent className="p-0">
           {activeTab === "assignments" && (
@@ -1224,7 +1201,7 @@ function AdminDashboardContent({
           {activeTab === "feedback" && (
             <FeedbackTable sessionToken={sessionToken} />
           )}
-          {/* Reports tab only for admins */}
+
           {activeTab === "reports" && isAdmin && (
             <ReportsTable sessionToken={sessionToken} />
           )}
@@ -1238,7 +1215,6 @@ export function OptimizedAdminDashboard(props: AdminDashboardProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AdminDashboardContent {...props} />
-      {/* <ReactQueryDevtools initialIsOpen={false} /> */}
     </QueryClientProvider>
   );
 }

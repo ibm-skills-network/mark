@@ -40,7 +40,6 @@ interface UpscalePricingData {
   reason?: string;
 }
 
-// Query Keys
 export const adminQueryKeys = {
   dashboardStats: (sessionToken: string, filters?: DashboardFilters) =>
     ["dashboard-stats", sessionToken, filters] as const,
@@ -48,7 +47,6 @@ export const adminQueryKeys = {
     ["current-price-upscaling", sessionToken] as const,
 };
 
-// Custom hooks
 export function useDashboardStats(
   sessionToken: string | null | undefined,
   filters?: DashboardFilters,
@@ -60,8 +58,8 @@ export function useDashboardStats(
       return getDashboardStats(sessionToken, filters);
     },
     enabled: !!sessionToken,
-    staleTime: 1000 * 60 * 2, // 2 minutes for dashboard stats
-    gcTime: 1000 * 60 * 10, // 10 minutes
+    staleTime: 1000 * 60 * 2,
+    gcTime: 1000 * 60 * 10,
   });
 }
 
@@ -76,8 +74,8 @@ export function useCurrentPriceUpscaling(
       return response.data;
     },
     enabled: !!sessionToken,
-    staleTime: 1000 * 60, // 1 minute for pricing info
-    gcTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60,
+    gcTime: 1000 * 60 * 5,
   });
 }
 
@@ -90,7 +88,6 @@ export function useUpscalePricing(sessionToken: string | null | undefined) {
       return upscalePricing(sessionToken, upscaleData);
     },
     onSuccess: () => {
-      // Invalidate related queries
       queryClient.invalidateQueries({
         queryKey: ["dashboard-stats", sessionToken],
       });
@@ -112,7 +109,6 @@ export function useRemovePriceUpscaling(
       return removePriceUpscaling(sessionToken, reason);
     },
     onSuccess: () => {
-      // Invalidate related queries
       queryClient.invalidateQueries({
         queryKey: ["dashboard-stats", sessionToken],
       });
@@ -129,7 +125,6 @@ export function useRefreshDashboard(sessionToken: string | null | undefined) {
   return () => {
     if (!sessionToken) return;
 
-    // Invalidate all dashboard-related queries
     queryClient.invalidateQueries({
       queryKey: ["dashboard-stats", sessionToken],
     });
