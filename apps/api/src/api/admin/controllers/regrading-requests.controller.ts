@@ -53,7 +53,7 @@ class RejectRegradingRequestDto {
 @ApiBearerAuth()
 @Injectable()
 @Controller({
-  path: "admin/regrading-requests",
+  path: "admin-dashboard/regrading-requests",
   version: "1",
 })
 export class RegradingRequestsController {

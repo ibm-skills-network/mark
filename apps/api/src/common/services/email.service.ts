@@ -377,7 +377,7 @@ Provider: Console
                 <p style="text-align: center;">
                   <a href="${
                     process.env.FRONTEND_URL || "http://localhost:3000"
-                  }/admin/regrading-requests" class="button">
+                  }/admin-dashboard/regrading-requests" class="button">
                     Review Request
                   </a>
                 </p>
@@ -414,7 +414,7 @@ Learner's Reason:
 ${reason}
 
 Review this request in the admin dashboard:
-${process.env.FRONTEND_URL || "http://localhost:3000"}/admin/regrading-requests
+${process.env.FRONTEND_URL || "http://localhost:3000"}/admin-dashboard/regrading-requests
 
 This is an automated message from Mark Application.
         `,

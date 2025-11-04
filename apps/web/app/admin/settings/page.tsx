@@ -39,7 +39,7 @@ export default function SettingsPage() {
         return;
       }
 
-      const response = await fetch("/api/v1/admin/settings", {
+      const response = await fetch("/api/v1/admin-dashboard/settings", {
         headers: {
           "x-admin-token": token,
         },
@@ -69,7 +69,7 @@ export default function SettingsPage() {
         return;
       }
 
-      const response = await fetch("/api/v1/admin/settings", {
+      const response = await fetch("/api/v1/admin-dashboard/settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

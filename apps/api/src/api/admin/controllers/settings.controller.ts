@@ -42,7 +42,7 @@ class UpdateSettingsDto {
 )
 @ApiBearerAuth()
 @Controller({
-  path: "admin/settings",
+  path: "admin-dashboard/settings",
   version: "1",
 })
 export class SettingsController {

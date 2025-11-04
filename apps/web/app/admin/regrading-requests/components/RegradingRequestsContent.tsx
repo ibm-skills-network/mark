@@ -103,7 +103,7 @@ function RegradingRequestsTable({
   } = useQuery<RegradingRequest[]>({
     queryKey: ["regrading-requests"],
     queryFn: async () => {
-      const response = await fetch("/api/v1/admin/regrading-requests", {
+      const response = await fetch("/api/v1/admin-dashboard/regrading-requests", {
         headers: {
           "x-admin-token": sessionToken || "",
         },
@@ -122,7 +122,7 @@ function RegradingRequestsTable({
   const approveMutation = useMutation({
     mutationFn: async ({ id, grade }: { id: number; grade: number }) => {
       const response = await fetch(
-        `/api/v1/admin/regrading-requests/${id}/approve`,
+        `/api/v1/admin-dashboard/regrading-requests/${id}/approve`,
         {
           method: "POST",
           headers: {
@@ -151,7 +151,7 @@ function RegradingRequestsTable({
   const rejectMutation = useMutation({
     mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
       const response = await fetch(
-        `/api/v1/admin/regrading-requests/${id}/reject`,
+        `/api/v1/admin-dashboard/regrading-requests/${id}/reject`,
         {
           method: "POST",
           headers: {
