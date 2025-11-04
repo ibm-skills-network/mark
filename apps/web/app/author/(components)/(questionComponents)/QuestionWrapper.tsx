@@ -821,12 +821,12 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   };
 
-  
+
   return (
     <div
       id={`question-title-${questionId}`}
       className="flex flex-col w-full gap-y-2"
-      
+
     >
       {toggleTitle && !preview ? (
         <div ref={titleRef} className="w-full">
