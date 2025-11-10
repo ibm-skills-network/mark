@@ -421,13 +421,17 @@ export class QuestionGenerationService implements IQuestionGenerationService {
               .int()
               .positive()
               .optional()
-              .describe("Maximum word limit for text responses"),
+              .describe(
+                "Maximum word limit for text responses (only include for TEXT question types, omit otherwise)",
+              ),
             maxCharacters: z
               .number()
               .int()
               .positive()
               .optional()
-              .describe("Maximum character limit for text responses"),
+              .describe(
+                "Maximum character limit for text responses (only include for TEXT question types, omit otherwise)",
+              ),
             randomizedChoices: z
               .boolean()
               .optional()
@@ -653,10 +657,14 @@ FORMAT INSTRUCTIONS:
       responseType: question.responseType || this.getDefaultResponseType(),
       difficultyLevel: question.difficultyLevel,
       maxWords:
-        question.maxWords ||
+        (question.maxWords && question.maxWords > 0
+          ? question.maxWords
+          : null) ||
         this.getDefaultMaxWords(question.type, question.difficultyLevel),
       maxCharacters:
-        question.maxCharacters ||
+        (question.maxCharacters && question.maxCharacters > 0
+          ? question.maxCharacters
+          : null) ||
         this.getDefaultMaxCharacters(question.type, question.difficultyLevel),
       randomizedChoices:
         question.randomizedChoices ??
@@ -685,7 +693,11 @@ FORMAT INSTRUCTIONS:
       }
 
       const originalChoice = question.choices[0];
-      const choiceText = originalChoice.choice?.toLowerCase().trim();
+      const choiceValue =
+        typeof originalChoice.choice === "string"
+          ? originalChoice.choice
+          : String(originalChoice.choice ?? "");
+      const choiceText = choiceValue.toLowerCase().trim();
       const isStatementTrue = choiceText === "true";
 
       return [
@@ -707,22 +719,28 @@ FORMAT INSTRUCTIONS:
       return this.getDefaultChoices(question.type, question.difficultyLevel);
     }
 
-    return question.choices.map((choice: Choice, index: number) => ({
-      choice: choice.choice?.replaceAll("```", "").trim() || "",
-      id: choice.id || index + 1,
-      isCorrect: choice.isCorrect === true,
-      points:
-        choice.points === undefined
-          ? choice.isCorrect
-            ? 1
-            : 0
-          : Math.round(choice.points),
-      feedback:
-        choice.feedback?.replaceAll("```", "").trim() ||
-        (choice.isCorrect
-          ? "This is the correct answer."
-          : "This is not the correct answer."),
-    }));
+    return question.choices.map((choice: Choice, index: number) => {
+      const choiceValue =
+        typeof choice.choice === "string"
+          ? choice.choice
+          : String(choice.choice ?? "");
+      return {
+        choice: choiceValue.replaceAll("```", "").trim() || "",
+        id: choice.id || index + 1,
+        isCorrect: choice.isCorrect === true,
+        points:
+          choice.points === undefined
+            ? choice.isCorrect
+              ? 1
+              : 0
+            : Math.round(choice.points),
+        feedback:
+          choice.feedback?.replaceAll("```", "").trim() ||
+          (choice.isCorrect
+            ? "This is the correct answer."
+            : "This is not the correct answer."),
+      };
+    });
   }
 
   private async refineQuestions(
@@ -952,7 +970,11 @@ FORMAT INSTRUCTIONS:
       }
 
       const choice = question.choices[0];
-      const choiceValue = choice.choice?.toString().toLowerCase().trim();
+      const choiceString =
+        typeof choice.choice === "string"
+          ? choice.choice
+          : String(choice.choice ?? "");
+      const choiceValue = choiceString.toLowerCase().trim();
       if (choiceValue !== "true" && choiceValue !== "false") {
         return true;
       }

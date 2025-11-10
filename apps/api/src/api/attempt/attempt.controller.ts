@@ -32,9 +32,9 @@ import { Roles } from "src/auth/role/roles.global.guard";
 import { Logger } from "winston";
 import {
   GRADE_SUBMISSION_EXCEPTION,
+  IN_COOLDOWN_PERIOD,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
-  IN_COOLDOWN_PERIOD,
 } from "../assignment/attempt/api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "../assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
@@ -139,6 +139,7 @@ export class AttemptControllerV2 {
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
+    @Req() request: UserSessionRequest,
     @Query("lang") lang?: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(

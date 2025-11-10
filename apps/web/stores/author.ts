@@ -1310,14 +1310,24 @@ export const useAuthorStore = createWithEqualityFn<
             return (
               Array.isArray(variant.choices) &&
               variant.choices.every((choice) => {
-                return choice.choice.toLowerCase() === "true";
+                const choiceValue = choice.choice;
+                if (typeof choiceValue === "boolean")
+                  return choiceValue === true;
+                if (typeof choiceValue === "string")
+                  return choiceValue.toLowerCase() === "true";
+                return false;
               })
             );
           } else {
             return (
               Array.isArray(question.choices) &&
               question.choices.every((choice) => {
-                return choice.choice.toLowerCase() === "true";
+                const choiceValue = choice.choice;
+                if (typeof choiceValue === "boolean")
+                  return choiceValue === true;
+                if (typeof choiceValue === "string")
+                  return choiceValue.toLowerCase() === "true";
+                return false;
               })
             );
           }

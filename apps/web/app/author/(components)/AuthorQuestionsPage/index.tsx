@@ -86,7 +86,6 @@ type ClientSnapshot = {
   };
   timezone: string | null;
 };
-
 function parseBrowser(ua: string) {
   const pairs = [
     [/Edg\/([\d.]+)/i, "Edge"],

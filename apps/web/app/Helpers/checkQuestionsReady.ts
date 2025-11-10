@@ -72,7 +72,9 @@ export const useQuestionsAreReadyToBePublished = (
     }
     for (let i = 0; i < choices.length; i++) {
       const { choice: choiceText, points } = choices[i];
-      if (!choiceText?.trim()) {
+      const choiceString =
+        typeof choiceText === "string" ? choiceText : String(choiceText ?? "");
+      if (!choiceString.trim()) {
         return {
           message: `Question ${index + 1} has an empty choice text.`,
           step: 0,
