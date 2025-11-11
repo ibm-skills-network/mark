@@ -886,7 +886,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               </label>
               <textarea
                 className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:ring-violet-500 focus:border-violet-500"
-                placeholder="Add a note or explanation for this question..."
+                placeholder="Add a note, reminder, or explanation for this question..."
                 value={authorComment ?? ""}
                 onChange={(e) => setAuthorComment?.(e.target.value)}
                 onBlur={() => {
