@@ -138,6 +138,7 @@ function AuthorHeader() {
     allotedTimeMinutes,
     updatedAt,
     numberOfQuestionsPerAttempt,
+    questionControls,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
     state.retakeAttemptCoolDownMinutes,
@@ -150,6 +151,7 @@ function AuthorHeader() {
     state.allotedTimeMinutes,
     state.updatedAt,
     state.numberOfQuestionsPerAttempt,
+    state.questionControls,
   ]);
   const [
     showSubmissionFeedback,
@@ -507,6 +509,11 @@ function AuthorHeader() {
       gradingCriteriaOverview: string;
     } & { [key: string]: string | null };
 
+    if (process.env.NODE_ENV === "development") {
+      console.log("=== Publishing Assignment ===");
+      console.log("questionControls from store:", questionControls);
+    }
+
     const assignmentData: ReplaceAssignmentRequest = {
       ...encodedFields,
       numAttempts,
@@ -527,12 +534,21 @@ function AuthorHeader() {
       showAssignmentScore,
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
+      questionControls,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)
         : null,
       versionDescription: description,
       versionNumber: versionNumber,
     };
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("assignmentData being sent:", assignmentData);
+      console.log(
+        "questionControls in payload:",
+        assignmentData.questionControls,
+      );
+    }
     if (assignmentData.introduction === null) {
       toast.error(
         publishImmediately

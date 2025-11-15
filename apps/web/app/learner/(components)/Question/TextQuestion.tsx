@@ -1,5 +1,5 @@
 import { QuestionStore } from "@/config/types";
-import { useLearnerStore } from "@/stores/learner";
+import { useLearnerStore, useAssignmentDetails } from "@/stores/learner";
 import MarkdownEditor from "@components/MarkDownEditor";
 
 interface Props {
@@ -9,6 +9,10 @@ interface Props {
 function TextQuestion(props: Props) {
   const { question } = props;
   const [setTextResponse] = useLearnerStore((state) => [state.setTextResponse]);
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails,
+  );
+  const questionControls = assignmentDetails?.questionControls;
 
   const maxWords = question?.maxWords || null;
   const maxCharacters = question?.maxCharacters || null;
@@ -20,6 +24,9 @@ function TextQuestion(props: Props) {
       placeholder="Type your answer here"
       maxWords={maxWords}
       maxCharacters={maxCharacters}
+      allowCopy={questionControls?.allowCopy ?? true}
+      allowPaste={questionControls?.allowPaste ?? true}
+      allowRightClick={questionControls?.allowRightClick ?? true}
     />
   );
 }

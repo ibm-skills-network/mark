@@ -42,6 +42,8 @@ const FIELDS = [
   "showQuestionScore",
   "showSubmissionFeedback",
   "showQuestions",
+  "correctAnswerVisibility",
+  "questionControls",
   "languageCode",
 ] as const;
 
@@ -215,7 +217,7 @@ export class AssignmentRepository {
         },
       });
 
-      return authoredAssignments;
+      return authoredAssignments as AssignmentResponseDto[];
     }
 
     const results = await this.prisma.assignmentGroup.findMany({
@@ -231,7 +233,7 @@ export class AssignmentRepository {
 
     return results.map((result) => ({
       ...result.assignment,
-    }));
+    })) as AssignmentResponseDto[];
   }
 
   /**

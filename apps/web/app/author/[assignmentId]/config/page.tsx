@@ -7,6 +7,7 @@ import AssignmentFeedback from "@authorComponents/StepTwo/AssignmentFeedback";
 import AssignmentTime from "@authorComponents/StepTwo/AssignmentTime";
 import { FooterNavigation } from "@authorComponents/StepTwo/FooterNavigation";
 import AssignmentQuestionDisplay from "../../(components)/StepTwo/AssignmentQuestionDisplay";
+import AssignmentQuestionControls from "../../(components)/StepTwo/AssignmentQuestionControls";
 
 interface Props {
   params: { assignmentId: string };
@@ -29,6 +30,7 @@ function Component(props: Props) {
       <AssignmentFeedback />
       <AssignmentQuestionDisplay />
       <AssignmentQuestionOrder />
+      <AssignmentQuestionControls />
       <FooterNavigation />
     </main>
   );

@@ -304,7 +304,7 @@ export class AssignmentServiceV1 {
         },
       });
 
-      return authoredAssignments;
+      return authoredAssignments as AssignmentResponseDto[];
     }
 
     const results = await this.prisma.assignmentGroup.findMany({
@@ -322,7 +322,7 @@ export class AssignmentServiceV1 {
 
     return results.map((result) => ({
       ...result.assignment,
-    }));
+    })) as AssignmentResponseDto[];
   }
 
   async replace(

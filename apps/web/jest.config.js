@@ -19,6 +19,10 @@ const customJestConfig = {
   coverageDirectory: "../coverage/web",
   coverageReporters: ["text", "lcov", "html"],
   moduleNameMapper: {
+    "^@/stores/(.*)$": "<rootDir>/stores/$1",
+    "^@/components/(.*)$": "<rootDir>/components/$1",
+    "^@/config/(.*)$": "<rootDir>/config/$1",
+    "^@/lib/(.*)$": "<rootDir>/lib/$1",
     "^@/(.*)$": "<rootDir>/app/$1",
   },
 };

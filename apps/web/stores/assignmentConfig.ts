@@ -1,5 +1,9 @@
 import { withUpdatedAt } from "./middlewares";
-import { GradingData, QuestionDisplayType } from "@/config/types";
+import {
+  GradingData,
+  QuestionDisplayType,
+  QuestionControls,
+} from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
@@ -26,6 +30,8 @@ type GradingDataActions = {
   setUpdatedAt: (updatedAt: number) => void;
   setAssignmentConfigStore: (state: Partial<GradingData>) => void;
   setStrictTimeLimit: (strictTimeLimit: boolean) => void;
+  questionControls?: QuestionControls;
+  setQuestionControls: (questionControls: QuestionControls) => void;
   validate: () => boolean;
   deleteStore: () => void;
   errors: Record<string, string>;
@@ -43,6 +49,12 @@ export const useAssignmentConfig = createWithEqualityFn<
         retakeAttemptCoolDownMinutes: 1,
         passingGrade: 50,
         displayOrder: "DEFINED",
+        questionControls: {
+          allowCopy: false,
+          allowPaste: false,
+          allowRightClick: false,
+          preventPrint: false,
+        },
         strictTimeLimit: false,
         updatedAt: undefined,
         graded: false,
@@ -63,6 +75,8 @@ export const useAssignmentConfig = createWithEqualityFn<
         setShowSubmissionFeedback: (showSubmissionFeedback: boolean) =>
           set({ showSubmissionFeedback }),
         setShowQuestions: (showQuestions: boolean) => set({ showQuestions }),
+        setQuestionControls: (questionControls: QuestionControls) =>
+          set({ questionControls }),
         setGraded: (graded) => set({ graded }),
         setNumAttempts: (numAttempts) =>
           set({
@@ -163,6 +177,12 @@ export const useAssignmentConfig = createWithEqualityFn<
             questionDisplay: QuestionDisplayType.ONE_PER_PAGE,
             timeEstimateMinutes: undefined,
             allotedTimeMinutes: undefined,
+            questionControls: {
+              allowCopy: false,
+              allowPaste: false,
+              allowRightClick: false,
+              preventPrint: false,
+            },
           })),
 
         setAssignmentConfigStore: (state) =>

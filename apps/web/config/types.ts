@@ -591,6 +591,7 @@ export type ReplaceAssignmentRequest = {
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
+  questionControls?: QuestionControls;
   updatedAt: number;
   questionVariationNumber?: number;
   versionDescription?: string;
@@ -643,6 +644,14 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   preferredLanguage?: string;
 }
 
+export interface QuestionControls {
+  allowCopy?: boolean;
+  allowPaste?: boolean;
+  allowRightClick?: boolean;
+  preventPrint?: boolean;
+  [key: string]: boolean | undefined;
+}
+
 export interface AssignmentDetails {
   allotedTimeMinutes?: number;
   numAttempts?: number;
@@ -664,6 +673,7 @@ export interface AssignmentDetails {
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
   numberOfQuestionsPerAttempt?: number;
+  questionControls?: QuestionControls;
 }
 
 export interface AssignmentDetailsLocal extends AssignmentDetails {

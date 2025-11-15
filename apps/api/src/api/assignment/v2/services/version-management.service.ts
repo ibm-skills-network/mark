@@ -17,6 +17,7 @@ import {
   Question,
 } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { assign } from "nodemailer/lib/shared";
 import {
   UserRole,
   UserSession,
@@ -24,7 +25,6 @@ import {
 import { Logger } from "winston";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
-import { assign } from "nodemailer/lib/shared";
 
 export interface CreateVersionDto {
   versionNumber?: string;
@@ -303,6 +303,7 @@ export class VersionManagementService {
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
+          questionControls: assignment.questionControls,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: createVersionDto.isDraft ?? true,
@@ -551,6 +552,7 @@ export class VersionManagementService {
       showSubmissionFeedback: version.showSubmissionFeedback,
       showQuestions: version.showQuestions,
       correctAnswerVisibility: version.correctAnswerVisibility,
+      questionControls: version.questionControls,
       languageCode: version.languageCode,
       questionVersions: questionVersionsWithVariants,
     };
@@ -1066,6 +1068,7 @@ export class VersionManagementService {
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
+          questionControls: assignment.questionControls,
           languageCode: assignment.languageCode,
         },
         include: { _count: { select: { questionVersions: true } } },
@@ -1358,6 +1361,7 @@ export class VersionManagementService {
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
+          questionControls: assignment.questionControls,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: true,

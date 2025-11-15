@@ -10,7 +10,11 @@ import {
   LearnerAssignmentState,
 } from "@/config/types";
 import { getSupportedLanguages } from "@/lib/talkToBackend";
-import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
+import {
+  useAssignmentDetails,
+  useLearnerOverviewStore,
+  useLearnerStore,
+} from "@/stores/learner";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -32,7 +36,10 @@ interface AssignmentSectionProps {
 
 const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails,
+  );
+  const questionControls = assignmentDetails?.questionControls;
   return (
     <div className="bg-white shadow rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
@@ -58,7 +65,10 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
             : "max-h-none opacity-100"
         }`}
       >
-        <MarkdownViewer className="text-gray-600 text-sm sm:text-base">
+        <MarkdownViewer
+          className="text-gray-600 text-sm sm:text-base"
+          allowCopy={questionControls?.allowCopy ?? true}
+        >
           {content || `No ${title.toLowerCase()} provided.`}
         </MarkdownViewer>
       </div>
@@ -428,6 +438,207 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             title="Grading Criteria"
             content={gradingCriteriaOverview}
           />
+
+          {assignment.questionControls && (
+            <div className="bg-white shadow rounded-lg overflow-hidden">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+                  Assignment Restrictions
+                </h2>
+              </div>
+              <div className="px-4 sm:px-6 py-4">
+                <p className="text-gray-600 text-sm mb-4">
+                  The following restrictions have been configured for this
+                  assignment:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-start gap-3 p-3 border border-gray-200 rounded-md">
+                    <div className="flex-shrink-0 mt-0.5">
+                      {assignment.questionControls.allowCopy ? (
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-5 h-5 text-red-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-medium text-gray-900">
+                        {assignment.questionControls.allowCopy
+                          ? "Copying Allowed"
+                          : "Copying Disabled"}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {assignment.questionControls.allowCopy
+                          ? "You can copy text from questions and your answers"
+                          : "You cannot copy text during this assignment"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 border border-gray-200 rounded-md">
+                    <div className="flex-shrink-0 mt-0.5">
+                      {assignment.questionControls.allowPaste ? (
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-5 h-5 text-red-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-medium text-gray-900">
+                        {assignment.questionControls.allowPaste
+                          ? "Pasting Allowed"
+                          : "Pasting Disabled"}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {assignment.questionControls.allowPaste
+                          ? "You can paste content into answer fields"
+                          : "You cannot paste content into answer fields"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 border border-gray-200 rounded-md">
+                    <div className="flex-shrink-0 mt-0.5">
+                      {assignment.questionControls.allowRightClick ? (
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-5 h-5 text-red-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-medium text-gray-900">
+                        {assignment.questionControls.allowRightClick
+                          ? "Right Click Allowed"
+                          : "Right Click Disabled"}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {assignment.questionControls.allowRightClick
+                          ? "You can access the context menu"
+                          : "Right-click context menu is disabled"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 border border-gray-200 rounded-md">
+                    <div className="flex-shrink-0 mt-0.5">
+                      {assignment.questionControls.preventPrint ? (
+                        <svg
+                          className="w-5 h-5 text-orange-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-5 h-5 text-green-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-medium text-gray-900">
+                        {assignment.questionControls.preventPrint
+                          ? "Printing Blocked"
+                          : "Printing Allowed"}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {assignment.questionControls.preventPrint
+                          ? "Print functionality is disabled for this assignment"
+                          : "You can print the assignment"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-center mt-6">
             <BeginTheAssignmentButton

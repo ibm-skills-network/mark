@@ -94,6 +94,11 @@ export const stepTwoSections = {
     title: "7. How should questions be presented to the learner?",
     required: true,
   },
+  questionControls: {
+    title: "8. Question Controls",
+    description: "Configure what actions learners can perform",
+    required: false,
+  },
 } as const;
 
 export const formatPricePerMillionTokens = (pricePerToken: number) => {

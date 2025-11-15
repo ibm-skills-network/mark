@@ -7,7 +7,11 @@ import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { translateQuestion } from "@/lib/talkToBackend";
 import languages from "@/public/languages.json";
-import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
+import {
+  useAssignmentDetails,
+  useLearnerOverviewStore,
+  useLearnerStore,
+} from "@/stores/learner";
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
@@ -41,6 +45,10 @@ function Component(props: Props) {
     questionDisplay,
     lastQuestionNumber,
   } = props;
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails,
+  );
+  const questionControls = assignmentDetails?.questionControls;
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
     (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber],
@@ -274,6 +282,7 @@ function Component(props: Props) {
             <MarkdownViewer
               className="text-gray-800 px-2 border-gray-300 text-sm sm:text-base"
               id={`question-${question.id}-original`}
+              allowCopy={questionControls?.allowCopy ?? true}
             >
               {question.translations?.[userPreferedLanguage]?.translatedText ??
                 question.question}

@@ -11,9 +11,18 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
 } from "class-validator";
+
+export interface QuestionControls {
+  allowCopy?: boolean;
+  allowPaste?: boolean;
+  allowRightClick?: boolean;
+  preventPrint?: boolean;
+  [key: string]: boolean | undefined;
+}
 
 export class UpdateAssignmentRequestDto {
   @ApiProperty({
@@ -227,4 +236,13 @@ export class UpdateAssignmentRequestDto {
   })
   @IsOptional()
   correctAnswerVisibility: CorrectAnswerVisibility;
+
+  @ApiProperty({
+    description: "Question-level controls (copy, paste, right-click)",
+    required: false,
+    type: "object",
+  })
+  @IsOptional()
+  @IsObject()
+  questionControls?: QuestionControls;
 }
