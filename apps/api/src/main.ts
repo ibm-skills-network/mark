@@ -27,6 +27,7 @@ import { AppModule } from "./app.module";
 import { AuthModule } from "./auth/auth.module";
 import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { winstonOptions } from "./logger/config";
+import { SerializeDatesInterceptor } from "./common/interceptors/serialize-dates.interceptor";
 
 if (process.env.NODE_ENV === "production") {
   instana({
@@ -102,6 +103,12 @@ async function bootstrap() {
      * Applies role-based access control to all routes
      */
     app.useGlobalGuards(app.select(AuthModule).get(RolesGlobalGuard));
+
+    /**
+     * Global serialization interceptor
+     * Automatically serializes Date objects to ISO strings in API responses
+     */
+    app.useGlobalInterceptors(new SerializeDatesInterceptor());
 
     /**
      * Swagger API documentation setup
