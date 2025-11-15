@@ -1,11 +1,6 @@
-// Optional: configure or set up a testing framework before each test.
-// If you delete this file, remove `setupFilesAfterEnv` from `jest.config.js`
+import "@testing-library/jest-dom";
 
-// Setup for Node.js environment tests
-import '@testing-library/jest-dom';
-
-// Polyfill for ClipboardEvent (not available in jsdom)
-if (typeof global.ClipboardEvent === 'undefined') {
+if (typeof global.ClipboardEvent === "undefined") {
   global.ClipboardEvent = class ClipboardEvent extends Event {
     constructor(type, eventInitDict) {
       super(type, eventInitDict);
@@ -14,11 +9,10 @@ if (typeof global.ClipboardEvent === 'undefined') {
   };
 }
 
-// Mock matchMedia (not available in jsdom)
-if (typeof window !== 'undefined') {
-  Object.defineProperty(window, 'matchMedia', {
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "matchMedia", {
     writable: true,
-    value: jest.fn().mockImplementation(query => ({
+    value: jest.fn().mockImplementation((query) => ({
       matches: false,
       media: query,
       onchange: null,

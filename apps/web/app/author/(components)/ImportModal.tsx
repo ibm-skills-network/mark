@@ -12,6 +12,7 @@ import { cn } from "@/lib/strings";
 import type { QuestionAuthorStore, QuestionType } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { ResponseType } from "@/config/types";
+import * as XLSX from "xlsx";
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -30,6 +31,7 @@ interface ImportOptions {
   importRubrics: boolean;
   importConfig: boolean;
   importAssignmentSettings: boolean;
+  importChoiceFeedback: boolean;
 }
 
 interface ParsedData {
@@ -60,11 +62,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
   const [importOptions, setImportOptions] = useState<ImportOptions>({
     replaceExisting: false,
     appendToExisting: true,
-    validateQuestions: true,
+    validateQuestions: false,
     importChoices: true,
     importRubrics: true,
     importConfig: false,
     importAssignmentSettings: false,
+    importChoiceFeedback: true,
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [importStep, setImportStep] = useState<
@@ -386,37 +389,47 @@ const ImportModal: React.FC<ImportModalProps> = ({
     setIsProcessing(true);
 
     try {
-      const text = await file.text();
       let data: ParsedData;
 
-      if (file.name.endsWith(".json")) {
-        data = JSON.parse(text) as ParsedData;
-      } else if (file.name.endsWith(".txt")) {
-        if (
-          text.includes("COURSERA ASSIGNMENT EXPORT") ||
-          text.includes("[ASSIGNMENT_METADATA]") ||
-          text.includes("[QUESTIONS]")
-        ) {
-          data = parseCoursera(text);
+      if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+        data = await parseXLSX(file);
+        setImportOptions((prev) => ({
+          ...prev,
+          importChoices: true,
+          validateQuestions: true,
+        }));
+      } else {
+        const text = await file.text();
+
+        if (file.name.endsWith(".json")) {
+          data = JSON.parse(text) as ParsedData;
+        } else if (file.name.endsWith(".txt")) {
+          if (
+            text.includes("COURSERA ASSIGNMENT EXPORT") ||
+            text.includes("[ASSIGNMENT_METADATA]") ||
+            text.includes("[QUESTIONS]")
+          ) {
+            data = parseCoursera(text);
+          } else {
+            throw new Error(
+              "Unrecognized text file format. Expected Coursera format with section headers like [QUESTIONS].",
+            );
+          }
+        } else if (file.name.endsWith(".xml")) {
+          data = parseOLX(text);
+        } else if (file.name.endsWith(".docx")) {
+          throw new Error(
+            "Microsoft Word documents not yet supported. Please export as text, YAML, or XML.",
+          );
+        } else if (file.name.endsWith(".zip")) {
+          throw new Error(
+            "IMS QTI zip files not yet supported. Please extract individual XML files from the package.",
+          );
         } else {
           throw new Error(
-            "Unrecognized text file format. Expected Coursera format with section headers like [QUESTIONS].",
+            "Unsupported file format. Please use JSON, Excel (.xlsx), Coursera (.txt), QTI (.xml), or OLX (.xml) files.",
           );
         }
-      } else if (file.name.endsWith(".xml")) {
-        data = parseOLX(text);
-      } else if (file.name.endsWith(".docx")) {
-        throw new Error(
-          "Microsoft Word documents not yet supported. Please export as text, YAML, or XML.",
-        );
-      } else if (file.name.endsWith(".zip")) {
-        throw new Error(
-          "IMS QTI zip files not yet supported. Please extract individual XML files from the package.",
-        );
-      } else {
-        throw new Error(
-          "Unsupported file format. Please use JSON, Coursera (.txt), QTI (.xml), or OLX (.xml) files.",
-        );
       }
 
       if (!data.questions || data.questions.length === 0) {
@@ -433,7 +446,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
       setImportStep("configure");
     } catch (error) {
-      console.error("File parsing error:", error);
       alert(
         `Failed to parse file: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
@@ -463,7 +475,6 @@ const ImportModal: React.FC<ImportModalProps> = ({
         "Unrecognized YAML format. Expected either Coursera variations format or custom export format.",
       );
     } catch (error) {
-      console.error("Error parsing YAML:", error);
       throw new Error(
         `Invalid YAML format: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
@@ -800,6 +811,124 @@ const ImportModal: React.FC<ImportModalProps> = ({
       assignment: Object.keys(assignment).length > 0 ? assignment : undefined,
       config: Object.keys(config).length > 0 ? config : undefined,
     };
+  };
+
+  const parseXLSX = async (file: File): Promise<ParsedData> => {
+    const questions: QuestionAuthorStore[] = [];
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+
+      const quizSheetName =
+        workbook.SheetNames.find((name) =>
+          name.toLowerCase().includes("quiz questions"),
+        ) ||
+        workbook.SheetNames.find((name) =>
+          name.toLowerCase().includes("questions_master"),
+        ) ||
+        workbook.SheetNames[0];
+
+      const worksheet = workbook.Sheets[quizSheetName];
+
+      if (!worksheet) {
+        throw new Error(
+          "Could not find a sheet with quiz questions. Expected a sheet named 'QUIZ QUESTIONS_MASTER'.",
+        );
+      }
+
+      const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        defval: "",
+      });
+
+      if (!rows.length) {
+        throw new Error("Excel sheet is empty.");
+      }
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+
+        if (!row || row.length === 0) continue;
+
+        const questionText = (row[0] ?? "").toString().trim();
+        const correctAnswer = (row[1] ?? "").toString().trim();
+        const answer2 = (row[2] ?? "").toString().trim();
+        const answer3 = (row[3] ?? "").toString().trim();
+        const answer4 = (row[4] ?? "").toString().trim();
+        const answerLocation = (row[5] ?? "").toString().trim();
+        const additionalInfo = (row[6] ?? "").toString().trim();
+
+        if (!questionText) continue;
+
+        const question: Partial<QuestionAuthorStore> = {
+          id: generateTempQuestionId(),
+          alreadyInBackend: false,
+          assignmentId: 0,
+          index: questions.length + 1,
+          numRetries: 1,
+          type: "SINGLE_CORRECT" as QuestionType,
+          responseType: "OTHER" as ResponseType,
+          totalPoints: 1,
+          question: questionText,
+          scoring: { type: "CRITERIA_BASED", criteria: [] },
+        };
+
+        const choices: any[] = [];
+
+        if (correctAnswer) {
+          choices.push({
+            choice: correctAnswer,
+            isCorrect: true,
+            points: 1,
+            feedback: additionalInfo
+              ? `You may find answer for this question at ${additionalInfo}`
+              : "",
+          });
+        }
+
+        [answer2, answer3, answer4].forEach((answer) => {
+          if (answer) {
+            choices.push({
+              choice: answer,
+              isCorrect: false,
+              points: 0,
+              feedback: answerLocation
+                ? `You may find answer for this question at ${answerLocation}`
+                : "",
+            });
+          }
+        });
+
+        if (choices.length < 2) {
+          continue;
+        }
+
+        question.choices = choices;
+
+        questions.push(question as QuestionAuthorStore);
+      }
+
+      if (!questions.length) {
+        throw new Error(
+          "No questions parsed from Excel. Check that 'QUIZ QUESTIONS_MASTER' has data under the header row.",
+        );
+      }
+
+      return {
+        questions,
+        assignment: {
+          name: "Imported from Excel",
+          introduction: `Imported ${questions.length} multiple-choice questions from sheet "${quizSheetName}" in ${file.name}`,
+        },
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to parse Excel file: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
   };
 
   const parseCustomYAMLFormat = (yamlData: any): ParsedData => {
@@ -1182,6 +1311,16 @@ const ImportModal: React.FC<ImportModalProps> = ({
       }));
     }
 
+    if (!importOptions.importChoiceFeedback && importOptions.importChoices) {
+      questionsToImport = questionsToImport.map((q) => ({
+        ...q,
+        choices: q.choices?.map((choice) => ({
+          ...choice,
+          feedback: "",
+        })),
+      }));
+    }
+
     if (!importOptions.importRubrics) {
       questionsToImport = questionsToImport.map((q) => ({
         ...q,
@@ -1256,13 +1395,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     </button>
                   </p>
                   <p className="text-sm text-gray-500">
-                    Supports JSON, Open edX (.xml)
+                    Supports JSON, Excel (.xlsx), Open edX (.xml)
                   </p>
 
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".json,.txt,.xml,.zip"
+                    accept=".json,.txt,.xml,.zip,.xlsx,.xls"
                     onChange={handleFileInput}
                     className="hidden"
                   />
@@ -1298,6 +1437,10 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   <li>
                     <strong>JSON:</strong> Complete assignment exports with all
                     question data
+                  </li>
+                  <li>
+                    <strong>Excel (.xlsx):</strong> Quiz format with question
+                    text and 4 answer choices (first column is correct answer)
                   </li>
                   <li>
                     <strong>Open edX OLX (.xml):</strong> Open Learning XML
@@ -1391,8 +1534,23 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     {
                       id: "importChoices",
                       label: "Import question choices",
-                      description: "Include multiple choice options",
+                      description:
+                        selectedFile?.name.endsWith(".xlsx") ||
+                        selectedFile?.name.endsWith(".xls")
+                          ? "Required for Excel imports (always enabled)"
+                          : "Include multiple choice options",
                     },
+                    ...(selectedFile?.name.endsWith(".xlsx") ||
+                    selectedFile?.name.endsWith(".xls")
+                      ? [
+                          {
+                            id: "importChoiceFeedback",
+                            label: "Import choice feedback from Excel",
+                            description:
+                              "Adds 'Additional Info' as feedback on correct answer, and 'Answer Location' as feedback on incorrect answers",
+                          },
+                        ]
+                      : []),
                     {
                       id: "importRubrics",
                       label: "Import rubrics and scoring",
@@ -1443,6 +1601,29 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {validationErrors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ExclamationTriangleIcon className="w-5 h-5 text-red-600" />
+                    <h4 className="font-medium text-red-900">
+                      Validation Errors
+                    </h4>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {validationErrors.map((error, idx) => (
+                      <div key={idx} className="text-sm text-red-800">
+                        <strong>Question {error.questionIndex + 1}:</strong>{" "}
+                        {error.message} (field: {error.field})
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-red-600 mt-2">
+                    Note: Errors marked with "will be auto-generated" or "will
+                    be auto-calculated" won't prevent import.
+                  </p>
+                </div>
+              )}
 
               {importOptions.replaceExisting && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">

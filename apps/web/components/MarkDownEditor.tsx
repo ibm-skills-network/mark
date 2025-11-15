@@ -45,7 +45,6 @@ const MarkdownEditor: React.FC<Props> = ({
   );
   const [charCount, setCharCount] = useState<number>(value?.length ?? 0);
 
-  // Initialize Quill
   useEffect(() => {
     let isMounted = true;
     const initializeQuill = async () => {
@@ -131,7 +130,6 @@ const MarkdownEditor: React.FC<Props> = ({
     };
   }, [quillInstance]);
 
-  // Prevent paste (strongest method — works 100%)
   useEffect(() => {
     if (!quillInstance) return;
 
@@ -150,7 +148,6 @@ const MarkdownEditor: React.FC<Props> = ({
       }
     };
 
-    // capture:true ensures we intercept BEFORE Quill
     document.addEventListener("paste", handlePaste, true);
 
     return () => {
@@ -158,7 +155,6 @@ const MarkdownEditor: React.FC<Props> = ({
     };
   }, [quillInstance, allowPaste]);
 
-  // Prevent right-click if needed
   useEffect(() => {
     if (!quillInstance || allowRightClick) return;
 
@@ -174,7 +170,6 @@ const MarkdownEditor: React.FC<Props> = ({
     return () => root.removeEventListener("contextmenu", handleContextMenu);
   }, [quillInstance, allowRightClick]);
 
-  // Sync value externally
   useEffect(() => {
     if (quillInstance) {
       const currentHTML = quillInstance.root.innerHTML;
@@ -184,7 +179,6 @@ const MarkdownEditor: React.FC<Props> = ({
     }
   }, [quillInstance, value]);
 
-  // Style injection
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
@@ -228,7 +222,9 @@ const MarkdownEditor: React.FC<Props> = ({
     `;
     document.head.appendChild(style);
 
-    return () => document.head.removeChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
   }, []);
 
   return (
