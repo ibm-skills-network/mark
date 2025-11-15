@@ -511,4 +511,47 @@ export class AttemptControllerV2 {
       statistics,
     };
   }
+
+  @Patch(":attemptId/question-grades")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({
+    summary: "Update individual question grades for an attempt (authors only).",
+  })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        questionGrades: {
+          type: "object",
+          additionalProperties: { type: "number" },
+          description: "Map of questionResponseId to new points value",
+        },
+        regradingRequestId: {
+          type: "number",
+          description: "Optional regrading request ID to mark as completed",
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403 })
+  async updateQuestionGrades(
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") attemptId: string,
+    @Body()
+    body: {
+      questionGrades: Record<string, number>;
+      regradingRequestId?: number;
+    },
+    @Req() request: UserSessionRequest,
+  ) {
+    return this.attemptService.updateQuestionGrades(
+      Number(assignmentId),
+      Number(attemptId),
+      body.questionGrades,
+      body.regradingRequestId,
+      request.userSession,
+    );
+  }
 }

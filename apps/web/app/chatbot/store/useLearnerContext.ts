@@ -202,8 +202,11 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
 
       if (questions && questions.length > 0) {
         contextContent += "FEEDBACK SUMMARY:\n";
+        contextContent += "Format: Question #[number] (ID:[database_id])\n";
+        contextContent +=
+          "IMPORTANT: All question IDs are listed below - DO NOT call getQuestionDetails to get IDs!\n\n";
 
-        questions.forEach((q) => {
+        questions.forEach((q, index) => {
           if (!q) return;
 
           const questionPoints = q.totalPoints || 0;
@@ -214,7 +217,7 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
               0,
             ) || 0;
 
-          contextContent += `Question ${q.id}: ${earnedPoints}/${questionPoints} points\n`;
+          contextContent += `Question #${index + 1} (ID:${q.id}): ${earnedPoints}/${questionPoints} points\n`;
           contextContent += `Type: ${q.type}\n`;
           contextContent += `Question: ${q.question}\n`;
 
@@ -255,6 +258,43 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         "- You can help create a regrading request using the requestRegrading tool\n";
       contextContent +=
         "- Clearly explain the regrading process to the learner\n\n";
+
+      contextContent += "⚠️ REGRADING PROTOCOL - READ CAREFULLY:\n\n";
+
+      contextContent += "STEP 1 - IDENTIFY ALL QUESTIONS:\n";
+      contextContent +=
+        "- First, identify EVERY question the learner is complaining about\n";
+      contextContent +=
+        "- Extract ALL database IDs from FEEDBACK SUMMARY above\n";
+      contextContent += "- Example: Learner says 'questions 4 and 5'\n";
+      contextContent += "  → Find 'Question #4 (ID:6827)' → extract 6827\n";
+      contextContent += "  → Find 'Question #5 (ID:6828)' → extract 6828\n";
+      contextContent += "  → IDs to submit: [6827, 6828]\n\n";
+
+      contextContent += "STEP 2 - CALL FUNCTION EXACTLY ONCE:\n";
+      contextContent +=
+        "- Call requestRegrading ONE TIME with ALL IDs: questionIds: [6827, 6828]\n";
+      contextContent +=
+        "- ❌ FORBIDDEN: Calling requestRegrading multiple times\n";
+      contextContent +=
+        "- ❌ FORBIDDEN: Calling with [6827], then calling again with [6828]\n";
+      contextContent += "- ✅ REQUIRED: ONE call with [6827, 6828]\n\n";
+
+      contextContent += "CRITICAL RULES:\n";
+      contextContent +=
+        "- WAIT until you've identified ALL questions, THEN call requestRegrading ONCE\n";
+      contextContent +=
+        "- NEVER call requestRegrading more than once per learner request\n";
+      contextContent +=
+        "- All IDs are in FEEDBACK SUMMARY - DO NOT call getQuestionDetails\n";
+      contextContent +=
+        "- Use database ID from (ID:xxx), NEVER question number\n";
+      contextContent +=
+        "- If learner says 'all questions', extract ALL IDs from FEEDBACK SUMMARY\n";
+      contextContent +=
+        "- If invalid question numbers, inform them which questions exist (1-" +
+        questions.length +
+        ")\n\n";
     } else {
       contextContent += "MODE: ASSIGNMENT ASSISTANCE\n";
 

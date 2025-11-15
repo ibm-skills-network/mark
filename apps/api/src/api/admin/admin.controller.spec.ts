@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { EmailService } from "src/common/services/email.service";
 import { AdminVerificationService } from "../../auth/services/admin-verification.service";
 import { PrismaService } from "../../database/prisma.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
@@ -45,6 +46,7 @@ describe("AdminController", () => {
       providers: [
         AdminService,
         PrismaService,
+        EmailService,
         AdminRepository,
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
         {

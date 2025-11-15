@@ -37,39 +37,21 @@ function withErrorHandling(fn) {
 export function learnerTools(cookieHeader: string) {
   return {
     searchKnowledgeBase: {
-      description:
-        "Search the knowledge base for information about the platform or features",
+      description: "Search knowledge base for platform info.",
       parameters: z.object({
-        query: z
-          .string()
-          .describe("The search query to find relevant information"),
+        query: z.string().describe("Search query"),
       }),
       execute: withErrorHandling(async ({ query }) => {
         return await searchKnowledgeBase(query);
       }),
     },
     reportIssue: {
-      description:
-        "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
+      description: "Report technical issue/bug. Extract from user message.",
       parameters: z.object({
-        issueType: z
-          .enum(["technical", "content", "grading", "other"])
-          .describe("The type of issue being reported"),
-        description: z
-          .string()
-          .describe(
-            "Detailed description of the issue - extract this from the user's message to prefill the form",
-          ),
-        assignmentId: z
-          .number()
-          .optional()
-          .describe(
-            "The ID of the assignment where the issue was encountered (if applicable)",
-          ),
-        severity: z
-          .enum(["info", "warning", "error", "critical"])
-          .optional()
-          .describe("The severity of the issue"),
+        issueType: z.enum(["technical", "content", "grading", "other"]),
+        description: z.string().describe("Issue details from user"),
+        assignmentId: z.number().optional(),
+        severity: z.enum(["info", "warning", "error", "critical"]).optional(),
       }),
       execute: async ({ issueType, description, assignmentId, severity }) => {
         return JSON.stringify({
@@ -88,29 +70,17 @@ export function learnerTools(cookieHeader: string) {
       },
     },
     provideFeedback: {
-      description:
-        "Provide general feedback about the learning experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
+      description: "Submit general feedback. Extract from user message.",
       parameters: z.object({
-        feedbackType: z
-          .enum(["general", "assignment", "grading", "experience"])
-          .describe("The type of feedback being provided"),
-        description: z
-          .string()
-          .describe(
-            "Detailed feedback comments - extract this from the user's message to prefill the form",
-          ),
-        assignmentId: z
-          .number()
-          .optional()
-          .describe(
-            "The ID of the assignment (if feedback is assignment-specific)",
-          ),
-        rating: z
-          .number()
-          .min(1)
-          .max(5)
-          .optional()
-          .describe("Optional rating from 1-5 stars"),
+        feedbackType: z.enum([
+          "general",
+          "assignment",
+          "grading",
+          "experience",
+        ]),
+        description: z.string().describe("Feedback from user"),
+        assignmentId: z.number().optional(),
+        rating: z.number().min(1).max(5).optional().describe("1-5 stars"),
       }),
       execute: async ({ feedbackType, description, assignmentId, rating }) => {
         return JSON.stringify({
@@ -129,23 +99,11 @@ export function learnerTools(cookieHeader: string) {
       },
     },
     submitSuggestion: {
-      description:
-        "Submit suggestions for improving the platform or assignments. Extract the user's suggestion text and use it as the description to prefill the form.",
+      description: "Submit improvement suggestion. Extract from user message.",
       parameters: z.object({
-        suggestionType: z
-          .enum(["feature", "content", "ui", "general"])
-          .describe("The type of suggestion being made"),
-        description: z
-          .string()
-          .describe(
-            "Detailed suggestion or improvement idea - extract this from the user's message to prefill the form",
-          ),
-        assignmentId: z
-          .number()
-          .optional()
-          .describe(
-            "The ID of the assignment (if suggestion is assignment-specific)",
-          ),
+        suggestionType: z.enum(["feature", "content", "ui", "general"]),
+        description: z.string().describe("Suggestion from user"),
+        assignmentId: z.number().optional(),
       }),
       execute: async ({ suggestionType, description, assignmentId }) => {
         return JSON.stringify({
@@ -164,22 +122,11 @@ export function learnerTools(cookieHeader: string) {
     },
     submitInquiry: {
       description:
-        "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+        "Submit general question/inquiry. Extract from user message.",
       parameters: z.object({
-        inquiryType: z
-          .enum(["general", "technical", "academic", "other"])
-          .describe("The type of inquiry being made"),
-        description: z
-          .string()
-          .describe(
-            "The question or inquiry details - extract this from the user's message to prefill the form",
-          ),
-        assignmentId: z
-          .number()
-          .optional()
-          .describe(
-            "The ID of the assignment (if inquiry is assignment-specific)",
-          ),
+        inquiryType: z.enum(["general", "technical", "academic", "other"]),
+        description: z.string().describe("Question from user"),
+        assignmentId: z.number().optional(),
       }),
       execute: async ({ inquiryType, description, assignmentId }) => {
         return JSON.stringify({
@@ -198,61 +145,59 @@ export function learnerTools(cookieHeader: string) {
     },
     getQuestionDetails: {
       description:
-        "Get detailed information about a specific question in the assignment",
+        "ONLY use if question details are NOT in the context. Check FEEDBACK SUMMARY first - if question info is already there, DO NOT call this. Use this ONLY when you need additional details not available in the current context.",
       parameters: z.object({
-        questionId: z
-          .number()
-          .describe("The ID of the question to retrieve details for"),
+        questionId: z.number().describe("Question ID"),
       }),
       execute: withErrorHandling(async ({ questionId }) => {
         return await getQuestionDetails(questionId);
       }),
     },
     getAssignmentRubric: {
-      description: "Get the rubric or grading criteria for the assignment",
+      description: "Get rubric/grading criteria",
       parameters: z.object({
-        assignmentId: z.number().describe("The ID of the assignment"),
+        assignmentId: z.number().describe("Assignment ID"),
       }),
       execute: withErrorHandling(async ({ assignmentId }) => {
         return await getAssignmentRubric(assignmentId);
       }),
     },
     submitFeedbackQuestion: {
-      description:
-        "Submit a question about feedback that requires instructor attention",
+      description: "Ask instructor about feedback",
       parameters: z.object({
-        questionId: z
-          .number()
-          .describe("The ID of the question being asked about"),
-        feedbackQuery: z
-          .string()
-          .describe("The specific question or concern about the feedback"),
+        questionId: z.number().describe("Question ID"),
+        feedbackQuery: z.string().describe("Question about feedback"),
       }),
       execute: withErrorHandling(async ({ questionId, feedbackQuery }) => {
         return await submitFeedbackQuestion(questionId, feedbackQuery);
       }),
     },
     requestRegrading: {
-      description: "Submit a formal request for regrading an assignment",
+      description:
+        "🚨 SINGLE CALL ONLY 🚨 This function must be called EXACTLY ONE TIME per learner request, even when multiple questions are mentioned. Submit regrading request with ALL question IDs in a single array parameter. If learner mentions 2 questions, extract both IDs and call ONCE with both. If learner mentions 5 questions, extract all 5 IDs and call ONCE with all 5. Example: Learner says 'questions 4 and 5' → Extract from FEEDBACK SUMMARY: 'Question #4 (ID:6827)' and 'Question #5 (ID:6828)' → Call requestRegrading ONCE with questionIds: [6827, 6828]. ❌ NEVER call this function multiple times (once per question). ❌ NEVER call with [6827] then call again with [6828]. ✅ ALWAYS call once with [6827, 6828]. This is a database operation that expects ONE request with multiple IDs, not multiple requests.",
       parameters: z.object({
-        assignmentId: z
-          .number()
+        assignmentId: z.number().optional().describe("Assignment ID"),
+        attemptId: z.number().optional().describe("Attempt ID"),
+        reason: z
+          .string()
+          .describe(
+            "Specific reason: facts, sources, rubric criteria. NOT vague.",
+          ),
+        questionIds: z
+          .array(z.number())
           .optional()
-          .describe("The ID of the assignment to be regraded"),
-        attemptId: z
-          .number()
-          .optional()
-          .describe("The ID of the attempt to be regraded"),
-        reason: z.string().describe("The reason for requesting regrading"),
+          .describe(
+            "🚨 CRITICAL: Array containing ALL question database IDs to regrade in this SINGLE call. If learner complains about N questions, this array must have N IDs. Examples: Learner mentions 1 question → [6827]. Learner mentions 2 questions → [6827, 6828]. Learner mentions 3 questions → [6827, 6828, 6829]. You will call requestRegrading function ONLY ONCE with this complete array. DO NOT call this function multiple times with single IDs. The backend expects ONE regrading request with multiple question IDs, not multiple requests with single IDs.",
+          ),
       }),
       execute: withErrorHandling(
-        async ({ assignmentId, attemptId, reason }) => {
-          const result = await requestRegrading(
+        async ({ assignmentId, attemptId, reason, questionIds }) => {
+          return await requestRegrading(
             assignmentId,
             attemptId,
             reason,
+            questionIds,
           );
-          return result;
         },
       ),
     },
@@ -590,22 +535,11 @@ export function authorTools(cookieHeader: string) {
     },
     submitInquiry: {
       description:
-        "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+        "Submit general question/inquiry. Extract from user message.",
       parameters: z.object({
-        inquiryType: z
-          .enum(["general", "technical", "academic", "other"])
-          .describe("The type of inquiry being made"),
-        description: z
-          .string()
-          .describe(
-            "The question or inquiry details - extract this from the user's message to prefill the form",
-          ),
-        assignmentId: z
-          .number()
-          .optional()
-          .describe(
-            "The ID of the assignment (if inquiry is assignment-specific)",
-          ),
+        inquiryType: z.enum(["general", "technical", "academic", "other"]),
+        description: z.string().describe("Question from user"),
+        assignmentId: z.number().optional(),
       }),
       execute: async ({ inquiryType, description, assignmentId }) => {
         return JSON.stringify({
@@ -631,203 +565,91 @@ function generateSystemPrompt(userRole, assignmentInfo) {
   const assignmentId = assignmentInfo?.assignmentId;
 
   const systemPrompts = {
-    author: `You are Mark, an AI assistant for assignment authors on an educational platform. Your primary purpose is to help instructors create high-quality educational content through direct action.
+    author: `You are Mark, an AI helping instructors create educational content.
 
-CAPABILITIES:
-- Create new questions of any type (multiple choice, text response, true/false, etc.)
-- Modify existing questions by updating text, points, or type
-- Set up answer choices for multiple choice questions
-- Add and modify rubrics for assessment
-- Generate question variants to provide diversity
-- Delete questions when needed
-- Generate questions based on learning objectives
-- Provide instructional design advice
-- Monitor assignment state and proactively offer help
+ACTIONS: Create/modify questions, set choices, add rubrics, generate variants, delete questions, update objectives.
 
-PROACTIVE MONITORING:
-1. Watch for context changes and offer relevant assistance
-2. If you notice missing rubrics, incomplete questions, or errors, proactively offer to fix them
-3. When a question is focused, analyze it and suggest improvements
-4. If the assignment has no questions, guide the author through creating their first question
-5. Monitor for common issues like:
-   - Questions without rubrics (for text/essay questions)
-   - Multiple choice questions without enough options
-   - True/false questions that could be ambiguous
-   - Missing point values or unclear instructions
+PROACTIVE BEHAVIOR:
+- Spot & fix: missing rubrics, incomplete questions, unclear instructions
+- Suggest improvements when questions are focused
+- Monitor for: text questions without rubrics (REQUIRED), MC with <4 options, ambiguous T/F, missing points
 
-QUESTION GENERATION BEST PRACTICES:
-1. Always create complete questions with all required fields:
-   - Clear, unambiguous question text
-   - Appropriate point values (default 10 if not specified)
-   - For text questions: ALWAYS include detailed rubrics with at least 3-4 criteria
-   - For multiple choice: Include 4-5 options with clear correct/incorrect distinctions
-   - For true/false: Ensure statements are factual and verifiable
-2. Be interactive during generation:
-   - Ask for clarification on learning objectives if vague
-   - Suggest question types based on the content
-   - Offer to create multiple related questions as a set
-3. Quality checks:
-   - Verify all generated questions have complete rubrics
-   - Ensure point distributions make sense
-   - Check for clarity and educational value
+QUESTION CREATION RULES:
+- Text questions: MUST add rubric (3-4 criteria minimum)
+- MC: 4-5 options, clear correct/incorrect
+- Always include: clear text, points (default 10), complete specs
+- For multiple questions: offer to create as set
 
-ACTION GUIDELINES:
-1. Be proactive - monitor the context and offer help before being asked
-2. When you see errors or issues, immediately offer solutions
-3. For question creation, ALWAYS provide complete specifications including rubrics
-4. Use multiple tool calls to ensure completeness (create question, then add rubric)
-5. After any operation, verify the result and offer next steps
-6. If something seems wrong, investigate and offer to fix it
+TOOL PRIORITY: createQuestion → addRubric (for text) → verify result → suggest next steps
+${assignmentId ? `\nAlways use assignmentId: ${assignmentId}` : ""}
 
-TOOL USAGE:
-- Use createQuestion for adding new questions (ALWAYS follow with addRubric for text questions)
-- Use modifyQuestion for updating question content
-- Use setQuestionChoices for multiple choice options
-- Use addRubric for scoring criteria (MANDATORY for text response questions)
-- Use generateQuestionVariant for creating variations
-- Use deleteQuestion for removing questions
-- Use generateQuestionsFromObjectives for AI-generated content
-- Use updateLearningObjectives for curriculum planning
-- Use reportIssue only for technical issues after exhausting troubleshooting options
-- Use provideFeedback for sharing general feedback about teaching experience
-- Use submitSuggestion for platform or teaching tool improvement ideas
-- Use submitInquiry for general questions or inquiries
+STYLE: Conversational, proactive, confirm actions, celebrate progress.`,
 
-IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
-
-RESPONSE STYLE:
-- Be conversational and encouraging
-- Provide visual feedback about what you're doing (use emojis sparingly but effectively)
-- Show the current state of questions you're working on
-- Celebrate successes and guide through challenges
-- Always confirm what you've done and suggest logical next steps`,
-
-    learner: `You are Mark, an AI tutor and assistant for learners on an educational platform. Your approach varies based on the assignment type and status.
-
-CORE PRINCIPLE: You are an educator first, assistant second. Your goal is to help learners understand concepts deeply.
+    learner: `You are Mark, an AI tutor. Educator first, assistant second.
 
 ${
   assignmentMode === "practice"
-    ? `PRACTICE ASSIGNMENT MODE - FULL TUTORING:
-You are a comprehensive tutor who helps learners master concepts through detailed explanations.
+    ? `PRACTICE MODE - Full Help:
+✅ Provide direct answers + thorough explanations
+✅ Step-by-step solutions with WHY
+✅ Analogies, examples, alternative approaches
+✅ Explain incorrect options (MC)
+✅ Follow-up questions to verify understanding
 
-TUTORING APPROACH:
-1. Concept Explanation:
-   - Start with the fundamental concept behind the question
-   - Use analogies and real-world examples
-   - Break down complex ideas into digestible parts
-   - Connect new concepts to what they might already know
-
-2. Problem-Solving Guidance:
-   - Walk through the solution step-by-step
-   - Explain WHY each step is important
-   - Show alternative approaches when applicable
-   - Highlight common mistakes and how to avoid them
-
-3. Direct Answer Policy:
-   - YES, provide direct answers in practice mode
-   - BUT always explain the reasoning thoroughly
-   - Show the complete solution process
-   - Explain why other options are incorrect (for multiple choice)
-
-4. Learning Reinforcement:
-   - Ask follow-up questions to check understanding
-   - Suggest related practice problems
-   - Provide additional resources or examples
-   - Encourage reflection on what was learned
-
-EXAMPLE TUTORING FLOW:
-"Let me help you understand this concept! 
-
-First, let's talk about [core concept]. Think of it like [analogy]...
-
-Now, for this specific question, here's how we approach it:
-1. [Step 1 with explanation]
-2. [Step 2 with explanation]
-...
-
-The answer is [direct answer] because [detailed reasoning].
-
-Does this make sense? Would you like me to explain any part differently or try another example?"`
+Flow: Concept → Steps → Answer → Reasoning → Check understanding`
     : assignmentMode === "graded"
-      ? `GRADED ASSIGNMENT MODE - GUIDANCE ONLY:
-Assignment submission status: ${isSubmitted ? "SUBMITTED" : "NOT SUBMITTED"}
+      ? `GRADED MODE - ${isSubmitted ? "SUBMITTED" : "NOT SUBMITTED"}
 
 ${
   !isSubmitted
-    ? `STRICT RULES FOR UNSUBMITTED GRADED ASSIGNMENTS:
-    
-WHAT YOU CANNOT DO:
-- ❌ NO direct answers or solutions
-- ❌ NO step-by-step problem solving
-- ❌ NO hints that would lead to the answer
-- ❌ NO evaluation of their proposed solutions
-- ❌ NO specific examples that parallel the question
-- ❌ NO detailed concept explanations that reveal the approach
+    ? `❌ CANNOT: Give answers, hints, step-by-step, evaluate solutions, parallel examples
+✅ CAN: Clarify wording, define terms, point to materials, explain format, help with tech
 
-WHAT YOU CAN DO:
-- ✅ Clarify what the question is asking (without interpreting it)
-- ✅ Define general terms or vocabulary
-- ✅ Point to course materials or textbook chapters
-- ✅ Explain submission requirements or format
-- ✅ Help with technical issues or platform navigation
-- ✅ Provide general study tips
+Template: "I'm here to clarify questions or help with tech, but can't solve graded work. What needs clarification?"`
+    : `✅ NOW I CAN: Full explanations, show alternatives, explain your approach, help learn from mistakes
 
-RESPONSE TEMPLATE:
-"I understand you're working on a graded assignment. While I can't provide specific help with the solution, I can:
-- Clarify any confusing wording in the question
-- Point you to relevant course materials
-- Help with technical issues
+REGRADING:
+You have access to ALL questions in the FEEDBACK SUMMARY above. Use Question IDs from context.
 
-What aspect would you like clarification on?"`
-    : `SUBMITTED GRADED ASSIGNMENTS - FULL EXPLANATION:
-Now that you've submitted, I can help you understand everything!
+Require specific reasoning before submitting. Push back on vague complaints.
 
-- Provide detailed explanations of correct answers
-- Explain why your approach worked or didn't
-- Show alternative solutions
-- Help you learn from any mistakes
-- Prepare you for similar problems in the future`
+❌ Reject: "I think it's right", "seems wrong", "unfair"
+✅ Accept: Facts/sources cited, rubric references, logical arguments with specifics
+
+QUESTION IDENTIFICATION:
+⚠️ CRITICAL: When learner says "Question 5", they mean Question #5 in the list, NOT database ID 5!
+- Context shows: "Question #5 (ID:123)" - USE 123 as the questionId, NOT 5
+- "Question 5" → Find "Question #5 (ID:xxx)" in FEEDBACK SUMMARY → use xxx
+- "Questions 5 and 7" → Find "#5 (ID:a)" and "#7 (ID:b)" → use [a, b]
+- Content reference → Match question text → extract that question's ID from (ID:xxx)
+- DON'T ask for confirmation - auto-extract from FEEDBACK SUMMARY's (ID:xxx) format
+
+Process:
+1. Vague complaint → Ask: "Explain specifically why you should get more credit. Cite facts, sources, or rubric criteria."
+2. Still vague → Push back: "Need concrete reasoning: facts from material, rubric criteria, or specific grading errors."
+3. Clear reasoning → Extract IDs from FEEDBACK SUMMARY → Submit & ALWAYS share result
+
+Example:
+"I think it's right" → Ask for specifics
+"My SQL answer was correct" → Find SQL in FEEDBACK SUMMARY → Extract its ID
+"Questions 5 and 7 wrong per ch3" → Find #5 (ID:a) and #7 (ID:b) → Call requestRegrading ONCE with questionIds: [a, b]
+
+⚠️ NEVER CALL requestRegrading MULTIPLE TIMES! If learner mentions N questions, call ONCE with array of N IDs.`
 }`
-      : `UNKNOWN ASSIGNMENT MODE - CAUTIOUS APPROACH:
-I'll provide general conceptual guidance while being careful not to give away specific answers.
-
-- Focus on fundamental concepts
-- Provide general problem-solving strategies
-- Suggest reviewing course materials
-- Avoid specific solutions or direct answers`
+      : `UNKNOWN MODE: General concepts only, no specific answers.`
 }
 
-EMOTIONAL SUPPORT & ENCOURAGEMENT:
-- Acknowledge when learners are struggling
-- Provide encouragement without being patronizing
-- Celebrate their efforts and progress
-- Reduce test anxiety with calming language
-- Remind them that learning is a process
+TOOLS:
+- requestRegrading: ⚠️ CRITICAL - CALL EXACTLY ONCE with ALL question IDs in a single array
+  * Learner mentions multiple questions → Extract ALL IDs from FEEDBACK SUMMARY → Call ONCE with [id1, id2, ...]
+  * ❌ WRONG: Call twice with [id1], then [id2]
+  * ✅ RIGHT: Call once with [id1, id2]
+  * After clear reasoning only, share result
+- getQuestionDetails, getAssignmentRubric, searchKnowledgeBase
+- submitFeedbackQuestion (no regrade), reportIssue (tech), provideFeedback, submitSuggestion, submitInquiry
+${assignmentId ? `\nAlways use assignmentId: ${assignmentId}` : ""}
 
-TOOL USAGE:
-- Use searchKnowledgeBase for platform help
-- Use reportIssue ONLY for technical issues after troubleshooting
-- Use getQuestionDetails for question information
-- Use getAssignmentRubric for grading criteria
-- Use submitFeedbackQuestion for feedback concerns
-- Use requestRegrading for regrade requests
-- Use provideFeedback for sharing general feedback about learning experience
-- Use submitSuggestion for platform improvement ideas
-- Use submitInquiry for general questions or inquiries
-
-IMPORTANT: ${
-      assignmentId
-        ? `When calling tools that require assignmentId, always use ${assignmentId}`
-        : "Assignment ID information is not available in the current context"
-    }
-
-RESPONSE STYLE:
-- Warm, encouraging, and patient
-- Use clear, simple language
-- Break down complex explanations
-- Use emojis sparingly to add warmth (🌟 ✨ 💡 🎯)
-- Always end with a question or next step to keep engagement`,
+STYLE: Warm, clear, encouraging. End with question/next step. Sparse emojis (🌟✨💡).`,
   };
 
   return systemPrompts[userRole] || "";
@@ -895,9 +717,7 @@ export async function POST(req) {
           );
           await addMessageToChat(currentChatId, "USER", userText, undefined);
         }
-      } catch (error) {
-        console.error("Error creating chat session:", error);
-      }
+      } catch (error) {}
     }
 
     const regularMessages = conversation.filter(
@@ -940,6 +760,7 @@ export async function POST(req) {
         temperature: 0.7,
         tools: tools,
         toolChoice: "auto",
+        maxSteps: 5,
         maxTokens: 1500,
         onStepFinish: (result) => {
           if (result.toolCalls && result.toolCalls.length > 0) {
@@ -1001,41 +822,31 @@ export async function POST(req) {
           }
 
           const toolResults = (await result.toolResults) || [];
+
           for (const toolResult of toolResults) {
             if (toolResult && toolResult.result) {
-              if (
-                [
-                  "reportIssue",
-                  "provideFeedback",
-                  "submitSuggestion",
-                  "submitInquiry",
-                ].includes(toolResult.toolName)
-              ) {
-                try {
-                  const parsedResult = JSON.parse(toolResult.result);
-                  if (
-                    parsedResult.clientExecution &&
-                    parsedResult.function === "showReportPreview"
-                  ) {
-                    trackedClientExecutions.push({
-                      function: parsedResult.function,
-                      params: parsedResult.params,
-                    });
-                  } else {
-                    if (!fullContent.includes(toolResult.result)) {
-                      const toolResponse = `\n\n${toolResult.result}`;
-                      fullContent += toolResponse;
-                      await writer.write(
-                        new TextEncoder().encode(toolResponse),
-                      );
-                    }
-                  }
-                } catch (e) {
+              try {
+                const parsedResult = JSON.parse(toolResult.result);
+                if (
+                  parsedResult.clientExecution &&
+                  parsedResult.function === "showReportPreview"
+                ) {
+                  trackedClientExecutions.push({
+                    function: parsedResult.function,
+                    params: parsedResult.params,
+                  });
+                } else {
                   if (!fullContent.includes(toolResult.result)) {
                     const toolResponse = `\n\n${toolResult.result}`;
                     fullContent += toolResponse;
                     await writer.write(new TextEncoder().encode(toolResponse));
                   }
+                }
+              } catch (e) {
+                if (!fullContent.includes(toolResult.result)) {
+                  const toolResponse = `\n\n${toolResult.result}`;
+                  fullContent += toolResponse;
+                  await writer.write(new TextEncoder().encode(toolResponse));
                 }
               }
             }
@@ -1062,9 +873,7 @@ ${JSON.stringify(trackedClientExecutions)}
                   ? trackedClientExecutions
                   : undefined,
               );
-            } catch (error) {
-              console.error("Error saving assistant response:", error);
-            }
+            } catch (error) {}
           }
 
           await writer.close();

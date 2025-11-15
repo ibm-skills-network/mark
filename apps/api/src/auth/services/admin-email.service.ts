@@ -1,224 +1,44 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable unicorn/prefer-module */
-/* eslint-disable @typescript-eslint/no-var-requires */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from "@nestjs/common";
-import * as nodemailer from "nodemailer";
+import { EmailService, EmailOptions } from "src/common/services/email.service";
 
 /**
- * AdminEmailService supports both SendGrid and Gmail SMTP for sending emails.
- *
- * Environment Variables:
- *
- * EMAIL_PROVIDER - Choose email provider ('sendgrid' | 'google'). Defaults to 'sendgrid'
- *
- * SendGrid Configuration:
- * - SENDGRID_API_KEY: SendGrid API key (required for SendGrid)
- * - SENDGRID_FROM_EMAIL: From email address (defaults to 'noreply@markapp.com')
- * - SENDGRID_FROM_NAME: From name (defaults to 'Mark Admin System')
- *
- * Gmail Configuration:
- * - GMAIL_USER: Gmail email address (required for Gmail)
- * - GMAIL_APP_PASSWORD: Gmail app password (required for Gmail)
- *
- * Fallback Strategy:
- * - If preferred provider is not available, falls back to the other provider
- * - If no providers are configured, uses console logging in development
- * - Fails gracefully in production when no providers are available
+ * AdminEmailService handles admin-specific email operations.
+ * Uses the general EmailService for actual email delivery.
  */
-
-type EmailProvider = "sendgrid" | "google" | "none";
-const sgMail = require("@sendgrid/mail");
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 @Injectable()
 export class AdminEmailService {
   private readonly logger = new Logger(AdminEmailService.name);
-  private transporter: nodemailer.Transporter;
-  private emailProvider: EmailProvider;
 
-  constructor() {
-    this.initializeEmailService();
-  }
-
-  private initializeEmailService() {
-    const providerPreference =
-      process.env.EMAIL_PROVIDER?.toLowerCase() || "sendgrid";
-
-    const sendGridApiKey = process.env.SENDGRID_API_KEY;
-
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPassword = process.env.GMAIL_APP_PASSWORD;
-
-    if (providerPreference === "sendgrid" && sendGridApiKey) {
-      try {
-        sgMail.setApiKey(sendGridApiKey);
-        this.emailProvider = "sendgrid";
-        this.transporter = undefined;
-        this.logger.log("SendGrid email service initialized");
-        return;
-      } catch (error) {
-        this.logger.error("Failed to initialize SendGrid:", error);
-      }
-    }
-
-    if (providerPreference === "google" && gmailUser && gmailPassword) {
-      this.emailProvider = "google";
-      this.transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false,
-        auth: {
-          user: gmailUser,
-          pass: gmailPassword,
-        },
-        requireTLS: true,
-      });
-      this.logger.log("Gmail SMTP transporter initialized");
-      return;
-    } else if (gmailUser && gmailPassword) {
-      this.emailProvider = "google";
-      this.transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false,
-        auth: {
-          user: gmailUser,
-          pass: gmailPassword,
-        },
-        requireTLS: true,
-      });
-      this.logger.log("Gmail SMTP transporter initialized (fallback)");
-      return;
-    } else if (
-      sendGridApiKey &&
-      sgMail &&
-      typeof sgMail.setApiKey === "function"
-    ) {
-      try {
-        sgMail.setApiKey(sendGridApiKey);
-        this.emailProvider = "sendgrid";
-        this.transporter = undefined;
-        this.logger.log("SendGrid email service initialized (fallback)");
-      } catch (error) {
-        this.logger.error("Failed to initialize SendGrid as fallback:", error);
-        this.emailProvider = "none";
-        this.transporter = undefined;
-      }
-    } else {
-      this.emailProvider = "none";
-      this.transporter = undefined;
-      this.logger.warn(
-        "No email service configured. Set SENDGRID_API_KEY or GMAIL_USER/GMAIL_APP_PASSWORD. Email service will use console logging in development.",
-      );
-    }
-  }
+  constructor(private readonly emailService: EmailService) {}
 
   /**
-   * Send verification code email to admin using configured email provider (SendGrid or Gmail)
+   * Send verification code email to admin
    */
   async sendVerificationCode(email: string, code: string): Promise<boolean> {
     try {
-      if (this.emailProvider === "none") {
-        if (process.env.NODE_ENV === "production") {
-          this.logger.error("Email service not configured for production");
-          return false;
-        } else {
-          this.logger.log(`
-=== ADMIN VERIFICATION CODE ===
-Email: ${email}
-Code: ${code}
-Expires: 10 minutes
-Provider: Development Console
-===============================`);
-          return true;
-        }
+      const emailOptions: EmailOptions = {
+        to: email,
+        subject: "Mark Admin Access - Verification Code",
+        html: this.getEmailTemplate(code),
+        text: this.getPlainTextTemplate(code),
+        from: {
+          email:
+            process.env.SENDGRID_FROM_EMAIL ||
+            process.env.GMAIL_USER ||
+            "noreply@markapp.com",
+          name: "Mark Admin System",
+        },
+      };
+
+      const result = await this.emailService.sendEmail(emailOptions);
+
+      if (!result) {
+        this.logger.error(`Failed to send verification code to ${email}`);
       }
 
-      if (this.emailProvider === "sendgrid") {
-        return await this.sendVerificationCodeSendGrid(email, code);
-      } else if (this.emailProvider === "google") {
-        return await this.sendVerificationCodeGmail(email, code);
-      }
-
-      return false;
+      return result;
     } catch (error) {
       this.logger.error(`Failed to send verification code to ${email}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Send verification code using SendGrid
-   */
-  private async sendVerificationCodeSendGrid(
-    email: string,
-    code: string,
-  ): Promise<boolean> {
-    try {
-      if (!sgMail || typeof sgMail.send !== "function") {
-        this.logger.error("SendGrid not properly initialized");
-        return false;
-      }
-
-      const fromEmail =
-        process.env.SENDGRID_FROM_EMAIL || "noreply@markapp.com";
-      const fromName = process.env.SENDGRID_FROM_NAME || "Mark Admin System";
-
-      const mailData = {
-        from: {
-          email: fromEmail,
-          name: fromName,
-        },
-        to: email,
-        subject: "Mark Admin Access - Verification Code",
-        html: this.getEmailTemplate(code),
-        text: this.getPlainTextTemplate(code),
-      };
-
-      await sgMail.send(mailData);
-
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Failed to send verification code via SendGrid to ${email}:`,
-        error,
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Send verification code using Gmail SMTP
-   */
-  private async sendVerificationCodeGmail(
-    email: string,
-    code: string,
-  ): Promise<boolean> {
-    try {
-      if (!this.transporter) {
-        this.logger.error("Gmail transporter not initialized");
-        return false;
-      }
-
-      const mailOptions = {
-        from: {
-          name: "Mark Admin System",
-          address: process.env.GMAIL_USER || "noreply@markapp.com",
-        },
-        to: email,
-        subject: "Mark Admin Access - Verification Code",
-        html: this.getEmailTemplate(code),
-        text: this.getPlainTextTemplate(code),
-      };
-
-      await this.transporter.sendMail(mailOptions);
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Failed to send verification code via Gmail to ${email}:`,
-        error,
-      );
       return false;
     }
   }
@@ -308,38 +128,7 @@ This is an automated message from Mark Admin System.
    * Test email service connection
    */
   async testConnection(): Promise<boolean> {
-    try {
-      if (this.emailProvider === "none") {
-        if (process.env.NODE_ENV === "production") {
-          this.logger.error("Email service not configured");
-          return false;
-        } else {
-          this.logger.log(
-            "Email service ready (development mode - console logging)",
-          );
-          return true;
-        }
-      }
-
-      if (this.emailProvider === "sendgrid") {
-        this.logger.log("SendGrid email service ready");
-        return true;
-      }
-
-      if (this.emailProvider === "google" && this.transporter) {
-        await this.transporter.verify();
-        this.logger.log("Gmail SMTP connection verified successfully");
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      this.logger.error(
-        `${this.emailProvider} email service connection failed:`,
-        error,
-      );
-      return false;
-    }
+    return await this.emailService.testConnection();
   }
 
   /**
@@ -347,120 +136,36 @@ This is an automated message from Mark Admin System.
    */
   async sendTestEmail(toEmail: string): Promise<boolean> {
     try {
-      if (this.emailProvider === "none") {
-        this.logger.warn(
-          "Cannot send test email - email service not configured",
-        );
-        return false;
-      }
+      const emailOptions: EmailOptions = {
+        to: toEmail,
+        subject: "Mark Admin - Email Configuration Test",
+        html: `
+          <h2>🎉 Email Configuration Test</h2>
+          <p>If you received this email, your email configuration is working correctly!</p>
+          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+          <p><em>This is a test message from Mark Admin System.</em></p>
+        `,
+        text: `
+Email Configuration Test
 
-      if (this.emailProvider === "sendgrid") {
-        return await this.sendTestEmailSendGrid(toEmail);
-      } else if (this.emailProvider === "google") {
-        return await this.sendTestEmailGmail(toEmail);
-      }
+If you received this email, your email configuration is working correctly!
 
-      return false;
+Timestamp: ${new Date().toISOString()}
+
+This is a test message from Mark Admin System.
+        `,
+        from: {
+          email:
+            process.env.SENDGRID_FROM_EMAIL ||
+            process.env.GMAIL_USER ||
+            "noreply@markapp.com",
+          name: "Mark Admin System",
+        },
+      };
+
+      return await this.emailService.sendEmail(emailOptions);
     } catch (error) {
       this.logger.error(`Failed to send test email to ${toEmail}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Send test email using SendGrid
-   */
-  private async sendTestEmailSendGrid(toEmail: string): Promise<boolean> {
-    try {
-      if (!sgMail || typeof sgMail.send !== "function") {
-        this.logger.error("SendGrid not properly initialized");
-        return false;
-      }
-
-      const fromEmail =
-        process.env.SENDGRID_FROM_EMAIL || "noreply@markapp.com";
-      const fromName = process.env.SENDGRID_FROM_NAME || "Mark Admin System";
-
-      const mailData = {
-        from: {
-          email: fromEmail,
-          name: fromName,
-        },
-        to: toEmail,
-        subject: "Mark Admin - Email Configuration Test",
-        html: `
-          <h2>🎉 Email Configuration Test</h2>
-          <p>If you received this email, your SendGrid email configuration is working correctly!</p>
-          <p><strong>Provider:</strong> SendGrid</p>
-          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-          <p><em>This is a test message from Mark Admin System.</em></p>
-        `,
-        text: `
-Email Configuration Test
-
-If you received this email, your SendGrid email configuration is working correctly!
-
-Provider: SendGrid
-Timestamp: ${new Date().toISOString()}
-
-This is a test message from Mark Admin System.
-        `,
-      };
-      await sgMail.send(mailData);
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Failed to send test email via SendGrid to ${toEmail}:`,
-        error,
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Send test email using Gmail SMTP
-   */
-  private async sendTestEmailGmail(toEmail: string): Promise<boolean> {
-    try {
-      if (!this.transporter) {
-        this.logger.error("Gmail transporter not initialized");
-        return false;
-      }
-
-      const mailOptions = {
-        from: {
-          name: "Mark Admin System",
-          address: process.env.GMAIL_USER || "noreply@markapp.com",
-        },
-        to: toEmail,
-        subject: "Mark Admin - Email Configuration Test",
-        html: `
-          <h2>🎉 Email Configuration Test</h2>
-          <p>If you received this email, your Gmail SMTP configuration is working correctly!</p>
-          <p><strong>Provider:</strong> Gmail SMTP</p>
-          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-          <p><em>This is a test message from Mark Admin System.</em></p>
-        `,
-        text: `
-Email Configuration Test
-
-If you received this email, your Gmail SMTP configuration is working correctly!
-
-Provider: Gmail SMTP
-Timestamp: ${new Date().toISOString()}
-
-This is a test message from Mark Admin System.
-        `,
-      };
-
-      await this.transporter.sendMail(mailOptions);
-
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Failed to send test email via Gmail to ${toEmail}:`,
-        error,
-      );
       return false;
     }
   }

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
+import { EmailService } from "../../common/services/email.service";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
 import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
@@ -61,6 +62,7 @@ import { TranslationService } from "./services/translation/translation.service";
       useClass: GradingAuditService,
     },
     PrismaService,
+    EmailService,
     {
       provide: FILE_CONTENT_EXTRACTION_SERVICE,
       useClass: FileContentExtractionService,

@@ -828,7 +828,11 @@ const Question: FC<Props> = ({
             </p>
           ) : (
             <FeedbackFormatter className="text-gray-800 flex-1 mt-2 sm:mt-0">
-              {highestScoreResponse?.feedback[0]?.feedback}
+              {typeof highestScoreResponse?.feedback[0]?.feedback === "string"
+                ? highestScoreResponse.feedback[0].feedback
+                : typeof highestScoreResponse?.feedback[0] === "string"
+                  ? highestScoreResponse.feedback[0]
+                  : ""}
             </FeedbackFormatter>
           )}
         </div>

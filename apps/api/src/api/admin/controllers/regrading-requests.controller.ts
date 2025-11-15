@@ -5,6 +5,8 @@ import {
   Injectable,
   Param,
   Post,
+  Req,
+  UseGuards,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
@@ -16,17 +18,32 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { IsNumber, IsString, IsNotEmpty } from "class-validator";
 import { AdminService } from "../admin.service";
+import { AdminGuard } from "../../../auth/guards/admin.guard";
+import { Request } from "express";
+
+interface AdminSessionRequest extends Request {
+  userSession: {
+    userId: string;
+    role: string;
+  };
+}
 
 class ApproveRegradingRequestDto {
+  @IsNumber()
+  @IsNotEmpty()
   newGrade: number;
 }
 
 class RejectRegradingRequestDto {
+  @IsString()
+  @IsNotEmpty()
   reason: string;
 }
 
 @ApiTags("Admin")
+@UseGuards(AdminGuard)
 @UsePipes(
   new ValidationPipe({
     whitelist: true,
@@ -36,7 +53,7 @@ class RejectRegradingRequestDto {
 @ApiBearerAuth()
 @Injectable()
 @Controller({
-  path: "admin/regrading-requests",
+  path: "admin-dashboard/regrading-requests",
   version: "1",
 })
 export class RegradingRequestsController {
@@ -59,10 +76,12 @@ export class RegradingRequestsController {
   approveRegradingRequest(
     @Param("id") id: number,
     @Body() approveDto: ApproveRegradingRequestDto,
+    @Req() request: AdminSessionRequest,
   ) {
     return this.adminService.approveRegradingRequest(
       Number(id),
       approveDto.newGrade,
+      request.userSession?.userId,
     );
   }
 
@@ -75,10 +94,12 @@ export class RegradingRequestsController {
   rejectRegradingRequest(
     @Param("id") id: number,
     @Body() rejectDto: RejectRegradingRequestDto,
+    @Req() request: AdminSessionRequest,
   ) {
     return this.adminService.rejectRegradingRequest(
       Number(id),
       rejectDto.reason,
+      request.userSession?.userId,
     );
   }
 }

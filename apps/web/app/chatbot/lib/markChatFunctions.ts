@@ -4,6 +4,7 @@ import {
   generateQuestionVariant,
 } from "../store/authorStoreUtil";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import { absoluteUrl } from "@/lib/utils";
 
 /**
  * Search the knowledge base for information
@@ -89,12 +90,8 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
   result += `**ID**: ${question.id}\n`;
   result += `**Type**: ${question.type}\n`;
   result += `**Max Points**: ${question.totalPoints}\n`;
-  result += `**Points Earned**: ${pointsEarned}\n`;
+  result += `**Points Earned**: ${pointsEarned?.points || 0}\n`;
   result += `**Question**: ${question.question}\n\n`;
-  result += `**Feedback**: ${question.questionResponses || "No feedback available."}\n\n`;
-  result += `**Was the assignment submitted?**: ${
-    question.questionResponses ? "Yes" : "No"
-  }\n`;
 
   if (question.choices) {
     result += `**Answer Choices**:\n`;
@@ -106,29 +103,28 @@ export async function getQuestionDetails(questionId: number): Promise<string> {
     });
   }
 
-  if (useLearnerStore.getState().showSubmissionFeedback) {
-    result += `\n**Your Score**: ${
-      question.choices
-        ? question.choices.filter((choice: any) => choice.isCorrect).length
-        : 0
-    } / ${question.totalPoints}\n`;
+  if (
+    useLearnerStore.getState().showSubmissionFeedback &&
+    question.questionResponses &&
+    question.questionResponses.length > 0
+  ) {
+    result += `\n**Feedback**:\n`;
 
-    if (question.questionResponses && question.questionResponses.length > 0) {
-      result += `\n**Feedback**:\n`;
-      const feedback = Array.isArray(
-        question.questionResponses.map((response: any) => response.feedback),
-      )
-        ? question.questionResponses.map((response: any) => response.feedback)
-        : [];
-
-      feedback.forEach((fb: any) => {
-        if (typeof fb === "string") {
-          result += `- ${fb}\n`;
-        } else if (fb.feedback) {
-          result += `- ${fb.feedback}\n`;
+    question.questionResponses.forEach((response: any) => {
+      if (response.feedback) {
+        if (Array.isArray(response.feedback)) {
+          response.feedback.forEach((fb: any) => {
+            const feedbackText =
+              typeof fb === "string" ? fb : fb?.feedback || "";
+            if (feedbackText) {
+              result += `- ${feedbackText}\n`;
+            }
+          });
+        } else if (typeof response.feedback === "string") {
+          result += `- ${response.feedback}\n`;
         }
-      });
-    }
+      }
+    });
   }
 
   return result;
@@ -222,12 +218,14 @@ export async function submitFeedbackQuestion(
 
 /**
  * Request regrading for an assignment
- * This implementation actually attempts to make a server call to create a regrade request
+ * This implementation submits a regrading request through the backend API
+ * It also calculates and proposes a new grade based on the learner's concerns
  */
 export async function requestRegrading(
   assignmentId: number,
   attemptId: number,
   reason: string,
+  questionIds?: number[],
 ): Promise<string> {
   if (!assignmentId) {
     assignmentId = useAssignmentDetails.getState().assignmentDetails?.id || 0;
@@ -240,33 +238,155 @@ export async function requestRegrading(
   if (!assignmentId || !attemptId) {
     return "Unable to submit regrading request: missing assignment or attempt information. Please refresh the page and try again.";
   }
+
+  if (!reason || reason.trim() === "") {
+    return "Unable to submit regrading request: please provide a reason for your request.";
+  }
+
   try {
-    const response = await fetch("/api/regrading", {
+    let currentGrade = useAssignmentDetails.getState().grade || 0;
+    let proposedGrade: number;
+    let usedQuestionCalculation = false;
+
+    if (questionIds && questionIds.length > 0) {
+      let questions = useLearnerStore.getState().questions || [];
+      let totalPointsPossible =
+        useLearnerStore.getState().totalPointsPossible || 100;
+
+      if (questions.length === 0) {
+        try {
+          const url = absoluteUrl(
+            `/api/v2/assignments/${assignmentId}/attempts/${attemptId}/completed`,
+          );
+          const response = await fetch(url, { credentials: "include" });
+
+          if (response.ok) {
+            const data = await response.json();
+
+            questions = data.questions || [];
+            totalPointsPossible =
+              data.totalPossiblePoints ||
+              data.totalPointsPossible ||
+              questions.reduce((sum, q) => sum + (q.totalPoints || 0), 0) ||
+              100;
+
+            if (data.grade !== undefined && data.grade !== null) {
+              currentGrade = data.grade * 100;
+            } else {
+              const totalEarnedPoints = questions.reduce((sum, q) => {
+                const earnedPts = q.questionResponses?.[0]?.points || 0;
+                return sum + earnedPts;
+              }, 0);
+
+              if (totalPointsPossible > 0) {
+                currentGrade = (totalEarnedPoints / totalPointsPossible) * 100;
+              } else {
+              }
+            }
+          } else {
+          }
+        } catch (error) {}
+      }
+
+      const complainedQuestions = questions.filter((q) =>
+        questionIds.includes(q.id),
+      );
+
+      if (complainedQuestions.length > 0 && totalPointsPossible > 0) {
+        let questionsTotalPoints = 0;
+        let questionsEarnedPoints = 0;
+
+        complainedQuestions.forEach((q) => {
+          const totalPts = q.totalPoints || 0;
+          const earnedPts = q.questionResponses?.[0]?.points || 0;
+          questionsTotalPoints += totalPts;
+          questionsEarnedPoints += earnedPts;
+        });
+
+        const maxImprovement = questionsTotalPoints - questionsEarnedPoints;
+        const improvementPercentage =
+          (maxImprovement / totalPointsPossible) * 100;
+
+        proposedGrade =
+          Math.min(currentGrade + improvementPercentage, 100) / 100;
+
+        proposedGrade = Math.max(currentGrade / 100, proposedGrade);
+        usedQuestionCalculation = true;
+      } else {
+      }
+    }
+
+    if (!usedQuestionCalculation) {
+      if (currentGrade >= 90) {
+        proposedGrade = Math.min(currentGrade + 5, 100) / 100;
+      } else if (currentGrade >= 70) {
+        proposedGrade = Math.min(currentGrade + 15, 85) / 100;
+      } else if (currentGrade >= 50) {
+        proposedGrade = 0.8;
+      } else {
+        proposedGrade = 0.7;
+      }
+
+      proposedGrade = Math.max(currentGrade / 100, proposedGrade);
+    }
+
+    if (isNaN(proposedGrade) || !isFinite(proposedGrade)) {
+      proposedGrade = 0.7;
+    }
+
+    proposedGrade = Math.max(0, Math.min(1, proposedGrade));
+
+    const url = absoluteUrl(
+      `/api/v2/assignments/${assignmentId}/attempts/${attemptId}/regrade`,
+    );
+
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "include",
       body: JSON.stringify({
-        assignmentId,
-        attemptId,
-        reason,
+        regradingRequest: {
+          reason: reason.trim(),
+          proposedGrade: proposedGrade,
+          questionIds: questionIds || [],
+        },
       }),
     });
 
     if (response.ok) {
       const data = await response.json();
-      return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is ${
-        data.id || "RG-" + Date.now().toString(36).toUpperCase()
-      }.`;
+      const proposedGradePercent = (proposedGrade * 100).toFixed(1);
+      const currentGradeValue =
+        useAssignmentDetails.getState().grade || currentGrade || 0;
+
+      const questionText =
+        questionIds && questionIds.length > 0
+          ? `\n- Questions Mentioned: ${questionIds.map((id) => `ID ${id}`).join(", ")}`
+          : "";
+
+      const proposalExplanation = usedQuestionCalculation
+        ? `I've proposed giving you full credit on the specific question${questionIds.length > 1 ? "s" : ""} you mentioned. This would bring your grade to ${proposedGradePercent}% (maximum possible if ${questionIds.length > 1 ? "these questions get" : "this question gets"} full marks).`
+        : questionIds && questionIds.length > 0
+          ? `I've proposed an improved grade. Note: I couldn't find the specific questions in the current data, so I used a general improvement calculation.`
+          : `I've proposed an improved grade based on your complaint.`;
+
+      return `✅ Your request for regrading has been successfully submitted!\n\n**Details:**\n- Assignment ID: ${assignmentId}\n- Attempt ID: ${attemptId}\n- Request ID: ${data.id || "RG-" + Date.now().toString(36).toUpperCase()}\n- Current Grade: ${currentGradeValue.toFixed(1)}%\n- AI Proposed Grade: ${proposedGradePercent}%${questionText}\n- Reason: "${reason}"\n\n${proposalExplanation} Your instructor will review your request along with this proposal and make a final decision. You'll be notified once the review is complete.`;
     } else {
-      return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is RG-${Date.now()
-        .toString(36)
-        .toUpperCase()}.`;
+      const errorData = await response.json().catch(() => null);
+      const errorMessage = errorData?.message || response.statusText;
+
+      if (response.status === 403) {
+        return `❌ Unable to submit regrading request: You don't have permission to request regrading for this attempt. This may be because:\n- The attempt belongs to another student\n- The assignment is no longer accepting regrade requests\n\nPlease contact your instructor if you believe this is an error.`;
+      } else if (response.status === 404) {
+        return `❌ Unable to submit regrading request: The assignment or attempt could not be found. Please verify:\n- Assignment ID: ${assignmentId}\n- Attempt ID: ${attemptId}\n\nTry refreshing the page or contact your instructor if the problem persists.`;
+      }
+
+      return `⚠️ There was an issue submitting your regrading request: ${errorMessage}\n\nPlease try again in a few moments. If the problem persists, contact your instructor and provide them with:\n- Assignment ID: ${assignmentId}\n- Attempt ID: ${attemptId}`;
     }
   } catch (error) {
-    return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is RG-${Date.now()
-      .toString(36)
-      .toUpperCase()}.`;
+    return `⚠️ Unable to connect to the server to submit your regrading request. Please check your internet connection and try again.\n\nIf the problem persists, you can contact your instructor directly and provide them with:\n- Assignment ID: ${assignmentId}\n- Attempt ID: ${attemptId}\n- Reason: "${reason}"`;
   }
 }
 

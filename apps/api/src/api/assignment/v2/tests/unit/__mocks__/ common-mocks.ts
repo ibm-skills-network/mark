@@ -1464,6 +1464,9 @@ export const createMockRegradingRequest = (
     regradingStatus: status,
     createdAt: new Date(),
     updatedAt: new Date(),
+    proposedGrade: null,
+    questionIds: [],
+    processedBy: null,
   };
 
   return {

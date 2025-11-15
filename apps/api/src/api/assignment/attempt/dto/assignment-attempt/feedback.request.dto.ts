@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsNumber,
@@ -61,6 +62,15 @@ export class RegradingRequestDto {
 
   @IsString()
   reason: string;
+
+  @IsNumber()
+  @IsOptional()
+  proposedGrade?: number;
+
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @IsOptional()
+  questionIds?: number[];
 }
 export class RegradingStatusResponseDto {
   status: string;

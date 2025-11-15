@@ -1,21 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getUser } from "@/lib/talkToBackend";
 import Loading from "@/components/Loading";
 import animationData from "@/animations/LoadSN.json";
-import { AdminLogin } from "./components/AdminLogin";
-import { OptimizedAdminDashboard } from "./components/OptimizedAdminDashboard";
+import { AdminLogin } from "../components/AdminLogin";
+import { RegradingRequestsContent } from "./components/RegradingRequestsContent";
 
-export default function AdminPage() {
+export default function RegradingRequestsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const returnTo = searchParams.get("returnTo");
 
   useEffect(() => {
     const checkAdminAccess = async () => {
@@ -43,10 +41,6 @@ export default function AdminPage() {
                 setIsAuthenticated(true);
                 setUserRole("admin");
                 setIsLoading(false);
-
-                if (returnTo) {
-                  router.push(returnTo);
-                }
                 return;
               } else {
                 localStorage.removeItem("adminSessionToken");
@@ -72,16 +66,12 @@ export default function AdminPage() {
     };
 
     checkAdminAccess();
-  }, [router, returnTo]);
+  }, [router]);
 
   const handleAuthenticated = (token: string) => {
     setSessionToken(token);
     setIsAuthenticated(true);
     setUserRole("admin");
-
-    if (returnTo) {
-      router.push(returnTo);
-    }
   };
 
   const handleLogout = async () => {
@@ -121,11 +111,9 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <OptimizedAdminDashboard
-        sessionToken={sessionToken}
-        onLogout={handleLogout}
-      />
-    </div>
+    <RegradingRequestsContent
+      sessionToken={sessionToken}
+      onLogout={handleLogout}
+    />
   );
 }
