@@ -56,6 +56,8 @@ import { AttemptValidationService } from "./attempt-validation.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
+import { Roles } from "src/auth/role/roles.global.guard";
+import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
 
 @Injectable()
 export class AttemptSubmissionService {
@@ -337,6 +339,7 @@ export class AttemptSubmissionService {
    */
   async getLearnerAssignmentAttempt(
     attemptId: number,
+    userSession: UserSession,
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -382,6 +385,12 @@ export class AttemptSubmissionService {
       throw new NotFoundException(
         `Assignment with Id ${assignmentAttempt.assignmentId} not found.`,
       );
+    }
+
+    if (userSession.role === UserRole.LEARNER) {
+      assignment.questions.map((question) => {
+        question.authorComment = null;
+      });
     }
 
     const shouldShowCorrectAnswers = this.shouldShowCorrectAnswers(
@@ -1293,6 +1302,8 @@ export class AttemptSubmissionService {
   /**
    * Remove sensitive data from questions
    */
+
+  // fpilter out the author comment
   private removeSensitiveData(
     questions: AttemptQuestionDto[],
     assignment: { correctAnswerVisibility: CorrectAnswerVisibility },
@@ -1303,6 +1314,11 @@ export class AttemptSubmissionService {
       if (!question.scoring?.showRubricsToLearner) {
         delete question.scoring?.rubrics;
       }
+
+      if (UserRole.LEARNER) {
+        question.authorComment == null;
+      }
+      // if user role learner make quetion null
 
       if (question.choices) {
         for (const choice of question.choices) {

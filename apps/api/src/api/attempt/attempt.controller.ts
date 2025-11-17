@@ -144,6 +144,7 @@ export class AttemptControllerV2 {
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
       Number(assignmentAttemptId),
+      request.userSession,
       lang,
     );
   }
@@ -156,9 +157,11 @@ export class AttemptControllerV2 {
   @ApiResponse({ status: 403 })
   getLearnerAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
+    @Req() request: UserSessionRequest,
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getLearnerAssignmentAttempt(
       Number(assignmentAttemptId),
+      request.userSession,
     );
   }
 

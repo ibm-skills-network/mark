@@ -499,6 +499,7 @@ export interface QuestionAuthorStore extends Question {
 export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
     status: QuestionStatus;
+    authorComment?: string;
     learnerResponse: string;
     translationOn: boolean;
     selectedLanguage: string;
