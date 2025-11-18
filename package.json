@@ -61,7 +61,7 @@
     "@nestjs/jwt": "^10.1.0",
     "@nestjs/passport": "^10.0.0",
     "@nestjs/platform-express": "^10.4.9",
-    "@nestjs/swagger": "^7.0.1",
+    "@nestjs/swagger": "^11.0.0",
     "@nestjs/terminus": "^10.0.0",
     "@octokit/rest": "^21.0.2",
     "@smastrom/react-rating": "^1.5.0",
