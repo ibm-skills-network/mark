@@ -48,7 +48,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/styled-components": "^5.1.34",
     "@uiw/react-md-editor": "^4.0.1",
-    "ai": "^4.2.11",
+    "ai": "^5.0.52",
     "aws-sdk": "^2.1692.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
