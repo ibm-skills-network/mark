@@ -10,7 +10,7 @@ services:
     ports:
       - "${POSTGRES_EXTERNAL_PORT:-6001}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mark-pg-user}"]
       interval: 5s

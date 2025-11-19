@@ -21,6 +21,7 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   textareaClassName?: string;
   maxWords?: number | null;
   maxCharacters?: number | null;
+  allowCopy?: boolean;
 }
 
 const MarkdownEditor: React.FC<Props> = ({
@@ -31,6 +32,7 @@ const MarkdownEditor: React.FC<Props> = ({
   maxWords,
   maxCharacters,
   placeholder = "Write your question here...",
+  allowCopy = true,
 }) => {
   const quillRef = useRef<HTMLDivElement>(null);
   const [quillInstance, setQuillInstance] = useState<any>(null);
@@ -74,7 +76,6 @@ const MarkdownEditor: React.FC<Props> = ({
               ["link", "image", "video"],
               ["clean"],
             ],
-
             syntax: {
               highlight: (text: string) => hljs.highlightAuto(text).value,
             },
@@ -128,7 +129,6 @@ const MarkdownEditor: React.FC<Props> = ({
   useEffect(() => {
     if (quillInstance) {
       const currentHTML = quillInstance.root.innerHTML;
-
       if (currentHTML !== value && !quillInstance.hasFocus()) {
         quillInstance.root.innerHTML = value;
       }
@@ -150,9 +150,8 @@ const MarkdownEditor: React.FC<Props> = ({
         background-color: transparent !important;
         height: auto !important;
         overflow: visible !important;
-       padding: 0 !important;
+        padding: 0 !important;
       }
-      /* Optional: Adjust spacing for list items, paragraphs, etc. */
       .ql-editor p,
       .ql-editor li,
       .ql-editor blockquote {
@@ -172,7 +171,6 @@ const MarkdownEditor: React.FC<Props> = ({
       .ql-editor pre {
         background-color: #f5f5f5 !important;
       }
-      /* Syntax highlighting tweak */
       .ql-editor .hljs {
         padding: 0.2em !important;
         font-size: 0.95em !important;
@@ -184,6 +182,7 @@ const MarkdownEditor: React.FC<Props> = ({
       document.head.removeChild(style);
     };
   }, []);
+
   return (
     <div className={cn("flex flex-col", className)}>
       <div

@@ -11,7 +11,6 @@ import "quill/dist/quill.snow.css";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import { cn } from "@/lib/strings";
-import Quill from "quill";
 
 declare global {
   interface Window {
@@ -19,7 +18,9 @@ declare global {
   }
 }
 
-type Props = ComponentPropsWithoutRef<"div">;
+interface Props extends ComponentPropsWithoutRef<"div"> {
+  allowCopy?: boolean;
+}
 
 /**
  * MarkdownViewer
@@ -28,9 +29,9 @@ type Props = ComponentPropsWithoutRef<"div">;
  * It uses the Quill editor without a toolbar and applies syntax highlighting via Highlight.js.
  */
 const MarkdownViewer: FC<Props> = (props) => {
-  const { className, children, ...restOfProps } = props;
+  const { className, children, allowCopy = true, ...restOfProps } = props;
   const quillRef = useRef<HTMLDivElement>(null);
-  const [quillInstance, setQuillInstance] = useState<Quill | null>(null);
+  const [quillInstance, setQuillInstance] = useState<any>(null);
 
   useEffect(() => {
     if (quillInstance) {
@@ -64,6 +65,7 @@ const MarkdownViewer: FC<Props> = (props) => {
     }
   }, [children]);
 
+  // Style injection (copy control + typography)
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
@@ -71,10 +73,11 @@ const MarkdownViewer: FC<Props> = (props) => {
         border: none !important;
         min-height: auto !important;
         overflow: visible !important;
-        user-select: none !important;
+        ${allowCopy ? "" : "user-select: none !important;"}
       }
-        .quill-viewer .ql-container .ql-editor .ql-code-block-container .ql-ui{
-        display: none !important;}
+      .quill-viewer .ql-container .ql-editor .ql-code-block-container .ql-ui {
+        display: none !important;
+      }
       .ql-container.ql-snow .ql-editor {
         font-family: "IBM Plex Sans", sans-serif !important;
         font-size: 16px !important;
@@ -82,9 +85,8 @@ const MarkdownViewer: FC<Props> = (props) => {
         background-color: transparent !important;
         min-height: auto !important;
         overflow: visible !important;
-       padding: 0 !important;
+        padding: 0 !important;
       }
-      /* Optional: Adjust spacing for list items, paragraphs, etc. */
       .ql-editor p,
       .ql-editor li,
       .ql-editor blockquote {
@@ -104,7 +106,6 @@ const MarkdownViewer: FC<Props> = (props) => {
       .ql-editor pre {
         background-color: #f5f5f5 !important;
       }
-      /* Syntax highlighting tweak */
       .ql-editor .hljs {
         padding: 0.2em !important;
         font-size: 0.95em !important;
@@ -115,7 +116,7 @@ const MarkdownViewer: FC<Props> = (props) => {
     return () => {
       document.head.removeChild(style);
     };
-  }, []);
+  }, [allowCopy]);
 
   return (
     <div className={cn(className, "quill-viewer")} {...restOfProps}>

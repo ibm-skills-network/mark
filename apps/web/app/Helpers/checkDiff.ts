@@ -74,6 +74,7 @@ export function useChangesSummary(): string {
     strictTimeLimit,
     graded,
     numberOfQuestionsPerAttempt,
+    questionControls,
   } = useAssignmentConfig();
 
   const {
@@ -121,7 +122,8 @@ export function useChangesSummary(): string {
       !safeCompare(showAssignmentScore, originalAssignment.showAssignmentScore)
     )
       diffs.push("Changed assignment score visibility.");
-
+    if (!safeCompare(questionControls, originalAssignment.questionControls))
+      diffs.push("Modified question controls.");
     if (
       !safeCompare(
         correctAnswerVisibility,

@@ -120,7 +120,10 @@ async function AttemptLoader({
 
   return (
     role === "learner" && (
-      <main className="flex flex-col h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] overflow-hidden">
+      <main
+        id="exam-root"
+        className="flex  flex-col h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] overflow-hidden"
+      >
         <QuestionPage
           attempt={attempt}
           assignmentId={assignmentId}

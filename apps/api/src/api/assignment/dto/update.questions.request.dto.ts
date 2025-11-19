@@ -589,6 +589,19 @@ export class UpdateAssignmentQuestionsDto {
   correctAnswerVisibility: CorrectAnswerVisibility;
 
   @ApiProperty({
+    description: "Question-level controls (copy, paste, right-click, print)",
+    required: false,
+    type: "object",
+  })
+  @IsOptional()
+  questionControls?: {
+    disableCopy?: boolean;
+    disablePaste?: boolean;
+    disableRightClick?: boolean;
+    disablePrint?: boolean;
+  };
+
+  @ApiProperty({
     description: "updatedAt",
     required: false,
   })

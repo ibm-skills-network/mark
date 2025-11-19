@@ -971,6 +971,13 @@ export const createMockAssignment = (
   updatedAt: new Date(),
   languageCode: "en",
   currentVersionId: 1,
+  questionControls: {
+    allowCopy: true,
+    allowPaste: true,
+    allowRightClick: true,
+    preventPrint: false,
+    preventScreenshot: false,
+  },
   ...overrides,
 });
 
@@ -991,7 +998,7 @@ export const createMockGetAssignmentResponseDto = (
     questions,
     success: true,
     ...overrides,
-  };
+  } as GetAssignmentResponseDto;
 };
 
 /**
@@ -1007,7 +1014,7 @@ export const createMockLearnerGetAssignmentResponseDto = (
     questions: [] as Question[],
     success: true,
     ...overrides,
-  };
+  } as LearnerGetAssignmentResponseDto;
 };
 
 /**
@@ -1021,7 +1028,7 @@ export const createMockAssignmentResponseDto = (
   return {
     ...assignment,
     ...overrides,
-  };
+  } as AssignmentResponseDto;
 };
 
 /**

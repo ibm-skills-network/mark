@@ -231,6 +231,7 @@ export class AssignmentServiceV2 {
         timeEstimateMinutes: updateDto.timeEstimateMinutes,
         showQuestions: updateDto.showQuestions,
         numberOfQuestionsPerAttempt: updateDto.numberOfQuestionsPerAttempt,
+        questionControls: updateDto.questionControls,
       });
 
       await this.jobStatusService.updateJobStatus(jobId, {

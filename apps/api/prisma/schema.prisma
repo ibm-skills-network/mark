@@ -237,6 +237,7 @@ model Assignment {
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
   correctAnswerVisibility CorrectAnswerVisibility        @default(ALWAYS) /// When should correct answers be shown to learners
+  questionControls        Json?                           /// Question-level controls (e.g., allowCopy, allowPaste, allowRightClick)
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
   languageCode            String?                         /// The language code for the assignment
   currentVersionId        Int?                            /// The ID of the current active version
@@ -287,6 +288,7 @@ model AssignmentVersion {
   showSubmissionFeedback  Boolean                         @default(true) /// Show submission feedback
   showQuestions           Boolean                         @default(true) /// Show questions
   correctAnswerVisibility CorrectAnswerVisibility         @default(ALWAYS) /// When to show correct answers to learners
+  questionControls        Json?                           /// Question-level controls (e.g., allowCopy, allowPaste, allowRightClick)
   languageCode            String?                         /// Language code
   createdBy               String                          /// User who created this version
   createdAt               DateTime                        @default(now()) /// When version was created

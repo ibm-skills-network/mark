@@ -114,6 +114,19 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   })
   @Optional()
   comments?: string;
+
+  @ApiPropertyOptional({
+    description: "Question-level controls (copy, paste, right-click, print)",
+    type: "object",
+    required: false,
+  })
+  @Optional()
+  questionControls?: {
+    disableCopy?: boolean;
+    disablePaste?: boolean;
+    disableRightClick?: boolean;
+    disablePrint?: boolean;
+  };
 }
 
 export class AssignmentAttemptQuestions {

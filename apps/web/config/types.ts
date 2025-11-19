@@ -221,6 +221,7 @@ export type AuthorAssignmentState = {
   correctAnswerVisibility: CorrectAnswerVisibility;
   updatedAt: number;
   numberOfQuestionsPerAttempt?: number;
+  questionControls?: QuestionControls;
 };
 export type AuthorFileUploads = {
   filename: string;
@@ -599,6 +600,7 @@ export type ReplaceAssignmentRequest = {
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
+  questionControls?: QuestionControls;
   updatedAt: number;
   questionVariationNumber?: number;
   versionDescription?: string;
@@ -651,6 +653,14 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   preferredLanguage?: string;
 }
 
+export interface QuestionControls {
+  disableCopy?: boolean;
+  disablePaste?: boolean;
+  disableRightClick?: boolean;
+  disablePrint?: boolean;
+  [key: string]: boolean | undefined;
+}
+
 export interface AssignmentDetails {
   allotedTimeMinutes?: number;
   numAttempts?: number;
@@ -672,6 +682,7 @@ export interface AssignmentDetails {
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
   numberOfQuestionsPerAttempt?: number;
+  questionControls?: QuestionControls;
 }
 
 export interface AssignmentDetailsLocal extends AssignmentDetails {

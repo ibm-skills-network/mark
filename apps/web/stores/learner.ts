@@ -1007,7 +1007,7 @@ export const useAssignmentDetails = createWithEqualityFn<
         setGrade: (grade) => set({ grade }),
       }),
       {
-        name: "learner",
+        name: "learner-assignment-details",
         trace: true,
         traceLimit: 25,
         enabled: process.env.NODE_ENV === "development",

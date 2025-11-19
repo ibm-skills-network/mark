@@ -10,7 +10,11 @@ import {
   LearnerAssignmentState,
 } from "@/config/types";
 import { getSupportedLanguages } from "@/lib/talkToBackend";
-import { useLearnerOverviewStore, useLearnerStore } from "@/stores/learner";
+import {
+  useAssignmentDetails,
+  useLearnerOverviewStore,
+  useLearnerStore,
+} from "@/stores/learner";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -32,7 +36,10 @@ interface AssignmentSectionProps {
 
 const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails,
+  );
+  const questionControls = assignmentDetails?.questionControls;
   return (
     <div className="bg-white shadow rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
@@ -58,7 +65,10 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
             : "max-h-none opacity-100"
         }`}
       >
-        <MarkdownViewer className="text-gray-600 text-sm sm:text-base">
+        <MarkdownViewer
+          className="text-gray-600 text-sm sm:text-base"
+          allowCopy={!(questionControls?.disableCopy ?? false)}
+        >
           {content || `No ${title.toLowerCase()} provided.`}
         </MarkdownViewer>
       </div>
@@ -428,6 +438,91 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             title="Grading Criteria"
             content={gradingCriteriaOverview}
           />
+
+          {(() => {
+            const qc = assignment.questionControls;
+            if (!qc) return null;
+
+            const restrictions = [];
+
+            if (qc.disableCopy) {
+              restrictions.push({
+                title: "Copying Disabled",
+                description: "You cannot copy text during this assignment",
+              });
+            }
+
+            if (qc.disablePaste) {
+              restrictions.push({
+                title: "Pasting Disabled",
+                description: "You cannot paste content into answer fields",
+              });
+            }
+
+            if (qc.disableRightClick) {
+              restrictions.push({
+                title: "Right Click Disabled",
+                description: "Right-click context menu is disabled",
+              });
+            }
+
+            if (qc.disablePrint) {
+              restrictions.push({
+                title: "Printing Disabled",
+                description:
+                  "Print functionality is disabled for this assignment",
+              });
+            }
+
+            if (restrictions.length === 0) return null;
+
+            return (
+              <div className="bg-white shadow rounded-lg overflow-hidden">
+                <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+                    Assignment Restrictions
+                  </h2>
+                </div>
+                <div className="px-4 sm:px-6 py-4">
+                  <p className="text-gray-600 text-sm mb-4">
+                    The following restrictions are enabled for this assignment:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {restrictions.map((restriction, index) => (
+                      <div
+                        key={index}
+                        className="flex items-start gap-3 p-3 border border-orange-200 bg-orange-50 rounded-md"
+                      >
+                        <div className="flex-shrink-0 mt-0.5">
+                          <svg
+                            className="w-5 h-5 text-orange-600"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-sm font-medium text-gray-900">
+                            {restriction.title}
+                          </h3>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {restriction.description}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex justify-center mt-6">
             <BeginTheAssignmentButton
