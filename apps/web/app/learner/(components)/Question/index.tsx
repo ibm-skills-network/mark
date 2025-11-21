@@ -16,6 +16,7 @@ import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
+import SecurityMonitor from "../SecurityMonitor";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -41,23 +42,41 @@ function QuestionPage(props: Props) {
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
 
   useEffect(() => {
-    setTipsVersion("v1.0"); // change this version to update the tips
+    setTipsVersion("v1.0");
   }, []);
 
   useEffect(() => {
     const fetchAssignment = async () => {
-      //backend call to get the assignment details
+      if (process.env.NODE_ENV === "development") {
+        console.log("=== fetchAssignment called ===");
+        console.log("assignmentId:", assignmentId);
+      }
+
       const assignment = await getAssignment(assignmentId);
 
+      if (process.env.NODE_ENV === "development") {
+        console.log("=== getAssignment response ===");
+        console.log("Full assignment:", assignment);
+        console.log("questionControls field:", assignment?.questionControls);
+      }
+
       if (assignment) {
-        // Only set assignment details if they are different from the current state
-        // Fetched assignment will be stored in the global state, assignmentDetails
-        // Set the global state only if it is different from the fetched assignment
         if (
           !assignmentDetails ||
           assignmentDetails.id !== assignment.id ||
           JSON.stringify(assignmentDetails) !== JSON.stringify(assignment)
         ) {
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              "=== Question/index.tsx: Setting Assignment Details ===",
+            );
+            console.log("assignment from API:", assignment);
+            console.log(
+              "questionControls from API:",
+              assignment.questionControls,
+            );
+          }
+
           setAssignmentDetails({
             id: assignment.id,
             name: assignment.name,
@@ -73,6 +92,7 @@ function QuestionPage(props: Props) {
             published: assignment.published,
             questionOrder: assignment.questionOrder,
             updatedAt: assignment.updatedAt,
+            questionControls: assignment.questionControls,
           });
         }
       } else {
@@ -106,11 +126,8 @@ function QuestionPage(props: Props) {
 
     debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
 
-    // Use setQuestions to merge fresh assignment data with existing user responses
-    // This preserves any responses the user has already entered
     setQuestions(questionsWithStatus);
 
-    // Update other store properties that don't contain user responses
     const currentStoreUpdate = {
       activeAttemptId: id,
       expiresAt: normalizedExpiresAt,
@@ -204,6 +221,10 @@ function QuestionPage(props: Props) {
           <TipsView />
         </div>
       )}
+      {process.env.NODE_ENV === "development" && (
+        <div style={{ display: "none" }}></div>
+      )}
+      <SecurityMonitor questionControls={assignmentDetails?.questionControls} />
     </div>
   );
 }

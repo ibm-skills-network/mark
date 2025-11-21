@@ -45,6 +45,7 @@ export default function GradingProgressModal({
             />
           </svg>
         );
+
       case "failed":
         return (
           <svg
@@ -61,6 +62,7 @@ export default function GradingProgressModal({
             />
           </svg>
         );
+
       default:
         return null;
     }
@@ -83,11 +85,9 @@ export default function GradingProgressModal({
             className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4"
           >
             <div className="text-center">
-              {/* Animated Icon */}
               <div className="mb-6 relative">
                 {status === "processing" ? (
                   <div className="relative w-24 h-24 mx-auto">
-                    {/* Outer ring */}
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{
@@ -106,6 +106,7 @@ export default function GradingProgressModal({
                           stroke="#e5e7eb"
                           strokeWidth="8"
                         />
+
                         <circle
                           cx="50"
                           cy="50"
@@ -120,7 +121,6 @@ export default function GradingProgressModal({
                       </svg>
                     </motion.div>
 
-                    {/* Center percentage */}
                     <div className="absolute inset-0 flex items-center justify-center">
                       <motion.span
                         key={progress}
@@ -144,7 +144,6 @@ export default function GradingProgressModal({
                 )}
               </div>
 
-              {/* Title */}
               <h3 className="text-xl font-semibold mb-2">
                 {status === "processing" && "Grading Your Assignment"}
                 {status === "completed" && "Grading Complete!"}
@@ -154,7 +153,7 @@ export default function GradingProgressModal({
               <h3 className="text-gray-500 text-md mb-4">
                 Please don't close this tab. Your assignment is being marked.
               </h3>
-              {/* Message */}
+
               <motion.p
                 key={message}
                 initial={{ opacity: 0, y: 5 }}
@@ -164,7 +163,6 @@ export default function GradingProgressModal({
                 {message}
               </motion.p>
 
-              {/* Progress bar */}
               {status === "processing" && (
                 <div className="mb-6">
                   <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
@@ -174,7 +172,6 @@ export default function GradingProgressModal({
                       transition={{ duration: 0.5, ease: "easeOut" }}
                       className="bg-purple-500 h-full rounded-full relative"
                     >
-                      {/* Shimmer effect */}
                       <motion.div
                         animate={{ x: ["0%", "200%"] }}
                         transition={{

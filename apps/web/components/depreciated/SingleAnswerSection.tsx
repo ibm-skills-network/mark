@@ -44,10 +44,6 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
     });
   };
 
-  ////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////
-
   return (
     <div className="mt-4">
       <p>Choices:</p>
@@ -61,6 +57,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
             onChange={() => handleChoiceToggleSingleCorrect(index)}
             className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
           />
+
           <div className="ml-2"> {String.fromCharCode(65 + index)}.</div>
 
           <textarea
@@ -77,6 +74,7 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
               resize: "vertical",
             }}
           />
+
           <button
             className="ml-2 text-red-600"
             onClick={() => {

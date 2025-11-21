@@ -52,6 +52,7 @@ function normalizeAssignment(assignment: Assignment): Assignment {
           criteria: q.scoring.criteria,
         },
       ];
+
       delete q.scoring.criteria;
     }
 
@@ -67,6 +68,7 @@ function normalizeAssignment(assignment: Assignment): Assignment {
             })),
           },
         ];
+
         delete variant.scoring.criteria;
       }
     });
@@ -136,6 +138,7 @@ function AuthorHeader() {
     allotedTimeMinutes,
     updatedAt,
     numberOfQuestionsPerAttempt,
+    questionControls,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
     state.retakeAttemptCoolDownMinutes,
@@ -148,6 +151,7 @@ function AuthorHeader() {
     state.allotedTimeMinutes,
     state.updatedAt,
     state.numberOfQuestionsPerAttempt,
+    state.questionControls,
   ]);
   const [
     showSubmissionFeedback,
@@ -290,8 +294,6 @@ function AuthorHeader() {
   };
 
   const fetchAssignment = async () => {
-    // Check if there's a checked out version - if so, fetch that version's data
-    // But wait for versions to be loaded first
     const state = useAuthorStore.getState();
     const checkedOutVersion = state.checkedOutVersion;
     const versions = state.versions;
@@ -312,14 +314,11 @@ function AuthorHeader() {
       }
     }
 
-    // If checkedOutVersion exists but versions aren't loaded yet, wait
     if (checkedOutVersion && versions.length === 0) {
-      // Wait a bit for versions to load, then retry
       await new Promise((resolve) => setTimeout(resolve, 100));
-      return fetchAssignment(); // Retry
+      return fetchAssignment();
     }
 
-    // Otherwise, load the regular assignment
     const assignment = await getAssignment(parseInt(assignmentId, 10));
     if (assignment) {
       const newAssignment = normalizeAssignment({ ...assignment });
@@ -395,7 +394,6 @@ function AuthorHeader() {
     void fetchData();
   }, [assignmentId, router]);
 
-  // Listen for draft activation publishing events from VersionTreeView
   useEffect(() => {
     const handleTriggerHeaderPublish = (event: any) => {
       const {
@@ -406,13 +404,10 @@ function AuthorHeader() {
         afterPublish,
       } = event.detail;
 
-      // Store the afterPublish callback for later use
       const originalAfterPublish = afterPublish;
 
-      // Call handlePublishButton with the provided parameters
       handlePublishButton(description, publishImmediately)
         .then(() => {
-          // After successful publishing, execute the callback if provided
           if (
             originalAfterPublish &&
             typeof originalAfterPublish === "function"
@@ -514,6 +509,11 @@ function AuthorHeader() {
       gradingCriteriaOverview: string;
     } & { [key: string]: string | null };
 
+    if (process.env.NODE_ENV === "development") {
+      console.log("=== Publishing Assignment ===");
+      console.log("questionControls from store:", questionControls);
+    }
+
     const assignmentData: ReplaceAssignmentRequest = {
       ...encodedFields,
       numAttempts,
@@ -534,12 +534,21 @@ function AuthorHeader() {
       showAssignmentScore,
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
+      questionControls,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)
         : null,
       versionDescription: description,
       versionNumber: versionNumber,
     };
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("assignmentData being sent:", assignmentData);
+      console.log(
+        "questionControls in payload:",
+        assignmentData.questionControls,
+      );
+    }
     if (assignmentData.introduction === null) {
       toast.error(
         publishImmediately
@@ -571,7 +580,6 @@ function AuthorHeader() {
         }
         setProgressStatus("Completed");
 
-        // Reload versions to reflect the new version
         try {
           await loadVersions();
         } catch (error) {
@@ -701,7 +709,6 @@ function AuthorHeader() {
                 disabled={!questionsAreReadyToBePublished}
               />
 
-              {/* Admin Insights Button - Only show for admins/authors when assignment exists */}
               {(role === "admin" || role === "author") &&
                 activeAssignmentId && (
                   <button
@@ -796,6 +803,7 @@ function AuthorHeader() {
                 placeholder={`Draft - ${new Date().toLocaleDateString()}`}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+
               <p className="text-xs text-gray-500">
                 If left empty, a default name with timestamp will be used.
               </p>

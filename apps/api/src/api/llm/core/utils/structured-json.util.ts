@@ -11,7 +11,6 @@ function scoreCandidateJson(jsonString: string): number {
   try {
     const object = JSON.parse(jsonString) as Record<string, unknown>;
     let score = 0;
-    // Positive signals for structured-output style payloads
     if (typeof object.isValid === "boolean") score += 5;
     if (typeof object.overallFeedback === "string") score += 3;
     if (object.questionIssues && typeof object.questionIssues === "object")
@@ -24,7 +23,6 @@ function scoreCandidateJson(jsonString: string): number {
     if (typeof object.translatedText === "string") score += 4;
     if (Array.isArray(object.detections)) score += 3;
 
-    // Negative signals for domain DTO echoes
     if (
       ("id" in object && "question" in object && "choices" in object) ||
       ("assignmentId" in object && "type" in object && "question" in object)
@@ -38,15 +36,17 @@ function scoreCandidateJson(jsonString: string): number {
 }
 
 export function extractStructuredJSON(response: string): string {
-  // 1) If already valid JSON, return as-is
   try {
     JSON.parse(response);
     return response;
-  } catch {
-    // continue
+  } catch (error) {
+    console.warn(
+      `Error parsing JSON: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
   }
 
-  // 2) Gather candidates from fenced code blocks
   const codeBlocks: string[] = [];
   const codeBlockRegex = /```json\s*([\S\s]*?)\s*```/g;
   let match: RegExpExecArray | null;
@@ -56,7 +56,9 @@ export function extractStructuredJSON(response: string): string {
       JSON.parse(candidate);
       codeBlocks.push(candidate);
     } catch {
-      // ignore
+      console.warn(
+        "Could not parse JSON block from response, trying other methods",
+      );
     }
   }
 
@@ -85,7 +87,6 @@ export function extractStructuredJSON(response: string): string {
     }
   }
 
-  // 3) Fallback: scan for JSON object substrings
   const objectBlocks: string[] = [];
   const objectRegex = /{[\S\s]*?}/g;
   let objectMatch: RegExpExecArray | null;
@@ -95,7 +96,9 @@ export function extractStructuredJSON(response: string): string {
       JSON.parse(candidate);
       objectBlocks.push(candidate);
     } catch {
-      // ignore
+      console.warn(
+        "Could not parse JSON object from response, trying other methods",
+      );
     }
   }
 
@@ -124,7 +127,6 @@ export function extractStructuredJSON(response: string): string {
     }
   }
 
-  // 4) Nothing valid found; return original
   return response;
 }
 

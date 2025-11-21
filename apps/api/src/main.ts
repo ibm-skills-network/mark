@@ -27,6 +27,7 @@ import { AppModule } from "./app.module";
 import { AuthModule } from "./auth/auth.module";
 import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { winstonOptions } from "./logger/config";
+import { SerializeDatesInterceptor } from "./common/interceptors/serialize-dates.interceptor";
 
 if (process.env.NODE_ENV === "production") {
   instana({
@@ -58,7 +59,6 @@ async function bootstrap() {
       logger: WinstonModule.createLogger(winstonOptions),
     });
 
-    // Get configuration service for environment variables
     const configService = app.get(ConfigService);
 
     /**
@@ -105,6 +105,12 @@ async function bootstrap() {
     app.useGlobalGuards(app.select(AuthModule).get(RolesGlobalGuard));
 
     /**
+     * Global serialization interceptor
+     * Automatically serializes Date objects to ISO strings in API responses
+     */
+    app.useGlobalInterceptors(new SerializeDatesInterceptor());
+
+    /**
      * Swagger API documentation setup
      * Provides interactive API documentation at /api endpoint
      */
@@ -140,8 +146,8 @@ async function bootstrap() {
      * - headersTimeout: Time to wait for complete HTTP headers
      */
     const server = app.getHttpServer() as import("http").Server;
-    server.keepAliveTimeout = 65_000; // 65 seconds
-    server.headersTimeout = 66_000; // 66 seconds
+    server.keepAliveTimeout = 65_000;
+    server.headersTimeout = 66_000;
 
     /**
      * Graceful shutdown handler
@@ -153,23 +159,20 @@ async function bootstrap() {
       logger.log(`${signal} signal received, starting graceful shutdown`);
 
       try {
-        // Set a timeout for graceful shutdown (30 seconds)
         const shutdownTimeout = setTimeout(() => {
           logger.error("Graceful shutdown timeout, forcing exit");
           throw new Error("Graceful shutdown timeout");
         }, 30_000);
 
-        // Close the NestJS application
         await app.close();
 
-        // Clear the timeout if shutdown completed successfully
         clearTimeout(shutdownTimeout);
 
         logger.log("Application closed successfully");
         process.exit(0);
       } catch (error) {
         logger.error("Error during graceful shutdown:", error);
-        throw error; // Re-throw to trigger process exit
+        throw error;
       }
     };
 

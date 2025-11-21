@@ -9,6 +9,7 @@
 ## Quick Links
 
 - [Getting Started](#getting-started)
+- [Setup Guide](./SETUP.md)
 - [Key Features](#key-features)
 - [Technology Stack](#technology-stack)
 - [Contributing](./docs/CONTRIBUTING.md)
@@ -28,7 +29,8 @@
    ```
 
 2. **Follow the setup guide**
-   See [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for detailed setup instructions, environment configuration, and development workflows.
+   - **Quick Setup**: See [SETUP.md](./SETUP.md) for step-by-step instructions with troubleshooting
+   - **Full Guide**: See [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for detailed environment configuration and development workflows
 
 3. **Pick an issue**
    Browse the [project board](https://github.com/orgs/ibm-skills-network/projects/9) and assign yourself an issue.

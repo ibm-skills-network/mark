@@ -1,4 +1,3 @@
-// src/components/FileExplorer/SearchResults.tsx
 import React from "react";
 import {
   IconSearch,
@@ -41,7 +40,6 @@ const SearchResults: React.FC<SearchResultsProps> = ({
     return null;
   }
 
-  // If no results, show an empty state message
   if (results.length === 0) {
     return (
       <div className="text-gray-500 p-8 text-center rounded-lg border border-gray-200 bg-gray-50">

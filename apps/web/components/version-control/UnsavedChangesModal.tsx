@@ -35,6 +35,7 @@ export function UnsavedChangesModal({
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             onClick={onClose}
           />
+
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -44,7 +45,6 @@ export function UnsavedChangesModal({
           >
             <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/60 max-w-md w-full">
               <div className="p-6">
-                {/* Header */}
                 <div className="flex items-center space-x-3 mb-4">
                   <div className="p-2 bg-amber-100 rounded-lg">
                     <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -54,7 +54,6 @@ export function UnsavedChangesModal({
                   </h2>
                 </div>
 
-                {/* Content */}
                 <div className="space-y-4">
                   <p className="text-gray-600">
                     You have unsaved changes that will be lost if you{" "}
@@ -76,7 +75,6 @@ export function UnsavedChangesModal({
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div className="flex flex-col space-y-3 mt-6">
                   <button
                     onClick={onSaveAndProceed}

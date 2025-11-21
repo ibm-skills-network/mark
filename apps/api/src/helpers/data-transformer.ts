@@ -1,8 +1,25 @@
+import type { API_CONFIG, DATABASE_CONFIG } from "./transform-config";
+
 export interface TransformConfig {
   fields?: string[];
   exclude?: string[];
   deep?: boolean;
   preserveTypes?: boolean;
+}
+
+let _transformConfig:
+  | {
+      DATABASE_CONFIG: typeof DATABASE_CONFIG;
+      API_CONFIG: typeof API_CONFIG;
+    }
+  | undefined;
+
+function getTransformConfig() {
+  if (!_transformConfig) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment, unicorn/prefer-module
+    _transformConfig = require("./transform-config");
+  }
+  return _transformConfig;
 }
 
 export interface TransformResult<T = any> {
@@ -15,22 +32,13 @@ export interface TransformResult<T = any> {
   };
 }
 
-const HTML_TAG_REGEX = /<\/?[a-z][\S\s]*>/i;
-const BASE64_FULL_REGEX = /^[\d+/A-Za-z]+={0,2}$/;
-const BASE64_SEGMENT_REGEX = /[\d+/=A-Za-z]{12,}/g;
+const BASE64_REGEX = /^[\d+/A-Za-z]+=*$/;
 const MAX_BASE64_DEPTH = 5;
 
-interface Base64Payload {
-  candidate: string;
-  decoded: string;
-}
-
-function padBase64(value: string): string {
-  const remainder = value.length % 4;
-  if (remainder === 0) return value;
-  return value + "=".repeat(4 - remainder);
-}
-
+/**
+ * Check if a string contains mostly printable text
+ * Used to validate that decoded base64 produces readable content
+ */
 function isPrintableText(value: string): boolean {
   if (!value) return true;
 
@@ -51,14 +59,33 @@ function isPrintableText(value: string): boolean {
   return printableCount / value.length >= 0.85;
 }
 
-function decodeBase64String(value: string): string | null {
+/**
+ * Strictly validate and decode a base64 string
+ * Returns decoded string only if:
+ * 1. Input is valid base64 format
+ * 2. Decoded content is printable text
+ * 3. Re-encoding produces the same result (round-trip validation)
+ */
+function tryDecodeBase64(value: string): string | null {
+  if (!value || typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+
+  if (trimmed.length < 4) return null;
+
+  if (!BASE64_REGEX.test(trimmed)) return null;
+
+  const paddingNeeded = (4 - (trimmed.length % 4)) % 4;
+  const padded = trimmed + "=".repeat(paddingNeeded);
+
   try {
-    const decoded = Buffer.from(value, "base64").toString("utf8");
+    const decoded = Buffer.from(padded, "base64").toString("utf8");
+
     if (!isPrintableText(decoded)) {
       return null;
     }
 
-    const normalizedInput = value.replaceAll(/=+$/g, "");
+    const normalizedInput = trimmed.replaceAll(/=+$/g, "");
     const reencoded = Buffer.from(decoded, "utf8")
       .toString("base64")
       .replaceAll(/=+$/g, "");
@@ -69,46 +96,22 @@ function decodeBase64String(value: string): string | null {
   }
 }
 
-function findBase64Payload(rawValue: string): Base64Payload | null {
-  if (!rawValue) return null;
-
-  const trimmed = rawValue.trim();
-  if (!trimmed) return null;
-
-  const primaryCandidate =
-    trimmed.length >= 8 &&
-    BASE64_FULL_REGEX.test(trimmed) &&
-    decodeBase64String(trimmed);
-
-  if (typeof primaryCandidate === "string") {
-    return { candidate: trimmed, decoded: primaryCandidate };
-  }
-
-  const matches = trimmed.match(BASE64_SEGMENT_REGEX);
-  if (!matches) return null;
-
-  for (const match of matches) {
-    if (!match) continue;
-    const padded = padBase64(match);
-    const decoded = decodeBase64String(padded);
-    if (decoded !== null) {
-      return { candidate: padded, decoded };
-    }
-  }
-
-  return null;
-}
-
+/**
+ * Decode multiple layers of base64 encoding
+ * Handles cases where data was encoded multiple times
+ */
 function decodeBase64Layers(value: string): string {
+  if (!value || typeof value !== "string") return value;
+
   let current = value;
   let depth = 0;
 
   while (depth < MAX_BASE64_DEPTH) {
-    const payload = findBase64Payload(current);
-    if (!payload) break;
+    const decoded = tryDecodeBase64(current);
 
-    const decoded = payload.decoded;
-    if (decoded === current) break;
+    if (decoded === null || decoded === current) {
+      break;
+    }
 
     current = decoded;
     depth += 1;
@@ -242,6 +245,7 @@ function transformDataRecursive(
 
 /**
  * Determine if a field should be transformed
+ * Only transforms explicitly configured fields - no auto-detection
  */
 function shouldTransformField(
   key: string,
@@ -250,26 +254,27 @@ function shouldTransformField(
   fieldPath: string,
   operation: "encode" | "decode",
 ): boolean {
-  if (fields && fields.length > 0) {
-    return matchesConfiguredField(fields, key, fieldPath);
-  }
-
-  if (typeof value !== "string") {
+  if (!fields || fields.length === 0) {
     return false;
   }
 
-  const trimmedValue = value.trim();
-  const containsHtmlTags = HTML_TAG_REGEX.test(trimmedValue);
-  const base64Payload = findBase64Payload(value);
-
-  if (operation === "encode") {
-    const alreadyEncoded =
-      base64Payload !== null && base64Payload.candidate === trimmedValue;
-
-    return !alreadyEncoded && (value.length > 10 || containsHtmlTags);
+  const isConfigured = matchesConfiguredField(fields, key, fieldPath);
+  if (!isConfigured) {
+    return false;
   }
 
-  return base64Payload !== null;
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+    if (
+      operation === "encode" &&
+      /^\d+$/.test(trimmedValue) &&
+      trimmedValue.length <= 10
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -317,18 +322,7 @@ function matchesConfiguredField(
  * Check if a string is already Base64 encoded
  */
 function isBase64Encoded(value: string): boolean {
-  if (!value || typeof value !== "string") return false;
-
-  const trimmed = value.trim();
-  if (
-    !trimmed ||
-    trimmed.length % 4 !== 0 ||
-    !BASE64_FULL_REGEX.test(trimmed)
-  ) {
-    return false;
-  }
-
-  return decodeBase64String(trimmed) !== null;
+  return tryDecodeBase64(value) !== null;
 }
 
 /**
@@ -414,59 +408,27 @@ export function batchDecode<T = any>(
 }
 
 export const DataTransformer = {
-  encodeForDatabase: <T>(data: T) => {
-    const result = smartEncode(data, {
-      fields: [
-        "introduction",
-        "instructions",
-        "gradingCriteriaOverview",
-        "question",
-        "content",
-        "rubricQuestion",
-        "description",
-        "questions.choices.choice",
-        "questions.scoring.rubrics.rubricQuestion",
-        "questions.scoring.rubrics.criteria.description",
-        "learnerTextResponse",
-        "learnerChoices",
-      ],
-      deep: true,
-    });
+  encodeForDatabase: <T>(data: T, config?: TransformConfig) => {
+    const { DATABASE_CONFIG } = getTransformConfig();
+    const result = smartEncode(data, config || DATABASE_CONFIG);
     return result;
   },
 
-  decodeFromDatabase: <T>(data: T) => {
-    const result = smartDecode(data, {
-      fields: [
-        "introduction",
-        "instructions",
-        "gradingCriteriaOverview",
-        "question",
-        "content",
-        "rubricQuestion",
-        "description",
-        "questions.choices.choice",
-        "questions.scoring.rubrics.rubricQuestion",
-        "questions.scoring.rubrics.criteria.description",
-        "learnerTextResponse",
-        "learnerChoices",
-      ],
-      deep: true,
-    });
+  decodeFromDatabase: <T>(data: T, config?: TransformConfig) => {
+    const { DATABASE_CONFIG } = getTransformConfig();
+    const result = smartDecode(data, config || DATABASE_CONFIG);
     return result;
   },
 
-  encodeForAPI: <T>(data: T) =>
-    smartEncode(data, {
-      exclude: ["id", "createdAt", "updatedAt"],
-      deep: true,
-    }),
+  encodeForAPI: <T>(data: T, config?: TransformConfig) => {
+    const { API_CONFIG } = getTransformConfig();
+    return smartEncode(data, config || API_CONFIG);
+  },
 
-  decodeFromAPI: <T>(data: T) =>
-    smartDecode(data, {
-      exclude: ["id", "createdAt", "updatedAt"],
-      deep: true,
-    }),
+  decodeFromAPI: <T>(data: T, config?: TransformConfig) => {
+    const { API_CONFIG } = getTransformConfig();
+    return smartDecode(data, config || API_CONFIG);
+  },
 
   batchEncode,
   batchDecode,

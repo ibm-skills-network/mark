@@ -30,7 +30,7 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
   private retryCount = 0;
   private readonly maxRetries = 5;
-  private readonly retryDelay = 5000; // milliseconds
+  private readonly retryDelay = 5000;
 
   /**
    * Initializes the Prisma client with database configuration
@@ -83,7 +83,7 @@ export class PrismaService
       try {
         await this.$connect();
         this.logger.log("Database connected successfully");
-        this.retryCount = 0; // Reset counter on success
+        this.retryCount = 0;
         return;
       } catch (error) {
         this.retryCount++;
@@ -98,7 +98,6 @@ export class PrismaService
           );
         }
 
-        // Wait before next retry attempt
         await this.delay(this.retryDelay);
       }
     }

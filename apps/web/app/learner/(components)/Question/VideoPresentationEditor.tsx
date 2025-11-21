@@ -701,6 +701,7 @@ const VideoPresentationEditor = ({
                 }
                 className="border rounded p-1 w-16"
               />
+
               <input
                 type="number"
                 value={trimStartSeconds}
@@ -728,6 +729,7 @@ const VideoPresentationEditor = ({
                 }
                 className="border rounded p-1 w-16"
               />
+
               <input
                 type="number"
                 value={trimEndSeconds}
@@ -748,6 +750,7 @@ const VideoPresentationEditor = ({
                   controls
                   className="w-full mt-2 bg-black"
                 />
+
                 <button
                   onClick={removeTrimmedVideo}
                   className="mt-2 px-2 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"

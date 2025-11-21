@@ -204,6 +204,7 @@ export class QuestionService {
           type: questionDto.type,
           answer: questionDto.answer ?? false,
           totalPoints: questionDto.totalPoints ?? 0,
+          authorComment: questionDto.authorComment ?? null,
           choices: questionDto.choices,
           scoring: questionDto.scoring,
           maxWords: questionDto.maxWords,
@@ -213,14 +214,13 @@ export class QuestionService {
           liveRecordingConfig: questionDto.liveRecordingConfig,
           videoPresentationConfig: questionDto.videoPresentationConfig,
           gradingContextQuestionIds: questionDto.gradingContextQuestionIds,
-          isDeleted: false, // Explicitly set to false during publishing
+          isDeleted: false,
         });
 
         if (!existingQuestion) {
           frontendToBackendIdMap.set(questionDto.id, upsertedQuestion.id);
         }
 
-        // Always translate the original question (with variantId: null)
         await updateProgress(
           questionStartProgress + progressPerQuestion * 0.5,
           `Translating question ${index + 1}`,
@@ -230,8 +230,8 @@ export class QuestionService {
           assignmentId,
           upsertedQuestion.id,
           questionDto,
-          jobId || 0, // Use main job or fallback
-          true, // Force retranslation on every publish
+          jobId || 0,
+          true,
         );
 
         const variantCount = questionDto.variants?.length || 0;
@@ -247,8 +247,7 @@ export class QuestionService {
             questionDto.variants || [],
             existingQuestion?.variants || [],
             jobId,
-            // checkVariantsChanged || forceTranslation
-            true, // Always force translation for variants
+            true,
           );
         }
 
@@ -258,7 +257,6 @@ export class QuestionService {
         );
       }
 
-      // Final cleanup
       await updateProgress(
         FINAL_CLEANUP_RANGE.start,
         "Finalizing question processing",
@@ -642,15 +640,13 @@ export class QuestionService {
               }));
         }
 
-        // Always translate variants, regardless of jobId
         await this.translationService.translateVariant(
           assignmentId,
           questionId,
           updatedVariant.id,
           updatedVariant as unknown as VariantDto,
-          jobId || 0, // Use 0 as fallback jobId for non-job contexts
-          // contentChanged // Force retranslation only if content changed
-          true, // Always force translation for existing variants
+          jobId || 0,
+          true,
         );
       } else {
         const newVariant = await this.variantRepository.create(variantData);
@@ -664,14 +660,13 @@ export class QuestionService {
           });
         }
 
-        // Always translate new variants, regardless of jobId
         await this.translationService.translateVariant(
           assignmentId,
           questionId,
           newVariant.id,
           newVariant as unknown as VariantDto,
-          jobId || 0, // Use 0 as fallback jobId for non-job contexts
-          true, // Always force translation for new variants
+          jobId || 0,
+          true,
         );
       }
     }

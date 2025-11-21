@@ -32,7 +32,6 @@ export class TokenCounterService implements ITokenCounter {
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
-      // Rough fallback
       return Math.ceil(text.length / 4);
     }
   }
@@ -44,12 +43,8 @@ export class TokenCounterService implements ITokenCounter {
    */
   private countLlamaTokens(text: string): number {
     try {
-      // For now, use the same encoding as GPT models
-      // In the future, this could be replaced with actual Llama tokenizer
       return this.encoding.encode(text).length;
     } catch {
-      // Fallback to character-based estimation
-      // Llama models typically have similar token-to-character ratios as GPT
       return Math.ceil(text.length / 4);
     }
   }

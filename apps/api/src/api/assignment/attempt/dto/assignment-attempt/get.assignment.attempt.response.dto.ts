@@ -9,6 +9,7 @@ import {
 import { Type } from "class-transformer";
 import { AttemptQuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "../../../question/dto/create.update.question.request.dto";
+import { IsOptional, IsString } from "class-validator";
 
 export class AssignmentAttemptResponseDto {
   @ApiProperty({
@@ -113,6 +114,19 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   })
   @Optional()
   comments?: string;
+
+  @ApiPropertyOptional({
+    description: "Question-level controls (copy, paste, right-click, print)",
+    type: "object",
+    required: false,
+  })
+  @Optional()
+  questionControls?: {
+    disableCopy?: boolean;
+    disablePaste?: boolean;
+    disableRightClick?: boolean;
+    disablePrint?: boolean;
+  };
 }
 
 export class AssignmentAttemptQuestions {
@@ -129,6 +143,15 @@ export class AssignmentAttemptQuestions {
     required: true,
   })
   totalPoints: number;
+
+  @ApiPropertyOptional({
+    description: "Author comment or note on this question",
+    type: String,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  authorComment?: string | null;
 
   @ApiProperty({
     description: "Type of the question.",

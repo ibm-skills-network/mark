@@ -115,7 +115,6 @@ export class LLMAssignmentService {
       return null;
     }
 
-    // Return assigned model or default model
     if (feature.assignments.length > 0) {
       return feature.assignments[0].model.modelKey;
     }
@@ -147,7 +146,6 @@ export class LLMAssignmentService {
     } = request;
 
     try {
-      // Find the feature
       const feature = await this.prisma.aIFeature.findUnique({
         where: { featureKey },
       });
@@ -156,7 +154,6 @@ export class LLMAssignmentService {
         throw new NotFoundException(`Feature ${featureKey} not found`);
       }
 
-      // Find the model
       const model = await this.prisma.lLMModel.findUnique({
         where: { modelKey },
       });
@@ -169,7 +166,6 @@ export class LLMAssignmentService {
         throw new Error(`Model ${modelKey} is not active`);
       }
 
-      // Check if an assignment already exists for this feature-model pair
       const existingAssignment =
         await this.prisma.lLMFeatureAssignment.findUnique({
           where: {
@@ -205,7 +201,6 @@ export class LLMAssignmentService {
             },
           }));
 
-      // Deactivate all other assignments for this feature
       await this.prisma.lLMFeatureAssignment.updateMany({
         where: {
           featureId: feature.id,
@@ -218,7 +213,6 @@ export class LLMAssignmentService {
         },
       });
 
-      // Clear cache for this feature since assignment changed
       this.resolverService.clearCacheForFeature(featureKey);
 
       this.logger.log(
@@ -252,7 +246,6 @@ export class LLMAssignmentService {
         throw new NotFoundException(`Feature ${featureKey} not found`);
       }
 
-      // Deactivate current assignments
       const result = await this.prisma.lLMFeatureAssignment.updateMany({
         where: {
           featureId: feature.id,
@@ -264,7 +257,6 @@ export class LLMAssignmentService {
         },
       });
 
-      // Clear cache for this feature since assignment was removed
       this.resolverService.clearCacheForFeature(featureKey);
 
       this.logger.log(
@@ -406,7 +398,6 @@ export class LLMAssignmentService {
    * Reset all assignments to defaults
    */
   async resetToDefaults(assignedBy?: string): Promise<number> {
-    // Get all features with default models
     const featuresWithDefaults = await this.prisma.aIFeature.findMany({
       where: {
         defaultModelKey: { not: null },

@@ -103,6 +103,7 @@ function TipsView() {
               onChange={() => setPersistTips(!persistTips)}
               checked={persistTips}
             />
+
             <p className="text-gray-600 text-sm">Don't Show This Again</p>
           </div>
         </div>
@@ -193,6 +194,7 @@ function TipsView() {
           onChange={() => setPersistTips(!persistTips)}
           checked={persistTips}
         />
+
         <p className="text-gray-600 text-sm">Don't Show This Again</p>
       </div>
     </div>

@@ -26,18 +26,17 @@ import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
-// Interface for raw image upload data from request
 interface RawImageUpload {
   filename: string;
   imageData?: string;
-  content?: string; // legacy field name for imageData
+  content?: string;
   imageKey?: string;
-  key?: string; // legacy field name for imageKey
+  key?: string;
   imageBucket?: string;
-  bucket?: string; // legacy field name for imageBucket
+  bucket?: string;
   imageUrl?: string;
   mimeType?: string;
-  fileType?: string; // legacy field name for mimeType
+  fileType?: string;
   imageAnalysisResult?: ImageAnalysisResult;
 }
 
@@ -77,11 +76,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       );
     }
 
-    console.log(
-      `Validating ${requestDto.learnerFileResponse.length} images for question ${question.id}`,
-    );
-
-    // Validate each image
     for (const image of requestDto.learnerFileResponse) {
       this.validateSingleImage(image as RawImageUpload);
     }
@@ -108,7 +102,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
         throw new BadRequestException("Image filename is required");
       }
 
-      // Handle both new and legacy field names
       const imageData = rawImage.imageData ?? rawImage.content;
       const imageKey = rawImage.imageKey ?? rawImage.key;
       const imageBucket = rawImage.imageBucket ?? rawImage.bucket;
@@ -116,7 +109,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       const learnerImage: LearnerImageUpload = {
         filename: rawImage.filename,
         imageUrl: rawImage.imageUrl || "",
-        // Only set imageData if it's not the "InCos" placeholder
         imageData: imageData && imageData !== "InCos" ? imageData : "",
         imageBucket: imageBucket,
         imageKey: imageKey,
@@ -131,7 +123,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       learnerImages.push(learnerImage);
     }
 
-    console.log(`Extracted ${learnerImages.length} images for grading`);
     return learnerImages;
   }
 
@@ -145,10 +136,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
     }
 
     const textualResponse = this.extractTextualResponse(learnerResponse);
-
-    console.log(
-      `Grading question ${question.id} with ${learnerResponse.length} images`,
-    );
 
     const primaryImage = learnerResponse[0];
     const imageBasedQuestionEvaluateModel = new ImageBasedQuestionEvaluateModel(
@@ -165,24 +152,20 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       textualResponse,
     );
 
-    // Grade using the image grading service
     const gradingResult =
       await this.imageGradingService.gradeImageBasedQuestion(
         imageBasedQuestionEvaluateModel,
         context.assignmentId,
       );
 
-    // Validate the grading result
     const validatedResult = this.validateGradingConsistencyImage(
       gradingResult,
       question,
     );
 
-    // Create response DTO
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     AttemptHelper.assignFeedbackToResponse(validatedResult, responseDto);
 
-    // Enhanced metadata
     responseDto.metadata = {
       ...responseDto.metadata,
       imageCount: learnerResponse.length,
@@ -197,10 +180,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       maxPossiblePoints: question.totalPoints,
       scoringType: question.scoring?.type || "POINTS",
     };
-
-    console.log(
-      `Successfully graded question ${question.id} - awarded ${responseDto.totalPoints}/${question.totalPoints} points`,
-    );
 
     await this.recordGrading(
       question,
@@ -222,10 +201,8 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
     const feedback = response.feedback || "";
     const maxPoints = question.totalPoints || 0;
 
-    // Ensure points are within valid range
     const validatedPoints = Math.min(Math.max(points, 0), maxPoints);
 
-    // Check if feedback mentions specific point values
     const pointsInFeedback = this.extractPointsFromFeedback(feedback);
 
     if (pointsInFeedback.length > 0) {
@@ -234,13 +211,11 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
         0,
       );
 
-      // If there's a significant discrepancy, log it and potentially adjust
       if (Math.abs(totalPointsInFeedback - validatedPoints) > 1) {
         console.warn(
           `Grading inconsistency detected: feedback mentions ${totalPointsInFeedback} points but grade is ${validatedPoints}`,
         );
 
-        // If the feedback points are more reasonable, use those
         if (totalPointsInFeedback <= maxPoints && totalPointsInFeedback >= 0) {
           return {
             points: totalPointsInFeedback,
@@ -254,7 +229,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       }
     }
 
-    // Enhance feedback to ensure it's consistent with the points awarded
     const enhancedFeedback = this.enhanceFeedbackConsistency(
       feedback,
       validatedPoints,
@@ -269,12 +243,11 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
   private extractPointsFromFeedback(feedback: string): number[] {
     const points: number[] = [];
 
-    // Look for patterns specifically for final scores, avoiding intermediate scores
     const patterns = [
       /(?:total\s*score|final\s*score|overall\s*score):\s*(\d+)/gi,
       /(?:awarded|final\s*grade):\s*(\d+)\s*(?:points?|pts?)?$/gi,
-      /^(?:score|total):\s*(\d+)\s*(?:\/\s*\d+)?/gm, // Line starting with score
-      /(\d+)\s*(?:points?|pts?)\s*(?:out\s*of|\/)\s*\d+\s*(?:total|maximum)?$/gi, // Final score format
+      /^(?:score|total):\s*(\d+)\s*(?:\/\s*\d+)?/gm,
+      /(\d+)\s*(?:points?|pts?)\s*(?:out\s*of|\/)\s*\d+\s*(?:total|maximum)?$/gi,
     ];
 
     for (const pattern of patterns) {
@@ -287,9 +260,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       }
     }
 
-    // If no specific final score patterns found, avoid parsing intermediate scores
-    // to prevent the false positive warnings
-
     return points;
   }
 
@@ -300,7 +270,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
   ): string {
     let enhancedFeedback = originalFeedback;
 
-    // If feedback doesn't clearly state the final score, add it
     const hasScoreMention =
       /(?:total|final|score|awarded).*?(\d+).*?(?:points?|\/)/i.test(
         originalFeedback,
@@ -310,7 +279,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       enhancedFeedback += `\n\nFinal Score: ${awardedPoints}/${maxPoints} points`;
     }
 
-    // Add percentage if helpful
     const percentage = Math.round((awardedPoints / maxPoints) * 100);
     if (
       !enhancedFeedback.includes("%") &&
@@ -319,7 +287,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       enhancedFeedback += ` (${percentage}%)`;
     }
 
-    // Ensure the feedback tone matches the score
     const scoreRatio = awardedPoints / maxPoints;
     if (scoreRatio >= 0.9 && !this.containsPositiveLanguage(originalFeedback)) {
       enhancedFeedback = "Excellent work! " + enhancedFeedback;
@@ -362,29 +329,14 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
     );
   }
   private validateSingleImage(image: RawImageUpload): void {
-    // Handle both new and legacy field names
     const imageData = image.imageData ?? image.content;
     const imageKey = image.imageKey ?? image.key;
     const imageBucket = image.imageBucket ?? image.bucket;
 
-    // "InCos" means no direct content, should use storage reference
     const hasDirectContent = Boolean(
       (imageData && imageData !== "InCos") || image.imageUrl,
     );
     const hasCOSReference = Boolean(imageKey && imageBucket);
-
-    console.log(`Validating image ${image.filename}:`, {
-      imageData: imageData
-        ? imageData === "InCos"
-          ? "InCos (no direct content)"
-          : "has content"
-        : "none",
-      imageUrl: image.imageUrl || "none",
-      imageKey: imageKey || "none",
-      imageBucket: imageBucket || "none",
-      hasDirectContent,
-      hasCOSReference,
-    });
 
     if (!hasDirectContent && !hasCOSReference) {
       throw new BadRequestException(
@@ -398,7 +350,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       );
     }
 
-    // Validate file size if available (skip "InCos" placeholder)
     if (
       imageData &&
       imageData !== "InCos" &&
@@ -413,7 +364,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
   private extractTextualResponse(
     learnerResponse: LearnerImageUpload[],
   ): string {
-    // Extract any detected text from image analysis
     const detectedTexts = learnerResponse
       .flatMap((img) => img.imageAnalysisResult?.detectedText || [])
       .map((textInfo) => textInfo.text)
@@ -437,7 +387,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
   }
 
   private isValidImageFormat(filename: string): boolean {
-    console.log(`Checking image format for filename: ${filename}`);
     const supportedFormats = [
       "jpg",
       "jpeg",

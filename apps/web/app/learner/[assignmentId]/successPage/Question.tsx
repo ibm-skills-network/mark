@@ -13,7 +13,10 @@ import {
   getStoredGithubToken,
 } from "@/lib/talkToBackend";
 import { parseLearnerResponse } from "@/lib/utils";
-import { useLearnerOverviewStore } from "@/stores/learner";
+import {
+  useAssignmentDetails,
+  useLearnerOverviewStore,
+} from "@/stores/learner";
 import { CheckIcon, SparklesIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { Octokit } from "@octokit/rest";
 import { FC, useEffect, useMemo, useState } from "react";
@@ -131,6 +134,10 @@ const Question: FC<Props> = ({
     currentIndex: 0,
   });
 
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails,
+  );
+  const questionControls = assignmentDetails?.questionControls;
   const [octokit, setOctokit] = useState<Octokit | null>(null);
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [token, setToken] = useState<string | null>(null);
@@ -517,7 +524,10 @@ const Question: FC<Props> = ({
               : "bg-gray-50 border border-gray-300 rounded p-2"
           }`}
         >
-          <MarkdownViewer className="text-gray-800 ">
+          <MarkdownViewer
+            className="text-gray-800"
+            allowCopy={!(questionControls?.disableCopy ?? false)}
+          >
             {learnerResponse.toString()}
           </MarkdownViewer>
         </p>
@@ -720,6 +730,7 @@ const Question: FC<Props> = ({
                           strokeWidth={2}
                           d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                         />
+
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -800,7 +811,10 @@ const Question: FC<Props> = ({
         )}
       </div>
 
-      <MarkdownViewer className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700">
+      <MarkdownViewer
+        className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700"
+        allowCopy={!(questionControls?.disableCopy ?? false)}
+      >
         {questionText}
       </MarkdownViewer>
 

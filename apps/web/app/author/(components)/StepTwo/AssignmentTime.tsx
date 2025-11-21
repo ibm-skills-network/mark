@@ -81,6 +81,7 @@ const Component: FC<Props> = () => {
               onChange={(e) => setAllotedTimeMinutes(~~e.target.value)}
               value={allotedTimeMinutes || ""}
             />
+
             <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
               min
             </span>
@@ -104,6 +105,7 @@ const Component: FC<Props> = () => {
               onChange={(e) => setTimeEstimateMinutes(~~e.target.value)}
               value={timeEstimateMinutes || ""}
             />
+
             <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
               min
             </span>

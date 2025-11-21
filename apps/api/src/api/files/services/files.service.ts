@@ -175,8 +175,6 @@ export class FilesService {
     bucket: string,
     key: string,
   ): Promise<any> {
-    // Skip bucket validation - let the actual S3 operation handle any bucket issues
-    // This matches the behavior of presigned URL uploads which work fine
     const result = await this.s3Service.putObject({
       Bucket: bucket,
       Key: key,

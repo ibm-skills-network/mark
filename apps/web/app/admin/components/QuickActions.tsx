@@ -175,9 +175,8 @@ export function QuickActions({
 
       setResult(actionResult);
       onActionComplete?.(actionResult);
-      setIsOpen(false); // Close modal after successful execution
+      setIsOpen(false);
 
-      // Animate results appearance
       setTimeout(() => {
         setShowResults(true);
       }, 300);
@@ -188,7 +187,6 @@ export function QuickActions({
     }
   };
 
-  // Reset state when modal closes
   const handleModalOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open) {
@@ -227,7 +225,6 @@ export function QuickActions({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Category Filter */}
           <div className="flex items-center gap-4">
             <label className="text-sm font-medium">Filter by category:</label>
             <Select
@@ -247,7 +244,6 @@ export function QuickActions({
             </Select>
           </div>
 
-          {/* Quick Action Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredActions.map((action) => {
               const Icon = action.icon;
@@ -259,7 +255,10 @@ export function QuickActions({
                     isSelected
                       ? "ring-2 ring-blue-500 border-blue-300 shadow-lg"
                       : "hover:border-blue-200"
-                  } ${action.color.replace("bg-", "hover:bg-").replace("text-", "hover:text-").replace("border-", "hover:border-")}`}
+                  } ${action.color
+                    .replace("bg-", "hover:bg-")
+                    .replace("text-", "hover:text-")
+                    .replace("border-", "hover:border-")}`}
                   onClick={() => setSelectedAction(action.id)}
                 >
                   <CardHeader className="pb-3">
@@ -286,14 +285,12 @@ export function QuickActions({
             })}
           </div>
 
-          {/* Action Controls */}
           {selectedAction && (
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle className="text-sm">Execute Action</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Results Limit */}
                 <div className="flex items-center gap-4">
                   <label className="text-sm font-medium">Results Limit:</label>
                   <Select
@@ -312,7 +309,6 @@ export function QuickActions({
                   </Select>
                 </div>
 
-                {/* Execute Button */}
                 <Button
                   onClick={handleExecuteAction}
                   disabled={loading}
@@ -331,7 +327,6 @@ export function QuickActions({
                   )}
                 </Button>
 
-                {/* Error Display */}
                 {error && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
                     <div className="flex items-center gap-3">

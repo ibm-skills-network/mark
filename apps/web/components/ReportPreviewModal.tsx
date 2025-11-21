@@ -39,7 +39,7 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
       "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
     },
     multiple: false,
-    maxSize: 10 * 1024 * 1024, // 10MB
+    maxSize: 10 * 1024 * 1024,
     onDropRejected: (rejectedFiles) => {
       const error = rejectedFiles[0]?.errors[0];
       if (error?.code === "file-too-large") {
@@ -137,7 +137,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Update form fields when initialData changes
   useEffect(() => {
     if (initialData) {
       setIssueType(initialData.issueType || getDefaultIssueType(reportType));
@@ -145,7 +144,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
       setSeverity(initialData.severity || "info");
       setScreenshot(initialData.screenshot || null);
     } else {
-      // Reset form when no initial data
       setIssueType(getDefaultIssueType(reportType));
       setDescription("");
       setSeverity("info");
@@ -214,18 +212,21 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
           { value: "BUG", label: "Bug Report" },
           { value: "OTHER", label: "Other" },
         ];
+
       case "suggestion":
         return [
           { value: "SUGGESTION", label: "Feature Suggestion" },
           { value: "FEEDBACK", label: "Improvement Idea" },
           { value: "OTHER", label: "Other Suggestion" },
         ];
+
       case "inquiry":
         return [
           { value: "OTHER", label: "General Question" },
           { value: "FEEDBACK", label: "How-to Question" },
           { value: "BUG", label: "Technical Question" },
         ];
+
       default:
         return [
           { value: "BUG", label: "Bug/Technical Issue" },
@@ -244,7 +245,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      // Use the onSubmit prop to call handleReportPreview with "submit" action
       onSubmit("submit", {
         issueType,
         description,
@@ -254,7 +254,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
         attemptId: attemptId,
       });
 
-      // Reset form and close modal
       setIssueType(getDefaultIssueType(reportType));
       setDescription("");
       setSeverity("info");
@@ -314,7 +313,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
             </p>
 
             <div className="space-y-6">
-              {/* Type Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Type
@@ -332,7 +330,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 </select>
               </div>
 
-              {/* Description */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Description *
@@ -347,7 +344,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 />
               </div>
 
-              {/* Priority/Severity */}
               {reportType === "report" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -366,7 +362,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 </div>
               )}
 
-              {/* Assignment ID (if available) */}
               {initialData?.assignmentId && initialData.assignmentId !== 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -381,7 +376,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 </div>
               )}
 
-              {/* Screenshot Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Screenshot (optional)
@@ -393,7 +387,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-3 justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={handleCancel}

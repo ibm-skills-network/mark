@@ -1,6 +1,5 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-// src/api/assignment/v2/services/grading-consistency.service.ts
 import * as crypto from "node:crypto";
 import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
@@ -61,8 +60,8 @@ export class GradingConsistencyService implements OnModuleDestroy {
   private readonly logger: Logger;
   private readonly gradingCache = new Map<string, GradingRecord[]>();
   private readonly cacheLocks = new Map<string, Promise<void>>();
-  private readonly maxCacheSize = 1000; // Maximum cache entries
-  private readonly cacheCleanupInterval = 3_600_000; // 1 hour
+  private readonly maxCacheSize = 1000;
+  private readonly cacheCleanupInterval = 3_600_000;
   private cleanupTimer?: NodeJS.Timeout;
 
   constructor(
@@ -73,7 +72,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
       context: GradingConsistencyService.name,
     });
 
-    // Start periodic cache cleanup
     this.cleanupTimer = setInterval(() => {
       this.cleanupCache();
     }, this.cacheCleanupInterval);
@@ -94,10 +92,8 @@ export class GradingConsistencyService implements OnModuleDestroy {
     questionType: QuestionType,
   ): string {
     try {
-      // Normalize the response for comparison
       const normalized = this.normalizeResponse(response, questionType);
 
-      // Create a hash combining question and normalized response
       const hash = crypto
         .createHash("sha256")
         .update(`${questionId}:${normalized}`)
@@ -107,7 +103,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
       return hash;
     } catch (error) {
       this.logger.error("Error generating response hash:", error);
-      // Return a fallback hash
       return crypto.randomBytes(16).toString("hex");
     }
   }
@@ -122,33 +117,30 @@ export class GradingConsistencyService implements OnModuleDestroy {
     questionType: QuestionType,
   ): Promise<ConsistencyCheck> {
     try {
-      // Check cache first
       const cacheKey = `q_${questionId}`;
       const cachedRecords = this.gradingCache.get(cacheKey) || [];
 
-      // Check cached records first (faster)
       for (const record of cachedRecords) {
         if (this.isSimilarHash(responseHash, record.responseHash)) {
           return {
             similar: true,
             previousGrade: record.points,
             previousFeedback: record.feedback,
-            deviationPercentage: 0, // Exact match
+            deviationPercentage: 0,
             shouldAdjust: false,
           };
         }
       }
 
-      // Check database for recent similar responses
       const recentGradings = await this.prisma.gradingAudit.findMany({
         where: {
           questionId,
           timestamp: {
-            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
           },
         },
         orderBy: { timestamp: "desc" },
-        take: 50, // Limit for performance
+        take: 50,
         select: {
           id: true,
           requestPayload: true,
@@ -157,7 +149,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
         },
       });
 
-      // Analyze for similar responses
       for (const grading of recentGradings) {
         try {
           const requestData = this.safeJsonParse<ParsedRequestPayload>(
@@ -181,14 +172,14 @@ export class GradingConsistencyService implements OnModuleDestroy {
               questionType,
             )
           ) {
-            const deviationPercentage = 0; // Will be calculated when current grade is known
+            const deviationPercentage = 0;
 
             return {
               similar: true,
               previousGrade: responseData.totalPoints || 0,
               previousFeedback: JSON.stringify(responseData.feedback || ""),
               deviationPercentage,
-              shouldAdjust: false, // Will be determined after grading
+              shouldAdjust: false,
             };
           }
         } catch (error) {
@@ -234,7 +225,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
         timestamp: new Date(),
       };
 
-      // Update cache atomically
       await this.atomicCacheUpdate(`q_${questionId}`, record);
     } catch (error) {
       this.logger.error("Error recording grading:", error);
@@ -260,14 +250,12 @@ export class GradingConsistencyService implements OnModuleDestroy {
       return { valid: false, issues, corrections: [] };
     }
 
-    // Ensure we have scores for all rubrics
     if (rubricScores.length !== scoringCriteria.rubrics.length) {
       issues.push(
         `Rubric count mismatch: ${rubricScores.length} scores for ${scoringCriteria.rubrics.length} rubrics`,
       );
     }
 
-    // Validate each rubric score
     const maxIndex = Math.min(
       rubricScores.length,
       scoringCriteria.rubrics.length,
@@ -285,7 +273,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
         continue;
       }
 
-      // Check if points are valid for this rubric
       const validPoints = rubric.criteria
         .filter((c: CriteriaDto) => c && typeof c.points === "number")
         .map((c: CriteriaDto) => c.points);
@@ -370,7 +357,9 @@ export class GradingConsistencyService implements OnModuleDestroy {
           }%`;
           distribution[range] = (distribution[range] || 0) + 1;
         } catch {
-          // Skip invalid records
+          this.logger.warn(
+            `Error parsing grading response: ${grading.responsePayload}`,
+          );
         }
       }
 
@@ -419,21 +408,16 @@ export class GradingConsistencyService implements OnModuleDestroy {
 
     let normalized = response.toLowerCase().trim();
 
-    // Limit length for performance
     if (normalized.length > 1000) {
       normalized = normalized.slice(0, 1000);
     }
 
-    // Remove extra whitespace
     normalized = normalized.replaceAll(/\s+/g, " ");
 
-    // Remove common punctuation for comparison
     normalized = normalized.replaceAll(/[!"',.:;?]/g, "");
 
-    // Type-specific normalization
     switch (questionType) {
       case QuestionType.TEXT: {
-        // Remove common filler words for text comparison
         const fillerWords = [
           "the",
           "a",
@@ -451,20 +435,15 @@ export class GradingConsistencyService implements OnModuleDestroy {
           const regex = new RegExp(`\\b${word}\\b`, "g");
           normalized = normalized.replace(regex, "");
         }
-        // Remove extra spaces created by word removal
         normalized = normalized.replaceAll(/\s+/g, " ").trim();
         break;
       }
-
       case QuestionType.SINGLE_CORRECT:
       case QuestionType.MULTIPLE_CORRECT: {
-        // Normalize choice indicators
         normalized = normalized.replaceAll(/\b(option|choice|answer)\s*/gi, "");
         break;
       }
-
       case QuestionType.TRUE_FALSE: {
-        // Normalize boolean responses
         if (/\b(true|yes|correct|right)\b/i.test(normalized)) {
           normalized = "true";
         } else if (/\b(false|no|incorrect|wrong)\b/i.test(normalized)) {
@@ -492,7 +471,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
     const normalized1 = this.normalizeResponse(response1, questionType);
     const normalized2 = this.normalizeResponse(response2, questionType);
 
-    // For exact match types (choices, true/false)
     if (
       questionType === QuestionType.SINGLE_CORRECT ||
       questionType === QuestionType.MULTIPLE_CORRECT ||
@@ -501,9 +479,8 @@ export class GradingConsistencyService implements OnModuleDestroy {
       return normalized1 === normalized2;
     }
 
-    // For text responses, use similarity threshold
     const similarity = this.calculateSimilarity(normalized1, normalized2);
-    return similarity > 0.85; // 85% similarity threshold
+    return similarity > 0.85;
   }
 
   /**
@@ -527,7 +504,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
       return 1;
     }
 
-    // Use a more efficient algorithm for long strings
     if (longer.length > 500) {
       return this.calculateJaccardSimilarity(string1, string2);
     }
@@ -556,13 +532,11 @@ export class GradingConsistencyService implements OnModuleDestroy {
     const m = string1.length;
     const n = string2.length;
 
-    // Create a 2D array for dynamic programming
     const dp: number[][] = Array.from({ length: m + 1 }, () =>
       // eslint-disable-next-line unicorn/no-new-array
       new Array<number>(n + 1).fill(0),
     );
 
-    // Initialize first row and column
     for (let index = 0; index <= m; index++) {
       dp[index][0] = index;
     }
@@ -570,7 +544,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
       dp[0][index] = index;
     }
 
-    // Fill the matrix
     for (let index = 1; index <= m; index++) {
       for (let index_ = 1; index_ <= n; index_++) {
         dp[index][index_] =
@@ -609,20 +582,17 @@ export class GradingConsistencyService implements OnModuleDestroy {
     cacheKey: string,
     record: GradingRecord,
   ): Promise<void> {
-    // Wait for any existing operation on this key
     const existingLock = this.cacheLocks.get(cacheKey);
     if (existingLock !== undefined) {
       await existingLock;
     }
 
-    // Create a new lock for this operation
     const lockPromise = this.performCacheUpdate(cacheKey, record);
     this.cacheLocks.set(cacheKey, lockPromise);
 
     try {
       await lockPromise;
     } finally {
-      // Remove lock after operation
       this.cacheLocks.delete(cacheKey);
     }
   }
@@ -637,14 +607,12 @@ export class GradingConsistencyService implements OnModuleDestroy {
     const existing = this.gradingCache.get(cacheKey) || [];
     existing.push(record);
 
-    // Keep only recent records in cache (last 100)
     if (existing.length > 100) {
       existing.shift();
     }
 
     this.gradingCache.set(cacheKey, existing);
 
-    // Check cache size
     if (this.gradingCache.size > this.maxCacheSize) {
       this.cleanupCache();
     }
@@ -670,10 +638,9 @@ export class GradingConsistencyService implements OnModuleDestroy {
   private cleanupCache(): void {
     try {
       const now = Date.now();
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      const maxAge = 24 * 60 * 60 * 1000;
 
       for (const [key, records] of this.gradingCache.entries()) {
-        // Remove old records
         const filteredRecords = records.filter(
           (record) => now - record.timestamp.getTime() < maxAge,
         );
@@ -685,7 +652,6 @@ export class GradingConsistencyService implements OnModuleDestroy {
         }
       }
 
-      // If still too large, remove oldest entries
       if (this.gradingCache.size > this.maxCacheSize) {
         const sortedKeys = [...this.gradingCache.keys()].sort();
         const keysToRemove = sortedKeys.slice(

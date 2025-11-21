@@ -119,7 +119,6 @@ export class LLMPricingController {
   @Post("refresh")
   async refreshPricing() {
     try {
-      // Fetch current pricing
       const currentPricing = await this.llmPricingService.fetchCurrentPricing();
 
       if (currentPricing.length === 0) {
@@ -130,7 +129,6 @@ export class LLMPricingController {
         };
       }
 
-      // Update pricing history
       const updatedCount =
         await this.llmPricingService.updatePricingHistory(currentPricing);
 
@@ -252,7 +250,6 @@ export class LLMPricingController {
       );
     }
 
-    // Validate factors are positive numbers
     if (
       upscaleData.globalFactor &&
       (upscaleData.globalFactor <= 0 || Number.isNaN(upscaleData.globalFactor))
@@ -333,7 +330,7 @@ export class LLMPricingController {
     try {
       const removed = await this.llmPricingService.removePriceUpscaling(
         data.reason || "Manual removal via admin interface",
-        "admin", // TODO: Get actual admin email from session
+        "admin",
       );
 
       if (!removed) {

@@ -71,7 +71,7 @@ const CorrectAnswerSetting: React.FC<CorrectAnswerSettingProps> = ({
     if (showCorrectAnswers) {
       onChange("NEVER");
     } else {
-      onChange("ALWAYS"); // Default to ALWAYS when enabling
+      onChange("ALWAYS");
     }
   };
 
@@ -96,7 +96,6 @@ const CorrectAnswerSetting: React.FC<CorrectAnswerSettingProps> = ({
           {description}
         </div>
 
-        {/* Radio buttons for when to show (only visible if toggle is enabled) */}
         {showCorrectAnswers && (
           <div className="space-y-2">
             <div className="text-sm font-medium text-gray-700 mb-2">
@@ -115,6 +114,7 @@ const CorrectAnswerSetting: React.FC<CorrectAnswerSettingProps> = ({
                   onChange={() => onChange(option.value)}
                   className="mt-1 h-4 w-4 text-violet-600 focus:ring-violet-500 border-gray-300"
                 />
+
                 <div className="flex-1">
                   <div className="font-medium text-gray-900">
                     {option.label}
@@ -129,7 +129,6 @@ const CorrectAnswerSetting: React.FC<CorrectAnswerSettingProps> = ({
         )}
       </div>
 
-      {/* Toggle for enabling/disabling correct answers - positioned on the right side */}
       <div className="flex items-center">
         <label className="inline-flex items-center cursor-pointer">
           <input
@@ -138,6 +137,7 @@ const CorrectAnswerSetting: React.FC<CorrectAnswerSettingProps> = ({
             onChange={handleToggleChange}
             className="sr-only"
           />
+
           <div
             className={`relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-violet-300 rounded-full peer ${showCorrectAnswers ? "bg-violet-600" : "bg-gray-200"} transition-colors`}
           >

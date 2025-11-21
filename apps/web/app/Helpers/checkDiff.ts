@@ -24,7 +24,6 @@ function safeArrayCompare<T>(
   b: T[] | null | undefined,
   compareFn?: (itemA: T, itemB: T) => boolean,
 ): boolean {
-  // Normalize null/undefined to empty arrays for comparison
   const normalizeArray = (arr: T[] | null | undefined): T[] => {
     if (arr == null) return [];
     return arr;
@@ -75,6 +74,7 @@ export function useChangesSummary(): string {
     strictTimeLimit,
     graded,
     numberOfQuestionsPerAttempt,
+    questionControls,
   } = useAssignmentConfig();
 
   const {
@@ -122,7 +122,8 @@ export function useChangesSummary(): string {
       !safeCompare(showAssignmentScore, originalAssignment.showAssignmentScore)
     )
       diffs.push("Changed assignment score visibility.");
-
+    if (!safeCompare(questionControls, originalAssignment.questionControls))
+      diffs.push("Modified question controls.");
     if (
       !safeCompare(
         correctAnswerVisibility,
@@ -131,7 +132,6 @@ export function useChangesSummary(): string {
     )
       diffs.push("Changed correct answer visibility.");
 
-    // check if question order is different
     if (!safeArrayCompare(questionOrder, originalAssignment.questionOrder)) {
       diffs.push("Modified question order.");
     }
@@ -245,7 +245,6 @@ export function useChangesSummary(): string {
         );
       }
 
-      // Compare randomized choices
       if (
         !safeCompare(
           question.randomizedChoices,
@@ -267,6 +266,16 @@ export function useChangesSummary(): string {
         !safeCompare(question.maxCharacters, originalQuestion.maxCharacters)
       ) {
         diffs.push(`Updated max characters for question ${question.id}.`);
+      }
+
+      const normalizedAuthorComment = (question.authorComment ?? "").trim();
+      const normalizedOriginalAuthorComment = (
+        originalQuestion.authorComment ?? ""
+      ).trim();
+      if (
+        !safeCompare(normalizedAuthorComment, normalizedOriginalAuthorComment)
+      ) {
+        diffs.push(`Updated the author comment for question ${question.id}.`);
       }
 
       if (

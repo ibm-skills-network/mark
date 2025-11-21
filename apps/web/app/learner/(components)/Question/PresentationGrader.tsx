@@ -350,6 +350,7 @@ const analyzeSpeechReport = (text: string): string => {
     "basically",
     "literally",
   ];
+
   const fillerCount = words.filter((w) =>
     fillerWords.includes(w.toLowerCase()),
   ).length;
@@ -378,9 +379,6 @@ const analyzeContentReport = (text: string): string => {
 - Strong usage of named entities: ${hasStrongEntities ? "Yes" : "No"}`;
 };
 
-/** ------------------------------------------------------------------
- * MAIN COMPONENT: PresentationGrader
- * ------------------------------------------------------------------ */
 interface PresentationGraderProps {
   question: QuestionStore;
   assignmentId: number;

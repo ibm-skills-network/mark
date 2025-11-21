@@ -19,9 +19,9 @@ import { Injectable, Logger } from "@nestjs/common";
  * Represents the possible states of the circuit breaker
  */
 export enum CircuitState {
-  CLOSED = "CLOSED", // Normal operation
-  OPEN = "OPEN", // Blocking requests
-  HALF_OPEN = "HALF_OPEN", // Testing recovery
+  CLOSED = "CLOSED",
+  OPEN = "OPEN",
+  HALF_OPEN = "HALF_OPEN",
 }
 
 @Injectable()
@@ -32,10 +32,9 @@ export class DatabaseCircuitBreakerService {
   private successCount = 0;
   private lastFailureTime?: Date;
 
-  // Configuration parameters
-  private readonly failureThreshold = 5; // Failures before opening circuit
-  private readonly successThreshold = 3; // Successes needed to close from half-open
-  private readonly timeout = 60_000; // Time before attempting recovery (ms)
+  private readonly failureThreshold = 5;
+  private readonly successThreshold = 3;
+  private readonly timeout = 60_000;
 
   /**
    * Executes an operation through the circuit breaker
@@ -47,7 +46,6 @@ export class DatabaseCircuitBreakerService {
    * @returns {Promise<T>} Result of the operation
    */
   async execute<T>(operation: () => Promise<T>): Promise<T> {
-    // Check if circuit should transition from OPEN to HALF_OPEN
     if (this.state === CircuitState.OPEN) {
       if (Date.now() - this.lastFailureTime.getTime() > this.timeout) {
         this.state = CircuitState.HALF_OPEN;
@@ -78,7 +76,6 @@ export class DatabaseCircuitBreakerService {
   private onSuccess(): void {
     this.failureCount = 0;
 
-    // If in HALF_OPEN state, check if we can fully close the circuit
     if (this.state === CircuitState.HALF_OPEN) {
       this.successCount++;
 
@@ -100,7 +97,6 @@ export class DatabaseCircuitBreakerService {
     this.failureCount++;
     this.lastFailureTime = new Date();
 
-    // Check if failure threshold exceeded
     if (this.failureCount >= this.failureThreshold) {
       this.state = CircuitState.OPEN;
       this.logger.warn("Circuit breaker transitioned to OPEN");

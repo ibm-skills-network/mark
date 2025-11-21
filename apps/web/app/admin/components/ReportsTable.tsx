@@ -61,11 +61,9 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // Modal states
   const [selectedReport, setSelectedReport] = useState<ReportData | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
-  // Helper functions
   const getStatusBadge = (status: string) => {
     const statusVariants = {
       OPEN: "destructive" as const,
@@ -113,7 +111,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
     setError(null);
 
     try {
-      // Fetch all reports for client-side filtering/pagination
       const data = await getAdminReports(
         { page: 1, limit: 1000 },
         undefined,
@@ -132,10 +129,8 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
     fetchReports();
   }, [sessionToken]);
 
-  // Create column helper
   const columnHelper = createColumnHelper<ReportData>();
 
-  // Define table columns
   const columns = useMemo<ColumnDef<ReportData, any>[]>(
     () => [
       columnHelper.accessor("id", {
@@ -150,6 +145,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             )}
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -165,6 +161,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             )}
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -183,6 +180,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             )}
           </div>
         ),
+
         enableSorting: true,
         sortingFn: (rowA, rowB) => {
           const a = rowA.original.assignment?.name || "";
@@ -217,6 +215,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             )}
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -232,6 +231,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             </div>
           </div>
         ),
+
         enableSorting: true,
       }),
 
@@ -249,16 +249,15 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
         ),
       }),
     ],
+
     [getStatusBadge, getIssueTypeBadge, openReportModal],
   );
 
-  // Create global filter function with dependencies
   const globalFilterFn = useMemo(() => {
     return (row: any, _columnId: string, value: string) => {
       const report = row.original;
       const searchValue = value?.toLowerCase() || "";
 
-      // Apply date range filter
       const itemDate = new Date(report.createdAt);
       if (startDate && itemDate < new Date(startDate)) {
         return false;
@@ -267,10 +266,8 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
         return false;
       }
 
-      // If no search value, return true (item passes filters)
       if (!value) return true;
 
-      // Search in description, reporter ID, and assignment name
       const descriptionMatch = report.description
         .toLowerCase()
         .includes(searchValue);
@@ -285,7 +282,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
     };
   }, [startDate, endDate]);
 
-  // Create table instance
   const table = useReactTable({
     data: reports,
     columns,
@@ -306,9 +302,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
     globalFilterFn,
   });
 
-  // Force re-filtering when custom filters change
   useEffect(() => {
-    // Trigger a re-render by toggling the global filter
     const currentFilter = globalFilter || "";
     table.setGlobalFilter(currentFilter + " ");
     table.setGlobalFilter(currentFilter);
@@ -389,7 +383,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Filters */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -403,7 +396,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Global Search */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">
               Global Search
@@ -416,6 +408,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="pl-10"
               />
+
               {globalFilter && (
                 <Button
                   variant="ghost"
@@ -429,9 +422,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             </div>
           </div>
 
-          {/* Quick Filters Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Status Filter */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Status Filter
@@ -459,7 +450,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
               </select>
             </div>
 
-            {/* Issue Type Filter */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Issue Type Filter
@@ -487,7 +477,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
               </select>
             </div>
 
-            {/* Page Size */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
                 Items per Page
@@ -507,7 +496,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             </div>
           </div>
 
-          {/* Date Range Filters */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
@@ -541,7 +529,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             </div>
           </div>
 
-          {/* Active Filters */}
           {(globalFilter ||
             table.getColumn("status")?.getFilterValue() !== undefined ||
             table.getColumn("issueType")?.getFilterValue() !== undefined ||
@@ -599,7 +586,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
         </CardContent>
       </Card>
 
-      {/* Table */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -617,7 +603,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Table */}
               <div className="overflow-hidden rounded-lg border border-gray-200">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -649,6 +634,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
                                       asc: (
                                         <SortAsc className="h-3 w-3 text-gray-400" />
                                       ),
+
                                       desc: (
                                         <SortDesc className="h-3 w-3 text-gray-400" />
                                       ),
@@ -692,7 +678,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
                 </div>
               </div>
 
-              {/* Empty State */}
               {table.getFilteredRowModel().rows.length === 0 &&
                 reports.length > 0 && (
                   <div className="text-center py-12">
@@ -708,7 +693,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
                   </div>
                 )}
 
-              {/* Pagination */}
               {table.getPageCount() > 1 && (
                 <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
                   <div className="flex items-center space-x-2">
@@ -744,7 +728,6 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
         </CardContent>
       </Card>
 
-      {/* Report Modal */}
       <ReportModal
         report={selectedReport}
         isOpen={isReportModalOpen}

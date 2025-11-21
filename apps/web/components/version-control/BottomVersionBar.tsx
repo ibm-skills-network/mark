@@ -48,6 +48,7 @@ function Dropdown({
             className="fixed inset-0 z-40"
             onClick={onClose}
           />
+
           <motion.div
             initial={{ opacity: 0, y: 16, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -90,9 +91,15 @@ export function BottomVersionBar() {
   const isVersionFavorite = (versionId: number) =>
     favoriteVersions.includes(versionId);
 
-  // Temporary placeholder for toggleFavoriteVersion
   const toggleFavoriteVersion = (versionId: number) => {
-    console.log(`Toggling favorite for version ${versionId}`);
+    useAuthorStore.setState((state) => {
+      const isFavorite = state.favoriteVersions.includes(versionId);
+      const newFavorites = isFavorite
+        ? state.favoriteVersions.filter((id) => id !== versionId)
+        : [...state.favoriteVersions, versionId];
+
+      return { favoriteVersions: newFavorites };
+    });
   };
 
   const versionControlHook = useVersionControl();
@@ -119,23 +126,20 @@ export function BottomVersionBar() {
     compareVersions,
   } = versionControlHook;
 
-  // Force load versions if stuck in loading state for too long
   React.useEffect(() => {
     if (activeAssignmentId && isLoadingVersions) {
       const timeout = setTimeout(() => {
         loadVersions().catch(console.error);
-      }, 5000); // 5 second timeout
+      }, 5000);
 
       return () => clearTimeout(timeout);
     }
   }, [activeAssignmentId, isLoadingVersions, loadVersions]);
 
-  // Helper functions for version data
   const getVersionQuestionCount = (version: any) => {
     return version?.questionVersions?.length || version?.questionCount || 0;
   };
 
-  // Current working version (what user is working on)
   const workingVersion =
     checkedOutVersion ||
     currentVersion ||
@@ -241,7 +245,6 @@ export function BottomVersionBar() {
         "Are you sure you want to revert all unsaved changes? This action cannot be undone.",
       )
     ) {
-      // Reload the page to discard all changes
       window.location.reload();
     }
   };
@@ -329,7 +332,6 @@ export function BottomVersionBar() {
     );
   }
 
-  // If versions failed to load, show error state
   if (versionsLoadFailed) {
     return (
       <div
@@ -347,7 +349,6 @@ export function BottomVersionBar() {
     );
   }
 
-  // If we still don't have a working version but have an activeAssignmentId, show a different message
   if (!workingVersion && activeAssignmentId) {
     return (
       <div
@@ -374,9 +375,7 @@ export function BottomVersionBar() {
       >
         <div className="absolute inset-0 bg-gradient-to-r from-blue-50/30 via-white/50 to-indigo-50/30 pointer-events-none" />
         <div className="relative flex items-center justify-between px-6 py-3">
-          {/* Left side - Version info */}
           <div className="flex items-center space-x-4">
-            {/* Current Version Dropdown */}
             <div className="relative">
               <button
                 onClick={() => {
@@ -393,6 +392,7 @@ export function BottomVersionBar() {
                     <div
                       className={`w-2.5 h-2.5 rounded-full ${getStatusColor()} animate-pulse`}
                     />
+
                     <div className="flex items-center space-x-2">
                       <span className="font-semibold text-gray-900">
                         v{workingVersion?.versionNumber || "0.0.0"}
@@ -477,6 +477,7 @@ export function BottomVersionBar() {
                                       : "bg-gray-300"
                                   }`}
                                 />
+
                                 {index < versions.length - 1 && (
                                   <div className="w-px h-12 bg-gradient-to-b from-gray-300 to-transparent mt-2" />
                                 )}
@@ -570,7 +571,6 @@ export function BottomVersionBar() {
             </div>
           </div>
 
-          {/* Middle - Enhanced Status indicators */}
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-4 text-gray-600">
               <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 rounded-lg">
@@ -599,7 +599,6 @@ export function BottomVersionBar() {
             </div>
           </div>
 
-          {/* Right side - Actions */}
           <div className="flex items-center space-x-3">
             <button
               onClick={() =>
@@ -614,7 +613,6 @@ export function BottomVersionBar() {
         </div>
       </div>
 
-      {/* Unsaved Changes Modal */}
       <UnsavedChangesModal
         isOpen={showUnsavedModal}
         onClose={handleModalClose}
@@ -624,7 +622,6 @@ export function BottomVersionBar() {
         targetName={pendingAction?.targetName}
       />
 
-      {/* Version Selection Modal */}
       <VersionSelectionModal
         isOpen={showVersionModal}
         onClose={() => setShowVersionModal(false)}

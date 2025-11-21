@@ -1,7 +1,5 @@
-// Modified fileUtils.ts
 import { FileObject } from "@/stores/fileStore";
 
-// Format file size for display (e.g. 1.2 MB)
 export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
@@ -9,27 +7,25 @@ export const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 };
-// Get the file extension from a filename
+
 export const getFileExtension = (fileName: string): string => {
   return fileName.split(".").pop()?.toLowerCase() || "";
 };
 
-// Check if a file is previewable
 export const isFilePreviewable = (fileName: string): boolean => {
   const extension = getFileExtension(fileName);
   const previewableExtensions = [
-    // Images
     "jpg",
     "jpeg",
     "png",
     "gif",
     "svg",
-    // Documents
+
     "pdf",
     "txt",
     "md",
     "csv",
-    // Code
+
     "js",
     "jsx",
     "ts",
@@ -44,21 +40,19 @@ export const isFilePreviewable = (fileName: string): boolean => {
   return previewableExtensions.includes(extension);
 };
 
-// Build a folder structure from flat file array
 export interface FolderStructure {
   name: string;
   path: string;
   files: FileObject[];
   folders: FolderStructure[];
   expanded?: boolean;
-  isEmpty?: boolean; // Flag for empty folders
+  isEmpty?: boolean;
 }
 
-// Modified to include empty folders
 export const buildFolderStructure = (
   files: FileObject[],
   expandedFolders: string[] = ["/"],
-  emptyFolders: string[] = [], // New parameter for empty folders
+  emptyFolders: string[] = [],
 ): FolderStructure => {
   const root: FolderStructure = {
     name: "Root",
@@ -70,7 +64,6 @@ export const buildFolderStructure = (
 
   const folderMap: { [fullPath: string]: FolderStructure } = { "/": root };
 
-  // Helper function to ensure folder exists
   const ensureFolderPath = (folderPath: string) => {
     const parts = folderPath.split("/").filter(Boolean);
     let currentPath = "";
@@ -97,14 +90,12 @@ export const buildFolderStructure = (
     return folderMap[folderPath];
   };
 
-  // Add files to their respective folders
   files.forEach((file) => {
     const folderPath = file.path || "/";
     const targetFolder = ensureFolderPath(folderPath);
     targetFolder.files.push(file);
   });
 
-  // Add empty folders
   emptyFolders.forEach((folderPath) => {
     const targetFolder = ensureFolderPath(folderPath);
     targetFolder.isEmpty = true;
@@ -113,7 +104,6 @@ export const buildFolderStructure = (
   return root;
 };
 
-// Find a folder by path in folder structure
 export const findFolderByPath = (
   path: string,
   folderStructure: FolderStructure,
@@ -130,7 +120,6 @@ export const findFolderByPath = (
   return null;
 };
 
-// Generate breadcrumbs from a path
 export interface Breadcrumb {
   name: string;
   path: string;

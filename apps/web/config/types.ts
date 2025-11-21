@@ -221,6 +221,7 @@ export type AuthorAssignmentState = {
   correctAnswerVisibility: CorrectAnswerVisibility;
   updatedAt: number;
   numberOfQuestionsPerAttempt?: number;
+  questionControls?: QuestionControls;
 };
 export type AuthorFileUploads = {
   filename: string;
@@ -234,12 +235,13 @@ export type UpdateQuestionStateParams = {
   questionType?: QuestionType;
   responseType?: ResponseType;
   totalPoints?: number;
+  authorComment?: string;
   randomizedChoices?: boolean;
   maxWordCount?: number;
   questionTitle?: string;
   showSubQuestionsToLearner?: boolean;
   showRubricsToLearner?: boolean;
-  //if the points will be shown in the rubric
+
   showPoints?: boolean;
   rubrics?: Rubric[];
   questionCriteria?: {
@@ -425,6 +427,8 @@ export interface CreateQuestionRequest extends BaseQuestion {
 
   answer?: boolean;
 
+  authorComment?: string;
+
   choices?: Choice[];
 }
 export interface videoPresentationConfig {
@@ -444,6 +448,7 @@ export interface Question extends CreateQuestionRequest {
   assignmentId: number;
   questionOrder?: number[];
   variants?: QuestionVariants[];
+  authorComment?: string;
   randomizedChoices?: boolean;
   alreadyInBackend?: boolean;
   videoPresentationConfig?: videoPresentationConfig;
@@ -461,6 +466,7 @@ export interface QuestionVariants {
   id: number;
   questionId: number;
   type: QuestionType;
+  authorComment?: string;
   variantContent: string;
   choices: string | Choice[];
   maxWords?: number;
@@ -482,6 +488,7 @@ export interface QuestionAuthorStore extends Question {
   index?: number;
   alreadyInBackend?: boolean;
   showPoints?: boolean;
+  authorComment?: string;
   //set with a button on the frontend
 }
 
@@ -493,6 +500,7 @@ export interface QuestionAuthorStore extends Question {
 export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
     status: QuestionStatus;
+    authorComment?: string;
     learnerResponse: string;
     translationOn: boolean;
     selectedLanguage: string;
@@ -592,6 +600,7 @@ export type ReplaceAssignmentRequest = {
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
+  questionControls?: QuestionControls;
   updatedAt: number;
   questionVariationNumber?: number;
   versionDescription?: string;
@@ -644,6 +653,14 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   preferredLanguage?: string;
 }
 
+export interface QuestionControls {
+  disableCopy?: boolean;
+  disablePaste?: boolean;
+  disableRightClick?: boolean;
+  disablePrint?: boolean;
+  [key: string]: boolean | undefined;
+}
+
 export interface AssignmentDetails {
   allotedTimeMinutes?: number;
   numAttempts?: number;
@@ -665,6 +682,7 @@ export interface AssignmentDetails {
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
   numberOfQuestionsPerAttempt?: number;
+  questionControls?: QuestionControls;
 }
 
 export interface AssignmentDetailsLocal extends AssignmentDetails {

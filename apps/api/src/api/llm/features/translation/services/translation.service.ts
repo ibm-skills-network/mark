@@ -40,15 +40,14 @@ export class TranslationService implements ITranslationService {
    */
   private loadLanguageMap(): void {
     try {
-      // Try multiple possible paths for the languages.json file
       const possiblePaths = [
-        path.join(process.cwd(), "../../apps/web/public/languages.json"), // When running from api directory
-        path.join(process.cwd(), "../web/public/languages.json"), // Alternative path
+        path.join(process.cwd(), "../../apps/web/public/languages.json"),
+        path.join(process.cwd(), "../web/public/languages.json"),
         path.join(
           __dirname,
           "../../../../../../apps/web/public/languages.json",
-        ), // From compiled js location
-        path.join(__dirname, "../../../../../web/public/languages.json"), // Alternative compiled location
+        ),
+        path.join(__dirname, "../../../../../web/public/languages.json"),
       ];
 
       let languagesPath: string | null;
@@ -137,7 +136,6 @@ export class TranslationService implements ITranslationService {
   ): Promise<string[]> {
     if (texts.length === 0) return [];
 
-    // Step 1: Try CLD on all texts first (fast and free)
     const results: unknown[] = Array.from({ length: texts.length }).fill(
       "unknown",
     );
@@ -154,21 +152,18 @@ export class TranslationService implements ITranslationService {
         const cldResponse = await cld.detect(decodedText);
         const detectedLanguage = cldResponse.languages[0];
 
-        // Check if CLD is confident enough
         if (detectedLanguage && detectedLanguage.percent >= 80) {
           results[index] = detectedLanguage.code;
           this.logger.debug(
             `CLD batch detected language for text ${index}: ${detectedLanguage.code} (${detectedLanguage.percent}% confidence)`,
           );
         } else {
-          // Mark for GPT-5-nano processing
           textsNeedingGPT.push({
             text: decodedText.slice(0, 500),
             index: index,
           });
         }
       } catch {
-        // Mark for GPT-5-nano processing
         textsNeedingGPT.push({
           text: decodedText.slice(0, 500),
           index: index,
@@ -176,7 +171,6 @@ export class TranslationService implements ITranslationService {
       }
     }
 
-    // Step 2: Use GPT-5-nano for texts that CLD couldn't handle confidently
     if (
       textsNeedingGPT.length === 0 &&
       results.every((r) => typeof r === "string")
@@ -214,7 +208,6 @@ export class TranslationService implements ITranslationService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Create input texts for the model (only the texts that need GPT processing)
     const inputTexts = textsNeedingGPT
       .map((item, index) => `Text ${index}: ${item.text}`)
       .join("\n\n");
@@ -252,7 +245,6 @@ INSTRUCTIONS:
 
       const parsedResponse = await parser.parse(response);
 
-      // Map GPT-5-nano results back to the original result array
       for (const detection of parsedResponse.detections) {
         const gptTextItem = textsNeedingGPT[detection.textIndex];
         if (gptTextItem) {
@@ -279,7 +271,6 @@ INSTRUCTIONS:
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
-      // Fallback to individual detection for critical cases
       return Promise.all(
         texts.map((text) => this.getLanguageCode(text, assignmentId)),
       );
@@ -294,12 +285,10 @@ INSTRUCTIONS:
 
     const decodedText = decodeIfBase64(text) || text;
 
-    // Step 1: Try CLD first (fast and free)
     try {
       const cldResponse = await cld.detect(decodedText);
       const detectedLanguage = cldResponse.languages[0];
 
-      // Check if CLD is confident enough
       if (detectedLanguage && detectedLanguage.percent >= 80) {
         this.logger.debug(
           `CLD detected language: ${detectedLanguage.code} (${detectedLanguage.percent}% confidence)`,
@@ -309,7 +298,6 @@ INSTRUCTIONS:
         this.logger.debug(
           `CLD low confidence (${detectedLanguage.percent}%), falling back to GPT-5-nano`,
         );
-        // Fall through to GPT-5-nano
       }
     } catch (cldError) {
       this.logger.debug(
@@ -317,10 +305,8 @@ INSTRUCTIONS:
           cldError instanceof Error ? cldError.message : "Unknown error"
         }, falling back to GPT-5-nano`,
       );
-      // Fall through to GPT-5-nano
     }
 
-    // Step 2: Fall back to GPT-5-nano for difficult cases
     const textSample = decodedText.slice(0, 500);
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -410,7 +396,6 @@ INSTRUCTIONS:
 
     const cleanedText = decodedQuestionText.replaceAll(/<[^>]*>?/gm, "");
 
-    // Convert language code to language name for the LLM
     const targetLanguageName = this.getLanguageName(targetLanguage);
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -444,7 +429,6 @@ INSTRUCTIONS:
         const parsedResponse = await parser.parse(response);
         return parsedResponse.translatedText;
       } catch (parseError) {
-        // Fallback: ask for plain text translation without structured output
         this.logger.warn(
           `Structured parse failed for question translation, falling back to plain text: ${
             parseError instanceof Error
@@ -499,7 +483,6 @@ INSTRUCTIONS:
     assignmentId: number,
     targetLanguage: string,
   ): Promise<Choice[] | null | undefined> {
-    // Parse choices if they come as a string (from database JSON)
     let parsedChoices: Choice[] | null = null;
 
     if (!choices) {
@@ -540,7 +523,6 @@ INSTRUCTIONS:
         `Batch translating text for ${parsedChoices.length} choices to ${targetLanguage}`,
       );
 
-      // Collect all texts for batch language detection
       const textsToCheck: string[] = [];
       const textMap: Array<{
         choiceIndex: number;
@@ -567,7 +549,6 @@ INSTRUCTIONS:
         }
       }
 
-      // Batch language detection
       let needsTranslationFlags: boolean[] = [];
       if (textsToCheck.length > 0) {
         needsTranslationFlags = await this.batchShouldRetranslate(
@@ -577,12 +558,10 @@ INSTRUCTIONS:
         );
       }
 
-      // Process translations based on batch results
       const translatedChoices = await Promise.all(
         parsedChoices.map(async (choice, choiceIndex) => {
           const translatedChoice = { ...choice };
 
-          // Handle choice text
           const choiceMapping = textMap.find(
             (m) => m.choiceIndex === choiceIndex && m.type === "choice",
           );
@@ -606,7 +585,6 @@ INSTRUCTIONS:
             }
           }
 
-          // Handle feedback text
           const feedbackMapping = textMap.find(
             (m) => m.choiceIndex === choiceIndex && m.type === "feedback",
           );
@@ -664,7 +642,6 @@ INSTRUCTIONS:
   ): Promise<boolean[]> {
     if (texts.length === 0) return [];
 
-    // Filter out empty texts
     const validTexts = texts.filter((text) => text && text.trim().length > 0);
     if (validTexts.length === 0) {
       return texts.map(() => false);
@@ -683,7 +660,6 @@ INSTRUCTIONS:
 
         const detectedLanguage = detectedLanguages[index];
 
-        // Skip retranslation if we can't detect the language
         if (detectedLanguage === "unknown") {
           this.logger.debug(
             `Could not detect language for text, skipping validation: "${text.slice(
@@ -694,7 +670,6 @@ INSTRUCTIONS:
           return false;
         }
 
-        // Normalize language codes for comparison
         const normalizedDetected = this.normalizeLanguageCode(detectedLanguage);
         const normalizedTarget = this.normalizeLanguageCode(targetLanguage);
 
@@ -717,7 +692,6 @@ INSTRUCTIONS:
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      // Fallback to individual validation
       return Promise.all(
         texts.map((text) =>
           this.shouldRetranslate(text, targetLanguage, assignmentId),
@@ -746,7 +720,6 @@ INSTRUCTIONS:
     try {
       const detectedLanguage = await this.getLanguageCode(text, assignmentId);
 
-      // Skip retranslation if we can't detect the language
       if (detectedLanguage === "unknown") {
         this.logger.debug(
           `Could not detect language for text, skipping validation: "${text.slice(
@@ -757,7 +730,6 @@ INSTRUCTIONS:
         return false;
       }
 
-      // Normalize language codes for comparison
       const normalizedDetected = this.normalizeLanguageCode(detectedLanguage);
       const normalizedTarget = this.normalizeLanguageCode(targetLanguage);
 
@@ -781,7 +753,6 @@ INSTRUCTIONS:
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      // On error, assume retranslation is needed to be safe
       return true;
     }
   }
@@ -797,7 +768,6 @@ INSTRUCTIONS:
 
     const code = languageCode.toLowerCase();
 
-    // Handle common language variants
     const languageMap: Record<string, string> = {
       "zh-cn": "zh",
       "zh-tw": "zh",
@@ -833,7 +803,6 @@ INSTRUCTIONS:
 
     const decodedText = decodeIfBase64(text) || text;
 
-    // Convert language code to language name for the LLM
     const targetLanguageName = this.getLanguageName(targetLanguage);
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -867,7 +836,6 @@ INSTRUCTIONS:
         const parsedResponse = await parser.parse(response);
         return parsedResponse.translatedText;
       } catch (parseError) {
-        // Fallback: request plain text translation without structured instructions
         this.logger.warn(
           `Structured parse failed for text translation, falling back to plain text: ${
             parseError instanceof Error

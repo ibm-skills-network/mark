@@ -3,19 +3,19 @@ name: Build All Services
 on:
   push:
     branches:
-      - '*'
+      - "*"
     tags:
-      - '*'
+      - "*"
     paths:
-      - 'apps/api-gateway/**'
-      - 'apps/api/**'
-      - 'apps/web/**'
-      - '.github/workflows/build-images.yml'
+      - "apps/api-gateway/**"
+      - "apps/api/**"
+      - "apps/web/**"
+      - ".github/workflows/build-images.yml"
   pull_request:
     branches:
-    - master
+      - master
   schedule:
-  - cron: 0 5 * * *
+    - cron: 0 5 * * *
   workflow_dispatch:
     inputs:
       suffix:
@@ -59,8 +59,8 @@ jobs:
         if: steps.changes.outputs.needs_scan == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '22.0.0'
-          cache: 'yarn'
+          node-version: "22.0.0"
+          cache: "yarn"
 
       - name: Configure Yarn
         if: steps.changes.outputs.needs_scan == 'true'
@@ -82,11 +82,11 @@ jobs:
         if: steps.changes.outputs.needs_scan == 'true'
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs'
-          scan-ref: 'apps/${{ matrix.service }}'
-          format: 'sarif'
-          output: 'trivy-fs-${{ matrix.service }}.sarif'
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+          scan-type: "fs"
+          scan-ref: "apps/${{ matrix.service }}"
+          format: "sarif"
+          output: "trivy-fs-${{ matrix.service }}.sarif"
+          severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
         continue-on-error: true
 
       - name: Display filesystem security scan results
@@ -94,7 +94,7 @@ jobs:
         run: |
           echo "🔍 FILESYSTEM SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
           echo "================================================="
-          
+
           # Run Trivy again with table format for readable output (show ALL vulnerabilities)
           echo "📊 DETAILED VULNERABILITY TABLE:"
           docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
@@ -102,7 +102,7 @@ jobs:
             --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
             --ignore-unfixed=false \
             /workspace/apps/${{ matrix.service }} || true
-          
+
           echo ""
           echo "📋 SUMMARY BY SEVERITY:"
           docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
@@ -111,7 +111,7 @@ jobs:
             --ignore-unfixed=false \
             /workspace/apps/${{ matrix.service }} 2>/dev/null | \
             jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
-          
+
           echo ""
           echo "📄 Detailed SARIF report saved as trivy-fs-${{ matrix.service }}.sarif"
         continue-on-error: true
@@ -121,11 +121,11 @@ jobs:
         run: |
           echo "🔍 DEPENDENCY SECURITY AUDIT FOR ${{ matrix.service }}"
           echo "==============================================="
-          
+
           # Generate comprehensive JSON report (all dependencies, all severity levels)
           yarn audit --json > yarn-audit-${{ matrix.service }}-full.json || true
           yarn audit --groups dependencies --level info --json > yarn-audit-${{ matrix.service }}.json || true
-          
+
           # Display human-readable report directly in workflow (show ALL vulnerabilities)
           echo "📊 VULNERABILITY SUMMARY (ALL SEVERITIES):"
           echo "--- ALL DEPENDENCIES (including dev) ---"
@@ -133,7 +133,7 @@ jobs:
           echo ""
           echo "--- PRODUCTION DEPENDENCIES ONLY ---"
           yarn audit --groups dependencies --level info || true
-          
+
           echo ""
           echo "📄 Reports saved:"
           echo "  - yarn-audit-${{ matrix.service }}-full.json (all deps, all severities)"
@@ -147,11 +147,11 @@ jobs:
           echo "========================"
 
           pip install git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.64.dss
-          
+
           # Run scan and show results
           echo "🔎 Scanning for potential secrets..."
           detect-secrets scan --update .secrets.baseline
-          
+
           # Display baseline file if it exists
           if [ -f ".secrets.baseline" ]; then
             echo "📊 SECRETS BASELINE SUMMARY:"
@@ -184,7 +184,7 @@ jobs:
         if: always() && steps.changes.outputs.needs_scan == 'true' && steps.sarif-check.outputs.sarif_exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-fs-${{ matrix.service }}.sarif'
+          sarif_file: "trivy-fs-${{ matrix.service }}.sarif"
           category: trivy-fs-${{ matrix.service }}
 
       - name: Upload security reports as artifacts
@@ -233,8 +233,8 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '22.0.0'
-          cache: 'yarn'
+          node-version: "22.0.0"
+          cache: "yarn"
 
       - name: Configure Yarn
         if: steps.changes.outputs.needs_build == 'true'
@@ -338,8 +338,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          # cache-from: type=gha,scope=${{ matrix.service }}
+          # cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           platforms: linux/amd64
 
       - name: Run container security scan
@@ -347,9 +347,9 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
-          format: 'sarif'
-          output: 'trivy-container-${{ matrix.service }}.sarif'
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+          format: "sarif"
+          output: "trivy-container-${{ matrix.service }}.sarif"
+          severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
         continue-on-error: true
 
       - name: Display container security scan results
@@ -357,7 +357,7 @@ jobs:
         run: |
           echo "🔍 CONTAINER SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
           echo "===================================================="
-          
+
           # Run Trivy again with table format for readable output (show ALL vulnerabilities)
           echo "📊 DETAILED VULNERABILITY TABLE:"
           docker run --rm aquasec/trivy:latest image \
@@ -365,7 +365,7 @@ jobs:
             --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
             --ignore-unfixed=false \
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
-          
+
           echo ""
           echo "📋 SUMMARY BY SEVERITY:"
           docker run --rm aquasec/trivy:latest image \
@@ -374,7 +374,7 @@ jobs:
             --ignore-unfixed=false \
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} 2>/dev/null | \
             jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
-          
+
           echo ""
           echo "📄 Detailed SARIF report saved as trivy-container-${{ matrix.service }}.sarif"
         continue-on-error: true
@@ -394,7 +394,7 @@ jobs:
         if: always() && steps.changes.outputs.needs_build == 'true' && steps.container-sarif-check.outputs.sarif_exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-container-${{ matrix.service }}.sarif'
+          sarif_file: "trivy-container-${{ matrix.service }}.sarif"
           category: trivy-container-${{ matrix.service }}
 
       - name: Upload container security reports as artifacts
@@ -425,7 +425,7 @@ jobs:
         run: |
           echo "## Security Scan Summary for ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Filesystem scan summary
           if [ -f "trivy-fs-${{ matrix.service }}.sarif" ]; then
             CRITICAL=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("CRITICAL")))' trivy-fs-${{ matrix.service }}.sarif | wc -l)
@@ -437,7 +437,7 @@ jobs:
             echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           # Container scan summary
           if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
             CRITICAL=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("CRITICAL")))' trivy-container-${{ matrix.service }}.sarif | wc -l)
@@ -449,7 +449,7 @@ jobs:
             echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           # Dependency audit summary
           if [ -f "yarn-audit-${{ matrix.service }}.json" ]; then
             ADVISORIES=$(jq '.metadata.totalDependencies // 0' yarn-audit-${{ matrix.service }}.json)
@@ -459,6 +459,5 @@ jobs:
             echo "- Vulnerabilities Found: $VULNERABILITIES" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          
-          echo "📊 **View detailed reports in the workflow artifacts**" >> $GITHUB_STEP_SUMMARY
 
+          echo "📊 **View detailed reports in the workflow artifacts**" >> $GITHUB_STEP_SUMMARY

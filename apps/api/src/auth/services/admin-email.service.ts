@@ -354,7 +354,6 @@ This is an automated message from Mark Admin System.
         return false;
       }
 
-      // Route to appropriate email service
       if (this.emailProvider === "sendgrid") {
         return await this.sendTestEmailSendGrid(toEmail);
       } else if (this.emailProvider === "google") {

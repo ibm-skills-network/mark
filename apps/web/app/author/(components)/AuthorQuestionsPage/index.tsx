@@ -86,7 +86,6 @@ type ClientSnapshot = {
   };
   timezone: string | null;
 };
-
 function parseBrowser(ua: string) {
   const pairs = [
     [/Edg\/([\d.]+)/i, "Edge"],
@@ -94,6 +93,7 @@ function parseBrowser(ua: string) {
     [/Version\/([\d.]+).*Safari/i, "Safari"],
     [/Firefox\/([\d.]+)/i, "Firefox"],
   ];
+
   for (const [re, name] of pairs) {
     const m = ua.match(re as RegExp);
     if (m) return { name, version: m[1] };
@@ -179,7 +179,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     state.focusedQuestionId,
     state.setFocusedQuestionId,
   ]);
-  const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
+  const [handleToggleTable, setHandleToggleTable] = useState(true);
   const questions = useAuthorStore((state) => state.questions, shallow);
 
   const setQuestions = useAuthorStore((state) => state.setQuestions);
@@ -209,7 +209,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 
   async function testSnapshot() {
     const snap = await buildClientSnapshot();
-    setClient(snap); // show on page
+    setClient(snap);
   }
   const questionTypes = useMemo(
     () => [
@@ -251,63 +251,25 @@ const AuthorQuestionsPage: FC<Props> = ({
         icon: <ArrowUpTrayIcon className="w-5 h-5 stroke-gray-500" />,
       },
     ],
+
     [],
   );
 
-  // Ensure versions are always fresh on page load
   useEffect(() => {
     if (assignmentId) {
       loadVersions().catch(console.error);
     }
-  }, [assignmentId, loadVersions]);
+  }, [assignmentId]);
 
   useEffect(() => {
-    // If there's a checked out version, always fetch that version's data
-    // But only after versions have been loaded
-    if (checkedOutVersion && versions.length > 0) {
-      if (assignmentId !== activeAssignmentId) {
-        setActiveAssignmentId(assignmentId);
-      }
-      // Re-fetch the checked out version's data to ensure sync
-      const fetchCheckedOutVersion = async () => {
-        try {
-          const { checkoutVersion } = useAuthorStore.getState();
-          await checkoutVersion(
-            checkedOutVersion.id,
-            checkedOutVersion.versionNumber,
-          );
-        } catch (error) {
-          console.error("Failed to fetch checked out version:", error);
-        }
-      };
-      void fetchCheckedOutVersion();
-      return;
-    }
-
     if (assignmentId !== activeAssignmentId) {
       const fetchAssignment = async () => {
         try {
-          // Check if there's a checked-out version - if so, fetch that instead of latest
-          const currentCheckedOutVersion =
-            useAuthorStore.getState().checkedOutVersion;
-
-          if (currentCheckedOutVersion) {
-            // There's a checked-out version, fetch that version's data
-            const { checkoutVersion } = useAuthorStore.getState();
-            await checkoutVersion(
-              currentCheckedOutVersion.id,
-              currentCheckedOutVersion.versionNumber,
-            );
-            setActiveAssignmentId(assignmentId);
-            return;
-          }
-
-          // No checked-out version, fetch the current/latest assignment
           const assignment = await getAssignment(assignmentId);
           if (assignment) {
             setActiveAssignmentId(assignmentId);
             setName(assignment.name || "Untitled Assignment");
-            //the scoring object is unified to use same fields
+
             const unifyScoringRubrics = (
               scoring: Scoring,
               defaultQuestionText: string,
@@ -400,7 +362,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                   ) as number[])
               : [];
 
-            // Process all questions first
             const allProcessedQuestions: QuestionAuthorStore[] =
               rawQuestions.map((question, index) => {
                 const unifiedQuestionScoring = unifyScoringRubrics(
@@ -490,8 +451,6 @@ const AuthorQuestionsPage: FC<Props> = ({
     setName,
     setQuestions,
     setFocusedQuestionId,
-    checkedOutVersion,
-    versions,
   ]);
 
   useEffect(() => {
@@ -612,6 +571,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         ...questionsWithVariants,
         ...nonEditableQuestions,
       ];
+
       setQuestions(combinedQuestions);
       toast.success("Variants generated successfully!");
     } else {
@@ -876,7 +836,6 @@ const AuthorQuestionsPage: FC<Props> = ({
    * @returns {number} The calculated total points
    */
   const calculateTotalPoints = (question: QuestionAuthorStore): number => {
-    // For choice-based questions, calculate from choices
     if (
       question.type === "SINGLE_CORRECT" ||
       question.type === "MULTIPLE_CORRECT" ||
@@ -887,7 +846,6 @@ const AuthorQuestionsPage: FC<Props> = ({
           return choice.points > 0 ? acc + choice.points : acc;
         }, 0);
 
-        // For TRUE_FALSE, ensure at least 1 point if calculated total is 0
         if (question.type === "TRUE_FALSE" && totalFromChoices === 0) {
           return 1;
         }
@@ -895,11 +853,9 @@ const AuthorQuestionsPage: FC<Props> = ({
         return totalFromChoices;
       }
 
-      // Default points for choice-based questions without choices
       return 1;
     }
 
-    // For AI-graded questions (TEXT, URL, UPLOAD, LINK_FILE), calculate from rubrics
     if (
       question.type === "TEXT" ||
       question.type === "URL" ||
@@ -925,11 +881,9 @@ const AuthorQuestionsPage: FC<Props> = ({
         }
       }
 
-      // Default points for AI-graded questions without rubrics (medium difficulty)
       return question.type === "TEXT" ? 10 : 10;
     }
 
-    // For other question types or fallback
     return question.totalPoints || 1;
   };
 
@@ -959,12 +913,9 @@ const AuthorQuestionsPage: FC<Props> = ({
     },
   ) => {
     try {
-      // Process imported questions with proper total points calculation
       const processedQuestions = importedQuestions.map((q, index) => {
-        // Calculate total points for the question
         const calculatedTotalPoints = calculateTotalPoints(q);
 
-        // Ensure proper scoring structure for AI-graded questions
         let updatedScoring = q.scoring;
         if (
           q.type === "TEXT" ||
@@ -1011,7 +962,6 @@ const AuthorQuestionsPage: FC<Props> = ({
           }
         }
 
-        // For choice-based questions, remove scoring (they don't use rubrics)
         if (
           q.type === "SINGLE_CORRECT" ||
           q.type === "MULTIPLE_CORRECT" ||
@@ -1025,7 +975,7 @@ const AuthorQuestionsPage: FC<Props> = ({
 
         return {
           ...q,
-          id: generateTempQuestionId(), // Use existing ID generation function
+          id: generateTempQuestionId(),
           assignmentId: assignmentId,
           alreadyInBackend: false,
           index: questions.length + index + 1,
@@ -1036,12 +986,10 @@ const AuthorQuestionsPage: FC<Props> = ({
         };
       });
 
-      // Add imported questions to existing ones or replace them based on options
       const updatedQuestions = options.replaceExisting
         ? processedQuestions
         : [...questions, ...processedQuestions];
 
-      // Update indices for all questions
       updatedQuestions.forEach((q, index) => {
         q.index = index + 1;
       });
@@ -1051,13 +999,11 @@ const AuthorQuestionsPage: FC<Props> = ({
         .getState()
         .setQuestionOrder(updatedQuestions.map((q) => q.id));
 
-      // Handle assignment settings if requested
       let importMessage = `Successfully imported ${importedQuestions.length} question(s)!`;
       if (options.importAssignmentSettings && assignmentData) {
         let settingsUpdated = false;
 
         if (assignmentData.assignment) {
-          // Update assignment metadata if available
           if (
             assignmentData.assignment.name &&
             assignmentData.assignment.name !== "Imported Assignment"
@@ -1077,7 +1023,7 @@ const AuthorQuestionsPage: FC<Props> = ({
               .setInstructions(assignmentData.assignment.instructions);
             settingsUpdated = true;
           }
-          // Check for gradingCriteria in assignment object
+
           if (assignmentData.assignment.gradingCriteria) {
             useAuthorStore
               .getState()
@@ -1089,7 +1035,6 @@ const AuthorQuestionsPage: FC<Props> = ({
         }
 
         if (assignmentData.config) {
-          // Update assignment configuration if available
           const configStore = useAssignmentConfig.getState();
 
           if (assignmentData.config.graded !== undefined) {
@@ -1156,7 +1101,6 @@ const AuthorQuestionsPage: FC<Props> = ({
           }
         }
 
-        // Check for root-level gradingCriteria
         if (assignmentData.gradingCriteria) {
           useAuthorStore
             .getState()
@@ -1164,7 +1108,6 @@ const AuthorQuestionsPage: FC<Props> = ({
           settingsUpdated = true;
         }
 
-        // Import feedback configuration if available
         if (assignmentData.feedbackConfig) {
           const feedbackConfigStore = useAssignmentFeedbackConfig.getState();
 
@@ -1207,7 +1150,6 @@ const AuthorQuestionsPage: FC<Props> = ({
         }
       }
 
-      // Focus on the first imported question
       if (processedQuestions.length > 0) {
         setFocusedQuestionId(processedQuestions[0].id);
       }
@@ -1241,6 +1183,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                     setFocusedQuestionId(questions[index].id);
                   }}
                 />
+
                 <button
                   onClick={() => setIsReportModalOpen(true)}
                   className="block px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
@@ -1301,7 +1244,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
-                  {/* menu for adding question button */}
                   <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-sm hover:shadow-md transition-all ring-1 ring-black ring-opacity-5 focus:outline-none">
                     <div className="py-1">
                       {questionTypes.map((qt) => (
@@ -1358,14 +1300,13 @@ const AuthorQuestionsPage: FC<Props> = ({
             </button>
           </div>
         </div>
-        {/* next button */}
+
         {questions.length > 0 && (
           <div className="col-span-4 md:col-span-8 lg:col-span-12 md:col-start-3 md:col-end-11 lg:col-start-3 lg:col-end-11 row-start-3 flex flex-col justify-end mb-10">
             <FooterNavigation nextStep="config" />
           </div>
         )}
 
-        {/* side menu bar */}
         <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
           <div className="flex flex-col sticky top-0 gap-4 items-center px-4 pb-4">
             {questions.length > 0 && (
@@ -1401,6 +1342,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                       { value: 10, label: "10" },
                     ]}
                   />
+
                   <p className="text-gray-500 mt-2 text-wrap">
                     Variation(s) will automatically generate on all existing
                     questions using AI. These variants are editable.
@@ -1520,6 +1462,7 @@ interface SortableNavItemProps {
 const DragHandle = () => (
   <GripVertical height={16} width={16} className="cursor-move" />
 );
+
 const SortableNavItem = ({
   question,
   questionIndex,

@@ -237,6 +237,7 @@ model Assignment {
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
   correctAnswerVisibility CorrectAnswerVisibility        @default(ALWAYS) /// When should correct answers be shown to learners
+  questionControls        Json?                           /// Question-level controls (e.g., allowCopy, allowPaste, allowRightClick)
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
   languageCode            String?                         /// The language code for the assignment
   currentVersionId        Int?                            /// The ID of the current active version
@@ -287,6 +288,7 @@ model AssignmentVersion {
   showSubmissionFeedback  Boolean                         @default(true) /// Show submission feedback
   showQuestions           Boolean                         @default(true) /// Show questions
   correctAnswerVisibility CorrectAnswerVisibility         @default(ALWAYS) /// When to show correct answers to learners
+  questionControls        Json?                           /// Question-level controls (e.g., allowCopy, allowPaste, allowRightClick)
   languageCode            String?                         /// Language code
   createdBy               String                          /// User who created this version
   createdAt               DateTime                        @default(now()) /// When version was created
@@ -310,6 +312,7 @@ model QuestionVersion {
   id                        Int                @id @default(autoincrement()) /// Unique identifier for the question version
   assignmentVersionId       Int                /// The ID of the assignment version this belongs to
   assignmentVersion         AssignmentVersion  @relation(fields: [assignmentVersionId], references: [id], onDelete: Cascade)
+  authorComment             String? /// The comment an author can leave for context on a question
   questionId                Int?               /// Reference to original question (null for new questions in version)
   totalPoints               Int                /// Points for this question
   type                      QuestionType       /// Type of question
@@ -363,6 +366,7 @@ model Question {
   totalPoints               Int /// Total points that can be scored for the question
   type                      QuestionType /// Type of question
   responseType              ResponseType? /// Type of response expected from the learner
+  authorComment             String? /// The comment an author can leave for context on a question
   question                  String /// The text of the question
   variants                  QuestionVariant[] /// AI-generated variants for this question
   maxWords                  Int? /// Optional maximum number of words allowed for a written response type question

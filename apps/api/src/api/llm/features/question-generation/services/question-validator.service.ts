@@ -471,7 +471,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
 
     const choice = question.choices[0];
 
-    const choiceText = choice.choice?.toString().toLowerCase().trim();
+    const choiceString =
+      typeof choice.choice === "string"
+        ? choice.choice
+        : String(choice.choice ?? "");
+    const choiceText = choiceString.toLowerCase().trim();
 
     if (choiceText !== "true" && choiceText !== "false") {
       issues.push(

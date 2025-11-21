@@ -116,7 +116,6 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
         <Modal onClose={() => setIsOpen(false)} Title="Version History">
           <div className="max-h-[60vh] overflow-hidden">
             <div className="flex gap-4 h-[60vh]">
-              {/* Version List */}
               <div className="flex-1 border rounded-lg p-4 overflow-y-auto">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <GitBranch className="h-4 w-4" />
@@ -226,7 +225,6 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                 )}
               </div>
 
-              {/* Activity Timeline */}
               <div className="flex-1 border rounded-lg p-4 overflow-y-auto">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <Clock className="h-4 w-4" />

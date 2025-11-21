@@ -72,7 +72,9 @@ export const useQuestionsAreReadyToBePublished = (
     }
     for (let i = 0; i < choices.length; i++) {
       const { choice: choiceText, points } = choices[i];
-      if (!choiceText?.trim()) {
+      const choiceString =
+        typeof choiceText === "string" ? choiceText : String(choiceText ?? "");
+      if (!choiceString.trim()) {
         return {
           message: `Question ${index + 1} has an empty choice text.`,
           step: 0,
@@ -95,6 +97,7 @@ export const useQuestionsAreReadyToBePublished = (
           message: `Question ${
             index + 1
           } must have at least one correct choice.`,
+
           step: 0,
         };
       }
@@ -139,6 +142,7 @@ export const useQuestionsAreReadyToBePublished = (
           message: `Question ${index + 1} rubric ${
             r + 1
           } criteria are missing.`,
+
           step: 0,
         };
       }
@@ -149,6 +153,7 @@ export const useQuestionsAreReadyToBePublished = (
             message: `Question ${index + 1} rubric ${r + 1} criteria ${
               c + 1
             } description is empty.`,
+
             step: 0,
           };
         }
@@ -161,6 +166,7 @@ export const useQuestionsAreReadyToBePublished = (
             message: `Question ${index + 1} rubric ${r + 1} criteria ${
               c + 1
             } points are invalid.`,
+
             step: 0,
           };
         }
@@ -203,6 +209,7 @@ export const useQuestionsAreReadyToBePublished = (
             message: `Question ${index + 1} variant ${
               v + 1
             } choices are not in the correct format.`,
+
             step: 0,
           };
         }
@@ -211,6 +218,7 @@ export const useQuestionsAreReadyToBePublished = (
             message: `Question ${index + 1} variant ${
               v + 1
             } must have exactly 1 choices.`,
+
             step: 0,
           };
         }

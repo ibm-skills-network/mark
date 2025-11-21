@@ -52,6 +52,7 @@ const Component: FC<Props> = () => {
           selectedItem={numAttempts}
           setSelectedItem={setNumAttempts}
         />
+
         {errors.numAttempts && (
           <p
             className="text-red-500 text-sm"
@@ -76,6 +77,7 @@ const Component: FC<Props> = () => {
             onChange={(e) => setPassingGrade(~~e.target.value)}
             value={passingGrade || ""}
           />
+
           <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
             %
           </span>

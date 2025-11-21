@@ -56,6 +56,7 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
       assignmentConfigstate.numberOfQuestionsPerAttempt,
     name: authorState.name,
     id: assignmentId,
+    questionControls: assignmentConfigstate.questionControls,
   };
   function handleJumpToLearnerSide(
     questions: QuestionAuthorStore[],

@@ -81,6 +81,7 @@ export class QuestionRepository {
         totalPoints: questionData.totalPoints,
         type: questionData.type,
         question: questionData.question,
+        authorComment: questionData.authorComment ?? null,
         responseType: questionData.responseType,
         maxWords: questionData.maxWords,
         maxCharacters: questionData.maxCharacters,
@@ -96,11 +97,11 @@ export class QuestionRepository {
         isDeleted: questionData.isDeleted,
       };
 
-      // Create data needs assignment connection, use only plain values
       const createData: Prisma.QuestionCreateInput = {
         totalPoints: questionData.totalPoints,
         type: questionData.type,
         question: questionData.question,
+        authorComment: questionData.authorComment ?? null,
         responseType: questionData.responseType,
         maxWords: questionData.maxWords,
         maxCharacters: questionData.maxCharacters,
@@ -124,7 +125,6 @@ export class QuestionRepository {
         update: updateData,
         create: createData,
       });
-      // Handle upsert operation with properly typed data
       return returnValue;
     } catch (error: unknown) {
       const errorMessage =
@@ -178,6 +178,7 @@ export class QuestionRepository {
             type,
             question,
             assignmentId,
+            authorComment,
             responseType,
             maxWords,
             maxCharacters,
@@ -225,6 +226,7 @@ export class QuestionRepository {
             type,
             question,
             responseType,
+            authorComment: authorComment ?? null,
             maxWords,
             maxCharacters,
             randomizedChoices,

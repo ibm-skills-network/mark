@@ -1,4 +1,3 @@
-// src/components/FileExplorer/SelectedFilesBar.tsx
 import React from "react";
 import { IconX, IconTrash } from "@tabler/icons-react";
 import { FileObject } from "@/stores/fileStore";
@@ -31,7 +30,6 @@ const SelectedFilesBar: React.FC<SelectedFilesBarProps> = ({
           selected
         </span>
         <div className="flex space-x-3 overflow-x-auto">
-          {/* Show first 3 files, then a "+X more" indicator */}
           {selectedFiles.slice(0, 3).map((file) => (
             <div
               key={file.id}

@@ -156,11 +156,13 @@ const Component: FC<Props> = () => {
           title="Full Feedback"
           onClick={() => handleButtonClick("Full")}
         />
+
         <FeedbackOption
           id="Custom"
           title="Custom"
           onClick={() => handleButtonClick("Custom")}
         />
+
         <FeedbackOption
           id="None"
           title="No Feedback"

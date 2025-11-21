@@ -34,7 +34,7 @@ export class Llama3370bInstructLlmService implements IMultimodalLlmProvider {
       serviceUrl: "https://us-south.ml.cloud.ibm.com",
       projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
       watsonxAIAuthType: "iam",
-      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
+      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? Llama3370bInstructLlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
       maxTokens: options?.maxTokens ?? 2000,

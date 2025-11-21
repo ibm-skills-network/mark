@@ -1,6 +1,5 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-// src/api/assignment/v2/common/strategies/text-grading.strategy.ts
 import {
   BadRequestException,
   Inject,
@@ -40,7 +39,7 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     super(
       localizationService,
       gradingAuditService,
-      undefined, // Don't inject consistency service to avoid DI conflicts
+      undefined,
       gradingJudgeService,
       parentLogger,
     );
@@ -90,7 +89,6 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     try {
-      // Create evaluation model
       const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
         question.question,
         context.questionAnswerContext,
@@ -102,7 +100,6 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
         question.responseType ?? "OTHER",
       );
 
-      // Get grading from LLM (includes internal judge validation with retry logic)
       const gradingModel = await this.llmFacadeService.gradeTextBasedQuestion(
         textBasedQuestionEvaluateModel,
         context.assignmentId,
@@ -112,7 +109,6 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
       const responseDto = new CreateQuestionResponseAttemptResponseDto();
       AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
 
-      // Record grading for audit
       await this.recordGrading(
         question,
         {
@@ -123,7 +119,6 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
         "TextGradingStrategy",
       );
 
-      // Add strategy metadata
       responseDto.metadata = {
         ...responseDto.metadata,
         strategyUsed: "TextGradingStrategy",

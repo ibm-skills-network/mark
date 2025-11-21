@@ -1,4 +1,3 @@
-// components/JupyterNotebookViewer.tsx
 import React, { useState, useEffect } from "react";
 import { marked } from "marked";
 import { IconRefresh } from "@tabler/icons-react";
@@ -51,12 +50,10 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
 
   useEffect(() => {
     try {
-      // Parse the notebook JSON
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const parsedNotebook: Notebook =
         typeof content === "string" ? JSON.parse(content) : content;
 
-      // Validate basic notebook structure
       if (!parsedNotebook.cells || !Array.isArray(parsedNotebook.cells)) {
         throw new Error("Invalid notebook format: missing cells array");
       }
@@ -94,7 +91,6 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
 
     return (
       <div className="code-cell">
-        {/* Input area with execution count */}
         <div className="input-area mb-2">
           <div className="flex items-start">
             <div className="execution-count w-12 text-right pr-2 text-gray-500 font-mono">
@@ -112,7 +108,6 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
           </div>
         </div>
 
-        {/* Output area */}
         {cell.outputs && cell.outputs.length > 0 && (
           <div className="output-area ml-12 mb-4">
             {cell.outputs.map((output, idx) => renderCellOutput(output, idx))}
@@ -123,7 +118,6 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
   };
 
   const renderCellOutput = (output: NotebookOutput, idx: number) => {
-    // Handle different output types
     switch (output.output_type) {
       case "stream":
         return (
@@ -137,9 +131,7 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
 
       case "execute_result":
       case "display_data":
-        // Try to find the best representation of the data
         if (output.data) {
-          // Prefer HTML if available
           if (output.data["text/html"]) {
             return (
               <div
@@ -154,7 +146,6 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
             );
           }
 
-          // Then try image formats
           if (output.data["image/png"]) {
             return (
               <div key={idx} className="output-image py-2">
@@ -179,7 +170,6 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
             );
           }
 
-          // SVG
           if (output.data["image/svg+xml"]) {
             return (
               <div
@@ -194,7 +184,6 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
             );
           }
 
-          // Fallback to plain text
           if (
             typeof output.data?.["text/plain"] === "string"
               ? output.data["text/plain"]
@@ -275,12 +264,10 @@ export const JupyterNotebookViewer: React.FC<JupyterNotebookViewerProps> = ({
 
   return (
     <div className={`jupyter-notebook-viewer ${className}`}>
-      {/* Metadata display if needed */}
       {notebook.metadata?.title && (
         <h1 className="text-2xl font-bold mb-4">{notebook.metadata.title}</h1>
       )}
 
-      {/* Render each cell */}
       <div className="notebook-cells">
         {notebook.cells.map((cell, index) => renderCell(cell, index))}
       </div>

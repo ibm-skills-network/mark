@@ -57,6 +57,7 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       showSubmissionFeedback: assignmentDetails.showSubmissionFeedback || false,
       showQuestionScore: assignmentDetails.showQuestionScore || false,
       showAssignmentScore: assignmentDetails.showAssignmentScore || false,
+      questionControls: assignmentDetails.questionControls,
     });
   }, [assignmentDetails, setAssignmentDetails]);
 

@@ -285,8 +285,6 @@ export function setQuestionTitle(questionId, title) {
  * @returns {Promise} - Promise that resolves with success
  */
 export function showReportPreview(params) {
-  // This is a client-side only operation that triggers UI changes
-  // The actual form display is handled by the MarkChat component
   return Promise.resolve({
     success: true,
     message: "Report preview form displayed",
@@ -344,7 +342,6 @@ export function runAuthorOperation(operation, params) {
     case "setQuestionTitle":
       return setQuestionTitle(params.questionId, params.title);
     case "showReportPreview":
-      // This is handled directly by the React component, not through store operations
       return Promise.resolve({
         success: true,
         message: "Report preview handled by component",

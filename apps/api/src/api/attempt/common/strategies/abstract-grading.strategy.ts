@@ -1,4 +1,3 @@
-// src/api/assignment/v2/common/strategies/abstract-grading.strategy.ts
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
@@ -127,7 +126,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
     } = {};
 
     try {
-      // Validate points are within valid range
       if (
         !this.isValidNumber(response.totalPoints) ||
         response.totalPoints < 0
@@ -141,7 +139,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         corrections.points = question.totalPoints;
       }
 
-      // Check consistency with similar responses
       if (
         this.consistencyService &&
         typeof this.consistencyService.generateResponseHash === "function"
@@ -166,14 +163,12 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
               consistencyCheck.deviationPercentage || 0;
 
             if (deviationPercentage > 15) {
-              // More than 15% deviation
               issues.push(
                 `Similar response previously graded differently (${deviationPercentage.toFixed(
                   1,
                 )}% deviation)`,
               );
 
-              // Suggest adjustment to maintain consistency
               if (consistencyCheck.previousGrade !== undefined) {
                 corrections.points = consistencyCheck.previousGrade;
                 corrections.feedback = this.adjustFeedbackForConsistency(
@@ -188,7 +183,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         }
       }
 
-      // Validate feedback alignment with score
       const scorePercentage =
         (response.totalPoints / question.totalPoints) * 100;
       const feedbackTone = this.analyzeFeedbackTone(response.feedback);
@@ -207,7 +201,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         issues.push("Positive feedback tone doesn't match low score");
       }
 
-      // Validate rubric math if present
       if (response.metadata?.rubricScores) {
         const mathValidation = this.validateRubricMath(
           // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
@@ -287,7 +280,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
       return { valid: true };
     } catch (error) {
       this.logger?.error("Error validating rubric math:", error);
-      return { valid: true }; // Don't fail grading due to validation error
+      return { valid: true };
     }
   }
 
@@ -350,7 +343,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         return { tone: "neutral", confidence: 1 };
       }
 
-      const confidence = Math.min(totalWords / 5, 1); // Max confidence at 5 words
+      const confidence = Math.min(totalWords / 5, 1);
 
       if (positiveCount > negativeCount * 2) {
         return { tone: "positive", confidence };
@@ -408,7 +401,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
 
       if (!previousFeedback) return currentText;
 
-      // Add consistency note to feedback
       const adjustedFeedback = `${currentText}\n\n**Note**: This response is similar to previous submissions and has been graded consistently.`;
 
       return adjustedFeedback;
@@ -441,17 +433,15 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
     });
 
     try {
-      // Record in audit service (non-blocking)
       if (!this.gradingAuditService) {
         this.logger?.error("GradingAuditService is not available", {
           questionId: question.id,
           gradingStrategy,
           hasService: !!this.gradingAuditService,
         });
-        return; // Exit early if service is not available
+        return;
       }
 
-      // Type guard: Check if this is actually a GradingAuditService instance
       if (typeof this.gradingAuditService.recordGrading !== "function") {
         this.logger?.error(
           "GradingAuditService.recordGrading is not a function - wrong service type injected",
@@ -468,7 +458,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
           },
         );
 
-        // Gracefully skip audit recording if wrong service type is injected
         this.logger?.warn(
           "Skipping grading audit due to dependency injection issue",
           {
@@ -494,7 +483,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         },
       });
 
-      // Record in consistency service (non-blocking)
       const consistencyPromise = this.recordConsistencyData(
         question,
         requestDto,
@@ -502,13 +490,11 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         context,
       );
 
-      // Wait for both operations but don't throw if they fail
       const results = await Promise.allSettled([
         auditPromise,
         consistencyPromise,
       ]);
 
-      // Log results but don't fail
       for (const [index, result] of results.entries()) {
         const operation = index === 0 ? "audit" : "consistency";
         if (result.status === "fulfilled") {
@@ -537,7 +523,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         consistencySuccess: results[1].status === "fulfilled",
       });
     } catch (error) {
-      // This shouldn't happen with Promise.allSettled, but just in case
       this.logger?.error("Unexpected error in recordGrading", {
         questionId: question.id,
         gradingStrategy,
@@ -563,7 +548,6 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
       return;
     }
 
-    // Additional safety check and type guard
     if (typeof this.consistencyService.generateResponseHash !== "function") {
       this.logger?.error(
         "GradingConsistencyService.generateResponseHash is not a function - wrong service type injected",
@@ -711,7 +695,6 @@ ${guidance}
   private extractPointsFromRubricScore(score: RubricScore): number {
     if (!score || typeof score !== "object") return 0;
 
-    // Use awarded points (fallback to 0). Max points is not the achieved score.
     const points =
       typeof score.pointsAwarded === "number" ? score.pointsAwarded : 0;
     return this.sanitizePoints(points);

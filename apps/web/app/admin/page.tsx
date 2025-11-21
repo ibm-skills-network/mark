@@ -20,7 +20,6 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAdminAccess = async () => {
       try {
-        // First, check if we have a valid admin session token
         const adminToken = localStorage.getItem("adminSessionToken");
         const adminEmail = localStorage.getItem("adminEmail");
         const expiresAt = localStorage.getItem("adminExpiresAt");
@@ -29,7 +28,6 @@ export default function AdminPage() {
           const expireDate = new Date(expiresAt);
 
           if (expireDate > new Date()) {
-            // Session appears valid, let's verify it with the backend
             try {
               const response = await fetch(
                 "/api/v1/reports/feedback?page=1&limit=1",
@@ -41,32 +39,28 @@ export default function AdminPage() {
               );
 
               if (response.ok) {
-                // Session is valid with backend
                 setSessionToken(adminToken);
                 setIsAuthenticated(true);
                 setUserRole("admin");
                 setIsLoading(false);
 
-                // If user already has valid session and there's a returnTo parameter, redirect
                 if (returnTo) {
                   router.push(returnTo);
                 }
                 return;
               } else {
-                // Session invalid, clear it
                 localStorage.removeItem("adminSessionToken");
                 localStorage.removeItem("adminEmail");
                 localStorage.removeItem("adminExpiresAt");
               }
             } catch (apiError) {
               console.error("Error validating session with backend:", apiError);
-              // Clear potentially invalid session
+
               localStorage.removeItem("adminSessionToken");
               localStorage.removeItem("adminEmail");
               localStorage.removeItem("adminExpiresAt");
             }
           } else {
-            // Session expired, clear it
             localStorage.removeItem("adminSessionToken");
             localStorage.removeItem("adminEmail");
             localStorage.removeItem("adminExpiresAt");
@@ -74,7 +68,6 @@ export default function AdminPage() {
         }
       } catch (error) {
         console.error("Failed to check admin access:", error);
-        // Will show login form
       } finally {
         setIsLoading(false);
       }
@@ -88,7 +81,6 @@ export default function AdminPage() {
     setIsAuthenticated(true);
     setUserRole("admin");
 
-    // Redirect to the original destination if returnTo parameter exists
     if (returnTo) {
       router.push(returnTo);
     }
@@ -111,17 +103,14 @@ export default function AdminPage() {
       }
     }
 
-    // Clear local storage
     localStorage.removeItem("adminSessionToken");
     localStorage.removeItem("adminEmail");
     localStorage.removeItem("adminExpiresAt");
 
-    // Reset state
     setSessionToken(null);
     setIsAuthenticated(false);
     setUserRole(null);
 
-    // Redirect to home page
     router.push("/");
   };
 

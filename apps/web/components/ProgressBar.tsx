@@ -18,7 +18,6 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   const [messages, setMessages] = useState<string[]>([]);
   const [maxProgress, setMaxProgress] = useState(0);
 
-  // track max progress so it never goes backwards
   useEffect(() => {
     setMaxProgress((prev) => (progress > prev ? progress : prev));
   }, [progress]);
@@ -53,7 +52,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
 
   const progressVariants = {
     hidden: { width: 0 },
-    visible: { width: `${maxProgress}%` }, // use maxProgress instead of raw progress
+    visible: { width: `${maxProgress}%` },
   };
 
   return (

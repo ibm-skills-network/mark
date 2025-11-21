@@ -42,6 +42,8 @@ const FIELDS = [
   "showQuestionScore",
   "showSubmissionFeedback",
   "showQuestions",
+  "correctAnswerVisibility",
+  "questionControls",
   "languageCode",
 ] as const;
 
@@ -139,6 +141,7 @@ export class AssignmentRepository {
             assignmentId: result.id,
             isDeleted: false,
             totalPoints: qv.totalPoints,
+            authorComment: qv.authorComment ?? legacy?.authorComment ?? null,
             type: qv.type,
             responseType: qv.responseType ?? null,
             question: qv.question,
@@ -204,7 +207,6 @@ export class AssignmentRepository {
   async findAllForUser(
     userSession: UserSession,
   ): Promise<AssignmentResponseDto[]> {
-    // If user is an author, only show assignments they've authored
     if (userSession.role === UserRole.AUTHOR) {
       const authoredAssignments = await this.prisma.assignment.findMany({
         where: {
@@ -216,10 +218,9 @@ export class AssignmentRepository {
         },
       });
 
-      return authoredAssignments;
+      return authoredAssignments as AssignmentResponseDto[];
     }
 
-    // For non-authors (learners, admins), show assignments from their group
     const results = await this.prisma.assignmentGroup.findMany({
       where: { groupId: userSession.groupId },
       include: {
@@ -233,7 +234,7 @@ export class AssignmentRepository {
 
     return results.map((result) => ({
       ...result.assignment,
-    }));
+    })) as AssignmentResponseDto[];
   }
 
   /**

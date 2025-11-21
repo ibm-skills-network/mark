@@ -204,6 +204,16 @@ export class QuestionDto {
   @IsBoolean()
   isDeleted?: boolean;
 
+  @ApiPropertyOptional({
+  description: "Author comment or note on this question",
+  type: String,
+  nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  authorComment?: string | null;
+
+
   @ApiProperty({
     description: "Grading context question IDs (array of question IDs)",
     type: [Number],
@@ -579,12 +589,24 @@ export class UpdateAssignmentQuestionsDto {
   correctAnswerVisibility: CorrectAnswerVisibility;
 
   @ApiProperty({
+    description: "Question-level controls (copy, paste, right-click, print)",
+    required: false,
+    type: "object",
+  })
+  @IsOptional()
+  questionControls?: {
+    disableCopy?: boolean;
+    disablePaste?: boolean;
+    disableRightClick?: boolean;
+    disablePrint?: boolean;
+  };
+
+  @ApiProperty({
     description: "updatedAt",
     required: false,
   })
   @IsOptional()
   updatedAt: Date;
-  // versionDescription
   @ApiProperty({
     description: "versionDescription",
     type: String,
@@ -594,7 +616,6 @@ export class UpdateAssignmentQuestionsDto {
   @IsString()
   versionDescription: string;
 
-  // versionNumber
   @ApiProperty({
     description:
       "versionNumber - the specific version number to create when publishing",
@@ -757,6 +778,15 @@ export class AttemptQuestionDto {
   @ValidateNested({ each: true })
   @Type(() => Choice)
   choices?: Choice[];
+
+  @ApiPropertyOptional({
+  description: "Author comment or note on this question",
+  type: String,
+  nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  authorComment?: string | null;
 
   @ApiPropertyOptional({
     description: "Dictionary of translations keyed by language code",

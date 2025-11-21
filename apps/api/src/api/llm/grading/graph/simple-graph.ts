@@ -48,7 +48,7 @@ export class SimpleGradingGraph {
         let currentState = initialState;
         let currentNode = this.entryPoint;
         const visitedNodes = new Set<string>();
-        const maxIterations = 20; // Prevent infinite loops
+        const maxIterations = 20;
         let iteration = 0;
 
         while (
@@ -58,13 +58,11 @@ export class SimpleGradingGraph {
         ) {
           iteration++;
 
-          // Execute current node
           const nodeFunction = this.nodes.get(currentNode);
           if (!nodeFunction) {
             throw new Error(`Node '${currentNode}' not found`);
           }
 
-          // Prevent infinite loops
           const nodeKey = `${currentNode}_${iteration}`;
           if (visitedNodes.has(nodeKey)) {
             break;
@@ -74,7 +72,6 @@ export class SimpleGradingGraph {
           try {
             currentState = await nodeFunction(currentState);
 
-            // Check if processing should stop
             if (!currentState.shouldContinue) {
               break;
             }
@@ -90,7 +87,6 @@ export class SimpleGradingGraph {
             break;
           }
 
-          // Determine next node
           currentNode = this.getNextNode(currentNode, currentState);
         }
 
@@ -109,7 +105,6 @@ export class SimpleGradingGraph {
       return edge.to;
     }
 
-    // Conditional edge
     if (typeof edge.to === "function" && edge.conditions) {
       const condition = edge.to(state);
       return edge.conditions[condition] ?? "END";

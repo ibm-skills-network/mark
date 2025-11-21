@@ -32,7 +32,7 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
       serviceUrl: "https://us-south.ml.cloud.ibm.com",
       projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
       watsonxAIAuthType: "iam",
-      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
+      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? GptOss120bLlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
       maxTokens: options?.maxTokens ?? 8000,
@@ -55,12 +55,9 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
     this.logger.debug(`Invoking WatsonX Chat with ${inputTokens} input tokens`);
 
     try {
-      console.log(`Invoking WatsonX Chat with ${messages.length} messages`);
       const result = await withWatsonxRateLimit(() => model.invoke(messages));
-      console.log(`WatsonX Chat response received`);
       const rawResponse = result.content.toString();
 
-      // Extract JSON from the response if it contains additional text
       const responseContent = this.extractJSONFromResponse(rawResponse);
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
@@ -135,15 +132,15 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
    * Extract JSON from WatsonX response that may contain additional text or be truncated
    */
   private extractJSONFromResponse(response: string): string {
-    // 1) If the whole response is valid JSON, return it
     try {
       JSON.parse(response);
       return response;
     } catch {
-      // continue
+      this.logger.warn(
+        "Response is not valid JSON, attempting to extract structured JSON",
+      );
     }
 
-    // Use shared extractor which handles schema echoes and noisy wrappers
     return extractStructuredJSON(response);
   }
 
@@ -152,25 +149,20 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
    */
   private repairTruncatedJSON(json: string): string | null {
     try {
-      // Try to parse first to see if it's valid
       JSON.parse(json);
       return json;
     } catch (error) {
-      // If it's not valid JSON, try to repair it
       let repaired = json.trim();
 
-      // Check if we're in the middle of a string (unterminated string error)
       if (
         error instanceof SyntaxError &&
         error.message.includes("Unterminated string")
       ) {
-        // Find the last complete quote and truncate there, then close the string
         const lastCompleteQuote = repaired.lastIndexOf(
           '"',
           repaired.length - 2,
         );
         if (lastCompleteQuote > 0) {
-          // Check if this quote is escaped
           let quotePos = lastCompleteQuote;
           let escapeCount = 0;
           while (quotePos > 0 && repaired[quotePos - 1] === "\\") {
@@ -178,7 +170,6 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
             quotePos--;
           }
 
-          // If odd number of escapes, the quote is escaped, find the previous one
           if (escapeCount % 2 === 1) {
             const previousQuote = repaired.lastIndexOf(
               '"',
@@ -192,33 +183,27 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
           }
         }
 
-        // Add closing quote if we ended on an open quote
         const quoteCount = (repaired.match(/"/g) || []).length;
         if (quoteCount % 2 === 1) {
           repaired += '"';
         }
       }
 
-      // Count open braces and brackets
       const openBraces = (repaired.match(/{/g) || []).length;
       const closeBraces = (repaired.match(/}/g) || []).length;
       const openBrackets = (repaired.match(/\[/g) || []).length;
       const closeBrackets = (repaired.match(/]/g) || []).length;
 
-      // Remove any trailing commas before we close things
       repaired = repaired.replace(/,\s*$/, "");
 
-      // Close arrays first (inner to outer)
       for (let index = 0; index < openBrackets - closeBrackets; index++) {
         repaired += "]";
       }
 
-      // Close objects (outer to inner)
       for (let index = 0; index < openBraces - closeBraces; index++) {
         repaired += "}";
       }
 
-      // Try to parse the repaired JSON
       try {
         JSON.parse(repaired);
         this.logger.info(

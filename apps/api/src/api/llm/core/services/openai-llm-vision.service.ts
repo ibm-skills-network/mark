@@ -34,7 +34,7 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       temperature: options?.temperature ?? 0.5,
       modelName:
         options?.modelName ?? Gpt4VisionPreviewLlmService.DEFAULT_MODEL,
-      maxTokens: options?.maxTokens ?? 4096, // Vision preview has token limits
+      maxTokens: options?.maxTokens ?? 4096,
     });
   }
 
@@ -88,8 +88,6 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
 
-    // GPT-4 Vision Preview uses a different token calculation for images
-    // Images are processed in 512px chunks, each chunk costs ~170 tokens
     const estimatedImageTokens = this.estimateImageTokens(processedImageData);
 
     this.logger.debug(
@@ -105,7 +103,7 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
               type: "image_url",
               image_url: {
                 url: processedImageData,
-                detail: options?.imageDetail ?? "auto", // auto, low, high
+                detail: options?.imageDetail ?? "auto",
               },
             },
           ],
@@ -142,33 +140,24 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
    */
   private estimateImageTokens(imageData: string): number {
     try {
-      // Extract base64 data if it's a data URL
       const base64Data = imageData.includes(",")
         ? imageData.split(",")[1]
         : imageData;
 
-      // Estimate image size in bytes (base64 is ~1.33x larger than binary)
       const estimatedBytes = (base64Data.length * 3) / 4;
 
-      // Rough estimation: GPT-4 Vision processes images in chunks
-      // Low detail: ~85 tokens per image
-      // High detail: depends on image size, roughly 170 tokens per 512px tile
-
       if (estimatedBytes < 50_000) {
-        // Small image (~50KB)
-        return 85; // Low detail processing
+        return 85;
       } else if (estimatedBytes < 200_000) {
-        // Medium image (~200KB)
-        return 255; // ~1.5 tiles
+        return 255;
       } else if (estimatedBytes < 500_000) {
-        // Large image (~500KB)
-        return 510; // ~3 tiles
+        return 510;
       } else {
-        return 765; // Very large image, ~4.5 tiles
+        return 765;
       }
     } catch (error) {
       this.logger.warn("Could not estimate image tokens, using default", error);
-      return 170; // Default estimate
+      return 170;
     }
   }
 
@@ -184,8 +173,7 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       return imageData;
     }
 
-    // Detect image format based on base64 header
-    let mimeType = "image/jpeg"; // Default
+    let mimeType = "image/jpeg";
 
     if (imageData.startsWith("/9j/")) {
       mimeType = "image/jpeg";

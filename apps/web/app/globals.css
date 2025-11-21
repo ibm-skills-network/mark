@@ -80,6 +80,40 @@ body .w-md-editor-text-pre > code,
 body .w-md-editor-text-input {
   @apply !text-base;
 }
+/* Blur content when tab is not visible and preventScreenshot is on */
+body.assignment-blur {
+  filter: blur(10px);
+  pointer-events: none;
+}
+/* Strong blur when “protection” is active */
+.exam-blur {
+  filter: blur(18px);
+  pointer-events: none;
+  user-select: none;
+  transition: filter 0.15s ease-out;
+}
+
+/* Optional: add a dark overlay on top of blurred content */
+.exam-blur-overlay::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 40;
+}
+
+/* Existing from previous answer */
+@media print {
+  body.no-print * {
+    display: none !important;
+  }
+}
+
+body.assignment-blur {
+  filter: blur(10px);
+  pointer-events: none;
+}
 
 /* For the markdown editor to still show in preview mode (bug in the library) */
 body .w-md-editor-content {

@@ -32,9 +32,9 @@ import { Roles } from "src/auth/role/roles.global.guard";
 import { Logger } from "winston";
 import {
   GRADE_SUBMISSION_EXCEPTION,
+  IN_COOLDOWN_PERIOD,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
-  IN_COOLDOWN_PERIOD,
 } from "../assignment/attempt/api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "../assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
@@ -139,10 +139,12 @@ export class AttemptControllerV2 {
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
+    @Req() request: UserSessionRequest,
     @Query("lang") lang?: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
       Number(assignmentAttemptId),
+      request.userSession,
       lang,
     );
   }
@@ -155,9 +157,11 @@ export class AttemptControllerV2 {
   @ApiResponse({ status: 403 })
   getLearnerAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
+    @Req() request: UserSessionRequest,
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.attemptService.getLearnerAssignmentAttempt(
       Number(assignmentAttemptId),
+      request.userSession,
     );
   }
 
@@ -207,7 +211,6 @@ export class AttemptControllerV2 {
     learnerUpdateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     @Req() request: UserSessionRequest,
   ): Promise<any> {
-    // Parse IDs to ensure they're numbers
     const parsedAttemptId = Number(attemptId);
     const parsedAssignmentId = Number(assignmentId);
 
@@ -222,13 +225,10 @@ export class AttemptControllerV2 {
     const gradingCallbackRequired =
       request?.userSession.gradingCallbackRequired ?? false;
 
-    // Always use SSE for submitted assignments
     const needsLongRunningGrading = true;
-    // Check if this is author mode (might have fake attempt ID)
     const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
 
     if (needsLongRunningGrading && !isAuthorMode) {
-      // Only create grading jobs for real learner attempts
       const { gradingJobId, message } =
         await this.attemptService.createGradingJob(
           parsedAttemptId,
@@ -238,7 +238,6 @@ export class AttemptControllerV2 {
           request,
         );
 
-      // Start the grading process asynchronously (don't await)
       this.attemptService
         .processGradingJob(
           gradingJobId,
@@ -252,10 +251,8 @@ export class AttemptControllerV2 {
           this.logger.error(`Grading job ${gradingJobId} failed:`, error);
         });
 
-      // Return immediately with job ID
       return { gradingJobId, message };
     } else if (needsLongRunningGrading && isAuthorMode) {
-      // For author mode, create a job without attemptId
       const { gradingJobId, message } =
         await this.attemptService.createAuthorGradingJob(
           parsedAssignmentId,
@@ -264,7 +261,6 @@ export class AttemptControllerV2 {
           request,
         );
 
-      // Process author preview asynchronously
       this.attemptService
         .processAuthorPreviewJob(
           gradingJobId,
@@ -282,7 +278,6 @@ export class AttemptControllerV2 {
 
       return { gradingJobId, message };
     } else {
-      // Regular synchronous update
       const result = await this.attemptService.updateAssignmentAttempt(
         parsedAttemptId,
         parsedAssignmentId,
@@ -318,8 +313,6 @@ export class AttemptControllerV2 {
       );
     }
 
-    // For author mode, attemptId might be null or not match
-    // Only validate attemptId for learner jobs
     if (job.attemptId !== null && job.attemptId !== Number(attemptId)) {
       throw new BadRequestException(
         `Grading job ${gradingJobId} does not belong to attempt ${attemptId}`,
@@ -510,10 +503,8 @@ export class AttemptControllerV2 {
     message: string;
     statistics: any;
   }> {
-    // Log the usage summary to Winston logs
     await this.gradingAuditService.logArchitectureUsageSummary();
 
-    // Also return statistics for API response
     const statistics =
       await this.gradingAuditService.getGradingUsageStatistics();
 

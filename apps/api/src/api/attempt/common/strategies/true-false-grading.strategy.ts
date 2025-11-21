@@ -161,7 +161,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
       awardedPoints: pointsAwarded,
     };
 
-    // Record grading for audit and consistency
     await this.recordGrading(
       question,
       {

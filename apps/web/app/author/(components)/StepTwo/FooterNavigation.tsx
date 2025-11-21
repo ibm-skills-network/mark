@@ -33,14 +33,11 @@ export const FooterNavigation = () => {
     if (isAssignmentConfigValid) {
       router.push(`/author/${activeAssignmentId}/review`);
     } else {
-      // Check if error is on current page
       const firstErrorField = document.querySelector('[aria-invalid="true"]');
 
       if (firstErrorField) {
-        // Error is on current page, just scroll to it
         handleScrollToFirstErrorField();
       } else {
-        // Error might be on another page
         setErrorMessage("Please fix all validation errors before proceeding.");
         setShowErrorModal(true);
       }
@@ -62,19 +59,15 @@ export const FooterNavigation = () => {
         </Button>
       </footer>
 
-      {/* Error Modal */}
       {showErrorModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            {/* Backdrop */}
             <div
               className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
               onClick={() => setShowErrorModal(false)}
             />
 
-            {/* Modal Content */}
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              {/* Close button */}
               <button
                 onClick={() => setShowErrorModal(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -82,7 +75,6 @@ export const FooterNavigation = () => {
                 <XMarkIcon className="h-6 w-6" />
               </button>
 
-              {/* Modal Header */}
               <div className="flex items-center mb-4">
                 <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-2" />
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -90,12 +82,10 @@ export const FooterNavigation = () => {
                 </h3>
               </div>
 
-              {/* Modal Body */}
               <div className="mb-6">
                 <p className="text-gray-600">{errorMessage}</p>
               </div>
 
-              {/* Modal Footer */}
               <div className="flex justify-end">
                 <button
                   onClick={() => setShowErrorModal(false)}

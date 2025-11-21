@@ -40,7 +40,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    */
   async onApplicationBootstrap(): Promise<void> {
     this.logger.log("Application started - running initial tasks");
-    // Run initial tasks on startup
     await Promise.all([this.migrateExistingAuthors(), this.updateLLMPricing()]);
   }
 
@@ -58,7 +57,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     );
 
     try {
-      // Find authors from Report table where author=true
       const reportAuthors = await this.prismaService.report.findMany({
         where: {
           author: true,
@@ -77,7 +75,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Found ${reportAuthors.length} potential authors from Report table`,
       );
 
-      // Find authors from AIUsage table
       const aiUsageAuthors = await this.prismaService.aIUsage.findMany({
         where: {
           userId: {
@@ -98,7 +95,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Found ${aiUsageAuthors.length} potential authors from AIUsage table`,
       );
 
-      // Find authors from Job table
       const jobAuthors = await this.prismaService.job.findMany({
         select: {
           userId: true,
@@ -111,7 +107,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Found ${jobAuthors.length} potential authors from Job table`,
       );
 
-      // Find authors from publishJob table
       const publishJobAuthors = await this.prismaService.publishJob.findMany({
         where: {
           userId: {
@@ -125,7 +120,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         distinct: ["userId", "assignmentId"],
       });
 
-      // Combine all potential authors
       const allPotentialAuthors = [
         ...reportAuthors
           .filter((r) => r.assignmentId !== null)
@@ -149,7 +143,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         })),
       ];
 
-      // Remove duplicates and filter out invalid entries
       const uniqueAuthors = allPotentialAuthors.filter(
         (author, index, self) =>
           author.userId &&
@@ -166,7 +159,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         `Processing ${uniqueAuthors.length} unique author-assignment pairs`,
       );
 
-      // Use batch upsert for better performance
       const results = await this.batchUpsertAuthors(uniqueAuthors);
 
       this.logger.log(
@@ -192,16 +184,13 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     let updated = 0;
     let skipped = 0;
 
-    // Process in batches to avoid overwhelming the database
     const batchSize = 100;
     for (let index = 0; index < authors.length; index += batchSize) {
       const batch = authors.slice(index, index + batchSize);
 
-      // Use transaction for batch operations
       await this.prismaService.$transaction(async (tx) => {
         for (const author of batch) {
           try {
-            // First check if assignment exists
             const assignmentExists = await tx.assignment.findUnique({
               where: { id: author.assignmentId },
               select: { id: true },
@@ -212,7 +201,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
               continue;
             }
 
-            // Upsert the author
             const result = await tx.assignmentAuthor.upsert({
               where: {
                 assignmentId_userId: {
@@ -221,7 +209,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
                 },
               },
               update: {
-                // Update timestamp to track last sync
                 createdAt: new Date(),
               },
               create: {
@@ -231,21 +218,17 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
               },
             });
 
-            // Check if it was a create or update based on createdAt
             if (result.createdAt.getTime() === Date.now()) {
               created++;
             } else {
               updated++;
             }
           } catch (error: { code: string } | any) {
-            // Log specific errors but continue processing
             if (error.code === "P2002") {
-              // This shouldn't happen with upsert, but log it
               this.logger.debug(
                 `Unexpected duplicate for assignment ${author.assignmentId}, user ${author.userId}`,
               );
             } else if (error.code === "P2003") {
-              // Foreign key constraint failed
               this.logger.debug(
                 `Invalid reference for assignment ${author.assignmentId} or user ${author.userId}`,
               );
@@ -281,7 +264,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
           userId: author.userId,
           createdAt: new Date(),
         })),
-        skipDuplicates: true, // Skip existing records
+        skipDuplicates: true,
       });
 
       return result.count;
@@ -335,7 +318,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
 
       this.logger.log(logMessage);
 
-      // Find and log drafts to be deleted
       const oldDrafts = await this.prismaService.assignmentDraft.findMany({
         where: whereCondition,
         select: {
@@ -370,7 +352,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         };
       }
 
-      // Log details for audit
       for (const draft of oldDrafts) {
         this.logger.log(
           `Deleting draft: ID=${draft.id}, Name="${draft.draftName}", ` +
@@ -378,7 +359,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         );
       }
 
-      // Delete the drafts
       const deletedDrafts = await this.prismaService.assignmentDraft.deleteMany(
         {
           where: whereCondition,

@@ -56,6 +56,8 @@ import { AttemptValidationService } from "./attempt-validation.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
+import { Roles } from "src/auth/role/roles.global.guard";
+import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
 
 @Injectable()
 export class AttemptSubmissionService {
@@ -150,7 +152,6 @@ export class AttemptSubmissionService {
         ? await Promise.all(
             assignmentWithActiveVersion.currentVersion.questionVersions.map(
               async (qv) => {
-                // Fetch variants from the original question if questionId exists
                 let variants: QuestionVariant[] = [];
                 if (qv.questionId) {
                   const originalQuestion =
@@ -166,10 +167,10 @@ export class AttemptSubmissionService {
                 }
 
                 return {
-                  id: qv.questionId || qv.id, // Use questionId if available, fallback to qv.id
+                  id: qv.questionId || qv.id,
                   question: qv.question,
                   type: qv.type,
-                  assignmentId: assignmentId, // Set from parameter since QuestionVersion doesn't have this
+                  assignmentId: assignmentId,
                   totalPoints: qv.totalPoints,
                   maxWords: qv.maxWords,
                   maxCharacters: qv.maxCharacters,
@@ -191,7 +192,7 @@ export class AttemptSubmissionService {
                   ),
                   gradingContextQuestionIds: qv.gradingContextQuestionIds,
                   responseType: qv.responseType,
-                  isDeleted: false, // QuestionVersions are not deleted by definition
+                  isDeleted: false,
                   randomizedChoices: qv.randomizedChoices,
                   videoPresentationConfig:
                     qv.videoPresentationConfig as unknown as VideoPresentationConfig,
@@ -338,6 +339,7 @@ export class AttemptSubmissionService {
    */
   async getLearnerAssignmentAttempt(
     attemptId: number,
+    userSession: UserSession,
   ): Promise<GetAssignmentAttemptResponseDto> {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -383,6 +385,12 @@ export class AttemptSubmissionService {
       throw new NotFoundException(
         `Assignment with Id ${assignmentAttempt.assignmentId} not found.`,
       );
+    }
+
+    if (userSession.role === UserRole.LEARNER) {
+      assignment.questions.map((question) => {
+        question.authorComment = null;
+      });
     }
 
     const shouldShowCorrectAnswers = this.shouldShowCorrectAnswers(
@@ -494,7 +502,6 @@ export class AttemptSubmissionService {
 
     let questionsToShow = questionDtos;
     {
-      // Get all questions from the assignment version or legacy questions
       const allQuestions: unknown[] =
         assignmentAttempt.assignmentVersionId &&
         assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
@@ -523,7 +530,6 @@ export class AttemptSubmissionService {
               },
             });
 
-      // Convert to questionDtos format
       const allQuestionDtos: EnhancedAttemptQuestionDto[] = allQuestions.map(
         (q) => {
           const question = q as Record<string, unknown>;
@@ -583,7 +589,6 @@ export class AttemptSubmissionService {
         {
           id: assignmentAttempt.assignmentId,
           ...assignment,
-          // Override questionOrder to include all questions if we should show all
           questionOrder: questionsToShow.map((q) => q.id),
         },
         this.prisma,
@@ -673,7 +678,6 @@ export class AttemptSubmissionService {
       } | null;
     };
 
-    // Get version-specific questions for translation if available
     const questionsForTranslation: QuestionDto[] =
       assignmentAttempt.assignmentVersionId &&
       assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
@@ -732,14 +736,12 @@ export class AttemptSubmissionService {
       })),
     };
 
-    // Determine if we should show all questions based on correctAnswerVisibility
     const shouldShowAllQuestions = this.shouldShowCorrectAnswers(
       assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
     );
 
-    // If we should show all questions, override the assignment questionOrder
     const assignmentForTranslation = {
       ...assignment,
       questionOrder: shouldShowAllQuestions
@@ -792,7 +794,6 @@ export class AttemptSubmissionService {
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
-      // Report initial progress
       if (progressCallback) {
         await progressCallback("Validating submission...", 5);
       }
@@ -1301,6 +1302,8 @@ export class AttemptSubmissionService {
   /**
    * Remove sensitive data from questions
    */
+
+  // fpilter out the author comment
   private removeSensitiveData(
     questions: AttemptQuestionDto[],
     assignment: { correctAnswerVisibility: CorrectAnswerVisibility },
@@ -1311,6 +1314,11 @@ export class AttemptSubmissionService {
       if (!question.scoring?.showRubricsToLearner) {
         delete question.scoring?.rubrics;
       }
+
+      if (UserRole.LEARNER) {
+        question.authorComment == null;
+      }
+      // if user role learner make quetion null
 
       if (question.choices) {
         for (const choice of question.choices) {
