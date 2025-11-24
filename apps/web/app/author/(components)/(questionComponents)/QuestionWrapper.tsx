@@ -16,13 +16,14 @@ import { expandMarkingRubric, generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
 import MarkdownEditor from "@components/MarkDownEditor";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
-import { ArrowDownIcon, PlusIcon } from "@heroicons/react/24/solid";
 import React, {
   FC,
   useEffect,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 import { toast } from "sonner";
 import MultipleAnswerSection from "../Questions/QuestionTypes/MultipleAnswerSection";
@@ -294,6 +295,11 @@ interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
   variantMode: boolean;
   responseType: ResponseType;
   variantId?: number;
+  authorComment?: string;
+  setAuthorComment?: Dispatch<SetStateAction<string>>;
+  onAuthorCommentBlur?: () => void;
+  isAuthorCommentVisible?: boolean;
+  setIsAuthorCommentVisible?: Dispatch<SetStateAction<boolean>>;
 }
 
 const QuestionWrapper: FC<QuestionWrapperProps> = ({
@@ -314,6 +320,11 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   variantMode,
   variantId,
   responseType,
+  authorComment,
+  setAuthorComment,
+  onAuthorCommentBlur,
+  isAuthorCommentVisible,
+  setIsAuthorCommentVisible,
 }) => {
   const [localQuestionTitle, setLocalQuestionTitle] =
     useState<string>(questionTitle);
@@ -862,6 +873,46 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         </div>
       )}
 
+      {!variantMode &&
+        !preview &&
+        typeof isAuthorCommentVisible === "boolean" &&
+        setIsAuthorCommentVisible &&
+        setAuthorComment &&
+        (isAuthorCommentVisible ? (
+          <div className="w-full mb-4 bg-grey-50 border border-violet-200 rounded-md p-3">
+            <label className="block text-violet-900 text-sm font-semibold mb-1">
+              Private Author Comment (Not visible to learners)
+            </label>
+            <textarea
+              className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:ring-violet-500 focus:border-violet-500"
+              placeholder="Add a note, reminder, or explanation for this question..."
+              value={authorComment ?? ""}
+              onChange={(e) => setAuthorComment?.(e.target.value)}
+              onBlur={() => {
+                onAuthorCommentBlur?.();
+              }}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsAuthorCommentVisible?.(true)}
+            className="flex items-center gap-2 bg-violet-100 border border-violet-200 rounded-md py-2 px-4 hover:bg-violet-100 transition-colors duration-150 w-fit"
+          >
+            <span className="text-violet-800 typography-body text-nowrap font-bold">
+              + Add Author Comment
+            </span>
+          </button>
+        ))}
+
+      {!variantMode && preview && authorComment?.trim() && (
+        <div className="w-full mb-4 p-3 bg-gray-50 rounded-md text-gray-700">
+          <strong>Author Comment:</strong>
+          <p className="mt-1">{authorComment}</p>
+        </div>
+      )}
+
+      {/* Show Rubrics to Learner toggle, only for certain question types */}
       {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) && (
         <div className="flex flex-col justify-between gap-2 my-3">
           <div>

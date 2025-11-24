@@ -204,6 +204,16 @@ export class QuestionDto {
   @IsBoolean()
   isDeleted?: boolean;
 
+  @ApiPropertyOptional({
+  description: "Author comment or note on this question",
+  type: String,
+  nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  authorComment?: string | null;
+
+
   @ApiProperty({
     description: "Grading context question IDs (array of question IDs)",
     type: [Number],
@@ -768,6 +778,15 @@ export class AttemptQuestionDto {
   @ValidateNested({ each: true })
   @Type(() => Choice)
   choices?: Choice[];
+
+  @ApiPropertyOptional({
+  description: "Author comment or note on this question",
+  type: String,
+  nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  authorComment?: string | null;
 
   @ApiPropertyOptional({
     description: "Dictionary of translations keyed by language code",

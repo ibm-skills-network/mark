@@ -79,6 +79,15 @@ export class CreateUpdateQuestionRequestDto {
   @IsEnum(QuestionType)
   type: QuestionType;
 
+  @ApiPropertyOptional({
+  description: "Author comment or note on this question",
+  type: String,
+  nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  authorComment?: string | null;
+
   @ApiProperty({
     description: "The question content.",
     type: String,

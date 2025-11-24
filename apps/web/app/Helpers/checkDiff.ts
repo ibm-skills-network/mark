@@ -268,6 +268,16 @@ export function useChangesSummary(): string {
         diffs.push(`Updated max characters for question ${question.id}.`);
       }
 
+      const normalizedAuthorComment = (question.authorComment ?? "").trim();
+      const normalizedOriginalAuthorComment = (
+        originalQuestion.authorComment ?? ""
+      ).trim();
+      if (
+        !safeCompare(normalizedAuthorComment, normalizedOriginalAuthorComment)
+      ) {
+        diffs.push(`Updated the author comment for question ${question.id}.`);
+      }
+
       if (
         !safeCompare(
           question.videoPresentationConfig,

@@ -724,8 +724,12 @@ export class AttemptServiceV2 {
    */
   async getLearnerAssignmentAttempt(
     attemptId: number,
+    userSession: UserSession,
   ): Promise<GetAssignmentAttemptResponseDto> {
-    return this.submissionService.getLearnerAssignmentAttempt(attemptId);
+    return this.submissionService.getLearnerAssignmentAttempt(
+      attemptId,
+      userSession,
+    );
   }
 
   /**
@@ -733,6 +737,7 @@ export class AttemptServiceV2 {
    */
   async getAssignmentAttempt(
     attemptId: number,
+    userSession: UserSession,
     language?: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
     return this.submissionService.getAssignmentAttempt(attemptId, language);

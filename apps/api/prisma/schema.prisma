@@ -312,6 +312,7 @@ model QuestionVersion {
   id                        Int                @id @default(autoincrement()) /// Unique identifier for the question version
   assignmentVersionId       Int                /// The ID of the assignment version this belongs to
   assignmentVersion         AssignmentVersion  @relation(fields: [assignmentVersionId], references: [id], onDelete: Cascade)
+  authorComment             String? /// The comment an author can leave for context on a question
   questionId                Int?               /// Reference to original question (null for new questions in version)
   totalPoints               Int                /// Points for this question
   type                      QuestionType       /// Type of question
@@ -365,6 +366,7 @@ model Question {
   totalPoints               Int /// Total points that can be scored for the question
   type                      QuestionType /// Type of question
   responseType              ResponseType? /// Type of response expected from the learner
+  authorComment             String? /// The comment an author can leave for context on a question
   question                  String /// The text of the question
   variants                  QuestionVariant[] /// AI-generated variants for this question
   maxWords                  Int? /// Optional maximum number of words allowed for a written response type question

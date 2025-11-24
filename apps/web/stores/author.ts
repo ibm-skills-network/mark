@@ -130,7 +130,11 @@ export type AuthorActions = {
     questionId: number,
     newQuestion: QuestionAuthorStore,
   ) => void;
-  modifyQuestion: (questionId: number, modifiedData: OptionalQuestion) => void;
+  modifyQuestion: (
+    questionId: number,
+    modifiedData: OptionalQuestion,
+    authorComment?: string,
+  ) => void;
   addOneRubric: (questionId: number, variantId?: number) => void;
   removeRubric: (
     questionId: number,
@@ -1844,6 +1848,7 @@ export const useAuthorStore = createWithEqualityFn<
             maxCharacters: questionVersion.maxCharacters,
             totalPoints: questionVersion.totalPoints,
             answer: questionVersion.answer,
+            authorComment: questionVersion.authorComment ?? null,
             choices: parseJsonField(
               questionVersion.choices,
               "question choices",
@@ -1879,6 +1884,7 @@ export const useAuthorStore = createWithEqualityFn<
             updatedAt: questionVersion.createdAt,
             maxWords: question.maxWords || null,
             maxCharacters: question.maxCharacters || null,
+            authorComment: question.authorComment ?? null,
           };
         },
 

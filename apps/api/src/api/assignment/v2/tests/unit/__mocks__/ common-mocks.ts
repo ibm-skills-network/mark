@@ -631,6 +631,7 @@ export const createMockQuestion = (
     isDeleted: false,
     videoPresentationConfig: null,
     liveRecordingConfig: null,
+    authorComment: null,
   };
 
   switch (questionType) {

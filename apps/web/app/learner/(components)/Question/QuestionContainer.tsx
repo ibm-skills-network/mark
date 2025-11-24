@@ -53,6 +53,11 @@ function Component(props: Props) {
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
     (state) => [state.activeQuestionNumber, state.setActiveQuestionNumber],
   );
+
+  // author comment visiblity
+  const role = useLearnerStore((state) => state.role);
+  const isAuthorView = role === "author";
+
   const setQuestionStatus = useLearnerStore((state) => state.setQuestionStatus);
   const getQuestionStatusById = useLearnerStore(
     (state) => state.getQuestionStatusById,
@@ -332,6 +337,22 @@ function Component(props: Props) {
           </button>
         </div>
       </div>
+      {isAuthorView && question.authorComment?.trim() && (
+        <div className="mt-6 border border-violet-200 rounded-md p-4 bg-white">
+          <p className="text-sm font-semibold text-violet-800 mb-2">
+            Private Author Comment (Not visible to learners)
+          </p>
+
+          <div className="border border-gray-300 bg-white rounded-md p-3">
+            <MarkdownViewer
+              className="text-sm text-gray-800 whitespace-pre-wrap"
+              id={`question-${question.id}-author-comment`}
+            >
+              {question.authorComment}
+            </MarkdownViewer>
+          </div>
+        </div>
+      )}
       {checkToShowRubric() && (
         <ShowHideRubric
           rubrics={question.scoring.rubrics}

@@ -141,6 +141,7 @@ export class AssignmentRepository {
             assignmentId: result.id,
             isDeleted: false,
             totalPoints: qv.totalPoints,
+            authorComment: qv.authorComment ?? legacy?.authorComment ?? null,
             type: qv.type,
             responseType: qv.responseType ?? null,
             question: qv.question,

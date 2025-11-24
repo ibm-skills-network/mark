@@ -235,6 +235,7 @@ export type UpdateQuestionStateParams = {
   questionType?: QuestionType;
   responseType?: ResponseType;
   totalPoints?: number;
+  authorComment?: string;
   randomizedChoices?: boolean;
   maxWordCount?: number;
   questionTitle?: string;
@@ -426,6 +427,8 @@ export interface CreateQuestionRequest extends BaseQuestion {
 
   answer?: boolean;
 
+  authorComment?: string;
+
   choices?: Choice[];
 }
 export interface videoPresentationConfig {
@@ -445,6 +448,7 @@ export interface Question extends CreateQuestionRequest {
   assignmentId: number;
   questionOrder?: number[];
   variants?: QuestionVariants[];
+  authorComment?: string;
   randomizedChoices?: boolean;
   alreadyInBackend?: boolean;
   videoPresentationConfig?: videoPresentationConfig;
@@ -462,6 +466,7 @@ export interface QuestionVariants {
   id: number;
   questionId: number;
   type: QuestionType;
+  authorComment?: string;
   variantContent: string;
   choices: string | Choice[];
   maxWords?: number;
@@ -483,6 +488,8 @@ export interface QuestionAuthorStore extends Question {
   index?: number;
   alreadyInBackend?: boolean;
   showPoints?: boolean;
+  authorComment?: string;
+  //set with a button on the frontend
 }
 
 /**
@@ -493,6 +500,7 @@ export interface QuestionAuthorStore extends Question {
 export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
     status: QuestionStatus;
+    authorComment?: string;
     learnerResponse: string;
     translationOn: boolean;
     selectedLanguage: string;
