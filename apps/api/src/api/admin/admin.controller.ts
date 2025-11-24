@@ -175,7 +175,6 @@ export class AdminController {
     @Param("id") id: number,
     @Body() addContentRequestDto: AdminAddContentToAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
-    // In a real app, you'd get userId from the authenticated user context
     // For now, using 'admin-api' as the creator
     return this.adminService.addContentToAssignment(
       Number(id),
