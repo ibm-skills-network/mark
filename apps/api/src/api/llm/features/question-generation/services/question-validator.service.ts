@@ -368,9 +368,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       issues.push("All choices should have meaningful feedback");
     }
 
-    const choiceTexts = question.choices.map((c: Choice) =>
-      c.choice?.toLowerCase().trim(),
-    );
+    const choiceTexts = question.choices.map((c: Choice) => {
+      const choiceText =
+        typeof c.choice === "string" ? c.choice : String(c.choice ?? "");
+      return choiceText.toLowerCase().trim();
+    });
     if (new Set(choiceTexts).size !== choiceTexts.length) {
       issues.push("Choices contain duplicates");
     }
@@ -406,9 +408,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       issues.push("All choices should have meaningful feedback");
     }
 
-    const choiceTexts = question.choices.map((c: Choice) =>
-      c.choice?.toLowerCase().trim(),
-    );
+    const choiceTexts = question.choices.map((c: Choice) => {
+      const choiceText =
+        typeof c.choice === "string" ? c.choice : String(c.choice ?? "");
+      return choiceText.toLowerCase().trim();
+    });
     if (new Set(choiceTexts).size !== choiceTexts.length) {
       issues.push("Choices contain duplicates");
     }

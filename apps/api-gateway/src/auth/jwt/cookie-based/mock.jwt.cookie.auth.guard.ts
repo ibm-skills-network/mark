@@ -23,7 +23,7 @@ export class MockJwtCookieAuthGuard extends AuthGuard("cookie-strategy") {
 
     request.user = {
       userId: "magdy.hafez@ibm.com",
-      role: UserRole.LEARNER,
+      role: UserRole.AUTHOR,
       groupId: "autogen-faculty-v1-course-v1-IND-AI0103EN-v1",
       assignmentId: 1,
       gradingCallbackRequired: false,
