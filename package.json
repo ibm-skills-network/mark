@@ -82,7 +82,7 @@
     "natural": "^8.1.0",
     "next": "^14.2.32",
     "node-fetch": "^2.6.7",
-    "nodemailer": "^7.0.7",
+    "nodemailer": "^7.0.11",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "^4.7.76",
     "prismjs": "1.30.0",

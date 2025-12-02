@@ -12718,10 +12718,10 @@ node-xlsx@^0.24.0:
   dependencies:
     xlsx "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
 
-nodemailer@^7.0.7:
-  version "7.0.9"
-  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-7.0.9.tgz#fe5abd4173e08e01aa243c7cddd612ad8c6ccc18"
-  integrity sha512-9/Qm0qXIByEP8lEV2qOqcAW7bRpL8CR9jcTwk3NBnHJNmP9fIJ86g2fgmIXqHY+nj55ZEMwWqYAT2QTDpRUYiQ==
+nodemailer@^7.0.11:
+  version "7.0.11"
+  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-7.0.11.tgz#5f7b06afaec20073cff36bea92d1c7395cc3e512"
+  integrity sha512-gnXhNRE0FNhD7wPSCGhdNh46Hs6nm+uTyg+Kq0cZukNQiYdnCsoQjodNP9BQVG9XrcK/v6/MgpAPBUFyzh9pvw==
 
 normalize-package-data@^2.5.0:
   version "2.5.0"
