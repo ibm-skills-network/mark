@@ -1,10 +1,10 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { AdminService } from '../admin.service';
-import { PrismaService } from '../../../database/prisma.service';
-import { RedisService } from '../../../cache/redis.service';
-import { LLMPricingService } from '../../llm/core/services/llm-pricing.service';
-import { LLM_PRICING_SERVICE } from '../../llm/llm.constants';
-import { UserRole } from '../../../auth/interfaces/user.session.interface';
+import { Test, TestingModule } from "@nestjs/testing";
+import { UserRole } from "../../../auth/interfaces/user.session.interface";
+import { CacheService } from "../../../cache/cache.service";
+import { PrismaService } from "../../../database/prisma.service";
+import { LLMPricingService } from "../../llm/core/services/llm-pricing.service";
+import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
+import { AdminService } from "../admin.service";
 
 /**
  * Performance tests for admin analytics endpoints
@@ -15,29 +15,29 @@ import { UserRole } from '../../../auth/interfaces/user.session.interface';
  * - Warm Request (cached): < 250ms
  * - Query Count: < 10 per request (vs 50-100+ before)
  */
-describe('Admin Analytics Performance Tests', () => {
+describe("Admin Analytics Performance Tests", () => {
   let adminService: AdminService;
   let prismaService: PrismaService;
-  let redisService: RedisService;
+  let cacheService: CacheService;
 
   // Performance tracking
   const queryLog: Array<{ query: string; timestamp: number }> = [];
   let queryCount = 0;
 
   const mockAdminSession = {
-    email: 'admin@test.com',
+    email: "admin@test.com",
     role: UserRole.ADMIN,
-    sessionToken: 'test-token',
-    userId: 'admin-user-id',
+    sessionToken: "test-token",
+    userId: "admin-user-id",
   };
 
   const mockAssignment = {
     id: 1,
-    name: 'Test Assignment',
-    type: 'AI_GRADED',
+    name: "Test Assignment",
+    type: "AI_GRADED",
     published: true,
-    introduction: 'Test intro',
-    instructions: 'Test instructions',
+    introduction: "Test intro",
+    instructions: "Test instructions",
     timeEstimateMinutes: 30,
     allotedTimeMinutes: 45,
     passingGrade: 0.7,
@@ -45,7 +45,7 @@ describe('Admin Analytics Performance Tests', () => {
     questions: Array.from({ length: 10 }, (_, index) => ({
       id: index + 1,
       question: `Question ${index + 1}`,
-      type: 'MULTIPLE_CHOICE',
+      type: "MULTIPLE_CHOICE",
       totalPoints: 10,
       isDeleted: false,
       variants: [],
@@ -56,8 +56,8 @@ describe('Admin Analytics Performance Tests', () => {
       assignmentId: 1,
       tokensIn: 1000,
       tokensOut: 500,
-      usageType: 'grading',
-      modelKey: 'gpt-4',
+      usageType: "grading",
+      modelKey: "gpt-4",
       createdAt: new Date(),
       usageCount: 1,
     })),
@@ -65,7 +65,7 @@ describe('Admin Analytics Performance Tests', () => {
     Report: [],
     AssignmentAuthor: [
       {
-        userId: 'author-1',
+        userId: "author-1",
         assignmentId: 1,
       },
     ],
@@ -77,40 +77,55 @@ describe('Admin Analytics Performance Tests', () => {
       assignment: {
         findFirst: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignment.findFirst', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 10)); // Simulate DB latency
+          queryLog.push({
+            query: "assignment.findFirst",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 10)); // Simulate DB latency
           return mockAssignment;
         }),
         findMany: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignment.findMany', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 10));
+          queryLog.push({
+            query: "assignment.findMany",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 10));
           return [mockAssignment];
         }),
         count: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignment.count', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 5));
+          queryLog.push({ query: "assignment.count", timestamp: Date.now() });
+          await new Promise((resolve) => setTimeout(resolve, 5));
           return 1;
         }),
       },
       assignmentAttempt: {
         count: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignmentAttempt.count', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 5));
+          queryLog.push({
+            query: "assignmentAttempt.count",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 5));
           return 100;
         }),
         aggregate: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignmentAttempt.aggregate', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 10));
+          queryLog.push({
+            query: "assignmentAttempt.aggregate",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 10));
           return { _avg: { grade: 0.85 } };
         }),
         groupBy: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignmentAttempt.groupBy', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 10));
+          queryLog.push({
+            query: "assignmentAttempt.groupBy",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 10));
           return Array.from({ length: 50 }, (_, index) => ({
             assignmentId: 1,
             userId: `user-${index}`,
@@ -120,28 +135,40 @@ describe('Admin Analytics Performance Tests', () => {
         }),
         findMany: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignmentAttempt.findMany', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 10));
+          queryLog.push({
+            query: "assignmentAttempt.findMany",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 10));
           return [];
         }),
       },
       questionResponse: {
         count: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'questionResponse.count', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 5));
+          queryLog.push({
+            query: "questionResponse.count",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 5));
           return 80;
         }),
         aggregate: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'questionResponse.aggregate', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 10));
+          queryLog.push({
+            query: "questionResponse.aggregate",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 10));
           return { _avg: { points: 8.5 } };
         }),
         groupBy: jest.fn().mockImplementation(async (arguments_) => {
           queryCount++;
-          queryLog.push({ query: 'questionResponse.groupBy', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 15));
+          queryLog.push({
+            query: "questionResponse.groupBy",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 15));
 
           // Return stats for each question
           const questionIds = arguments_.where.questionId.in || [];
@@ -155,21 +182,26 @@ describe('Admin Analytics Performance Tests', () => {
       aIUsage: {
         findMany: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'aIUsage.findMany', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 10));
+          queryLog.push({ query: "aIUsage.findMany", timestamp: Date.now() });
+          await new Promise((resolve) => setTimeout(resolve, 10));
           return mockAssignment.AIUsage;
         }),
       },
       assignmentFeedback: {
         groupBy: jest.fn().mockImplementation(async () => {
           queryCount++;
-          queryLog.push({ query: 'assignmentFeedback.groupBy', timestamp: Date.now() });
-          await new Promise(resolve => setTimeout(resolve, 5));
-          return [{
-            assignmentId: 1,
-            _avg: { assignmentRating: 4.5 },
-            _count: { id: 10 },
-          }];
+          queryLog.push({
+            query: "assignmentFeedback.groupBy",
+            timestamp: Date.now(),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return [
+            {
+              assignmentId: 1,
+              _avg: { assignmentRating: 4.5 },
+              _count: { id: 10 },
+            },
+          ];
         }),
       },
       user: {
@@ -178,19 +210,23 @@ describe('Admin Analytics Performance Tests', () => {
     };
   };
 
-  const createMockRedisService = () => {
+  const createMockCacheService = () => {
     const cache = new Map<string, any>();
 
     return {
-      getOrSet: jest.fn().mockImplementation(async (key: string, factory: () => Promise<any>, options?: any) => {
-        // Simulate cache miss on first call, hit on subsequent calls
-        if (!cache.has(key)) {
-          const value = await factory();
-          cache.set(key, value);
-          return value;
-        }
-        return cache.get(key);
-      }),
+      getOrSet: jest
+        .fn()
+        .mockImplementation(
+          async (key: string, factory: () => Promise<any>, options?: any) => {
+            // Simulate cache miss on first call, hit on subsequent calls
+            if (!cache.has(key)) {
+              const value = await factory();
+              cache.set(key, value);
+              return value;
+            }
+            return cache.get(key);
+          }
+        ),
       get: jest.fn().mockImplementation(async (key: string) => cache.get(key)),
       set: jest.fn().mockImplementation(async (key: string, value: any) => {
         cache.set(key, value);
@@ -198,6 +234,15 @@ describe('Admin Analytics Performance Tests', () => {
       del: jest.fn().mockImplementation(async (key: string) => {
         cache.delete(key);
       }),
+      delPattern: jest.fn().mockImplementation(async (pattern: string) => {
+        const prefix = pattern.replace("*", "");
+        for (const key of cache.keys()) {
+          if (!prefix || key.startsWith(prefix)) {
+            cache.delete(key);
+          }
+        }
+      }),
+      flush: jest.fn().mockImplementation(async () => cache.clear()),
       clearCache: () => cache.clear(),
     };
   };
@@ -208,32 +253,34 @@ describe('Admin Analytics Performance Tests', () => {
       outputPrice: 0.000_03,
       effectiveDate: new Date(),
     }),
-    calculateCostWithBreakdown: jest.fn().mockImplementation(async (modelKey, tokensIn, tokensOut, usageDate) => {
-      const inputPrice = 0.000_01;
-      const outputPrice = 0.000_03;
-      const inputCost = tokensIn * inputPrice;
-      const outputCost = tokensOut * outputPrice;
-      const totalCost = inputCost + outputCost;
+    calculateCostWithBreakdown: jest
+      .fn()
+      .mockImplementation(async (modelKey, tokensIn, tokensOut, usageDate) => {
+        const inputPrice = 0.000_01;
+        const outputPrice = 0.000_03;
+        const inputCost = tokensIn * inputPrice;
+        const outputCost = tokensOut * outputPrice;
+        const totalCost = inputCost + outputCost;
 
-      return {
-        inputCost,
-        outputCost,
-        totalCost,
-        modelKey,
-        inputTokenPrice: inputPrice,
-        outputTokenPrice: outputPrice,
-        pricingEffectiveDate: new Date(),
-        usageDate: usageDate || new Date(),
-        usageType: 'grading',
-        tokensIn,
-        tokensOut,
-        calculationSteps: {
-          inputCalculation: `${tokensIn} tokens × $${inputPrice} = $${inputCost}`,
-          outputCalculation: `${tokensOut} tokens × $${outputPrice} = $${outputCost}`,
-          totalCalculation: `$${inputCost} + $${outputCost} = $${totalCost}`,
-        },
-      };
-    }),
+        return {
+          inputCost,
+          outputCost,
+          totalCost,
+          modelKey,
+          inputTokenPrice: inputPrice,
+          outputTokenPrice: outputPrice,
+          pricingEffectiveDate: new Date(),
+          usageDate: usageDate || new Date(),
+          usageType: "grading",
+          tokensIn,
+          tokensOut,
+          calculationSteps: {
+            inputCalculation: `${tokensIn} tokens × $${inputPrice} = $${inputCost}`,
+            outputCalculation: `${tokensOut} tokens × $${outputPrice} = $${outputCost}`,
+            totalCalculation: `$${inputCost} + $${outputCost} = $${totalCost}`,
+          },
+        };
+      }),
   };
 
   beforeEach(async () => {
@@ -249,8 +296,8 @@ describe('Admin Analytics Performance Tests', () => {
           useValue: createMockPrismaService(),
         },
         {
-          provide: RedisService,
-          useValue: createMockRedisService(),
+          provide: CacheService,
+          useValue: createMockCacheService(),
         },
         {
           provide: LLM_PRICING_SERVICE,
@@ -261,16 +308,16 @@ describe('Admin Analytics Performance Tests', () => {
 
     adminService = module.get<AdminService>(AdminService);
     prismaService = module.get<PrismaService>(PrismaService);
-    redisService = module.get<RedisService>(RedisService);
+    cacheService = module.get<CacheService>(CacheService);
   });
 
   afterEach(() => {
     // Clear cache between tests
-    (redisService as any).clearCache?.();
+    (cacheService as any).clearCache?.();
   });
 
-  describe('getAssignmentAnalytics Performance', () => {
-    it('should complete BASIC tier request in < 600ms (cold cache)', async () => {
+  describe("getAssignmentAnalytics Performance", () => {
+    it("should complete BASIC tier request in < 600ms (cold cache)", async () => {
       const startTime = Date.now();
 
       await adminService.getAssignmentAnalytics(
@@ -290,7 +337,7 @@ describe('Admin Analytics Performance Tests', () => {
       expect(queryCount).toBeLessThan(15); // Allow some overhead for batched queries
     });
 
-    it('should complete DETAILED tier request in < 1200ms (cold cache)', async () => {
+    it("should complete DETAILED tier request in < 1200ms (cold cache)", async () => {
       const startTime = Date.now();
 
       await adminService.getAssignmentAnalytics(
@@ -310,7 +357,7 @@ describe('Admin Analytics Performance Tests', () => {
       expect(queryCount).toBeLessThan(15); // Still should use batched queries
     });
 
-    it('should complete cached request in < 250ms (warm cache)', async () => {
+    it("should complete cached request in < 250ms (warm cache)", async () => {
       // Prime the cache
       await adminService.getAssignmentAnalytics(
         mockAdminSession,
@@ -344,7 +391,7 @@ describe('Admin Analytics Performance Tests', () => {
       expect(queryCount).toBe(0); // No DB queries on cache hit
     });
 
-    it('should use batched queries for multiple assignments', async () => {
+    it("should use batched queries for multiple assignments", async () => {
       queryCount = 0;
 
       await adminService.getAssignmentAnalytics(
@@ -364,7 +411,7 @@ describe('Admin Analytics Performance Tests', () => {
       // Total: ~6-8 queries (not 50+ from before)
 
       console.log(`\n📊 Total queries for analytics: ${queryCount}`);
-      console.log('   Query breakdown:');
+      console.log("   Query breakdown:");
       const queryBreakdown = queryLog.reduce((accumulator, log) => {
         accumulator[log.query] = (accumulator[log.query] || 0) + 1;
         return accumulator;
@@ -378,8 +425,8 @@ describe('Admin Analytics Performance Tests', () => {
     });
   });
 
-  describe('getDetailedAssignmentInsights Performance', () => {
-    it('should complete BASIC tier insights in < 600ms (cold cache)', async () => {
+  describe("getDetailedAssignmentInsights Performance", () => {
+    it("should complete BASIC tier insights in < 600ms (cold cache)", async () => {
       const startTime = Date.now();
 
       await adminService.getDetailedAssignmentInsights(
@@ -397,7 +444,7 @@ describe('Admin Analytics Performance Tests', () => {
       expect(queryCount).toBeLessThan(10);
     });
 
-    it('should complete DETAILED tier insights in < 1200ms (cold cache)', async () => {
+    it("should complete DETAILED tier insights in < 1200ms (cold cache)", async () => {
       const startTime = Date.now();
 
       await adminService.getDetailedAssignmentInsights(
@@ -415,7 +462,7 @@ describe('Admin Analytics Performance Tests', () => {
       expect(queryCount).toBeLessThan(25); // More queries for question insights (1 groupBy + N count queries), but still batched
     });
 
-    it('should skip expensive question queries when details=false', async () => {
+    it("should skip expensive question queries when details=false", async () => {
       queryCount = 0;
       queryLog.length = 0;
 
@@ -427,15 +474,17 @@ describe('Admin Analytics Performance Tests', () => {
 
       // Should NOT call questionResponse.groupBy when details=false
       const questionResponseQueries = queryLog.filter(
-        log => log.query === 'questionResponse.groupBy'
+        (log) => log.query === "questionResponse.groupBy"
       );
 
-      console.log(`\n📊 Question response queries (BASIC): ${questionResponseQueries.length}`);
+      console.log(
+        `\n📊 Question response queries (BASIC): ${questionResponseQueries.length}`
+      );
 
       expect(questionResponseQueries.length).toBe(0);
     });
 
-    it('should use batched query for question insights when details=true', async () => {
+    it("should use batched query for question insights when details=true", async () => {
       queryCount = 0;
       queryLog.length = 0;
 
@@ -447,16 +496,20 @@ describe('Admin Analytics Performance Tests', () => {
 
       // Should use ONE batched groupBy instead of N individual queries
       const questionResponseGroupBy = queryLog.filter(
-        log => log.query === 'questionResponse.groupBy'
+        (log) => log.query === "questionResponse.groupBy"
       );
 
       const questionResponseCount = queryLog.filter(
-        log => log.query === 'questionResponse.count'
+        (log) => log.query === "questionResponse.count"
       );
 
       console.log(`\n📊 Question insights queries (DETAILED):`);
-      console.log(`   - groupBy calls: ${questionResponseGroupBy.length} (should be 1)`);
-      console.log(`   - count calls: ${questionResponseCount.length} (should be ~10 for correct counts)`);
+      console.log(
+        `   - groupBy calls: ${questionResponseGroupBy.length} (should be 1)`
+      );
+      console.log(
+        `   - count calls: ${questionResponseCount.length} (should be ~10 for correct counts)`
+      );
 
       // With 10 questions, we should have:
       // - 1 groupBy to get stats for all questions
@@ -468,9 +521,9 @@ describe('Admin Analytics Performance Tests', () => {
     });
   });
 
-  describe('Cache Performance', () => {
-    it('should have separate cache keys for BASIC and DETAILED tiers', async () => {
-      const getOrSetSpy = jest.spyOn(redisService, 'getOrSet');
+  describe("Cache Performance", () => {
+    it("should have separate cache keys for BASIC and DETAILED tiers", async () => {
+      const getOrSetSpy = jest.spyOn(cacheService, "getOrSet");
 
       // Request BASIC tier
       await adminService.getAssignmentAnalytics(
@@ -500,11 +553,11 @@ describe('Admin Analytics Performance Tests', () => {
 
       // Cache keys should be different to prevent serving BASIC data for DETAILED requests
       expect(basicCacheKey).not.toBe(detailedCacheKey);
-      expect(basicCacheKey).toContain('basic');
-      expect(detailedCacheKey).toContain('detailed');
+      expect(basicCacheKey).toContain("basic");
+      expect(detailedCacheKey).toContain("detailed");
     });
 
-    it('should cache responses independently for different tiers', async () => {
+    it("should cache responses independently for different tiers", async () => {
       // Prime both caches
       const basicResult = await adminService.getAssignmentAnalytics(
         mockAdminSession,
@@ -542,14 +595,16 @@ describe('Admin Analytics Performance Tests', () => {
         true
       );
 
-      console.log(`\n📊 Queries after caching both tiers: ${queryCount} (should be 0)`);
+      console.log(
+        `\n📊 Queries after caching both tiers: ${queryCount} (should be 0)`
+      );
 
       expect(queryCount).toBe(0);
     });
   });
 
-  describe('Response Payload Size', () => {
-    it('should return smaller payload for BASIC tier', async () => {
+  describe("Response Payload Size", () => {
+    it("should return smaller payload for BASIC tier", async () => {
       const basicResult = await adminService.getAssignmentAnalytics(
         mockAdminSession,
         1,
@@ -581,7 +636,7 @@ describe('Admin Analytics Performance Tests', () => {
       expect(reduction).toBeGreaterThan(30);
     });
 
-    it('should exclude detailedCostBreakdown in BASIC tier', async () => {
+    it("should exclude detailedCostBreakdown in BASIC tier", async () => {
       const basicResult: any = await adminService.getAssignmentAnalytics(
         mockAdminSession,
         1,
@@ -599,19 +654,28 @@ describe('Admin Analytics Performance Tests', () => {
       );
 
       // BASIC should not have detailedCostBreakdown
-      expect(basicResult.data[0]?.insights?.detailedCostBreakdown).toBeUndefined();
+      expect(
+        basicResult.data[0]?.insights?.detailedCostBreakdown
+      ).toBeUndefined();
 
       // DETAILED should have it
-      expect(detailedResult.data[0]?.insights?.detailedCostBreakdown).toBeDefined();
+      expect(
+        detailedResult.data[0]?.insights?.detailedCostBreakdown
+      ).toBeDefined();
 
       console.log(`\n📊 Cost breakdown included:`);
-      console.log(`   BASIC: ${!!basicResult.data[0]?.insights?.detailedCostBreakdown}`);
-      console.log(`   DETAILED: ${!!detailedResult.data[0]?.insights?.detailedCostBreakdown}`);
+      console.log(
+        `   BASIC: ${!!basicResult.data[0]?.insights?.detailedCostBreakdown}`
+      );
+      console.log(
+        `   DETAILED: ${!!detailedResult.data[0]?.insights
+          ?.detailedCostBreakdown}`
+      );
     });
   });
 
-  describe('Performance Regression Tests', () => {
-    it('should maintain performance with input validation', async () => {
+  describe("Performance Regression Tests", () => {
+    it("should maintain performance with input validation", async () => {
       const startTime = Date.now();
 
       // Request with max limit
@@ -631,14 +695,14 @@ describe('Admin Analytics Performance Tests', () => {
       expect(duration).toBeLessThan(800);
     });
 
-    it('should handle search queries efficiently', async () => {
+    it("should handle search queries efficiently", async () => {
       const startTime = Date.now();
 
       await adminService.getAssignmentAnalytics(
         mockAdminSession,
         1,
         10,
-        'Test Assignment', // search term
+        "Test Assignment", // search term
         false
       );
 
@@ -650,21 +714,21 @@ describe('Admin Analytics Performance Tests', () => {
     });
   });
 
-  describe('Performance Summary', () => {
-    it('should log comprehensive performance metrics', async () => {
-      console.log('\n' + '='.repeat(60));
-      console.log('📊 ADMIN ANALYTICS PERFORMANCE SUMMARY');
-      console.log('='.repeat(60));
+  describe("Performance Summary", () => {
+    it("should log comprehensive performance metrics", async () => {
+      console.log("\n" + "=".repeat(60));
+      console.log("📊 ADMIN ANALYTICS PERFORMANCE SUMMARY");
+      console.log("=".repeat(60));
 
       const tests = [
-        { name: 'BASIC (cold)', tier: false, target: 600 },
-        { name: 'DETAILED (cold)', tier: true, target: 1200 },
+        { name: "BASIC (cold)", tier: false, target: 600 },
+        { name: "DETAILED (cold)", tier: true, target: 1200 },
       ];
 
       for (const test of tests) {
         queryCount = 0;
         queryLog.length = 0;
-        (redisService as any).clearCache?.();
+        (cacheService as any).clearCache?.();
 
         const start = Date.now();
         await adminService.getAssignmentAnalytics(
@@ -676,15 +740,15 @@ describe('Admin Analytics Performance Tests', () => {
         );
         const duration = Date.now() - start;
 
-        const status = duration < test.target ? '✅' : '❌';
+        const status = duration < test.target ? "✅" : "❌";
 
         console.log(`\n${status} ${test.name}`);
         console.log(`   Duration: ${duration}ms (target: <${test.target}ms)`);
         console.log(`   Queries: ${queryCount} (target: <10)`);
-        console.log(`   Status: ${duration < test.target ? 'PASS' : 'FAIL'}`);
+        console.log(`   Status: ${duration < test.target ? "PASS" : "FAIL"}`);
       }
 
-      console.log('\n' + '='.repeat(60));
+      console.log("\n" + "=".repeat(60));
     });
   });
 });

@@ -1,6 +1,6 @@
 import { Module, forwardRef } from "@nestjs/common";
 import { PassportModule } from "@nestjs/passport";
-import { RedisModule } from "src/cache/redis.module";
+import { CacheModule } from "src/cache/cache.module";
 import { PrismaService } from "src/database/prisma.service";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { AuthModule } from "../../auth/auth.module";
@@ -23,7 +23,7 @@ import { RegradingRequestsController } from "./controllers/regrading-requests.co
     AdminAuthModule,
     LlmModule,
     forwardRef(() => ScheduledTasksModule),
-    RedisModule,
+    CacheModule,
   ],
   controllers: [
     AdminController,

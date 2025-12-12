@@ -1,14 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { WinstonModule } from "nest-winston";
-import { RedisService } from "../../cache/redis.service";
+import { CacheService } from "../../cache/cache.service";
 import { PrismaService } from "../../database/prisma.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
 
 process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
-process.env.REDIS_HOST = "localhost";
-process.env.REDIS_PORT = "6379";
 
 describe("AdminService", () => {
   let service: AdminService;
@@ -50,13 +48,13 @@ describe("AdminService", () => {
     $connect: jest.fn().mockResolvedValue(),
   };
 
-  const mockRedisService = {
+  const mockCacheService = {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
+    delPattern: jest.fn(),
+    getOrSet: jest.fn(),
     flush: jest.fn().mockResolvedValue(),
-    connect: jest.fn().mockResolvedValue(),
-    disconnect: jest.fn().mockResolvedValue(),
   };
 
   beforeAll(() => {
@@ -88,7 +86,7 @@ describe("AdminService", () => {
         AdminService,
         AdminRepository,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: RedisService, useValue: mockRedisService },
+        { provide: CacheService, useValue: mockCacheService },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
       ],
     }).compile();

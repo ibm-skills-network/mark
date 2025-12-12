@@ -20,8 +20,6 @@ import { VariantRepository } from "../../../repositories/variant.repository";
 
 // Set up environment variables for tests
 process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
-process.env.REDIS_HOST = "localhost";
-process.env.REDIS_PORT = "6379";
 
 describe("VariantRepository", () => {
   let variantRepository: VariantRepository;

@@ -823,3 +823,14 @@ model LLMFeatureAssignment {
   @@index([isActive])
   @@unique([featureId, modelId])
 }
+
+/// Postgres-backed cache for admin analytics and dashboards
+model AdminCache {
+  key       String   @id /// Cache key (e.g., "admin:analytics:...")
+  value     Json     /// Cached payload
+  expiresAt DateTime? /// Expiration timestamp; null means no expiration
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}

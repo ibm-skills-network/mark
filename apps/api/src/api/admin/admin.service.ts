@@ -15,7 +15,7 @@ import {
   UserRole,
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
-import { RedisService } from "../../cache/redis.service";
+import { CacheService } from "../../cache/cache.service";
 import { PrismaService } from "../../database/prisma.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
@@ -46,7 +46,7 @@ export class AdminService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly redisService: RedisService,
+    private readonly cacheService: CacheService,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService
   ) {}
@@ -63,7 +63,7 @@ export class AdminService {
    */
   private async invalidateInsightsCache(assignmentId: number): Promise<void> {
     const cacheKey = this.getCacheKey("insights", assignmentId);
-    await this.redisService.del(cacheKey);
+    await this.cacheService.del(cacheKey);
     this.logger.debug(
       `Invalidated insights cache for assignment ${assignmentId}`
     );
@@ -74,22 +74,22 @@ export class AdminService {
    */
   async invalidateAssignmentInsightsCache(assignmentId: number): Promise<void> {
     await this.invalidateInsightsCache(assignmentId);
-    await this.redisService.delPattern(this.getCacheKey("analytics", "*"));
-    await this.redisService.delPattern(this.getCacheKey("dashboard", "*"));
+    await this.cacheService.delPattern(this.getCacheKey("analytics", "*"));
+    await this.cacheService.delPattern(this.getCacheKey("dashboard", "*"));
   }
 
   /**
    * Invalidate all admin caches
    */
   async invalidateAllCaches(): Promise<void> {
-    await this.redisService.delPattern(this.getCacheKey("*"));
+    await this.cacheService.delPattern(this.getCacheKey("*"));
     this.logger.log("Invalidated all admin caches");
   }
 
   async getBasicAssignmentAnalytics(assignmentId: number) {
     const cacheKey = this.getCacheKey("basic-analytics", assignmentId);
 
-    return this.redisService.getOrSet(
+    return this.cacheService.getOrSet(
       cacheKey,
       async () => {
         const assignment = await this.prisma.assignment.findUnique({
@@ -775,7 +775,7 @@ export class AdminService {
   async getFlaggedSubmissions() {
     const cacheKey = this.getCacheKey("flagged-submissions", "all");
 
-    return this.redisService.getOrSet(
+    return this.cacheService.getOrSet(
       cacheKey,
       async () => {
         return this.prisma.regradingRequest.findMany({
@@ -799,10 +799,10 @@ export class AdminService {
       },
     });
 
-    await this.redisService.delPattern(
+    await this.cacheService.delPattern(
       this.getCacheKey("flagged-submissions", "*")
     );
-    await this.redisService.delPattern(
+    await this.cacheService.delPattern(
       this.getCacheKey("regrading-requests", "*")
     );
 
@@ -812,7 +812,7 @@ export class AdminService {
   async getRegradingRequests() {
     const cacheKey = this.getCacheKey("regrading-requests", "all");
 
-    return this.redisService.getOrSet(
+    return this.cacheService.getOrSet(
       cacheKey,
       async () => {
         return this.prisma.regradingRequest.findMany({
@@ -849,7 +849,7 @@ export class AdminService {
     });
 
     await this.invalidateAssignmentInsightsCache(request.assignmentId);
-    await this.redisService.delPattern(
+    await this.cacheService.delPattern(
       this.getCacheKey("regrading-requests", "*")
     );
 
@@ -873,7 +873,7 @@ export class AdminService {
       },
     });
 
-    await this.redisService.delPattern(
+    await this.cacheService.delPattern(
       this.getCacheKey("regrading-requests", "*")
     );
 
@@ -1041,7 +1041,7 @@ export class AdminService {
       details ? 'detailed' : 'basic'
     );
 
-    return this.redisService.getOrSet(
+    return this.cacheService.getOrSet(
       cacheKey,
       async () => {
         const isAdmin = adminSession.role === UserRole.ADMIN;
@@ -1308,7 +1308,7 @@ export class AdminService {
       JSON.stringify(filters || {})
     );
 
-    return this.redisService.getOrSet(
+    return this.cacheService.getOrSet(
       cacheKey,
       async () => {
         const isAdmin = adminSession.role === UserRole.ADMIN;
@@ -1686,7 +1686,7 @@ export class AdminService {
   ) {
     const cacheKey = this.getCacheKey("insights", assignmentId, details ? 'detailed' : 'basic');
 
-    return this.redisService.getOrSet(
+    return this.cacheService.getOrSet(
       cacheKey,
       async () => {
         try {
@@ -2202,7 +2202,7 @@ export class AdminService {
       limit
     );
 
-    return this.redisService.getOrSet(
+    return this.cacheService.getOrSet(
       cacheKey,
       async () => {
         const isAdmin = adminSession.role === UserRole.ADMIN;

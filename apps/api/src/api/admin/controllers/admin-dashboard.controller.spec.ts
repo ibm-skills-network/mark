@@ -10,7 +10,7 @@ import { WinstonModule } from "nest-winston";
 import request from "supertest";
 import { AdminGuard } from "../../../auth/guards/admin.guard";
 import { UserRole } from "../../../auth/interfaces/user.session.interface";
-import { RedisService } from "../../../cache/redis.service";
+import { CacheService } from "../../../cache/cache.service";
 import { PrismaService } from "../../../database/prisma.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
 import { ScheduledTasksService } from "../../scheduled-tasks/services/scheduled-tasks.service";
@@ -19,14 +19,12 @@ import { AdminService } from "../admin.service";
 
 // Set up environment variables for tests
 process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
-process.env.REDIS_HOST = "localhost";
-process.env.REDIS_PORT = "6379";
 
 describe("AdminDashboardController (Integration)", () => {
   let app: INestApplication;
   let adminService: any;
   let prismaService: PrismaService;
-  let redisService: RedisService;
+  let cacheService: CacheService;
 
   const mockAdminService = {
     getDashboardStats: jest.fn(),
@@ -36,14 +34,12 @@ describe("AdminDashboardController (Integration)", () => {
     invalidateAssignmentInsightsCache: jest.fn().mockResolvedValue(),
   };
 
-  const mockRedisService = {
+  const mockCacheService = {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
     delPattern: jest.fn().mockResolvedValue(),
     flush: jest.fn().mockResolvedValue(),
-    connect: jest.fn().mockResolvedValue(),
-    disconnect: jest.fn().mockResolvedValue(),
     getOrSet: jest.fn().mockImplementation(async (key, factory, ttl) => {
       return await factory();
     }),
@@ -136,8 +132,8 @@ describe("AdminDashboardController (Integration)", () => {
       .useValue(mockAdminService)
       .overrideProvider(PrismaService)
       .useValue(mockPrismaService)
-      .overrideProvider(RedisService)
-      .useValue(mockRedisService)
+      .overrideProvider(CacheService)
+      .useValue(mockCacheService)
       .overrideProvider(ScheduledTasksService)
       .useValue(mockScheduledTasksService)
       .overrideProvider(LLM_PRICING_SERVICE)
@@ -162,7 +158,7 @@ describe("AdminDashboardController (Integration)", () => {
 
     adminService = mockAdminService;
     prismaService = moduleFixture.get<PrismaService>(PrismaService);
-    redisService = moduleFixture.get<RedisService>(RedisService);
+    cacheService = moduleFixture.get<CacheService>(CacheService);
   });
 
   afterAll(async () => {
