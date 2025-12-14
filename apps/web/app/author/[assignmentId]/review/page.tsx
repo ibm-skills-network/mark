@@ -931,7 +931,11 @@ function Component() {
 
       if (
         (q.type === "MULTIPLE_CORRECT" || q.type === "SINGLE_CORRECT") &&
-        q.choices?.some((c) => !c.choice || c.choice.trim() === "")
+        q.choices?.some((c) => {
+          const choiceText =
+            typeof c.choice === "string" ? c.choice : String(c.choice ?? "");
+          return !c.choice || choiceText.trim() === "";
+        })
       ) {
         qIssues.push("Some choices are empty");
       }
@@ -1161,7 +1165,6 @@ function Component() {
         await generatePDF(exportData, filename);
       }
     } catch (error) {
-      console.error("Export failed:", error);
       alert("Export failed. Please try again.");
     }
   };
@@ -1322,8 +1325,6 @@ function Component() {
 
       printWindow.focus();
     } catch (error) {
-      console.error("PDF generation failed:", error);
-
       const pdfContent = formatForPDF(data);
       const blob = new Blob([pdfContent], { type: "text/plain" });
       downloadFile(blob, `${filename}.txt`);

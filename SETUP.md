@@ -17,6 +17,7 @@ yarn start
 ```
 
 This will automatically:
+
 1. Install dependencies
 2. Start the database
 3. Run migrations
@@ -34,6 +35,7 @@ yarn
 ```
 
 **Troubleshooting:**
+
 - Make sure you have Node.js >= 20.9.0 installed
 - Ensure you're using Yarn 1.22.22
 
@@ -44,12 +46,14 @@ yarn db
 ```
 
 This will:
+
 - Check if Docker and Docker Compose are installed and running
 - Start a PostgreSQL container using docker-compose
 - Wait for the database to be ready
 - Persist data in a Docker volume (survives container restarts)
 
 **Database Management:**
+
 ```bash
 # Stop database (keeps data)
 docker-compose stop
@@ -68,6 +72,7 @@ docker-compose restart postgres
 ```
 
 **Troubleshooting:**
+
 - If you get "Docker is not installed", install Docker Desktop from https://www.docker.com/products/docker-desktop
 - If you get "Docker daemon is not running", start Docker Desktop and wait for it to fully start
 - If you get "docker-compose is not installed", Docker Compose comes with Docker Desktop (or install docker-compose-plugin on Linux)
@@ -79,11 +84,13 @@ yarn setup
 ```
 
 This will:
+
 - Validate critical environment variables
 - Run Prisma migrations
 - Generate Prisma client
 
 **Troubleshooting:**
+
 - If you get "Dependencies not installed", run `yarn` first
 - If you get "Database container is not running", run `yarn db` first
 - If you get "Missing critical environment variables", check the error message for which variables are missing and add them to `dev.env`
@@ -102,6 +109,7 @@ This will seed the database with initial data. The script intelligently handles 
 **Important:** You must run `yarn setup` before `yarn seed` to ensure Prisma client is generated and migrations are applied.
 
 **Troubleshooting:**
+
 - If you get "Prisma client not generated", run `yarn setup` first
 - If you get "Database container is not running", run `yarn db` first
 - If you get "node_modules not found", run `yarn` first
@@ -113,10 +121,12 @@ yarn dev
 ```
 
 This will:
+
 - Validate all requirements are met
 - Start all development servers in parallel
 
 **Troubleshooting:**
+
 - Follow the error messages which will guide you through the required setup steps
 
 ## Environment Variables
@@ -205,6 +215,7 @@ This opens Prisma Studio to view and edit database records.
 ### "Missing critical environment variables"
 
 **Solution:**
+
 1. Check the error message for which variables are missing
 2. Open `dev.env` in your editor
 3. Add the missing variables (refer to the error message for required variables)
@@ -214,6 +225,7 @@ This opens Prisma Studio to view and edit database records.
 **Problem:** Development or database port is occupied by another process
 
 **Solution:**
+
 1. Check which process is using the port (shown in the error message)
 2. Stop that process
 3. Or change the port in `dev.env`:
@@ -223,6 +235,7 @@ This opens Prisma Studio to view and edit database records.
    - `API_GATEWAY_PORT` for API Gateway (default: 8000)
 
 To kill a process using a specific port:
+
 ```bash
 # Replace PORT_NUMBER with the actual port
 kill -9 $(lsof -ti:PORT_NUMBER)
@@ -231,6 +244,7 @@ kill -9 $(lsof -ti:PORT_NUMBER)
 ## Additional Scripts
 
 ### Database Management
+
 - `yarn db` - Start database
 - `yarn db:stop` - Stop database (keeps data)
 - `yarn db:down` - Stop and remove container (keeps data)
@@ -238,12 +252,14 @@ kill -9 $(lsof -ti:PORT_NUMBER)
 - `yarn db:logs` - View database logs
 
 ### Development
+
 - `yarn build` - Build all packages
 - `yarn lint` - Lint all packages
 - `yarn test` - Run all tests
 - `yarn format` - Format all files
 
 ### Database Tools
+
 - `yarn studio` - Open Prisma Studio
 - `yarn prisma:studio` - Open Prisma Studio (alternative)
 - `yarn prisma:migrate` - Create and run a new migration

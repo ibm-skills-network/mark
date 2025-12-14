@@ -2511,8 +2511,8 @@ export class AttemptServiceV1 {
     return { responseDto, learnerResponse };
   }
 
-  private normalizeText(text: string): string {
-    return text
+  private normalizeText(text: string | number): string {
+    return String(text)
       .trim()
       .toLowerCase()
 
@@ -2953,6 +2953,26 @@ export class AttemptServiceV1 {
         }),
       );
 
+      // Parse learner response for multiple choice questions
+      let learnerChoices: string[] | undefined;
+      if (
+        (question.type === "SINGLE_CORRECT" ||
+          question.type === "MULTIPLE_CORRECT") &&
+        correspondingResponses.length > 0
+      ) {
+        const learnerResponse = correspondingResponses[0]?.learnerResponse;
+        if (learnerResponse && typeof learnerResponse === "string") {
+          try {
+            const parsed: unknown = JSON.parse(learnerResponse);
+            if (Array.isArray(parsed)) {
+              learnerChoices = parsed as string[];
+            }
+          } catch {
+            // If parsing fails, learnerChoices remains undefined
+          }
+        }
+      }
+
       return {
         id: question.id,
         variantId: extendedQuestion.variantId,
@@ -2972,6 +2992,7 @@ export class AttemptServiceV1 {
             ?.showRubricsToLearner
             ? question.scoring
             : undefined,
+        learnerChoices,
       };
     });
   }

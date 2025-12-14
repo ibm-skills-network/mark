@@ -211,6 +211,16 @@ export class AssignmentAttemptQuestions {
   })
   @Optional()
   variantId?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "The learner's selected choices for multiple choice questions (array of choice indices as strings).",
+    type: [String],
+    required: false,
+  })
+  @Optional()
+  learnerChoices?: string[];
+
   @Optional()
   _permutation?: boolean;
 }

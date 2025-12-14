@@ -391,10 +391,13 @@ export class AttemptQuestionsMapper {
     if (!choices || typeof choices === "string") return [];
 
     return choices
-      .filter((c): c is Choice => !!c && typeof c.choice === "string")
+      .filter(
+        (c): c is Choice =>
+          !!c && (typeof c.choice === "string" || typeof c.choice === "number"),
+      )
       .map((c) => ({
         id: c.id === undefined ? null : c.id,
-        choice: c.choice,
+        choice: typeof c.choice === "number" ? String(c.choice) : c.choice,
       }));
   }
 

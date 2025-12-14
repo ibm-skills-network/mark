@@ -141,9 +141,7 @@ async function main() {
     await runPgRestore(sqlFilePath);
     console.log("✅ Database seeded successfully from seed.sql!");
   } else {
-    console.log(
-      "📝 No seed.sql found - creating sample assignment data...",
-    );
+    console.log("📝 No seed.sql found - creating sample assignment data...");
     await prisma.assignment.create({
       data: {
         name: "Cybersecurity Job Listing",

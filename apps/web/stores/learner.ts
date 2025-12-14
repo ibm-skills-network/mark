@@ -840,7 +840,19 @@ export const useLearnerStore = createWithEqualityFn<
               const prevDataForQuestion = state.questions.find(
                 (q2) => q2.id === q.id,
               );
-              return prevDataForQuestion ? { ...prevDataForQuestion, ...q } : q;
+              const questionData = prevDataForQuestion
+                ? { ...prevDataForQuestion, ...q }
+                : q;
+
+              if (
+                (!questionData.choices || questionData.choices.length === 0) &&
+                (questionData as any).randomizedChoices &&
+                Array.isArray((questionData as any).randomizedChoices)
+              ) {
+                questionData.choices = (questionData as any).randomizedChoices;
+              }
+
+              return questionData;
             });
             return { questions: updatedQuestions as QuestionStore[] };
           }),

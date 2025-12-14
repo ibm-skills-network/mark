@@ -576,7 +576,7 @@ const Question: FC<Props> = ({
         <ul className="list-none text-gray-800 w-full flex flex-col justify-start gap-y-2">
           {choices.map((choiceObj, idx) => {
             const isSelected = Array.isArray(learnerResponse)
-              ? (learnerResponse as string[]).includes(choiceObj.choice)
+              ? (learnerResponse as string[]).includes(String(idx))
               : false;
 
             const isCorrect = choiceObj.isCorrect;

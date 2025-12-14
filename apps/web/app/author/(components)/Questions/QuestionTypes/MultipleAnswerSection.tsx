@@ -69,7 +69,12 @@ function Section({
   const { choices, type } = question;
 
   const [localChoices, setLocalChoices] = useState(
-    choices?.map((choice) => choice?.choice ?? "") || [],
+    choices?.map((choice) => {
+      const choiceValue = choice?.choice;
+      return typeof choiceValue === "string"
+        ? choiceValue
+        : String(choiceValue ?? "");
+    }) || [],
   );
   const [localFeedback, setLocalFeedback] = useState(
     choices?.map((choice) => choice?.feedback ?? "") || [],
@@ -112,7 +117,14 @@ function Section({
   }, [choices?.length]);
 
   useEffect(() => {
-    setLocalChoices(choices?.map((choice) => choice?.choice ?? "") || []);
+    setLocalChoices(
+      choices?.map((choice) => {
+        const choiceValue = choice?.choice;
+        return typeof choiceValue === "string"
+          ? choiceValue
+          : String(choiceValue ?? "");
+      }) || [],
+    );
     setLocalFeedback(choices?.map((choice) => choice?.feedback ?? "") || []);
     setLocalPoints(
       choices?.map((choice) => choice?.points?.toString() ?? "") || [],
