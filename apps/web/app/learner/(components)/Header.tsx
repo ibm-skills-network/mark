@@ -106,7 +106,10 @@ function LearnerHeader() {
 
       try {
         const supportedLanguages = await getSupportedLanguages(assignmentId);
-        setLanguages(supportedLanguages);
+        const sortedLanguages = [...supportedLanguages].sort((a, b) =>
+          getLanguageName(a).localeCompare(getLanguageName(b)),
+        );
+        setLanguages(sortedLanguages);
 
         const user = await getUser();
         if (user) {

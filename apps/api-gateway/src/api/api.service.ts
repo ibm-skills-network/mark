@@ -7,6 +7,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { AxiosRequestConfig } from "@nestjs/terminus/dist/health-indicator/http/axios.interfaces";
 import axios, { AxiosError, Method } from "axios";
@@ -47,6 +48,12 @@ export class ApiService {
         endpoint = `${process.env.MARK_API_ENDPOINT ?? ""}${
           request.originalUrl
         }`;
+
+        // Ensure user session exists before forwarding
+        if (!request.user) {
+          throw new UnauthorizedException("Missing or invalid user session");
+        }
+
         extraHeaders = {
           "user-session": JSON.stringify(request.user),
           "Cache-Control": "no-cache",
@@ -354,6 +361,11 @@ export class ApiService {
       const response = await axios.request(config);
       return { data: response.data as string, status: response.status };
     } catch (error) {
+      // If it's already an HttpException (like UnauthorizedException), we should rethrow it
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
       const axiosError = error as AxiosError;
       if (axiosError.isAxiosError && axiosError.response) {
         this.logger.error(axiosError.response.status);

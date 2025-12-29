@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Controller, Get, Req } from "@nestjs/common";
+import { Controller, Get, Req, UnauthorizedException } from "@nestjs/common";
 import { ApiOperation, ApiResponse } from "@nestjs/swagger";
 import {
   ClientUserSession,
@@ -45,7 +45,14 @@ export class ApiController {
     status: 200,
     description: "The user session information was successfully retrieved.",
   })
+  
+  
   getUserSession(@Req() request: UserSessionRequest): ClientUserSession {
+    // If userSession wasn't populated by the middleware or gateway return 401
+    if (!request.userSession) {
+      throw new UnauthorizedException("Missing or invalid user session");
+    }
+
     const userSession = request.userSession;
     return {
       userId: userSession.userId,
