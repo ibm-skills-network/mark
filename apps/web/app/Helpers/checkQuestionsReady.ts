@@ -299,6 +299,15 @@ export const useQuestionsAreReadyToBePublished = (
         isValid = false;
       }
       if (
+        assignmentConfig.strictTimeLimit &&
+        (!assignmentConfig.allotedTimeMinutes ||
+          assignmentConfig.allotedTimeMinutes <= 0)
+      ) {
+        message = `Please enter a time limit greater than 0 minutes.`;
+        step = 1;
+        isValid = false;
+      }
+      if (
         assignmentConfig.numAttempts == null ||
         assignmentConfig.numAttempts < -1
       ) {

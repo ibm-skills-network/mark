@@ -549,7 +549,7 @@ export enum QuestionDisplayType {
 export type GradingData = {
   graded: boolean;
   timeEstimateMinutes: number | undefined;
-  allotedTimeMinutes?: number | undefined;
+  allotedTimeMinutes?: number | null;
   passingGrade: number;
   numAttempts?: number;
   attemptsBeforeCoolDown?: number;

@@ -24,7 +24,9 @@ type GradingDataActions = {
   ) => void;
   setPassingGrade: (passingGrade: number) => void;
   setTimeEstimateMinutes: (timeEstimateMinutes: number) => void;
-  setAllotedTimeMinutes: (allotedTimeMinutes: number) => void;
+  setAllotedTimeMinutes: (
+    allotedTimeMinutes: number | null | undefined,
+  ) => void;
   setDisplayOrder: (displayOrder: "DEFINED" | "RANDOM") => void;
   toggleStrictTimeLimit: () => void;
   setUpdatedAt: (updatedAt: number) => void;
@@ -101,17 +103,25 @@ export const useAssignmentConfig = createWithEqualityFn<
         setTimeEstimateMinutes: (timeEstimateMinutes) =>
           set({ timeEstimateMinutes }),
         allotedTimeMinutes: undefined,
-        setAllotedTimeMinutes: (allotedTimeMinutes) =>
+        setAllotedTimeMinutes: (value) => {
+          const state = get();
+          const newErrors = { ...state.errors };
+
+          if (value !== null && value !== undefined && value > 0) {
+            delete newErrors.allotedTimeMinutes;
+          }
+
           set({
-            allotedTimeMinutes:
-              allotedTimeMinutes === 0 ? 1 : allotedTimeMinutes,
-            timeEstimateMinutes: allotedTimeMinutes,
-          }),
+            allotedTimeMinutes: value,
+            timeEstimateMinutes: typeof value === "number" ? value : undefined,
+            errors: newErrors,
+          });
+        },
         setDisplayOrder: (displayOrder) => set({ displayOrder }),
         setStrictTimeLimit: (strictTimeLimit) => {
           set({ strictTimeLimit });
           if (!strictTimeLimit) {
-            set({ allotedTimeMinutes: 0 });
+            set({ allotedTimeMinutes: null });
           }
         },
         toggleStrictTimeLimit: () => {
@@ -129,6 +139,13 @@ export const useAssignmentConfig = createWithEqualityFn<
         validate: () => {
           const state = get();
           const errors: Record<string, string> = {};
+          if (
+            state.strictTimeLimit &&
+            (!state.allotedTimeMinutes || state.allotedTimeMinutes <= 0)
+          ) {
+            errors.allotedTimeMinutes =
+              "Please enter a time limit greater than 0 minutes.";
+          }
           if (state.graded === null) {
             errors.graded = "Assignment type is required.";
           }

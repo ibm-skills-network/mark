@@ -3,7 +3,12 @@
 import { stepTwoSections } from "@/config/constants";
 import { cn } from "@/lib/strings";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { useEffect, type ComponentPropsWithoutRef, type FC } from "react";
+import {
+  useEffect,
+  type ChangeEvent,
+  type ComponentPropsWithoutRef,
+  type FC,
+} from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
 type Props = ComponentPropsWithoutRef<"div">;
@@ -34,6 +39,36 @@ const Component: FC<Props> = () => {
       setStrictTimeLimit(true);
     }
   }, [allotedTimeMinutes]);
+
+
+  const handleAllotedTimeChange = (
+    event: ChangeEvent<HTMLInputElement>,
+  ): void => {
+    const { value } = event.target;
+
+    // case 1: empty field
+    if (value === "") {
+      setAllotedTimeMinutes(undefined);
+      return;
+    }
+
+    // case 2: not a number
+    const parsedValue = Number(value);
+    if (Number.isNaN(parsedValue)) {
+      return;
+    }
+
+    // valid number
+    setAllotedTimeMinutes(parsedValue);
+  };
+
+
+  let timeLimitError;
+  if (!strictTimeLimit) {
+    timeLimitError = undefined;
+  } else {
+    timeLimitError = errors.allotedTimeMinutes;
+  }
 
   return (
     <SectionWithTitle
@@ -71,21 +106,38 @@ const Component: FC<Props> = () => {
           </button>
         </label>
         {strictTimeLimit && (
-          <div className="relative">
-            <input
-              type="number"
-              className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full`}
-              placeholder="Enter time limit in minutes"
-              min={0}
-              step={5}
-              onChange={(e) => setAllotedTimeMinutes(~~e.target.value)}
-              value={allotedTimeMinutes || ""}
-            />
+          <>
+            <div className="relative">
+              <input
+                type="number"
+                className={cn(
+                  "border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full",
+                  timeLimitError && "border-red-500 focus:border-red-500",
+                )}
+                placeholder="Enter time limit in minutes"
+                min={0}
+                step={5}
+                onChange={handleAllotedTimeChange}
+                value={allotedTimeMinutes ?? ""}
+                aria-invalid={Boolean(timeLimitError)}
+                aria-describedby={
+                  timeLimitError ? "alloted-time-minutes-error" : undefined
+                }
+              />
 
-            <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
-              min
-            </span>
-          </div>
+              <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                min
+              </span>
+            </div>
+            {timeLimitError && (
+              <p
+                id="alloted-time-minutes-error"
+                className="text-red-500 text-sm"
+              >
+                {timeLimitError}
+              </p>
+            )}
+          </>
         )}
       </div>
 
