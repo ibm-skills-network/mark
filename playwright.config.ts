@@ -13,6 +13,9 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests",
+
+  testIgnore: ["apps/api/**", "apps/api-gateway/**", "**/__tests__/**"],
+  
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -25,6 +28,8 @@ export default defineConfig({
   reporter: "html",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
+    baseURL: 'http://localhost:3010',
+
     /* Base URL to use in actions like `await page.goto('')`. */
     // baseURL: 'http://localhost:3000',
 
@@ -70,10 +75,19 @@ export default defineConfig({
     // },
   ],
 
+    webServer: {
+    command: 'yarn dev',
+    port: 3010,
+    timeout: 120_000,
+    reuseExistingServer: !process.env.CI,
+  },
+
   /* Run your local dev server before starting the tests */
+  // Note: Start services manually with 'yarn dev' before running tests
   // webServer: {
-  //   command: 'npm run start',
-  //   url: 'http://localhost:3000',
+  //   command: 'yarn dev',
+  //   url: 'http://localhost:8000', // API Gateway health check
   //   reuseExistingServer: !process.env.CI,
+  //   timeout: 120000, // 2 minutes to start all services
   // },
 });
