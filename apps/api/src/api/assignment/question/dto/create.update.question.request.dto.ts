@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionType } from "@prisma/client";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayNotEmpty,
   IsArray,
@@ -45,6 +45,9 @@ export interface LLMResponseQuestion {
 export class Choice {
   @IsNotEmpty()
   @IsString()
+  @Transform(({ value }) =>
+    typeof value === "number" ? String(value) : (value as string),
+  )
   choice: string;
   @IsNotEmpty()
   @IsBoolean()
@@ -80,9 +83,9 @@ export class CreateUpdateQuestionRequestDto {
   type: QuestionType;
 
   @ApiPropertyOptional({
-  description: "Author comment or note on this question",
-  type: String,
-  nullable: true,
+    description: "Author comment or note on this question",
+    type: String,
+    nullable: true,
   })
   @IsOptional()
   @IsString()

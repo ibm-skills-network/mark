@@ -26,7 +26,22 @@ async function LearnerLayout(props: Props) {
   const assignmentId = ~~params.assignmentId;
   const headerList = headers();
   const cookieHeader = headerList.get("cookie") || "";
-  const user = await getUser(cookieHeader);
+
+  // Catch 401 from getUser so Next.js doesn’t render a 500 page
+  let user = null;
+  try {
+    user = await getUser(cookieHeader);
+  } catch {
+    return (
+      <ErrorPage
+        statusCode={401}
+        error={
+          "Oopsies! It looks like you tried to launch this assignment incorrectly. Please open the assignment from your LMS (Coursera, OpenEdx, Author Workbench, or yourLearning). If the problem keeps happening, contact your instructor or use the chatbot to open a support ticket."
+        }
+      />
+    );
+  }
+
   const role = user?.role;
 
   if (role === "author" && authorMode === "true") {
@@ -122,7 +137,7 @@ async function AttemptLoader({
     role === "learner" && (
       <main
         id="exam-root"
-        className="flex  flex-col h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] overflow-hidden"
+        className="flex flex-col h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] overflow-hidden"
       >
         <QuestionPage
           attempt={attempt}

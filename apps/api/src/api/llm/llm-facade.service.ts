@@ -227,7 +227,7 @@ export class LlmFacadeService {
         rubrics?: RubricDto[];
       };
       choices?: {
-        choice: string;
+        choice: string | number;
         isCorrect: boolean;
         points: number;
         feedback: string;

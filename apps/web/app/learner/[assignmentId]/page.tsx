@@ -1,3 +1,4 @@
+import ErrorPage from "@/components/ErrorPage";
 import { getUser } from "@/lib/talkToBackend";
 import { headers } from "next/headers";
 import AuthFetchToAbout from "./AuthFetchToAbout";
@@ -12,16 +13,28 @@ async function Component(props: Props) {
   const { assignmentId } = params;
   const headerList = headers();
   const cookieHeader = headerList.get("cookie") || "";
-  const user = await getUser(cookieHeader);
-  const role = user?.role;
+  try {
+    const user = await getUser(cookieHeader);
+    const role = user?.role;
 
-  return (
-    <AuthFetchToAbout
-      assignmentId={~~assignmentId}
-      role={role}
-      cookie={cookieHeader}
-    />
-  );
+    return (
+      <AuthFetchToAbout
+        assignmentId={~~assignmentId}
+        role={role}
+        cookie={cookieHeader}
+      />
+    );
+  } catch (error) {
+    console.error("Learner page error:", error);
+    return (
+      <ErrorPage
+        statusCode={401}
+        error={
+          "Oopsies! It looks like you tried to launch this assignment incorrectly. Please open the assignment from your LMS (Coursera, OpenEdx, Author Workbench, or yourLearning). If the problem keeps happening, contact your instructor or use the chatbot to open a support ticket."
+        }
+      />
+    );
+  }
 }
 
 export default Component;

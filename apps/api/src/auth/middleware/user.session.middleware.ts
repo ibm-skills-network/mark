@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NestMiddleware,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { NextFunction, Response } from "express";
 import {
@@ -16,7 +17,7 @@ export class UserSessionMiddleware implements NestMiddleware {
 
     if (!userSessionHeader) {
       console.error("Invalid user-session header format");
-      throw new BadRequestException("Invalid user-session header");
+      throw new UnauthorizedException("Missing or invalid user session");
     }
 
     try {

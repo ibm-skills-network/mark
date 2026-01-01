@@ -1014,9 +1014,11 @@ FORMAT INSTRUCTIONS:
         return true;
       }
 
-      const choiceTexts = question.choices.map((c) =>
-        c.choice?.toLowerCase().trim(),
-      );
+      const choiceTexts = question.choices.map((c) => {
+        const choiceText =
+          typeof c.choice === "string" ? c.choice : String(c.choice ?? "");
+        return choiceText.toLowerCase().trim();
+      });
       if (new Set(choiceTexts).size !== choiceTexts.length) {
         return true;
       }

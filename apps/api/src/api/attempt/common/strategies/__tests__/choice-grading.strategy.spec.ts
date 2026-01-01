@@ -114,6 +114,24 @@ describe("ChoiceGradingStrategy - Type Safety Tests", () => {
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toEqual(["Option A", "Option B", "Option C"]);
     });
+
+    it("should convert float learner choices to strings", async () => {
+      const requestDto = {
+        learnerChoices: [3.14159, 2.71828, 0.5],
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      const result = await strategy.extractLearnerResponse(requestDto);
+      expect(result).toEqual(["3.14159", "2.71828", "0.5"]);
+    });
+
+    it("should preserve decimal points in float choices during extraction", async () => {
+      const requestDto = {
+        learnerChoices: [1.5, 10.25, 100.999],
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      const result = await strategy.extractLearnerResponse(requestDto);
+      expect(result).toEqual(["1.5", "10.25", "100.999"]);
+    });
   });
 
   describe("validateResponse - Single Choice", () => {
@@ -329,6 +347,137 @@ describe("ChoiceGradingStrategy - Type Safety Tests", () => {
 
       expect(result).toBeDefined();
       expect(result.totalPoints).toBeDefined();
+    });
+
+    it("should correctly grade single choice question with float choice values", async () => {
+      const mockFloatChoiceQuestion: QuestionDto = {
+        id: 1,
+        question: "Select the value of pi",
+        type: QuestionType.SINGLE_CORRECT,
+        totalPoints: 10,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "3.14159", isCorrect: true, points: 10 },
+          { id: 2, choice: "2.71828", isCorrect: false, points: 0 },
+          { id: 3, choice: "1.41421", isCorrect: false, points: 0 },
+        ],
+      } as any;
+
+      const result = await strategy.gradeResponse(
+        mockFloatChoiceQuestion,
+        ["3.14159"],
+        mockContext,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.totalPoints).toBe(10);
+    });
+
+    it("should correctly grade multiple choice question with float choice values", async () => {
+      const mockFloatMultipleChoiceQuestion: QuestionDto = {
+        id: 1,
+        question: "Select irrational numbers",
+        type: QuestionType.MULTIPLE_CORRECT,
+        totalPoints: 10,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "3.14159", isCorrect: true, points: 5 },
+          { id: 2, choice: "2.71828", isCorrect: true, points: 5 },
+          { id: 3, choice: "0.5", isCorrect: false, points: 0 },
+          { id: 4, choice: "1.414213562", isCorrect: true, points: 3 },
+        ],
+      } as any;
+
+      const result = await strategy.gradeResponse(
+        mockFloatMultipleChoiceQuestion,
+        ["3.14159", "2.71828"],
+        mockContext,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.totalPoints).toBe(10);
+    });
+
+    it("should distinguish between similar float values", async () => {
+      const mockSimilarFloatQuestion: QuestionDto = {
+        id: 1,
+        question: "Select the correct value",
+        type: QuestionType.SINGLE_CORRECT,
+        totalPoints: 10,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "3.14", isCorrect: false, points: 0 },
+          { id: 2, choice: "3.141", isCorrect: false, points: 0 },
+          { id: 3, choice: "3.1415", isCorrect: true, points: 10 },
+          { id: 4, choice: "314", isCorrect: false, points: 0 },
+        ],
+      } as any;
+
+      const result = await strategy.gradeResponse(
+        mockSimilarFloatQuestion,
+        ["3.1415"],
+        mockContext,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.totalPoints).toBe(10);
+    });
+
+    it("should not confuse float '3.14' with integer '314'", async () => {
+      const mockFloatVsIntegerQuestion: QuestionDto = {
+        id: 1,
+        question: "Which is pi (approximately)?",
+        type: QuestionType.SINGLE_CORRECT,
+        totalPoints: 10,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "3.14", isCorrect: true, points: 10 },
+          { id: 2, choice: "314", isCorrect: false, points: 0 },
+        ],
+      } as any;
+
+      const result1 = await strategy.gradeResponse(
+        mockFloatVsIntegerQuestion,
+        ["3.14"],
+        mockContext,
+      );
+      expect(result1.totalPoints).toBe(10);
+
+      const result2 = await strategy.gradeResponse(
+        mockFloatVsIntegerQuestion,
+        ["314"],
+        mockContext,
+      );
+      expect(result2.totalPoints).toBe(0);
+    });
+
+    it("should handle float choices with fractional points", async () => {
+      const mockFloatPointsQuestion: QuestionDto = {
+        id: 1,
+        question: "Select correct answers",
+        type: QuestionType.MULTIPLE_CORRECT,
+        totalPoints: 10,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "0.5", isCorrect: true, points: 2.5 },
+          { id: 2, choice: "1.5", isCorrect: true, points: 3.5 },
+          { id: 3, choice: "2.5", isCorrect: true, points: 4 },
+        ],
+      } as any;
+
+      const result = await strategy.gradeResponse(
+        mockFloatPointsQuestion,
+        ["0.5", "1.5"],
+        mockContext,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.totalPoints).toBe(6);
     });
   });
 });

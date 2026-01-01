@@ -222,7 +222,6 @@ const Question: FC<QuestionProps> = ({
         },
 
         authorComment: params.authorComment ?? question.authorComment,
-
       };
 
       useAuthorStore.getState().modifyQuestion(questionId, updatedQuestion);
@@ -244,37 +243,37 @@ const Question: FC<QuestionProps> = ({
       choices:
         questionType === "MULTIPLE_CORRECT" || questionType === "SINGLE_CORRECT"
           ? [
-            {
-              choice: "",
-              points: 1,
-              feedback: "",
-              isCorrect: true,
-            },
-            {
-              choice: "",
-              points: 0,
-              feedback: "",
-              isCorrect: false,
-            },
-          ]
+              {
+                choice: "",
+                points: 1,
+                feedback: "",
+                isCorrect: true,
+              },
+              {
+                choice: "",
+                points: 0,
+                feedback: "",
+                isCorrect: false,
+              },
+            ]
           : undefined,
       scoring:
         questionType === "TEXT" || questionType === "URL"
           ? {
-            type: "CRITERIA_BASED",
-            criteria: [
-              {
-                id: 1,
-                description: "",
-                points: 1,
-              },
-              {
-                id: 2,
-                description: "",
-                points: 0,
-              },
-            ],
-          }
+              type: "CRITERIA_BASED",
+              criteria: [
+                {
+                  id: 1,
+                  description: "",
+                  points: 1,
+                },
+                {
+                  id: 2,
+                  description: "",
+                  points: 0,
+                },
+              ],
+            }
           : undefined,
       createdAt: new Date().toISOString(),
       variantType: "REWORDED",
@@ -456,14 +455,16 @@ const Question: FC<QuestionProps> = ({
     if (variantId) {
       const randomizedMode = toggleRandomizedChoicesMode(questionId, variantId);
       toast.info(
-        `Randomized choice order for question ${questionIndex}  ${variantId ? `: variant ${Index}` : ""
+        `Randomized choice order for question ${questionIndex}  ${
+          variantId ? `: variant ${Index}` : ""
         } has been ${randomizedMode ? "ENABLED" : "DISABLED"}`,
       );
       return;
     }
     const randomizedMode = toggleRandomizedChoicesMode(questionId);
     toast.info(
-      `Randomized choice order for question number ${questionIndex} has been ${randomizedMode ? "ENABLED" : "DISABLED"
+      `Randomized choice order for question number ${questionIndex} has been ${
+        randomizedMode ? "ENABLED" : "DISABLED"
       }`,
     );
   };
@@ -580,13 +581,13 @@ const Question: FC<QuestionProps> = ({
                             }
                             setQuestionTypeState(
                               qt.value as
-                              | "TEXT"
-                              | "URL"
-                              | "MULTIPLE_CORRECT"
-                              | "UPLOAD"
-                              | "CODE"
-                              | "SINGLE_CORRECT"
-                              | "TRUE_FALSE",
+                                | "TEXT"
+                                | "URL"
+                                | "MULTIPLE_CORRECT"
+                                | "UPLOAD"
+                                | "CODE"
+                                | "SINGLE_CORRECT"
+                                | "TRUE_FALSE",
                             );
                             handleUpdateQuestionState({
                               questionType: qt.value as
@@ -604,13 +605,15 @@ const Question: FC<QuestionProps> = ({
                               ? true
                               : false
                           }
-                          className={`${active
-                            ? "bg-gray-100 text-gray-600"
-                            : "text-gray-600"
-                            } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${disabledMenuButtons.includes(qt.value)
+                          className={`${
+                            active
+                              ? "bg-gray-100 text-gray-600"
+                              : "text-gray-600"
+                          } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
+                            disabledMenuButtons.includes(qt.value)
                               ? "cursor-not-allowed opacity-50"
                               : "cursor-pointer"
-                            }`}
+                          }`}
                         >
                           <div className="stroke-gray-500">{qt.icon}</div>
                           {qt.label}
@@ -693,13 +696,15 @@ const Question: FC<QuestionProps> = ({
                                   ? true
                                   : false
                               }
-                              className={`${active
-                                ? "bg-gray-100 text-gray-600"
-                                : "text-gray-600"
-                                } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${disabledMenuButtons.includes(qt.value)
+                              className={`${
+                                active
+                                  ? "bg-gray-100 text-gray-600"
+                                  : "text-gray-600"
+                              } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
+                                disabledMenuButtons.includes(qt.value)
                                   ? "cursor-not-allowed opacity-50"
                                   : "cursor-pointer"
-                                }`}
+                              }`}
                             >
                               <div className="stroke-gray-500">{qt.icon}</div>
                               {qt.label}
@@ -796,8 +801,9 @@ const Question: FC<QuestionProps> = ({
                             maxWordCount: null,
                           });
                         }}
-                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${isFocused ? "focused" : "not-focused"
-                          }`}
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
+                          isFocused ? "focused" : "not-focused"
+                        }`}
                         style={{
                           width: `${maxCharacters?.toString()?.length + 1}ch`,
                         }}
@@ -869,13 +875,15 @@ const Question: FC<QuestionProps> = ({
                             maxCharacters: null,
                           });
                         }}
-                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${isFocused ? "focused" : "not-focused"
-                          }`}
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
+                          isFocused ? "focused" : "not-focused"
+                        }`}
                         style={{
-                          width: `${isFocused
-                            ? maxWordCount?.toString()?.length + 2
-                            : maxWordCount?.toString()?.length + 1
-                            }ch`,
+                          width: `${
+                            isFocused
+                              ? maxWordCount?.toString()?.length + 2
+                              : maxWordCount?.toString()?.length + 1
+                          }ch`,
                         }}
                       />
 
@@ -952,7 +960,7 @@ const Question: FC<QuestionProps> = ({
                 </button>
               ) : null}
               {question.type === "MULTIPLE_CORRECT" ||
-                question.type === "SINGLE_CORRECT" ? (
+              question.type === "SINGLE_CORRECT" ? (
                 <Tooltip
                   content={
                     question.randomizedChoices
@@ -1058,12 +1066,12 @@ const Question: FC<QuestionProps> = ({
             const [localCriteria, setLocalCriteria] = useState(() =>
               variant.scoring?.criteria
                 ? {
-                  points: variant.scoring.criteria.map((c) => c.points),
-                  criteriaDesc: variant.scoring.criteria.map(
-                    (c) => c.description,
-                  ),
-                  criteriaIds: variant.scoring.criteria.map((c) => c.id),
-                }
+                    points: variant.scoring.criteria.map((c) => c.points),
+                    criteriaDesc: variant.scoring.criteria.map(
+                      (c) => c.description,
+                    ),
+                    criteriaIds: variant.scoring.criteria.map((c) => c.id),
+                  }
                 : {
                     points: [1, 0],
                     criteriaDesc: [
@@ -1084,7 +1092,7 @@ const Question: FC<QuestionProps> = ({
                   <span className="typography-body">Variant {index + 1}</span>
                   <div className="flex items-center gap-4">
                     {question.type === "MULTIPLE_CORRECT" ||
-                      question.type === "SINGLE_CORRECT" ? (
+                    question.type === "SINGLE_CORRECT" ? (
                       <Tooltip
                         content={
                           variant.randomizedChoices

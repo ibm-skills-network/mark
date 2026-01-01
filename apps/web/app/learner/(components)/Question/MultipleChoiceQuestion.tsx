@@ -40,6 +40,12 @@ function MultipleChoiceQuestion({
     <div className="flex flex-col gap-y-2 w-full">
       {choices.map((choice, index) => {
         const isSelected = learnerChoices?.includes(String(index));
+        const choiceText =
+          typeof choice === "string"
+            ? choice
+            : typeof choice === "number"
+              ? String(choice)
+              : choice?.choice;
 
         return (
           <button
@@ -76,7 +82,7 @@ function MultipleChoiceQuestion({
                 ) : null}
               </span>
               <div className="whitespace-pre-wrap break-words hyphens-auto text-left overflow-hidden w-full">
-                {choice.choice}
+                {choiceText}
               </div>
             </div>
           </button>

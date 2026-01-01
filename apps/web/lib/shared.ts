@@ -1600,6 +1600,11 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
     },
   });
 
+  if (res.status === 401) {
+    // Means user is not authenticated so return "nothing", this will become a 403 in the frontend
+      throw new Error("Unauthorized");
+  }
+
   if (!res.ok) {
     const errorBody = (await res.json()) as ErrorResponse;
     throw new Error(errorBody.message || "Failed to fetch user");
