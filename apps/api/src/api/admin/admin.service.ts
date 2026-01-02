@@ -5,6 +5,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import {
   UserRole,
   UserSession,
@@ -13,6 +14,7 @@ import { PrismaService } from "../../database/prisma.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
+import { AdminAddContentToAssignmentRequestDto } from "./dto/assignment/add.content.to.assignment.request.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
 import {
   AdminCreateAssignmentRequestDto,
@@ -2027,6 +2029,204 @@ export class AdminService {
       success: true,
       name: assignmentExists.name || "",
       type: assignmentExists.type || "AI_GRADED",
+    };
+  }
+
+  /**
+   * Helper method to map question DTO to Prisma question data
+   */
+  private mapQuestionDataForCreation(questionData: any, assignmentId: number) {
+    const scoring = questionData.scoring
+      ? (questionData.scoring as object)
+      : undefined;
+    const choices = questionData.choices
+      ? (JSON.parse(
+          JSON.stringify(questionData.choices),
+        ) as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
+
+    return {
+      assignmentId,
+      type: questionData.type,
+      question: questionData.question,
+      responseType: questionData.responseType,
+      maxWords: questionData.maxWords,
+      maxCharacters: questionData.maxCharacters,
+      totalPoints: questionData.totalPoints,
+      randomizedChoices: questionData.randomizedChoices,
+      choices,
+      scoring,
+    };
+  }
+
+  /**
+   * Add content (details, configuration, and questions) to an existing empty assignment.
+   * Uses a transaction to ensure atomicity - if any step fails, all changes are rolled back.
+   *
+   * @param id - The assignment ID
+   * @param addContentRequestDto - The content to add
+   * @returns Success response with updated assignment info
+   * @throws NotFoundException if assignment doesn't exist
+   */
+  async addContentToAssignment(
+    id: number,
+    addContentRequestDto: AdminAddContentToAssignmentRequestDto,
+    userId = "system",
+  ): Promise<BaseAssignmentResponseDto> {
+    const { assignment, config, gradingCriteria, questions } =
+      addContentRequestDto;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const existingAssignment = await tx.assignment.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: { questions: true },
+          },
+        },
+      });
+
+      if (!existingAssignment) {
+        throw new NotFoundException(`Assignment with Id ${id} not found.`);
+      }
+
+      if (existingAssignment._count.questions > 0) {
+        this.logger.warn(
+          `Assignment ${id} already has ${existingAssignment._count.questions} questions. Adding ${questions.length} more.`,
+        );
+      }
+
+      const updatedAssignment = await tx.assignment.update({
+        where: { id },
+        data: {
+          ...assignment,
+          gradingCriteriaOverview: gradingCriteria,
+          published: true,
+          numAttempts: config.numAttempts,
+          attemptsBeforeCoolDown: config.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: config.retakeAttemptCoolDownMinutes,
+          passingGrade: config.passingGrade,
+          displayOrder: config.displayOrder,
+          graded: config.graded,
+          questionDisplay: config.questionDisplay,
+          showQuestions: config.showQuestions,
+          showSubmissionFeedback: config.showSubmissionFeedback,
+          showAssignmentScore: config.showAssignmentScore,
+          numberOfQuestionsPerAttempt: config.numberOfQuestionsPerAttempt,
+          timeEstimateMinutes: config.timeEstimateMinutes,
+          allotedTimeMinutes: config.allotedTimeMinutes,
+          attemptsPerTimeRange: config.attemptsPerTimeRange,
+          attemptsTimeRangeHours: config.attemptsTimeRangeHours,
+          showQuestionScore: config.showQuestionScore,
+          correctAnswerVisibility: config.correctAnswerVisibility,
+        },
+      });
+
+      const createdQuestions: any[] = [];
+      if (questions.length > 0) {
+        const questionDataArray = questions.map((q) =>
+          this.mapQuestionDataForCreation(q, id),
+        );
+
+        await tx.question.createMany({
+          data: questionDataArray,
+        });
+
+        const fetchedQuestions = await tx.question.findMany({
+          where: { assignmentId: id },
+          orderBy: { id: "asc" },
+        });
+        createdQuestions.push(...fetchedQuestions);
+
+        this.logger.log(
+          `Successfully added ${questions.length} questions to assignment ${id}`,
+        );
+      }
+      const questionOrder = createdQuestions.map((q) => q.id);
+
+      const assignmentVersion = await tx.assignmentVersion.create({
+        data: {
+          assignmentId: id,
+          versionNumber: "0.0.1",
+          name: assignment.name,
+          introduction: assignment.introduction,
+          instructions: assignment.instructions,
+          gradingCriteriaOverview: gradingCriteria,
+          type: existingAssignment.type,
+          timeEstimateMinutes: config.timeEstimateMinutes,
+          attemptsBeforeCoolDown: config.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: config.retakeAttemptCoolDownMinutes,
+          graded: config.graded,
+          numAttempts: config.numAttempts,
+          allotedTimeMinutes: config.allotedTimeMinutes,
+          attemptsPerTimeRange: config.attemptsPerTimeRange,
+          attemptsTimeRangeHours: config.attemptsTimeRangeHours,
+          passingGrade: config.passingGrade,
+          displayOrder: config.displayOrder,
+          questionDisplay: config.questionDisplay,
+          numberOfQuestionsPerAttempt: config.numberOfQuestionsPerAttempt,
+          questionOrder: questionOrder ?? [],
+          published: true,
+          showAssignmentScore: config.showAssignmentScore,
+          showQuestionScore: config.showQuestionScore,
+          showSubmissionFeedback: config.showSubmissionFeedback,
+          showQuestions: config.showQuestions,
+          correctAnswerVisibility: config.correctAnswerVisibility,
+          createdBy: userId,
+          isDraft: false,
+          isActive: true,
+          versionDescription: "Initial version created via API",
+        },
+      });
+
+      if (createdQuestions.length > 0) {
+        const questionVersionsData = createdQuestions.map((q, index) => ({
+          assignmentVersionId: assignmentVersion.id,
+          questionId: q.id,
+          totalPoints: q.totalPoints,
+          type: q.type,
+          responseType: q.responseType,
+          question: q.question,
+          maxWords: q.maxWords,
+          scoring: q.scoring,
+          choices: q.choices,
+          randomizedChoices: q.randomizedChoices,
+          answer: q.answer,
+          gradingContextQuestionIds: q.gradingContextQuestionIds || [],
+          maxCharacters: q.maxCharacters,
+          videoPresentationConfig: q.videoPresentationConfig,
+          liveRecordingConfig: q.liveRecordingConfig,
+          displayOrder: index,
+        }));
+
+        await tx.questionVersion.createMany({
+          data: questionVersionsData,
+        });
+
+        this.logger.log(
+          `Created ${questionVersionsData.length} question versions for version ${assignmentVersion.versionNumber}`,
+        );
+      }
+
+      await tx.assignment.update({
+        where: { id },
+        data: {
+          currentVersionId: assignmentVersion.id,
+        },
+      });
+
+      this.logger.log(
+        `Successfully created version 0.0.1 for assignment ${id}`,
+      );
+
+      return updatedAssignment;
+    });
+
+    return {
+      id: result.id,
+      success: true,
+      name: result.name,
+      type: result.type,
     };
   }
 

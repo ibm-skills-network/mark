@@ -32,6 +32,7 @@ import {
 } from "./dto/assignment/create.replace.assignment.request.dto";
 import { AdminGetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
 import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
+import { AdminAddContentToAssignmentRequestDto } from "./dto/assignment/add.content.to.assignment.request.dto";
 
 @ApiTags("Admin")
 @UsePipes(
@@ -153,5 +154,32 @@ export class AdminController {
     @Param("id") id: number,
   ): Promise<BaseAssignmentResponseDto> {
     return this.adminService.removeAssignment(Number(id));
+  }
+
+  @Post("assignments/:id/content")
+  @ApiOperation({
+    summary: "Add content to an existing assignment",
+    description:
+      "This endpoint allows external services to populate an empty assignment with assignment details, configuration, and questions. Also creates version 0.0.1 and publishes the assignment.",
+  })
+  @ApiParam({
+    name: "id",
+    required: true,
+    description: "The ID of the assignment to add content to",
+  })
+  @ApiBody({ type: AdminAddContentToAssignmentRequestDto })
+  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 403 })
+  @ApiResponse({ status: 404, description: "Assignment not found" })
+  addContentToAssignment(
+    @Param("id") id: number,
+    @Body() addContentRequestDto: AdminAddContentToAssignmentRequestDto,
+  ): Promise<BaseAssignmentResponseDto> {
+    // For now, using 'admin-api' as the creator
+    return this.adminService.addContentToAssignment(
+      Number(id),
+      addContentRequestDto,
+      "admin-api",
+    );
   }
 }
