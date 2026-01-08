@@ -1,6 +1,6 @@
 # local-test/ui.Dockerfile
 # Using a consistent base for all stages
-ARG BASE_IMAGE=node:22-alpine
+ARG BASE_IMAGE=node:24-alpine
 FROM ${BASE_IMAGE} AS builder
 
 ARG DIR=/usr/src/app

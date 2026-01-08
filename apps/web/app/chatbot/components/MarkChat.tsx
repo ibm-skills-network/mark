@@ -56,6 +56,7 @@ import { useUserBehaviorMonitor } from "../../../hooks/useUserBehaviorMonitor";
 import { useDropzone } from "react-dropzone";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
+import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
 
 interface ScreenshotDropzoneProps {
   file: File | null | undefined;
@@ -920,6 +921,7 @@ export const MarkChat = () => {
     data: null as any,
   });
   const handleCheckReports = useCallback(() => {
+    toggleChatbot();
     setShowReports(true);
   }, []);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
@@ -1226,6 +1228,34 @@ export const MarkChat = () => {
       resetHelpOffer,
       toggleChatbot,
     ],
+  );
+
+  const handleActionClick = useCallback(
+    (action: string) => {
+      switch (action) {
+        case "help":
+          toggleChatbot();
+          setTimeout(() => {
+            setUserInput("/help");
+          }, 300);
+          break;
+        case "magic":
+          toggleChatbot();
+          setTimeout(() => {
+            setUserInput("/");
+          }, 300);
+          break;
+        case "settings":
+          toast.info("Settings coming soon!");
+          break;
+        case "mute":
+          break;
+        default:
+          toggleChatbot();
+          break;
+      }
+    },
+    [toggleChatbot],
   );
 
   const handleChatToggle = useCallback(() => {
@@ -2494,6 +2524,11 @@ Please help me with this.`;
             }}
           >
             <div className="fixed z-50">
+              <OrbitingActionDock
+                isVisible={!isChatbotOpen}
+                onActionClick={handleActionClick}
+              />
+
               <motion.button
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
@@ -2504,7 +2539,7 @@ Please help me with this.`;
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
-                className={`p-3 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 ${isMobileDevice() ? "cursor-pointer" : "cursor-move"} ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
+                className={`p-3 z-99999 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 ${isMobileDevice() ? "cursor-pointer" : "cursor-move"} ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
               >
                 {MarkFace ? (
                   <Image

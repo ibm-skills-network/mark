@@ -1,5 +1,5 @@
 # Using a consistent base for all stages
-ARG BASE_IMAGE=node:22-slim
+ARG BASE_IMAGE=node:24-slim
 # hadolint ignore=DL3006
 FROM ${BASE_IMAGE} AS builder
 

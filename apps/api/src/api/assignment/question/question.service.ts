@@ -21,6 +21,11 @@ import {
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 
+type PrismaTransactionalClient = Omit<
+  PrismaService,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use"
+>;
+
 @Injectable()
 export class QuestionService {
   private logger: Logger;
@@ -65,12 +70,16 @@ export class QuestionService {
     };
   }
 
-  async findOne(id: number): Promise<QuestionDto> {
+  async findOne(
+    id: number,
+    tx?: PrismaTransactionalClient,
+  ): Promise<QuestionDto> {
     if (!id || Number.isNaN(Number(id))) {
       throw new NotFoundException(`Question with ID ${id} not found`);
     }
 
-    const result = await this.prisma.question.findUnique({
+    const prisma = tx ?? this.prisma;
+    const result = await prisma.question.findUnique({
       where: { id },
     });
 

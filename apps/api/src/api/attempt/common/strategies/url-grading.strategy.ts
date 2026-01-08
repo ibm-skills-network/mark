@@ -142,6 +142,7 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         error: "url_fetch_failed",
         url: learnerResponse,
         status: "error",
+        maxPossiblePoints: question.totalPoints,
       };
 
       await this.recordGrading(
@@ -197,6 +198,7 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       isGithubRepo: learnerResponse.includes("github.com"),
       gradingRationale:
         gradingModel.gradingRationale || "URL content evaluated",
+      maxPossiblePoints: question.totalPoints,
     };
 
     await this.recordGrading(
@@ -243,6 +245,7 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       status: "fallback_grading",
       fallbackReason: errorMessage,
       requiresManualReview: true,
+      maxPossiblePoints: question.totalPoints,
     };
 
     return responseDto;

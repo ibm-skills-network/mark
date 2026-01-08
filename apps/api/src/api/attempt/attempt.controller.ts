@@ -53,6 +53,7 @@ import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/p
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { GRADING_AUDIT_SERVICE } from "./attempt.constants";
 import { AttemptServiceV2 } from "./services/attempt.service";
+import { GradingProgressService } from "./services/grading-progress.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
 
 @ApiTags("Attempts")
@@ -68,6 +69,8 @@ export class AttemptControllerV2 {
     private readonly attemptService: AttemptServiceV2,
     @Inject(GRADING_AUDIT_SERVICE)
     private readonly gradingAuditService: GradingAuditService,
+    @Inject("GradingProgressService")
+    private readonly gradingProgressService: GradingProgressService,
   ) {
     this.logger = parentLogger.child({ context: AttemptControllerV2.name });
   }
@@ -512,6 +515,93 @@ export class AttemptControllerV2 {
       message:
         "Grading architecture usage summary logged. Check application logs for detailed output.",
       statistics,
+    };
+  }
+
+  /**
+   * Get grading progress for an attempt
+   */
+  @Get(":attemptId/progress")
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({
+    summary: "Get real-time grading progress for an assignment attempt",
+  })
+  @ApiParam({
+    name: "attemptId",
+    description: "The ID of the assignment attempt",
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Grading progress retrieved successfully",
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Progress not found",
+  })
+  async getGradingProgress(
+    @Param("attemptId") attemptId: number,
+    @Req() request: UserSessionRequest,
+  ) {
+    const progress = await this.gradingProgressService.getProgress(
+      Number(attemptId),
+    );
+
+    if (!progress) {
+      throw new NotFoundException(
+        `Grading progress not found for attempt ${attemptId}`,
+      );
+    }
+
+    return progress;
+  }
+
+  /**
+   * Subscribe to email notification when grading is complete
+   */
+  @Post(":attemptId/notify")
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({
+    summary: "Subscribe to email notification when grading completes",
+  })
+  @ApiParam({
+    name: "attemptId",
+    description: "The ID of the assignment attempt",
+    type: Number,
+  })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        email: {
+          type: "string",
+          format: "email",
+          description:
+            "Email address to notify (optional, defaults to user email)",
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Email notification subscription successful",
+  })
+  async subscribeToNotification(
+    @Param("attemptId") attemptId: number,
+    @Req() request: UserSessionRequest,
+  ) {
+    const email = request.userSession.userId;
+
+    await this.gradingProgressService.enableEmailNotification(
+      Number(attemptId),
+      email,
+    );
+
+    return {
+      success: true,
+      message: `You will receive an email at ${email} when grading is complete`,
     };
   }
 }

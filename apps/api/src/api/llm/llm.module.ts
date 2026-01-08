@@ -21,10 +21,15 @@ import { OpenAiLlmService } from "./core/services/openai-llm.service";
 import { PromptProcessorService } from "./core/services/prompt-processor.service";
 import { TokenCounterService } from "./core/services/token-counter.service";
 import { UsageTrackerService } from "./core/services/usage-tracking.service";
+import { AnswerNormalizationService } from "./features/grading/services/answer-normalization.service";
 import { FileGradingService } from "./features/grading/services/file-grading.service";
+import { EvidenceBasedGradingService } from "./features/grading/services/evidence-based-grading.service";
+import { GradingCacheService } from "./features/grading/services/grading-cache.service";
 import { GradingJudgeService } from "./features/grading/services/grading-judge.service";
 import { GradingThresholdService } from "./features/grading/services/grading-threshold.service";
 import { ImageGradingService } from "./features/grading/services/image-grading.service";
+import { ImageDescriptionService } from "./features/grading/services/image-description.service";
+import { HighlightingGeneratorService } from "./features/grading/services/highlighting-generator.service";
 import { PresentationGradingService } from "./features/grading/services/presentation-grading.service";
 import { TextGradingService } from "./features/grading/services/text-grading.service";
 import { UrlGradingService } from "./features/grading/services/url-grading.service";
@@ -36,7 +41,9 @@ import { TranslationService } from "./features/translation/services/translation.
 import { LlmFacadeService } from "./llm-facade.service";
 import {
   ALL_LLM_PROVIDERS,
+  ANSWER_NORMALIZATION_SERVICE,
   FILE_GRADING_SERVICE,
+  GRADING_CACHE_SERVICE,
   GRADING_JUDGE_SERVICE,
   GRADING_THRESHOLD_SERVICE,
   IMAGE_GRADING_SERVICE,
@@ -56,6 +63,7 @@ import {
   VALIDATOR_SERVICE,
   VIDEO_PRESENTATION_GRADING_SERVICE,
 } from "./llm.constants";
+import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service";
 
 @Global()
 @Module({
@@ -109,6 +117,7 @@ import {
       ],
     },
     S3Service,
+    PdfAnnotationService,
     {
       provide: GRADING_JUDGE_SERVICE,
       useClass: GradingJudgeService,
@@ -158,6 +167,9 @@ import {
       provide: FILE_GRADING_SERVICE,
       useClass: FileGradingService,
     },
+    EvidenceBasedGradingService,
+    ImageDescriptionService,
+    HighlightingGeneratorService,
     {
       provide: IMAGE_GRADING_SERVICE,
       useClass: ImageGradingService,
@@ -173,6 +185,14 @@ import {
     {
       provide: VIDEO_PRESENTATION_GRADING_SERVICE,
       useClass: VideoPresentationGradingService,
+    },
+    {
+      provide: ANSWER_NORMALIZATION_SERVICE,
+      useClass: AnswerNormalizationService,
+    },
+    {
+      provide: GRADING_CACHE_SERVICE,
+      useClass: GradingCacheService,
     },
     {
       provide: QUESTION_GENERATION_SERVICE,

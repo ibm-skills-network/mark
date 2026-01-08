@@ -7,6 +7,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Logger,
 } from "@nestjs/common";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
@@ -47,6 +48,7 @@ interface ReportFilterParameters {
 export class ReportsService {
   private ghTokenCache: { value: string; expiresAt: number } | null = null;
   private ghInstallationIdCache: number | null = null;
+  private readonly logger = new Logger(ReportsService.name);
 
   constructor(
     private readonly floService: FloService,
@@ -54,6 +56,105 @@ export class ReportsService {
     private readonly filesService: FilesService,
     private readonly adminEmailService: AdminEmailService,
   ) {}
+
+  private async fetchGitHubIssueComments(issueNumber: number): Promise<
+    Array<{
+      id: number;
+      body: string;
+      created_at: string;
+      author: string;
+      url: string;
+    }>
+  > {
+    const githubOwner = process.env.GITHUB_OWNER;
+    const githubRepo = process.env.GITHUB_REPO;
+    const token = await this.getInstallationToken();
+
+    if (!githubOwner || !githubRepo || !token) {
+      throw new InternalServerErrorException(
+        "GitHub repository configuration or token missing",
+      );
+    }
+
+    const commentsResponse = await axios.get(
+      `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}/comments`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      },
+    );
+
+    const comments = commentsResponse.data as Array<{
+      id: number;
+      body: string;
+      created_at: string;
+      user: { login: string };
+      html_url: string;
+    }>;
+
+    return comments.map((c) => ({
+      id: c.id,
+      body: c.body,
+      created_at: c.created_at,
+      author: c.user?.login ?? "unknown",
+      url: c.html_url,
+    }));
+  }
+
+  private getDeveloperNotificationEmail(): string | undefined {
+    return (
+      process.env.GITHUB_DEV_EMAIL ||
+      process.env.REPORTS_DEV_EMAIL ||
+      process.env.SUPPORT_EMAIL
+    );
+  }
+
+  private async sendReportEmail(
+    to: string | undefined,
+    subject: string,
+    body: string,
+  ) {
+    if (!to) return;
+    await this.adminEmailService.sendGenericEmail(to, subject, body);
+  }
+
+  async handleIncomingGitHubComment(
+    issueNumber: number,
+    commentBody: string,
+    commenter: string,
+  ) {
+    const report = await this.prisma.report.findFirst({
+      where: { issueNumber },
+    });
+    if (!report) return;
+
+    if (report.reporterId && commenter && commenter === report.reporterId) {
+      return;
+    }
+
+    await this.prisma.report.update({
+      where: { id: report.id },
+      data: {
+        comments: commentBody,
+        updatedAt: new Date(),
+        ...(report.status === ReportStatus.OPEN
+          ? {
+              status: ReportStatus.IN_PROGRESS,
+              statusMessage: "Developer is investigating your report",
+            }
+          : {}),
+      },
+    });
+
+    await this.sendReportEmail(
+      report.reporterId || undefined,
+      `Update on your report #${report.issueNumber ?? report.id}`,
+      `New developer comment (${commenter}):\n\n${commentBody}`,
+    );
+  }
   private getPrivateKey(): string {
     const raw = process.env.GITHUB_APP_PRIVATE_KEY || "";
 
@@ -97,8 +198,7 @@ export class ReportsService {
       );
 
       return token;
-    } catch (error) {
-      console.error("Failed to create JWT:", error);
+    } catch {
       throw new InternalServerErrorException("Failed to create GitHub App JWT");
     }
   }
@@ -136,14 +236,12 @@ export class ReportsService {
       this.ghInstallationIdCache = Number(data.id);
       return this.ghInstallationIdCache;
     } catch (error) {
-      console.error("Failed to get installation ID:", error);
-      if (axios.isAxiosError(error)) {
-        console.error("Response status:", error.response?.status);
-        console.error("Response data:", error.response?.data);
-      }
-      throw new InternalServerErrorException(
-        "Failed to get GitHub App installation ID",
-      );
+      const message = axios.isAxiosError(error)
+        ? error.message
+        : "Failed to get GitHub App installation ID";
+      throw new InternalServerErrorException(message, {
+        cause: error instanceof Error ? error : undefined,
+      });
     }
   }
   private async getInstallationToken(): Promise<string> {
@@ -169,20 +267,19 @@ export class ReportsService {
         },
       );
 
-      const token = data.token as string;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-      const expiresAt = Math.floor(new Date(data.expires_at).getTime() / 1000);
+      const token = String(data.token);
+      const expiresAt = Math.floor(
+        new Date(String(data.expires_at)).getTime() / 1000,
+      );
       this.ghTokenCache = { value: token, expiresAt };
       return token;
     } catch (error) {
-      console.error("Failed to get installation token:", error);
-      if (axios.isAxiosError(error)) {
-        console.error("Response status:", error.response?.status);
-        console.error("Response data:", error.response?.data);
-      }
-      throw new InternalServerErrorException(
-        "Failed to get GitHub App installation token",
-      );
+      const message = axios.isAxiosError(error)
+        ? error.message
+        : "Failed to get GitHub App installation token";
+      throw new InternalServerErrorException(message, {
+        cause: error instanceof Error ? error : undefined,
+      });
     }
   }
 
@@ -366,7 +463,6 @@ export class ReportsService {
       if (!githubOwner) missingConfig.push("GITHUB_OWNER");
       if (!githubRepo) missingConfig.push("GITHUB_REPO");
       if (!token) missingConfig.push("installation token");
-      console.error("Missing GitHub configuration:", missingConfig);
       throw new InternalServerErrorException(
         `GitHub repository configuration or token missing: ${missingConfig.join(
           ", ",
@@ -387,13 +483,7 @@ export class ReportsService {
 
       return response.data as { number: number; [key: string]: any };
     } catch (error) {
-      console.error("Failed to create GitHub issue:", error);
-
       if (axios.isAxiosError(error)) {
-        console.error("HTTP Status:", error.response?.status);
-        console.error("Response headers:", error.response?.headers);
-        console.error("Response data:", error.response?.data);
-
         const errorMessage: string =
           error.response?.data?.message || error.message;
         const status = error.response?.status;
@@ -404,7 +494,6 @@ export class ReportsService {
       } else {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
-        console.error("Non-HTTP error:", errorMessage);
         throw new InternalServerErrorException(
           `Failed to create GitHub issue: ${errorMessage}`,
         );
@@ -820,13 +909,9 @@ export class ReportsService {
           );
 
           screenshotUrl = screenshotKey;
-        } else {
-          console.warn(
-            "IBM_COS_DEBUG_BUCKET not configured, skipping screenshot upload",
-          );
         }
-      } catch (uploadError) {
-        console.error("Failed to upload screenshot:", uploadError);
+      } catch {
+        // Ignore screenshot upload failures; continue without screenshot
       }
     }
 
@@ -1179,11 +1264,7 @@ A new related issue has been created: #${issue.number}
             : undefined,
         isDuplicate,
       };
-    } catch (error) {
-      console.error(
-        "[REPORT DEBUG] GitHub issue creation failed in main try block:",
-        error,
-      );
+    } catch {
       try {
         const reportData: {
           duplicateOfReportId: number | null;
@@ -1240,8 +1321,8 @@ A new related issue has been created: #${issue.number}
               : undefined,
           isDuplicate: potentialDuplicate !== undefined,
         };
-      } catch (error) {
-        console.error("Error creating fallback report:", error);
+      } catch {
+        // If we fail to create a report, fall through to generic error response
       }
 
       return {
@@ -1364,8 +1445,11 @@ A new related issue has been created: #${issue.number}
       reports.map(async (report) => {
         if (report.issueNumber) {
           try {
+            const previousDeveloperComment = report.comments;
             const { status, statusMessage, developerComment, closureReason } =
               await this.syncGitHubIssueStatus(report.issueNumber);
+            const newDeveloperComment =
+              developerComment && developerComment !== previousDeveloperComment;
             if (status !== report.status) {
               await this.createStatusChangeNotification(
                 report.id,
@@ -1411,6 +1495,15 @@ A new related issue has been created: #${issue.number}
 
               if (developerComment) {
                 report.comments = developerComment;
+              }
+
+              if (newDeveloperComment) {
+                const reporterEmail = report.reporterId;
+                await this.sendReportEmail(
+                  reporterEmail || undefined,
+                  `Update on your report #${report.issueNumber ?? report.id}`,
+                  `New developer comment:\n\n${developerComment}`,
+                );
               }
             }
           } catch (error) {
@@ -1490,6 +1583,132 @@ A new related issue has been created: #${issue.number}
     return updatedReports;
   }
 
+  async getReportComments(reportId: number, userSession: UserSession) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+    });
+
+    if (!report) {
+      throw new NotFoundException(`Report with ID ${reportId} not found`);
+    }
+
+    if (
+      report.reporterId !== userSession.userId &&
+      userSession.role !== UserRole.ADMIN
+    ) {
+      throw new NotFoundException(`Report with ID ${reportId} not found`);
+    }
+
+    if (!report.issueNumber) {
+      return { comments: [] };
+    }
+
+    const comments = await this.fetchGitHubIssueComments(report.issueNumber);
+
+    const latestDeveloperComment = [...comments]
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      )
+      .find(
+        (c) => c.author !== report.reporterId && c.body !== report.comments,
+      );
+
+    if (latestDeveloperComment) {
+      await this.prisma.report.update({
+        where: { id: reportId },
+        data: { comments: latestDeveloperComment.body, updatedAt: new Date() },
+      });
+
+      await this.sendReportEmail(
+        report.reporterId || undefined,
+        `Update on your report #${report.issueNumber ?? report.id}`,
+        `New developer comment:\n\n${latestDeveloperComment.body}`,
+      );
+    }
+
+    return { comments };
+  }
+
+  async addReportComment(
+    reportId: number,
+    comment: string,
+    userSession: UserSession,
+  ) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+    });
+
+    if (!report) {
+      throw new NotFoundException(`Report with ID ${reportId} not found`);
+    }
+
+    if (
+      report.reporterId !== userSession.userId &&
+      userSession.role !== UserRole.ADMIN
+    ) {
+      throw new NotFoundException(`Report with ID ${reportId} not found`);
+    }
+
+    const githubOwner = process.env.GITHUB_OWNER;
+    const githubRepo = process.env.GITHUB_REPO;
+    const token = await this.getInstallationToken();
+
+    if (!githubOwner || !githubRepo || !token || !report.issueNumber) {
+      throw new InternalServerErrorException(
+        "GitHub repository configuration or token missing",
+      );
+    }
+
+    await axios.post(
+      `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${report.issueNumber}/comments`,
+      {
+        body: `**${userSession.role ?? "user"} (${
+          userSession.userId
+        })**\n\n${comment}`,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      },
+    );
+
+    const reporterEmail = report.reporterId;
+    const developerEmail = this.getDeveloperNotificationEmail();
+    const subject = `Update on your report #${report.issueNumber ?? report.id}`;
+    const userIsReporter = report.reporterId === userSession.userId;
+    if (userIsReporter) {
+      await this.sendReportEmail(
+        developerEmail,
+        subject,
+        `New comment from user ${report.reporterId}:\n\n${comment}`,
+      );
+    } else {
+      await this.sendReportEmail(
+        reporterEmail,
+        subject,
+        `New comment from developer (${userSession.userId}):\n\n${comment}`,
+      );
+
+      // Mark as in-progress when a developer/admin responds
+      if (report.status === ReportStatus.OPEN) {
+        await this.prisma.report.update({
+          where: { id: report.id },
+          data: {
+            status: ReportStatus.IN_PROGRESS,
+            statusMessage: "Developer is investigating your report",
+            updatedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    return { message: "Comment added", reportId };
+  }
+
   async getReportDetailsForUser(reportId: number, userId: string) {
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
@@ -1505,6 +1724,7 @@ A new related issue has been created: #${issue.number}
 
     if (report.issueNumber) {
       try {
+        const previousDeveloperComment = report.comments;
         const { status, statusMessage, developerComment, closureReason } =
           await this.syncGitHubIssueStatus(report.issueNumber);
 
@@ -1546,10 +1766,22 @@ A new related issue has been created: #${issue.number}
           if (developerComment) {
             report.comments = developerComment;
           }
+
+          if (
+            developerComment &&
+            developerComment !== previousDeveloperComment
+          ) {
+            const reporterEmail = report.reporterId;
+            await this.sendReportEmail(
+              reporterEmail || undefined,
+              `Update on your report #${report.issueNumber ?? report.id}`,
+              `New developer comment:\n\n${developerComment}`,
+            );
+          }
         }
       } catch (error) {
         console.error(
-          `Error syncing GitHub issue status for report ID ${report.id}:`,
+          `Error syncing GitHub issue status for report ID ${reportId}:`,
           error,
         );
       }
@@ -2253,9 +2485,10 @@ A new related issue has been created: #${issue.number}
           );
         }
       } catch (error) {
-        console.error(
-          `Error adding comment to GitHub issue #${report.issueNumber}:`,
-          error,
+        this.logger.warn(
+          `Failed to add GitHub comment for issue ${report.issueNumber ?? ""}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
       }
     }
@@ -2285,26 +2518,7 @@ A new related issue has been created: #${issue.number}
 
     if (!report || report.status === newStatus) return;
 
-    const statusText =
-      newStatus === ReportStatus.RESOLVED
-        ? "Resolved"
-        : newStatus === ReportStatus.CLOSED
-          ? "Closed"
-          : newStatus === ReportStatus.IN_PROGRESS
-            ? "In Progress"
-            : "Updated";
-
-    const reasonText = closureReason
-      ? closureReason === "fixed"
-        ? " (Issue Fixed)"
-        : closureReason === "wontfix"
-          ? " (Won't Fix)"
-          : closureReason === "duplicate"
-            ? " (Marked as Duplicate)"
-            : closureReason === "invalid"
-              ? " (Not Reproducible/Invalid)"
-              : ""
-      : "";
+    // Status text and reason are no longer used; remove dead variables
   }
   /**
    * Track issue status changes and notify users
@@ -2471,8 +2685,8 @@ ${description}
               "Your feedback has been saved. Thank you for helping us improve!",
             reportId: report.id,
           };
-        } catch (error) {
-          console.error("Error saving feedback report to the database:", error);
+        } catch {
+          // fall through to generic error
         }
       }
 
@@ -2532,7 +2746,11 @@ ${description}
           },
         );
       } catch (error) {
-        console.error(`Error adding screenshot to GitHub issue:`, error);
+        this.logger.warn(
+          `Failed to add screenshot comment for issue ${report.issueNumber ?? ""}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     }
 

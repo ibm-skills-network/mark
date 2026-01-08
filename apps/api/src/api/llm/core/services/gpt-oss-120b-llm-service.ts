@@ -34,7 +34,7 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
       watsonxAIAuthType: "iam",
       watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? GptOss120bLlmService.DEFAULT_MODEL,
-      temperature: options?.temperature ?? 0.5,
+      temperature: options?.temperature ?? 0,
       maxTokens: options?.maxTokens ?? 8000,
     });
   }

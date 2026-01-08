@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Prisma, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
@@ -14,20 +15,36 @@ import { GradingConsistencyService } from "src/api/assignment/v2/services/gradin
 import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/grading-judge.interface";
 import { GRADING_JUDGE_SERVICE } from "src/api/llm/llm.constants";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
+import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
-import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
+import {
+  GRADING_AUDIT_SERVICE,
+  GRADING_CONSISTENCY_SERVICE,
+} from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { IGradingStrategy } from "../interfaces/grading-strategy.interface";
 import { LocalizationService } from "../utils/localization.service";
 
+export type PrismaTransactionalClient = Omit<
+  PrismaService,
+  | "$connect"
+  | "$disconnect"
+  | "$on"
+  | "$transaction"
+  | "$use"
+  | "onModuleInit"
+  | "onModuleDestroy"
+  | "isHealthy"
+  | "reconnect"
+>;
 export interface GradingValidationResult {
   isValid: boolean;
   issues: string[];
   corrections?: {
     points?: number;
     feedback?: string;
-    rubricScores?: any[];
+    rubricScores?: RubricScore[];
   };
 }
 
@@ -45,16 +62,13 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
     @Inject(GRADING_AUDIT_SERVICE)
     protected readonly gradingAuditService: GradingAuditService,
     @Optional()
+    @Inject(GRADING_CONSISTENCY_SERVICE)
     protected readonly consistencyService?: GradingConsistencyService,
     @Optional()
     @Inject(GRADING_JUDGE_SERVICE)
     protected readonly gradingJudgeService?: IGradingJudgeService,
     @Optional() @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger,
   ) {
-    if (this.consistencyService) {
-      this.consistencyService = undefined;
-    }
-
     if (parentLogger) {
       this.logger = parentLogger.child({
         context: this.constructor.name,
@@ -285,21 +299,19 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
   }
 
   /**
-   * Analyze feedback tone
+   * Analyze feedback for subjective language (which should be avoided)
    */
   private analyzeFeedbackTone(feedback: any): FeedbackTone {
     try {
       const feedbackText = this.extractTextFromFeedback(feedback).toLowerCase();
 
-      const positiveWords = [
+      const subjectiveWords = [
         "excellent",
         "great",
         "good",
         "well done",
         "impressive",
         "strong",
-        "effective",
-        "successful",
         "outstanding",
         "perfect",
         "exceptional",
@@ -307,51 +319,21 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         "brilliant",
         "fantastic",
         "wonderful",
-      ];
-
-      const negativeWords = [
         "poor",
         "weak",
-        "insufficient",
-        "lacking",
-        "needs improvement",
-        "failed",
-        "incorrect",
-        "inadequate",
-        "wrong",
-        "missing",
-        "incomplete",
-        "unsatisfactory",
-        "below",
-        "deficient",
-        "problematic",
+        "nice",
       ];
 
-      let positiveCount = 0;
-      let negativeCount = 0;
-
-      for (const word of positiveWords) {
-        if (feedbackText.includes(word)) positiveCount++;
+      let subjectiveCount = 0;
+      for (const word of subjectiveWords) {
+        if (feedbackText.includes(word)) subjectiveCount++;
       }
 
-      for (const word of negativeWords) {
-        if (feedbackText.includes(word)) negativeCount++;
+      if (subjectiveCount > 0) {
+        return { tone: "positive", confidence: 0.8 };
       }
 
-      const totalWords = positiveCount + negativeCount;
-      if (totalWords === 0) {
-        return { tone: "neutral", confidence: 1 };
-      }
-
-      const confidence = Math.min(totalWords / 5, 1);
-
-      if (positiveCount > negativeCount * 2) {
-        return { tone: "positive", confidence };
-      } else if (negativeCount > positiveCount * 2) {
-        return { tone: "negative", confidence };
-      } else {
-        return { tone: "neutral", confidence };
-      }
+      return { tone: "neutral", confidence: 1 };
     } catch {
       return { tone: "neutral", confidence: 0.5 };
     }
@@ -421,6 +403,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
     gradingStrategy: string,
   ): Promise<void> {
     const startTime = Date.now();
+    let consistencyResult: GradingValidationResult | undefined;
 
     this.logger?.info("Starting grading record process", {
       questionId: question.id,
@@ -433,6 +416,76 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
     });
 
     try {
+      if (this.consistencyService) {
+        try {
+          const responseText = this.extractResponseText(requestDto);
+          consistencyResult = await this.validateGradingConsistency(
+            responseDto,
+            question,
+            context,
+            responseText,
+          );
+
+          if (consistencyResult?.issues?.length) {
+            responseDto.metadata = {
+              ...responseDto.metadata,
+              consistencyIssues: consistencyResult.issues,
+            };
+          }
+
+          if (consistencyResult?.corrections) {
+            const { points, feedback, rubricScores } =
+              consistencyResult.corrections;
+
+            if (typeof points === "number") {
+              const cappedPoints =
+                question.totalPoints && question.totalPoints > 0
+                  ? Math.min(points, question.totalPoints)
+                  : points;
+              responseDto.totalPoints = this.sanitizePoints(cappedPoints);
+            }
+
+            if (feedback) {
+              const feedbackDto = this.createGeneralFeedback(feedback);
+              responseDto.feedback = [
+                ...(Array.isArray(responseDto.feedback)
+                  ? responseDto.feedback
+                  : []),
+                feedbackDto,
+              ];
+            }
+
+            if (rubricScores && Array.isArray(rubricScores)) {
+              responseDto.metadata = {
+                ...responseDto.metadata,
+                rubricScores,
+              };
+              const correctedTotal = rubricScores.reduce(
+                (sum, score) =>
+                  sum +
+                  (typeof score?.pointsAwarded === "number"
+                    ? score.pointsAwarded
+                    : 0),
+                0,
+              );
+              responseDto.totalPoints = this.sanitizePoints(
+                correctedTotal || responseDto.totalPoints,
+              );
+            }
+
+            responseDto.metadata = {
+              ...responseDto.metadata,
+              consistencyApplied: true,
+            };
+          }
+        } catch (error) {
+          this.logger?.warn("Consistency validation failed - continuing", {
+            questionId: question.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       if (!this.gradingAuditService) {
         this.logger?.error("GradingAuditService is not available", {
           questionId: question.id,
@@ -468,20 +521,23 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         return;
       }
 
-      const auditPromise = this.gradingAuditService.recordGrading({
-        questionId: question.id,
-        assignmentId: context.assignmentId,
-        requestDto,
-        responseDto,
-        gradingStrategy,
-        metadata: {
-          language: context.language,
-          userRole: context.userRole,
-          timestamp: new Date().toISOString(),
-          version: "2.0",
-          processingTime: Date.now() - startTime,
+      const auditPromise = this.gradingAuditService.recordGrading(
+        {
+          questionId: question.id,
+          assignmentId: context.assignmentId,
+          requestDto,
+          responseDto,
+          gradingStrategy,
+          metadata: {
+            language: context.language,
+            userRole: context.userRole,
+            timestamp: new Date().toISOString(),
+            version: "2.0",
+            processingTime: Date.now() - startTime,
+          },
         },
-      });
+        context.tx,
+      );
 
       const consistencyPromise = this.recordConsistencyData(
         question,
@@ -649,25 +705,25 @@ ${guidance}
   }
 
   /**
-   * Get grade context message based on percentage
+   * Get grade context message based on percentage (factual, no subjective language)
    */
   private getGradeContext(percentage: number): string {
-    if (percentage >= 95) return "Outstanding work!";
-    if (percentage >= 90) return "Excellent performance!";
-    if (percentage >= 85) return "Very good work!";
-    if (percentage >= 80) return "Good performance.";
-    if (percentage >= 75) return "Above average work.";
-    if (percentage >= 70) return "Satisfactory performance.";
-    if (percentage >= 65) return "Adequate work with room for improvement.";
-    if (percentage >= 60) return "Below average performance.";
-    if (percentage >= 50) return "Needs significant improvement.";
-    return "Substantial improvement required.";
+    if (percentage >= 95) return "Score: 95-100%";
+    if (percentage >= 90) return "Score: 90-94%";
+    if (percentage >= 85) return "Score: 85-89%";
+    if (percentage >= 80) return "Score: 80-84%";
+    if (percentage >= 75) return "Score: 75-79%";
+    if (percentage >= 70) return "Score: 70-74%";
+    if (percentage >= 65) return "Score: 65-69%";
+    if (percentage >= 60) return "Score: 60-64%";
+    if (percentage >= 50) return "Score: 50-59%";
+    return "Score: Below 50%";
   }
 
   /**
    * Sanitize points to ensure valid number
    */
-  private sanitizePoints(points: any): number {
+  protected sanitizePoints(points: any): number {
     if (
       typeof points === "number" &&
       !Number.isNaN(points) &&

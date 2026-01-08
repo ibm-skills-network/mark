@@ -368,10 +368,28 @@ export type Scoring = {
   showPoints?: boolean;
 };
 
-type Feedback = {
+export interface StructuredCriterion {
+  name: string;
+  pointsAwarded: number;
+  maxPoints: number;
+  evidence: string;
+  feedback: string;
+  status: "full" | "partial" | "none";
+}
+
+export interface StructuredFeedbackData {
+  summary: string;
+  criteria: StructuredCriterion[];
+  guidance: string;
+}
+
+export type Feedback = {
   choice?: string;
 
   feedback: string;
+  structuredFeedback?: StructuredFeedbackData;
+  highlighting?: ResponseHighlighting;
+  annotatedPdfUrl?: string;
 };
 
 /**
@@ -384,7 +402,7 @@ export type Choice = {
   feedback?: string;
 };
 
-type QuestionResponse = {
+export type QuestionResponse = {
   id: number;
   assignmentAttemptId: number;
   questionId: number;
@@ -489,7 +507,6 @@ export interface QuestionAuthorStore extends Question {
   alreadyInBackend?: boolean;
   showPoints?: boolean;
   authorComment?: string;
-  //set with a button on the frontend
 }
 
 /**
@@ -757,4 +774,39 @@ export enum AssignmentTypeEnum {
   ASSINGMENT = "ASSINGMENT",
   MIDTERM = "MIDTERM",
   FINAL = "FINAL",
+}
+
+export enum HighlightLevel {
+  CORRECT = "correct",
+  PARTIAL = "partial",
+  INCORRECT = "incorrect",
+  NEUTRAL = "neutral",
+}
+
+export interface TextHighlight {
+  start: number;
+  end: number;
+  text: string;
+  level: HighlightLevel;
+  comment: string;
+  criterionId?: string;
+  evidenceId?: string;
+}
+
+export interface ResponsePage {
+  pageNumber: number;
+  originalText: string;
+  highlights: TextHighlight[];
+  correctnessScore: number;
+}
+
+export interface BlockHighlight {
+  blockId: string;
+  highlights: TextHighlight[];
+}
+
+export interface ResponseHighlighting {
+  filename: string;
+  pages: ResponsePage[];
+  blockHighlights: BlockHighlight[];
 }

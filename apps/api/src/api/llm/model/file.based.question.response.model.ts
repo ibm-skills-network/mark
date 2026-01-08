@@ -1,3 +1,5 @@
+import { FileHighlighting } from "./highlighting.model";
+
 export type RubricScore = {
   rubricQuestion?: string;
   pointsAwarded?: number;
@@ -14,6 +16,8 @@ export class FileBasedQuestionResponseModel {
   readonly explanation?: string;
   readonly guidance?: string;
   readonly rubricScores?: RubricScore[];
+  readonly highlighting?: FileHighlighting;
+  readonly annotatedPdfUrl?: string;
 
   constructor(
     points: number,
@@ -23,6 +27,8 @@ export class FileBasedQuestionResponseModel {
     explanation?: string,
     guidance?: string,
     rubricScores?: RubricScore[],
+    highlighting?: FileHighlighting,
+    annotatedPdfUrl?: string,
   ) {
     this.points = points;
     this.feedback = feedback;
@@ -31,5 +37,7 @@ export class FileBasedQuestionResponseModel {
     this.explanation = explanation;
     this.guidance = guidance;
     this.rubricScores = rubricScores;
+    this.highlighting = highlighting;
+    this.annotatedPdfUrl = annotatedPdfUrl;
   }
 }

@@ -48,6 +48,9 @@ const FileUploadSection = ({
     null,
   );
   const addFileUpload = useLearnerStore((state) => state.addFileUpload);
+  const setIsUploadingFiles = useLearnerStore(
+    (state) => state.setIsUploadingFiles,
+  );
   const [error, setError] = useState<string | null>(null);
   const [showContent, setShowContent] = useState(false);
   const learnerFileResponse = useLearnerStore((state) =>
@@ -272,6 +275,9 @@ const FileUploadSection = ({
                       selectedFiles.filter((file) => file.filename !== key),
                     );
                   }
+                }}
+                onUploadStateChange={(isUploading) => {
+                  setIsUploadingFiles(isUploading);
                 }}
                 showUploadedFiles={true}
                 uploadedFiles={learnerFileResponse}

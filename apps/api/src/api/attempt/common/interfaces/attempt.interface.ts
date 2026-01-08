@@ -2,6 +2,7 @@ import {
   Choice,
   QuestionDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { CanonicalSubmission } from "src/api/attempt/services/structured-content.models";
 
 /**
  * Interface for assignment attempt grading results
@@ -60,6 +61,12 @@ export interface LearnerFileUpload {
   repo?: RepoType;
   owner?: string;
   blob?: Blob;
+  fileUrl?: string;
+  useVisionMode?: boolean;
+  extractedText?: string;
+  contentSummary?: string;
+  metadata?: Record<string, unknown>;
+  structuredContent?: CanonicalSubmission;
 }
 
 /**

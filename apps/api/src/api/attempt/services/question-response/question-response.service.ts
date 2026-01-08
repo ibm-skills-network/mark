@@ -10,7 +10,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { QuestionType } from "@prisma/client";
+import { Prisma, QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -29,6 +29,12 @@ import { PrismaService } from "../../../../database/prisma.service";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
+import { GradingProgressService } from "../grading-progress.service";
+
+type PrismaTransactionalClient = Omit<
+  PrismaService,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use"
+>;
 
 @Injectable()
 export class QuestionResponseService {
@@ -40,6 +46,8 @@ export class QuestionResponseService {
     private readonly localizationService: LocalizationService,
     private readonly gradingFactoryService: GradingFactoryService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Inject("GradingProgressService")
+    private readonly progressService?: GradingProgressService,
   ) {
     this.logger = parentLogger.child({
       context: QuestionResponseService.name,
@@ -59,53 +67,155 @@ export class QuestionResponseService {
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
-    const questionResponsesPromise = responsesForQuestions.map(
-      async (questionResponse) => {
-        return await this.createQuestionResponse(
-          assignmentAttemptId,
-          questionResponse,
-          role,
-          assignmentId,
-          language,
-          authorQuestions,
-          assignmentDetails,
-          preTranslatedQuestions,
+    // Use 15 minute timeout for grading operations (includes LLM calls + judge validation)
+    return this.prisma.$transaction(
+      async (tx) => {
+        const questionDtos: QuestionDto[] = await Promise.all(
+          responsesForQuestions.map(async (response) => {
+            const questionId = response.id;
+            if (role === UserRole.LEARNER) {
+              const { question } = await this.getLearnerQuestion(
+                questionId,
+                assignmentAttemptId,
+                assignmentId,
+                preTranslatedQuestions,
+                tx as PrismaTransactionalClient,
+              );
+              return question;
+            } else if (role === UserRole.AUTHOR) {
+              const { question } = this.getAuthorQuestion(
+                questionId,
+                authorQuestions,
+                assignmentDetails,
+              );
+              return question;
+            } else {
+              throw new BadRequestException(`Unsupported user role: ${role}`);
+            }
+          }),
         );
+
+        const { sorted, adj, inDegree } =
+          this.buildAndSortDependencies(questionDtos);
+
+        if (sorted.length !== responsesForQuestions.length) {
+          const nodesInCycle = [];
+          for (const [questionId, degree] of inDegree.entries()) {
+            if (degree > 0) {
+              nodesInCycle.push(questionId);
+            }
+          }
+          this.logger.error(
+            `Cycle detected in question dependencies for assignment ${assignmentId}`,
+            {
+              inDegree,
+              adj,
+              nodesInCycle,
+            },
+          );
+          throw new InternalServerErrorException(
+            `A cycle was detected in the question dependencies: ${nodesInCycle.join(
+              ", ",
+            )}`,
+          );
+        }
+
+        const totalQuestions = sorted.length;
+        if (this.progressService && role === UserRole.LEARNER) {
+          await this.progressService.initializeProgress(
+            assignmentAttemptId,
+            totalQuestions,
+          );
+        }
+
+        const questionResponses: CreateQuestionResponseAttemptResponseDto[] =
+          [];
+        const responseMap = new Map(
+          responsesForQuestions.map((r) => [r.id, r]),
+        );
+
+        for (const [index, questionId] of sorted.entries()) {
+          const questionNumber = index + 1;
+          const questionResponse = responseMap.get(questionId);
+
+          if (questionResponse) {
+            if (this.progressService && role === UserRole.LEARNER) {
+              await this.progressService.updateQuestionProgress(
+                assignmentAttemptId,
+                questionNumber,
+                totalQuestions,
+                `Grading question ${questionNumber} of ${totalQuestions}...`,
+              );
+            }
+
+            const result = await this.createQuestionResponse(
+              assignmentAttemptId,
+              questionResponse,
+              role,
+              assignmentId,
+              language,
+              authorQuestions,
+              assignmentDetails,
+              preTranslatedQuestions,
+              tx as PrismaTransactionalClient,
+            );
+            questionResponses.push(result);
+          }
+        }
+
+        if (this.progressService && role === UserRole.LEARNER) {
+          await this.progressService.markComplete(assignmentAttemptId);
+        }
+
+        return questionResponses;
+      },
+      {
+        timeout: 900_000, // 15 minutes for LLM grading operations
       },
     );
+  }
 
-    const questionResponses = await Promise.allSettled(
-      questionResponsesPromise,
-    );
+  private buildAndSortDependencies(questions: QuestionDto[]): {
+    sorted: number[];
+    adj: Map<number, number[]>;
+    inDegree: Map<number, number>;
+  } {
+    const adj = new Map<number, number[]>();
+    const inDegree = new Map<number, number>();
+    const questionIds = new Set(questions.map((q) => q.id));
 
-    const successfulResponses = questionResponses
-      .filter((response) => response.status === "fulfilled")
-      .map((response) => response.value);
-
-    const failedResponses = questionResponses
-      .filter(
-        (response): response is PromiseRejectedResult =>
-          response.status === "rejected",
-      )
-      .map((response) => {
-        if (typeof response.reason === "string") {
-          return response.reason;
-        } else if (response.reason instanceof Error) {
-          return response.reason.message;
-        } else {
-          return JSON.stringify(response.reason);
-        }
-      });
-
-    if (failedResponses.length > 0) {
-      throw new BadRequestException(
-        `Failed to process some question responses: ${failedResponses.join(
-          ", ",
-        )}`,
-      );
+    for (const q of questions) {
+      adj.set(q.id, []);
+      inDegree.set(q.id, 0);
     }
 
-    return successfulResponses;
+    for (const q of questions) {
+      for (const depId of q.gradingContextQuestionIds ?? []) {
+        if (questionIds.has(depId)) {
+          adj.get(depId)!.push(q.id);
+          inDegree.set(q.id, (inDegree.get(q.id) ?? 0) + 1);
+        }
+      }
+    }
+
+    const queue = questions
+      .filter((q) => (inDegree.get(q.id) ?? 0) === 0)
+      .map((q) => q.id);
+    const sorted: number[] = [];
+
+    while (queue.length > 0) {
+      const u = queue.shift()!;
+      sorted.push(u);
+
+      for (const v of adj.get(u) ?? []) {
+        inDegree.set(v, (inDegree.get(v) ?? 0) - 1);
+        if ((inDegree.get(v) ?? 0) === 0) {
+          queue.push(v);
+        }
+      }
+    }
+
+    return { sorted, adj, inDegree };
   }
 
   /**
@@ -120,6 +230,7 @@ export class QuestionResponseService {
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    tx?: PrismaTransactionalClient,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const questionId = createQuestionResponseAttemptRequestDto.id;
 
@@ -137,6 +248,7 @@ export class QuestionResponseService {
         assignmentAttemptId,
         assignmentId,
         preTranslatedQuestions,
+        tx,
       ));
     } else if (role === UserRole.AUTHOR) {
       ({ question, assignmentContext } = this.getAuthorQuestion(
@@ -159,6 +271,7 @@ export class QuestionResponseService {
           learnerResponse,
           responseDto,
           role,
+          tx,
         );
       }
 
@@ -179,6 +292,7 @@ export class QuestionResponseService {
         questionType: question.type,
         responseType: question.responseType,
       },
+      tx,
     };
 
     let responseDto: CreateQuestionResponseAttemptResponseDto;
@@ -307,6 +421,7 @@ export class QuestionResponseService {
         learnerResponse,
         responseDto,
         role,
+        tx,
       );
     }
 
@@ -390,9 +505,33 @@ export class QuestionResponseService {
     learnerResponse: any,
     responseDto: CreateQuestionResponseAttemptResponseDto,
     role: UserRole,
+    tx?: PrismaTransactionalClient,
   ): Promise<void> {
+    const prisma = tx ?? this.prisma;
     try {
-      const result = await this.prisma.questionResponse.create({
+      type FeedbackWithUrl = { annotatedPdfUrl?: string };
+      const feedbackArray: FeedbackWithUrl[] = Array.isArray(
+        responseDto.feedback,
+      )
+        ? (responseDto.feedback as FeedbackWithUrl[])
+        : [];
+      const annotatedPdfUrls = feedbackArray
+        .map((feedback) => feedback.annotatedPdfUrl)
+        .filter((url): url is string => typeof url === "string");
+      const hasAnnotatedPdf = annotatedPdfUrls.length > 0;
+      if (hasAnnotatedPdf) {
+        this.logger.info(
+          "[saveResponseToDatabase] Saving response with annotatedPdfUrl",
+          {
+            questionId,
+            attemptId: assignmentAttemptId,
+            feedbackCount: feedbackArray.length,
+            annotatedPdfUrls,
+          },
+        );
+      }
+
+      const result = await prisma.questionResponse.create({
         data: {
           assignmentAttemptId:
             role === UserRole.LEARNER ? assignmentAttemptId : 1,
@@ -425,6 +564,7 @@ export class QuestionResponseService {
     assignmentAttemptId: number,
     assignmentId: number,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    tx?: PrismaTransactionalClient,
   ): Promise<{
     question: QuestionDto;
     assignmentContext: {
@@ -432,17 +572,19 @@ export class QuestionResponseService {
       questionAnswerContext: QuestionAnswerContext[];
     };
   }> {
+    const prisma = tx ?? this.prisma;
     if (preTranslatedQuestions && preTranslatedQuestions.has(questionId)) {
       const question = preTranslatedQuestions.get(questionId);
       const assignmentContext = await this.getAssignmentContext(
         assignmentId,
         questionId,
         assignmentAttemptId,
+        tx,
       );
       return { question, assignmentContext };
     }
 
-    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+    const assignmentAttempt = await prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
       include: {
         questionVariants: {
@@ -493,13 +635,14 @@ export class QuestionResponseService {
           : null,
       };
     } else {
-      question = await this.questionService.findOne(questionId);
+      question = await this.questionService.findOne(questionId, tx);
     }
 
     const assignmentContext = await this.getAssignmentContext(
       assignmentId,
       questionId,
       assignmentAttemptId,
+      tx,
     );
 
     return { question, assignmentContext };
@@ -542,11 +685,13 @@ export class QuestionResponseService {
     assignmentId: number,
     questionId: number,
     assignmentAttemptId: number,
+    tx?: PrismaTransactionalClient,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
   }> {
-    const assignment = await this.prisma.assignment.findUnique({
+    const prisma = tx ?? this.prisma;
+    const assignment = await prisma.assignment.findUnique({
       where: { id: assignmentId },
       select: { instructions: true },
     });
@@ -557,7 +702,7 @@ export class QuestionResponseService {
       );
     }
 
-    const question = await this.prisma.question.findUnique({
+    const question = await prisma.question.findUnique({
       where: { id: questionId },
       select: { gradingContextQuestionIds: true },
     });
@@ -576,7 +721,7 @@ export class QuestionResponseService {
       };
     }
 
-    const contextQuestions = await this.prisma.question.findMany({
+    const contextQuestions = await prisma.question.findMany({
       where: {
         id: {
           in: question.gradingContextQuestionIds,
@@ -585,7 +730,7 @@ export class QuestionResponseService {
       select: { id: true, question: true, type: true },
     });
 
-    const questionResponses = await this.prisma.questionResponse.findMany({
+    const questionResponses = await prisma.questionResponse.findMany({
       where: {
         assignmentAttemptId: assignmentAttemptId,
         questionId: {
@@ -633,9 +778,6 @@ export class QuestionResponseService {
           } catch (error: unknown) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
-            console.error(
-              `Error fetching URL content for question ${contextQuestion.id}: ${errorMessage}`,
-            );
           }
         }
 
@@ -722,7 +864,6 @@ export class QuestionResponseService {
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        console.error(`Error parsing JSON field: ${errorMessage}`);
         return null;
       }
     }
@@ -868,7 +1009,6 @@ export class QuestionResponseService {
           } catch (error: unknown) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
-            console.error("Error fetching URL content:", errorMessage);
           }
         }
 

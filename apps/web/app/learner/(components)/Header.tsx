@@ -37,12 +37,11 @@ function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [gradingProgress, setGradingProgress] = useState({
-    isOpen: false,
-    progress: 0,
-    message: "Initializing...",
-    status: "idle" as "idle" | "processing" | "completed" | "failed",
-  });
+  const [showGradingModal, setShowGradingModal] = useState(false);
+  const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
+  const [currentGradingJobId, setCurrentGradingJobId] = useState<number | null>(
+    null,
+  );
 
   const [
     questions,
@@ -74,7 +73,12 @@ function LearnerHeader() {
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
     (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
-  const buttonStatus = getSubmitButtonStatus(questions, submitting);
+  const isUploadingFiles = useLearnerStore((state) => state.isUploadingFiles);
+  const buttonStatus = getSubmitButtonStatus(
+    questions,
+    submitting,
+    isUploadingFiles,
+  );
 
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
     "assignmentConfig",
@@ -166,19 +170,6 @@ function LearnerHeader() {
     void handleSubmitAssignment();
   };
 
-  const handleProgressUpdate = (
-    status: "processing" | "completed" | "failed",
-    progress: number,
-    message: string,
-  ) => {
-    setGradingProgress({
-      isOpen: true,
-      progress,
-      message,
-      status,
-    });
-  };
-
   const handleSubmitAssignment = useCallback(async () => {
     let responsesForQuestions: QuestionAttemptRequestWithId[] = [];
     try {
@@ -218,17 +209,12 @@ function LearnerHeader() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       toast.error(`Error processing responses: ${errorMessage}`);
-      console.error("Error processing responses:", error);
       return;
     }
 
     setSubmitting(true);
-    setGradingProgress({
-      isOpen: true,
-      progress: 0,
-      message: "Preparing submission...",
-      status: "processing",
-    });
+    setShowGradingModal(true);
+    setCurrentAttemptId(activeAttemptId);
 
     if (!assignmentId) {
       toast.error("Assignment ID is missing.");
@@ -238,7 +224,7 @@ function LearnerHeader() {
     if (activeAttemptId === null) {
       toast.error("Active attempt ID is missing.");
       setSubmitting(false);
-      setGradingProgress({ ...gradingProgress, isOpen: false });
+      setShowGradingModal(false);
       return;
     }
 
@@ -252,7 +238,14 @@ function LearnerHeader() {
         role === "author" ? authorQuestions : undefined,
         role === "author" ? authorAssignmentDetails : undefined,
         undefined,
-        handleProgressUpdate,
+        () => {
+          // Progress callback not used - grading progress shown via modal
+        },
+        (gradingJobId) => {
+          setCurrentGradingJobId(gradingJobId);
+          setCurrentAttemptId(activeAttemptId);
+          setShowGradingModal(true);
+        },
       );
 
       if (res) {
@@ -301,7 +294,7 @@ function LearnerHeader() {
         router.push(`/learner/${assignmentId}/successPage/${res.id}`);
 
         setTimeout(() => {
-          setGradingProgress({ ...gradingProgress, isOpen: false });
+          setShowGradingModal(false);
           useLearnerStore.getState().setUserPreferedLanguage(null);
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
         }, 500);
@@ -309,7 +302,7 @@ function LearnerHeader() {
     } catch (error) {
       setSubmitting(false);
       setTimeout(() => {
-        setGradingProgress({ ...gradingProgress, isOpen: false });
+        setShowGradingModal(false);
       }, 2000);
       return;
     }
@@ -329,7 +322,6 @@ function LearnerHeader() {
     clearGithubStore,
     clearLearnerAnswers,
     router,
-    gradingProgress,
   ]);
 
   useEffect(() => {
@@ -396,7 +388,7 @@ function LearnerHeader() {
                   className="disabled:opacity-70 btn-secondary text-sm px-4 py-2"
                   onClick={CheckNoFlaggedQuestions}
                 >
-                  {submitting && !gradingProgress.isOpen ? (
+                  {submitting && !showGradingModal ? (
                     <Spinner className="w-6" />
                   ) : (
                     "Submit"
@@ -461,7 +453,7 @@ function LearnerHeader() {
                   className="disabled:opacity-70 btn-secondary"
                   onClick={CheckNoFlaggedQuestions}
                 >
-                  {submitting && !gradingProgress.isOpen ? (
+                  {submitting && !showGradingModal ? (
                     <Spinner className="w-8" />
                   ) : (
                     "Submit assignment"
@@ -500,10 +492,10 @@ function LearnerHeader() {
       </header>
 
       <GradingProgressModal
-        isOpen={gradingProgress.isOpen}
-        progress={gradingProgress.progress}
-        message={gradingProgress.message}
-        status={gradingProgress.status}
+        isOpen={showGradingModal}
+        assignmentId={assignmentId || 0}
+        attemptId={currentAttemptId}
+        gradingJobId={currentGradingJobId}
       />
     </>
   );

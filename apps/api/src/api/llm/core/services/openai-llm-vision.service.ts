@@ -31,7 +31,7 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
    */
   private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
     return new ChatOpenAI({
-      temperature: options?.temperature ?? 0.5,
+      temperature: options?.temperature ?? 0,
       modelName:
         options?.modelName ?? Gpt4VisionPreviewLlmService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens ?? 4096,

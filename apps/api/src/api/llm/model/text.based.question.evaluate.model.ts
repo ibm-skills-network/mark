@@ -15,6 +15,7 @@ export class TextBasedQuestionEvaluateModel
   readonly previousQuestionsAnswersContext: QuestionAnswerContext[];
   readonly assignmentInstrctions: string;
   readonly responseType: ResponseType;
+  readonly questionId?: number;
 
   constructor(
     question: string,
@@ -25,6 +26,7 @@ export class TextBasedQuestionEvaluateModel
     scoringCriteriaType: string,
     scoringCriteria: object,
     responseType: ResponseType,
+    questionId?: number,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
@@ -34,5 +36,6 @@ export class TextBasedQuestionEvaluateModel
     this.scoringCriteriaType = scoringCriteriaType;
     this.scoringCriteria = scoringCriteria;
     this.responseType = responseType;
+    this.questionId = questionId;
   }
 }

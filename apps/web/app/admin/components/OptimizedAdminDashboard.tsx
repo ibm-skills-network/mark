@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { FeedbackTable } from "./FeedbackTable";
 import { ReportsTable } from "./ReportsTable";
@@ -81,8 +81,7 @@ function AdminDashboardContent({
     error: statsError,
   } = useDashboardStats(sessionToken, filters);
 
-  const { data: currentUpscaling, isLoading: loadingUpscaling } =
-    useCurrentPriceUpscaling(sessionToken);
+  const { data: currentUpscaling } = useCurrentPriceUpscaling(sessionToken);
 
   const upscalePricingMutation = useUpscalePricing(sessionToken);
   const removePricingMutation = useRemovePriceUpscaling(sessionToken);

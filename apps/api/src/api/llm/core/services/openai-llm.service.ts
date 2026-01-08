@@ -29,7 +29,8 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
    */
   private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
     return new ChatOpenAI({
-      temperature: options?.temperature ?? 0.5,
+      temperature: options?.temperature ?? 0,
+      topP: options?.topP ?? options?.top_p ?? 1,
       modelName: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens,
     });

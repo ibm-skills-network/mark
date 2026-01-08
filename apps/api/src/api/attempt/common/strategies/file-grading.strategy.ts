@@ -16,7 +16,11 @@ import {
   TrueFalseBasedFeedbackDto,
 } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
-import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import {
+  QuestionDto,
+  ScoringDto,
+} from "src/api/assignment/dto/update.questions.request.dto";
+import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { FileUploadQuestionEvaluateModel } from "src/api/llm/model/file.based.question.evaluate.model";
 import { Logger } from "winston";
@@ -85,10 +89,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       const hasGithubMetadata = file.githubUrl && file.filename;
 
       if (!hasStorageMetadata && !hasGithubMetadata) {
-        console.error(
-          `Invalid file metadata for ${file.filename || "unknown file"}:`,
-          file,
-        );
         throw new BadRequestException(
           `Invalid file metadata for ${file.filename || "unknown file"}`,
         );
@@ -118,6 +118,10 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
     const extractedFiles =
       await this.fileContentExtractionService.extractContentFromFiles(
         learnerResponse,
+        {
+          useVisionForPDFs: false,
+          useStructuredExtraction: true,
+        },
       );
 
     const processedFiles = await this.processExtractedFiles(
@@ -125,14 +129,52 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       learnerResponse,
     );
 
+    let parsedScoring: ScoringDto | null = null;
+    if (typeof question.scoring === "string") {
+      try {
+        parsedScoring = JSON.parse(question.scoring) as ScoringDto;
+        this.logger?.info("Parsed scoring from JSON string", {
+          questionId: question.id,
+          hasRubrics: !!parsedScoring?.rubrics,
+        });
+      } catch (error) {
+        this.logger?.warn("Failed to parse scoring JSON string", {
+          questionId: question.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else if (question.scoring && typeof question.scoring === "object") {
+      parsedScoring = question.scoring;
+    }
+
+    let scoringType: ScoringType | "" = parsedScoring?.type ?? "";
+
+    if (
+      !scoringType &&
+      parsedScoring?.rubrics &&
+      Array.isArray(parsedScoring.rubrics) &&
+      parsedScoring.rubrics.length > 0
+    ) {
+      scoringType = ScoringType.CRITERIA_BASED;
+      this.logger?.info("Auto-detected CRITERIA_BASED scoring from rubrics", {
+        rubricCount: parsedScoring.rubrics.length,
+        questionId: question.id,
+      });
+    }
+
+    const scoringForModel: ScoringDto = parsedScoring ?? {
+      type: scoringType || ScoringType.AI_GRADED,
+      rubrics: [],
+    };
+
     const fileUploadQuestionEvaluateModel = new FileUploadQuestionEvaluateModel(
       question.question,
       context.questionAnswerContext,
       context.assignmentInstructions,
       processedFiles,
       question.totalPoints,
-      question.scoring?.type ?? "",
-      question.scoring,
+      scoringType,
+      scoringForModel,
       question.type,
       question.responseType ?? "OTHER",
     );
@@ -210,6 +252,7 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
         0,
       ),
       extractionStatus: this.getExtractionStatus(extractedFiles),
+      maxPossiblePoints: question.totalPoints,
     };
 
     try {
@@ -255,6 +298,9 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
         ...original,
         content: extracted.content,
         extractedText: extracted.extractedText,
+        fileUrl: extracted.fileUrl,
+        useVisionMode: extracted.useVisionMode,
+        structuredContent: extracted.structuredContent,
         contentSummary: this.generateContentSummary(extracted),
         metadata: {
           ...extracted.metadata,

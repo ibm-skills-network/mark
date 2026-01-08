@@ -427,7 +427,10 @@ export class AssignmentServiceV2 {
         percentage: 90,
       });
 
-      const questionOrder = updateDto.questions?.map((q) => q.id) || [];
+      const questionOrder = this.resolveQuestionOrder(
+        updateDto,
+        existingAssignment,
+      );
 
       if (questionContentChanged || !existingAssignment.published) {
         await this.questionService.updateQuestionGradingContext(assignmentId);
@@ -441,9 +444,12 @@ export class AssignmentServiceV2 {
       const updatedQuestions =
         await this.questionService.getQuestionsForAssignment(assignmentId);
 
+      const questionOrderIndex = new Map(
+        questionOrder.map((id, index) => [id, index]),
+      );
       updatedQuestions.sort((a, b) => {
-        const indexA = questionOrder.indexOf(a.id);
-        const indexB = questionOrder.indexOf(b.id);
+        const indexA = questionOrderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const indexB = questionOrderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
         return indexA - indexB;
       });
 
@@ -802,6 +808,77 @@ export class AssignmentServiceV2 {
 
     this.logger.debug(`No content changes detected in any questions`);
     return false;
+  }
+
+  /**
+   * Resolve the correct question order to persist without wiping existing order
+   * when question payloads are omitted (e.g., config-only publishes).
+   */
+  private resolveQuestionOrder(
+    updateDto: UpdateAssignmentQuestionsDto,
+    existingAssignment:
+      | GetAssignmentResponseDto
+      | LearnerGetAssignmentResponseDto,
+  ): number[] {
+    const updatedQuestions = Array.isArray(updateDto.questions)
+      ? updateDto.questions
+      : [];
+    const existingQuestions = Array.isArray(
+      (existingAssignment as GetAssignmentResponseDto).questions,
+    )
+      ? (existingAssignment as GetAssignmentResponseDto).questions
+      : [];
+
+    const validQuestionIds =
+      updatedQuestions.length > 0
+        ? updatedQuestions.map((q) => q.id)
+        : existingQuestions.map((q) => q.id);
+
+    const preferredOrder =
+      Array.isArray(updateDto.questionOrder) &&
+      updateDto.questionOrder.length > 0
+        ? updateDto.questionOrder
+        : updatedQuestions.length > 0
+          ? updatedQuestions.map((q) => q.id)
+          : (existingAssignment.questionOrder ?? []);
+
+    const normalizedOrder = this.normalizeQuestionOrder(
+      preferredOrder,
+      validQuestionIds,
+    );
+
+    if (normalizedOrder.length === 0 && validQuestionIds.length > 0) {
+      return [...validQuestionIds];
+    }
+
+    return normalizedOrder;
+  }
+
+  /**
+   * Normalize question order to valid IDs while preserving explicit ordering.
+   */
+  private normalizeQuestionOrder(
+    order: number[],
+    validIds: number[],
+  ): number[] {
+    const validSet = new Set(validIds);
+    const seen = new Set<number>();
+    const normalized: number[] = [];
+
+    for (const id of order) {
+      if (validSet.has(id) && !seen.has(id)) {
+        normalized.push(id);
+        seen.add(id);
+      }
+    }
+
+    for (const id of validIds) {
+      if (!seen.has(id)) {
+        normalized.push(id);
+      }
+    }
+
+    return normalized;
   }
 
   /**

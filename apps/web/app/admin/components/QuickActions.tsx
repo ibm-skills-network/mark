@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -29,8 +29,6 @@ import {
   BarChart,
   Target,
   AlertTriangle,
-  Award,
-  X,
 } from "lucide-react";
 import { executeQuickAction } from "@/lib/shared";
 
@@ -144,10 +142,7 @@ export function QuickActions({
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [limit, setLimit] = useState<number>(10);
   const [loading, setLoading] = useState<boolean>(false);
-  const [result, setResult] = useState<QuickActionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showResults, setShowResults] = useState<boolean>(false);
-  const [executionTime, setExecutionTime] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
 
   const filteredActions =
@@ -158,11 +153,8 @@ export function QuickActions({
   const handleExecuteAction = async () => {
     if (!selectedAction || !sessionToken) return;
 
-    const startTime = Date.now();
     setLoading(true);
     setError(null);
-    setResult(null);
-    setShowResults(false);
 
     try {
       const actionResult = (await executeQuickAction(
@@ -170,16 +162,9 @@ export function QuickActions({
         selectedAction,
         limit,
       )) as QuickActionResult;
-      const endTime = Date.now();
-      setExecutionTime(endTime - startTime);
 
-      setResult(actionResult);
       onActionComplete?.(actionResult);
       setIsOpen(false);
-
-      setTimeout(() => {
-        setShowResults(true);
-      }, 300);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to execute action");
     } finally {
@@ -192,14 +177,8 @@ export function QuickActions({
     if (!open) {
       setSelectedAction("");
       setError(null);
-      setResult(null);
-      setShowResults(false);
     }
   };
-
-  const selectedActionInfo = quickActions.find(
-    (action) => action.id === selectedAction,
-  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleModalOpenChange}>

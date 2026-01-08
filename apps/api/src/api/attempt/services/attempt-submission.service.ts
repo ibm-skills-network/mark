@@ -24,6 +24,7 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
@@ -40,6 +41,8 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
+import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
+import { Roles } from "src/auth/role/roles.global.guard";
 import {
   UserRole,
   UserSession,
@@ -56,8 +59,6 @@ import { AttemptValidationService } from "./attempt-validation.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
-import { Roles } from "src/auth/role/roles.global.guard";
-import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
 
 @Injectable()
 export class AttemptSubmissionService {
@@ -147,6 +148,8 @@ export class AttemptSubmissionService {
       },
     });
 
+    const selectionSeed = assignmentAttempt.id ^ assignmentId;
+
     const questions: QuestionDto[] =
       assignmentWithActiveVersion?.currentVersion?.questionVersions?.length > 0
         ? await Promise.all(
@@ -219,7 +222,10 @@ export class AttemptSubmissionService {
       assignment.numberOfQuestionsPerAttempt &&
       assignment.numberOfQuestionsPerAttempt > 0
     ) {
-      const shuffledQuestions = questions.sort(() => Math.random() - 0.5);
+      const shuffledQuestions = this.deterministicShuffle(
+        questions,
+        selectionSeed,
+      );
       const selectedQuestions = shuffledQuestions.slice(
         0,
         assignment.numberOfQuestionsPerAttempt,
@@ -279,7 +285,11 @@ export class AttemptSubmissionService {
       ),
     }));
 
-    const orderedQuestions = this.getOrderedQuestions(questionDtos, assignment);
+    const orderedQuestions = this.getOrderedQuestions(
+      questionDtos,
+      assignment,
+      selectionSeed,
+    );
 
     await this.prisma.assignmentAttempt.update({
       where: { id: assignmentAttempt.id },
@@ -850,10 +860,8 @@ export class AttemptSubmissionService {
         },
       });
 
-      if (progressCallback) {
-        await progressCallback("Processing question responses...", 20);
-      }
-
+      // Questions are graded from 0-90% by GradingProgressService
+      // Reserve 91-100% for finalization steps
       const successfulQuestionResponses =
         await this.questionResponseService.submitQuestions(
           updateDto.responsesForQuestions,
@@ -867,16 +875,54 @@ export class AttemptSubmissionService {
         );
 
       if (progressCallback) {
-        await progressCallback("Calculating grades...", 70);
+        await progressCallback("Calculating final grade...", 92);
       }
 
-      let totalPossiblePoints = 0;
-      for (const response of successfulQuestionResponses) {
-        const question = assignment.questions.find(
-          (q) => q.id === response.questionId,
+      // FIXED: Calculate totalPossiblePoints from the actual question responses
+      // instead of looking up questions which may have been deleted or filtered
+      const { totalPossiblePoints, missingQuestions } =
+        await this.calculateTotalPossiblePointsWithValidation(
+          successfulQuestionResponses,
+          assignment.questions,
         );
-        totalPossiblePoints += question?.totalPoints || 0;
+
+      // Validation: Log warning if any questions are missing
+      if (missingQuestions.length > 0) {
+        console.warn(
+          `[GRADING WARNING] Missing questions in totalPossiblePoints calculation for attemptId ${attemptId}:`,
+          {
+            attemptId,
+            assignmentId,
+            missingQuestionIds: missingQuestions,
+            responseCount: successfulQuestionResponses.length,
+            foundQuestionsCount: assignment.questions.length,
+          },
+        );
       }
+
+      // Validation: Ensure totalPossiblePoints is valid
+      if (totalPossiblePoints <= 0) {
+        throw new InternalServerErrorException(
+          `Invalid totalPossiblePoints (${totalPossiblePoints}) calculated for attemptId ${attemptId}. ` +
+            `This indicates a critical grading error. ` +
+            `Responses: ${successfulQuestionResponses.length}, ` +
+            `Questions: ${assignment.questions.length}`,
+        );
+      }
+
+      // Debug logging: Log all response points for verification
+      console.log(`[GRADE CALCULATION DEBUG] attemptId: ${attemptId}`, {
+        responseCount: successfulQuestionResponses.length,
+        responses: successfulQuestionResponses.map((r) => ({
+          questionId: r.questionId,
+          points: r.totalPoints,
+        })),
+        manualSum: successfulQuestionResponses.reduce(
+          (sum, r) => sum + (r.totalPoints || 0),
+          0,
+        ),
+        totalPossiblePoints,
+      });
 
       const { grade, totalPointsEarned } =
         this.gradingService.calculateGradeForLearner(
@@ -884,9 +930,25 @@ export class AttemptSubmissionService {
           totalPossiblePoints,
         );
 
+      console.log(`[GRADE CALCULATION RESULT] attemptId: ${attemptId}`, {
+        totalPointsEarned,
+        totalPossiblePoints,
+        grade,
+        gradePercentage: (grade * 100).toFixed(2) + "%",
+      });
+
+      // Validation: Ensure grade is within valid range [0, 1]
+      if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        throw new InternalServerErrorException(
+          `Invalid grade calculated: ${grade}. ` +
+            `totalPointsEarned: ${totalPointsEarned}, ` +
+            `totalPossiblePoints: ${totalPossiblePoints}`,
+        );
+      }
+
       if (gradingCallbackRequired) {
         if (progressCallback) {
-          await progressCallback("Sending grade to LTI...", 80);
+          await progressCallback("Sending grade to LTI...", 95);
         }
         await this.handleLtiGradeCallback(
           grade,
@@ -897,7 +959,7 @@ export class AttemptSubmissionService {
       }
 
       if (progressCallback) {
-        await progressCallback("Saving results...", 90);
+        await progressCallback("Finalizing results...", 98);
       }
 
       const result = await this.updateAssignmentAttemptInDb(
@@ -947,7 +1009,7 @@ export class AttemptSubmissionService {
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {
-        await progressCallback("Processing author preview...", 10);
+        await progressCallback("Setting up preview...", 5);
       }
 
       const assignment = await this.prisma.assignment.findUnique({
@@ -967,9 +1029,10 @@ export class AttemptSubmissionService {
       const fakeAttemptId = -1;
 
       if (progressCallback) {
-        await progressCallback("Submitting questions...", 30);
+        await progressCallback("Grading questions...", 10);
       }
 
+      // Author preview: questions graded 10-90%
       const successfulQuestionResponses =
         await this.questionResponseService.submitQuestions(
           updateDto.responsesForQuestions,
@@ -982,15 +1045,33 @@ export class AttemptSubmissionService {
         );
 
       if (progressCallback) {
-        await progressCallback("Calculating grades...", 70);
+        await progressCallback("Calculating results...", 92);
       }
 
-      let totalPossiblePoints = 0;
-      for (const response of successfulQuestionResponses) {
-        const question = assignment.questions.find(
-          (q) => q.id === response.questionId,
+      // FIXED: Calculate totalPossiblePoints from the actual question responses
+      const { totalPossiblePoints, missingQuestions } =
+        await this.calculateTotalPossiblePointsWithValidation(
+          successfulQuestionResponses,
+          assignment.questions,
         );
-        totalPossiblePoints += question?.totalPoints || 0;
+
+      // Validation: Log warning if any questions are missing (for author preview)
+      if (missingQuestions.length > 0) {
+        console.warn(
+          `[GRADING WARNING] Missing questions in author preview for assignmentId ${assignmentId}:`,
+          {
+            assignmentId,
+            missingQuestionIds: missingQuestions,
+            responseCount: successfulQuestionResponses.length,
+          },
+        );
+      }
+
+      // Validation: Ensure totalPossiblePoints is valid
+      if (totalPossiblePoints <= 0) {
+        throw new InternalServerErrorException(
+          `Invalid totalPossiblePoints (${totalPossiblePoints}) in author preview for assignmentId ${assignmentId}.`,
+        );
       }
 
       const { grade, totalPointsEarned } =
@@ -998,6 +1079,14 @@ export class AttemptSubmissionService {
           successfulQuestionResponses,
           totalPossiblePoints,
         );
+
+      if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        throw new InternalServerErrorException(
+          `Invalid grade calculated in author preview: ${grade}. ` +
+            `totalPointsEarned: ${totalPointsEarned}, ` +
+            `totalPossiblePoints: ${totalPossiblePoints}`,
+        );
+      }
 
       if (progressCallback) {
         await progressCallback("Preview completed!", 100);
@@ -1159,6 +1248,135 @@ export class AttemptSubmissionService {
   }
 
   /**
+   * Calculates total possible points with validation to prevent grade miscalculation bugs.
+   *
+   * CRITICAL: This method stores the max possible points from each question response
+   * to prevent bugs where questions are deleted/filtered after attempt creation.
+   *
+   * @param responses - The graded question responses
+   * @param assignmentQuestions - Questions from the assignment (may be filtered/deleted)
+   * @returns Object containing totalPossiblePoints and array of missing question IDs
+   */
+  private async calculateTotalPossiblePointsWithValidation(
+    responses: CreateQuestionResponseAttemptResponseDto[],
+    assignmentQuestions: Question[],
+  ): Promise<{
+    totalPossiblePoints: number;
+    missingQuestions: number[];
+  }> {
+    console.log(`[TOTAL POSSIBLE POINTS CALCULATION]`, {
+      responseCount: responses.length,
+      responseQuestionIds: responses.map((r) => r.questionId),
+      assignmentQuestionCount: assignmentQuestions.length,
+      assignmentQuestionIds: assignmentQuestions.map((q) => q.id),
+      assignmentQuestionPoints: assignmentQuestions.map((q) => ({
+        id: q.id,
+        points: q.totalPoints,
+      })),
+    });
+
+    let totalPossiblePoints = 0;
+    const missingQuestions: number[] = [];
+    const questionMap = new Map(
+      assignmentQuestions.map((q) => [q.id, q.totalPoints]),
+    );
+
+    // Collect missing question IDs to query database once
+    const missingQuestionIds: number[] = [];
+
+    for (const response of responses) {
+      const questionTotalPoints = questionMap.get(response.questionId);
+
+      if (questionTotalPoints === undefined) {
+        // Question not found in active questions - check metadata first
+        const responseMetadata = response.metadata as {
+          maxPossiblePoints?: number;
+        } | null;
+
+        if (
+          responseMetadata &&
+          typeof responseMetadata.maxPossiblePoints === "number" &&
+          responseMetadata.maxPossiblePoints > 0
+        ) {
+          // Use cached value from response metadata
+          totalPossiblePoints += responseMetadata.maxPossiblePoints;
+          missingQuestions.push(response.questionId);
+        } else {
+          // Need to query database for this question
+          missingQuestionIds.push(response.questionId);
+        }
+      } else {
+        // Question found - use its total points
+        totalPossiblePoints += questionTotalPoints;
+      }
+    }
+
+    // Fallback: Query database for deleted questions
+    if (missingQuestionIds.length > 0) {
+      try {
+        const deletedQuestions = await this.prisma.question.findMany({
+          where: {
+            id: { in: missingQuestionIds },
+          },
+          select: {
+            id: true,
+            totalPoints: true,
+          },
+        });
+
+        const deletedQuestionsMap = new Map(
+          deletedQuestions.map((q) => [q.id, q.totalPoints]),
+        );
+
+        for (const questionId of missingQuestionIds) {
+          const points = deletedQuestionsMap.get(questionId);
+
+          if (points !== undefined && points > 0) {
+            totalPossiblePoints += points;
+            missingQuestions.push(questionId);
+            console.warn(
+              `[GRADING WARNING] Used deleted question ${questionId} totalPoints (${points}) ` +
+                `from database for grade calculation.`,
+            );
+          } else {
+            // Complete failure - question doesn't exist anywhere
+            console.error(
+              `[GRADING ERROR] Cannot find totalPoints for questionId ${questionId}. ` +
+                `Question doesn't exist in database. This will result in incorrect grade calculation!`,
+            );
+            throw new InternalServerErrorException(
+              `Cannot calculate totalPossiblePoints: Question ${questionId} not found ` +
+                `in database. This prevents accurate grading.`,
+            );
+          }
+        }
+      } catch (error) {
+        if (error instanceof InternalServerErrorException) {
+          throw error;
+        }
+        console.error(
+          `[GRADING ERROR] Database query failed while looking up deleted questions:`,
+          error,
+        );
+        throw new InternalServerErrorException(
+          `Failed to query deleted questions for grade calculation: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    console.log(`[TOTAL POSSIBLE POINTS RESULT]`, {
+      totalPossiblePoints,
+      missingQuestionsCount: missingQuestions.length,
+      missingQuestionIds: missingQuestions,
+      queriedDeletedQuestions: missingQuestionIds,
+    });
+
+    return { totalPossiblePoints, missingQuestions };
+  }
+
+  /**
    * Calculate the expiration date for an attempt
    */
   private calculateAttemptExpiresAt(
@@ -1179,11 +1397,15 @@ export class AttemptSubmissionService {
   private getOrderedQuestions(
     questions: QuestionDto[],
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
+    shuffleSeed?: number,
   ): QuestionDto[] {
-    const orderedQuestions = [...questions];
+    let orderedQuestions = [...questions];
 
     if (assignment.displayOrder === "RANDOM") {
-      orderedQuestions.sort(() => Math.random() - 0.5);
+      orderedQuestions = this.deterministicShuffle(
+        orderedQuestions,
+        shuffleSeed ?? Date.now(),
+      );
     } else if (
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
@@ -1241,6 +1463,23 @@ export class AttemptSubmissionService {
         null,
       ),
     }));
+  }
+
+  /**
+   * Deterministically shuffle a list using a simple LCG so grading order is stable per attempt
+   */
+  private deterministicShuffle<T>(items: T[], seed = 1): T[] {
+    const result = [...items];
+    let currentSeed = seed || 1;
+
+    for (let index = result.length - 1; index > 0; index--) {
+      currentSeed = (currentSeed * 9301 + 49_297) % 233_280;
+      const rand = currentSeed / 233_280;
+      const swapIndex = Math.floor(rand * (index + 1));
+      [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+    }
+
+    return result;
   }
 
   /**
@@ -1303,7 +1542,6 @@ export class AttemptSubmissionService {
    * Remove sensitive data from questions
    */
 
-  // fpilter out the author comment
   private removeSensitiveData(
     questions: AttemptQuestionDto[],
     assignment: { correctAnswerVisibility: CorrectAnswerVisibility },
@@ -1318,8 +1556,6 @@ export class AttemptSubmissionService {
       if (UserRole.LEARNER) {
         question.authorComment == null;
       }
-      // if user role learner make quetion null
-
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;

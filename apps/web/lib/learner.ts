@@ -45,7 +45,6 @@ export async function createAttempt(
         },
       },
     );
-    console.log("result: ", res);
     const { success, error, id } = res;
     if (!success) {
       throw new Error(error);
@@ -172,7 +171,6 @@ export async function getSuccessPageData(
     });
     return data;
   } catch (err) {
-    console.error("Error fetching success page data:", err);
     return undefined;
   }
 }
@@ -258,6 +256,7 @@ export async function submitAssignment(
     progress: number,
     message: string,
   ) => void,
+  onGradingJobCreated?: (gradingJobId: number) => void,
 ): Promise<SubmitAssignmentResponse | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}`;
 
@@ -299,7 +298,6 @@ export async function submitAssignment(
         }
       }
 
-      console.error("Submission error:", apiError);
       toast.error(errorMessage);
       throw new Error(errorMessage);
     }
@@ -309,6 +307,8 @@ export async function submitAssignment(
     if (!gradingJobId) {
       throw new Error("No grading job ID returned");
     }
+
+    onGradingJobCreated?.(Number(gradingJobId));
 
     const sseUrl = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/grading/${gradingJobId}/status-stream`;
 
@@ -326,8 +326,6 @@ export async function submitAssignment(
       const attemptConnection = () => {
         retryCount++;
         const currentAttempt = retryCount;
-
-        console.log(`SSE Connection attempt ${currentAttempt}/${maxRetries}`);
 
         const eventSource = new EventSource(sseUrl, {
           withCredentials: true,
@@ -353,18 +351,17 @@ export async function submitAssignment(
               onProgress?.("failed", 0, timeoutError);
 
               if (currentAttempt < maxRetries) {
-                setTimeout(() => attemptConnection(), 2000 * currentAttempt); // Progressive delay
+                setTimeout(() => attemptConnection(), 2000 * currentAttempt);
               } else {
                 handleFinalFailure();
               }
             }
-          }, 300000); // 5 minutes
+          }, 300000);
         };
 
         resetTimeout();
 
         eventSource.onopen = () => {
-          console.log(`SSE connection opened on attempt ${currentAttempt}`);
           onProgress?.(
             "processing",
             0,
@@ -380,17 +377,13 @@ export async function submitAssignment(
             try {
               data = JSON.parse(event.data);
             } catch (parseError) {
-              // Handle non-JSON data (legacy format)
               data = event.data;
             }
 
-            // Handle heartbeat messages
             if (data.heartbeat) {
-              console.log(`Heartbeat received for grading job ${data.jobId}`);
               return;
             }
 
-            // Handle connection messages
             if (data.message && data.connectionId) {
               onProgress?.("processing", 0, data.message);
               return;
@@ -411,14 +404,11 @@ export async function submitAssignment(
               if (typeof result === "string") {
                 try {
                   result = JSON.parse(result);
-                } catch (e) {
-                  console.error("Failed to parse result:", e);
-                }
+                } catch (e) {}
               }
               resolve(result);
             } else if (data.status === "Failed" && !isCompleted) {
               isCompleted = true;
-              console.error("Grading failed:", data.progress);
               onProgress?.("failed", 0, data.progress || "Grading failed");
 
               eventSource.close();
@@ -429,9 +419,7 @@ export async function submitAssignment(
                 reject(new Error(data.progress || "Grading failed"));
               }, 2000);
             }
-          } catch (error) {
-            console.error("Error parsing SSE data:", error);
-          }
+          } catch (error) {}
         };
 
         eventSource.addEventListener("update", (event: any) => {
@@ -440,20 +428,14 @@ export async function submitAssignment(
             try {
               const data = JSON.parse(event.data);
 
-              // Handle heartbeat in update events
               if (data.heartbeat) {
-                console.log(
-                  `Heartbeat received via update event for job ${data.jobId}`,
-                );
                 return;
               }
 
               if (data.progress && data.percentage !== undefined) {
                 onProgress?.("processing", data.percentage, data.progress);
               }
-            } catch (error) {
-              console.error("Error parsing update event:", error);
-            }
+            } catch (error) {}
           }
         });
 
@@ -462,11 +444,7 @@ export async function submitAssignment(
             resetTimeout();
             try {
               const data = JSON.parse(event.data);
-              console.log(`Heartbeat event received for job ${data.jobId}`);
-              // Heartbeats don't need to update the UI, just reset the timeout
-            } catch (error) {
-              console.error("Error parsing heartbeat event:", error);
-            }
+            } catch (error) {}
           }
         });
 
@@ -484,15 +462,40 @@ export async function submitAssignment(
               if (typeof result === "string") {
                 try {
                   result = JSON.parse(result);
-                } catch (e) {
-                  console.error("Failed to parse result:", e);
-                }
+                } catch (e) {}
               }
               resolve(result);
             } catch (error) {
-              console.error("Error in finalize event:", error);
               reject(error);
             }
+          }
+        });
+
+        eventSource.addEventListener("error", (event: any) => {
+          if (!isCompleted && event?.data) {
+            resetTimeout();
+            try {
+              const data = JSON.parse(event.data);
+
+              if (data?.status === "Failed") {
+                isCompleted = true;
+                const errorMessage =
+                  data.progress || data.error || "Grading failed";
+                onProgress?.("failed", 0, errorMessage);
+
+                eventSource.close();
+                clearTimeout(timeout);
+
+                setTimeout(() => {
+                  toast.error(errorMessage);
+                  reject(new Error(errorMessage));
+                }, 2000);
+              } else if (data?.error) {
+                const streamErrorMessage =
+                  data.error || "Grading stream reported an error";
+                onProgress?.("failed", 0, streamErrorMessage);
+              }
+            } catch (error) {}
           }
         });
 
@@ -510,17 +513,12 @@ export async function submitAssignment(
             };
 
             allErrors.push(errorDetails);
-            console.error(
-              `SSE error on attempt ${currentAttempt}:`,
-              error,
-              errorDetails,
-            );
 
             eventSource.close();
             clearTimeout(timeout);
 
             if (currentAttempt < maxRetries) {
-              const retryDelay = 2000 * currentAttempt; // Progressive delay: 2s, 4s, 6s
+              const retryDelay = 2000 * currentAttempt;
               onProgress?.(
                 "failed",
                 0,
@@ -537,9 +535,6 @@ export async function submitAssignment(
       };
 
       const handleFinalFailure = async () => {
-        console.error("All SSE connection attempts failed:", allErrors);
-
-        // Create detailed error report
         const detailedErrorReport = {
           assignmentId,
           attemptId,
@@ -552,7 +547,6 @@ export async function submitAssignment(
           url: window.location.href,
         };
 
-        // Try to submit error report
         try {
           await submitReportLearner(
             assignmentId,
@@ -561,11 +555,7 @@ export async function submitAssignment(
             `SSE Connection Failed After ${maxRetries} Attempts\n\nDetailed Error Report:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
             cookies,
           );
-          console.log("Error report submitted successfully");
         } catch (reportError) {
-          console.error("Failed to submit error report:", reportError);
-
-          // Fallback: try author report
           try {
             await submitReportAuthor(
               assignmentId,
@@ -573,13 +563,9 @@ export async function submitAssignment(
               `SSE Connection Failed - Learner Report Fallback\n\nAttempt ID: ${attemptId}\nError Details:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
               cookies,
             );
-            console.log("Fallback error report submitted successfully");
-          } catch (fallbackError) {
-            console.error("All error reporting methods failed:", fallbackError);
-          }
+          } catch (fallbackError) {}
         }
 
-        // Final user notification
         const finalErrorMessage = `Connection failed after ${maxRetries} attempts. Error details have been automatically reported.`;
         onProgress?.("failed", 0, finalErrorMessage);
         toast.error(finalErrorMessage);
@@ -590,12 +576,9 @@ export async function submitAssignment(
         );
       };
 
-      // Start the first connection attempt
       attemptConnection();
     });
   } catch (err) {
-    console.error("Submit assignment error:", err);
-
     if (err instanceof Error) {
       throw err;
     }
@@ -723,10 +706,6 @@ export async function submitReportLearner(
   }
 }
 
-// =============================================================================
-// VERSION CONTROL API FUNCTIONS (Learner Read-Only Access)
-// =============================================================================
-
 export interface VersionSummary {
   id: number;
   versionNumber: string;
@@ -750,8 +729,6 @@ export async function getCurrentAssignmentVersion(
   cookies?: string,
 ): Promise<any | undefined> {
   try {
-    // Learners access assignments through the regular assignment endpoint
-    // which automatically returns the current active version
     const endpointURL = `${getApiRoutes().assignments}/${assignmentId}`;
 
     const assignment = await apiClient.get(endpointURL, {
@@ -762,7 +739,6 @@ export async function getCurrentAssignmentVersion(
 
     return assignment;
   } catch (err) {
-    console.error("Error fetching current assignment version:", err);
     return undefined;
   }
 }
@@ -781,8 +757,6 @@ export async function getAssignmentVersionInfo(
   { currentVersion?: VersionSummary; totalVersions: number } | undefined
 > {
   try {
-    // This would be a learner-specific endpoint if we want to show version info
-    // For now, we'll return basic info from the assignment endpoint
     const assignment = await getCurrentAssignmentVersion(assignmentId, cookies);
 
     if (assignment) {
@@ -794,7 +768,58 @@ export async function getAssignmentVersionInfo(
 
     return undefined;
   } catch (err) {
-    console.error("Error fetching assignment version info:", err);
     return undefined;
+  }
+}
+
+/**
+ * Get real-time grading progress for an assignment attempt
+ */
+export interface GradingProgress {
+  id: number;
+  attemptId: number;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  currentQuestion: number | null;
+  totalQuestions: number;
+  currentStage: string | null;
+  progress: number;
+  error: string | null;
+  notifyOnComplete: boolean;
+  notificationEmail: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getGradingProgress(
+  assignmentId: number,
+  attemptId: number,
+): Promise<GradingProgress | null> {
+  try {
+    const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/progress`;
+    const response = await apiClient.get<GradingProgress>(endpointURL);
+    return response;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Subscribe to email notification when grading is complete
+ */
+export async function subscribeToGradingNotification(
+  assignmentId: number,
+  attemptId: number,
+  email?: string,
+): Promise<{ success: boolean; message: string } | null> {
+  try {
+    const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/notify`;
+    const response = await apiClient.post<{
+      success: boolean;
+      message: string;
+    }>(endpointURL, { email });
+    return response;
+  } catch (err) {
+    throw err;
   }
 }

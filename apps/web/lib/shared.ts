@@ -81,7 +81,7 @@ export async function generateUploadUrl(
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-    transformResponse: false, // Disable transformation caching for file uploads
+    transformResponse: false,
   })) as UploadResponse;
 }
 
@@ -103,43 +103,37 @@ export async function getPublicFileUrl(
 
 /**
  * Upload a file using a presigned URL with progress tracking
+ * Uses chunked upload with retry logic for reliability with large files
  */
 export async function uploadWithPresignedUrl(
   file: File,
   presignedUrl: string,
   onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void,
 ): Promise<void> {
-  const axios = (await import("axios")).default;
-
   if (file.size === 0) {
     throw new Error("Cannot upload empty file");
   }
 
+  const { reliableUpload } = await import("./reliableUpload");
+
   try {
-    await axios.put(presignedUrl, file, {
-      headers: {
-        "Content-Type": file.type,
-      },
-      onUploadProgress: onUploadProgress
-        ? (progressEvent) => {
-            if (progressEvent.total) {
-              onUploadProgress({
-                loaded: progressEvent.loaded,
-                total: progressEvent.total,
-              });
-            }
+    await reliableUpload(
+      file,
+      presignedUrl,
+      onUploadProgress
+        ? (progress) => {
+            onUploadProgress({
+              loaded: progress.loaded,
+              total: progress.total,
+            });
           }
         : undefined,
-      timeout: 60000,
-    });
-  } catch (error: unknown) {
-    const axiosError = error as AxiosError;
-    if (axiosError.response?.data?.message) {
-      throw new Error(axiosError.response.data.message);
-    }
-    throw new Error(
-      axiosError.message || "Failed to upload file with presigned URL",
     );
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+    throw new Error("Failed to upload file with presigned URL");
   }
 }
 
@@ -231,9 +225,7 @@ export async function getFileAccessEnhanced(
   if (useProxy && key && bucket) {
     try {
       return await getFileInfo(key, bucket, cookies);
-    } catch {
-      // Fall through to alternative method
-    }
+    } catch {}
   }
 
   const fileAccessInfo = await getFileAccess(
@@ -584,9 +576,7 @@ export async function fetchFileContentSafe(
           filename: fileName,
           questionId: "",
         };
-      } catch {
-        // Fall through to alternative method
-      }
+      } catch {}
     }
 
     const fileAccess = await getFileAccess(key, bucket, 3600, cookies);
@@ -837,20 +827,53 @@ interface Report {
   attemptId?: string;
 }
 
+export interface ReportComment {
+  id: number;
+  body: string;
+  created_at: string;
+  author: string;
+  url: string;
+}
+
 export async function getReportsForUser(cookies?: string): Promise<Report[]> {
   const url = `${getBaseApiPath("v1")}/reports/user`;
 
-  const res = await apiClient.get(url, {
+  const reports = (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
-  });
+  })) as Report[];
 
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get reports");
-  }
-  return (await res.json()) as Report[];
+  return reports;
+}
+
+export async function getReportComments(
+  reportId: string,
+  cookies?: string,
+): Promise<{ comments: ReportComment[] }> {
+  const url = `${getBaseApiPath("v1")}/reports/${reportId}/comments`;
+  return (await apiClient.get(url, {
+    headers: {
+      ...(cookies ? { Cookie: cookies } : {}),
+    },
+  })) as { comments: ReportComment[] };
+}
+
+export async function addReportComment(
+  reportId: string,
+  comment: string,
+  cookies?: string,
+): Promise<{ message: string }> {
+  const url = `${getBaseApiPath("v1")}/reports/${reportId}/comments`;
+  return (await apiClient.post(
+    url,
+    { comment },
+    {
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    },
+  )) as { message: string };
 }
 
 /**
@@ -1162,7 +1185,6 @@ export async function getAdminFeedback(
 ): Promise<FeedbackResponse> {
   const params = new URLSearchParams();
 
-  // Add all filter parameters
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== "") {
       params.append(key, value.toString());
@@ -1205,7 +1227,6 @@ export async function getAdminReports(
 ): Promise<ReportsResponse> {
   const params = new URLSearchParams();
 
-  // Add all filter parameters
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== "") {
       params.append(key, value.toString());
@@ -1350,7 +1371,7 @@ export async function checkAdminAccess(email: string): Promise<boolean> {
       body: JSON.stringify({ email }),
     });
 
-    return res.ok; // Returns true if email is authorized
+    return res.ok;
   } catch {
     return false;
   }
@@ -1601,8 +1622,7 @@ export async function getUser(cookies?: string): Promise<User | undefined> {
   });
 
   if (res.status === 401) {
-    // Means user is not authenticated so return "nothing", this will become a 403 in the frontend
-      throw new Error("Unauthorized");
+    throw new Error("Unauthorized");
   }
 
   if (!res.ok) {

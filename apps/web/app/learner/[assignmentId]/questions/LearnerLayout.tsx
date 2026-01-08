@@ -2,7 +2,7 @@
 
 import animationData from "@/animations/LoadSN.json";
 import LoadingPage from "@/app/loading";
-import ErrorPage from "@/components/ErrorPage";
+import ErrorModal from "@/components/ErrorModal";
 import {
   createAttempt,
   getAttempt,
@@ -26,18 +26,44 @@ async function LearnerLayout(props: Props) {
   const assignmentId = ~~params.assignmentId;
   const headerList = headers();
   const cookieHeader = headerList.get("cookie") || "";
+  const stateTimeline: { step: string; detail?: string; timestamp?: string }[] =
+    [];
+  const log = (step: string, detail?: string) => {
+    stateTimeline.push({
+      step,
+      detail,
+      timestamp: new Date().toISOString(),
+    });
+  };
 
-  // Catch 401 from getUser so Next.js doesn’t render a 500 page
+  log("Load learner layout", `Assignment ${assignmentId}`);
+
   let user = null;
   try {
     user = await getUser(cookieHeader);
+    log("User fetched", `Role: ${user?.role ?? "unknown"}`);
   } catch {
+    log("User fetch failed", "Unauthorized");
     return (
-      <ErrorPage
+      <ErrorModal
         statusCode={401}
         error={
-          "Oopsies! It looks like you tried to launch this assignment incorrectly. Please open the assignment from your LMS (Coursera, OpenEdx, Author Workbench, or yourLearning). If the problem keeps happening, contact your instructor or use the chatbot to open a support ticket."
+          "Oopsies! It looks like you tried to launch this assignment incorrectly. Please open the assignment from your LMS (Coursera, OpenEdx, Author Workbench, or yourLearning). If the problem keeps happening, use the chatbot to open a support ticket."
         }
+        headline="Authentication required"
+        userSteps={[
+          {
+            title: "Open the assignment from your LMS",
+            description:
+              "Launch from Coursera, OpenEdx, Author Workbench, or yourLearning.",
+            cta: "Return to course",
+          },
+          {
+            title: "Refresh and sign in again",
+            description: "Your session may have expired. Sign in and retry.",
+          },
+        ]}
+        stateTimeline={stateTimeline}
       />
     );
   }
@@ -50,7 +76,10 @@ async function LearnerLayout(props: Props) {
 
   const listOfAttempts = await getAttempts(assignmentId, cookieHeader);
   if (!listOfAttempts) {
-    return <ErrorPage error={"Attempts could not be fetched"} />;
+    log("Attempts fetch failed");
+    return (
+      <ErrorModal error={"Attempts could not be fetched"} statusCode={500} />
+    );
   }
 
   const unsubmittedAssignment = listOfAttempts.find(
@@ -59,40 +88,81 @@ async function LearnerLayout(props: Props) {
   const attemptId = unsubmittedAssignment
     ? unsubmittedAssignment.id
     : await createAttempt(assignmentId, cookieHeader);
+  log(
+    "Attempt resolved",
+    unsubmittedAssignment
+      ? `Reusing attempt ${unsubmittedAssignment.id}`
+      : `Created attempt ${attemptId}`,
+  );
 
   if (!attemptId && role === "author" && authorMode === undefined) {
+    log("Author attempt disallowed");
     return (
-      <ErrorPage
+      <ErrorModal
         error={
           "You can't take the assignment as an author, please switch to learner mode or check learner side in the review page to try the assignment"
         }
         statusCode={403}
+        stateTimeline={stateTimeline}
       />
     );
   } else if (!attemptId) {
-    return <ErrorPage error={"Attempt could not be created"} />;
+    log("Attempt creation failed");
+    return (
+      <ErrorModal
+        error={"Attempt could not be created"}
+        statusCode={500}
+        stateTimeline={stateTimeline}
+      />
+    );
   }
 
   if (attemptId === "no more attempts") {
+    log("No more attempts");
     return (
-      <ErrorPage
+      <ErrorModal
         className="h-[calc(100vh-100px)]"
         statusCode={422}
         error={
           "You have reached the maximum number of attempts for this assignment, if you need more attempts, please contact the author"
         }
+        headline="No more attempts available"
+        userSteps={[
+          {
+            title: "Contact your instructor",
+            description: "Ask for an additional attempt if needed.",
+          },
+          {
+            title: "Return to course",
+            description: "Go back to the course home.",
+          },
+        ]}
+        stateTimeline={stateTimeline}
       />
     );
   }
 
   if (attemptId === "in cooldown period") {
+    log("Attempt in cooldown");
     return (
-      <ErrorPage
+      <ErrorModal
         className="h-[calc(100vh-100px)]"
         statusCode={429}
         error={
           "You need to wait until the cooldown period is complete before being able to retake the assignment. Please wait until this period is complete before reattempting."
         }
+        headline="Cooldown in effect"
+        userSteps={[
+          {
+            title: "Wait for the cooldown",
+            description: "Try again after the cooldown ends.",
+          },
+          {
+            title: "Return to course",
+            description: "Head back to the assignment list.",
+          },
+        ]}
+        stateTimeline={stateTimeline}
       />
     );
   }

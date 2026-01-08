@@ -159,6 +159,7 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
       correctAnswer,
       possiblePoints: correctPoints,
       awardedPoints: pointsAwarded,
+      maxPossiblePoints: question.totalPoints,
     };
 
     await this.recordGrading(

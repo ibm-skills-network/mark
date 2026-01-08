@@ -2,6 +2,11 @@ import { HumanMessage } from "@langchain/core/messages";
 
 export interface LlmRequestOptions {
   temperature?: number;
+  topP?: number;
+  /**
+   * Deprecated: prefer topP. Kept for backward compatibility.
+   */
+  top_p?: number;
   maxTokens?: number;
   modelName?: string;
   imageDetail?: "auto" | "low" | "high";

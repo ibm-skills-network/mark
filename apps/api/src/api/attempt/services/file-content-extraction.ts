@@ -12,11 +12,17 @@ import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
 import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
 
+import { CanonicalSubmission } from "./structured-content.models";
+import { PdfStructureExtractorService } from "./pdf-structure-extractor.service";
+
 export interface ExtractedFileContent {
   filename: string;
   content: string;
   fileType: string;
   extractedText?: string;
+  fileUrl?: string;
+  useVisionMode?: boolean;
+  structuredContent?: CanonicalSubmission;
   metadata?: {
     size: number;
     encoding?: string;
@@ -29,6 +35,7 @@ export interface ExtractedFileContent {
     fileCount?: number;
     mimeType?: string;
     hash?: string;
+    structureQuality?: "high" | "medium" | "low";
   };
 }
 
@@ -131,10 +138,14 @@ export class FileContentExtractionService {
     "application/x-ipynb+json": ["ipynb"],
   };
 
-  constructor(private readonly s3Service: S3Service) {}
+  constructor(
+    private readonly s3Service: S3Service,
+    private readonly pdfStructureExtractor: PdfStructureExtractorService,
+  ) {}
 
   async extractContentFromFiles(
     learnerFiles: LearnerFileUpload[],
+    options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
   ): Promise<ExtractedFileContent[]> {
     this.logger.debug(`Starting extraction for ${learnerFiles.length} files`);
 
@@ -146,7 +157,7 @@ export class FileContentExtractionService {
           );
           const startTime = Date.now();
 
-          const result = await this.extractSingleFileContent(file);
+          const result = await this.extractSingleFileContent(file, options);
 
           const duration = Date.now() - startTime;
           this.logger.debug(
@@ -184,7 +195,107 @@ export class FileContentExtractionService {
 
   private async extractSingleFileContent(
     file: LearnerFileUpload,
+    options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
   ): Promise<ExtractedFileContent> {
+    const isPDF =
+      file.filename.toLowerCase().endsWith(".pdf") ||
+      file.fileType === "application/pdf";
+
+    const useStructuredExtraction =
+      isPDF && options?.useStructuredExtraction !== false;
+
+    const useVisionMode = isPDF && options?.useVisionForPDFs;
+
+    if (isPDF) {
+      this.logger.log(`[PDF Extraction] Processing PDF: ${file.filename}`, {
+        hasBucket: !!file.bucket,
+        hasKey: !!file.key,
+        useStructuredExtraction,
+        useVisionMode,
+        bucket: file.bucket,
+        keyLength: file.key?.length || 0,
+      });
+    }
+
+    if (useVisionMode && file.bucket && file.key) {
+      this.logger.debug(
+        `Using vision mode for PDF: ${file.filename}, generating presigned URL`,
+      );
+
+      const fileUrl = this.s3Service.getSignedUrl("getObject", {
+        Bucket: file.bucket,
+        Key: file.key,
+        Expires: 3600,
+      });
+
+      const metadata = await this.s3Service.getObjectMetadata(
+        file.bucket,
+        file.key,
+      );
+
+      return {
+        filename: file.filename,
+        content: "[PDF file - using vision mode for grading]",
+        fileType: file.fileType,
+        fileUrl: fileUrl,
+        useVisionMode: true,
+        metadata: {
+          size: metadata.ContentLength || 0,
+          mimeType: file.fileType,
+        },
+      };
+    }
+
+    if (useStructuredExtraction && isPDF && file.bucket && file.key) {
+      this.logger.debug(
+        `Using structured extraction for PDF: ${file.filename}`,
+      );
+
+      try {
+        const fileContent = await this.downloadFileFromCOS(
+          file.bucket,
+          file.key,
+        );
+
+        // Use recordId or questionId if available, otherwise just use filename
+        const prefix = file.recordId || file.questionId;
+        const submissionId = prefix
+          ? `${prefix}_${file.filename}`
+          : file.filename;
+
+        const { submission, metadata: extractionMetadata } =
+          await this.pdfStructureExtractor.extractStructuredContent(
+            fileContent,
+            submissionId,
+          );
+
+        const contentSummary =
+          this.generateContentSummaryFromStructured(submission);
+
+        this.logger.log(
+          `Structured extraction completed: ${submission.metadata.blockCount} blocks, quality: ${extractionMetadata.structureQuality}`,
+        );
+
+        return {
+          filename: file.filename,
+          content: contentSummary,
+          fileType: file.fileType,
+          structuredContent: submission,
+          metadata: {
+            size: fileContent.length,
+            mimeType: file.fileType,
+            pageCount: submission.metadata.pageCount,
+            hash: submission.metadata.checksum,
+            structureQuality: extractionMetadata.structureQuality,
+          },
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Structured extraction failed for ${file.filename}, falling back to simple extraction: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     if (
       file.content &&
       file.content !== "InCos" &&
@@ -2050,6 +2161,45 @@ export class FileContentExtractionService {
 
     extract(node);
     return text.trim();
+  }
+
+  /**
+   * Generate human-readable content summary from structured submission
+   * This is for backwards compatibility with code expecting text content
+   */
+  private generateContentSummaryFromStructured(
+    submission: CanonicalSubmission,
+  ): string {
+    let summary = `=== STRUCTURED PDF DOCUMENT ===\n`;
+    summary += `Pages: ${submission.metadata.pageCount}\n`;
+    summary += `Blocks: ${submission.metadata.blockCount}\n`;
+    summary += `Words: ${submission.metadata.wordCount}\n`;
+
+    if (submission.metadata.detectedSections) {
+      summary += `Sections: ${submission.metadata.detectedSections.join(", ")}\n`;
+    }
+
+    summary += `\n--- CONTENT ---\n\n`;
+
+    for (const page of submission.pages) {
+      summary += `--- Page ${page.pageNumber} ---\n\n`;
+
+      for (const block of page.blocks) {
+        if (block.type === "heading") {
+          summary += `# ${block.text}\n\n`;
+        } else if (block.type === "code") {
+          summary += `\`\`\`${block.language || ""}\n${block.text}\n\`\`\`\n\n`;
+        } else if (block.type === "equation") {
+          summary += `[EQUATION] ${block.text}\n\n`;
+        } else if (block.type === "table") {
+          summary += `[TABLE]\n${block.text}\n\n`;
+        } else {
+          summary += `${block.text}\n\n`;
+        }
+      }
+    }
+
+    return this.sanitizeAndTruncate(summary);
   }
 
   private sanitizeAndTruncate(content: string): string {

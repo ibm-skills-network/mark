@@ -40,10 +40,33 @@ model GradingAudit {
   gradingStrategy   String        // Name of the grading strategy used
   metadata          String?       @db.Text    // Optional additional metadata
   timestamp         DateTime      @default(now())
-  
+
   @@index([questionId])
   @@index([assignmentId])
   @@index([timestamp])
+}
+
+/// This model caches grading results for deterministic re-grading
+/// Enables same input → same output consistency and instant re-grading
+model GradingCache {
+  id               Int      @id @default(autoincrement())
+  cacheKey         String   @unique  // SHA-256 hash of rubric + normalized answer
+  questionId       Int
+  question         Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  rubricHash       String   // Hash of the scoring criteria/rubric
+  answerHash       String   // Hash of the normalized learner answer
+  totalScore       Float    // Total points awarded
+  maxScore         Float    // Maximum possible points
+  criteria         Json     // Array of criterion scores and feedback
+  overallFeedback  String   @db.Text // Overall feedback text
+  cachedAt         DateTime @default(now())
+  hitCount         Int      @default(0) // How many times this cached result was used
+  metadata         Json?    // Optional metadata (grading time, attempts, etc.)
+
+  @@index([questionId])
+  @@index([rubricHash])
+  @@index([answerHash])
+  @@index([cachedAt])
 }
 
 /// This enum represents the types of questions that can be part of an assignment
@@ -386,6 +409,7 @@ model Question {
   liveRecordingConfig       Json? /// Configuration for live recording questions
 
   GradingAudit GradingAudit[]
+  GradingCache GradingCache[]
 }
 model AssignmentAttempt {
   id                    Int                   @id @default(autoincrement())
@@ -404,15 +428,45 @@ model AssignmentAttempt {
   RegradingRequest      RegradingRequest[]
   comments              String?               /// Additional comments or notes for the assignment attempt from the system
   preferredLanguage     String?
+  gradingProgress       GradingProgress?
 
   GradingJob GradingJob[]
-  
+
   @@index([assignmentId])
   @@index([userId])
   @@index([assignmentId, submitted])
   @@index([createdAt])
   @@index([assignmentId, userId])
   @@index([assignmentVersionId])
+}
+
+/// Tracks real-time progress of assignment grading
+model GradingProgress {
+  id                    Int                   @id @default(autoincrement())
+  attemptId             Int                   @unique
+  attempt               AssignmentAttempt     @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  status                GradingStatus         @default(PENDING)
+  currentQuestion       Int?                  /// Current question being graded (1-indexed)
+  totalQuestions        Int                   /// Total number of questions
+  currentStage          String?               /// Current processing stage (e.g., "Analyzing response", "Validating with judge")
+  progress              Int                   @default(0) /// Progress percentage (0-100)
+  error                 String?               /// Error message if grading failed
+  notifyOnComplete      Boolean               @default(false) /// Whether to send email notification
+  notificationEmail     String?               /// Email to notify (defaults to user email)
+  completedAt           DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([attemptId])
+  @@index([status])
+  @@index([notifyOnComplete])
+}
+
+enum GradingStatus {
+  PENDING         /// Grading not started yet
+  PROCESSING      /// Currently grading
+  COMPLETED       /// Grading finished successfully
+  FAILED          /// Grading failed with error
 }
 
 model AssignmentAttemptQuestionVariant {

@@ -37,6 +37,7 @@ interface FileUploaderProps {
   onUploadComplete?: (fileData: learnerFileResponse) => void;
   onUploadError?: (error: unknown, file: File) => void;
   onDeleteComplete?: (key: string) => void;
+  onUploadStateChange?: (isUploading: boolean) => void;
   maxFileSize?: number;
   acceptedFileTypes?: { [key: string]: string[] };
   multiple?: boolean;
@@ -58,6 +59,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   onUploadComplete,
   onUploadError,
   onDeleteComplete,
+  onUploadStateChange,
   maxFileSize = 10 * 1024 * 1024,
   acceptedFileTypes = {},
   multiple = false,
@@ -126,12 +128,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     accept: {},
     maxFiles: multiple ? undefined : 1,
     onDropRejected: (fileRejections) => {
-      fileRejections.forEach((rejection) => {
-        console.error(
-          `File rejected: ${rejection.file.name} - ${rejection.errors
-            .map((err) => err.message)
-            .join(", ")}`,
-        );
+      // File rejections are handled by the validator callback
+      // This handler is kept to prevent default dropzone behavior
+      fileRejections.forEach(() => {
+        // No action needed - validation errors shown via validator
       });
     },
   };
@@ -153,7 +153,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   const handleDeleteFile = async (file: learnerFileResponse) => {
     if (!file.key) {
-      console.error("Cannot delete file: missing key");
       return;
     }
 
@@ -172,7 +171,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         onDeleteComplete(file.key);
       }
     } catch (error) {
-      console.error("Error deleting file:", error);
       setDeleteStatus((prev) => ({ ...prev, [file.key]: "error" }));
     }
   };
@@ -245,7 +243,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error("Error uploading file:", error.message);
         setUploadStatus((prev) => ({
           ...prev,
           [id]: {
@@ -256,7 +253,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         }));
         onUploadError?.(error, file);
       } else {
-        console.error("Error uploading file:", error);
         setUploadStatus((prev) => ({
           ...prev,
           [id]: {
@@ -276,6 +272,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
     if (filesToUpload.length > 0) {
       setIsUploading(true);
+      onUploadStateChange?.(true);
 
       const selectedFiles = multiple
         ? filesToUpload
@@ -286,6 +283,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           await uploadFile(fileData);
         }
         setIsUploading(false);
+        onUploadStateChange?.(false);
       };
 
       void uploadSequentially();
@@ -337,29 +335,105 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         </motion.div>
       </div>
 
-      {recentFileUploaded && (
-        <div className="flex-1 mx-4 mt-2">
-          <p className="text-right text-sm mb-1">
-            {uploadStatus[recentFileUploaded?.id]?.message || "Ready to upload"}
-          </p>
-          <div className="relative h-1 w-full bg-gray-200 rounded">
-            <motion.div
-              className={`absolute h-1 rounded ${
-                uploadStatus[recentFileUploaded?.id]?.status === "error"
-                  ? "bg-red-500"
-                  : uploadStatus[recentFileUploaded?.id]?.status === "success"
-                    ? "bg-green-500"
-                    : "bg-purple-500"
-              }`}
-              initial={{ width: "0%" }}
-              animate={{
-                width: `${
-                  uploadStatus[recentFileUploaded?.id]?.progress || 0
-                }%`,
-              }}
-              transition={{ duration: 0.5 }}
-            ></motion.div>
-          </div>
+      {files.length > 0 && (
+        <div className="mt-4 space-y-3">
+          {files.map((fileData) => {
+            const status = uploadStatus[fileData.id];
+            if (!status || status.status === "success") return null;
+
+            return (
+              <motion.div
+                key={fileData.id}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div
+                      className={`
+                      flex items-center justify-center w-10 h-10 rounded-full
+                      ${status.status === "error" ? "bg-red-100" : "bg-purple-100"}
+                    `}
+                    >
+                      {status.status === "uploading" ? (
+                        <IconLoader2
+                          size={20}
+                          className="text-purple-600 animate-spin"
+                        />
+                      ) : status.status === "error" ? (
+                        <IconFile size={20} className="text-red-600" />
+                      ) : (
+                        <IconFile size={20} className="text-gray-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {fileData.file.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatFileSize(fileData.file.size)}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`
+                    text-sm font-semibold px-3 py-1 rounded-full
+                    ${
+                      status.status === "error"
+                        ? "bg-red-100 text-red-700"
+                        : status.status === "uploading"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-gray-100 text-gray-700"
+                    }
+                  `}
+                  >
+                    {status.progress}%
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="relative h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                  <motion.div
+                    className={`absolute h-full rounded-full ${
+                      status.status === "error"
+                        ? "bg-red-500"
+                        : status.status === "success"
+                          ? "bg-green-500"
+                          : "bg-gradient-to-r from-purple-500 to-purple-600"
+                    }`}
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${status.progress}%` }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  >
+                    {/* Shimmer effect for active uploads */}
+                    {status.status === "uploading" && (
+                      <motion.div
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                        animate={{ x: ["-100%", "200%"] }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
+                      />
+                    )}
+                  </motion.div>
+                </div>
+
+                {/* Status message */}
+                <p
+                  className={`
+                  text-xs mt-2
+                  ${status.status === "error" ? "text-red-600" : "text-gray-600"}
+                `}
+                >
+                  {status.message}
+                </p>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 

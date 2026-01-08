@@ -23,6 +23,7 @@ import {
   createMockLlmFacadeService,
   createMockLogger,
   createMockPrismaService,
+  createMockQuestion,
   createMockQuestionDto,
   createMockQuestionService,
   createMockReplaceAssignmentDto,
@@ -324,6 +325,108 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
     expect(translationService.translateAssignment).not.toHaveBeenCalled();
     expect(questionService.updateQuestionGradingContext).not.toHaveBeenCalled();
+  });
+
+  it("preserves question order when publishing config-only changes", async () => {
+    const assignmentId = 1;
+    const jobId = 1;
+    const dto = createMockUpdateAssignmentQuestionsDto(
+      { questions: undefined, questionOrder: undefined },
+      false,
+    );
+
+    const existingAssignment = createMockGetAssignmentResponseDto(
+      { questionOrder: [3, 2, 1] },
+      [
+        createMockQuestion({ id: 1 }),
+        createMockQuestion({ id: 2 }),
+        createMockQuestion({ id: 3 }),
+      ],
+    );
+    assignmentRepository.findById.mockResolvedValue(existingAssignment);
+    questionService.getQuestionsForAssignment.mockResolvedValue([
+      createMockQuestionDto({ id: 1 }),
+      createMockQuestionDto({ id: 2 }),
+      createMockQuestionDto({ id: 3 }),
+    ]);
+
+    jest
+      .spyOn<
+        any,
+        any
+      >(service as any, "haveTranslatableAssignmentFieldsChanged")
+      .mockReturnValue(false);
+
+    await service["startPublishingProcess"](
+      jobId,
+      assignmentId,
+      dto,
+      "author-123",
+    );
+
+    expect(assignmentRepository.update).toHaveBeenCalledWith(
+      assignmentId,
+      expect.objectContaining({ questionOrder: [3, 2, 1] }),
+    );
+  });
+
+  describe("resolveQuestionOrder", () => {
+    it("uses explicit questionOrder even when questions payload is absent", () => {
+      const existingAssignment = createMockGetAssignmentResponseDto();
+      const dto = createMockUpdateAssignmentQuestionsDto(
+        { questionOrder: [2, 1], questions: undefined },
+        false,
+      );
+
+      const order = service["resolveQuestionOrder"](dto, existingAssignment);
+
+      expect(order).toEqual([2, 1]);
+    });
+
+    it("falls back to existing assignment order when nothing new is supplied", () => {
+      const existingAssignment = createMockGetAssignmentResponseDto(
+        { questionOrder: [3, 1, 2] },
+        [
+          createMockQuestion({ id: 3 }),
+          createMockQuestion({ id: 1 }),
+          createMockQuestion({ id: 2 }),
+        ],
+      );
+      const dto = createMockUpdateAssignmentQuestionsDto(
+        { questions: undefined, questionOrder: undefined },
+        false,
+      );
+
+      const order = service["resolveQuestionOrder"](dto, existingAssignment);
+
+      expect(order).toEqual([3, 1, 2]);
+    });
+
+    it("derives order from updated questions when explicit order is missing", () => {
+      const existingAssignment = createMockGetAssignmentResponseDto();
+      const dto = createMockUpdateAssignmentQuestionsDto();
+      dto.questions = [
+        createMockQuestionDto({ id: 10 }),
+        createMockQuestionDto({ id: 11 }),
+      ];
+      dto.questionOrder = undefined;
+
+      const order = service["resolveQuestionOrder"](dto, existingAssignment);
+
+      expect(order).toEqual([10, 11]);
+    });
+
+    it("drops invalid ids and deduplicates while keeping valid order", () => {
+      const existingAssignment = createMockGetAssignmentResponseDto();
+      const dto = createMockUpdateAssignmentQuestionsDto(
+        { questionOrder: [99, 1, 1, 2], questions: undefined },
+        false,
+      );
+
+      const order = service["resolveQuestionOrder"](dto, existingAssignment);
+
+      expect(order).toEqual([1, 2]);
+    });
   });
 
   describe("haveTranslatableAssignmentFieldsChanged", () => {

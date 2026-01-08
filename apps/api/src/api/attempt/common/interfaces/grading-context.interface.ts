@@ -1,5 +1,11 @@
+import { Prisma } from "@prisma/client";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
+import { PrismaService } from "src/database/prisma.service";
 
+type PrismaTransactionalClient = Omit<
+  PrismaService,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use"
+>;
 /**
  * Context data needed for grading a question response
  */
@@ -33,4 +39,9 @@ export interface GradingContext {
    * Optional metadata for grading
    */
   metadata?: Record<string, any>;
+
+  /**
+   * Optional Prisma transactional client
+   */
+  tx?: PrismaTransactionalClient;
 }

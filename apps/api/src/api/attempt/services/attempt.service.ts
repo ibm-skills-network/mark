@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Injectable } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { GradingJob, ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
 import { catchError, Observable, of, Subject } from "rxjs";
@@ -30,6 +30,7 @@ import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
+import { GradingProgressService } from "./grading-progress.service";
 
 @Injectable()
 export class AttemptServiceV2 {
@@ -41,6 +42,8 @@ export class AttemptServiceV2 {
     private readonly regradingService: AttemptRegradingService,
     private readonly reportingService: AttemptReportingService,
     private readonly jobStatusService: JobStatusServiceV2,
+    @Inject("GradingProgressService")
+    private readonly gradingProgressService?: GradingProgressService,
   ) {}
 
   /**
@@ -52,6 +55,24 @@ export class AttemptServiceV2 {
     authCookie: string,
     request: UserSessionRequest,
   ): Promise<{ gradingJobId: number; message: string }> {
+    const existingJob = await this.prisma.gradingJob.findFirst({
+      where: {
+        attemptId: null,
+        assignmentId,
+        userId: request.userSession.userId,
+        status: { in: ["Pending", "Processing"] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existingJob) {
+      return {
+        gradingJobId: existingJob.id,
+        message:
+          "Author preview job is already in progress. Reusing existing job.",
+      };
+    }
+
     const gradingJob = await this.prisma.gradingJob.create({
       data: {
         attemptId: null,
@@ -78,6 +99,24 @@ export class AttemptServiceV2 {
     authCookie: string,
     request: UserSessionRequest,
   ): Promise<{ gradingJobId: number; message: string }> {
+    const existingJob = await this.prisma.gradingJob.findFirst({
+      where: {
+        attemptId,
+        assignmentId,
+        userId: request.userSession.userId,
+        status: { in: ["Pending", "Processing"] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existingJob) {
+      return {
+        gradingJobId: existingJob.id,
+        message:
+          "A grading job is already running for this attempt. Reusing existing job.",
+      };
+    }
+
     const gradingJob = await this.prisma.gradingJob.create({
       data: {
         attemptId,
@@ -157,6 +196,19 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
+      if (this.gradingProgressService) {
+        this.gradingProgressService.setProgressCallback(
+          attemptId,
+          async (status: string, progress: string, percentage?: number) => {
+            await this.updateGradingJobStatus(gradingJobId, {
+              status,
+              progress,
+              percentage,
+            });
+          },
+        );
+      }
+
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Processing",
         progress: "Starting grading process...",
@@ -185,6 +237,10 @@ export class AttemptServiceV2 {
         percentage: 100,
         result,
       });
+
+      if (this.gradingProgressService) {
+        this.gradingProgressService.removeProgressCallback(attemptId);
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -193,6 +249,10 @@ export class AttemptServiceV2 {
         progress: `Grading failed: ${errorMessage}`,
         percentage: 0,
       });
+
+      if (this.gradingProgressService) {
+        this.gradingProgressService.removeProgressCallback(attemptId);
+      }
       throw error;
     }
   }
@@ -283,10 +343,6 @@ export class AttemptServiceV2 {
           }
         })
         .catch((error) => {
-          console.error(
-            `Failed to get initial status for job ${gradingJobId}:`,
-            error,
-          );
           subscriber.next({
             type: "error",
             data: JSON.stringify({
@@ -334,14 +390,9 @@ export class AttemptServiceV2 {
               return;
             }
           }
-        } catch (error) {
+        } catch {
           consecutiveErrors++;
           pollInterval = Math.min(maxPollInterval, pollInterval + 2000);
-
-          console.error(
-            `Poll error for job ${gradingJobId} (attempt ${consecutiveErrors}):`,
-            error,
-          );
 
           if (consecutiveErrors >= 3) {
             subscriber.next({
@@ -356,9 +407,6 @@ export class AttemptServiceV2 {
           }
 
           if (consecutiveErrors >= 10) {
-            console.error(
-              `Too many consecutive errors for job ${gradingJobId}, terminating stream`,
-            );
             isStreamActive = false;
             subscriber.error(
               new Error(
@@ -384,7 +432,6 @@ export class AttemptServiceV2 {
           }
         },
         error: (error) => {
-          console.error(`Status subject error for job ${gradingJobId}:`, error);
           if (isStreamActive) {
             subscriber.next({
               type: "error",
@@ -410,10 +457,6 @@ export class AttemptServiceV2 {
       };
     }).pipe(
       catchError((error: Error) => {
-        console.error(
-          `Critical stream error for grading job ${gradingJobId}:`,
-          error,
-        );
         return of({
           type: "error",
           data: JSON.stringify({
@@ -462,7 +505,6 @@ export class AttemptServiceV2 {
       const job = await this.getGradingJob(gradingJobId);
 
       if (!job) {
-        console.warn(`Grading job ${gradingJobId} not found during polling`);
         return {
           type: "error",
           data: JSON.stringify({
@@ -486,11 +528,7 @@ export class AttemptServiceV2 {
         parsedResult = job.result
           ? JSON.parse(job.result as string)
           : undefined;
-      } catch (parseError) {
-        console.warn(
-          `Failed to parse job result for ${gradingJobId}:`,
-          parseError,
-        );
+      } catch {
         parsedResult = {
           error: "Result parsing failed",
           rawResult: job.result,
@@ -510,7 +548,6 @@ export class AttemptServiceV2 {
         }),
       } as MessageEvent;
     } catch (error) {
-      console.error(`Failed to poll grading job ${gradingJobId}:`, error);
       throw new Error(
         `Database error while polling job ${gradingJobId}: ${
           error instanceof Error ? error.message : "Unknown error"

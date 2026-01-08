@@ -236,6 +236,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
         correctChoice: correctChoice?.choice,
         possiblePoints: selectedChoice.points,
         scoredPoints: responseDto.totalPoints,
+        maxPossiblePoints: question.totalPoints,
       };
     } else {
       responseDto.totalPoints = 0;
@@ -254,6 +255,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
         isCorrect: false,
         error: "invalidSelection",
         correctChoice: correctChoice?.choice,
+        maxPossiblePoints: question.totalPoints,
       };
     }
 
@@ -448,6 +450,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       perfectScore,
       allCorrectSelected,
       noIncorrectSelected,
+      maxPossiblePoints: question.totalPoints,
     };
 
     return { responseDto, learnerResponse };

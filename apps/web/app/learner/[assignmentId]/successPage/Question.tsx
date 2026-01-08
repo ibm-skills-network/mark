@@ -1,11 +1,21 @@
 import { trueFalseTranslations } from "@/app/Helpers/Languages/TrueFalseInAllLang";
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
-import FeedbackFormatter from "@/components/FeedbackFormatter";
+import CollapsibleFeedback, {
+  StructuredFeedbackData,
+} from "@/components/CollapsibleFeedback";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import type {
-  ExtendedFileContent,
-  QuestionStore,
-  Scoring,
+import dynamic from "next/dynamic";
+
+const PdfFeedbackViewer = dynamic(
+  () => import("@/components/PdfFeedbackViewer"),
+  { ssr: false },
+);
+import {
+  type ExtendedFileContent,
+  type QuestionStore,
+  type Scoring,
+  type ResponseHighlighting,
+  HighlightLevel,
 } from "@/config/types";
 import {
   AuthorizeGithubBackend,
@@ -27,8 +37,8 @@ import {
   fetchFileContentSafe,
   downloadFile,
   getFileExtension,
-  formatFileSize,
 } from "@/lib/shared";
+import PdfAnnotationModal from "./PdfAnnotationModal";
 
 interface Props {
   question: QuestionStore;
@@ -41,7 +51,12 @@ interface Props {
 
 interface HighestScoreResponseType {
   points: number;
-  feedback: { feedback: string }[];
+  feedback: {
+    feedback: string;
+    structuredFeedback?: StructuredFeedbackData;
+    highlighting?: ResponseHighlighting;
+    annotatedPdfUrl?: string;
+  }[];
 }
 
 export type LearnerResponseType =
@@ -141,6 +156,7 @@ const Question: FC<Props> = ({
   const [octokit, setOctokit] = useState<Octokit | null>(null);
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [token, setToken] = useState<string | null>(null);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   const scoring: Scoring | undefined =
     typeof question.scoring === "string"
@@ -490,6 +506,185 @@ const Question: FC<Props> = ({
     );
   }, [questionResponses, showSubmissionFeedback]);
 
+  const parsedFeedback = useMemo<{
+    feedbackText: string;
+    structuredFeedback?: StructuredFeedbackData;
+    highlighting?: ResponseHighlighting;
+    annotatedPdfUrl?: string;
+  }>(() => {
+    const feedbackEntry = highestScoreResponse?.feedback?.[0];
+    let feedbackText =
+      typeof feedbackEntry?.feedback === "string"
+        ? feedbackEntry.feedback
+        : feedbackEntry?.feedback
+          ? String(feedbackEntry.feedback)
+          : "";
+    let structuredFeedback: StructuredFeedbackData | undefined = undefined;
+    let highlighting = feedbackEntry?.highlighting;
+    let annotatedPdfUrl = feedbackEntry?.annotatedPdfUrl;
+    if (
+      typeof feedbackText === "string" &&
+      feedbackText.trim().startsWith("[")
+    ) {
+      try {
+        let jsonString = feedbackText.trim();
+        let bracketCount = 0;
+        let jsonEndIndex = -1;
+
+        for (let index = 0; index < jsonString.length; index++) {
+          if (jsonString[index] === "[") bracketCount++;
+          else if (jsonString[index] === "]") {
+            bracketCount--;
+            if (bracketCount === 0) {
+              jsonEndIndex = index + 1;
+              break;
+            }
+          }
+        }
+
+        if (jsonEndIndex > 0) {
+          jsonString = jsonString.substring(0, jsonEndIndex);
+        }
+
+        const parsed = JSON.parse(jsonString);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].feedback) {
+          feedbackText = parsed[0].feedback;
+          const rawStructured = parsed[0].structuredFeedback;
+          if (rawStructured && typeof rawStructured === "object") {
+            structuredFeedback = rawStructured as StructuredFeedbackData;
+          }
+          highlighting = parsed[0].highlighting;
+          annotatedPdfUrl = parsed[0].annotatedPdfUrl;
+        }
+      } catch (error) {
+        // Failed to parse highlighting data - continue without highlights
+      }
+    }
+
+    if (!structuredFeedback && feedbackEntry?.structuredFeedback) {
+      const rawStructured = feedbackEntry.structuredFeedback;
+      if (typeof rawStructured === "string") {
+        try {
+          structuredFeedback = JSON.parse(
+            rawStructured,
+          ) as StructuredFeedbackData;
+        } catch {
+          structuredFeedback = undefined;
+        }
+      } else if (typeof rawStructured === "object") {
+        structuredFeedback = rawStructured;
+      }
+    }
+
+    if (
+      structuredFeedback &&
+      (!structuredFeedback.summary ||
+        !Array.isArray(structuredFeedback.criteria))
+    ) {
+      structuredFeedback = undefined;
+    }
+
+    return {
+      feedbackText: feedbackText ?? "",
+      structuredFeedback,
+      highlighting,
+      annotatedPdfUrl,
+    };
+  }, [highestScoreResponse]);
+
+  const allHighlights = useMemo(() => {
+    const pages = parsedFeedback.highlighting?.pages;
+    const pageArray = Array.isArray(pages)
+      ? pages
+      : pages && typeof pages === "object"
+        ? Object.values(pages as Record<string, ResponseHighlighting>)
+        : [];
+
+    return pageArray.flatMap((page) =>
+      page.highlights.map((h) => ({ ...h, page: page.pageNumber })),
+    );
+  }, [parsedFeedback.highlighting]);
+
+  const quickStrengths = useMemo(() => {
+    if (parsedFeedback.structuredFeedback?.criteria) {
+      return parsedFeedback.structuredFeedback.criteria
+        .filter(
+          (criterion) =>
+            criterion.status === "full" ||
+            criterion.pointsAwarded === criterion.maxPoints,
+        )
+        .map(
+          (criterion) =>
+            `${criterion.name}: ${criterion.feedback || "Met in full"}`,
+        )
+        .slice(0, 4);
+    }
+
+    return allHighlights
+      .filter((h) => h.level === HighlightLevel.CORRECT)
+      .map((h) => `${h.text}: ${h.comment || "Matches rubric"}`)
+      .slice(0, 4);
+  }, [allHighlights, parsedFeedback.structuredFeedback]);
+
+  const quickNeedsWork = useMemo(() => {
+    if (parsedFeedback.structuredFeedback?.criteria) {
+      return parsedFeedback.structuredFeedback.criteria
+        .filter((criterion) => criterion.status !== "full")
+        .map(
+          (criterion) =>
+            `${criterion.name}: ${criterion.feedback || "Needs more detail"}`,
+        )
+        .slice(0, 4);
+    }
+
+    return allHighlights
+      .filter(
+        (h) =>
+          h.level === HighlightLevel.PARTIAL ||
+          h.level === HighlightLevel.INCORRECT,
+      )
+      .map((h) => `${h.text}: ${h.comment || "Needs revision"}`)
+      .slice(0, 4);
+  }, [allHighlights, parsedFeedback.structuredFeedback]);
+
+  const quickGuidance = useMemo(() => {
+    const guidanceText = parsedFeedback.structuredFeedback?.guidance;
+    if (typeof guidanceText === "string" && guidanceText.trim()) {
+      return guidanceText
+        .split(/\n|•|- /)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => item)
+        .slice(0, 4);
+    }
+
+    const match = parsedFeedback.feedbackText.match(/Guidance:\s*([\s\S]+)/i);
+    if (match && match[1]) {
+      return match[1]
+        .split(/\n|•|- /)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => item)
+        .slice(0, 4);
+    }
+
+    return [];
+  }, [parsedFeedback.feedbackText, parsedFeedback.structuredFeedback]);
+
+  const scoreRationale = useMemo(() => {
+    if (parsedFeedback.structuredFeedback?.summary) {
+      return parsedFeedback.structuredFeedback.summary;
+    }
+    if (highestScoreResponse?.points !== undefined) {
+      return `Awarded ${highestScoreResponse.points}/${totalPoints} points.`;
+    }
+    return "";
+  }, [
+    highestScoreResponse?.points,
+    parsedFeedback.structuredFeedback,
+    totalPoints,
+  ]);
+
   const questionResponse = questionResponses?.[0];
 
   const shouldShowHighlighting = correctAnswerVisibility !== "NEVER";
@@ -576,8 +771,11 @@ const Question: FC<Props> = ({
         <ul className="list-none text-gray-800 w-full flex flex-col justify-start gap-y-2">
           {choices.map((choiceObj, idx) => {
             const isSelected = Array.isArray(learnerResponse)
-              ? (learnerResponse as string[]).includes(String(idx))
-              : false;
+              ? (learnerResponse as string[]).some(
+                  (ans) => ans === choiceObj.choice || ans === String(idx),
+                )
+              : learnerResponse === choiceObj.choice ||
+                learnerResponse === String(idx);
 
             const isCorrect = choiceObj.isCorrect;
             return (
@@ -830,19 +1028,123 @@ const Question: FC<Props> = ({
       <div className="w-full mb-4">{renderLearnerAnswer()}</div>
 
       {highestScoreResponse?.feedback && (
-        <div className="p-4 mt-4 rounded-lg bg-gray-50 flex items-center gap-4">
-          <div className="flex-shrink-0 w-6 justify-center items-center flex">
-            <SparklesIcon className="w-4 h-4 text-violet-600" />
-          </div>
+        <div className="mt-4">
           {!showSubmissionFeedback ? (
-            <p className="text-gray-800">
-              Feedback has been hidden by the instructor. Please wait until your
-              instructor enable it back.
-            </p>
+            <div className="p-4 rounded-lg bg-gray-50 flex items-center gap-4">
+              <div className="flex-shrink-0 w-6 justify-center items-center flex">
+                <SparklesIcon className="w-4 h-4 text-violet-600" />
+              </div>
+              <p className="text-gray-800">
+                Feedback has been hidden by the instructor. Please wait until
+                your instructor enable it back.
+              </p>
+            </div>
           ) : (
-            <FeedbackFormatter className="text-gray-800 flex-1 mt-2 sm:mt-0">
-              {highestScoreResponse?.feedback[0]?.feedback}
-            </FeedbackFormatter>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <SparklesIcon className="w-5 h-5 text-violet-600" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Grading Feedback
+                </h3>
+              </div>
+              {parsedFeedback.annotatedPdfUrl && (
+                <div className="rounded-xl border border-violet-100 bg-gradient-to-r from-violet-50 to-indigo-50 p-4 shadow-sm">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-violet-900">
+                        Interactive PDF with AI feedback
+                      </p>
+                      <p className="text-sm text-violet-800">
+                        Your submission with color-coded highlights and detailed
+                        comments
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setIsPdfModalOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-md bg-violet-700 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-violet-600"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                          />
+                        </svg>
+                        View Fullscreen
+                      </button>
+                      <a
+                        href={parsedFeedback.annotatedPdfUrl}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-violet-800 shadow hover:bg-violet-50 border border-violet-200"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                          />
+                        </svg>
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {parsedFeedback.annotatedPdfUrl ? (
+                <PdfFeedbackViewer
+                  pdfUrl={parsedFeedback.annotatedPdfUrl}
+                  highlighting={parsedFeedback.highlighting}
+                  strengths={quickStrengths}
+                  needsWork={quickNeedsWork}
+                  guidance={quickGuidance}
+                  scoreRationale={scoreRationale}
+                />
+              ) : ["TRUE_FALSE", "SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(
+                  type,
+                ) ? (
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                  {parsedFeedback.feedbackText && (
+                    <div className="prose prose-sm max-w-none text-gray-800">
+                      <MarkdownViewer
+                        className="text-gray-800"
+                        allowCopy={!(questionControls?.disableCopy ?? false)}
+                      >
+                        {parsedFeedback.feedbackText}
+                      </MarkdownViewer>
+                    </div>
+                  )}
+                  {!parsedFeedback.feedbackText && (
+                    <p className="text-sm text-gray-500 italic">
+                      No feedback available
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <CollapsibleFeedback
+                  feedback={parsedFeedback.feedbackText}
+                  structuredFeedback={parsedFeedback.structuredFeedback}
+                  showSubQuestions={scoring?.showSubQuestionsToLearner ?? true}
+                  showPoints={scoring?.showPoints ?? true}
+                  className="text-gray-800"
+                />
+              )}
+            </div>
           )}
         </div>
       )}
@@ -874,6 +1176,17 @@ const Question: FC<Props> = ({
           </div>
         </div>
       )}
+
+      <PdfAnnotationModal
+        open={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        pdfUrl={parsedFeedback.annotatedPdfUrl}
+        highlighting={parsedFeedback.highlighting}
+        strengths={quickStrengths}
+        needsWork={quickNeedsWork}
+        guidance={quickGuidance}
+        scoreRationale={scoreRationale}
+      />
     </>
   );
 };

@@ -11,12 +11,16 @@ import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/atte
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { GradingConsistencyService } from "src/api/assignment/v2/services/grading-consistency.service";
 import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/grading-judge.interface";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { GRADING_JUDGE_SERVICE } from "src/api/llm/llm.constants";
 import { TextBasedQuestionEvaluateModel } from "src/api/llm/model/text.based.question.evaluate.model";
 import { Logger } from "winston";
-import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
+import {
+  GRADING_AUDIT_SERVICE,
+  GRADING_CONSISTENCY_SERVICE,
+} from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
@@ -31,6 +35,9 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     protected readonly localizationService: LocalizationService,
     @Inject(GRADING_AUDIT_SERVICE)
     protected readonly gradingAuditService: GradingAuditService,
+    @Optional()
+    @Inject(GRADING_CONSISTENCY_SERVICE)
+    protected readonly consistencyService: GradingConsistencyService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
     @Optional()
     @Inject(GRADING_JUDGE_SERVICE)
@@ -39,7 +46,7 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     super(
       localizationService,
       gradingAuditService,
-      undefined,
+      consistencyService,
       gradingJudgeService,
       parentLogger,
     );
@@ -89,6 +96,15 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     try {
+      const reuseDto = await this.tryReuseFromConsistency(
+        question,
+        learnerResponse,
+        context,
+      );
+      if (reuseDto) {
+        return reuseDto;
+      }
+
       const textBasedQuestionEvaluateModel = new TextBasedQuestionEvaluateModel(
         question.question,
         context.questionAnswerContext,
@@ -108,6 +124,12 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
 
       const responseDto = new CreateQuestionResponseAttemptResponseDto();
       AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
+      this.appendRationale(
+        responseDto,
+        gradingModel.points,
+        question.totalPoints,
+        gradingModel,
+      );
 
       await this.recordGrading(
         question,
@@ -121,6 +143,7 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
 
       responseDto.metadata = {
         ...responseDto.metadata,
+        ...gradingModel.metadata,
         strategyUsed: "TextGradingStrategy",
       };
 
@@ -133,5 +156,106 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
         `Failed to grade text response: ${errorMessage}`,
       );
     }
+  }
+
+  /**
+   * Attempt to reuse a previous grading when the learner response hash matches.
+   */
+  private async tryReuseFromConsistency(
+    question: QuestionDto,
+    learnerResponse: string,
+    context: GradingContext,
+  ): Promise<CreateQuestionResponseAttemptResponseDto | null> {
+    if (!this.consistencyService) {
+      return null;
+    }
+
+    try {
+      const responseHash = this.consistencyService.generateResponseHash(
+        learnerResponse,
+        question.id,
+        question.type,
+      );
+
+      const check = await this.consistencyService.checkConsistency(
+        question.id,
+        responseHash,
+        learnerResponse,
+        question.type,
+      );
+
+      if (check.similar && check.previousGrade !== undefined) {
+        const responseDto = new CreateQuestionResponseAttemptResponseDto();
+        responseDto.totalPoints = this.sanitizePoints(check.previousGrade);
+
+        const feedbackText =
+          typeof check.previousFeedback === "string"
+            ? check.previousFeedback
+            : "Reused prior grading result for identical answer.";
+
+        responseDto.feedback = [
+          {
+            feedback: `${feedbackText}\n\n**Score Rationale:** Reused prior grade (${responseDto.totalPoints}/${question.totalPoints}).`,
+          },
+        ];
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          reusedPriorGrade: true,
+          responseHash,
+          maxPossiblePoints: question.totalPoints,
+        };
+        return responseDto;
+      }
+    } catch (error) {
+      this.logger.warn("Consistency reuse failed - proceeding to grade", {
+        error: error instanceof Error ? error.message : String(error),
+        questionId: question.id,
+      });
+    }
+
+    return null;
+  }
+
+  /**
+   * Attach a short rationale explaining the awarded score.
+   */
+  private appendRationale(
+    responseDto: CreateQuestionResponseAttemptResponseDto,
+    awardedPoints: number,
+    maxPoints: number,
+    gradingModel: {
+      analysis?: string;
+      evaluation?: string;
+      explanation?: string;
+      guidance?: string;
+    },
+  ): void {
+    if (!responseDto?.feedback?.length) {
+      return;
+    }
+
+    const rationalePieces = [
+      gradingModel?.evaluation,
+      gradingModel?.explanation,
+      gradingModel?.analysis,
+    ]
+      .filter(Boolean)
+      .map(String);
+
+    const rationaleText =
+      `**Score Rationale:** Awarded ${awardedPoints}/${maxPoints} points.` +
+      (rationalePieces.length > 0
+        ? ` ${rationalePieces.join(" ")}`
+        : " See rubric feedback above.");
+
+    const firstFeedback = responseDto.feedback[0] as { feedback?: string };
+    firstFeedback.feedback = `${
+      firstFeedback.feedback || ""
+    }\n\n${rationaleText}`.trim();
+
+    responseDto.metadata = {
+      ...responseDto.metadata,
+      rationale: rationaleText,
+    };
   }
 }
