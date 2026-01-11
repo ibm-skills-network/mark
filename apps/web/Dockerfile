@@ -1,51 +1,54 @@
-# local-test/ui.Dockerfile
-# Using a consistent base for all stages
 ARG BASE_IMAGE=node:24-alpine
-FROM ${BASE_IMAGE} AS builder
-
 ARG DIR=/usr/src/app
 
-# Pruning using turbo for the Next.js app
-WORKDIR $DIR
+FROM ${BASE_IMAGE} AS builder
+WORKDIR ${DIR}
+
 COPY . .
 RUN yarn global add turbo@^2.0.3
 RUN turbo prune web --docker && rm -f .npmrc
 
-# Installing the isolated workspace for the Next.js app
+
 FROM ${BASE_IMAGE} AS installer
-ARG DIR=/usr/src/app
-WORKDIR $DIR
-COPY --from=builder $DIR/ .
-COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn install --ignore-scripts --frozen-lockfile && yarn cache clean
+WORKDIR ${DIR}
 
-# Running build using turbo for the Next.js app
-FROM installer AS sourcer
-WORKDIR $DIR
-COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn build --filter=web && yarn install --production --ignore-scripts --frozen-lockfile && yarn cache clean
+COPY --from=builder ${DIR}/out/json/ .
+COPY --from=builder ${DIR}/out/yarn.lock ./yarn.lock
+COPY --from=builder ${DIR}/turbo.json ./turbo.json
+COPY --from=builder ${DIR}/packages ./packages
 
-# Production stage
+RUN yarn install --ignore-scripts --frozen-lockfile \
+ && yarn cache clean
+
+
+FROM ${BASE_IMAGE} AS build
+WORKDIR ${DIR}
+
+COPY --from=installer ${DIR}/ .
+COPY --from=builder ${DIR}/out/full/ .
+
+RUN yarn build --filter=web
+
+
 FROM ${BASE_IMAGE} AS production
-ARG DIR=/usr/src/app
-ENV NODE_ENV production
-
-WORKDIR $DIR
-RUN ls 
+ENV NODE_ENV=production
+WORKDIR ${DIR}
 
 RUN apk add --no-cache dumb-init~=1
-COPY --chown=node:node --from=sourcer $DIR/apps/web/.next ./.next
-COPY --chown=node:node --from=sourcer $DIR/apps/web/package.json ./package.json
-COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
-COPY --chown=node:node --from=sourcer $DIR/apps/web/public ./public
-COPY --chown=node:node --from=sourcer $DIR/apps/web/entrypoint.sh ./entrypoint.sh
+
+COPY --chown=node:node --from=installer ${DIR}/node_modules ./node_modules
+COPY --chown=node:node --from=build ${DIR}/apps/web/.next ./.next
+COPY --chown=node:node --from=build ${DIR}/apps/web/package.json ./package.json
+COPY --chown=node:node --from=build ${DIR}/apps/web/public ./public
+COPY --chown=node:node --from=build ${DIR}/apps/web/entrypoint.sh ./entrypoint.sh
+
 ENV NODE_OPTIONS="--require ./node_modules/@instana/collector/src/immediate"
 
+USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["sh","-c","NODE_OPTIONS='--require ./node_modules/@instana/collector/src/immediate'  ./entrypoint.sh"]
+CMD ["sh","-c","./entrypoint.sh"]
 EXPOSE 3000
 
-# Patched stage with updates
 FROM production AS patched
 USER root
 RUN apk -U upgrade
