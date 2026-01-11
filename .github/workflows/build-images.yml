@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check if service needs scanning
-        id: changes
+        id: scan-changes
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_scan=true" >> $GITHUB_OUTPUT
@@ -54,7 +54,7 @@ jobs:
           fi
 
       - name: Free disk space
-        if: steps.changes.outputs.needs_scan == 'true'
+        if: steps.scan-changes.outputs.needs_scan == 'true'
         run: |
           echo "Disk usage before cleanup:"
           df -h
@@ -68,20 +68,6 @@ jobs:
 
           echo "Disk usage after cleanup:"
           df -h
-      - name: Check if service needs scanning
-        id: changes
-        run: |
-          # Check if this is a scheduled run, tag, or if service files changed
-          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "needs_scan=true" >> $GITHUB_OUTPUT
-          else
-            # Check for changes in service-specific files
-            if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
-              echo "needs_scan=true" >> $GITHUB_OUTPUT
-            else
-              echo "needs_scan=false" >> $GITHUB_OUTPUT
-            fi
-          fi
 
       - name: Setup Node.js
         if: steps.changes.outputs.needs_scan == 'true'
