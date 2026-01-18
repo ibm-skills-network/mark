@@ -579,6 +579,7 @@ export type GradingData = {
   showQuestions: boolean;
   showSubmissionFeedback: boolean;
   showAssignmentScore: boolean;
+  requireAllQuestions?: boolean;
   numberOfQuestionsPerAttempt?: number | undefined;
 };
 
@@ -609,6 +610,7 @@ export type ReplaceAssignmentRequest = {
   displayOrder?: "DEFINED" | "RANDOM";
   questionDisplay?: QuestionDisplayType;
   numberOfQuestionsPerAttempt?: number;
+  requireAllQuestions?: boolean;
   published: boolean;
   questions?: Question[];
   questionOrder: number[];
@@ -700,6 +702,7 @@ export interface AssignmentDetails {
   correctAnswerVisibility?: CorrectAnswerVisibility;
   numberOfQuestionsPerAttempt?: number;
   questionControls?: QuestionControls;
+  requireAllQuestions?: boolean;
 }
 
 export interface AssignmentDetailsLocal extends AssignmentDetails {

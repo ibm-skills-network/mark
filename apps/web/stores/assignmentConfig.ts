@@ -29,6 +29,8 @@ type GradingDataActions = {
   ) => void;
   setDisplayOrder: (displayOrder: "DEFINED" | "RANDOM") => void;
   toggleStrictTimeLimit: () => void;
+  toggleRequireAllQuestions: () => void;
+  setRequireAllQuestions: (requireAllQuestions: boolean) => void;
   setUpdatedAt: (updatedAt: number) => void;
   setAssignmentConfigStore: (state: Partial<GradingData>) => void;
   setStrictTimeLimit: (strictTimeLimit: boolean) => void;
@@ -70,6 +72,7 @@ export const useAssignmentConfig = createWithEqualityFn<
         showQuestions: true,
         showSubmissionFeedback: true,
         showAssignmentScore: false,
+        requireAllQuestions: false,
         numberOfQuestionsPerAttempt: null,
         setNumberOfQuestionsPerAttempt: (numberOfQuestionsPerAttempt) => {
           set({ numberOfQuestionsPerAttempt });
@@ -77,6 +80,12 @@ export const useAssignmentConfig = createWithEqualityFn<
         setShowSubmissionFeedback: (showSubmissionFeedback: boolean) =>
           set({ showSubmissionFeedback }),
         setShowQuestions: (showQuestions: boolean) => set({ showQuestions }),
+        toggleRequireAllQuestions: () =>
+          set((state) => ({
+            requireAllQuestions: !state.requireAllQuestions,
+          })),
+        setRequireAllQuestions: (requireAllQuestions: boolean) =>
+          set({ requireAllQuestions }),
         setQuestionControls: (questionControls: QuestionControls) =>
           set({ questionControls }),
         setGraded: (graded) => set({ graded }),
@@ -190,6 +199,7 @@ export const useAssignmentConfig = createWithEqualityFn<
             strictTimeLimit: false,
             updatedAt: undefined,
             graded: false,
+            requireAllQuestions: false,
             questionVariationNumber: 0,
             questionDisplay: QuestionDisplayType.ONE_PER_PAGE,
             timeEstimateMinutes: undefined,

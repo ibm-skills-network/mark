@@ -93,6 +93,7 @@ function QuestionPage(props: Props) {
             questionOrder: assignment.questionOrder,
             updatedAt: assignment.updatedAt,
             questionControls: assignment.questionControls,
+            requireAllQuestions: assignment.requireAllQuestions,
           });
         }
       } else {
@@ -103,7 +104,8 @@ function QuestionPage(props: Props) {
     if (
       !assignmentDetails ||
       assignmentDetails.id !== assignmentId ||
-      assignmentDetails.questionDisplay === undefined
+      assignmentDetails.questionDisplay === undefined ||
+      assignmentDetails.requireAllQuestions === undefined
     ) {
       void fetchAssignment();
     }

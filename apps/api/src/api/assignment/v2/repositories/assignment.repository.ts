@@ -44,6 +44,7 @@ const FIELDS = [
   "showQuestions",
   "correctAnswerVisibility",
   "questionControls",
+  "requireAllQuestions",
   "languageCode",
 ] as const;
 
@@ -61,6 +62,7 @@ const DEFAULTS: Partial<Record<FieldKey, unknown>> = {
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
+  requireAllQuestions: false,
 };
 
 /** Safe coalescer */

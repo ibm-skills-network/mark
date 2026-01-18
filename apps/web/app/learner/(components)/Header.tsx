@@ -17,7 +17,11 @@ import {
   getUser,
   submitAssignment,
 } from "@/lib/talkToBackend";
-import { editedQuestionsOnly, getSubmitButtonStatus } from "@/lib/utils";
+import {
+  editedQuestionsOnly,
+  getSubmitButtonStatus,
+  hasLearnerResponse,
+} from "@/lib/utils";
 import {
   useAssignmentDetails,
   useGitHubStore,
@@ -78,6 +82,7 @@ function LearnerHeader() {
     questions,
     submitting,
     isUploadingFiles,
+    assignmentDetails?.requireAllQuestions,
   );
 
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
@@ -148,6 +153,19 @@ function LearnerHeader() {
   };
 
   const CheckNoFlaggedQuestions = useCallback(() => {
+    const questionsWithResponses = questions.filter(hasLearnerResponse);
+
+    if (
+      assignmentDetails?.requireAllQuestions &&
+      questionsWithResponses.length < questions.length
+    ) {
+      const unansweredCount = questions.length - questionsWithResponses.length;
+      toast.error(
+        `All questions must be answered before submitting (${unansweredCount} unanswered)`,
+      );
+      return;
+    }
+
     const flaggedQuestions = questions.filter((q) => q.status === "flagged");
     if (flaggedQuestions.length > 0) {
       setToggleWarning(true);
@@ -159,7 +177,7 @@ function LearnerHeader() {
         setToggleWarning(true);
       }
     }
-  }, [questions]);
+  }, [questions, assignmentDetails]);
 
   const handleCloseModal = () => {
     setToggleWarning(false);

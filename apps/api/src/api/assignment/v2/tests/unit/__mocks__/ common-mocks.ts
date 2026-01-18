@@ -978,6 +978,7 @@ export const createMockAssignment = (
     preventPrint: false,
     preventScreenshot: false,
   },
+  requireAllQuestions: false,
   ...overrides,
 });
 

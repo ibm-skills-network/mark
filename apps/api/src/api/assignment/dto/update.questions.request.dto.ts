@@ -628,6 +628,15 @@ export class UpdateAssignmentQuestionsDto {
   @IsOptional()
   @IsString()
   versionNumber: string;
+
+  @ApiProperty({
+    description: "Require learners to answer all questions before submitting.",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireAllQuestions?: boolean;
 }
 /**
  * If a questionVariant is present (not null), you can expand this class

@@ -245,4 +245,13 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsObject()
   questionControls?: QuestionControls;
+
+  @ApiProperty({
+    description: "Require learners to answer all questions before submitting.",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireAllQuestions?: boolean;
 }

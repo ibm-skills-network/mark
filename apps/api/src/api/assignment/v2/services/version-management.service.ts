@@ -304,6 +304,7 @@ export class VersionManagementService {
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
           questionControls: assignment.questionControls,
+          requireAllQuestions: assignment.requireAllQuestions,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: createVersionDto.isDraft ?? true,
@@ -555,6 +556,7 @@ export class VersionManagementService {
       showQuestions: version.showQuestions,
       correctAnswerVisibility: version.correctAnswerVisibility,
       questionControls: version.questionControls,
+      requireAllQuestions: version.requireAllQuestions,
       languageCode: version.languageCode,
       questionVersions: questionVersionsWithVariants,
     };
@@ -641,6 +643,7 @@ export class VersionManagementService {
             showSubmissionFeedback: versionToRestore.showSubmissionFeedback,
             showQuestions: versionToRestore.showQuestions,
             correctAnswerVisibility: versionToRestore.correctAnswerVisibility,
+            requireAllQuestions: versionToRestore.requireAllQuestions,
             languageCode: versionToRestore.languageCode,
             createdBy: userSession.userId,
             isDraft: true,
@@ -957,6 +960,9 @@ export class VersionManagementService {
             gradingCriteriaOverview:
               saveDraftDto.assignmentData.gradingCriteriaOverview,
           }),
+          ...(saveDraftDto.assignmentData?.requireAllQuestions !== undefined && {
+            requireAllQuestions: saveDraftDto.assignmentData.requireAllQuestions,
+          }),
           ...(saveDraftDto.assignmentData?.timeEstimateMinutes && {
             timeEstimateMinutes:
               saveDraftDto.assignmentData.timeEstimateMinutes,
@@ -1073,6 +1079,7 @@ export class VersionManagementService {
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
           questionControls: assignment.questionControls,
+          requireAllQuestions: assignment.requireAllQuestions,
           languageCode: assignment.languageCode,
         },
         include: { _count: { select: { questionVersions: true } } },
@@ -1367,6 +1374,7 @@ export class VersionManagementService {
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
           questionControls: assignment.questionControls,
+          requireAllQuestions: assignment.requireAllQuestions,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: true,
@@ -1461,6 +1469,7 @@ export class VersionManagementService {
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
     correctAnswerVisibility: string;
+    requireAllQuestions: boolean;
     languageCode: string | null;
   }> {
     const latestDraft = await this.prisma.assignmentVersion.findFirst({
@@ -1503,6 +1512,7 @@ export class VersionManagementService {
       showSubmissionFeedback: latestDraft.showSubmissionFeedback,
       showQuestions: latestDraft.showQuestions,
       correctAnswerVisibility: latestDraft.correctAnswerVisibility,
+      requireAllQuestions: latestDraft.requireAllQuestions,
       languageCode: latestDraft.languageCode,
       questions: latestDraft.questionVersions.map((qv) => ({
         id: qv.questionId,
@@ -1603,6 +1613,7 @@ export class VersionManagementService {
             showSubmissionFeedback: sourceVersion.showSubmissionFeedback,
             showQuestions: sourceVersion.showQuestions,
             correctAnswerVisibility: sourceVersion.correctAnswerVisibility,
+            requireAllQuestions: sourceVersion.requireAllQuestions,
             languageCode: sourceVersion.languageCode,
             createdBy: userSession.userId,
             isDraft: true,
@@ -2071,6 +2082,9 @@ export class VersionManagementService {
             correctAnswerVisibility:
               draftData.assignmentData.correctAnswerVisibility ??
               assignment.correctAnswerVisibility,
+            requireAllQuestions:
+              draftData.assignmentData.requireAllQuestions ??
+              assignment.requireAllQuestions,
             languageCode:
               draftData.assignmentData.languageCode ?? assignment.languageCode,
           },

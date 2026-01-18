@@ -11,14 +11,23 @@ import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
-  const [numAttempts, setNumAttempts, passingGrade, setPassingGrade, errors] =
-    useAssignmentConfig((state) => [
-      state.numAttempts,
-      state.setNumAttempts,
-      state.passingGrade,
-      state.setPassingGrade,
-      state.errors,
-    ]);
+  const [
+    numAttempts,
+    setNumAttempts,
+    passingGrade,
+    setPassingGrade,
+    errors,
+    requireAllQuestions,
+    toggleRequireAllQuestions,
+  ] = useAssignmentConfig((state) => [
+    state.numAttempts,
+    state.setNumAttempts,
+    state.passingGrade,
+    state.setPassingGrade,
+    state.errors,
+    state.requireAllQuestions,
+    state.toggleRequireAllQuestions,
+  ]);
 
   const dropdownItems = [
     { value: 1, label: "1" },
@@ -62,6 +71,7 @@ const Component: FC<Props> = () => {
           </p>
         )}
       </div>
+
       <div className="flex flex-col gap-y-1">
         <p className=" text-gray-600">
           What is the passing threshold (in percentage)?
@@ -91,6 +101,33 @@ const Component: FC<Props> = () => {
           </p>
         )}
       </div>
+
+      <div className="border-t border-gray-200 pt-4">
+        <div className="flex items-center justify-between">
+          <label className="text-gray-600 flex gap-x-1">
+            Should learners answer all questions before submitting?
+            <Tooltip content="Require learners to complete all questions before submission">
+              <InformationCircleIcon className="w-5 inline-block text-gray-500" />
+            </Tooltip>
+          </label>
+
+          <button
+            type="button"
+            onClick={toggleRequireAllQuestions}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${requireAllQuestions ? "bg-violet-600" : "bg-gray-200"
+              }`}
+            role="switch"
+            aria-checked={requireAllQuestions}
+          >
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${requireAllQuestions ? "translate-x-5" : "translate-x-0"
+                }`}
+            />
+          </button>
+        </div>
+      </div>
+
     </SectionWithTitle>
   );
 };

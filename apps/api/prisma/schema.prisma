@@ -245,6 +245,7 @@ model Assignment {
   graded                  Boolean? @default(false) /// Is the assignment graded or not
   numAttempts             Int? @default(-1) /// Max number of times a learner can attempt the assignment
   allotedTimeMinutes      Int? /// Time allotted to complete the assignment in minutes
+  requireAllQuestions     Boolean @default(false) /// Require learners to answer all questions before submitting
   attemptsPerTimeRange    Int? /// Number of allowed attempts within the specified time range.
   attemptsTimeRangeHours  Int? /// Time range, in hours, over which the attempts are counted.
   passingGrade            Int? @default(50) /// The minimum grade required to pass the assignment
@@ -297,6 +298,7 @@ model AssignmentVersion {
   type                    AssignmentType                  /// Type of assignment
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed
+  requireAllQuestions     Boolean @default(false) /// Require learners to answer all questions before submitting
   allotedTimeMinutes      Int?                            /// Time allotted to complete
   attemptsPerTimeRange    Int?                            /// Attempts per time range
   attemptsTimeRangeHours  Int?                            /// Time range in hours
@@ -666,6 +668,7 @@ model AssignmentDraft {
   type                    AssignmentType                  /// Type of assignment
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed
+  requireAllQuestions     Boolean @default(false) /// Require learners to answer all questions before submitting
   allotedTimeMinutes      Int?                            /// Time allotted to complete
   attemptsPerTimeRange    Int?                            /// Attempts per time range
   attemptsTimeRangeHours  Int?                            /// Time range in hours

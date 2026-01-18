@@ -1947,6 +1947,10 @@ export const useAuthorStore = createWithEqualityFn<
               versionData.questionDisplay !== undefined
                 ? versionData.questionDisplay
                 : assignmentConfigState.questionDisplay,
+            requireAllQuestions:
+              versionData.requireAllQuestions !== undefined
+                ? versionData.requireAllQuestions
+                : assignmentConfigState.requireAllQuestions,
           });
 
           useAssignmentFeedbackConfig
@@ -2494,6 +2498,10 @@ export const useAuthorStore = createWithEqualityFn<
                         assignment.showSubmissionFeedback !== undefined
                           ? assignment.showSubmissionFeedback
                           : assignmentConfigStore.showSubmissionFeedback,
+                      requireAllQuestions:
+                        assignment.requireAllQuestions !== undefined
+                          ? assignment.requireAllQuestions
+                          : assignmentConfigStore.requireAllQuestions,
                     });
                   }
 
