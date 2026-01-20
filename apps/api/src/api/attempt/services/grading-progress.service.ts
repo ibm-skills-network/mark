@@ -138,7 +138,11 @@ export class GradingProgressService {
       const gradingProgress = await this.prisma.gradingProgress.findUnique({
         where: { attemptId },
         include: {
-          attempt: true,
+          attempt: {
+            include: {
+              questionResponses: true,
+            },
+          },
         },
       });
 
@@ -156,7 +160,8 @@ export class GradingProgressService {
 
       if (
         gradingProgress?.notifyOnComplete &&
-        gradingProgress.notificationEmail
+        gradingProgress.notificationEmail &&
+        gradingProgress.attempt
       ) {
         this.logger.log(
           `Sending grading completion email for attempt ${attemptId} to ${gradingProgress.notificationEmail}`,
@@ -168,11 +173,53 @@ export class GradingProgressService {
             ? gradingProgress.attempt.grade * 100
             : undefined;
 
+          // Calculate performance summary from question responses
+          const questionResponses = gradingProgress.attempt.questionResponses || [];
+
+          // For total points possible, we need to fetch the assignment questions
+          const assignment = await this.prisma.assignment.findUnique({
+            where: { id: assignmentId },
+            include: {
+              questions: {
+                where: {
+                  isDeleted: false,
+                },
+              },
+            },
+          });
+
+          let totalPointsEarned = 0;
+          let totalPointsPossible = 0;
+          let questionsAnswered = 0;
+
+          // Sum up points earned from responses
+          for (const response of questionResponses) {
+            totalPointsEarned += response.points ?? 0;
+            if (response.learnerResponse && response.learnerResponse.trim() !== '') {
+              questionsAnswered++;
+            }
+          }
+
+          // Calculate total possible points from assignment questions
+          if (assignment?.questions) {
+            for (const question of assignment.questions) {
+              totalPointsPossible += question.totalPoints ?? 0;
+            }
+          }
+
+          const performanceSummary = {
+            totalPointsEarned,
+            totalPointsPossible,
+            questionsAnswered,
+            totalQuestions: assignment?.questions?.length ?? 0,
+          };
+
           await this.emailService.sendGradingCompletionEmail(
             gradingProgress.notificationEmail,
             assignmentId,
             attemptId,
             grade,
+            performanceSummary,
           );
 
           this.logger.log(

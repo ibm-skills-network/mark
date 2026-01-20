@@ -525,6 +525,12 @@ This is a test message from Mark Admin System.
     assignmentId: number,
     attemptId: number,
     grade?: number,
+    performanceSummary?: {
+      totalPointsEarned: number;
+      totalPointsPossible: number;
+      questionsAnswered: number;
+      totalQuestions: number;
+    },
   ): Promise<boolean> {
     try {
       if (this.emailProvider === "none") {
@@ -538,6 +544,12 @@ Email: ${email}
 Assignment ID: ${assignmentId}
 Attempt ID: ${attemptId}
 Grade: ${grade === undefined ? "N/A" : `${Math.round(grade)}%`}
+${
+  performanceSummary
+    ? `Points: ${performanceSummary.totalPointsEarned}/${performanceSummary.totalPointsPossible}
+Questions Answered: ${performanceSummary.questionsAnswered}/${performanceSummary.totalQuestions}`
+    : ""
+}
 Provider: Development Console
 ========================================`);
           return true;
@@ -550,6 +562,7 @@ Provider: Development Console
           assignmentId,
           attemptId,
           grade,
+          performanceSummary,
         );
       } else if (this.emailProvider === "google") {
         return await this.sendGradingCompletionGmail(
@@ -557,6 +570,7 @@ Provider: Development Console
           assignmentId,
           attemptId,
           grade,
+          performanceSummary,
         );
       }
 
@@ -578,6 +592,12 @@ Provider: Development Console
     assignmentId: number,
     attemptId: number,
     grade?: number,
+    performanceSummary?: {
+      totalPointsEarned: number;
+      totalPointsPossible: number;
+      questionsAnswered: number;
+      totalQuestions: number;
+    },
   ): Promise<boolean> {
     try {
       if (!sgMail || typeof sgMail.send !== "function") {
@@ -589,12 +609,21 @@ Provider: Development Console
         process.env.SENDGRID_FROM_EMAIL || "noreply@markapp.com";
       const fromName = process.env.SENDGRID_FROM_NAME || "Mark Grading System";
 
-      const baseUrl =
-        process.env.NODE_ENV === "production"
-          ? process.env.WEB_APP_URL
-          : process.env.NODE_ENV === "staging"
-            ? process.env.STAGING_WEB_APP_URL
-            : "http://localhost:3010";
+      let baseUrl: string;
+      if (process.env.NODE_ENV === "production") {
+        baseUrl = process.env.WEB_APP_URL || "";
+      } else if (process.env.NODE_ENV === "staging") {
+        baseUrl = process.env.STAGING_WEB_APP_URL || "";
+      } else {
+        baseUrl = "http://localhost:3010";
+      }
+
+      if (!baseUrl) {
+        this.logger.error(
+          "WEB_APP_URL not configured for email notification. Please set WEB_APP_URL environment variable.",
+        );
+        return false;
+      }
 
       const resultsUrl = `${baseUrl}/learner/${assignmentId}/successPage/${attemptId}`;
 
@@ -605,8 +634,8 @@ Provider: Development Console
         },
         to: email,
         subject: "Your Assignment Has Been Graded! ",
-        html: this.getGradingCompletionTemplate(resultsUrl, grade),
-        text: this.getGradingCompletionPlainText(resultsUrl, grade),
+        html: this.getGradingCompletionTemplate(resultsUrl, grade, performanceSummary),
+        text: this.getGradingCompletionPlainText(resultsUrl, grade, performanceSummary),
       };
 
       await sgMail.send(mailData);
@@ -628,6 +657,12 @@ Provider: Development Console
     assignmentId: number,
     attemptId: number,
     grade?: number,
+    performanceSummary?: {
+      totalPointsEarned: number;
+      totalPointsPossible: number;
+      questionsAnswered: number;
+      totalQuestions: number;
+    },
   ): Promise<boolean> {
     try {
       if (!this.transporter) {
@@ -635,7 +670,22 @@ Provider: Development Console
         return false;
       }
 
-      const baseUrl = process.env.WEB_APP_URL || "http://localhost:3010";
+      let baseUrl: string;
+      if (process.env.NODE_ENV === "production") {
+        baseUrl = process.env.WEB_APP_URL || "";
+      } else if (process.env.NODE_ENV === "staging") {
+        baseUrl = process.env.STAGING_WEB_APP_URL || "";
+      } else {
+        baseUrl = "http://localhost:3010";
+      }
+
+      if (!baseUrl) {
+        this.logger.error(
+          "WEB_APP_URL not configured for email notification. Please set WEB_APP_URL environment variable.",
+        );
+        return false;
+      }
+
       const resultsUrl = `${baseUrl}/learner/${assignmentId}/successPage/${attemptId}`;
 
       const mailOptions = {
@@ -645,8 +695,8 @@ Provider: Development Console
         },
         to: email,
         subject: "Your Assignment Has Been Graded! ✅",
-        html: this.getGradingCompletionTemplate(resultsUrl, grade),
-        text: this.getGradingCompletionPlainText(resultsUrl, grade),
+        html: this.getGradingCompletionTemplate(resultsUrl, grade, performanceSummary),
+        text: this.getGradingCompletionPlainText(resultsUrl, grade, performanceSummary),
       };
 
       await this.transporter.sendMail(mailOptions);
@@ -666,6 +716,12 @@ Provider: Development Console
   private getGradingCompletionTemplate(
     resultsUrl: string,
     grade?: number,
+    performanceSummary?: {
+      totalPointsEarned: number;
+      totalPointsPossible: number;
+      questionsAnswered: number;
+      totalQuestions: number;
+    },
   ): string {
     return `
       <!DOCTYPE html>
@@ -720,6 +776,30 @@ Provider: Development Console
             `
             }
 
+            ${
+              performanceSummary
+                ? `
+            <div style="background-color: #f8fafc; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;">
+              <p style="color: #64748b; font-size: 14px; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Performance Summary</p>
+              <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 15px;">
+                <div style="flex: 1; min-width: 120px;">
+                  <div style="color: #8b5cf6; font-size: 24px; font-weight: bold;">${performanceSummary.totalPointsEarned.toFixed(1)}</div>
+                  <div style="color: #64748b; font-size: 12px; margin-top: 5px;">Points Earned</div>
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                  <div style="color: #8b5cf6; font-size: 24px; font-weight: bold;">${performanceSummary.totalPointsPossible.toFixed(1)}</div>
+                  <div style="color: #64748b; font-size: 12px; margin-top: 5px;">Total Points</div>
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                  <div style="color: #8b5cf6; font-size: 24px; font-weight: bold;">${performanceSummary.questionsAnswered}/${performanceSummary.totalQuestions}</div>
+                  <div style="color: #64748b; font-size: 12px; margin-top: 5px;">Questions Answered</div>
+                </div>
+              </div>
+            </div>
+            `
+                : ""
+            }
+
             <div style="text-align: center;">
               <a href="${resultsUrl}" class="cta-button">View Your Results</a>
             </div>
@@ -771,6 +851,12 @@ Provider: Development Console
   private getGradingCompletionPlainText(
     resultsUrl: string,
     grade?: number,
+    performanceSummary?: {
+      totalPointsEarned: number;
+      totalPointsPossible: number;
+      questionsAnswered: number;
+      totalQuestions: number;
+    },
   ): string {
     return `
 Grading Complete!
@@ -778,6 +864,15 @@ Grading Complete!
 Great news! Your assignment has been graded and your results are ready to view.
 
 ${grade === undefined ? "" : `Your Score: ${Math.round(grade)}%\n`}
+${
+  performanceSummary
+    ? `
+Performance Summary:
+• Points Earned: ${performanceSummary.totalPointsEarned.toFixed(1)} / ${performanceSummary.totalPointsPossible.toFixed(1)}
+• Questions Answered: ${performanceSummary.questionsAnswered} / ${performanceSummary.totalQuestions}
+`
+    : ""
+}
 View Your Results: ${resultsUrl}
 
 What's Included:
