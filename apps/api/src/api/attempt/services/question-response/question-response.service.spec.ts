@@ -1,10 +1,11 @@
+/* eslint-disable */
 import { Test, TestingModule } from "@nestjs/testing";
 import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { QuestionService } from "../../../assignment/question/question.service";
 import { PrismaService } from "../../../../database/prisma.service";
-import { GradingFactoryService } from "../grading-factory.service";
+import { QuestionService } from "../../../assignment/question/question.service";
 import { LocalizationService } from "../../common/utils/localization.service";
+import { GradingFactoryService } from "../grading-factory.service";
 import { QuestionResponseService } from "./question-response.service";
 
 describe("QuestionResponseService", () => {
@@ -82,10 +83,15 @@ describe("QuestionResponseService", () => {
       ],
     };
 
-    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue(assignmentAttempt);
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue(
+      assignmentAttempt,
+    );
 
     jest
-      .spyOn(service as unknown as { getAssignmentContext: () => void }, "getAssignmentContext")
+      .spyOn(
+        service as unknown as { getAssignmentContext: () => void },
+        "getAssignmentContext",
+      )
       .mockResolvedValue({
         assignmentInstructions: "",
         questionAnswerContext: [],
@@ -97,7 +103,9 @@ describe("QuestionResponseService", () => {
           questionId: number,
           assignmentAttemptId: number,
           assignmentId: number,
-        ) => Promise<{ question: { id: number; question: string; type: QuestionType } }>;
+        ) => Promise<{
+          question: { id: number; question: string; type: QuestionType };
+        }>;
       }
     ).getLearnerQuestion(10383, 289110, 2991);
 
