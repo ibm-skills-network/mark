@@ -1320,7 +1320,6 @@ export class AttemptSubmissionService {
   /**
    * Calculates total possible points with validation to prevent grade miscalculation bugs.
    *
-   * CRITICAL: This method stores the max possible points from each question response
    * to prevent bugs where questions are deleted/filtered after attempt creation.
    *
    * @param responses - The graded question responses
@@ -1334,24 +1333,12 @@ export class AttemptSubmissionService {
     totalPossiblePoints: number;
     missingQuestions: number[];
   }> {
-    console.log(`[TOTAL POSSIBLE POINTS CALCULATION]`, {
-      responseCount: responses.length,
-      responseQuestionIds: responses.map((r) => r.questionId),
-      assignmentQuestionCount: assignmentQuestions.length,
-      assignmentQuestionIds: assignmentQuestions.map((q) => q.id),
-      assignmentQuestionPoints: assignmentQuestions.map((q) => ({
-        id: q.id,
-        points: q.totalPoints,
-      })),
-    });
-
     let totalPossiblePoints = 0;
     const missingQuestions: number[] = [];
     const questionMap = new Map(
       assignmentQuestions.map((q) => [q.id, q.totalPoints]),
     );
 
-    // Collect missing question IDs to query database once
     const missingQuestionIds: number[] = [];
 
     for (const response of responses) {
@@ -1368,20 +1355,16 @@ export class AttemptSubmissionService {
           typeof responseMetadata.maxPossiblePoints === "number" &&
           responseMetadata.maxPossiblePoints > 0
         ) {
-          // Use cached value from response metadata
           totalPossiblePoints += responseMetadata.maxPossiblePoints;
           missingQuestions.push(response.questionId);
         } else {
-          // Need to query database for this question
           missingQuestionIds.push(response.questionId);
         }
       } else {
-        // Question found - use its total points
         totalPossiblePoints += questionTotalPoints;
       }
     }
 
-    // Fallback: Query database for deleted questions
     if (missingQuestionIds.length > 0) {
       try {
         const deletedQuestions = await this.prisma.question.findMany({
@@ -1409,7 +1392,6 @@ export class AttemptSubmissionService {
                 `from database for grade calculation.`,
             );
           } else {
-            // Complete failure - question doesn't exist anywhere
             console.error(
               `[GRADING ERROR] Cannot find totalPoints for questionId ${questionId}. ` +
                 `Question doesn't exist in database. This will result in incorrect grade calculation!`,

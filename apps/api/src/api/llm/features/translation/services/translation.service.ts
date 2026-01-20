@@ -394,7 +394,8 @@ INSTRUCTIONS:
   ): Promise<string> {
     const decodedQuestionText = decodeIfBase64(questionText) || questionText;
 
-    const cleanedText = decodedQuestionText.replaceAll(/<[^>]*>?/gm, "");
+    const { cleanedText, placeholders } =
+      this.stripHtmlPreserveImages(decodedQuestionText);
 
     const targetLanguageName = this.getLanguageName(targetLanguage);
 
@@ -427,7 +428,10 @@ INSTRUCTIONS:
 
       try {
         const parsedResponse = await parser.parse(response);
-        return parsedResponse.translatedText;
+        return this.restoreImagePlaceholders(
+          parsedResponse.translatedText,
+          placeholders,
+        );
       } catch (parseError) {
         this.logger.warn(
           `Structured parse failed for question translation, falling back to plain text: ${
@@ -440,6 +444,7 @@ INSTRUCTIONS:
         const fallbackPrompt = new PromptTemplate({
           template:
             `Translate the following question into {target_language}.\n` +
+            `Preserve any placeholders like [[IMAGE_0]] exactly as written.\n` +
             `Return ONLY the translated text. No quotes, no JSON, no markdown, no explanations.\n\n` +
             `QUESTION:\n{question_text}`,
           inputVariables: [],
@@ -455,7 +460,10 @@ INSTRUCTIONS:
           AIUsageType.TRANSLATION,
           "gpt-4o-mini",
         );
-        return plain?.trim?.() ?? plain;
+        return this.restoreImagePlaceholders(
+          plain?.trim?.() ?? plain,
+          placeholders,
+        );
       }
     } catch (error) {
       this.logger.error(
@@ -891,9 +899,44 @@ INSTRUCTIONS:
     4. Preserve formatting elements such as bullet points or numbered lists.
     5. Translate any proper names only if they have standard translations in the target language.
     6. Preserve any words already in another language—tech terms, proper names, acronyms, quotes—exactly as written.
+    7. Preserve placeholder tokens like [[IMAGE_0]] exactly as written and keep their position.
     
     {format_instructions}
     `;
+  }
+
+  private stripHtmlPreserveImages(text: string): {
+    cleanedText: string;
+    placeholders: string[];
+  } {
+    const placeholders: string[] = [];
+    const withPlaceholders = text.replaceAll(
+      /<img\b[^>]*>/gi,
+      (match: string) => {
+        const token = `[[IMAGE_${placeholders.length}]]`;
+        placeholders.push(match);
+        return token;
+      },
+    );
+
+    const cleanedText = withPlaceholders.replaceAll(/<[^>]*>?/gm, "");
+    return { cleanedText, placeholders };
+  }
+
+  private restoreImagePlaceholders(
+    translatedText: string,
+    placeholders: string[],
+  ): string {
+    if (!translatedText || placeholders.length === 0) {
+      return translatedText;
+    }
+
+    let restored = translatedText;
+    for (const [index, tag] of placeholders.entries()) {
+      const token = `[[IMAGE_${index}]]`;
+      restored = restored.replaceAll(token, tag);
+    }
+    return restored;
   }
 
   private getChoicesTranslationTemplate(): string {
