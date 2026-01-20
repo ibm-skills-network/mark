@@ -13,7 +13,10 @@ import QuestionPage from "@learnerComponents/Question";
 import { headers } from "next/headers";
 import { Suspense } from "react";
 import ClientLearnerLayout from "./ClientComponent";
-import { coerceSubmitted } from "@/app/learner/utils/attempts";
+import {
+  getLatestAttempt,
+  isAttemptInProgress,
+} from "@/app/learner/utils/attempts";
 
 interface Props {
   params: { assignmentId: string };
@@ -82,16 +85,15 @@ async function LearnerLayout(props: Props) {
     );
   }
 
-  const unsubmittedAssignment = listOfAttempts.find(
-    (attempt) => !coerceSubmitted(attempt.submitted),
-  );
-  const attemptId = unsubmittedAssignment
-    ? unsubmittedAssignment.id
+  const inProgressAttempts = listOfAttempts.filter(isAttemptInProgress);
+  const latestInProgressAttempt = getLatestAttempt(inProgressAttempts);
+  const attemptId = latestInProgressAttempt
+    ? latestInProgressAttempt.id
     : await createAttempt(assignmentId, cookieHeader);
   log(
     "Attempt resolved",
-    unsubmittedAssignment
-      ? `Reusing attempt ${unsubmittedAssignment.id}`
+    latestInProgressAttempt
+      ? `Reusing attempt ${latestInProgressAttempt.id}`
       : `Created attempt ${attemptId}`,
   );
 

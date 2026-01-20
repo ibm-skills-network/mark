@@ -613,7 +613,7 @@ export class QuestionResponseService {
       const baseQuestion = variant.variantOf;
 
       question = {
-        id: variant.id,
+        id: baseQuestion.id,
         question: variant.variantContent,
         type: baseQuestion.type,
         assignmentId: baseQuestion.assignmentId,
