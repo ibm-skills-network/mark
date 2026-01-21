@@ -957,7 +957,8 @@ export class AttemptServiceV1 {
     if (!language) {
       language = "en";
     }
-    const normalizedLanguage = language.toLowerCase().split("-")[0];
+    const languageKey = language.toLowerCase();
+    const normalizedLanguage = languageKey.split("-")[0];
 
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -1029,7 +1030,7 @@ export class AttemptServiceV1 {
         translationMap.set(key, {});
       }
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      translationMap.get(key)![t.languageCode] = {
+      translationMap.get(key)![t.languageCode.toLowerCase()] = {
         translatedText: t.translatedText,
         translatedChoices: t.translatedChoices,
       };
@@ -1060,8 +1061,12 @@ export class AttemptServiceV1 {
 
       const primaryTranslation =
         (variant
+          ? variantTranslations[languageKey]
+          : questionTranslations[languageKey]) ||
+        (variant
           ? variantTranslations[normalizedLanguage]
-          : questionTranslations[normalizedLanguage]) || translationFallback;
+          : questionTranslations[normalizedLanguage]) ||
+        translationFallback;
 
       const baseChoicesRaw = variant?.choices ?? originalQ?.choices;
 
