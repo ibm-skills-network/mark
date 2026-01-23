@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Put,
+  Req,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
@@ -33,6 +34,7 @@ import {
 import { AdminGetAssignmentResponseDto } from "./dto/assignment/get.assignment.response.dto";
 import { AdminUpdateAssignmentRequestDto } from "./dto/assignment/update.assignment.request.dto";
 import { AdminAddContentToAssignmentRequestDto } from "./dto/assignment/add.content.to.assignment.request.dto";
+import { UserSessionRequest } from "../../auth/interfaces/user.session.interface";
 
 @ApiTags("Admin")
 @UsePipes(
@@ -174,12 +176,12 @@ export class AdminController {
   addContentToAssignment(
     @Param("id") id: number,
     @Body() addContentRequestDto: AdminAddContentToAssignmentRequestDto,
+    @Req() request: UserSessionRequest,
   ): Promise<BaseAssignmentResponseDto> {
-    // For now, using 'admin-api' as the creator
     return this.adminService.addContentToAssignment(
       Number(id),
       addContentRequestDto,
-      "admin-api",
+      request.userSession?.userId ?? "admin-api",
     );
   }
 }
