@@ -10,6 +10,7 @@ import {
   ResponseType,
 } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
+import { AssignmentServiceV2 } from "../../assignment/v2/services/assignment.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
 import { AdminService } from "../admin.service";
 import { AdminAddContentToAssignmentRequestDto } from "../dto/assignment/add.content.to.assignment.request.dto";
@@ -17,6 +18,7 @@ import { AdminAddContentToAssignmentRequestDto } from "../dto/assignment/add.con
 describe("AdminService - addContentToAssignment", () => {
   let service: AdminService;
   let prismaService: PrismaService;
+  let assignmentService: { publishAssignment: jest.Mock };
 
   // Mock data
   const mockAssignmentId = 1;
@@ -129,6 +131,8 @@ describe("AdminService - addContentToAssignment", () => {
     ],
   };
 
+  const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -144,14 +148,16 @@ describe("AdminService - addContentToAssignment", () => {
               createMany: jest.fn(),
               findMany: jest.fn(),
             },
-            assignmentVersion: {
-              findMany: jest.fn(),
-              create: jest.fn(),
-            },
-            questionVersion: {
-              createMany: jest.fn(),
-            },
             $transaction: jest.fn(),
+          },
+        },
+        {
+          provide: AssignmentServiceV2,
+          useValue: {
+            publishAssignment: jest.fn().mockResolvedValue({
+              jobId: 1,
+              message: "Publishing started",
+            }),
           },
         },
         {
@@ -165,6 +171,9 @@ describe("AdminService - addContentToAssignment", () => {
 
     service = module.get<AdminService>(AdminService);
     prismaService = module.get<PrismaService>(PrismaService);
+    assignmentService = module.get(AssignmentServiceV2) as {
+      publishAssignment: jest.Mock;
+    };
   });
 
   describe("Successful scenarios", () => {
@@ -210,17 +219,36 @@ describe("AdminService - addContentToAssignment", () => {
       const mockUpdatedAssignment = {
         ...mockExistingAssignment,
         ...mockContentDto.assignment,
-        published: true,
+        published: false,
       };
-
-      const mockAssignmentVersion = {
-        id: 1,
-        assignmentId: mockAssignmentId,
-        versionNumber: "0.0.1",
-        name: mockContentDto.assignment.name,
-        isActive: true,
-        isDraft: false,
-        published: true,
+      const mockAssignmentForPublish = {
+        ...mockUpdatedAssignment,
+        gradingCriteriaOverview: mockContentDto.gradingCriteria,
+        questionDisplay: mockContentDto.config.questionDisplay,
+        displayOrder: mockContentDto.config.displayOrder,
+        numAttempts: mockContentDto.config.numAttempts,
+        attemptsBeforeCoolDown: mockContentDto.config.attemptsBeforeCoolDown,
+        retakeAttemptCoolDownMinutes:
+          mockContentDto.config.retakeAttemptCoolDownMinutes,
+        passingGrade: mockContentDto.config.passingGrade,
+        graded: mockContentDto.config.graded,
+        showQuestions: mockContentDto.config.showQuestions,
+        showSubmissionFeedback: mockContentDto.config.showSubmissionFeedback,
+        showAssignmentScore: mockContentDto.config.showAssignmentScore,
+        showQuestionScore: mockContentDto.config.showQuestionScore,
+        correctAnswerVisibility: mockContentDto.config.correctAnswerVisibility,
+        numberOfQuestionsPerAttempt:
+          mockContentDto.config.numberOfQuestionsPerAttempt,
+        timeEstimateMinutes: mockContentDto.config.timeEstimateMinutes,
+        allotedTimeMinutes: mockContentDto.config.allotedTimeMinutes,
+        attemptsPerTimeRange: mockContentDto.config.attemptsPerTimeRange,
+        attemptsTimeRangeHours: mockContentDto.config.attemptsTimeRangeHours,
+        questionOrder: [1, 2],
+        updatedAt: new Date(),
+        questions: mockCreatedQuestions.map((q) => ({
+          ...q,
+          variants: [],
+        })),
       };
 
       // Mock the transaction
@@ -244,17 +272,13 @@ describe("AdminService - addContentToAssignment", () => {
               createMany: jest.fn().mockResolvedValue({ count: 2 }),
               findMany: jest.fn().mockResolvedValue(mockCreatedQuestions),
             },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-              create: jest.fn().mockResolvedValue(mockAssignmentVersion),
-            },
-            questionVersion: {
-              createMany: jest.fn().mockResolvedValue({ count: 2 }),
-            },
           };
 
           return await callback(tx);
         },
+      );
+      (prismaService.assignment.findUnique as jest.Mock).mockResolvedValue(
+        mockAssignmentForPublish,
       );
 
       // Act
@@ -274,23 +298,39 @@ describe("AdminService - addContentToAssignment", () => {
 
       // Verify transaction was called
       expect(prismaService.$transaction).toHaveBeenCalled();
+      await flushPromises();
+      expect(assignmentService.publishAssignment).toHaveBeenCalled();
     });
 
-    it("should create version 0.0.1 with correct data", async () => {
+    it("should trigger publish after content import", async () => {
       // Arrange
-      const mockAssignmentVersion = {
-        id: 1,
-        assignmentId: mockAssignmentId,
-        versionNumber: "0.0.1",
-        name: mockContentDto.assignment.name,
-        isActive: true,
-        isDraft: false,
-        published: true,
-        createdBy: mockUserId,
-        versionDescription: "Initial version created via API",
+      const mockAssignmentForPublish = {
+        ...mockExistingAssignment,
+        ...mockContentDto.assignment,
+        gradingCriteriaOverview: mockContentDto.gradingCriteria,
+        questionDisplay: mockContentDto.config.questionDisplay,
+        displayOrder: mockContentDto.config.displayOrder,
+        numAttempts: mockContentDto.config.numAttempts,
+        attemptsBeforeCoolDown: mockContentDto.config.attemptsBeforeCoolDown,
+        retakeAttemptCoolDownMinutes:
+          mockContentDto.config.retakeAttemptCoolDownMinutes,
+        passingGrade: mockContentDto.config.passingGrade,
+        graded: mockContentDto.config.graded,
+        showQuestions: mockContentDto.config.showQuestions,
+        showSubmissionFeedback: mockContentDto.config.showSubmissionFeedback,
+        showAssignmentScore: mockContentDto.config.showAssignmentScore,
+        showQuestionScore: mockContentDto.config.showQuestionScore,
+        correctAnswerVisibility: mockContentDto.config.correctAnswerVisibility,
+        numberOfQuestionsPerAttempt:
+          mockContentDto.config.numberOfQuestionsPerAttempt,
+        timeEstimateMinutes: mockContentDto.config.timeEstimateMinutes,
+        allotedTimeMinutes: mockContentDto.config.allotedTimeMinutes,
+        attemptsPerTimeRange: mockContentDto.config.attemptsPerTimeRange,
+        attemptsTimeRangeHours: mockContentDto.config.attemptsTimeRangeHours,
+        questionOrder: [],
+        updatedAt: new Date(),
+        questions: [],
       };
-
-      let capturedVersionData: any;
 
       (prismaService.$transaction as jest.Mock).mockImplementation(
         async (callback) => {
@@ -304,31 +344,23 @@ describe("AdminService - addContentToAssignment", () => {
                 .fn()
                 .mockResolvedValueOnce({
                   ...mockExistingAssignment,
-                  published: true,
+                  published: false,
                 })
                 .mockResolvedValueOnce({
                   ...mockExistingAssignment,
-                  currentVersionId: 1,
                 }),
             },
             question: {
               createMany: jest.fn().mockResolvedValue({ count: 2 }),
               findMany: jest.fn().mockResolvedValue([]),
             },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-              create: jest.fn().mockImplementation((args) => {
-                capturedVersionData = args.data;
-                return Promise.resolve(mockAssignmentVersion);
-              }),
-            },
-            questionVersion: {
-              createMany: jest.fn().mockResolvedValue({ count: 0 }),
-            },
           };
 
           return await callback(tx);
         },
+      );
+      (prismaService.assignment.findUnique as jest.Mock).mockResolvedValue(
+        mockAssignmentForPublish,
       );
 
       // Act
@@ -339,18 +371,15 @@ describe("AdminService - addContentToAssignment", () => {
       );
 
       // Assert
-      expect(capturedVersionData).toBeDefined();
-      expect(capturedVersionData.versionNumber).toBe("0.0.1");
-      expect(capturedVersionData.createdBy).toBe(mockUserId);
-      expect(capturedVersionData.isActive).toBe(true);
-      expect(capturedVersionData.isDraft).toBe(false);
-      expect(capturedVersionData.published).toBe(true);
-      expect(capturedVersionData.versionDescription).toBe(
-        "Initial version created via API",
+      await flushPromises();
+      expect(assignmentService.publishAssignment).toHaveBeenCalledWith(
+        mockAssignmentId,
+        expect.objectContaining({ published: true }),
+        mockUserId,
       );
     });
 
-    it("should create question versions for all questions", async () => {
+    it("should persist question order based on created questions", async () => {
       // Arrange
       const mockCreatedQuestions = [
         {
@@ -362,63 +391,7 @@ describe("AdminService - addContentToAssignment", () => {
         { id: 2, totalPoints: 5, type: QuestionType.TEXT, question: "Q2" },
       ];
 
-      let capturedQuestionVersionsData: any;
-
-      (prismaService.$transaction as jest.Mock).mockImplementation(
-        async (callback) => {
-          const tx = {
-            assignment: {
-              findUnique: jest.fn().mockResolvedValue({
-                ...mockExistingAssignment,
-                _count: { questions: 0 },
-              }),
-              update: jest
-                .fn()
-                .mockResolvedValueOnce({ ...mockExistingAssignment })
-                .mockResolvedValueOnce({ ...mockExistingAssignment }),
-            },
-            question: {
-              createMany: jest.fn().mockResolvedValue({ count: 2 }),
-              findMany: jest.fn().mockResolvedValue(mockCreatedQuestions),
-            },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-              create: jest
-                .fn()
-                .mockResolvedValue({ id: 1, versionNumber: "0.0.1" }),
-            },
-            questionVersion: {
-              createMany: jest.fn().mockImplementation((args) => {
-                capturedQuestionVersionsData = args.data;
-                return Promise.resolve({ count: 2 });
-              }),
-            },
-          };
-
-          return await callback(tx);
-        },
-      );
-
-      // Act
-      await service.addContentToAssignment(
-        mockAssignmentId,
-        mockContentDto,
-        mockUserId,
-      );
-
-      // Assert
-      expect(capturedQuestionVersionsData).toBeDefined();
-      expect(capturedQuestionVersionsData).toHaveLength(2);
-      expect(capturedQuestionVersionsData[0].assignmentVersionId).toBe(1);
-      expect(capturedQuestionVersionsData[0].questionId).toBe(1);
-      expect(capturedQuestionVersionsData[0].displayOrder).toBe(0);
-      expect(capturedQuestionVersionsData[1].displayOrder).toBe(1);
-    });
-
-    it("should set currentVersionId on the assignment", async () => {
-      // Arrange
-      let secondUpdateCalled = false;
-      let capturedVersionId: any;
+      let capturedQuestionOrder: number[] | undefined;
 
       (prismaService.$transaction as jest.Mock).mockImplementation(
         async (callback) => {
@@ -432,26 +405,13 @@ describe("AdminService - addContentToAssignment", () => {
                 .fn()
                 .mockResolvedValueOnce({ ...mockExistingAssignment })
                 .mockImplementationOnce((args) => {
-                  secondUpdateCalled = true;
-                  capturedVersionId = args.data.currentVersionId;
-                  return Promise.resolve({
-                    ...mockExistingAssignment,
-                    currentVersionId: args.data.currentVersionId,
-                  });
+                  capturedQuestionOrder = args.data.questionOrder;
+                  return Promise.resolve({ ...mockExistingAssignment });
                 }),
             },
             question: {
-              createMany: jest.fn().mockResolvedValue({ count: 0 }),
-              findMany: jest.fn().mockResolvedValue([]),
-            },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-              create: jest
-                .fn()
-                .mockResolvedValue({ id: 99, versionNumber: "0.0.1" }),
-            },
-            questionVersion: {
-              createMany: jest.fn().mockResolvedValue({ count: 0 }),
+              createMany: jest.fn().mockResolvedValue({ count: 2 }),
+              findMany: jest.fn().mockResolvedValue(mockCreatedQuestions),
             },
           };
 
@@ -467,8 +427,7 @@ describe("AdminService - addContentToAssignment", () => {
       );
 
       // Assert
-      expect(secondUpdateCalled).toBe(true);
-      expect(capturedVersionId).toBe(99);
+      expect(capturedQuestionOrder).toEqual([1, 2]);
     });
 
     it("should handle assignment with no questions", async () => {
@@ -494,15 +453,6 @@ describe("AdminService - addContentToAssignment", () => {
             question: {
               createMany: jest.fn(),
               findMany: jest.fn().mockResolvedValue([]),
-            },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-              create: jest
-                .fn()
-                .mockResolvedValue({ id: 1, versionNumber: "0.0.1" }),
-            },
-            questionVersion: {
-              createMany: jest.fn(),
             },
           };
 
@@ -547,10 +497,32 @@ describe("AdminService - addContentToAssignment", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it("should rollback all changes if version creation fails", async () => {
+    it("should not throw if publish fails", async () => {
       // Arrange
-      (prismaService.$transaction as jest.Mock).mockRejectedValue(
-        new Error("Version creation failed"),
+      (assignmentService.publishAssignment as jest.Mock).mockRejectedValueOnce(
+        new Error("Publish failed"),
+      );
+      (prismaService.$transaction as jest.Mock).mockImplementation(
+        async (callback) => {
+          const tx = {
+            assignment: {
+              findUnique: jest.fn().mockResolvedValue({
+                ...mockExistingAssignment,
+                _count: { questions: 0 },
+              }),
+              update: jest
+                .fn()
+                .mockResolvedValueOnce({ ...mockExistingAssignment })
+                .mockResolvedValueOnce({ ...mockExistingAssignment }),
+            },
+            question: {
+              createMany: jest.fn().mockResolvedValue({ count: 0 }),
+              findMany: jest.fn().mockResolvedValue([]),
+            },
+          };
+
+          return await callback(tx);
+        },
       );
 
       // Act & Assert
@@ -560,7 +532,7 @@ describe("AdminService - addContentToAssignment", () => {
           mockContentDto,
           mockUserId,
         ),
-      ).rejects.toThrow("Version creation failed");
+      ).resolves.toBeDefined();
     });
 
     it("should rollback all changes if question creation fails", async () => {
@@ -582,9 +554,6 @@ describe("AdminService - addContentToAssignment", () => {
                 .fn()
                 .mockRejectedValue(new Error("Question creation failed")),
             },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-            },
           };
 
           return await callback(tx);
@@ -599,53 +568,6 @@ describe("AdminService - addContentToAssignment", () => {
           mockUserId,
         ),
       ).rejects.toThrow("Question creation failed");
-    });
-
-    it("should rollback if question version creation fails", async () => {
-      // Arrange
-      (prismaService.$transaction as jest.Mock).mockImplementation(
-        async (callback) => {
-          const tx = {
-            assignment: {
-              findUnique: jest.fn().mockResolvedValue({
-                ...mockExistingAssignment,
-                _count: { questions: 0 },
-              }),
-              update: jest
-                .fn()
-                .mockResolvedValue({ ...mockExistingAssignment }),
-            },
-            question: {
-              createMany: jest.fn().mockResolvedValue({ count: 2 }),
-              findMany: jest.fn().mockResolvedValue([{ id: 1 }, { id: 2 }]),
-            },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-              create: jest
-                .fn()
-                .mockResolvedValue({ id: 1, versionNumber: "0.0.1" }),
-            },
-            questionVersion: {
-              createMany: jest
-                .fn()
-                .mockRejectedValue(
-                  new Error("Question version creation failed"),
-                ),
-            },
-          };
-
-          return await callback(tx);
-        },
-      );
-
-      // Act & Assert
-      await expect(
-        service.addContentToAssignment(
-          mockAssignmentId,
-          mockContentDto,
-          mockUserId,
-        ),
-      ).rejects.toThrow("Question version creation failed");
     });
   });
 
@@ -703,7 +625,12 @@ describe("AdminService - addContentToAssignment", () => {
 
     it("should use default userId when not provided", async () => {
       // Arrange
-      let capturedUserId: any;
+      (prismaService.assignment.findUnique as jest.Mock).mockResolvedValue({
+        ...mockExistingAssignment,
+        questions: [],
+        questionOrder: [],
+        updatedAt: new Date(),
+      });
 
       (prismaService.$transaction as jest.Mock).mockImplementation(
         async (callback) => {
@@ -722,16 +649,6 @@ describe("AdminService - addContentToAssignment", () => {
               createMany: jest.fn().mockResolvedValue({ count: 0 }),
               findMany: jest.fn().mockResolvedValue([]),
             },
-            assignmentVersion: {
-              findMany: jest.fn().mockResolvedValue([]),
-              create: jest.fn().mockImplementation((args) => {
-                capturedUserId = args.data.createdBy;
-                return Promise.resolve({ id: 1, versionNumber: "0.0.1" });
-              }),
-            },
-            questionVersion: {
-              createMany: jest.fn().mockResolvedValue({ count: 0 }),
-            },
           };
 
           return await callback(tx);
@@ -740,9 +657,14 @@ describe("AdminService - addContentToAssignment", () => {
 
       // Act
       await service.addContentToAssignment(mockAssignmentId, mockContentDto);
+      await flushPromises();
 
       // Assert
-      expect(capturedUserId).toBe("system");
+      expect(assignmentService.publishAssignment).toHaveBeenCalledWith(
+        mockAssignmentId,
+        expect.any(Object),
+        "system",
+      );
     });
 
     it("should handle questions with null/undefined optional fields", async () => {
