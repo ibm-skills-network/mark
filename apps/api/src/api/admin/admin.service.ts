@@ -2242,7 +2242,9 @@ export class AdminService {
       showSubmissionFeedback: assignment.showSubmissionFeedback ?? false,
       showQuestions: assignment.showQuestions ?? false,
       correctAnswerVisibility: assignment.correctAnswerVisibility ?? undefined,
-      questionControls: this.cloneJsonValue(assignment.questionControls),
+      questionControls: this.cloneJsonValue<Record<string, boolean>>(
+        assignment.questionControls as Prisma.JsonValue,
+      ),
       versionDescription: "Published via admin content import",
       versionNumber: "",
       updatedAt: assignment.updatedAt,
