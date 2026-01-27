@@ -979,6 +979,7 @@ export const createMockAssignment = (
     preventScreenshot: false,
   },
   requireAllQuestions: false,
+  optionalQuestionIds: [],
   ...overrides,
 });
 
@@ -1134,6 +1135,8 @@ export const createMockUpdateAssignmentQuestionsDto = (
     showSubmissionFeedback: true,
     showQuestions: true,
     correctAnswerVisibility: "ON_PASS",
+    requireAllQuestions: false,
+    optionalQuestionIds: [],
     versionNumber: "0.0.1",
     versionDescription: "Updated questions version",
     updatedAt: new Date(),

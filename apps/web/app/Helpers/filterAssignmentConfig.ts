@@ -11,6 +11,7 @@ export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
     allotedTimeMinutes,
     displayOrder,
     requireAllQuestions,
+    optionalQuestionIds,
   } = useAssignmentConfig((state) => ({
     questionDisplay: state.questionDisplay,
     graded: state.graded,
@@ -19,6 +20,7 @@ export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
     allotedTimeMinutes: state.allotedTimeMinutes,
     displayOrder: state.displayOrder,
     requireAllQuestions: state.requireAllQuestions,
+    optionalQuestionIds: state.optionalQuestionIds,
   }));
 
   const { introduction, instructions, questionOrder, updatedAt, questions } =
@@ -38,6 +40,7 @@ export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
     allotedTimeMinutes,
     displayOrder,
     requireAllQuestions,
+    optionalQuestionIds,
     introduction,
     instructions,
     questionOrder,

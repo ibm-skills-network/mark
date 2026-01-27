@@ -23,6 +23,7 @@ export interface DraftData {
   showSubmissionFeedback?: boolean;
   showQuestions?: boolean;
   requireAllQuestions?: boolean;
+  optionalQuestionIds?: number[];
 }
 
 interface Draft {
@@ -292,6 +293,10 @@ export function useVersionControl() {
                 typedDraftData.requireAllQuestions !== undefined
                   ? typedDraftData.requireAllQuestions
                   : assignmentConfigStore.requireAllQuestions,
+              optionalQuestionIds:
+                typedDraftData.optionalQuestionIds !== undefined
+                  ? typedDraftData.optionalQuestionIds
+                  : assignmentConfigStore.optionalQuestionIds,
             });
           }
 

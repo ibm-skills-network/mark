@@ -94,6 +94,7 @@ function QuestionPage(props: Props) {
             updatedAt: assignment.updatedAt,
             questionControls: assignment.questionControls,
             requireAllQuestions: assignment.requireAllQuestions,
+            optionalQuestionIds: assignment.optionalQuestionIds ?? [],
           });
         }
       } else {
@@ -105,7 +106,8 @@ function QuestionPage(props: Props) {
       !assignmentDetails ||
       assignmentDetails.id !== assignmentId ||
       assignmentDetails.questionDisplay === undefined ||
-      assignmentDetails.requireAllQuestions === undefined
+      assignmentDetails.requireAllQuestions === undefined ||
+      assignmentDetails.optionalQuestionIds === undefined
     ) {
       void fetchAssignment();
     }

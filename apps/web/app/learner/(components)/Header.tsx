@@ -83,6 +83,7 @@ function LearnerHeader() {
     submitting,
     isUploadingFiles,
     assignmentDetails?.requireAllQuestions,
+    assignmentDetails?.optionalQuestionIds,
   );
 
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
@@ -153,15 +154,22 @@ function LearnerHeader() {
   };
 
   const CheckNoFlaggedQuestions = useCallback(() => {
-    const questionsWithResponses = questions.filter(hasLearnerResponse);
+    const optionalQuestionSet = new Set(
+      assignmentDetails?.optionalQuestionIds ?? [],
+    );
+    const requiredQuestions = questions.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+    const requiredResponses = requiredQuestions.filter(hasLearnerResponse);
 
     if (
       assignmentDetails?.requireAllQuestions &&
-      questionsWithResponses.length < questions.length
+      requiredResponses.length < requiredQuestions.length
     ) {
-      const unansweredCount = questions.length - questionsWithResponses.length;
+      const unansweredCount =
+        requiredQuestions.length - requiredResponses.length;
       toast.error(
-        `All questions must be answered before submitting (${unansweredCount} unanswered)`,
+        `All required questions must be answered before submitting (${unansweredCount} unanswered)`,
       );
       return;
     }
@@ -170,7 +178,7 @@ function LearnerHeader() {
     if (flaggedQuestions.length > 0) {
       setToggleWarning(true);
     } else {
-      if (questions.every((q) => editedQuestionsOnly([q]).length > 0)) {
+      if (requiredQuestions.every((q) => editedQuestionsOnly([q]).length > 0)) {
         void handleSubmitAssignment();
       } else {
         setToggleEmptyWarning(true);

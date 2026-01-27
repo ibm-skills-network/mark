@@ -862,10 +862,19 @@ export class AttemptSubmissionService {
       });
 
       if (assignment?.requireAllQuestions) {
-        const requiredQuestionIds =
-          assignmentAttempt.questionOrder?.length > 0
-            ? assignmentAttempt.questionOrder
-            : updateDto.responsesForQuestions.map((response) => response.id);
+        const optionalQuestionIds = new Set(
+          assignment.optionalQuestionIds ?? [],
+        );
+        let questionOrder = assignmentAttempt.questionOrder;
+        if (!questionOrder || questionOrder.length === 0) {
+          questionOrder =
+            assignment.questionOrder?.length > 0
+              ? assignment.questionOrder
+              : (assignment.questions?.map((question) => question.id) ?? []);
+        }
+        const requiredQuestionIds = questionOrder.filter(
+          (questionId) => !optionalQuestionIds.has(questionId),
+        );
         const responseMap = new Map(
           updateDto.responsesForQuestions.map((response) => [
             response.id,
@@ -878,7 +887,7 @@ export class AttemptSubmissionService {
 
         if (unansweredQuestionIds.length > 0) {
           throw new UnprocessableEntityException(
-            `All questions must be answered before submitting (${unansweredQuestionIds.length} unanswered).`,
+            `All required questions must be answered before submitting (${unansweredQuestionIds.length} unanswered).`,
           );
         }
       }
@@ -1237,12 +1246,10 @@ export class AttemptSubmissionService {
   }
 
   private hasPresentationResponse(
-    response?:
-      | {
-          transcript?: string | null;
-          slidesData?: unknown[] | null;
-        }
-      | null,
+    response?: {
+      transcript?: string | null;
+      slidesData?: unknown[] | null;
+    } | null,
   ): boolean {
     if (!response) {
       return false;

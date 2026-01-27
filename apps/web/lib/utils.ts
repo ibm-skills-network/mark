@@ -169,8 +169,7 @@ export const hasLearnerResponse = (question: QuestionStore): boolean => {
 export const editedQuestionsOnly = (questions: QuestionStore[]) =>
   questions.filter((q) => {
     const text = q.learnerTextResponse?.trim() ?? "";
-    const hasText =
-      text.length > 0 && q.learnerTextResponse !== "<p><br></p>";
+    const hasText = text.length > 0 && q.learnerTextResponse !== "<p><br></p>";
     const urlResponse = q.learnerUrlResponse?.trim();
     const hasValidUrl = urlResponse ? validateURL(urlResponse) : false;
     const hasChoices = (q.learnerChoices?.length ?? 0) > 0;
@@ -196,6 +195,7 @@ export const getSubmitButtonStatus = (
   submitting: boolean,
   isUploadingFiles?: boolean,
   requireAllQuestions?: boolean,
+  optionalQuestionIds?: number[],
 ) => {
   if (submitting) {
     return { disabled: true, reason: "Submitting assignment..." };
@@ -227,12 +227,24 @@ export const getSubmitButtonStatus = (
     return { disabled: true, reason: "No valid responses to submit" };
   }
 
-  if (requireAllQuestions && questionsWithResponses.length < questions.length) {
-    const unansweredCount = questions.length - questionsWithResponses.length;
-    return {
-      disabled: true,
-      reason: `All questions must be answered before submitting (${unansweredCount} unanswered)`,
-    };
+  if (requireAllQuestions) {
+    const optionalQuestionSet = new Set(optionalQuestionIds ?? []);
+    const requiredQuestions = questions.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+    const requiredResponses = questionsWithResponses.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+
+    // notification for error submitting if required questions are unanswered
+    if (requiredResponses.length < requiredQuestions.length) {
+      const unansweredCount =
+        requiredQuestions.length - requiredResponses.length;
+      return {
+        disabled: true,
+        reason: `All required questions must be answered before submitting (${unansweredCount} unanswered)`,
+      };
+    }
   }
 
   return { disabled: false, reason: null };

@@ -609,6 +609,8 @@ export class AssignmentServiceV1 {
       showQuestionScore,
       showSubmissionFeedback,
       showQuestions,
+      requireAllQuestions,
+      optionalQuestionIds,
     } = updateAssignmentQuestionsDto;
     const supportedLanguages = this.languageTranslation
       ? getAllLanguageCodes()
@@ -707,6 +709,8 @@ export class AssignmentServiceV1 {
               languageCode,
               timeEstimateMinutes,
               showQuestions,
+              requireAllQuestions,
+              optionalQuestionIds,
             },
           });
 

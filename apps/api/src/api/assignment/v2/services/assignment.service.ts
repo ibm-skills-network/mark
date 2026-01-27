@@ -233,6 +233,7 @@ export class AssignmentServiceV2 {
         numberOfQuestionsPerAttempt: updateDto.numberOfQuestionsPerAttempt,
         questionControls: updateDto.questionControls,
         requireAllQuestions: updateDto.requireAllQuestions,
+        optionalQuestionIds: updateDto.optionalQuestionIds,
       });
 
       await this.jobStatusService.updateJobStatus(jobId, {
@@ -515,6 +516,7 @@ export class AssignmentServiceV2 {
                 gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
                 timeEstimateMinutes: updateDto.timeEstimateMinutes,
                 requireAllQuestions: updateDto.requireAllQuestions,
+                optionalQuestionIds: updateDto.optionalQuestionIds,
               },
               questionsData: updatedQuestions,
               versionDescription:
@@ -579,6 +581,7 @@ export class AssignmentServiceV2 {
                 gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
                 timeEstimateMinutes: updateDto.timeEstimateMinutes,
                 requireAllQuestions: updateDto.requireAllQuestions,
+                optionalQuestionIds: updateDto.optionalQuestionIds,
               },
               questionsData: updatedQuestions,
               versionDescription:

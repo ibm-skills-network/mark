@@ -219,6 +219,8 @@ export type AuthorAssignmentState = {
   showSubmissionFeedback: boolean;
   showQuestions: boolean;
   correctAnswerVisibility: CorrectAnswerVisibility;
+  requireAllQuestions?: boolean;
+  optionalQuestionIds?: number[];
   updatedAt: number;
   numberOfQuestionsPerAttempt?: number;
   questionControls?: QuestionControls;
@@ -580,6 +582,7 @@ export type GradingData = {
   showSubmissionFeedback: boolean;
   showAssignmentScore: boolean;
   requireAllQuestions?: boolean;
+  optionalQuestionIds?: number[];
   numberOfQuestionsPerAttempt?: number | undefined;
 };
 
@@ -611,6 +614,7 @@ export type ReplaceAssignmentRequest = {
   questionDisplay?: QuestionDisplayType;
   numberOfQuestionsPerAttempt?: number;
   requireAllQuestions?: boolean;
+  optionalQuestionIds?: number[];
   published: boolean;
   questions?: Question[];
   questionOrder: number[];
@@ -703,6 +707,7 @@ export interface AssignmentDetails {
   numberOfQuestionsPerAttempt?: number;
   questionControls?: QuestionControls;
   requireAllQuestions?: boolean;
+  optionalQuestionIds?: number[];
 }
 
 export interface AssignmentDetailsLocal extends AssignmentDetails {

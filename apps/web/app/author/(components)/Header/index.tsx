@@ -140,6 +140,7 @@ function AuthorHeader() {
     numberOfQuestionsPerAttempt,
     questionControls,
     requireAllQuestions,
+    optionalQuestionIds,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
     state.retakeAttemptCoolDownMinutes,
@@ -154,6 +155,7 @@ function AuthorHeader() {
     state.numberOfQuestionsPerAttempt,
     state.questionControls,
     state.requireAllQuestions,
+    state.optionalQuestionIds,
   ]);
   const [
     showSubmissionFeedback,
@@ -272,6 +274,7 @@ function AuthorHeader() {
         showQuestions: newAssignment.showQuestions,
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
         requireAllQuestions: newAssignment.requireAllQuestions,
+        optionalQuestionIds: newAssignment.optionalQuestionIds,
       });
 
       if (newAssignment.questionVariationNumber !== undefined) {
@@ -538,6 +541,7 @@ function AuthorHeader() {
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
       requireAllQuestions,
+      optionalQuestionIds,
       questionControls,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)

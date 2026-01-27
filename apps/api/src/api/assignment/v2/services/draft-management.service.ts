@@ -42,6 +42,8 @@ export interface SaveDraftDto {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    requireAllQuestions: boolean;
+    optionalQuestionIds: number[];
     languageCode: string;
   }>;
   questionsData?: Array<any>;
@@ -173,6 +175,12 @@ export class DraftManagementService {
           showQuestions:
             saveDraftDto.assignmentData?.showQuestions ??
             assignment.showQuestions,
+          requireAllQuestions:
+            saveDraftDto.assignmentData?.requireAllQuestions ??
+            assignment.requireAllQuestions,
+          optionalQuestionIds:
+            saveDraftDto.assignmentData?.optionalQuestionIds ??
+            assignment.optionalQuestionIds,
           languageCode:
             saveDraftDto.assignmentData?.languageCode ??
             assignment.languageCode,
@@ -307,6 +315,12 @@ export class DraftManagementService {
         ...(saveDraftDto.assignmentData?.showQuestions !== undefined && {
           showQuestions: saveDraftDto.assignmentData.showQuestions,
         }),
+        ...(saveDraftDto.assignmentData?.requireAllQuestions !== undefined && {
+          requireAllQuestions: saveDraftDto.assignmentData.requireAllQuestions,
+        }),
+        ...(saveDraftDto.assignmentData?.optionalQuestionIds !== undefined && {
+          optionalQuestionIds: saveDraftDto.assignmentData.optionalQuestionIds,
+        }),
         ...(saveDraftDto.assignmentData?.languageCode && {
           languageCode: saveDraftDto.assignmentData.languageCode,
         }),
@@ -379,6 +393,8 @@ export class DraftManagementService {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    requireAllQuestions: boolean;
+    optionalQuestionIds: number[];
     languageCode: string;
     questions: JsonValue[];
     _isDraft?: boolean;
@@ -423,6 +439,8 @@ export class DraftManagementService {
       showQuestionScore: draft.showQuestionScore,
       showSubmissionFeedback: draft.showSubmissionFeedback,
       showQuestions: draft.showQuestions,
+      requireAllQuestions: draft.requireAllQuestions,
+      optionalQuestionIds: draft.optionalQuestionIds,
       languageCode: draft.languageCode,
       questions:
         (JSON.parse(draft.questionsData as string) as unknown as JsonValue[]) ??
@@ -484,6 +502,8 @@ export class DraftManagementService {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    requireAllQuestions: boolean;
+    optionalQuestionIds: number[];
     languageCode: string;
     questions: JsonValue[];
     _isDraft?: boolean;

@@ -246,6 +246,7 @@ model Assignment {
   numAttempts             Int? @default(-1) /// Max number of times a learner can attempt the assignment
   allotedTimeMinutes      Int? /// Time allotted to complete the assignment in minutes
   requireAllQuestions     Boolean @default(false) /// Require learners to answer all questions before submitting
+  optionalQuestionIds     Int[] @default([]) /// Question IDs that are optional when requireAllQuestions is enabled
   attemptsPerTimeRange    Int? /// Number of allowed attempts within the specified time range.
   attemptsTimeRangeHours  Int? /// Time range, in hours, over which the attempts are counted.
   passingGrade            Int? @default(50) /// The minimum grade required to pass the assignment
@@ -299,6 +300,7 @@ model AssignmentVersion {
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed
   requireAllQuestions     Boolean @default(false) /// Require learners to answer all questions before submitting
+  optionalQuestionIds     Int[]                           @default([]) /// Question IDs that are optional when requireAllQuestions is enabled
   allotedTimeMinutes      Int?                            /// Time allotted to complete
   attemptsPerTimeRange    Int?                            /// Attempts per time range
   attemptsTimeRangeHours  Int?                            /// Time range in hours
@@ -669,6 +671,7 @@ model AssignmentDraft {
   graded                  Boolean?                        @default(false) /// Is the assignment graded
   numAttempts             Int?                            @default(-1) /// Max attempts allowed
   requireAllQuestions     Boolean @default(false) /// Require learners to answer all questions before submitting
+  optionalQuestionIds     Int[]                           @default([]) /// Question IDs that are optional when requireAllQuestions is enabled
   allotedTimeMinutes      Int?                            /// Time allotted to complete
   attemptsPerTimeRange    Int?                            /// Attempts per time range
   attemptsTimeRangeHours  Int?                            /// Time range in hours

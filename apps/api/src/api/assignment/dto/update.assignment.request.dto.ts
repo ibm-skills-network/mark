@@ -254,4 +254,15 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsBoolean()
   requireAllQuestions?: boolean;
+
+  @ApiProperty({
+    description:
+      "Question IDs that are optional when require all questions is enabled.",
+    type: [Number],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  optionalQuestionIds?: number[];
 }

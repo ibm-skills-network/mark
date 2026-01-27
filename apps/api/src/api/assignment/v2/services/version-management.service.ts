@@ -305,6 +305,7 @@ export class VersionManagementService {
           correctAnswerVisibility: assignment.correctAnswerVisibility,
           questionControls: assignment.questionControls,
           requireAllQuestions: assignment.requireAllQuestions,
+          optionalQuestionIds: assignment.optionalQuestionIds,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: createVersionDto.isDraft ?? true,
@@ -557,6 +558,7 @@ export class VersionManagementService {
       correctAnswerVisibility: version.correctAnswerVisibility,
       questionControls: version.questionControls,
       requireAllQuestions: version.requireAllQuestions,
+      optionalQuestionIds: version.optionalQuestionIds,
       languageCode: version.languageCode,
       questionVersions: questionVersionsWithVariants,
     };
@@ -644,6 +646,7 @@ export class VersionManagementService {
             showQuestions: versionToRestore.showQuestions,
             correctAnswerVisibility: versionToRestore.correctAnswerVisibility,
             requireAllQuestions: versionToRestore.requireAllQuestions,
+            optionalQuestionIds: versionToRestore.optionalQuestionIds,
             languageCode: versionToRestore.languageCode,
             createdBy: userSession.userId,
             isDraft: true,
@@ -960,8 +963,15 @@ export class VersionManagementService {
             gradingCriteriaOverview:
               saveDraftDto.assignmentData.gradingCriteriaOverview,
           }),
-          ...(saveDraftDto.assignmentData?.requireAllQuestions !== undefined && {
-            requireAllQuestions: saveDraftDto.assignmentData.requireAllQuestions,
+          ...(saveDraftDto.assignmentData?.requireAllQuestions !==
+            undefined && {
+            requireAllQuestions:
+              saveDraftDto.assignmentData.requireAllQuestions,
+          }),
+          ...(saveDraftDto.assignmentData?.optionalQuestionIds !==
+            undefined && {
+            optionalQuestionIds:
+              saveDraftDto.assignmentData.optionalQuestionIds,
           }),
           ...(saveDraftDto.assignmentData?.timeEstimateMinutes && {
             timeEstimateMinutes:
@@ -1080,6 +1090,7 @@ export class VersionManagementService {
           correctAnswerVisibility: assignment.correctAnswerVisibility,
           questionControls: assignment.questionControls,
           requireAllQuestions: assignment.requireAllQuestions,
+          optionalQuestionIds: assignment.optionalQuestionIds,
           languageCode: assignment.languageCode,
         },
         include: { _count: { select: { questionVersions: true } } },
@@ -1375,6 +1386,7 @@ export class VersionManagementService {
           correctAnswerVisibility: assignment.correctAnswerVisibility,
           questionControls: assignment.questionControls,
           requireAllQuestions: assignment.requireAllQuestions,
+          optionalQuestionIds: assignment.optionalQuestionIds,
           languageCode: assignment.languageCode,
           createdBy: userSession.userId,
           isDraft: true,
@@ -1470,6 +1482,7 @@ export class VersionManagementService {
     showQuestions: boolean;
     correctAnswerVisibility: string;
     requireAllQuestions: boolean;
+    optionalQuestionIds: number[];
     languageCode: string | null;
   }> {
     const latestDraft = await this.prisma.assignmentVersion.findFirst({
@@ -1513,6 +1526,7 @@ export class VersionManagementService {
       showQuestions: latestDraft.showQuestions,
       correctAnswerVisibility: latestDraft.correctAnswerVisibility,
       requireAllQuestions: latestDraft.requireAllQuestions,
+      optionalQuestionIds: latestDraft.optionalQuestionIds,
       languageCode: latestDraft.languageCode,
       questions: latestDraft.questionVersions.map((qv) => ({
         id: qv.questionId,
@@ -1614,6 +1628,7 @@ export class VersionManagementService {
             showQuestions: sourceVersion.showQuestions,
             correctAnswerVisibility: sourceVersion.correctAnswerVisibility,
             requireAllQuestions: sourceVersion.requireAllQuestions,
+            optionalQuestionIds: sourceVersion.optionalQuestionIds,
             languageCode: sourceVersion.languageCode,
             createdBy: userSession.userId,
             isDraft: true,
@@ -2085,6 +2100,9 @@ export class VersionManagementService {
             requireAllQuestions:
               draftData.assignmentData.requireAllQuestions ??
               assignment.requireAllQuestions,
+            optionalQuestionIds:
+              draftData.assignmentData.optionalQuestionIds ??
+              assignment.optionalQuestionIds,
             languageCode:
               draftData.assignmentData.languageCode ?? assignment.languageCode,
           },
