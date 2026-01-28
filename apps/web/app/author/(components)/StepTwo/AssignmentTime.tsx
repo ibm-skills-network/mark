@@ -188,7 +188,7 @@ const Component: FC<Props> = () => {
               content={
                 strictTimeLimit
                   ? "This option is only available when strict time limit is disabled"
-                  : "Require learners to complete all mandatory questions before submission"
+                  : "Require learners to complete all required questions before submission"
               }
             >
               <InformationCircleIcon
@@ -241,7 +241,7 @@ const Component: FC<Props> = () => {
           <details className="relative">
             <summary className="cursor-pointer list-none border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 px-4 py-2 flex items-center justify-between hover:border-gray-300 transition-colors">
               <span className="text-sm text-black-600">
-                Select Mandatory Questions
+                Select Required Questions
               </span>
               <svg
                 className="w-4 h-4 text-gray-400"
@@ -313,8 +313,8 @@ const Component: FC<Props> = () => {
               </div>
               <div className="border-t border-gray-200 p-2 bg-gray-50">
                 <p className="text-xs text-amber-600">
-                  Click on a question to toggle. It is not recommended to make
-                  URL or File Upload questions as mandatory.
+                  Click on a question title to toggle. It is not recommended to mark
+                  URL or File Upload questions as required.
                 </p>
               </div>
             </div>
