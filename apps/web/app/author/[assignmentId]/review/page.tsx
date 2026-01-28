@@ -945,7 +945,11 @@ function Component() {
     const optional = optionalIds || [];
     const required = allQuestions
       .filter((q) => !optional.includes(q.id))
-      .map((q) => getQuestionTitle(q.id, allQuestions));
+      .map((q) => {
+        const index = allQuestions.findIndex((question) => question.id === q.id) + 1;
+        const title = getQuestionTitle(q.id, allQuestions);
+        return `Q${index}: ${title}`;
+      });
 
     if (required.length === 0) {
       return "None required (all optional)";
