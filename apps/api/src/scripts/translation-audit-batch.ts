@@ -317,7 +317,7 @@ async function batchUpdateTranslations(
           successCount++;
         } catch (error) {
           console.log(
-            `❌ Failed to update ${result.translationId}: ${
+            `Failed to update ${result.translationId}: ${
               error instanceof Error ? error.message : "Unknown error"
             }`,
           );

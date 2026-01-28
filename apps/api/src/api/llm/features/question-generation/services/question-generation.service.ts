@@ -1984,6 +1984,50 @@ FORMAT INSTRUCTIONS:
     }
   }
 
+  private sanitizeTextValue(value: string | number | null | undefined): string {
+    return this.stripHtmlTags(
+      typeof value === "string" ? value : String(value ?? ""),
+    );
+  }
+
+  private normalizeTrueFalseChoice(isCorrect?: boolean): string {
+    return isCorrect ? "true" : "false";
+  }
+
+  private appendMedia(text: string, mediaHtml: string): string {
+    if (!mediaHtml) {
+      return text;
+    }
+    const separator = text ? "\n\n" : "";
+    return `${text}${separator}${mediaHtml}`;
+  }
+
+  private ensureNonEmpty(
+    value: string,
+    fallback?: string,
+    index?: number,
+  ): string {
+    if (value) {
+      return value;
+    }
+    if (fallback) {
+      return fallback;
+    }
+    return index === undefined ? "Option" : `Option ${index + 1}`;
+  }
+
+  private sanitizeChoiceValue(
+    value: string | number | null | undefined,
+    fallback?: string,
+    index?: number,
+  ): string {
+    return this.ensureNonEmpty(
+      this.sanitizeTextValue(value),
+      fallback ? this.sanitizeTextValue(fallback) : "",
+      index,
+    );
+  }
+
   async generateQuestionRewordings(
     questionText: string,
     variationCount: number,
@@ -1998,6 +2042,46 @@ FORMAT INSTRUCTIONS:
       choices: Choice[];
     }[]
   > {
+    const { cleanedText: strippedQuestionText, mediaHtml: questionMediaHtml } =
+      this.stripHtmlPreserveMedia(questionText);
+    const sanitizedQuestionText = this.ensureNonEmpty(
+      strippedQuestionText,
+      "Please answer the question.",
+    );
+    const sanitizedChoices = choices?.map((choice, index) => ({
+      ...choice,
+      choice: this.sanitizeChoiceValue(
+        choice.choice,
+        questionType === QuestionType.TRUE_FALSE
+          ? this.normalizeTrueFalseChoice(choice.isCorrect)
+          : undefined,
+        index,
+      ),
+      feedback: choice.feedback
+        ? this.sanitizeTextValue(choice.feedback)
+        : choice.feedback,
+    }));
+    const sanitizedVariants = variants?.map((variant) => ({
+      ...variant,
+      variantContent: this.ensureNonEmpty(
+        this.stripHtmlPreserveMedia(variant.variantContent).cleanedText,
+        sanitizedQuestionText,
+      ),
+      choices: variant.choices?.map((choice, index) => ({
+        ...choice,
+        choice: this.sanitizeChoiceValue(
+          choice.choice,
+          questionType === QuestionType.TRUE_FALSE
+            ? this.normalizeTrueFalseChoice(choice.isCorrect)
+            : undefined,
+          index,
+        ),
+        feedback: choice.feedback
+          ? this.sanitizeTextValue(choice.feedback)
+          : choice.feedback,
+      })),
+    }));
+
     const baseQuestionSchema = z.object({
       id: z.number().describe("Unique identifier for the variation"),
       variantContent: z
@@ -2016,7 +2100,7 @@ FORMAT INSTRUCTIONS:
             choice: z.enum(["true", "false", "True", "False"]),
             points: z.number().min(0),
             feedback: z.string().optional(),
-            isCorrect: z.boolean(),
+            isCorrect: z.boolean().optional(),
           }),
         )
         .length(1),
@@ -2032,7 +2116,7 @@ FORMAT INSTRUCTIONS:
               .min(0)
               .describe("Whole Points assigned for this choice"),
             feedback: z.string().min(5).optional(),
-            isCorrect: z.boolean(),
+            isCorrect: z.boolean().optional(),
           }),
         )
         .min(3),
@@ -2048,7 +2132,7 @@ FORMAT INSTRUCTIONS:
               .min(0)
               .describe("Whole Points assigned for this choice"),
             feedback: z.string().min(5).optional(),
-            isCorrect: z.boolean(),
+            isCorrect: z.boolean().optional(),
           }),
         )
         .min(3),
@@ -2101,6 +2185,7 @@ QUALITY REQUIREMENTS:
    - Be clearly distinct from the original and other variations
    - Use precise language with no ambiguity
    - Have proper grammar and spelling
+   - Use plain text only (no HTML tags, tables, or images)
 
 3. For choice-based questions:
    - Maintain the same pattern of correct/incorrect answers
@@ -2108,6 +2193,7 @@ QUALITY REQUIREMENTS:
    - Ensure distractors remain equally plausible
    - Provide educational feedback for each choice
    - Keep original point distribution
+   - Include "isCorrect" boolean for every choice
    - IMPORTANT: Points must be non-negative integers (>= 0) for all questions
 
 4. Avoid simply:
@@ -2125,12 +2211,12 @@ FORMAT INSTRUCTIONS:
       partialVariables: {
         formatInstructions: formatInstructions,
         variationCount: variationCount.toString(),
-        existingVariants: variants
-          ? JSON.stringify(variants, null, 2)
+        existingVariants: sanitizedVariants
+          ? JSON.stringify(sanitizedVariants, null, 2)
           : "No existing variants provided",
-        questionText: questionText,
-        originalChoices: choices
-          ? JSON.stringify(choices, null, 2)
+        questionText: sanitizedQuestionText,
+        originalChoices: sanitizedChoices
+          ? JSON.stringify(sanitizedChoices, null, 2)
           : "No choices provided",
       },
     });
@@ -2190,39 +2276,74 @@ FORMAT INSTRUCTIONS:
         : [parsedResponse];
 
       return responseArray.map((item, index) => {
+        const baseVariantContent = this.ensureNonEmpty(
+          this.stripHtmlTags(item.variantContent ?? ""),
+          sanitizedQuestionText,
+        );
         const variant = {
           id: item.id ?? index + 1,
-          variantContent: item.variantContent ?? "",
+          variantContent: this.appendMedia(
+            baseVariantContent,
+            questionMediaHtml,
+          ),
           choices: [] as Choice[],
         };
 
         if (item.choices && Array.isArray(item.choices)) {
           variant.choices = item.choices.map(
             (rewordedChoice: Choice, choiceIndex: number) => {
-              const originalChoice =
-                choices && choiceIndex < choices.length
-                  ? choices[choiceIndex]
-                  : null;
+              const originalChoice = sanitizedChoices?.[choiceIndex];
+              const choiceText =
+                typeof rewordedChoice.choice === "string"
+                  ? rewordedChoice.choice.toLowerCase().trim()
+                  : "";
+              const inferredIsCorrect =
+                typeof rewordedChoice.isCorrect === "boolean"
+                  ? rewordedChoice.isCorrect
+                  : questionType === QuestionType.TRUE_FALSE
+                    ? choiceText === "true"
+                    : (originalChoice?.isCorrect ??
+                      (rewordedChoice.points ?? 0) > 0);
+              const fallbackFeedback =
+                originalChoice?.feedback ||
+                (inferredIsCorrect
+                  ? "This is the correct answer."
+                  : "This is not the correct answer.");
+              const fallbackChoice =
+                questionType === QuestionType.TRUE_FALSE
+                  ? this.normalizeTrueFalseChoice(inferredIsCorrect)
+                  : originalChoice?.choice;
               return {
-                choice: rewordedChoice.choice,
+                choice: this.sanitizeChoiceValue(
+                  rewordedChoice.choice,
+                  fallbackChoice,
+                  choiceIndex,
+                ),
                 points:
                   rewordedChoice.points ??
                   originalChoice?.points ??
-                  (rewordedChoice.isCorrect ? 1 : 0),
-                feedback:
-                  rewordedChoice.feedback ||
-                  originalChoice?.feedback ||
-                  (rewordedChoice.isCorrect
-                    ? "This is the correct answer."
-                    : "This is not the correct answer."),
-                isCorrect: rewordedChoice.isCorrect === true,
+                  (inferredIsCorrect ? 1 : 0),
+                feedback: this.stripHtmlTags(
+                  rewordedChoice.feedback || fallbackFeedback,
+                ),
+                isCorrect: inferredIsCorrect,
                 id: originalChoice?.id ?? choiceIndex + 1,
               };
             },
           );
-        } else if (choices) {
-          variant.choices = choices.map((choice, choiceIndex) => ({
+        } else if (sanitizedChoices) {
+          variant.choices = sanitizedChoices.map((choice, choiceIndex) => ({
             ...choice,
+            choice: this.sanitizeChoiceValue(
+              choice.choice,
+              questionType === QuestionType.TRUE_FALSE
+                ? this.normalizeTrueFalseChoice(choice.isCorrect)
+                : undefined,
+              choiceIndex,
+            ),
+            feedback: choice.feedback
+              ? this.stripHtmlTags(choice.feedback)
+              : choice.feedback,
             id: choiceIndex + 1,
           }));
         }
@@ -2240,6 +2361,38 @@ FORMAT INSTRUCTIONS:
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  private stripHtmlTags(text: string): string {
+    if (!text) {
+      return "";
+    }
+
+    const withoutTags = text.replaceAll(/<[^>]*>/g, "");
+    return withoutTags.trim();
+  }
+
+  private stripHtmlPreserveMedia(text: string): {
+    cleanedText: string;
+    mediaHtml: string;
+  } {
+    if (!text) {
+      return { cleanedText: "", mediaHtml: "" };
+    }
+
+    const mediaRegex = /<img\b[^>]*>|<table\b[^>]*>[\S\s]*?<\/table>/gi;
+    const media: string[] = [];
+    let match: RegExpExecArray | null = mediaRegex.exec(text);
+    while (match) {
+      media.push(match[0]);
+      match = mediaRegex.exec(text);
+    }
+
+    const withoutMedia = text.replaceAll(mediaRegex, "");
+    const cleanedText = withoutMedia.replaceAll(/<[^>]*>/g, "").trim();
+    const mediaHtml = media.join("").trim();
+
+    return { cleanedText, mediaHtml };
   }
 
   async generateQuestionGradingContext(

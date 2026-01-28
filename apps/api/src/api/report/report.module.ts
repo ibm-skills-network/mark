@@ -29,11 +29,9 @@ import { ReportsService } from "./services/report.service";
 })
 export class ReportsModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(raw({ type: "*/*" }))
-      .forRoutes({
-        path: "reports/github/webhook",
-        method: RequestMethod.POST,
-      });
+    consumer.apply(raw({ type: "*/*" })).forRoutes({
+      path: "reports/github/webhook",
+      method: RequestMethod.POST,
+    });
   }
 }
