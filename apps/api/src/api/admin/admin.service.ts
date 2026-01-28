@@ -5,12 +5,20 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, Question, QuestionVariant } from "@prisma/client";
 import {
   UserRole,
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../database/prisma.service";
+import {
+  Choice,
+  QuestionDto,
+  ScoringDto,
+  UpdateAssignmentQuestionsDto,
+  VariantDto,
+} from "../assignment/dto/update.questions.request.dto";
+import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
@@ -42,6 +50,7 @@ export class AdminService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly assignmentService: AssignmentServiceV2,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService,
   ) {}
@@ -100,6 +109,7 @@ export class AdminService {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
+        currentVersion: true,
         questions: {
           where: { isDeleted: false },
         },
@@ -2060,74 +2070,6 @@ export class AdminService {
   }
 
   /**
-   * Determines the next semantic version number for an assignment.
-   * Defaults to 0.0.1 when no versions exist; otherwise bumps the patch of the highest semver-like version.
-   */
-  private getNextVersionNumber(existingVersionNumbers: string[]): string {
-    if (!existingVersionNumbers || existingVersionNumbers.length === 0) {
-      return "0.0.1";
-    }
-
-    const semverRegex = /^(\d+)\.(\d+)\.(\d+)(-rc\d+)?$/;
-    const parsed = existingVersionNumbers
-      .map((v) => {
-        const match = semverRegex.exec(v);
-        if (!match) return null;
-        const [, major, minor, patch, rc] = match;
-        return {
-          major: Number.parseInt(major, 10),
-          minor: Number.parseInt(minor, 10),
-          patch: Number.parseInt(patch, 10),
-          isRc: Boolean(rc),
-        };
-      })
-      .filter(Boolean) as {
-      major: number;
-      minor: number;
-      patch: number;
-      isRc: boolean;
-    }[];
-
-    if (parsed.length === 0) {
-      return "0.0.1";
-    }
-
-    let highest = parsed[0];
-    for (let index = 1; index < parsed.length; index += 1) {
-      const current = parsed[index];
-      if (current.major !== highest.major) {
-        highest = current.major > highest.major ? current : highest;
-        continue;
-      }
-      if (current.minor !== highest.minor) {
-        highest = current.minor > highest.minor ? current : highest;
-        continue;
-      }
-      if (current.patch !== highest.patch) {
-        highest = current.patch > highest.patch ? current : highest;
-        continue;
-      }
-      if (current.isRc === highest.isRc) {
-        continue;
-      }
-      // Non-RC is considered newer than RC for the same patch
-      if (!current.isRc && highest.isRc) {
-        highest = current;
-      }
-    }
-
-    const existingSet = new Set(existingVersionNumbers);
-    let nextPatch = highest.patch + 1;
-    let candidate = `${highest.major}.${highest.minor}.${nextPatch}`;
-    while (existingSet.has(candidate)) {
-      nextPatch += 1;
-      candidate = `${highest.major}.${highest.minor}.${nextPatch}`;
-    }
-
-    return candidate;
-  }
-
-  /**
    * Add content (details, configuration, and questions) to an existing empty assignment.
    * Uses a transaction to ensure atomicity - if any step fails, all changes are rolled back.
    *
@@ -2166,20 +2108,12 @@ export class AdminService {
         );
       }
 
-      const existingVersionNumbers = await tx.assignmentVersion.findMany({
-        where: { assignmentId: id },
-        select: { versionNumber: true },
-      });
-      const versionNumber = this.getNextVersionNumber(
-        existingVersionNumbers.map((v) => v.versionNumber),
-      );
-
       const updatedAssignment = await tx.assignment.update({
         where: { id },
         data: {
           ...assignmentDetails,
           gradingCriteriaOverview: gradingCriteria,
-          published: true,
+          published: false,
           numAttempts: config.numAttempts,
           attemptsBeforeCoolDown: config.attemptsBeforeCoolDown,
           retakeAttemptCoolDownMinutes: config.retakeAttemptCoolDownMinutes,
@@ -2222,83 +2156,23 @@ export class AdminService {
       }
       const questionOrder = createdQuestions.map((q) => q.id);
 
-      const assignmentVersion = await tx.assignmentVersion.create({
-        data: {
-          assignmentId: id,
-          versionNumber,
-          name: assignmentDetails.name,
-          introduction: assignmentDetails.introduction,
-          instructions: assignmentDetails.instructions,
-          gradingCriteriaOverview: gradingCriteria,
-          type: existingAssignment.type,
-          timeEstimateMinutes: config.timeEstimateMinutes,
-          attemptsBeforeCoolDown: config.attemptsBeforeCoolDown,
-          retakeAttemptCoolDownMinutes: config.retakeAttemptCoolDownMinutes,
-          graded: config.graded,
-          numAttempts: config.numAttempts,
-          allotedTimeMinutes: config.allotedTimeMinutes,
-          attemptsPerTimeRange: config.attemptsPerTimeRange,
-          attemptsTimeRangeHours: config.attemptsTimeRangeHours,
-          passingGrade: config.passingGrade,
-          displayOrder: config.displayOrder,
-          questionDisplay: config.questionDisplay,
-          numberOfQuestionsPerAttempt: config.numberOfQuestionsPerAttempt,
-          questionOrder: questionOrder ?? [],
-          published: true,
-          showAssignmentScore: config.showAssignmentScore,
-          showQuestionScore: config.showQuestionScore,
-          showSubmissionFeedback: config.showSubmissionFeedback,
-          showQuestions: config.showQuestions,
-          correctAnswerVisibility: config.correctAnswerVisibility,
-          createdBy: userId,
-          isDraft: false,
-          isActive: true,
-          versionDescription: "Initial version created via API",
-        },
-      });
-
-      if (createdQuestions.length > 0) {
-        const questionVersionsData = createdQuestions.map((q, index) => ({
-          assignmentVersionId: assignmentVersion.id,
-          questionId: q.id,
-          totalPoints: q.totalPoints,
-          type: q.type,
-          responseType: q.responseType,
-          question: q.question,
-          maxWords: q.maxWords,
-          scoring: q.scoring,
-          choices: q.choices,
-          randomizedChoices: q.randomizedChoices,
-          answer: q.answer,
-          gradingContextQuestionIds: q.gradingContextQuestionIds || [],
-          maxCharacters: q.maxCharacters,
-          videoPresentationConfig: q.videoPresentationConfig,
-          liveRecordingConfig: q.liveRecordingConfig,
-          displayOrder: index,
-        }));
-
-        await tx.questionVersion.createMany({
-          data: questionVersionsData,
-        });
-
-        this.logger.log(
-          `Created ${questionVersionsData.length} question versions for version ${assignmentVersion.versionNumber}`,
-        );
-      }
-
       await tx.assignment.update({
         where: { id },
-        data: {
-          currentVersionId: assignmentVersion.id,
-        },
+        data: { questionOrder: questionOrder ?? [] },
       });
-
-      this.logger.log(
-        `Successfully created version ${versionNumber} for assignment ${id}`,
-      );
 
       return updatedAssignment;
     });
+
+    void this.publishAssignmentAfterContent(id, userId).catch(
+      (error: unknown) => {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        this.logger.error(
+          `Failed to publish assignment ${id} after content import: ${errorMessage}`,
+        );
+      },
+    );
 
     return {
       id: result.id,
@@ -2306,6 +2180,125 @@ export class AdminService {
       name: result.name,
       type: result.type,
     };
+  }
+
+  private async publishAssignmentAfterContent(
+    assignmentId: number,
+    userId: string,
+  ): Promise<void> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        questions: {
+          where: { isDeleted: false },
+          include: {
+            variants: {
+              where: { isDeleted: false },
+            },
+          },
+        },
+      },
+    });
+
+    if (!assignment) {
+      this.logger.warn(
+        `Assignment ${assignmentId} not found while preparing publish payload`,
+      );
+      return;
+    }
+
+    const questions = assignment.questions.map((question) =>
+      this.mapQuestionToDto(question),
+    );
+    const questionOrder =
+      assignment.questionOrder && assignment.questionOrder.length > 0
+        ? assignment.questionOrder
+        : questions.map((q) => q.id);
+
+    const publishPayload: UpdateAssignmentQuestionsDto = {
+      name: assignment.name,
+      questions,
+      introduction: assignment.introduction ?? null,
+      instructions: assignment.instructions ?? null,
+      gradingCriteriaOverview: assignment.gradingCriteriaOverview ?? null,
+      timeEstimateMinutes: assignment.timeEstimateMinutes ?? null,
+      graded: assignment.graded ?? false,
+      numAttempts: assignment.numAttempts ?? null,
+      attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown ?? null,
+      retakeAttemptCoolDownMinutes:
+        assignment.retakeAttemptCoolDownMinutes ?? null,
+      allotedTimeMinutes: assignment.allotedTimeMinutes ?? null,
+      attemptsPerTimeRange: assignment.attemptsPerTimeRange ?? null,
+      attemptsTimeRangeHours: assignment.attemptsTimeRangeHours ?? null,
+      passingGrade: assignment.passingGrade ?? null,
+      displayOrder: assignment.displayOrder ?? null,
+      questionDisplay: assignment.questionDisplay ?? null,
+      numberOfQuestionsPerAttempt:
+        assignment.numberOfQuestionsPerAttempt ?? null,
+      published: true,
+      questionOrder,
+      showAssignmentScore: assignment.showAssignmentScore ?? false,
+      showQuestionScore: assignment.showQuestionScore ?? false,
+      showSubmissionFeedback: assignment.showSubmissionFeedback ?? false,
+      showQuestions: assignment.showQuestions ?? false,
+      correctAnswerVisibility: assignment.correctAnswerVisibility ?? undefined,
+      questionControls: this.cloneJsonValue(assignment.questionControls),
+      versionDescription: "Published via admin content import",
+      versionNumber: "",
+      updatedAt: assignment.updatedAt,
+    };
+
+    await this.assignmentService.publishAssignment(
+      assignmentId,
+      publishPayload,
+      userId,
+    );
+  }
+
+  private mapQuestionToDto(
+    question: Question & { variants: QuestionVariant[] },
+  ): QuestionDto {
+    const variants: VariantDto[] = (question.variants ?? []).map((variant) => ({
+      id: variant.id,
+      variantContent: variant.variantContent,
+      variantType: variant.variantType as VariantDto["variantType"],
+      isDeleted: variant.isDeleted,
+      choices: this.cloneJsonValue<Choice[]>(variant.choices),
+      scoring: this.cloneJsonValue<ScoringDto>(variant.scoring),
+      maxWords: variant.maxWords ?? undefined,
+      maxCharacters: variant.maxCharacters ?? undefined,
+      randomizedChoices: variant.randomizedChoices ?? undefined,
+    }));
+
+    return {
+      id: question.id,
+      assignmentId: question.assignmentId,
+      question: question.question,
+      type: question.type,
+      responseType: question.responseType ?? undefined,
+      totalPoints: question.totalPoints ?? undefined,
+      authorComment: question.authorComment ?? null,
+      choices: this.cloneJsonValue<Choice[]>(question.choices),
+      scoring: this.cloneJsonValue<ScoringDto>(question.scoring),
+      maxWords: question.maxWords ?? undefined,
+      maxCharacters: question.maxCharacters ?? undefined,
+      randomizedChoices: question.randomizedChoices ?? undefined,
+      answer: question.answer ?? null,
+      gradingContextQuestionIds: question.gradingContextQuestionIds ?? [],
+      variants,
+    };
+  }
+
+  private cloneJsonValue<T>(value?: Prisma.JsonValue | null): T | undefined {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(JSON.stringify(value)) as T;
+    } catch {
+      return undefined;
+    }
   }
 
   async executeQuickAction(
