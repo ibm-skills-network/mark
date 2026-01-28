@@ -302,7 +302,16 @@ export class AssignmentServiceV2 {
         );
       }
 
-      if (assignmentTranslatableFieldsChanged || questionContentChanged) {
+      const existingTranslationCount =
+        await this.prisma.assignmentTranslation.count({
+          where: { assignmentId },
+        });
+      const shouldTranslateAssignment =
+        assignmentTranslatableFieldsChanged ||
+        questionContentChanged ||
+        existingTranslationCount === 0;
+
+      if (shouldTranslateAssignment) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
           progress: "Content changes detected, translating assignment",
@@ -320,12 +329,7 @@ export class AssignmentServiceV2 {
           percentage: 78,
         });
 
-        const hasExistingTranslations =
-          await this.prisma.assignmentTranslation.count({
-            where: { assignmentId },
-          });
-
-        if (hasExistingTranslations > 0) {
+        if (existingTranslationCount > 0) {
           const isValid = true;
           if (isValid) {
             await this.jobStatusService.updateJobStatus(jobId, {

@@ -754,6 +754,11 @@ export const useLearnerStore = createWithEqualityFn<
               } else {
                 finalCode = "zh-CN";
               }
+            }
+            else if (baseLang === "uk") {
+              if (region === "UA") {
+                finalCode = "uk-UA";
+              }
             } else {
               const foundLanguageCode = AVAILABLE_LANGUAGES.find(
                 (langCode) => langCode === baseLang,

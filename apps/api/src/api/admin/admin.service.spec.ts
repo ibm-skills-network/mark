@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { PrismaService } from "../../database/prisma.service";
+import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminService } from "./admin.service";
 
@@ -30,6 +31,12 @@ describe("AdminService", () => {
       providers: [
         AdminService,
         PrismaService,
+        {
+          provide: AssignmentServiceV2,
+          useValue: {
+            publishAssignment: jest.fn(),
+          },
+        },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
       ],
     }).compile();

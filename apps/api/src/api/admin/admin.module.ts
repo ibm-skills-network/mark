@@ -3,6 +3,7 @@ import { PassportModule } from "@nestjs/passport";
 import { PrismaService } from "src/database/prisma.service";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { AuthModule } from "../../auth/auth.module";
+import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
 import { LlmModule } from "../llm/llm.module";
 import { ScheduledTasksModule } from "../scheduled-tasks/scheduled-tasks.module";
 import { AdminController } from "./admin.controller";
@@ -20,6 +21,7 @@ import { RegradingRequestsController } from "./controllers/regrading-requests.co
     AuthModule,
     PassportModule,
     AdminAuthModule,
+    AssignmentModuleV2,
     LlmModule,
     ScheduledTasksModule,
   ],
