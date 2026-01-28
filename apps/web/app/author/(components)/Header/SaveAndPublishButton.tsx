@@ -82,7 +82,6 @@ const SaveAndPublishButton: FC<Props> = ({
         );
         return;
       } catch (error) {
-        console.error("Failed to fetch checked out version:", error);
         return;
       }
     }
@@ -91,7 +90,14 @@ const SaveAndPublishButton: FC<Props> = ({
     if (assignment) {
       useAuthorStore.getState().setOriginalAssignment(assignment);
 
-      const mergedAuthorData = mergeData(useAuthorStore.getState(), assignment);
+      const authorSafeAssignment = {
+        ...assignment,
+        currentVersion: undefined,
+      };
+      const mergedAuthorData = mergeData(
+        useAuthorStore.getState(),
+        authorSafeAssignment,
+      );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
         ...cleanedAuthorData,
@@ -330,8 +336,6 @@ const SaveAndPublishButton: FC<Props> = ({
       setVersionComparison(defaultComparison);
       setShowPublishModal(true);
     } catch (error) {
-      console.error("Failed to analyze changes:", error);
-
       const fallbackComparison: VersionComparison = {
         fromVersion: currentVersion
           ? {
@@ -409,8 +413,6 @@ const SaveAndPublishButton: FC<Props> = ({
         router.push(`/author/${assignmentId}/version-tree`);
       }
     } catch (error: any) {
-      console.error("Failed to save version:", error);
-
       if (
         error.response?.status === 409 &&
         error.response?.data?.versionExists
@@ -444,7 +446,8 @@ const SaveAndPublishButton: FC<Props> = ({
       setShowConflictModal(false);
       setConflictDetails(null);
     } catch (error) {
-      console.error("Failed to update existing version:", error);
+      setConflictDetails(null);
+      setShowConflictModal(false);
       throw error;
     }
   };

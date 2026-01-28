@@ -51,7 +51,6 @@ function SuccessPage(props: Props) {
         setPageState("success");
         return;
       } catch (error) {
-        console.error("Failed to fetch checked out version:", error);
         setPageState("error");
         return;
       }
@@ -61,7 +60,14 @@ function SuccessPage(props: Props) {
     if (assignment) {
       useAuthorStore.getState().setOriginalAssignment(assignment);
 
-      const mergedAuthorData = mergeData(useAuthorStore.getState(), assignment);
+      const authorSafeAssignment = {
+        ...assignment,
+        currentVersion: undefined,
+      };
+      const mergedAuthorData = mergeData(
+        useAuthorStore.getState(),
+        authorSafeAssignment,
+      );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
         ...cleanedAuthorData,
@@ -113,7 +119,7 @@ function SuccessPage(props: Props) {
         const user = await getUser();
         setReturnUrl(user.returnUrl || "");
       } catch (err) {
-        console.error("Error fetching user:", err);
+        console.error("Failed to fetch user data", err);
       }
     };
 

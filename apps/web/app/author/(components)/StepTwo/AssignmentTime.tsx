@@ -40,7 +40,6 @@ const Component: FC<Props> = () => {
     }
   }, [allotedTimeMinutes]);
 
-
   const handleAllotedTimeChange = (
     event: ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -61,7 +60,6 @@ const Component: FC<Props> = () => {
     // valid number
     setAllotedTimeMinutes(parsedValue);
   };
-
 
   let timeLimitError;
   if (!strictTimeLimit) {
