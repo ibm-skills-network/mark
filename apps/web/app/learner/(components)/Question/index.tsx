@@ -2,29 +2,236 @@
 
 import animationData from "@/animations/LoadSN.json";
 import Loading from "@/components/Loading";
-import {
+import type {
   AssignmentAttemptWithQuestions,
-  QuestionDisplayType,
+  PresentationQuestionResponse,
+  QuestionStore,
 } from "@/config/types";
+import { QuestionDisplayType } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { getAssignment } from "@/lib/talkToBackend";
-import { useDebugLog } from "@/lib/utils";
+import { parseLearnerResponse, useDebugLog } from "@/lib/utils";
 import { useAppConfig } from "@/stores/appConfig";
-import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
+import {
+  type learnerFileResponse,
+  useAssignmentDetails,
+  useLearnerStore,
+} from "@/stores/learner";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
 import SecurityMonitor from "../SecurityMonitor";
+import { clearAssignmentLocalStorage } from "@/app/learner/utils/localStorage";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
   assignmentId: number;
+  isNewAttempt?: boolean;
 }
 
+const normalizeChoiceText = (value: string) =>
+  value.trim().toLowerCase().replace(/\s+/g, " ");
+
+const getChoiceTexts = (choices?: QuestionStore["choices"]) =>
+  (choices ?? [])
+    .map((choice) => {
+      if (typeof choice === "string" || typeof choice === "number") {
+        return String(choice);
+      }
+      return choice?.choice ?? "";
+    })
+    .filter((choice) => choice.trim().length > 0);
+
+const getLatestQuestionResponse = (question: QuestionStore) => {
+  const responses = question.questionResponses ?? [];
+  if (!Array.isArray(responses) || responses.length === 0) {
+    return undefined;
+  }
+  return responses.reduce((latest, response) =>
+    (response?.id ?? 0) > (latest?.id ?? 0) ? response : latest,
+  );
+};
+
+const isPresentationResponse = (
+  value: unknown,
+): value is PresentationQuestionResponse => {
+  if (!value || typeof value !== "object") return false;
+  return (
+    "transcript" in value ||
+    "slidesData" in value ||
+    "speechReport" in value ||
+    "contentReport" in value ||
+    "bodyLanguageScore" in value ||
+    "bodyLanguageExplanation" in value
+  );
+};
+
+const isLearnerFileResponse = (
+  value: unknown,
+): value is learnerFileResponse => {
+  if (!value || typeof value !== "object") return false;
+  return (
+    "filename" in value &&
+    typeof (value as { filename?: unknown }).filename === "string"
+  );
+};
+
+const isLearnerFileResponseArray = (
+  value: unknown,
+): value is learnerFileResponse[] =>
+  Array.isArray(value) && value.every(isLearnerFileResponse);
+
+const mapChoicesToIndices = (values: unknown[], choiceTexts: string[]) => {
+  if (choiceTexts.length === 0) {
+    return [];
+  }
+  const indices: number[] = [];
+  values.forEach((value) => {
+    if (typeof value === "number" && Number.isInteger(value)) {
+      if (value >= 0 && value < choiceTexts.length) {
+        indices.push(value);
+        return;
+      }
+    }
+    const valueText = String(value).trim();
+    if (/^\d+$/.test(valueText)) {
+      const index = Number(valueText);
+      if (index >= 0 && index < choiceTexts.length) {
+        indices.push(index);
+        return;
+      }
+    }
+    const normalizedValue = normalizeChoiceText(valueText);
+    const matchIndex = choiceTexts.findIndex(
+      (choice) => normalizeChoiceText(choice) === normalizedValue,
+    );
+    if (matchIndex >= 0) {
+      indices.push(matchIndex);
+    }
+  });
+  return Array.from(new Set(indices)).map((index) => String(index));
+};
+
+const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
+  const latestResponse = getLatestQuestionResponse(question);
+  const rawResponse = latestResponse?.learnerResponse;
+  const parsedResponse =
+    typeof rawResponse === "string" && rawResponse.trim().length > 0
+      ? parseLearnerResponse(rawResponse)
+      : undefined;
+  const updated: Partial<QuestionStore> = {};
+
+  if (latestResponse?.learnerResponse) {
+    updated.learnerResponse = latestResponse.learnerResponse;
+  }
+
+  const hasPresentation = isPresentationResponse(parsedResponse);
+  if (!question.presentationResponse && hasPresentation) {
+    updated.presentationResponse =
+      parsedResponse as PresentationQuestionResponse;
+  }
+
+  if (
+    question.type === "SINGLE_CORRECT" ||
+    question.type === "MULTIPLE_CORRECT"
+  ) {
+    const choiceTexts = getChoiceTexts(question.choices);
+    const existingChoices = Array.isArray(question.learnerChoices)
+      ? question.learnerChoices
+      : [];
+    const existingAreIndices =
+      existingChoices.length > 0 &&
+      existingChoices.every(
+        (choice) =>
+          typeof choice === "string" &&
+          /^\d+$/.test(choice) &&
+          Number(choice) >= 0 &&
+          Number(choice) < choiceTexts.length,
+      );
+
+    if (existingAreIndices) {
+      updated.learnerChoices = existingChoices;
+    } else {
+      const responseValues = existingChoices.length
+        ? existingChoices
+        : Array.isArray(parsedResponse)
+          ? parsedResponse
+          : typeof parsedResponse === "string"
+            ? [parsedResponse]
+            : [];
+      const mappedChoices = mapChoicesToIndices(responseValues, choiceTexts);
+      if (mappedChoices.length > 0) {
+        updated.learnerChoices = mappedChoices;
+      }
+    }
+  }
+
+  if (question.type === "TRUE_FALSE" && question.learnerAnswerChoice == null) {
+    if (typeof parsedResponse === "boolean") {
+      updated.learnerAnswerChoice = parsedResponse;
+    } else if (typeof parsedResponse === "string") {
+      const normalized = parsedResponse.trim().toLowerCase();
+      if (normalized === "true" || normalized === "false") {
+        updated.learnerAnswerChoice = normalized === "true";
+      }
+    }
+  }
+
+  if (question.type === "TEXT" && !question.learnerTextResponse) {
+    if (typeof parsedResponse === "string") {
+      updated.learnerTextResponse = parsedResponse;
+    }
+  }
+
+  if (
+    (question.type === "URL" || question.type === "LINK_FILE") &&
+    !question.learnerUrlResponse
+  ) {
+    if (typeof parsedResponse === "string") {
+      updated.learnerUrlResponse = parsedResponse;
+    } else if (
+      parsedResponse &&
+      typeof parsedResponse === "object" &&
+      "url" in parsedResponse &&
+      typeof parsedResponse.url === "string"
+    ) {
+      updated.learnerUrlResponse = parsedResponse.url;
+    }
+  }
+
+  if (
+    (question.type === "UPLOAD" ||
+      question.type === "CODE" ||
+      question.type === "LINK_FILE") &&
+    !question.learnerFileResponse &&
+    !hasPresentation
+  ) {
+    if (isLearnerFileResponseArray(parsedResponse)) {
+      updated.learnerFileResponse = parsedResponse;
+    } else if (isLearnerFileResponse(parsedResponse)) {
+      updated.learnerFileResponse = [parsedResponse];
+    }
+  }
+
+  const nextQuestion = { ...question, ...updated };
+  const hasResponse =
+    (nextQuestion.learnerTextResponse?.trim()?.length ?? 0) > 0 ||
+    (nextQuestion.learnerUrlResponse?.trim()?.length ?? 0) > 0 ||
+    (nextQuestion.learnerChoices?.length ?? 0) > 0 ||
+    typeof nextQuestion.learnerAnswerChoice === "boolean" ||
+    (nextQuestion.learnerFileResponse?.length ?? 0) > 0 ||
+    nextQuestion.presentationResponse !== undefined;
+
+  return {
+    ...nextQuestion,
+    status: nextQuestion.status ?? (hasResponse ? "edited" : "unedited"),
+  };
+};
+
 function QuestionPage(props: Props) {
-  const { attempt, assignmentId } = props;
+  const { attempt, assignmentId, isNewAttempt } = props;
   const { questions, id, expiresAt } = attempt;
   const debugLog = useDebugLog();
   const router = useRouter();
@@ -42,41 +249,24 @@ function QuestionPage(props: Props) {
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
 
   useEffect(() => {
+    if (isNewAttempt) {
+      clearAssignmentLocalStorage(assignmentId);
+    }
+  }, [isNewAttempt, assignmentId]);
+
+  useEffect(() => {
     setTipsVersion("v1.0");
   }, []);
 
   useEffect(() => {
     const fetchAssignment = async () => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("=== fetchAssignment called ===");
-        console.log("assignmentId:", assignmentId);
-      }
-
       const assignment = await getAssignment(assignmentId);
-
-      if (process.env.NODE_ENV === "development") {
-        console.log("=== getAssignment response ===");
-        console.log("Full assignment:", assignment);
-        console.log("questionControls field:", assignment?.questionControls);
-      }
-
       if (assignment) {
         if (
           !assignmentDetails ||
           assignmentDetails.id !== assignment.id ||
           JSON.stringify(assignmentDetails) !== JSON.stringify(assignment)
         ) {
-          if (process.env.NODE_ENV === "development") {
-            console.log(
-              "=== Question/index.tsx: Setting Assignment Details ===",
-            );
-            console.log("assignment from API:", assignment);
-            console.log(
-              "questionControls from API:",
-              assignment.questionControls,
-            );
-          }
-
           setAssignmentDetails({
             id: assignment.id,
             name: assignment.name,
@@ -107,10 +297,12 @@ function QuestionPage(props: Props) {
     ) {
       void fetchAssignment();
     }
-    const questionsWithStatus = questions.map((question) => ({
-      ...question,
-      status: question.status ?? "unedited",
-    }));
+    const questionsWithStatus = questions.map((question) =>
+      hydrateQuestionResponse({
+        ...question,
+        status: question.status ?? "unedited",
+      }),
+    );
 
     const expiresAtMs = expiresAt
       ? typeof expiresAt === "string"

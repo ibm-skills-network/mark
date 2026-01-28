@@ -43,7 +43,7 @@ const transformCache = new Map<
   string,
   { data: any; metadata: TransformMetadata; expiry: number }
 >();
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_TTL = 0;
 const BASE64_REGEX = /^[A-Za-z0-9+/]+=*$/;
 const MAX_BASE64_DEPTH = 5;
 

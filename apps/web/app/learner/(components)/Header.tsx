@@ -217,7 +217,9 @@ function LearnerHeader() {
     setCurrentAttemptId(activeAttemptId);
 
     if (!assignmentId) {
-      toast.error("Assignment ID is missing.");
+      toast.error(
+        "Assignment ID is missing, exit and try launching the assignment again.",
+      );
       return;
     }
 

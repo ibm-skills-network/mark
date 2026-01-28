@@ -87,9 +87,13 @@ async function LearnerLayout(props: Props) {
 
   const inProgressAttempts = listOfAttempts.filter(isAttemptInProgress);
   const latestInProgressAttempt = getLatestAttempt(inProgressAttempts);
+
+  const isNewAttempt = !latestInProgressAttempt;
+
   const attemptId = latestInProgressAttempt
     ? latestInProgressAttempt.id
     : await createAttempt(assignmentId, cookieHeader);
+
   log(
     "Attempt resolved",
     latestInProgressAttempt
@@ -177,6 +181,7 @@ async function LearnerLayout(props: Props) {
         cookieHeader={cookieHeader}
         role={role}
         lang={searchParams.lang}
+        isNewAttempt={isNewAttempt}
       />
     </Suspense>
   );
@@ -188,12 +193,14 @@ async function AttemptLoader({
   cookieHeader,
   role,
   lang,
+  isNewAttempt,
 }: {
   assignmentId: number;
   attemptId: number;
   cookieHeader: string;
   role: string;
   lang?: string;
+  isNewAttempt: boolean;
 }) {
   const attempt = await getAttempt(
     Number(assignmentId),
@@ -215,6 +222,7 @@ async function AttemptLoader({
           attempt={attempt}
           assignmentId={assignmentId}
           role={role}
+          isNewAttempt={isNewAttempt}
         />
       </main>
     )

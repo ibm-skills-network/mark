@@ -59,10 +59,11 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
         </button>
       </div>
       <div
-        className={`px-4 sm:px-6 py-4 transition-all duration-300 ${isCollapsed
-          ? "max-h-0 opacity-0 py-0 sm:max-h-none sm:opacity-100 sm:py-4 overflow-hidden"
-          : "max-h-none opacity-100"
-          }`}
+        className={`px-4 sm:px-6 py-4 transition-all duration-300 ${
+          isCollapsed
+            ? "max-h-0 opacity-0 py-0 sm:max-h-none sm:opacity-100 sm:py-4 overflow-hidden"
+            : "max-h-none opacity-100"
+        }`}
       >
         <MarkdownViewer
           className="text-gray-600 text-sm sm:text-base"
@@ -116,6 +117,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     graded,
     published = false,
   } = assignment;
+
+  const normalizedNumAttempts = numAttempts ?? -1;
+
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
     (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
@@ -155,10 +159,12 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const assignmentState =
     !published && role === "learner"
       ? "not-published"
-      : getAssignmentState(attempts, numAttempts);
+      : getAssignmentState(attempts, normalizedNumAttempts);
 
   const attemptsLeft =
-    numAttempts === -1 ? Infinity : Math.max(0, numAttempts - attempts.length);
+    normalizedNumAttempts === -1
+      ? Infinity
+      : Math.max(0, normalizedNumAttempts - attempts.length);
 
   const latestAttempt = getLatestAttempt(attempts || []);
 
@@ -367,10 +373,11 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
               </button>
             </div>
             <div
-              className={`transition-all duration-300 ${isAboutCollapsed
-                ? "max-h-0 opacity-0 overflow-hidden sm:max-h-none sm:opacity-100"
-                : "max-h-none opacity-100"
-                }`}
+              className={`transition-all duration-300 ${
+                isAboutCollapsed
+                  ? "max-h-0 opacity-0 overflow-hidden sm:max-h-none sm:opacity-100"
+                  : "max-h-none opacity-100"
+              }`}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 p-4 sm:p-6">
                 <div className="flex flex-col gap-1 text-gray-600">
@@ -400,10 +407,11 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                     Assignment attempts
                   </span>
                   <span className="text-sm">
-                    {numAttempts === -1
+                    {normalizedNumAttempts === -1
                       ? "Unlimited"
-                      : `${attemptsLeft} attempt${attemptsLeft > 1 ? "s" : ""
-                      } left`}
+                      : `${attemptsLeft} attempt${
+                          attemptsLeft > 1 ? "s" : ""
+                        } left`}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1 text-gray-600">
