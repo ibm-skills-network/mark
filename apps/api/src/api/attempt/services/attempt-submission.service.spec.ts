@@ -8,6 +8,7 @@ import { PrismaService } from "../../../database/prisma.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { AttemptValidationService } from "./attempt-validation.service";
+import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
@@ -83,6 +84,10 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     put: jest.fn(),
   };
 
+  const mockLtiGradeSyncService = {
+    createAndSync: jest.fn(),
+  };
+
   type TestResponse = CreateQuestionResponseAttemptResponseDto & {
     metadata?: Record<string, unknown> | null;
     learnerResponse?: unknown;
@@ -129,6 +134,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           provide: QuestionVariantService,
           useValue: mockQuestionVariantService,
         },
+        { provide: LtiGradeSyncService, useValue: mockLtiGradeSyncService },
         { provide: HttpService, useValue: mockHttpService },
       ],
     }).compile();

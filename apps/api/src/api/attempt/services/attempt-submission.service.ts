@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
-import { HttpService } from "@nestjs/axios";
 import {
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -16,7 +16,6 @@ import {
   ResponseType,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
-import { GRADE_SUBMISSION_EXCEPTION } from "src/api/assignment/attempt/api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
@@ -24,6 +23,7 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
+import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   GetAssignmentResponseDto,
@@ -56,12 +56,15 @@ import {
 } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
+import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
 
 @Injectable()
 export class AttemptSubmissionService {
+  private readonly logger = new Logger(AttemptSubmissionService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly validationService: AttemptValidationService,
@@ -70,8 +73,51 @@ export class AttemptSubmissionService {
     private readonly questionResponseService: QuestionResponseService,
     private readonly translationService: TranslationService,
     private readonly questionVariantService: QuestionVariantService,
-    private readonly httpService: HttpService,
+    private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {}
+
+  async autoSaveQuestionResponse(
+    attemptId: number,
+    assignmentId: number,
+    questionId: number,
+    requestDto: CreateQuestionResponseAttemptRequestDto,
+    userSession: UserSession,
+    language: string,
+  ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    const responseDto =
+      await this.questionResponseService.createQuestionResponse(
+        attemptId,
+        { ...requestDto, id: questionId },
+        userSession.role,
+        assignmentId,
+        language,
+      );
+
+    await this.prisma.questionResponse.deleteMany({
+      where: {
+        assignmentAttemptId: attemptId,
+        questionId,
+        id: { not: responseDto.id },
+      },
+    });
+
+    return this.sanitizeAutoSaveResponse(responseDto, userSession.role);
+  }
+
+  private sanitizeAutoSaveResponse(
+    responseDto: CreateQuestionResponseAttemptResponseDto,
+    role: UserRole,
+  ): CreateQuestionResponseAttemptResponseDto {
+    if (role !== UserRole.LEARNER) {
+      return responseDto;
+    }
+
+    return {
+      id: responseDto.id,
+      questionId: responseDto.questionId,
+      question: "",
+    };
+  }
   /**
    * Creates a new assignment attempt
    */
@@ -860,8 +906,6 @@ export class AttemptSubmissionService {
         },
       });
 
-      // Questions are graded from 0-90% by GradingProgressService
-      // Reserve 91-100% for finalization steps
       const successfulQuestionResponses =
         await this.questionResponseService.submitQuestions(
           updateDto.responsesForQuestions,
@@ -878,29 +922,12 @@ export class AttemptSubmissionService {
         await progressCallback("Calculating final grade...", 92);
       }
 
-      // FIXED: Calculate totalPossiblePoints from the actual question responses
-      // instead of looking up questions which may have been deleted or filtered
       const { totalPossiblePoints, missingQuestions } =
         await this.calculateTotalPossiblePointsWithValidation(
           successfulQuestionResponses,
           assignment.questions,
         );
 
-      // Validation: Log warning if any questions are missing
-      if (missingQuestions.length > 0) {
-        console.warn(
-          `[GRADING WARNING] Missing questions in totalPossiblePoints calculation for attemptId ${attemptId}:`,
-          {
-            attemptId,
-            assignmentId,
-            missingQuestionIds: missingQuestions,
-            responseCount: successfulQuestionResponses.length,
-            foundQuestionsCount: assignment.questions.length,
-          },
-        );
-      }
-
-      // Validation: Ensure totalPossiblePoints is valid
       if (totalPossiblePoints <= 0) {
         throw new InternalServerErrorException(
           `Invalid totalPossiblePoints (${totalPossiblePoints}) calculated for attemptId ${attemptId}. ` +
@@ -910,34 +937,12 @@ export class AttemptSubmissionService {
         );
       }
 
-      // Debug logging: Log all response points for verification
-      console.log(`[GRADE CALCULATION DEBUG] attemptId: ${attemptId}`, {
-        responseCount: successfulQuestionResponses.length,
-        responses: successfulQuestionResponses.map((r) => ({
-          questionId: r.questionId,
-          points: r.totalPoints,
-        })),
-        manualSum: successfulQuestionResponses.reduce(
-          (sum, r) => sum + (r.totalPoints || 0),
-          0,
-        ),
-        totalPossiblePoints,
-      });
-
       const { grade, totalPointsEarned } =
         this.gradingService.calculateGradeForLearner(
           successfulQuestionResponses,
           totalPossiblePoints,
         );
 
-      console.log(`[GRADE CALCULATION RESULT] attemptId: ${attemptId}`, {
-        totalPointsEarned,
-        totalPossiblePoints,
-        grade,
-        gradePercentage: (grade * 100).toFixed(2) + "%",
-      });
-
-      // Validation: Ensure grade is within valid range [0, 1]
       if (Number.isNaN(grade) || grade < 0 || grade > 1) {
         throw new InternalServerErrorException(
           `Invalid grade calculated: ${grade}. ` +
@@ -951,6 +956,7 @@ export class AttemptSubmissionService {
           await progressCallback("Sending grade to LTI...", 95);
         }
         await this.handleLtiGradeCallback(
+          attemptId,
           grade,
           authCookie,
           assignmentId,
@@ -966,6 +972,11 @@ export class AttemptSubmissionService {
         attemptId,
         updateDto,
         grade,
+      );
+
+      await this.pruneAutoSavedResponses(
+        attemptId,
+        successfulQuestionResponses,
       );
 
       if (progressCallback) {
@@ -1032,7 +1043,6 @@ export class AttemptSubmissionService {
         await progressCallback("Grading questions...", 10);
       }
 
-      // Author preview: questions graded 10-90%
       const successfulQuestionResponses =
         await this.questionResponseService.submitQuestions(
           updateDto.responsesForQuestions,
@@ -1048,26 +1058,12 @@ export class AttemptSubmissionService {
         await progressCallback("Calculating results...", 92);
       }
 
-      // FIXED: Calculate totalPossiblePoints from the actual question responses
       const { totalPossiblePoints, missingQuestions } =
         await this.calculateTotalPossiblePointsWithValidation(
           successfulQuestionResponses,
           assignment.questions,
         );
 
-      // Validation: Log warning if any questions are missing (for author preview)
-      if (missingQuestions.length > 0) {
-        console.warn(
-          `[GRADING WARNING] Missing questions in author preview for assignmentId ${assignmentId}:`,
-          {
-            assignmentId,
-            missingQuestionIds: missingQuestions,
-            responseCount: successfulQuestionResponses.length,
-          },
-        );
-      }
-
-      // Validation: Ensure totalPossiblePoints is valid
       if (totalPossiblePoints <= 0) {
         throw new InternalServerErrorException(
           `Invalid totalPossiblePoints (${totalPossiblePoints}) in author preview for assignmentId ${assignmentId}.`,
@@ -1154,6 +1150,7 @@ export class AttemptSubmissionService {
    * Handle the LTI grade callback
    */
   private async handleLtiGradeCallback(
+    attemptId: number,
     grade: number,
     authCookie: string,
     assignmentId: number,
@@ -1180,7 +1177,13 @@ export class AttemptSubmissionService {
       highestOverall = grade;
     }
 
-    await this.sendGradeToLtiGateway(highestOverall, authCookie);
+    await this.sendGradeToLtiGateway(
+      attemptId,
+      highestOverall,
+      authCookie,
+      assignmentId,
+      userId,
+    );
   }
 
   /**
@@ -1213,37 +1216,81 @@ export class AttemptSubmissionService {
     });
   }
 
+  private async pruneAutoSavedResponses(
+    attemptId: number,
+    responses: CreateQuestionResponseAttemptResponseDto[],
+  ): Promise<void> {
+    const responseIds = [
+      ...new Set(
+        responses
+          .map((response) => response.id)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    ];
+
+    if (responseIds.length === 0) {
+      return;
+    }
+
+    try {
+      await this.prisma.questionResponse.deleteMany({
+        where: {
+          assignmentAttemptId: attemptId,
+          id: { notIn: responseIds },
+        },
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+    }
+  }
+
   /**
-   * Send a grade to the LTI gateway
+   * Send a grade to the LTI gateway using the retry service.
+   * This method delegates to LtiGradeSyncService which handles retries, logging, and notifications.
+   * It does NOT throw exceptions - failures are handled gracefully with scheduled retries.
    */
   private async sendGradeToLtiGateway(
+    attemptId: number,
     grade: number,
     authCookie: string,
+    assignmentId: number,
+    userId: string,
   ): Promise<void> {
-    try {
-      const ltiGatewayResponse = await this.httpService
-        .put(
-          process.env.GRADING_LTI_GATEWAY_URL,
-          { score: grade },
-          {
-            headers: {
-              Cookie: `authentication=${authCookie}`,
-            },
-          },
-        )
-        .toPromise();
+    this.logger.log(
+      `Initiating LTI grade sync for attempt ${attemptId}, grade: ${grade}`,
+    );
 
-      if (ltiGatewayResponse.status !== 200) {
-        throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
+    try {
+      const syncResult = await this.ltiGradeSyncService.createAndSync({
+        attemptId,
+        userId,
+        assignmentId,
+        grade,
+        authCookie,
+      });
+
+      if (syncResult.success) {
+        this.logger.log(
+          `✅ Successfully synced grade ${grade} for attempt ${attemptId}`,
+        );
+      } else {
+        // Sync failed but retry is scheduled - log it but don't throw
+        this.logger.warn(
+          `⏰ LTI grade sync failed for attempt ${attemptId}, but retry is scheduled. ` +
+            `Status: ${syncResult.status}, Message: ${syncResult.message}`,
+        );
       }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "An unknown error occurred while sending the grade to the LTI gateway.";
-      throw new InternalServerErrorException(
-        `${GRADE_SUBMISSION_EXCEPTION}: ${errorMessage}`,
+    } catch (error) {
+      // Even if the sync service throws (unlikely), we should NOT crash the grading job
+      // Log the error and continue - the sync service will handle retries
+      this.logger.error(
+        `Unexpected error while initiating LTI grade sync for attempt ${attemptId}`,
+        error instanceof Error ? error.stack : String(error),
       );
+
+      // DO NOT throw - we don't want to fail the grading job
+      // The grade is saved in the database, LTI sync can be retried later
     }
   }
 
@@ -1275,7 +1322,6 @@ export class AttemptSubmissionService {
       const questionTotalPoints = questionMap.get(response.questionId);
 
       if (questionTotalPoints === undefined) {
-        // Question not found in active questions - check metadata first
         const responseMetadata = response.metadata as {
           maxPossiblePoints?: number;
         } | null;
@@ -1317,15 +1363,7 @@ export class AttemptSubmissionService {
           if (points !== undefined && points > 0) {
             totalPossiblePoints += points;
             missingQuestions.push(questionId);
-            console.warn(
-              `[GRADING WARNING] Used deleted question ${questionId} totalPoints (${points}) ` +
-                `from database for grade calculation.`,
-            );
           } else {
-            console.error(
-              `[GRADING ERROR] Cannot find totalPoints for questionId ${questionId}. ` +
-                `Question doesn't exist in database. This will result in incorrect grade calculation!`,
-            );
             throw new InternalServerErrorException(
               `Cannot calculate totalPossiblePoints: Question ${questionId} not found ` +
                 `in database. This prevents accurate grading.`,
@@ -1336,10 +1374,6 @@ export class AttemptSubmissionService {
         if (error instanceof InternalServerErrorException) {
           throw error;
         }
-        console.error(
-          `[GRADING ERROR] Database query failed while looking up deleted questions:`,
-          error,
-        );
         throw new InternalServerErrorException(
           `Failed to query deleted questions for grade calculation: ${
             error instanceof Error ? error.message : String(error)
@@ -1347,13 +1381,6 @@ export class AttemptSubmissionService {
         );
       }
     }
-
-    console.log(`[TOTAL POSSIBLE POINTS RESULT]`, {
-      totalPossiblePoints,
-      missingQuestionsCount: missingQuestions.length,
-      missingQuestionIds: missingQuestions,
-      queriedDeletedQuestions: missingQuestionIds,
-    });
 
     return { totalPossiblePoints, missingQuestions };
   }

@@ -431,6 +431,7 @@ model AssignmentAttempt {
   gradingProgress       GradingProgress?
 
   GradingJob GradingJob[]
+  LtiGradeSync LtiGradeSync[]
 
   @@index([assignmentId])
   @@index([userId])
@@ -606,6 +607,75 @@ enum ReportType {
   PERFORMANCE  /// Performance-related issue
   FALSE_MARKING /// Report for false marking
   OTHER        /// Other types of reports
+}
+
+/// Enum for LTI grade sync status
+enum LtiSyncStatus {
+  PENDING      /// Initial state, waiting to be processed
+  IN_PROGRESS  /// Currently being sent
+  SUCCESS      /// Successfully synced
+  FAILED       /// Failed after all retries
+  SCHEDULED    /// Scheduled for retry
+}
+
+/// Tracks LTI grade synchronization with retry mechanism
+model LtiGradeSync {
+  id          Int      @id @default(autoincrement())
+  attemptId   Int
+  attempt     AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  userId      String
+  assignmentId Int
+  grade       Float
+
+  // Status tracking
+  status      LtiSyncStatus @default(PENDING)
+  retryCount  Int           @default(0)
+  maxRetries  Int           @default(5)
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastAttemptAt   DateTime?
+  nextRetryAt     DateTime?
+  completedAt     DateTime?
+
+  // Error tracking
+  lastError       String?
+  errorHistory    Json      @default("[]")
+
+  // LTI context
+  authCookie      String
+  ltiGatewayUrl   String?
+
+  // Notifications
+  learnerNotified    Boolean   @default(false)
+  notificationSentAt DateTime?
+
+  // Relations
+  errorLogs   LtiSyncErrorLog[]
+
+  @@index([attemptId])
+  @@index([userId])
+  @@index([status])
+  @@index([nextRetryAt])
+  @@index([createdAt])
+}
+
+/// Detailed error logs for LTI sync attempts
+model LtiSyncErrorLog {
+  id             Int      @id @default(autoincrement())
+  syncId         Int
+  sync           LtiGradeSync @relation(fields: [syncId], references: [id], onDelete: Cascade)
+  attemptNumber  Int
+  errorMessage   String
+  errorStack     String?
+  httpStatus     Int?
+  responseBody   String?
+  timestamp      DateTime @default(now())
+  metadata       Json?
+
+  @@index([syncId])
+  @@index([timestamp])
 }
 
 /// Enum representing the status of a report

@@ -19,6 +19,8 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
+import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { JobStatusServiceV2 } from "src/api/assignment/v2/services/job-status.service";
 import {
   UserRole,
@@ -732,6 +734,24 @@ export class AttemptServiceV2 {
     return this.submissionService.createAssignmentAttempt(
       assignmentId,
       userSession,
+    );
+  }
+
+  async autoSaveQuestionResponse(
+    attemptId: number,
+    assignmentId: number,
+    questionId: number,
+    requestDto: CreateQuestionResponseAttemptRequestDto,
+    userSession: UserSession,
+    language: string,
+  ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    return this.submissionService.autoSaveQuestionResponse(
+      attemptId,
+      assignmentId,
+      questionId,
+      requestDto,
+      userSession,
+      language,
     );
   }
 
