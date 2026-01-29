@@ -41,6 +41,7 @@ import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import ErrorModal from "@/components/ErrorModal";
+import GradeSyncStatus from "@/components/GradeSyncStatus";
 
 const DynamicConfetti = dynamic(() => import("react-confetti"), {
   ssr: false,
@@ -672,6 +673,21 @@ function SuccessPage() {
             </motion.h1>
           )}
         </div>
+
+        {/* LTI Grade Sync Status */}
+        {role === "learner" && !Number.isNaN(grade) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="w-full"
+          >
+            <GradeSyncStatus
+              attemptId={attemptId}
+              assignmentId={assignmentId}
+            />
+          </motion.div>
+        )}
 
         {role === "learner" && (
           <div className="flex flex-col sm:flex-row items-center gap-y-4 sm:gap-y-0 gap-x-4 justify-center p-4">

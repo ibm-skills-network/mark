@@ -39,9 +39,10 @@ import { PdfStructureExtractorService } from "./services/pdf-structure-extractor
 import { PdfAnnotationService } from "./services/pdf-annotation.service";
 import { GradingProgressService } from "./services/grading-progress.service";
 import { AdminEmailService } from "../../auth/services/admin-email.service";
+import { LtiSyncModule } from "./lti-sync.module";
 
 @Module({
-  imports: [LlmModule, AssignmentModuleV2],
+  imports: [LlmModule, AssignmentModuleV2, LtiSyncModule],
   controllers: [AttemptControllerV2],
   providers: [
     AttemptServiceV2,

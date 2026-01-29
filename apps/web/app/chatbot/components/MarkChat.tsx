@@ -57,6 +57,26 @@ import { useDropzone } from "react-dropzone";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
+import type { User } from "@/config/types";
+
+let cachedUser: User | null = null;
+let cachedUserPromise: Promise<User | null> | null = null;
+
+const fetchUserCached = async (): Promise<User | null> => {
+  if (cachedUser) return cachedUser;
+  if (!cachedUserPromise) {
+    cachedUserPromise = getUser()
+      .then((user) => {
+        cachedUser = user ?? null;
+        return cachedUser;
+      })
+      .catch((error) => {
+        cachedUserPromise = null;
+        throw error;
+      });
+  }
+  return cachedUserPromise;
+};
 
 interface ScreenshotDropzoneProps {
   file: File | null | undefined;
@@ -1321,14 +1341,20 @@ export const MarkChat = () => {
     );
   };
   useEffect(() => {
+    let cancelled = false;
     const fetchUser = async () => {
       try {
-        const userData = await getUser();
-        setUser(userData);
+        const userData = await fetchUserCached();
+        if (!cancelled) {
+          setUser(userData);
+        }
       } catch (error) {}
     };
-    fetchUser();
-  }, [userRole, learnerContext.assignmentId]);
+    void fetchUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const initializeChat = async () => {

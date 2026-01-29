@@ -13,7 +13,10 @@ import QuestionPage from "@learnerComponents/Question";
 import { headers } from "next/headers";
 import { Suspense } from "react";
 import ClientLearnerLayout from "./ClientComponent";
-import { coerceSubmitted } from "@/app/learner/utils/attempts";
+import {
+  getLatestAttempt,
+  isAttemptInProgress,
+} from "@/app/learner/utils/attempts";
 
 interface Props {
   params: { assignmentId: string };
@@ -82,16 +85,19 @@ async function LearnerLayout(props: Props) {
     );
   }
 
-  const unsubmittedAssignment = listOfAttempts.find(
-    (attempt) => !coerceSubmitted(attempt.submitted),
-  );
-  const attemptId = unsubmittedAssignment
-    ? unsubmittedAssignment.id
+  const inProgressAttempts = listOfAttempts.filter(isAttemptInProgress);
+  const latestInProgressAttempt = getLatestAttempt(inProgressAttempts);
+
+  const isNewAttempt = !latestInProgressAttempt;
+
+  const attemptId = latestInProgressAttempt
+    ? latestInProgressAttempt.id
     : await createAttempt(assignmentId, cookieHeader);
+
   log(
     "Attempt resolved",
-    unsubmittedAssignment
-      ? `Reusing attempt ${unsubmittedAssignment.id}`
+    latestInProgressAttempt
+      ? `Reusing attempt ${latestInProgressAttempt.id}`
       : `Created attempt ${attemptId}`,
   );
 
@@ -175,6 +181,7 @@ async function LearnerLayout(props: Props) {
         cookieHeader={cookieHeader}
         role={role}
         lang={searchParams.lang}
+        isNewAttempt={isNewAttempt}
       />
     </Suspense>
   );
@@ -186,12 +193,14 @@ async function AttemptLoader({
   cookieHeader,
   role,
   lang,
+  isNewAttempt,
 }: {
   assignmentId: number;
   attemptId: number;
   cookieHeader: string;
   role: string;
   lang?: string;
+  isNewAttempt: boolean;
 }) {
   const attempt = await getAttempt(
     Number(assignmentId),
@@ -213,6 +222,7 @@ async function AttemptLoader({
           attempt={attempt}
           assignmentId={assignmentId}
           role={role}
+          isNewAttempt={isNewAttempt}
         />
       </main>
     )

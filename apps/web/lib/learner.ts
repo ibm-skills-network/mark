@@ -471,35 +471,7 @@ export async function submitAssignment(
           }
         });
 
-        eventSource.addEventListener("error", (event: any) => {
-          if (!isCompleted && event?.data) {
-            resetTimeout();
-            try {
-              const data = JSON.parse(event.data);
-
-              if (data?.status === "Failed") {
-                isCompleted = true;
-                const errorMessage =
-                  data.progress || data.error || "Grading failed";
-                onProgress?.("failed", 0, errorMessage);
-
-                eventSource.close();
-                clearTimeout(timeout);
-
-                setTimeout(() => {
-                  toast.error(errorMessage);
-                  reject(new Error(errorMessage));
-                }, 2000);
-              } else if (data?.error) {
-                const streamErrorMessage =
-                  data.error || "Grading stream reported an error";
-                onProgress?.("failed", 0, streamErrorMessage);
-              }
-            } catch (error) {}
-          }
-        });
-
-        eventSource.onerror = (error) => {
+        const handleConnectionError = () => {
           if (!isCompleted) {
             const errorDetails = {
               attempt: currentAttempt,
@@ -532,6 +504,41 @@ export async function submitAssignment(
             eventSource.close();
           }
         };
+
+        eventSource.addEventListener("error", (event: any) => {
+          if (isCompleted) {
+            return;
+          }
+
+          if (event?.data) {
+            resetTimeout();
+            try {
+              const data = JSON.parse(event.data);
+
+              if (data?.status === "Failed") {
+                isCompleted = true;
+                const errorMessage =
+                  data.progress || data.error || "Grading failed";
+                onProgress?.("failed", 0, errorMessage);
+
+                eventSource.close();
+                clearTimeout(timeout);
+
+                setTimeout(() => {
+                  toast.error(errorMessage);
+                  reject(new Error(errorMessage));
+                }, 2000);
+              } else if (data?.error) {
+                const streamErrorMessage =
+                  data.error || "Grading stream reported an error";
+                onProgress?.("failed", 0, streamErrorMessage);
+              }
+            } catch (error) {}
+            return;
+          }
+
+          handleConnectionError();
+        });
       };
 
       const handleFinalFailure = async () => {

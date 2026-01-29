@@ -18,6 +18,11 @@ type ErrorModalProps = {
   primaryActionHrefOverride?: string;
 };
 
+type ReportStatus = {
+  tone: "success" | "error";
+  message: string;
+};
+
 export default function ErrorModal(props: ErrorModalProps) {
   const {
     error,
@@ -35,12 +40,22 @@ export default function ErrorModal(props: ErrorModalProps) {
   } = props;
 
   const [open, setOpen] = useState(true);
+  const [reportStatus, setReportStatus] = useState<ReportStatus | null>(null);
   const handleClose = () => {
     setOpen(false);
+    setReportStatus(null);
     onClose?.();
   };
 
   if (!open) return null;
+
+  const showFooter =
+    reportStatus ||
+    primaryActionHref ||
+    primaryActionHrefOverride ||
+    primaryActionLabel;
+
+  const footerLayout = reportStatus ? "justify-between" : "justify-end";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6">
@@ -69,21 +84,39 @@ export default function ErrorModal(props: ErrorModalProps) {
               debugDetails={debugDetails}
               stateTimeline={stateTimeline}
               className="shadow-none"
+              onReportStatusChange={setReportStatus}
             />
           </div>
 
-          {(primaryActionHref ||
-            primaryActionHrefOverride ||
-            primaryActionLabel) && (
-            <div className="border-t border-slate-200 bg-white/90 px-6 sm:px-8 py-4 flex justify-end">
-              <a
-                href={primaryActionHrefOverride || primaryActionHref || "#"}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-700"
-              >
-                {primaryActionLabel || "Go back"}
-              </a>
+          {showFooter ? (
+            <div
+              className={`border-t border-slate-200 bg-white/90 px-6 sm:px-8 py-4 flex flex-wrap items-center gap-3 ${footerLayout}`}
+            >
+              {reportStatus ? (
+                <span
+                  role="status"
+                  aria-live="polite"
+                  className={`rounded-md border px-3 py-2 text-sm font-medium ${
+                    reportStatus.tone === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-rose-200 bg-rose-50 text-rose-700"
+                  }`}
+                >
+                  {reportStatus.message}
+                </span>
+              ) : null}
+              {primaryActionHref ||
+              primaryActionHrefOverride ||
+              primaryActionLabel ? (
+                <a
+                  href={primaryActionHrefOverride || primaryActionHref || "#"}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-700"
+                >
+                  {primaryActionLabel || "Go back"}
+                </a>
+              ) : null}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

@@ -95,7 +95,160 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       }
     }
 
+    // this.validateFileTypes(question, requestDto.learnerFileResponse);
+
     return true;
+  }
+
+  /**
+   * Validates that uploaded file types/names match expectations from the question text.
+   * This catches obvious mismatches BEFORE sending to LLM for grading.
+   */
+  private validateFileTypes(
+    question: QuestionDto,
+    uploadedFiles: LearnerFileUpload[],
+  ): void {
+    // Extract expected file types/names from question text
+    const expectedFileInfo = this.extractExpectedFileInfo(question.question);
+
+    if (!expectedFileInfo.hasExpectations) {
+      // No specific file expectations found in question text
+      return;
+    }
+
+    // Check each uploaded file
+    for (const file of uploadedFiles) {
+      const filename = file.filename.toLowerCase();
+      const fileExtension = filename.slice(
+        Math.max(0, filename.lastIndexOf(".")),
+      );
+
+      // Check if specific filename is expected
+      if (expectedFileInfo.expectedFilenames.length > 0) {
+        const matchesName = expectedFileInfo.expectedFilenames.some(
+          (expected) => filename.includes(expected.toLowerCase()),
+        );
+
+        if (!matchesName) {
+          this.logger?.warn("Uploaded file does not match expected filename", {
+            questionId: question.id,
+            uploadedFilename: filename,
+            expectedFilenames: expectedFileInfo.expectedFilenames,
+          });
+
+          throw new BadRequestException(
+            `File name mismatch: Expected file name containing one of [${expectedFileInfo.expectedFilenames.join(
+              ", ",
+            )}] ` +
+              `but received "${file.filename}". Please upload the correct file.`,
+          );
+        }
+      }
+
+      // Check if specific file extension is expected
+      if (expectedFileInfo.expectedExtensions.length > 0) {
+        const matchesExtension = expectedFileInfo.expectedExtensions.some(
+          (expected) => fileExtension === expected.toLowerCase(),
+        );
+
+        if (!matchesExtension) {
+          this.logger?.warn(
+            "Uploaded file extension does not match expected type",
+            {
+              questionId: question.id,
+              uploadedExtension: fileExtension,
+              expectedExtensions: expectedFileInfo.expectedExtensions,
+            },
+          );
+
+          throw new BadRequestException(
+            `File type mismatch: Expected file type [${expectedFileInfo.expectedExtensions.join(
+              " or ",
+            )}] ` +
+              `but received "${fileExtension}". Please upload the correct file type.`,
+          );
+        }
+      }
+    }
+
+    this.logger?.info("File type validation passed", {
+      questionId: question.id,
+      uploadedFiles: uploadedFiles.map((f) => f.filename),
+      expectedInfo: expectedFileInfo,
+    });
+  }
+
+  /**
+   * Extracts expected file information from question text using pattern matching.
+   * Looks for patterns like:
+   * - "upload the file named [filename]"
+   * - "submit [filename.xlsx]"
+   * - "upload an Excel file (.xlsx)"
+   * - "upload a PDF (.pdf)"
+   */
+  private extractExpectedFileInfo(questionText: string): {
+    hasExpectations: boolean;
+    expectedFilenames: string[];
+    expectedExtensions: string[];
+  } {
+    const result = {
+      hasExpectations: false,
+      expectedFilenames: [] as string[],
+      expectedExtensions: [] as string[],
+    };
+
+    // Pattern 1: Extract specific filenames mentioned in question
+    // Matches: "upload [filename.ext]", "file named [filename.ext]", "submit [filename.ext]"
+    const filenamePattern =
+      /(?:upload|submit|file named|file called|named)\s+(?:the\s+)?(?:file\s+)?(?:named\s+)?["']?([\w.-]+\.[\da-z]+)["']?/gi;
+    let match;
+    while ((match = filenamePattern.exec(questionText)) !== null) {
+      const filename = match[1] as string;
+      if (filename && !result.expectedFilenames.includes(filename)) {
+        result.expectedFilenames.push(filename);
+        result.hasExpectations = true;
+      }
+    }
+
+    // Pattern 2: Extract file extensions
+    // Matches: ".xlsx", ".pdf", ".docx", ".csv", ".json", etc.
+    const extensionPattern = /\.([\dA-Za-z]{2,5})(?:\s|,|;|\.|\)|$)/g;
+    const mentionedExtensions = new Set<string>();
+
+    while ((match = extensionPattern.exec(questionText)) !== null) {
+      const extension = `.${(match[1] as string).toLowerCase()}`;
+      mentionedExtensions.add(extension);
+    }
+
+    // Pattern 3: Common file type keywords
+    const fileTypeKeywords: Record<string, string[]> = {
+      ".xlsx": ["excel", "spreadsheet", "xlsx"],
+      ".xls": ["excel", "xls"],
+      ".pdf": ["pdf"],
+      ".docx": ["word document", "docx", "word"],
+      ".doc": ["word", "doc"],
+      ".csv": ["csv", "comma-separated"],
+      ".json": ["json"],
+      ".txt": ["text file", "txt"],
+      ".zip": ["zip", "compressed"],
+      ".png": ["png", "image"],
+      ".jpg": ["jpg", "jpeg", "image"],
+      ".jpeg": ["jpeg", "jpg", "image"],
+    };
+
+    const lowerText = questionText.toLowerCase();
+    for (const [extension, keywords] of Object.entries(fileTypeKeywords)) {
+      if (keywords.some((keyword) => lowerText.includes(keyword))) {
+        mentionedExtensions.add(extension);
+      }
+    }
+
+    result.expectedExtensions = [...mentionedExtensions];
+    if (result.expectedExtensions.length > 0) {
+      result.hasExpectations = true;
+    }
+
+    return result;
   }
 
   /**
@@ -236,6 +389,8 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       context,
     );
 
+    responseDto = this.normalizePointsToQuestionMax(responseDto, question);
+
     responseDto.metadata = {
       ...responseDto.metadata,
       fileCount: learnerResponse.length,
@@ -278,6 +433,34 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           error: error instanceof Error ? error.message : String(error),
           timestamp: new Date().toISOString(),
         },
+      };
+    }
+
+    return responseDto;
+  }
+
+  private normalizePointsToQuestionMax(
+    responseDto: CreateQuestionResponseAttemptResponseDto,
+    question: QuestionDto,
+  ): CreateQuestionResponseAttemptResponseDto {
+    const maxPoints =
+      typeof question.totalPoints === "number" ? question.totalPoints : 0;
+    const rawPoints =
+      typeof responseDto.totalPoints === "number" ? responseDto.totalPoints : 0;
+
+    let normalizedPoints = this.sanitizePoints(rawPoints);
+    if (maxPoints > 0) {
+      normalizedPoints = Math.min(normalizedPoints, maxPoints);
+    }
+
+    if (normalizedPoints !== rawPoints) {
+      responseDto.totalPoints = normalizedPoints;
+      responseDto.metadata = {
+        ...responseDto.metadata,
+        pointsNormalized: true,
+        pointsNormalizedFrom: rawPoints,
+        pointsNormalizedTo: normalizedPoints,
+        pointsMax: maxPoints,
       };
     }
 
@@ -449,6 +632,69 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
   }
 
   /**
+   * Detects critical issues that should make judge decisions binding immediately.
+   * Critical issues include:
+   * - File type/name mismatches
+   * - Wrong file uploaded
+   * - Missing required files
+   * - Severe grading errors (e.g., awarding points for completely wrong submission)
+   */
+  private detectCriticalIssues(
+    issues: string[],
+    judgeFeedback: string,
+  ): boolean {
+    // Keywords that indicate critical file-related issues
+    const criticalKeywords = [
+      "uploaded a file named",
+      "instead of",
+      "wrong file",
+      "file name mismatch",
+      "file type mismatch",
+      "incorrect file",
+      "different file",
+      "uploaded.*instead",
+      "expected.*file.*but",
+      "\\.json.*instead.*\\.xlsx",
+      "\\.xlsx.*instead.*\\.json",
+      "\\.pdf.*instead.*\\.docx",
+      "not the required file",
+    ];
+
+    // Check issues array
+    for (const issue of issues) {
+      const lowerIssue = issue.toLowerCase();
+      for (const keyword of criticalKeywords) {
+        if (
+          lowerIssue.includes(keyword) ||
+          new RegExp(keyword, "i").test(lowerIssue)
+        ) {
+          this.logger?.info("Critical issue detected in judge issues", {
+            issue,
+            keyword,
+          });
+          return true;
+        }
+      }
+    }
+
+    // Check judge feedback
+    const lowerFeedback = judgeFeedback.toLowerCase();
+    for (const keyword of criticalKeywords) {
+      if (
+        lowerFeedback.includes(keyword) ||
+        new RegExp(keyword, "i").test(lowerFeedback)
+      ) {
+        this.logger?.info("Critical issue detected in judge feedback", {
+          keyword,
+        });
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Create a summary of learner response for judge validation
    */
   private createLearnerResponseSummary(
@@ -553,6 +799,54 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           suggestedPoints: judgeResult.corrections?.points,
           judgeFeedback: judgeResult.feedback,
         });
+
+        // Check for CRITICAL issues that should be binding immediately
+        const hasCriticalIssues = this.detectCriticalIssues(
+          judgeResult.issues || [],
+          judgeResult.feedback,
+        );
+
+        if (hasCriticalIssues) {
+          this.logger?.warn(
+            "Critical issues detected - applying judge corrections immediately",
+            {
+              questionId: question.id,
+              issues: judgeResult.issues,
+              originalPoints: currentResponseDto.totalPoints,
+              judgePoints: judgeResult.corrections?.points,
+            },
+          );
+
+          // Apply judge's corrections immediately for critical issues
+          if (judgeResult.corrections?.points !== undefined) {
+            currentResponseDto.totalPoints = judgeResult.corrections.points;
+          }
+          if (judgeResult.corrections?.feedback) {
+            currentResponseDto.feedback = [
+              {
+                feedback: judgeResult.corrections.feedback,
+              },
+            ];
+          }
+          if (judgeResult.corrections?.rubricScores) {
+            currentResponseDto.metadata = {
+              ...currentResponseDto.metadata,
+              rubricScores: judgeResult.corrections.rubricScores,
+            };
+          }
+
+          currentResponseDto.metadata = {
+            ...currentResponseDto.metadata,
+            judgeValidated: true,
+            judgeApproved: false,
+            criticalIssuesDetected: true,
+            validationAttempts: attempt,
+            judgeFeedback: judgeResult.feedback,
+            judgeIssues: judgeResult.issues,
+          };
+
+          return currentResponseDto;
+        }
 
         if (attempt === maxAttempts) {
           this.logger?.warn(

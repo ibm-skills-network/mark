@@ -22,6 +22,11 @@ type StateEvent = {
 
 type ErrorInput = Error | string | { message: string };
 
+type ReportStatus = {
+  tone: "success" | "error";
+  message: string;
+};
+
 const DEFAULT_HEADLINES: Record<number, string> = {
   401: "Authentication required",
   403: "Access is restricted",
@@ -141,6 +146,7 @@ export default function ErrorPage({
   debugDetails = [],
   stateTimeline = [],
   variant = "page",
+  onReportStatusChange,
 }: {
   error: ErrorInput;
   statusCode?: number;
@@ -151,9 +157,12 @@ export default function ErrorPage({
   debugDetails?: DebugEntry[];
   stateTimeline?: StateEvent[];
   variant?: "page" | "modal";
+  onReportStatusChange?: (status: ReportStatus | null) => void;
 }) {
   const [isReporting, setIsReporting] = useState(false);
-  const [reportStatus, setReportStatus] = useState<string | null>(null);
+  const [reportStatus, setReportStatus] = useState<"success" | "error" | null>(
+    null,
+  );
 
   const errorMessage = useMemo(() => parseErrorMessage(error), [error]);
 
@@ -198,9 +207,20 @@ export default function ErrorPage({
     ],
   );
 
+  const reportSuccessMessage = "Issue reported. Thank you!";
+  const reportErrorMessage = "Failed to send report. Please try again.";
+
+  const reportStatusMessage =
+    reportStatus === "success"
+      ? reportSuccessMessage
+      : reportStatus === "error"
+        ? reportErrorMessage
+        : null;
+
   const handleReport = async () => {
     setIsReporting(true);
     setReportStatus(null);
+    onReportStatusChange?.(null);
     try {
       const res = await fetch("/api/error-report", {
         method: "POST",
@@ -216,9 +236,14 @@ export default function ErrorPage({
         }),
       });
       if (!res.ok) throw new Error(`Report failed with status ${res.status}`);
-      setReportStatus("Issue reported. Thank you!");
-    } catch (err) {
-      setReportStatus("Failed to send report. Please try again.");
+      setReportStatus("success");
+      onReportStatusChange?.({
+        tone: "success",
+        message: reportSuccessMessage,
+      });
+    } catch {
+      setReportStatus("error");
+      onReportStatusChange?.({ tone: "error", message: reportErrorMessage });
     } finally {
       setIsReporting(false);
     }
@@ -266,14 +291,27 @@ export default function ErrorPage({
               <button
                 type="button"
                 onClick={handleReport}
-                disabled={isReporting}
+                disabled={isReporting || reportStatus === "success"}
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-700 disabled:opacity-60"
               >
-                {isReporting ? "Reporting..." : "Report issue"}
+                {isReporting
+                  ? "Reporting..."
+                  : reportStatus === "success"
+                    ? "Reported"
+                    : "Report issue"}
               </button>
-              {reportStatus ? (
-                <span className="text-xs text-gray-600 max-w-xs text-right">
-                  {reportStatus}
+              {reportStatusMessage ? (
+                <span
+                  role="status"
+                  aria-live="polite"
+                  className={cn(
+                    "text-xs max-w-xs text-right rounded-md border px-2 py-1",
+                    reportStatus === "success"
+                      ? "text-emerald-700 border-emerald-200 bg-emerald-50"
+                      : "text-rose-700 border-rose-200 bg-rose-50",
+                  )}
+                >
+                  {reportStatusMessage}
                 </span>
               ) : null}
             </div>

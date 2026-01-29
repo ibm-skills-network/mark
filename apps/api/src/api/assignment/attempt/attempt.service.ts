@@ -6,11 +6,11 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import {
   Assignment,
-  CorrectAnswerVisibility,
   Question,
   QuestionType,
   QuestionVariant,
@@ -20,10 +20,7 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
-import {
-  SuccessPageDataDto,
-  SuccessPageQuestionDto,
-} from "src/api/attempt/dto/success-page-data.dto";
+import { LtiGradeSyncService } from "src/api/attempt/services/lti-grade-sync.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
@@ -99,6 +96,7 @@ export class AttemptServiceV1 {
     private readonly questionService: QuestionService,
     private readonly assignmentService: AssignmentServiceV1,
     private readonly httpService: HttpService,
+    @Optional() private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {}
 
   async submitFeedback(
@@ -304,9 +302,31 @@ export class AttemptServiceV1 {
     return role === UserRole.AUTHOR
       ? this.prisma.assignmentAttempt.findMany({
           where: { assignmentId },
+          include: {
+            assignmentVersion: {
+              select: {
+                id: true,
+                versionNumber: true,
+                isDraft: true,
+                isActive: true,
+                published: true,
+              },
+            },
+          },
         })
       : this.prisma.assignmentAttempt.findMany({
           where: { assignmentId, userId },
+          include: {
+            assignmentVersion: {
+              select: {
+                id: true,
+                versionNumber: true,
+                isDraft: true,
+                isActive: true,
+                published: true,
+              },
+            },
+          },
         });
   }
 
@@ -503,27 +523,61 @@ export class AttemptServiceV1 {
         assignmentAttempt.expiresAt &&
         tenSecondsBeforeNow > assignmentAttempt.expiresAt
       ) {
+        const savedResponses = await this.prisma.questionResponse.findMany({
+          where: { assignmentAttemptId },
+        });
+
+        let totalPointsEarned = 0;
+        let totalPossiblePoints = 0;
+
+        const questions = await this.prisma.question.findMany({
+          where: {
+            assignmentId: assignmentAttempt.assignmentId,
+            isDeleted: false,
+          },
+        });
+
+        for (const question of questions) {
+          totalPossiblePoints += question.totalPoints || 0;
+          const response = savedResponses.find(
+            (r) => r.questionId === question.id,
+          );
+          if (response) {
+            totalPointsEarned += response.points || 0;
+          }
+        }
+
+        const grade =
+          totalPossiblePoints > 0 ? totalPointsEarned / totalPossiblePoints : 0;
+
         await this.prisma.assignmentAttempt.update({
           where: { id: assignmentAttemptId },
           data: {
             submitted: true,
-            grade: 0,
+            grade,
+            expiresAt: new Date(),
             comments:
-              "You submitted the assignment after the deadline. Your submission will not be graded. If you dont have any more attempts, please contact your instructor.",
+              savedResponses.length > 0
+                ? "Your assignment was automatically submitted because the time limit was reached. Your responses have been graded based on what was saved."
+                : "Your assignment was automatically submitted because the time limit was reached. No responses were recorded.",
           },
         });
+
         return {
           id: assignmentAttemptId,
           submitted: true,
           success: true,
-          totalPointsEarned: 0,
-          totalPossiblePoints: 0,
-          grade: 0,
+          totalPointsEarned,
+          totalPossiblePoints,
+          grade,
           showSubmissionFeedback: false,
           showQuestions: false,
           correctAnswerVisibility: "NEVER",
           feedbacksForQuestions: [],
-          message: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
+          message:
+            savedResponses.length > 0
+              ? "Time limit reached. Your saved responses have been graded."
+              : SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
         };
       }
       const preTranslatedQuestions = new Map<number, QuestionDto>();
@@ -636,7 +690,16 @@ export class AttemptServiceV1 {
       if (grade && grade > highestOverall) {
         highestOverall = grade;
       }
-      await this.sendGradeToLtiGateway(highestOverall, authCookie);
+
+      this.queueGradeSyncAsync(
+        assignmentAttemptId,
+        userId,
+        assignmentId,
+        highestOverall,
+        authCookie,
+      ).catch((error: Error) => {
+        console.error("Error queuing LTI grade sync:", error);
+      });
     }
     if (role === UserRole.AUTHOR) {
       return {
@@ -660,6 +723,10 @@ export class AttemptServiceV1 {
         assignmentAttemptId,
         updateAssignmentAttemptDto,
         grade,
+      );
+      await this.pruneAutoSavedResponses(
+        assignmentAttemptId,
+        successfulQuestionResponses,
       );
       return {
         id: result.id,
@@ -1491,7 +1558,91 @@ export class AttemptServiceV1 {
   }
 
   /**
+   * Auto-grades an expired attempt using the last saved question responses.
+   * This ensures learners get credit for their work even if they don't manually submit before timeout.
+   *
+   * @param attemptId - The ID of the expired attempt to grade
+   * @param assignment - The assignment object for grading context
+   * @returns Promise that resolves when grading is complete
+   */
+  private async autoGradeExpiredAttempt(
+    attemptId: number,
+    assignment: LearnerGetAssignmentResponseDto,
+  ): Promise<void> {
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        questionResponses: true,
+        questionVariants: {
+          include: {
+            questionVariant: {
+              include: {
+                variantOf: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!attempt || attempt.submitted) {
+      return;
+    }
+
+    const questions = await this.prisma.question.findMany({
+      where: {
+        assignmentId: attempt.assignmentId,
+        isDeleted: false,
+      },
+    });
+
+    const questionMap = new Map(questions.map((q) => [q.id, q]));
+
+    const questionVariantsMap = new Map(
+      attempt.questionVariants.map((qv) => [
+        qv.questionId,
+        qv.questionVariant || questionMap.get(qv.questionId),
+      ]),
+    );
+
+    let totalPointsEarned = 0;
+    let totalPossiblePoints = 0;
+
+    for (const question of questions) {
+      const questionOrVariant =
+        questionVariantsMap.get(question.id) || question;
+      const response = attempt.questionResponses.find(
+        (r) => r.questionId === question.id,
+      );
+
+      totalPossiblePoints += question.totalPoints || 0;
+
+      if (response) {
+        totalPointsEarned += response.points || 0;
+      }
+    }
+
+    const grade =
+      totalPossiblePoints > 0 ? totalPointsEarned / totalPossiblePoints : 0;
+
+    await this.prisma.assignmentAttempt.update({
+      where: { id: attemptId },
+      data: {
+        submitted: true,
+        grade,
+        expiresAt: new Date(),
+        comments:
+          attempt.questionResponses.length > 0
+            ? "Your assignment was automatically submitted because the time limit was reached. Your responses have been graded based on what was saved."
+            : "Your assignment was automatically submitted because the time limit was reached. No responses were recorded.",
+      },
+    });
+  }
+
+  /**
    * Validates whether a new attempt can be created for the given assignment and user session.
+   * Now includes auto-grading of expired attempts to prevent blocking new attempts.
+   *
    * @param assignment The assignment object.
    * @param userSession The user session.
    */
@@ -1522,9 +1673,19 @@ export class AttemptServiceV1 {
       },
       orderBy: { createdAt: "desc" },
     });
+
+    const expiredAttempts = attempts.filter(
+      (sub) => !sub.submitted && sub.expiresAt && sub.expiresAt < now,
+    );
+
+    for (const expiredAttempt of expiredAttempts) {
+      await this.autoGradeExpiredAttempt(expiredAttempt.id, assignment);
+    }
+
     const ongoingAttempts = attempts.filter(
       (sub) => !sub.submitted && (!sub.expiresAt || sub.expiresAt >= now),
     );
+
     if (ongoingAttempts.length > 0) {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
@@ -1728,7 +1889,60 @@ export class AttemptServiceV1 {
   }
 
   /**
-   * Sends the grade to the LTI gateway if required.
+   * Queues a grade sync to the LTI gateway using the reliable sync service.
+   * This method is async fire-and-forget - it doesn't block the response.
+   *
+   * The LtiGradeSyncService handles:
+   * - Retry with exponential backoff (5 attempts)
+   * - Error logging and tracking
+   * - Learner notifications about sync status
+   * - Scheduled retries processed by cron job
+   *
+   * @param attemptId - The assignment attempt ID
+   * @param userId - The user ID
+   * @param assignmentId - The assignment ID
+   * @param grade - The calculated grade to sync
+   * @param authCookie - The authentication cookie
+   */
+  private async queueGradeSyncAsync(
+    attemptId: number,
+    userId: string,
+    assignmentId: number,
+    grade: number,
+    authCookie: string,
+  ): Promise<void> {
+    if (!this.ltiGradeSyncService) {
+      return this.sendGradeToLtiGateway(grade, authCookie);
+    }
+
+    try {
+      await this.ltiGradeSyncService.createAndSync({
+        attemptId,
+        userId,
+        assignmentId,
+        grade,
+        authCookie,
+      });
+    } catch {
+      try {
+        await this.sendGradeToLtiGateway(grade, authCookie);
+      } catch {
+        // put it back to the queue if the legacy method also fails
+        await this.ltiGradeSyncService.createAndSync({
+          attemptId,
+          userId,
+          assignmentId,
+          grade,
+          authCookie,
+        });
+      }
+    }
+  }
+
+  /**
+   * Sends the grade to the LTI gateway (legacy method, kept for backward compatibility).
+   *
+   * @deprecated Use queueGradeSyncAsync instead for better reliability
    * @param grade The calculated grade.
    * @param authCookie The authentication cookie.
    */
@@ -1787,6 +2001,35 @@ export class AttemptServiceV1 {
       },
       where: { id: assignmentAttemptId },
     });
+  }
+
+  private async pruneAutoSavedResponses(
+    assignmentAttemptId: number,
+    responses: CreateQuestionResponseAttemptResponseDto[],
+  ): Promise<void> {
+    const responseIds = [
+      ...new Set(
+        responses
+          .map((response) => response.id)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    ];
+
+    if (responseIds.length === 0) {
+      return;
+    }
+
+    try {
+      await this.prisma.questionResponse.deleteMany({
+        where: {
+          assignmentAttemptId,
+          id: { notIn: responseIds },
+        },
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+    }
   }
 
   /**
@@ -2953,7 +3196,6 @@ export class AttemptServiceV1 {
         }),
       );
 
-      // Parse learner response for multiple choice questions
       let learnerChoices: string[] | undefined;
       if (
         (question.type === "SINGLE_CORRECT" ||
@@ -2962,13 +3204,9 @@ export class AttemptServiceV1 {
       ) {
         const learnerResponse = correspondingResponses[0]?.learnerResponse;
         if (learnerResponse && typeof learnerResponse === "string") {
-          try {
-            const parsed: unknown = JSON.parse(learnerResponse);
-            if (Array.isArray(parsed)) {
-              learnerChoices = parsed as string[];
-            }
-          } catch {
-            // If parsing fails, learnerChoices remains undefined
+          const parsed: unknown = JSON.parse(learnerResponse);
+          if (Array.isArray(parsed)) {
+            learnerChoices = parsed as string[];
           }
         }
       }

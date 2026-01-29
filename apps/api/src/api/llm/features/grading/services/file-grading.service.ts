@@ -22,11 +22,13 @@ import { Logger } from "winston";
 import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
 import {
   LLM_RESOLVER_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
+  TOKEN_COUNTER,
 } from "../../../llm.constants";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 import {
@@ -54,10 +56,25 @@ type GradingOutput = {
 @Injectable()
 export class FileGradingService implements IFileGradingService {
   private readonly logger: Logger;
+  private readonly contextWindowByModel: Record<string, number> = {
+    "gpt-5-mini": 128_000,
+    "gpt-5o-mini": 128_000,
+    "gpt-5": 128_000,
+    "gpt-4o-mini": 128_000,
+    "gpt-4o": 128_000,
+    "gpt-4.1-mini": 128_000,
+    "gpt-4.1": 128_000,
+  };
+  private readonly defaultContextWindow = 32_000;
+  private readonly contextSafetyRatio = 0.8;
+  private readonly minimumChunkTokens = 4000;
+  private readonly maximumChunkTokens = 20_000;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
+    @Inject(TOKEN_COUNTER)
+    private readonly tokenCounter: ITokenCounter,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
     @Inject(LLM_RESOLVER_SERVICE)
@@ -99,7 +116,9 @@ export class FileGradingService implements IFileGradingService {
       );
     }
 
+    const questionMaxPoints = totalPoints;
     let maxTotalPoints = totalPoints;
+    let rubricMaxTotal = 0;
     const rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[] = [];
 
     if (
@@ -122,6 +141,7 @@ export class FileGradingService implements IFileGradingService {
             });
           }
         }
+        rubricMaxTotal = sum;
         maxTotalPoints = sum;
       }
     }
@@ -141,7 +161,7 @@ export class FileGradingService implements IFileGradingService {
 
     if (hasStructuredContent) {
       this.logger.info("Using evidence-based grading with structured content");
-      return await this.gradeWithEvidenceBasedApproach(
+      const model = await this.gradeWithEvidenceBasedApproach(
         learnerResponse,
         question,
         maxTotalPoints,
@@ -149,6 +169,11 @@ export class FileGradingService implements IFileGradingService {
         assignmentId,
         language,
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        model,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
 
@@ -177,28 +202,22 @@ export class FileGradingService implements IFileGradingService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    const prompt = new PromptTemplate({
+    const prompt = this.buildFileGradingPrompt({
       template: selectedTemplate,
-      inputVariables: [],
-      partialVariables: {
-        question: () => question,
-        files: () =>
-          JSON.stringify(
-            learnerResponse.map((item) => ({
-              filename: item.filename,
-              content: item.content,
-            })),
-          ),
-        total_points: () => maxTotalPoints.toString(),
-        scoring_type: () => scoringCriteriaType,
-        scoring_criteria: () => JSON.stringify(scoringCriteria),
-        grading_type: () => responseType,
-        language: () => language ?? "en",
-        format_instructions: () => formatInstructions,
-      },
+      question,
+      files: learnerResponse.map((item) => ({
+        filename: item.filename,
+        content: this.getFileContentForPrompt(item),
+      })),
+      maxTotalPoints,
+      scoringCriteriaType,
+      scoringCriteria,
+      responseType,
+      language,
+      formatInstructions,
     });
     const extractedContent = learnerResponse
-      .map((item) => item.content)
+      .map((item) => this.getFileContentForPrompt(item))
       .join(" ");
     const inputLength =
       question.length +
@@ -217,23 +236,76 @@ export class FileGradingService implements IFileGradingService {
 
     let response: string;
     try {
-      response = await this.processPromptWithRetry(
-        prompt,
-        assignmentId,
+      const estimatedTokens = this.estimateTokensForFileGrading(
+        question,
+        extractedContent,
+        scoringCriteria,
         selectedModel,
-        maxTotalPoints,
-        rubricMaxPoints,
       );
+      const safeTokenLimit = this.getSafeContextLimit(selectedModel);
+
+      if (estimatedTokens > safeTokenLimit) {
+        this.logger.warn(
+          `Input too large for model ${selectedModel}. Estimated ${estimatedTokens} tokens (limit ${safeTokenLimit}). Using chunked summarization.`,
+        );
+
+        const summarizedFiles = await this.summarizeFilesForGrading(
+          learnerResponse,
+          question,
+          scoringCriteria,
+          assignmentId,
+          language ?? "en",
+          selectedModel,
+          safeTokenLimit,
+        );
+
+        const summarizedTemplate = this.getTemplateForFileType(
+          responseType,
+          true,
+        );
+        const summarizedPrompt = this.buildFileGradingPrompt({
+          template: summarizedTemplate,
+          question,
+          files: summarizedFiles,
+          maxTotalPoints,
+          scoringCriteriaType,
+          scoringCriteria,
+          responseType,
+          language,
+          formatInstructions,
+        });
+
+        response = await this.processPromptWithRetry(
+          summarizedPrompt,
+          assignmentId,
+          selectedModel,
+          maxTotalPoints,
+          rubricMaxPoints,
+        );
+      } else {
+        response = await this.processPromptWithRetry(
+          prompt,
+          assignmentId,
+          selectedModel,
+          maxTotalPoints,
+          rubricMaxPoints,
+        );
+      }
     } catch (retryError) {
       this.logger.error(
         `All LLM retry attempts failed: ${
           retryError instanceof Error ? retryError.message : String(retryError)
         }`,
       );
-      return this.createFallbackResponse(
+      const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "All LLM models failed - using fallback grading",
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        fallback,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
 
@@ -305,7 +377,11 @@ export class FileGradingService implements IFileGradingService {
         );
       }
 
-      return finalModel;
+      return this.scaleFileBasedModelToQuestionMax(
+        finalModel,
+        questionMaxPoints,
+        rubricMaxTotal,
+      );
     } catch (error) {
       this.logger.error(
         `Error parsing LLM response: ${
@@ -313,10 +389,15 @@ export class FileGradingService implements IFileGradingService {
         }. Response: "${response?.slice(0, 200)}..."`,
       );
 
-      return this.createFallbackResponse(
+      const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "Failed to parse LLM response - using fallback grading",
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        fallback,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
   }
@@ -461,7 +542,83 @@ export class FileGradingService implements IFileGradingService {
     );
   }
 
-  private getTemplateForFileType(responseType: ResponseType): string {
+  private scaleFileBasedModelToQuestionMax(
+    model: FileBasedQuestionResponseModel,
+    questionMaxPoints: number,
+    rubricMaxTotal: number,
+  ): FileBasedQuestionResponseModel {
+    if (
+      !questionMaxPoints ||
+      questionMaxPoints <= 0 ||
+      !rubricMaxTotal ||
+      rubricMaxTotal <= 0 ||
+      rubricMaxTotal <= questionMaxPoints
+    ) {
+      return model;
+    }
+
+    const scaleFactor = questionMaxPoints / rubricMaxTotal;
+
+    const scaledRubricScores = model.rubricScores?.map((score) => {
+      if (typeof score.pointsAwarded !== "number") {
+        return score;
+      }
+      return {
+        ...score,
+        pointsAwarded: this.roundScaledPoints(
+          score.pointsAwarded * scaleFactor,
+        ),
+      };
+    });
+
+    const rubricSum = scaledRubricScores?.reduce((sum, score) => {
+      const points =
+        typeof score.pointsAwarded === "number" ? score.pointsAwarded : 0;
+      return sum + points;
+    }, 0);
+
+    const scaledPointsBase =
+      typeof rubricSum === "number" && rubricSum > 0
+        ? rubricSum
+        : model.points * scaleFactor;
+
+    const scaledPoints = Math.min(
+      questionMaxPoints,
+      Math.max(0, this.roundScaledPoints(scaledPointsBase)),
+    );
+
+    this.logger.warn(
+      "Scaling file grading score to match question max points",
+      {
+        originalPoints: model.points,
+        scaledPoints,
+        questionMaxPoints,
+        rubricMaxTotal,
+        scaleFactor,
+      },
+    );
+
+    return new FileBasedQuestionResponseModel(
+      scaledPoints,
+      model.feedback,
+      model.analysis,
+      model.evaluation,
+      model.explanation,
+      model.guidance,
+      scaledRubricScores ?? model.rubricScores,
+      model.highlighting,
+      model.annotatedPdfUrl,
+    );
+  }
+
+  private roundScaledPoints(points: number): number {
+    return Math.round(points * 100) / 100;
+  }
+
+  private getTemplateForFileType(
+    responseType: ResponseType,
+    summarized = false,
+  ): string {
     const fileTypeDescriptions: Record<ResponseType, string> = {
       CODE: "code submission with a focus on functionality, efficiency, style, and best practices",
       REPO: "repository submission with attention to project structure, documentation, testing, and maintainability",
@@ -488,6 +645,10 @@ export class FileGradingService implements IFileGradingService {
     const fileTypeContext =
       fileTypeDescriptions[responseType] || fileTypeDescriptions.OTHER;
 
+    const summaryNote = summarized
+      ? "\n    NOTE: FILES contain summarized extracts of the submission. If details are missing, be conservative and say what evidence is insufficient.\n"
+      : "";
+
     return `
     Grade ${fileTypeContext} using AEEG approach.
 
@@ -495,6 +656,7 @@ export class FileGradingService implements IFileGradingService {
     FILES: {files}
     POINTS: {total_points} | TYPE: {scoring_type}
     CRITERIA: {scoring_criteria}
+    ${summaryNote}
 
     RUBRIC RULES:
     - Select EXACTLY ONE criterion per rubric (no interpolation)
@@ -536,6 +698,404 @@ export class FileGradingService implements IFileGradingService {
 
     {format_instructions}
     `;
+  }
+
+  private buildFileGradingPrompt({
+    template,
+    question,
+    files,
+    maxTotalPoints,
+    scoringCriteriaType,
+    scoringCriteria,
+    responseType,
+    language,
+    formatInstructions,
+  }: {
+    template: string;
+    question: string;
+    files: Array<Record<string, unknown>>;
+    maxTotalPoints: number;
+    scoringCriteriaType: string;
+    scoringCriteria: ScoringDto;
+    responseType: ResponseType;
+    language?: string;
+    formatInstructions: string;
+  }): PromptTemplate {
+    return new PromptTemplate({
+      template,
+      inputVariables: [],
+      partialVariables: {
+        question: () => question,
+        files: () => JSON.stringify(files),
+        total_points: () => maxTotalPoints.toString(),
+        scoring_type: () => scoringCriteriaType,
+        scoring_criteria: () => this.safeStringify(scoringCriteria),
+        grading_type: () => responseType,
+        language: () => language ?? "en",
+        format_instructions: () => formatInstructions,
+      },
+    });
+  }
+
+  private getFileContentForPrompt(item: LearnerFileUpload): string {
+    return (
+      item.content ||
+      item.contentSummary ||
+      item.extractedText ||
+      item.filename ||
+      ""
+    );
+  }
+
+  private estimateTokensForFileGrading(
+    question: string,
+    extractedContent: string,
+    scoringCriteria: ScoringDto,
+    modelKey: string,
+  ): number {
+    const criteriaText = this.safeStringify(scoringCriteria);
+    const estimateText = `${question}\n${criteriaText}\n${extractedContent}`;
+    return this.tokenCounter.countTokens(estimateText, modelKey);
+  }
+
+  private getSafeContextLimit(modelKey: string): number {
+    const normalized = modelKey.toLowerCase();
+    const matchKey = Object.keys(this.contextWindowByModel).find((key) =>
+      normalized.includes(key),
+    );
+    const limit = matchKey
+      ? this.contextWindowByModel[matchKey]
+      : this.defaultContextWindow;
+    return Math.floor(limit * this.contextSafetyRatio);
+  }
+
+  private async summarizeFilesForGrading(
+    learnerResponse: LearnerFileUpload[],
+    question: string,
+    scoringCriteria: ScoringDto,
+    assignmentId: number,
+    language: string,
+    modelKey: string,
+    safeTokenLimit: number,
+  ): Promise<Array<{ filename: string; summary: string }>> {
+    const summaries: Array<{ filename: string; summary: string }> = [];
+    const chunkTokenLimit = Math.max(
+      this.minimumChunkTokens,
+      Math.min(this.maximumChunkTokens, Math.floor(safeTokenLimit * 0.2)),
+    );
+
+    for (const file of learnerResponse) {
+      const content = this.getFileContentForPrompt(file);
+      if (!content.trim()) {
+        summaries.push({
+          filename: file.filename,
+          summary: "No textual content available in this file.",
+        });
+        continue;
+      }
+
+      const chunks = this.splitTextIntoChunks(
+        content,
+        chunkTokenLimit,
+        modelKey,
+      );
+      const chunkSummaries: string[] = [];
+
+      for (const chunk of chunks) {
+        try {
+          const summary = await this.summarizeChunkForGrading(
+            chunk,
+            file.filename,
+            question,
+            scoringCriteria,
+            assignmentId,
+            language,
+            modelKey,
+          );
+          chunkSummaries.push(summary.trim());
+        } catch (error) {
+          this.logger.warn(
+            `Chunk summarization failed for ${file.filename}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          chunkSummaries.push(this.truncateToTokenLimit(chunk, 1200, modelKey));
+        }
+      }
+
+      let summaryText = chunkSummaries.filter(Boolean).join("\n");
+
+      const perFileLimit = Math.max(1500, Math.floor(safeTokenLimit * 0.1));
+      if (this.tokenCounter.countTokens(summaryText, modelKey) > perFileLimit) {
+        summaryText = await this.compressSummary(
+          summaryText,
+          question,
+          scoringCriteria,
+          assignmentId,
+          language,
+          modelKey,
+          perFileLimit,
+        );
+      }
+
+      summaries.push({
+        filename: file.filename,
+        summary: summaryText.trim(),
+      });
+    }
+
+    const combinedPrompt = this.buildFileGradingPrompt({
+      template: this.getTemplateForFileType(ResponseType.OTHER, true),
+      question,
+      files: summaries,
+      maxTotalPoints: 1,
+      scoringCriteriaType: "SUMMARY_ONLY",
+      scoringCriteria,
+      responseType: ResponseType.OTHER,
+      language,
+      formatInstructions: "{}",
+    });
+
+    const combinedPromptText = await combinedPrompt.format({});
+    const combinedTokens = this.tokenCounter.countTokens(
+      combinedPromptText,
+      modelKey,
+    );
+
+    if (combinedTokens > safeTokenLimit) {
+      const mergedSummary = await this.compressSummary(
+        summaries
+          .map((summary) => `${summary.filename}:\n${summary.summary}`)
+          .join("\n\n"),
+        question,
+        scoringCriteria,
+        assignmentId,
+        language,
+        modelKey,
+        Math.max(3000, Math.floor(safeTokenLimit * 0.3)),
+      );
+      const mergedFiles = [
+        {
+          filename: "combined",
+          summary: mergedSummary.trim(),
+        },
+      ];
+
+      const mergedPrompt = this.buildFileGradingPrompt({
+        template: this.getTemplateForFileType(ResponseType.OTHER, true),
+        question,
+        files: mergedFiles,
+        maxTotalPoints: 1,
+        scoringCriteriaType: "SUMMARY_ONLY",
+        scoringCriteria,
+        responseType: ResponseType.OTHER,
+        language,
+        formatInstructions: "{}",
+      });
+      const mergedPromptText = await mergedPrompt.format({});
+      const mergedTokens = this.tokenCounter.countTokens(
+        mergedPromptText,
+        modelKey,
+      );
+
+      if (mergedTokens > safeTokenLimit) {
+        const trimmedSummary = this.truncateToTokenLimit(
+          mergedSummary,
+          Math.max(2000, Math.floor(safeTokenLimit * 0.2)),
+          modelKey,
+        );
+        return [
+          {
+            filename: "combined",
+            summary: trimmedSummary.trim(),
+          },
+        ];
+      }
+
+      return mergedFiles;
+    }
+
+    return summaries;
+  }
+
+  private splitTextIntoChunks(
+    text: string,
+    maxTokens: number,
+    modelKey: string,
+  ): string[] {
+    const chunks: string[] = [];
+    const approxCharsPerToken = 4;
+    const maxChars = Math.max(1000, maxTokens * approxCharsPerToken);
+    let start = 0;
+
+    while (start < text.length) {
+      let end = Math.min(text.length, start + maxChars);
+      let chunk = text.slice(start, end);
+      let tokenCount = this.tokenCounter.countTokens(chunk, modelKey);
+
+      if (tokenCount > maxTokens) {
+        const ratio = Math.max(0.2, maxTokens / tokenCount);
+        end = Math.min(text.length, start + Math.floor(chunk.length * ratio));
+        chunk = text.slice(start, end);
+        tokenCount = this.tokenCounter.countTokens(chunk, modelKey);
+      }
+
+      if (chunk.length === 0) {
+        break;
+      }
+
+      chunks.push(chunk);
+      start = end;
+    }
+
+    return chunks;
+  }
+
+  private async summarizeChunkForGrading(
+    chunk: string,
+    filename: string,
+    question: string,
+    scoringCriteria: ScoringDto,
+    assignmentId: number,
+    language: string,
+    modelKey: string,
+  ): Promise<string> {
+    const prompt = new PromptTemplate({
+      template: `You are condensing a learner submission chunk to help grading.
+
+QUESTION:
+{question}
+
+SCORING CRITERIA:
+{scoring_criteria}
+
+FILE: {filename}
+
+CONTENT CHUNK:
+{chunk}
+
+LANGUAGE: {language}
+
+Write a concise summary (max 200 words) highlighting evidence relevant to the rubric and any missing elements. Use short bullet points.`,
+      inputVariables: [],
+      partialVariables: {
+        question: () => question,
+        scoring_criteria: () =>
+          this.truncateToTokenLimit(
+            this.safeStringify(scoringCriteria),
+            2000,
+            modelKey,
+          ),
+        filename: () => filename,
+        chunk: () => chunk,
+        language: () => language ?? "en",
+      },
+    });
+
+    return await this.promptProcessor.processPromptForFeature(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+      "file_grading",
+      modelKey,
+    );
+  }
+
+  private async compressSummary(
+    summaryText: string,
+    question: string,
+    scoringCriteria: ScoringDto,
+    assignmentId: number,
+    language: string,
+    modelKey: string,
+    targetTokens: number,
+  ): Promise<string> {
+    const cappedSummary = this.truncateToTokenLimit(
+      summaryText,
+      Math.max(targetTokens * 2, 4000),
+      modelKey,
+    );
+    const prompt = new PromptTemplate({
+      template: `You are compressing grading notes into a shorter summary.
+
+QUESTION:
+{question}
+
+SCORING CRITERIA:
+{scoring_criteria}
+
+NOTES:
+{summary}
+
+LANGUAGE: {language}
+
+Return a concise summary (max 300 words) focused on evidence and gaps.`,
+      inputVariables: [],
+      partialVariables: {
+        question: () => question,
+        scoring_criteria: () =>
+          this.truncateToTokenLimit(
+            this.safeStringify(scoringCriteria),
+            2000,
+            modelKey,
+          ),
+        summary: () => cappedSummary,
+        language: () => language ?? "en",
+      },
+    });
+
+    try {
+      const compressed = await this.promptProcessor.processPromptForFeature(
+        prompt,
+        assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        "file_grading",
+        modelKey,
+      );
+
+      return this.truncateToTokenLimit(compressed, targetTokens, modelKey);
+    } catch (error) {
+      this.logger.warn(
+        `Summary compression failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return this.truncateToTokenLimit(summaryText, targetTokens, modelKey);
+    }
+  }
+
+  private truncateToTokenLimit(
+    text: string,
+    maxTokens: number,
+    modelKey: string,
+  ): string {
+    if (!text) return "";
+    if (this.tokenCounter.countTokens(text, modelKey) <= maxTokens) {
+      return text;
+    }
+
+    const approxCharsPerToken = 4;
+    let end = Math.max(1000, maxTokens * approxCharsPerToken);
+    end = Math.min(text.length, end);
+    let truncated = text.slice(0, end);
+
+    while (
+      truncated.length > 0 &&
+      this.tokenCounter.countTokens(truncated, modelKey) > maxTokens
+    ) {
+      end = Math.floor(end * 0.9);
+      truncated = text.slice(0, end);
+    }
+
+    return truncated;
+  }
+
+  private safeStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value ?? "");
+    }
   }
 
   /**

@@ -20,10 +20,6 @@ const useCountdown = (expiresAt?: number): CountdownResult => {
   const debugLog = useDebugLog();
 
   const resetCountdown = (newExpiresAt?: number) => {
-    if (newExpiresAt === expiresAt) {
-      return;
-    }
-
     if (typeof newExpiresAt !== "number") {
       setCountdown(undefined);
       setTimerExpired(false);

@@ -10,19 +10,24 @@ interface Props extends React.ComponentPropsWithoutRef<"div"> {
   label: string;
   href: string;
   className?: string;
+  onBegin?: () => void | Promise<void>;
 }
 
 const BeginTheAssignment: React.FC<Props> = (props) => {
-  const { disabled, message, label, href, className } = props;
+  const { disabled, message, label, href, className, onBegin } = props;
   const userPreferedLanguage = useLearnerStore(
     (state) => state.userPreferedLanguage,
   );
   const setUserPreferedLanguage = useLearnerStore(
     (state) => state.setUserPreferedLanguage,
   );
-  const MoveToQuestionPage = () => {
+  const MoveToQuestionPage = async () => {
     if (!disabled) {
       setUserPreferedLanguage(userPreferedLanguage);
+      if (onBegin) {
+        await onBegin();
+        return;
+      }
       window.location.href = href;
     }
   };
@@ -35,7 +40,7 @@ const BeginTheAssignment: React.FC<Props> = (props) => {
           disabled={disabled}
           onClick={MoveToQuestionPage}
         >
-          {label} the Assignment
+          {label}
           <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-0.5 transition-transform duration-200" />
         </Button>
       </Tooltip>

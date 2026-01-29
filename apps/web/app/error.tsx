@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import ErrorModal from "@/components/ErrorModal";
+import { APIError } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export default function Error({
   error,
@@ -9,10 +12,26 @@ export default function Error({
   error: Error;
   reset?: () => void;
 }) {
+  const isAPIError = error instanceof APIError;
+
+  useEffect(() => {
+    if (!isAPIError) {
+      toast.error("An error occurred", {
+        description:
+          error?.message || "Something went wrong. Please try again.",
+        duration: 5000,
+      });
+    }
+  }, [error, isAPIError]);
+
+  if (!isAPIError) {
+    return null;
+  }
+
   return (
     <ErrorModal
-      statusCode={500}
-      headline="Unexpected error"
+      statusCode={error.status || 500}
+      headline={error.statusText || "Server error"}
       error={error?.message || "Something went wrong"}
       userSteps={[
         {

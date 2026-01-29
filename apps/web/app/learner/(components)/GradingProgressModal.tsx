@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { subscribeToGradingNotification } from "@/lib/learner";
 import { toast } from "sonner";
 import { getApiRoutes } from "@/config/constants";
+import GradeSyncStatus from "@/components/GradeSyncStatus";
 
 interface GradingProgressModalProps {
   isOpen: boolean;
@@ -122,6 +123,7 @@ export default function GradingProgressModal({
         handleSseMessage(event as MessageEvent);
         return;
       }
+
       setProgressData((prev) => ({
         ...prev,
         status: "failed",
@@ -131,15 +133,6 @@ export default function GradingProgressModal({
     });
 
     eventSource.onmessage = handleSseMessage;
-
-    eventSource.onerror = (error) => {
-      setProgressData((prev) => ({
-        ...prev,
-        status: "failed",
-        currentStage: "Connection to grading service lost",
-      }));
-      eventSource.close();
-    };
 
     return () => {
       eventSource.close();
@@ -498,6 +491,21 @@ export default function GradingProgressModal({
                 >
                   {message}
                 </motion.p>
+
+                {/* Show grade sync status when grading is complete */}
+                {status === "completed" && attemptId && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="mb-6"
+                  >
+                    <GradeSyncStatus
+                      attemptId={attemptId}
+                      assignmentId={assignmentId}
+                    />
+                  </motion.div>
+                )}
 
                 {status === "processing" && (
                   <>
