@@ -116,7 +116,9 @@ export class FileGradingService implements IFileGradingService {
       );
     }
 
+    const questionMaxPoints = totalPoints;
     let maxTotalPoints = totalPoints;
+    let rubricMaxTotal = 0;
     const rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[] = [];
 
     if (
@@ -139,6 +141,7 @@ export class FileGradingService implements IFileGradingService {
             });
           }
         }
+        rubricMaxTotal = sum;
         maxTotalPoints = sum;
       }
     }
@@ -158,7 +161,7 @@ export class FileGradingService implements IFileGradingService {
 
     if (hasStructuredContent) {
       this.logger.info("Using evidence-based grading with structured content");
-      return await this.gradeWithEvidenceBasedApproach(
+      const model = await this.gradeWithEvidenceBasedApproach(
         learnerResponse,
         question,
         maxTotalPoints,
@@ -166,6 +169,11 @@ export class FileGradingService implements IFileGradingService {
         assignmentId,
         language,
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        model,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
 
@@ -289,10 +297,15 @@ export class FileGradingService implements IFileGradingService {
           retryError instanceof Error ? retryError.message : String(retryError)
         }`,
       );
-      return this.createFallbackResponse(
+      const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "All LLM models failed - using fallback grading",
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        fallback,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
 
@@ -364,7 +377,11 @@ export class FileGradingService implements IFileGradingService {
         );
       }
 
-      return finalModel;
+      return this.scaleFileBasedModelToQuestionMax(
+        finalModel,
+        questionMaxPoints,
+        rubricMaxTotal,
+      );
     } catch (error) {
       this.logger.error(
         `Error parsing LLM response: ${
@@ -372,10 +389,15 @@ export class FileGradingService implements IFileGradingService {
         }. Response: "${response?.slice(0, 200)}..."`,
       );
 
-      return this.createFallbackResponse(
+      const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "Failed to parse LLM response - using fallback grading",
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        fallback,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
   }
@@ -518,6 +540,79 @@ export class FileGradingService implements IFileGradingService {
       "Please contact your instructor for manual grading of this submission.",
       fallbackRubricScores,
     );
+  }
+
+  private scaleFileBasedModelToQuestionMax(
+    model: FileBasedQuestionResponseModel,
+    questionMaxPoints: number,
+    rubricMaxTotal: number,
+  ): FileBasedQuestionResponseModel {
+    if (
+      !questionMaxPoints ||
+      questionMaxPoints <= 0 ||
+      !rubricMaxTotal ||
+      rubricMaxTotal <= 0 ||
+      rubricMaxTotal <= questionMaxPoints
+    ) {
+      return model;
+    }
+
+    const scaleFactor = questionMaxPoints / rubricMaxTotal;
+
+    const scaledRubricScores = model.rubricScores?.map((score) => {
+      if (typeof score.pointsAwarded !== "number") {
+        return score;
+      }
+      return {
+        ...score,
+        pointsAwarded: this.roundScaledPoints(
+          score.pointsAwarded * scaleFactor,
+        ),
+      };
+    });
+
+    const rubricSum = scaledRubricScores?.reduce((sum, score) => {
+      const points =
+        typeof score.pointsAwarded === "number" ? score.pointsAwarded : 0;
+      return sum + points;
+    }, 0);
+
+    const scaledPointsBase =
+      typeof rubricSum === "number" && rubricSum > 0
+        ? rubricSum
+        : model.points * scaleFactor;
+
+    const scaledPoints = Math.min(
+      questionMaxPoints,
+      Math.max(0, this.roundScaledPoints(scaledPointsBase)),
+    );
+
+    this.logger.warn(
+      "Scaling file grading score to match question max points",
+      {
+        originalPoints: model.points,
+        scaledPoints,
+        questionMaxPoints,
+        rubricMaxTotal,
+        scaleFactor,
+      },
+    );
+
+    return new FileBasedQuestionResponseModel(
+      scaledPoints,
+      model.feedback,
+      model.analysis,
+      model.evaluation,
+      model.explanation,
+      model.guidance,
+      scaledRubricScores ?? model.rubricScores,
+      model.highlighting,
+      model.annotatedPdfUrl,
+    );
+  }
+
+  private roundScaledPoints(points: number): number {
+    return Math.round(points * 100) / 100;
   }
 
   private getTemplateForFileType(

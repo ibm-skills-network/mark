@@ -389,6 +389,8 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       context,
     );
 
+    responseDto = this.normalizePointsToQuestionMax(responseDto, question);
+
     responseDto.metadata = {
       ...responseDto.metadata,
       fileCount: learnerResponse.length,
@@ -431,6 +433,34 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           error: error instanceof Error ? error.message : String(error),
           timestamp: new Date().toISOString(),
         },
+      };
+    }
+
+    return responseDto;
+  }
+
+  private normalizePointsToQuestionMax(
+    responseDto: CreateQuestionResponseAttemptResponseDto,
+    question: QuestionDto,
+  ): CreateQuestionResponseAttemptResponseDto {
+    const maxPoints =
+      typeof question.totalPoints === "number" ? question.totalPoints : 0;
+    const rawPoints =
+      typeof responseDto.totalPoints === "number" ? responseDto.totalPoints : 0;
+
+    let normalizedPoints = this.sanitizePoints(rawPoints);
+    if (maxPoints > 0) {
+      normalizedPoints = Math.min(normalizedPoints, maxPoints);
+    }
+
+    if (normalizedPoints !== rawPoints) {
+      responseDto.totalPoints = normalizedPoints;
+      responseDto.metadata = {
+        ...responseDto.metadata,
+        pointsNormalized: true,
+        pointsNormalizedFrom: rawPoints,
+        pointsNormalizedTo: normalizedPoints,
+        pointsMax: maxPoints,
       };
     }
 

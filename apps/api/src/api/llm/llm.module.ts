@@ -26,6 +26,7 @@ import { FileGradingService } from "./features/grading/services/file-grading.ser
 import { EvidenceBasedGradingService } from "./features/grading/services/evidence-based-grading.service";
 import { GradingCacheService } from "./features/grading/services/grading-cache.service";
 import { GradingJudgeService } from "./features/grading/services/grading-judge.service";
+import { NoopGradingJudgeService } from "./features/grading/services/noop-grading-judge.service";
 import { GradingThresholdService } from "./features/grading/services/grading-threshold.service";
 import { ImageGradingService } from "./features/grading/services/image-grading.service";
 import { ImageDescriptionService } from "./features/grading/services/image-description.service";
@@ -64,6 +65,10 @@ import {
   VIDEO_PRESENTATION_GRADING_SERVICE,
 } from "./llm.constants";
 import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service";
+
+const shouldDisableJudge = !["1", "true", "yes"].includes(
+  (process.env.ENABLE_GRADING_JUDGE || "").toLowerCase(),
+);
 
 @Global()
 @Module({
@@ -120,7 +125,9 @@ import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service
     PdfAnnotationService,
     {
       provide: GRADING_JUDGE_SERVICE,
-      useClass: GradingJudgeService,
+      useClass: shouldDisableJudge
+        ? NoopGradingJudgeService
+        : GradingJudgeService,
     },
     {
       provide: GRADING_THRESHOLD_SERVICE,
