@@ -7,6 +7,24 @@ export interface GradingMetadata {
   attempts: number;
   gradingTimeMs: number;
   contentHash: string;
+  cached?: boolean;
+  cacheHitCount?: number;
+  maxPossiblePoints?: number; // Store for grade calculation when question is deleted
+}
+
+export interface StructuredCriterionData {
+  name: string;
+  pointsAwarded: number;
+  maxPoints: number;
+  status: "full" | "partial" | "none";
+  evidence: string;
+  feedback: string;
+}
+
+export interface StructuredFeedbackData {
+  summary: string;
+  criteria: StructuredCriterionData[];
+  guidance: string;
 }
 
 export class TextBasedQuestionResponseModel {
@@ -19,6 +37,7 @@ export class TextBasedQuestionResponseModel {
   public readonly rubricScores?: RubricScore[];
   public readonly gradingRationale?: string;
   public readonly metadata?: GradingMetadata;
+  public readonly structuredFeedback?: StructuredFeedbackData;
 
   constructor(
     points: number,
@@ -30,6 +49,7 @@ export class TextBasedQuestionResponseModel {
     rubricScores?: RubricScore[],
     gradingRationale?: string,
     metadata?: GradingMetadata,
+    structuredFeedback?: StructuredFeedbackData,
   ) {
     this.points = points;
     this.feedback = feedback;
@@ -40,6 +60,7 @@ export class TextBasedQuestionResponseModel {
     this.rubricScores = rubricScores;
     this.gradingRationale = gradingRationale;
     this.metadata = metadata;
+    this.structuredFeedback = structuredFeedback;
   }
 
   /**

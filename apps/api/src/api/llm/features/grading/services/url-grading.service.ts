@@ -188,6 +188,17 @@ export class UrlGradingService implements IUrlGradingService {
     4. Provide detailed feedback that explains your evaluation and why you awarded the specific points.
     5. Include specific examples from the URL content that influenced your grading.
     6. Suggest improvements for any issues identified.
+
+    FEEDBACK REQUIREMENTS:
+    - Focus on what the learner DID or DID NOT include in their URL submission
+    - If criteria are fully met: Point out what specific content was correctly provided at the URL
+    - If criteria are partially met: State what was included AND what specific elements are missing
+    - If criteria are NOT met: Explain what specific content or functionality is absent
+    - Reference specific elements from the URL content (e.g., "The submitted page includes X", "The URL lacks Y")
+    - Frame improvement suggestions as actionable guidance: "The submission should include..." or "Consider adding..."
+    - Do NOT state criterion requirements or start with "Criterion requires..."
+    - Focus on the submission itself, not what the rubric asks for
+    - NO subjective adjectives, NO encouragement, NO praise - be specific and objective
     
     LANGUAGE: {language}
     

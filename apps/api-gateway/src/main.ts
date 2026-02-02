@@ -50,7 +50,7 @@ async function bootstrap() {
       `📚 API Documentation available at http://localhost:${port}/api`,
     );
   } catch (error) {
-    logger.error("❌ Failed to start API Gateway:", error);
+    logger.error("Failed to start API Gateway:", error);
     // eslint-disable-next-line unicorn/no-process-exit
     process.exit(1);
   }

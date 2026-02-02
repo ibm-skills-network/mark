@@ -47,6 +47,9 @@ const ParsedJudgeResponseSchema = z.object({
   feedbackAligned: z.boolean(),
   rubricAdherence: z.boolean(),
   fairnessScore: z.number().min(0).max(10),
+  subjectiveLanguageDetected: z.boolean(),
+  evidencePresent: z.boolean(),
+  strictRubricCompliance: z.boolean(),
   suggestedPoints: z.number().nullable().optional(),
   suggestedFeedbackChanges: z.string().nullable().optional(),
   correctedRubricScores: z
@@ -207,50 +210,52 @@ export class GradingJudgeService implements IGradingJudgeService {
     parsedResponse: ParsedJudgeResponse,
     input: GradingJudgeInput,
   ): GradingJudgeResult {
+    const issues: string[] = parsedResponse.issues || [];
+
+    if (parsedResponse.subjectiveLanguageDetected) {
+      issues.push(
+        "Excessive subjective/emotional language detected in feedback.",
+      );
+    }
+
+    if (!parsedResponse.evidencePresent) {
+      issues.push("Feedback does not reference the learner's response.");
+    }
+
+    if (!parsedResponse.strictRubricCompliance) {
+      issues.push("Points awarded significantly deviate from rubric values.");
+    }
+
+    const rubricScores = input.proposedGrading.rubricScores || [];
+    const hasInvalidPoints = rubricScores.some((score) => {
+      return score.pointsAwarded < 0 || score.pointsAwarded > score.maxPoints;
+    });
+
+    if (hasInvalidPoints) {
+      issues.push("Points awarded exceed maximum for one or more criteria");
+    }
+
+    const seriousViolations = hasInvalidPoints;
+    const qualitativeConcerns = parsedResponse.fairnessScore < 5;
+
+    const approved = !seriousViolations && !qualitativeConcerns;
+
     this.logger.info(
-      `Judge focusing on qualitative assessment only. Ignoring mathematical calculations.`,
+      `Judge validation: Serious violations: ${String(seriousViolations)}, ` +
+        `Fairness score: ${parsedResponse.fairnessScore}/10, ` +
+        `Approved: ${String(approved)}`,
     );
 
     const result: GradingJudgeResult = {
-      approved: parsedResponse.approved,
+      approved,
       feedback: parsedResponse.feedback || "No feedback provided",
-      issues: parsedResponse.issues || [],
+      issues,
     };
 
-    if (!parsedResponse.approved) {
+    if (!approved) {
       result.corrections = {};
 
-      if (parsedResponse.fairnessScore < 5) {
-        result.issues = [
-          `Grading appears unfair (fairness score: ${parsedResponse.fairnessScore}/10)`,
-        ];
-      } else if (!parsedResponse.rubricAdherence) {
-        const rubricScores = input.proposedGrading.rubricScores || [];
-        const hasInvalidPoints = rubricScores.some((score) => {
-          return (
-            score.pointsAwarded < 0 || score.pointsAwarded > score.maxPoints
-          );
-        });
-
-        if (hasInvalidPoints) {
-          result.issues = ["Invalid rubric point values used"];
-        } else {
-          this.logger.info(
-            "Judge disagrees with rubric scoring but values are valid. Approving.",
-          );
-          return {
-            approved: true,
-            feedback:
-              "Grading is technically correct despite subjective concerns",
-            issues: [],
-          };
-        }
-      }
-
-      if (
-        parsedResponse.suggestedFeedbackChanges &&
-        parsedResponse.fairnessScore < 5
-      ) {
+      if (parsedResponse.suggestedFeedbackChanges) {
         result.corrections.feedback = parsedResponse.suggestedFeedbackChanges;
       }
 
@@ -295,25 +300,57 @@ export class GradingJudgeService implements IGradingJudgeService {
   }
 
   private loadJudgeTemplate(): string {
-    return `Validate grading for QUALITATIVE FAIRNESS & RUBRIC ADHERENCE only. DO NOT do mathematical calculations or re-grade.
+    return `You are a grading validation engine for quality assurance.
 
 GRADING TO VALIDATE:
-Points: {proposed_points} | Max: {max_points}
-Scores: {proposed_rubric_scores}
+Points: {proposed_points} / {max_points}
+Rubric Scores: {proposed_rubric_scores}
+Feedback: {proposed_feedback}
 
-CRITERIA: {scoring_criteria}
+RUBRIC CRITERIA: {scoring_criteria}
 
-VALIDATION (NO ARITHMETIC):
-1. Fairness: Is the grading reasonable and fair given the learner response?
-2. Rubric adherence: Are the rubric scores appropriate for the response quality?
-3. Extremely unfair (fairness < 5/10)? If YES → REJECT
+LEARNER RESPONSE: {learner_response}
 
-✅ APPROVE: Valid rubric application + fairness ≥5
-❌ REJECT: Invalid rubric application OR fairness <5
+QUESTION: {question}
 
-IMPORTANT: Do NOT validate mathematical accuracy. Focus only on qualitative assessment.
+VALIDATION CHECKS:
 
-Context: {question} | {learner_response}
+1. **Subjective Language Check** (subjectiveLanguageDetected):
+   - Only flag if feedback contains excessive praise/criticism: "excellent work!", "terrible job!", "amazing!", "awful"
+   - Descriptive words like "accurate", "complete", "missing", "incorrect" are ACCEPTABLE
+   - Set to true ONLY if genuinely promotional/emotional language is used
+   - Also flag if feedback states criterion requirements: "Criterion requires...", "The rubric expects...", "According to the criterion..."
+   - Feedback should be learner-focused (what they did/didn't include), not criterion-focused
+
+2. **Evidence Check** (evidencePresent):
+   - Does feedback reference specific parts of the learner's response?
+   - It doesn't need to be direct quotes - paraphrasing is fine
+   - Feedback should focus on what the learner DID or DID NOT include, not what the criterion asks for
+   - Set to false ONLY if feedback is completely generic with no connection to the response
+
+3. **Rubric Compliance** (strictRubricCompliance):
+   - Do the points awarded match values from the rubric criteria?
+   - Minor point adjustments (±1) are ACCEPTABLE if justified
+   - Set to false ONLY if points are wildly off from rubric values
+
+4. **Fairness Score** (fairnessScore: 0-10):
+   - 0-4: Clearly unfair, biased, or inconsistent
+   - 5-7: Reasonable and justified
+   - 8-10: Perfectly aligned with rubric
+
+5. **Rubric Adherence** (rubricAdherence):
+   - Are the rubric criteria being applied?
+   - Set to false ONLY if rubric is completely ignored
+
+6. **Feedback Aligned** (feedbackAligned):
+   - Does feedback generally match the score?
+   - Set to false ONLY if major misalignment (e.g., positive feedback but low score)
+
+APPROVAL CRITERIA:
+- ✅ APPROVE if: fairnessScore ≥ 5 AND no major violations
+- ❌ REJECT if: fairnessScore < 5 OR serious rubric violations OR completely missing evidence
+
+Be LENIENT - only reject if there are genuinely serious problems with the grading.
 
 {format_instructions}`;
   }

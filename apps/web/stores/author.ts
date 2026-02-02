@@ -15,6 +15,7 @@ import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
+import { applyQuestionOrder } from "./utils/question-order";
 import { DraftSummary, VersionSummary } from "@/lib/author";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   "versions",
@@ -1680,10 +1681,20 @@ export const useAuthorStore = createWithEqualityFn<
         },
 
         setQuestionOrder: (order) => {
-          set((state) => ({
-            ...state,
-            questionOrder: order,
-          }));
+          set((state) => {
+            const { questionOrder, questions } = applyQuestionOrder(
+              state.questions,
+              order,
+            );
+
+            return {
+              ...state,
+              questionOrder,
+              questions,
+              hasUnsavedChanges: true,
+              updatedAt: Date.now(),
+            };
+          });
         },
         pageState: "loading" as const,
         setPageState: (pageState) => set({ pageState }),

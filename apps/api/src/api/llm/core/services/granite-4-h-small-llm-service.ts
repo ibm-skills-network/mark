@@ -36,7 +36,7 @@ export class Granite4HSmallLlmService implements IMultimodalLlmProvider {
       watsonxAIAuthType: "iam",
       watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? Granite4HSmallLlmService.DEFAULT_MODEL,
-      temperature: options?.temperature ?? 0.5,
+      temperature: options?.temperature ?? 0,
       maxTokens: options?.maxTokens ?? 2000,
     });
   }

@@ -341,6 +341,7 @@ export type LearnerState = {
   translationOn: boolean;
   globalLanguage: string;
   userPreferedLanguage: string;
+  isUploadingFiles: boolean;
 };
 
 export type learnerFileResponse = {
@@ -437,6 +438,7 @@ export type LearnerActions = {
   setUserPreferedLanguage: (language: string) => void;
   getUserPreferedLanguageFromLTI: () => Promise<string>;
   clearLearnerAnswers: () => void;
+  setIsUploadingFiles: (isUploading: boolean) => void;
 };
 
 export type AssignmentDetailsState = {
@@ -752,6 +754,11 @@ export const useLearnerStore = createWithEqualityFn<
               } else {
                 finalCode = "zh-CN";
               }
+            }
+            else if (baseLang === "uk") {
+              if (region === "UA") {
+                finalCode = "uk-UA";
+              }
             } else {
               const foundLanguageCode = AVAILABLE_LANGUAGES.find(
                 (langCode) => langCode === baseLang,
@@ -813,6 +820,9 @@ export const useLearnerStore = createWithEqualityFn<
         assignmentDetails: null,
         expiresAt: undefined,
         questions: [],
+        isUploadingFiles: false,
+        setIsUploadingFiles: (isUploading) =>
+          set({ isUploadingFiles: isUploading }),
         showSubmissionFeedback: false,
         setShowSubmissionFeedback: (showSubmissionFeedback) =>
           set({ showSubmissionFeedback }),

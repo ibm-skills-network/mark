@@ -5,14 +5,24 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Prisma, Question, QuestionVariant } from "@prisma/client";
 import {
   UserRole,
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../database/prisma.service";
+import {
+  Choice,
+  QuestionDto,
+  ScoringDto,
+  UpdateAssignmentQuestionsDto,
+  VariantDto,
+} from "../assignment/dto/update.questions.request.dto";
+import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
+import { AdminAddContentToAssignmentRequestDto } from "./dto/assignment/add.content.to.assignment.request.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
 import {
   AdminCreateAssignmentRequestDto,
@@ -40,6 +50,7 @@ export class AdminService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly assignmentService: AssignmentServiceV2,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService,
   ) {}
@@ -98,6 +109,7 @@ export class AdminService {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
+        currentVersion: true,
         questions: {
           where: { isDeleted: false },
         },
@@ -2028,6 +2040,265 @@ export class AdminService {
       name: assignmentExists.name || "",
       type: assignmentExists.type || "AI_GRADED",
     };
+  }
+
+  /**
+   * Helper method to map question DTO to Prisma question data
+   */
+  private mapQuestionDataForCreation(questionData: any, assignmentId: number) {
+    const scoring = questionData.scoring
+      ? (questionData.scoring as object)
+      : undefined;
+    const choices = questionData.choices
+      ? (JSON.parse(
+          JSON.stringify(questionData.choices),
+        ) as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
+
+    return {
+      assignmentId,
+      type: questionData.type,
+      question: questionData.question,
+      responseType: questionData.responseType,
+      maxWords: questionData.maxWords,
+      maxCharacters: questionData.maxCharacters,
+      totalPoints: questionData.totalPoints,
+      randomizedChoices: questionData.randomizedChoices,
+      choices,
+      scoring,
+    };
+  }
+
+  /**
+   * Add content (details, configuration, and questions) to an existing empty assignment.
+   * Uses a transaction to ensure atomicity - if any step fails, all changes are rolled back.
+   *
+   * @param id - The assignment ID
+   * @param addContentRequestDto - The content to add
+   * @returns Success response with updated assignment info
+   * @throws NotFoundException if assignment doesn't exist
+   */
+  async addContentToAssignment(
+    id: number,
+    addContentRequestDto: AdminAddContentToAssignmentRequestDto,
+    userId = "system",
+  ): Promise<BaseAssignmentResponseDto> {
+    const { assignment, config, gradingCriteria, questions } =
+      addContentRequestDto;
+    // Strip fields that don't exist in the assignment table (e.g., learningObjectives)
+    const { ...assignmentDetails } = assignment;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const existingAssignment = await tx.assignment.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: { questions: true },
+          },
+        },
+      });
+
+      if (!existingAssignment) {
+        throw new NotFoundException(`Assignment with Id ${id} not found.`);
+      }
+
+      if (existingAssignment._count.questions > 0) {
+        this.logger.warn(
+          `Assignment ${id} already has ${existingAssignment._count.questions} questions. Adding ${questions.length} more.`,
+        );
+      }
+
+      const updatedAssignment = await tx.assignment.update({
+        where: { id },
+        data: {
+          ...assignmentDetails,
+          gradingCriteriaOverview: gradingCriteria,
+          published: false,
+          numAttempts: config.numAttempts,
+          attemptsBeforeCoolDown: config.attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes: config.retakeAttemptCoolDownMinutes,
+          passingGrade: config.passingGrade,
+          displayOrder: config.displayOrder,
+          graded: config.graded,
+          questionDisplay: config.questionDisplay,
+          showQuestions: config.showQuestions,
+          showSubmissionFeedback: config.showSubmissionFeedback,
+          showAssignmentScore: config.showAssignmentScore,
+          numberOfQuestionsPerAttempt: config.numberOfQuestionsPerAttempt,
+          timeEstimateMinutes: config.timeEstimateMinutes,
+          allotedTimeMinutes: config.allotedTimeMinutes,
+          attemptsPerTimeRange: config.attemptsPerTimeRange,
+          attemptsTimeRangeHours: config.attemptsTimeRangeHours,
+          showQuestionScore: config.showQuestionScore,
+          correctAnswerVisibility: config.correctAnswerVisibility,
+        },
+      });
+
+      const createdQuestions: any[] = [];
+      if (questions.length > 0) {
+        const questionDataArray = questions.map((q) =>
+          this.mapQuestionDataForCreation(q, id),
+        );
+
+        await tx.question.createMany({
+          data: questionDataArray,
+        });
+
+        const fetchedQuestions = await tx.question.findMany({
+          where: { assignmentId: id },
+          orderBy: { id: "asc" },
+        });
+        createdQuestions.push(...fetchedQuestions);
+
+        this.logger.log(
+          `Successfully added ${questions.length} questions to assignment ${id}`,
+        );
+      }
+      const questionOrder = createdQuestions.map((q) => q.id);
+
+      await tx.assignment.update({
+        where: { id },
+        data: { questionOrder: questionOrder ?? [] },
+      });
+
+      return updatedAssignment;
+    });
+
+    void this.publishAssignmentAfterContent(id, userId).catch(
+      (error: unknown) => {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        this.logger.error(
+          `Failed to publish assignment ${id} after content import: ${errorMessage}`,
+        );
+      },
+    );
+
+    return {
+      id: result.id,
+      success: true,
+      name: result.name,
+      type: result.type,
+    };
+  }
+
+  private async publishAssignmentAfterContent(
+    assignmentId: number,
+    userId: string,
+  ): Promise<void> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        questions: {
+          where: { isDeleted: false },
+          include: {
+            variants: {
+              where: { isDeleted: false },
+            },
+          },
+        },
+      },
+    });
+
+    if (!assignment) {
+      this.logger.warn(
+        `Assignment ${assignmentId} not found while preparing publish payload`,
+      );
+      return;
+    }
+
+    const questions = assignment.questions.map((question) =>
+      this.mapQuestionToDto(question),
+    );
+    const questionOrder =
+      assignment.questionOrder && assignment.questionOrder.length > 0
+        ? assignment.questionOrder
+        : questions.map((q) => q.id);
+
+    const publishPayload: UpdateAssignmentQuestionsDto = {
+      name: assignment.name,
+      questions,
+      introduction: assignment.introduction ?? null,
+      instructions: assignment.instructions ?? null,
+      gradingCriteriaOverview: assignment.gradingCriteriaOverview ?? null,
+      timeEstimateMinutes: assignment.timeEstimateMinutes ?? null,
+      graded: assignment.graded ?? false,
+      numAttempts: assignment.numAttempts ?? null,
+      attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown ?? null,
+      retakeAttemptCoolDownMinutes:
+        assignment.retakeAttemptCoolDownMinutes ?? null,
+      allotedTimeMinutes: assignment.allotedTimeMinutes ?? null,
+      attemptsPerTimeRange: assignment.attemptsPerTimeRange ?? null,
+      attemptsTimeRangeHours: assignment.attemptsTimeRangeHours ?? null,
+      passingGrade: assignment.passingGrade ?? null,
+      displayOrder: assignment.displayOrder ?? null,
+      questionDisplay: assignment.questionDisplay ?? null,
+      numberOfQuestionsPerAttempt:
+        assignment.numberOfQuestionsPerAttempt ?? null,
+      published: true,
+      questionOrder,
+      showAssignmentScore: assignment.showAssignmentScore ?? false,
+      showQuestionScore: assignment.showQuestionScore ?? false,
+      showSubmissionFeedback: assignment.showSubmissionFeedback ?? false,
+      showQuestions: assignment.showQuestions ?? false,
+      correctAnswerVisibility: assignment.correctAnswerVisibility ?? undefined,
+      questionControls: this.cloneJsonValue(assignment.questionControls),
+      versionDescription: "Published via admin content import",
+      versionNumber: "",
+      updatedAt: assignment.updatedAt,
+    };
+
+    await this.assignmentService.publishAssignment(
+      assignmentId,
+      publishPayload,
+      userId,
+    );
+  }
+
+  private mapQuestionToDto(
+    question: Question & { variants: QuestionVariant[] },
+  ): QuestionDto {
+    const variants: VariantDto[] = (question.variants ?? []).map((variant) => ({
+      id: variant.id,
+      variantContent: variant.variantContent,
+      variantType: variant.variantType as VariantDto["variantType"],
+      isDeleted: variant.isDeleted,
+      choices: this.cloneJsonValue<Choice[]>(variant.choices),
+      scoring: this.cloneJsonValue<ScoringDto>(variant.scoring),
+      maxWords: variant.maxWords ?? undefined,
+      maxCharacters: variant.maxCharacters ?? undefined,
+      randomizedChoices: variant.randomizedChoices ?? undefined,
+    }));
+
+    return {
+      id: question.id,
+      assignmentId: question.assignmentId,
+      question: question.question,
+      type: question.type,
+      responseType: question.responseType ?? undefined,
+      totalPoints: question.totalPoints ?? undefined,
+      authorComment: question.authorComment ?? null,
+      choices: this.cloneJsonValue<Choice[]>(question.choices),
+      scoring: this.cloneJsonValue<ScoringDto>(question.scoring),
+      maxWords: question.maxWords ?? undefined,
+      maxCharacters: question.maxCharacters ?? undefined,
+      randomizedChoices: question.randomizedChoices ?? undefined,
+      answer: question.answer ?? null,
+      gradingContextQuestionIds: question.gradingContextQuestionIds ?? [],
+      variants,
+    };
+  }
+
+  private cloneJsonValue<T>(value?: Prisma.JsonValue | null): T | undefined {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(JSON.stringify(value)) as T;
+    } catch {
+      return undefined;
+    }
   }
 
   async executeQuickAction(

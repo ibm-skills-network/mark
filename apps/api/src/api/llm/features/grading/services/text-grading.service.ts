@@ -1,6 +1,12 @@
 /* eslint-disable unicorn/no-null */
 import { PromptTemplate } from "@langchain/core/prompts";
-import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -13,6 +19,7 @@ import { RubricScore } from "src/api/llm/model/file.based.question.response.mode
 import { TextBasedQuestionEvaluateModel } from "src/api/llm/model/text.based.question.evaluate.model";
 import {
   GradingMetadata,
+  StructuredFeedbackData,
   TextBasedQuestionResponseModel,
 } from "src/api/llm/model/text.based.question.response.model";
 import { Logger } from "winston";
@@ -20,11 +27,18 @@ import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import {
+  ANSWER_NORMALIZATION_SERVICE,
+  GRADING_CACHE_SERVICE,
   GRADING_JUDGE_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
   RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS,
 } from "../../../llm.constants";
+import {
+  IAnswerNormalizationService,
+  INormalizedAnswer,
+} from "../interfaces/answer-normalization.interface";
+import { IGradingCacheService } from "../interfaces/grading-cache.interface";
 import { IGradingJudgeService } from "../interfaces/grading-judge.interface";
 import { ITextGradingService } from "../interfaces/text-grading.interface";
 
@@ -39,51 +53,46 @@ export interface GradingValidation {
 }
 
 const GradingAttemptSchema = z.object({
-  points: z
+  totalScore: z
     .number()
     .min(0)
-    .describe("Total points awarded (sum of all rubric scores)"),
-  feedback: z
-    .string()
-    .describe("Comprehensive feedback following the AEEG approach"),
-  analysis: z
-    .string()
-    .describe(
-      "Detailed analysis of what is observed in the learner's response",
-    ),
-  evaluation: z
-    .string()
-    .describe(
-      "Evaluation of how well the response meets each assessment aspect",
-    ),
-  explanation: z
-    .string()
-    .describe("Clear reasons for the grade based on specific observations"),
-  guidance: z.string().describe("Concrete suggestions for improvement"),
-  rubricScores: z
+    .describe("Total points awarded (must equal sum of all criterion scores)"),
+  maxScore: z.number().min(0).describe("Maximum possible points"),
+  criteria: z
     .array(
       z.object({
-        rubricQuestion: z.string().describe("The rubric question"),
+        criterionId: z
+          .string()
+          .describe("Unique identifier for this criterion from the rubric"),
         pointsAwarded: z
           .number()
           .min(0)
-          .describe("Points awarded for this rubric"),
+          .describe(
+            "Points awarded for this criterion (must match rubric value exactly)",
+          ),
         maxPoints: z
           .number()
-          .describe("Maximum points available for this rubric"),
-        criterionSelected: z
+          .min(0)
+          .describe("Maximum points for this criterion"),
+        evidence: z
           .string()
-          .describe("The specific criterion level selected"),
-        justification: z
+          .nullable()
+          .describe(
+            "Direct quote from submission as evidence, or null if criterion not met",
+          ),
+        feedback: z
           .string()
-          .describe("Detailed justification for the score"),
+          .describe(
+            "Evidence-based feedback: state if met/not met, cite evidence or state 'No supporting evidence found'",
+          ),
       }),
     )
-    .describe("Individual scores for each rubric criterion")
-    .optional(),
-  gradingRationale: z
+    .describe("Evaluation of each criterion independently"),
+  overallFeedback: z
     .string()
-    .describe("Internal rationale for ensuring consistent grading"),
+    .describe(
+      "Concise summary of performance across all criteria (factual, no subjective language)",
+    ),
 });
 
 export type GradingAttempt = z.infer<typeof GradingAttemptSchema>;
@@ -95,7 +104,7 @@ let singletonParser: StructuredOutputParser<
 @Injectable()
 export class TextGradingService implements ITextGradingService {
   private readonly logger: Logger;
-  private readonly maxRetries = 3;
+  private readonly maxRetries = 1;
   private readonly retryDelay = 1000;
 
   constructor(
@@ -105,7 +114,13 @@ export class TextGradingService implements ITextGradingService {
     private readonly moderationService: IModerationService,
     @Inject(GRADING_JUDGE_SERVICE)
     private readonly gradingJudgeService: IGradingJudgeService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Optional()
+    @Inject(ANSWER_NORMALIZATION_SERVICE)
+    private readonly normalizationService?: IAnswerNormalizationService,
+    @Optional()
+    @Inject(GRADING_CACHE_SERVICE)
+    private readonly cacheService?: IGradingCacheService,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger,
   ) {
     this.logger = parentLogger.child({ context: TextGradingService.name });
   }
@@ -121,8 +136,13 @@ export class TextGradingService implements ITextGradingService {
     const startTime = Date.now();
 
     try {
-      const { question, learnerResponse, totalPoints, scoringCriteria } =
-        textBasedQuestionEvaluateModel;
+      const {
+        question,
+        learnerResponse,
+        totalPoints,
+        scoringCriteria,
+        questionId,
+      } = textBasedQuestionEvaluateModel;
 
       const sanitizedLearnerResponse = this.sanitizeInput(learnerResponse);
 
@@ -141,7 +161,91 @@ export class TextGradingService implements ITextGradingService {
         totalPoints,
       );
 
-      const contentHash = this.generateContentHash(learnerResponse, question);
+      let normalizedAnswer: INormalizedAnswer | null = null;
+      let rubricHash: string | null = null;
+      let cacheKey: string | null = null;
+
+      if (this.normalizationService) {
+        normalizedAnswer = this.normalizationService.normalizeAnswer(
+          sanitizedLearnerResponse,
+        );
+        rubricHash = this.normalizationService.hashRubric(
+          JSON.stringify(scoringCriteria),
+        );
+        cacheKey = this.normalizationService.generateCacheKey(
+          rubricHash,
+          normalizedAnswer.hash,
+          questionId,
+        );
+
+        this.logger.info(
+          `Normalized answer - Hash: ${normalizedAnswer.hash}, ` +
+            `Words: ${normalizedAnswer.wordCount}, ` +
+            `Claims: ${normalizedAnswer.claims.length}`,
+        );
+
+        if (this.cacheService && cacheKey && normalizedAnswer) {
+          const cached = await this.cacheService.getCachedGrading(cacheKey);
+          if (cached) {
+            this.logger.info(
+              `Cache hit! Returning cached grading (hit count: ${cached.hitCount})`,
+            );
+
+            const endTime = Date.now();
+            const metadata: GradingMetadata = {
+              judgeApproved: true,
+              attempts: 1,
+              gradingTimeMs: endTime - startTime,
+              contentHash: normalizedAnswer.hash,
+              cached: true,
+              cacheHitCount: cached.hitCount,
+              maxPossiblePoints,
+            };
+
+            const rubricScores = cached.criteria.map((criterion) => ({
+              rubricQuestion: criterion.criterionId,
+              pointsAwarded: criterion.pointsAwarded,
+              maxPoints: criterion.maxPoints,
+              criterionSelected:
+                criterion.pointsAwarded > 0 ? "Met" : "Not Met",
+              justification: criterion.feedback,
+            }));
+
+            const summary = this.generateScoreExplanation(
+              cached.totalScore,
+              maxPossiblePoints,
+              cached.criteria,
+            );
+            const details = this.generateCriteriaBasedFeedback(cached.criteria);
+            const guidance = this.generateGuidanceFromCriteria(cached.criteria);
+
+            const structuredFeedback = `${summary}\n\n---\n\n${details}\n\nGuidance: ${guidance}`;
+
+            const structuredData = this.buildStructuredFeedbackData(
+              summary,
+              cached.criteria,
+              guidance,
+            );
+
+            return new TextBasedQuestionResponseModel(
+              cached.totalScore,
+              structuredFeedback,
+              "",
+              "",
+              summary,
+              guidance,
+              rubricScores,
+              `Cached result (used ${cached.hitCount} times) - deterministic grading`,
+              metadata,
+              structuredData,
+            );
+          }
+        }
+      }
+
+      const contentHash =
+        normalizedAnswer?.hash ||
+        this.generateContentHash(learnerResponse, question);
 
       let gradingAttempt: GradingAttempt | null = null;
       let judgeApproved = false;
@@ -188,7 +292,7 @@ export class TextGradingService implements ITextGradingService {
             );
 
             if (judgeResult.corrections && gradingAttempt) {
-              const originalPoints = gradingAttempt.points;
+              const originalPoints = gradingAttempt.totalScore;
               gradingAttempt = this.applyJudgeCorrections(
                 gradingAttempt,
                 judgeResult.corrections,
@@ -242,14 +346,9 @@ export class TextGradingService implements ITextGradingService {
         maxPossiblePoints,
       );
 
-      const finalFeedback = this.generateAlignedFeedback(
-        normalizedAttempt,
-        maxPossiblePoints,
-      );
-
       const endTime = Date.now();
       this.logger.info(
-        `Graded text question - Points: ${gradingAttempt.points}/${maxPossiblePoints}, ` +
+        `Graded text question - Points: ${normalizedAttempt.totalScore}/${maxPossiblePoints}, ` +
           `Content Hash: ${contentHash}, Judge Approved: ${judgeApproved.toString()}, ` +
           `Time: ${endTime - startTime}ms, Attempts: ${attemptCount}`,
       );
@@ -259,18 +358,92 @@ export class TextGradingService implements ITextGradingService {
         attempts: attemptCount,
         gradingTimeMs: endTime - startTime,
         contentHash,
+        maxPossiblePoints,
       };
 
+      const rubricScores = normalizedAttempt.criteria.map((criterion) => ({
+        rubricQuestion: criterion.criterionId,
+        pointsAwarded: criterion.pointsAwarded,
+        maxPoints: criterion.maxPoints,
+        criterionSelected: criterion.pointsAwarded > 0 ? "Met" : "Not Met",
+        justification: criterion.feedback,
+      }));
+
+      if (
+        this.cacheService &&
+        cacheKey &&
+        rubricHash &&
+        normalizedAnswer &&
+        questionId
+      ) {
+        try {
+          const validatedCriteria = normalizedAttempt.criteria.map((c) => ({
+            criterionId: c.criterionId || "",
+            pointsAwarded: c.pointsAwarded || 0,
+            maxPoints: c.maxPoints || 0,
+            evidence: c.evidence || null,
+            feedback: c.feedback || "",
+          }));
+
+          await this.cacheService.cacheGrading({
+            cacheKey,
+            questionId,
+            rubricHash,
+            answerHash: normalizedAnswer.hash,
+            totalScore: normalizedAttempt.totalScore,
+            maxScore: normalizedAttempt.maxScore,
+            criteria: validatedCriteria,
+            overallFeedback: normalizedAttempt.overallFeedback,
+            cachedAt: new Date(),
+            hitCount: 0,
+            metadata: {
+              gradingTimeMs: endTime - startTime,
+              attempts: attemptCount,
+              judgeApproved,
+            },
+          });
+
+          this.logger.info(`Cached grading result with key: ${cacheKey}`);
+        } catch (cacheError) {
+          this.logger.warn(
+            `Failed to cache grading result: ${
+              cacheError instanceof Error ? cacheError.message : "Unknown error"
+            }`,
+          );
+        }
+      }
+
+      const summary = this.generateScoreExplanation(
+        normalizedAttempt.totalScore,
+        maxPossiblePoints,
+        normalizedAttempt.criteria,
+      );
+      const details = this.generateCriteriaBasedFeedback(
+        normalizedAttempt.criteria,
+      );
+      const guidance = this.generateGuidanceFromCriteria(
+        normalizedAttempt.criteria,
+      );
+
+      const structuredFeedback = `${summary}\n\n---\n\n${details}\n\nGuidance: ${guidance}`;
+
+      const structuredData = this.buildStructuredFeedbackData(
+        summary,
+        normalizedAttempt.criteria,
+        guidance,
+      );
+
       return new TextBasedQuestionResponseModel(
-        normalizedAttempt.points,
-        finalFeedback,
-        normalizedAttempt.analysis,
-        normalizedAttempt.evaluation,
-        normalizedAttempt.explanation,
-        normalizedAttempt.guidance,
-        this.ensureRequiredRubricFields(normalizedAttempt.rubricScores),
-        normalizedAttempt.gradingRationale,
+        normalizedAttempt.totalScore,
+        structuredFeedback,
+        "",
+        "",
+        summary,
+        guidance,
+        rubricScores,
+        `Deterministic grading: ${normalizedAttempt.criteria.length} criteria evaluated`,
         metadata,
+        structuredData,
       );
     } catch (error) {
       this.logger.error(
@@ -283,76 +456,56 @@ export class TextGradingService implements ITextGradingService {
   }
 
   /**
-   * Normalize a grading attempt by clamping rubric scores and total points to valid ranges.
+   * Normalize a grading attempt by clamping criterion scores and total points to valid ranges.
    */
   private normalizeGradingAttempt(
     attempt: GradingAttempt,
     maxPossiblePoints: number,
   ): GradingAttempt {
-    const cloned: GradingAttempt = { ...attempt } as GradingAttempt;
+    const cloned: GradingAttempt = { ...attempt };
 
-    let totalFromRubrics: number | undefined;
-    if (Array.isArray(cloned.rubricScores) && cloned.rubricScores.length > 0) {
-      type StrictRubricScore = {
-        rubricQuestion: string;
-        pointsAwarded: number;
-        maxPoints: number;
-        criterionSelected: string;
-        justification: string;
+    const normalizedCriteria = cloned.criteria.map((criterion, index) => {
+      const maxPoints = Math.max(0, Number(criterion.maxPoints ?? 0));
+      const awardedRaw = Number(criterion.pointsAwarded ?? 0);
+      const awarded = Math.min(Math.max(0, awardedRaw), maxPoints);
+
+      if (awarded !== awardedRaw) {
+        this.logger.warn(
+          `Clamped criterion "${criterion.criterionId}" score from ${awardedRaw} to ${awarded} (max ${maxPoints})`,
+        );
+      }
+
+      return {
+        criterionId: criterion.criterionId || `criterion_${index}`,
+        pointsAwarded: awarded,
+        maxPoints: maxPoints,
+        evidence: criterion.evidence,
+        feedback: criterion.feedback || "No feedback provided",
       };
+    });
 
-      const normalizedScores: StrictRubricScore[] = cloned.rubricScores.map(
-        (
-          r: {
-            rubricQuestion?: string;
-            pointsAwarded?: number;
-            maxPoints?: number;
-            criterionSelected?: string;
-            justification?: string;
-          },
-          index: number,
-        ): StrictRubricScore => {
-          const max = Math.max(0, Number(r?.maxPoints ?? 0));
-          const awardedRaw = Number(r?.pointsAwarded ?? 0);
-          const awarded = Math.min(Math.max(0, awardedRaw), max);
-          if (awarded !== awardedRaw) {
-            this.logger.warn(
-              `Clamped rubric score at index ${index} from ${awardedRaw} to ${awarded} (max ${max})`,
-            );
-          }
-          return {
-            rubricQuestion: String(r?.rubricQuestion ?? ""),
-            pointsAwarded: awarded,
-            maxPoints: max,
-            criterionSelected: String(r?.criterionSelected ?? ""),
-            justification: String(r?.justification ?? ""),
-          };
-        },
-      );
+    const totalFromCriteria = normalizedCriteria.reduce(
+      (sum, c) => sum + c.pointsAwarded,
+      0,
+    );
 
-      cloned.rubricScores =
-        normalizedScores as unknown as typeof cloned.rubricScores;
-      totalFromRubrics = cloned.rubricScores.reduce(
-        (sum, r) => sum + (r.pointsAwarded || 0),
-        0,
-      );
-    }
-
-    const rawPoints = Number(cloned.points ?? 0);
-    const normalizedPoints =
-      totalFromRubrics === undefined ? rawPoints : totalFromRubrics;
-    const cappedPoints = Math.min(
-      Math.max(0, normalizedPoints),
+    const cappedTotal = Math.min(
+      Math.max(0, totalFromCriteria),
       maxPossiblePoints,
     );
-    if (cappedPoints !== rawPoints) {
+
+    if (cappedTotal !== cloned.totalScore) {
       this.logger.warn(
-        `Normalized total points from ${rawPoints} to ${cappedPoints} (max ${maxPossiblePoints})`,
+        `Normalized total score from ${cloned.totalScore} to ${cappedTotal} (max ${maxPossiblePoints})`,
       );
     }
-    cloned.points = cappedPoints;
 
-    return cloned;
+    return {
+      totalScore: cappedTotal,
+      maxScore: maxPossiblePoints,
+      criteria: normalizedCriteria,
+      overallFeedback: cloned.overallFeedback || "Grading completed",
+    };
   }
 
   /**
@@ -431,13 +584,14 @@ export class TextGradingService implements ITextGradingService {
       AIUsageType.ASSIGNMENT_GRADING,
       "text_grading",
       "gpt-4o-mini",
+      { temperature: 0, top_p: 0 },
     );
 
     const parsedResponse = await parser.parse(response);
 
     this.logger.info(
-      `LLM grading result - Points: ${parsedResponse.points}/${maxPossiblePoints}, ` +
-        `Rubric scores: ${parsedResponse.rubricScores?.length || 0} items`,
+      `LLM grading result - Points: ${parsedResponse.totalScore}/${maxPossiblePoints}, ` +
+        `Criteria evaluated: ${parsedResponse.criteria?.length || 0} items`,
     );
 
     return parsedResponse;
@@ -460,17 +614,13 @@ export class TextGradingService implements ITextGradingService {
         learnerResponse,
         scoringCriteria,
         proposedGrading: {
-          points: gradingAttempt.points,
+          points: gradingAttempt.totalScore,
           maxPoints: maxPossiblePoints,
-          feedback: this.generateAlignedFeedback(
-            gradingAttempt,
-            maxPossiblePoints,
-          ),
-          rubricScores: gradingAttempt.rubricScores as RubricDto[],
-          analysis: gradingAttempt.analysis,
-          evaluation: gradingAttempt.evaluation,
-          explanation: gradingAttempt.explanation,
-          guidance: gradingAttempt.guidance,
+          feedback: gradingAttempt.overallFeedback,
+          analysis: "",
+          evaluation: "",
+          explanation: gradingAttempt.overallFeedback,
+          guidance: this.generateGuidanceFromCriteria(gradingAttempt.criteria),
         },
         assignmentId,
       });
@@ -488,6 +638,153 @@ export class TextGradingService implements ITextGradingService {
   }
 
   /**
+   * Generate criteria-based feedback showing each criterion's result
+   */
+  private generateCriteriaBasedFeedback(
+    criteria: Array<{
+      criterionId?: string;
+      pointsAwarded?: number;
+      maxPoints?: number;
+      evidence?: string | null;
+      feedback?: string;
+    }>,
+  ): string {
+    if (!criteria || criteria.length === 0) {
+      return "No grading criteria available.";
+    }
+
+    const feedbackSections = criteria.map((c, index) => {
+      const awarded = c.pointsAwarded || 0;
+      const max = c.maxPoints || 0;
+      const criterionName = c.criterionId || `Criterion ${index + 1}`;
+      const status = awarded >= max ? "✓" : awarded > 0 ? "◐" : "✗";
+
+      let section = `${status} **${criterionName}** (${awarded}/${max} points)\n`;
+
+      if (
+        c.evidence &&
+        c.evidence.trim() !== "No supporting evidence found in the submission."
+      ) {
+        section += `Evidence: "${c.evidence}"\n`;
+      }
+
+      section += `${c.feedback || "No feedback provided"}\n`;
+
+      return section;
+    });
+
+    return feedbackSections.join("\n");
+  }
+
+  /**
+   * Generate clear score explanation
+   */
+  private generateScoreExplanation(
+    totalScore: number,
+    maxScore: number,
+    criteria: Array<{
+      criterionId?: string;
+      pointsAwarded?: number;
+      maxPoints?: number;
+    }>,
+  ): string {
+    const percentage =
+      maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+
+    const breakdown = criteria
+      .map((c) => {
+        const awarded = c.pointsAwarded || 0;
+        const max = c.maxPoints || 0;
+        return `${c.criterionId}: ${awarded}/${max}`;
+      })
+      .join(", ");
+
+    return `Score: ${totalScore}/${maxScore} points (${percentage}%). Breakdown: ${breakdown}`;
+  }
+
+  /**
+   * Build structured feedback data for frontend
+   */
+  private buildStructuredFeedbackData(
+    summary: string,
+    criteria: Array<{
+      criterionId?: string;
+      pointsAwarded?: number;
+      maxPoints?: number;
+      evidence?: string | null;
+      feedback?: string;
+    }>,
+    guidance: string,
+  ): StructuredFeedbackData {
+    const structuredCriteria = criteria.map((c) => {
+      const awarded = c.pointsAwarded || 0;
+      const max = c.maxPoints || 0;
+
+      let status: "full" | "partial" | "none";
+      if (awarded >= max && max > 0) {
+        status = "full";
+      } else if (awarded > 0) {
+        status = "partial";
+      } else {
+        status = "none";
+      }
+
+      return {
+        name: c.criterionId || "",
+        pointsAwarded: awarded,
+        maxPoints: max,
+        status,
+        evidence: c.evidence || "",
+        feedback: c.feedback || "",
+      };
+    });
+
+    return {
+      summary,
+      criteria: structuredCriteria,
+      guidance,
+    };
+  }
+
+  /**
+   * Generate guidance text from criteria (both partially met and unmet)
+   */
+  private generateGuidanceFromCriteria(
+    criteria: Array<{
+      criterionId?: string;
+      pointsAwarded?: number;
+      maxPoints?: number;
+      evidence?: string | null;
+      feedback?: string;
+    }>,
+  ): string {
+    const allFullyMet = criteria.every((c) => {
+      const awarded = c.pointsAwarded || 0;
+      const max = c.maxPoints || 0;
+      return max > 0 && awarded >= max;
+    });
+
+    if (allFullyMet) {
+      return "All grading criteria fully satisfied.";
+    }
+
+    const improvementAreas = criteria
+      .filter((c) => {
+        const awarded = c.pointsAwarded || 0;
+        const max = c.maxPoints || 0;
+        return awarded < max;
+      })
+      .map((c) => {
+        return ` ${c.feedback || "No feedback provided"}`;
+      })
+      .join("\n");
+
+    return improvementAreas.length > 0
+      ? `To improve your score:\n${improvementAreas}`
+      : "Review criteria for potential improvements.";
+  }
+
+  /**
    * Apply corrections from judge
    */
   private applyJudgeCorrections(
@@ -501,17 +798,24 @@ export class TextGradingService implements ITextGradingService {
     const corrected = { ...gradingAttempt };
 
     if (corrections.points !== undefined) {
-      corrected.points = corrections.points;
+      corrected.totalScore = corrections.points;
     }
 
     if (corrections.feedback) {
-      corrected.explanation = `${corrected.explanation}\n\n**Judge Adjustment**: ${corrections.feedback}`;
+      corrected.overallFeedback = `${corrected.overallFeedback}\n\nJudge Adjustment: ${corrections.feedback}`;
     }
 
     if (corrections.rubricScores && Array.isArray(corrections.rubricScores)) {
-      corrected.rubricScores = corrections.rubricScores;
-      corrected.points = corrections.rubricScores.reduce(
-        (sum: number, score: RubricScore) => sum + (score.pointsAwarded || 0),
+      corrected.criteria = corrections.rubricScores.map((score, index) => ({
+        criterionId: score.rubricQuestion || `criterion_${index}`,
+        pointsAwarded: score.pointsAwarded || 0,
+        maxPoints: score.maxPoints || 0,
+        evidence: null,
+        feedback: score.justification || "No feedback provided",
+      }));
+
+      corrected.totalScore = corrected.criteria.reduce(
+        (sum, c) => sum + c.pointsAwarded,
         0,
       );
     }
@@ -582,57 +886,8 @@ export class TextGradingService implements ITextGradingService {
     typeof GradingAttemptSchema
   > {
     if (!singletonParser) {
-      singletonParser = StructuredOutputParser.fromZodSchema(
-        z.object({
-          points: z
-            .number()
-            .min(0)
-            .describe("Total points awarded (sum of all rubric scores)"),
-          feedback: z
-            .string()
-            .describe("Comprehensive feedback following the AEEG approach"),
-          analysis: z
-            .string()
-            .describe(
-              "Detailed analysis of what is observed in the learner's response",
-            ),
-          evaluation: z
-            .string()
-            .describe(
-              "Evaluation of how well the response meets each assessment aspect",
-            ),
-          explanation: z
-            .string()
-            .describe(
-              "Clear reasons for the grade based on specific observations",
-            ),
-          guidance: z.string().describe("Concrete suggestions for improvement"),
-          rubricScores: z
-            .array(
-              z.object({
-                rubricQuestion: z.string().describe("The rubric question"),
-                pointsAwarded: z
-                  .number()
-                  .min(0)
-                  .describe("Points awarded for this rubric"),
-                maxPoints: z
-                  .number()
-                  .describe("Maximum points available for this rubric"),
-                criterionSelected: z
-                  .string()
-                  .describe("The specific criterion level selected"),
-                justification: z
-                  .string()
-                  .describe("Detailed justification for the score"),
-              }),
-            )
-            .describe("Individual scores for each rubric criterion")
-            .optional(),
-          gradingRationale: z
-            .string()
-            .describe("Internal rationale for ensuring consistent grading"),
-        }),
-      );
+      singletonParser =
+        StructuredOutputParser.fromZodSchema(GradingAttemptSchema);
     }
 
     return singletonParser;
@@ -695,18 +950,10 @@ export class TextGradingService implements ITextGradingService {
   }
 
   /**
-   * Validate feedback tone alignment with score percentage
+   * Validate that feedback contains no subjective language
    */
-  private validateFeedbackAlignment(
-    gradingAttempt: GradingAttempt,
-    scorePercentage: number,
-  ): string | null {
-    const feedback = gradingAttempt.feedback || "";
-    const explanation = gradingAttempt.explanation || "";
-    const guidance = gradingAttempt.guidance || "";
-    const allText = `${feedback} ${explanation} ${guidance}`.toLowerCase();
-
-    const positiveWords = [
+  private validateNoSubjectiveLanguage(feedback: string): boolean {
+    const subjectiveWords = [
       "excellent",
       "outstanding",
       "great",
@@ -714,138 +961,17 @@ export class TextGradingService implements ITextGradingService {
       "impressive",
       "well done",
       "good job",
-    ];
-    const negativeWords = [
       "poor",
       "weak",
-      "inadequate",
-      "lacking",
-      "missing",
-      "incomplete",
-      "fails",
-      "incorrect",
-    ];
-    const encouragingWords = ["keep up", "continue", "maintain", "build on"];
-    const criticalWords = [
-      "needs improvement",
-      "must improve",
-      "requires work",
-      "significant issues",
+      "nice",
+      "wonderful",
+      "fantastic",
+      "brilliant",
+      "superb",
     ];
 
-    const positiveCount = positiveWords.reduce(
-      (count, word) => count + (allText.includes(word) ? 1 : 0),
-      0,
-    );
-    const negativeCount = negativeWords.reduce(
-      (count, word) => count + (allText.includes(word) ? 1 : 0),
-      0,
-    );
-    const encouragingCount = encouragingWords.reduce(
-      (count, word) => count + (allText.includes(word) ? 1 : 0),
-      0,
-    );
-    const criticalCount = criticalWords.reduce(
-      (count, word) => count + (allText.includes(word) ? 1 : 0),
-      0,
-    );
-
-    if (
-      scorePercentage >= 85 &&
-      (negativeCount > positiveCount || criticalCount > encouragingCount)
-    ) {
-      return `High score (${Math.round(
-        scorePercentage,
-      )}%) but overly negative feedback tone`;
-    }
-
-    if (
-      scorePercentage <= 40 &&
-      (positiveCount > negativeCount || encouragingCount > criticalCount)
-    ) {
-      return `Low score (${Math.round(
-        scorePercentage,
-      )}%) but overly positive feedback tone`;
-    }
-
-    if (
-      scorePercentage >= 70 &&
-      scorePercentage < 85 &&
-      negativeCount > positiveCount + 2
-    ) {
-      return `Good score (${Math.round(
-        scorePercentage,
-      )}%) but excessively critical feedback`;
-    }
-
-    return null;
-  }
-
-  /**
-   * Convert optional rubric scores to required format
-   */
-  private ensureRequiredRubricFields(
-    rubricScores?: RubricScore[],
-  ): RubricScore[] {
-    if (!rubricScores || !Array.isArray(rubricScores)) {
-      return [];
-    }
-
-    return rubricScores.map((score, index) => ({
-      rubricQuestion: score.rubricQuestion || `Rubric ${index + 1}`,
-      pointsAwarded: score.pointsAwarded || 0,
-      maxPoints: score.maxPoints || 0,
-      criterionSelected: score.criterionSelected || "Default criterion",
-      justification: score.justification || "Auto-generated justification",
-    }));
-  }
-
-  /**
-   * Generate ultra-concise feedback - no redundancy
-   */
-  private generateAlignedFeedback(
-    gradingAttempt: GradingAttempt,
-    maxPossiblePoints: number,
-  ): string {
-    const percentage =
-      maxPossiblePoints > 0
-        ? Math.round((gradingAttempt.points / maxPossiblePoints) * 100)
-        : 0;
-
-    const conciseFeedback = `${gradingAttempt.explanation}
-
-${gradingAttempt.guidance}
-
-**Score: ${gradingAttempt.points}/${maxPossiblePoints} (${percentage}%)**`.trim();
-
-    return conciseFeedback;
-  }
-
-  /**
-   * Get contextual introduction based on score percentage
-   */
-  private getScoreContext(percentage: number): string {
-    if (percentage >= 95) {
-      return "You achieved an outstanding score.";
-    } else if (percentage >= 90) {
-      return "You achieved an excellent score.";
-    } else if (percentage >= 85) {
-      return "You achieved a very good score.";
-    } else if (percentage >= 80) {
-      return "You achieved a good score.";
-    } else if (percentage >= 75) {
-      return "You achieved an above average score.";
-    } else if (percentage >= 70) {
-      return "You achieved a satisfactory score.";
-    } else if (percentage >= 65) {
-      return "You achieved an adequate score with room for improvement.";
-    } else if (percentage >= 60) {
-      return "Your score indicates areas for improvement.";
-    } else if (percentage >= 50) {
-      return "Your score indicates significant room for improvement.";
-    } else {
-      return "Your score indicates substantial areas needing improvement.";
-    }
+    const lowerFeedback = feedback.toLowerCase();
+    return !subjectiveWords.some((word) => lowerFeedback.includes(word));
   }
 
   /**
@@ -920,44 +1046,82 @@ ${gradingAttempt.guidance}
   }
 
   /**
-   * Load the enhanced text grading template with robust validation
+   * Load the deterministic grading template
    */
   private loadEnhancedTextGradingTemplate(): string {
-    return `
-    You are an educational grading assistant helping evaluate student work fairly and accurately.
-    
-    PREVIOUS FEEDBACK: {judge_feedback}
-    If feedback above exists, please address the issues mentioned.
-    
-    STUDENT RESPONSE TO GRADE:
-    {learner_response}
-    
-    DETAILED RUBRIC CRITERIA AND SCORING:
-    {scoring_criteria}
-    Max Points Available: {total_points}
-    
-    CRITICAL INSTRUCTIONS:
-    
-    1. CAREFULLY examine each rubric question and its scoring criteria
-    2. For each rubric, select the ONE criterion that BEST matches the student's response
-    3. Use the EXACT point value from the selected criterion - no custom points allowed
-    4. Your total points MUST equal the sum of all rubric scores
-    5. Quote specific parts of the student response as evidence for your scoring decisions
-    6. Provide constructive feedback based on what you observe
-    
-    RUBRIC SCORING REQUIREMENTS:
-    - You must score ALL rubric questions provided in the criteria
-    - Each rubric score must use a valid point value from its criteria options
-    - Justify each score with specific evidence from the student response
-    - Total points = sum of all individual rubric scores (this is mandatory)
-    
-    Question: {question}
-    Assignment Instructions: {assignment_instructions}
-    Language: {language}
+    return `You are an automated grading engine. Your task is to evaluate learner submissions using ONLY the provided grading rubric.
 
-    Make sure your feedback is short and concise.
+MANDATORY RULES:
+1. Grade strictly per criterion - do NOT invent new criteria
+2. Assign points ONLY if the criterion is explicitly satisfied
+3. If evidence is missing, unclear, or incorrect → assign 0 points
+4. Similar submissions must receive identical scores and feedback
+5. Do NOT use subjective language ("good", "strong", "weak", "excellent", "poor", "nice")
+6. Every point deduction MUST be explained with evidence from the submission
+7. Quote exact phrases from the submission as evidence
+8. Do NOT infer intent or give credit for unstated information
+9. Do NOT compare learners to others or give encouragement
 
-    {format_instructions}
-    `;
+FEEDBACK REQUIREMENTS FOR EACH CRITERION:
+1. **evidence**: Quote the specific text from the learner's submission that relates to this criterion
+   - If the criterion is met: Quote the relevant part that satisfies it
+   - If NOT met: Write "No supporting evidence found in the submission."
+
+2. **feedback**: Provide constructive, learner-focused feedback
+   - Focus on what the learner DID or DID NOT include in their answer
+   - If FULLY met: Acknowledge what was correctly explained or demonstrated
+   - If PARTIALLY met: Point out what was included AND what specific elements are missing
+   - If NOT met: Explain what specific information or concepts are absent from the answer
+   - Be specific about gaps: name the missing concepts, explanations, or details
+   - Frame as actionable guidance: "The answer should include..." or "Consider adding..."
+   - NO criterion requirements, NO subjective adjectives, NO encouragement, NO praise
+   - Do NOT start with "Criterion requires..." or similar phrasing
+
+EXAMPLE OF GOOD FEEDBACK:
+Criterion: "Explain how React components communicate via props"
+Points Awarded: 2/4
+Evidence: "Components can pass data through attributes called props."
+Feedback: "The answer mentions that props are used for passing data, which is correct. However, it lacks explanation of the parent-to-child data flow direction and how parent components actually pass props to their children. Consider adding details about unidirectional data flow and the syntax for passing props."
+
+EXAMPLE OF BAD FEEDBACK (DO NOT DO THIS):
+Criterion: "Explain how React components communicate via props"
+Points Awarded: 2/4
+Evidence: "The submission discusses props."
+Feedback: "Criterion requires explanation of HOW props enable communication. The submission does not explain the communication mechanism."
+❌ Problems: States criterion requirements, vague evidence, doesn't provide constructive guidance
+
+ANTI-HALLUCINATION RULE:
+If evidence is not explicitly in the submission, you MUST write:
+"No supporting evidence found in the submission."
+
+PREVIOUS JUDGE FEEDBACK (if any): {judge_feedback}
+
+---
+
+### Question
+{question}
+
+### Assignment Instructions
+{assignment_instructions}
+
+### Grading Rubric
+{scoring_criteria}
+
+Maximum Points: {total_points}
+
+### Learner Submission
+{learner_response}
+
+### Your Task
+For each criterion:
+1. Read the criterion requirements carefully
+2. Search the learner submission for evidence
+3. Quote the relevant text in the "evidence" field
+4. Award points based on whether requirements are met
+5. Provide constructive feedback focused on what the learner included or omitted, and how to improve
+
+Language for response: {language}
+
+{format_instructions}`;
   }
 }

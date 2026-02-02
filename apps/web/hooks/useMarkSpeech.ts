@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { useChatbot } from "./useChatbot";
 
 export interface SpeechBubble {
   id: string;
@@ -12,9 +13,15 @@ export interface SpeechBubble {
 export const useMarkSpeech = () => {
   const [activeBubble, setActiveBubble] = useState<SpeechBubble | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { isMuted } = useChatbot();
 
   const speak = useCallback(
     (message: string, type: SpeechBubble["type"] = "info", duration = 3000) => {
+      // Don't show speech bubbles if muted
+      if (isMuted) {
+        return;
+      }
+
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -32,7 +39,7 @@ export const useMarkSpeech = () => {
         setActiveBubble(null);
       }, duration);
     },
-    [],
+    [isMuted],
   );
 
   const dismiss = useCallback(() => {

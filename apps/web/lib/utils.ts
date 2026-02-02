@@ -73,11 +73,6 @@ export const useDebugLog = () => {
           }
           return String(arg);
         });
-        console.debug(
-          `%c [${new Date().toISOString()}]:`,
-          "color: #888; font-style: italic;",
-          ...formattedArgs,
-        );
       }
     },
     [debugMode],
@@ -150,9 +145,14 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
 export const getSubmitButtonStatus = (
   questions: QuestionStore[],
   submitting: boolean,
+  isUploadingFiles?: boolean,
 ) => {
   if (submitting) {
     return { disabled: true, reason: "Submitting assignment..." };
+  }
+
+  if (isUploadingFiles) {
+    return { disabled: true, reason: "File upload in progress..." };
   }
 
   const questionsWithResponses = questions.filter(

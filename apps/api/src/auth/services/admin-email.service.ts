@@ -149,6 +149,58 @@ Provider: Development Console
   }
 
   /**
+   * Send a generic email (used for report notifications, status updates, etc.)
+   */
+  async sendGenericEmail(
+    to: string,
+    subject: string,
+    body: string,
+  ): Promise<boolean> {
+    try {
+      if (this.emailProvider === "none") {
+        if (process.env.NODE_ENV !== "production") {
+          this.logger.log(
+            `DEV EMAIL (no provider configured)\nTo: ${to}\nSubject: ${subject}\n\n${body}`,
+          );
+          return true;
+        }
+        this.logger.error("Email service not configured for production");
+        return false;
+      }
+
+      if (this.emailProvider === "sendgrid") {
+        const fromEmail =
+          process.env.SENDGRID_FROM_EMAIL || "noreply@markapp.com";
+        const fromName = process.env.SENDGRID_FROM_NAME || "Mark Support";
+        await sgMail.send({
+          from: { email: fromEmail, name: fromName },
+          to,
+          subject,
+          text: body,
+          html: `<pre style="font-family:Arial, sans-serif; white-space:pre-wrap;">${body}</pre>`,
+        });
+        return true;
+      }
+
+      if (this.emailProvider === "google" && this.transporter) {
+        await this.transporter.sendMail({
+          from: process.env.GMAIL_USER,
+          to,
+          subject,
+          text: body,
+        });
+        return true;
+      }
+
+      this.logger.error("Email provider not initialized");
+      return false;
+    } catch (error) {
+      this.logger.error(`Failed to send email to ${to}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * Send verification code using SendGrid
    */
   private async sendVerificationCodeSendGrid(
@@ -463,5 +515,280 @@ This is a test message from Mark Admin System.
       );
       return false;
     }
+  }
+
+  /**
+   * Send grading completion notification email
+   */
+  async sendGradingCompletionEmail(
+    email: string,
+    assignmentId: number,
+    attemptId: number,
+    grade?: number,
+  ): Promise<boolean> {
+    try {
+      if (this.emailProvider === "none") {
+        if (process.env.NODE_ENV === "production") {
+          this.logger.error("Email service not configured for production");
+          return false;
+        } else {
+          this.logger.log(`
+=== GRADING COMPLETION NOTIFICATION ===
+Email: ${email}
+Assignment ID: ${assignmentId}
+Attempt ID: ${attemptId}
+Grade: ${grade === undefined ? "N/A" : `${Math.round(grade)}%`}
+Provider: Development Console
+========================================`);
+          return true;
+        }
+      }
+
+      if (this.emailProvider === "sendgrid") {
+        return await this.sendGradingCompletionSendGrid(
+          email,
+          assignmentId,
+          attemptId,
+          grade,
+        );
+      } else if (this.emailProvider === "google") {
+        return await this.sendGradingCompletionGmail(
+          email,
+          assignmentId,
+          attemptId,
+          grade,
+        );
+      }
+
+      return false;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send grading completion email to ${email}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Send grading completion email using SendGrid
+   */
+  private async sendGradingCompletionSendGrid(
+    email: string,
+    assignmentId: number,
+    attemptId: number,
+    grade?: number,
+  ): Promise<boolean> {
+    try {
+      if (!sgMail || typeof sgMail.send !== "function") {
+        this.logger.error("SendGrid not properly initialized");
+        return false;
+      }
+
+      const fromEmail =
+        process.env.SENDGRID_FROM_EMAIL || "noreply@markapp.com";
+      const fromName = process.env.SENDGRID_FROM_NAME || "Mark Grading System";
+
+      const baseUrl =
+        process.env.NODE_ENV === "production"
+          ? process.env.WEB_APP_URL
+          : process.env.NODE_ENV === "staging"
+            ? process.env.STAGING_WEB_APP_URL
+            : "http://localhost:3010";
+
+      const resultsUrl = `${baseUrl}/learner/${assignmentId}/successPage/${attemptId}`;
+
+      const mailData = {
+        from: {
+          email: fromEmail,
+          name: fromName,
+        },
+        to: email,
+        subject: "Your Assignment Has Been Graded! ",
+        html: this.getGradingCompletionTemplate(resultsUrl, grade),
+        text: this.getGradingCompletionPlainText(resultsUrl, grade),
+      };
+
+      await sgMail.send(mailData);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send grading completion via SendGrid to ${email}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Send grading completion email using Gmail SMTP
+   */
+  private async sendGradingCompletionGmail(
+    email: string,
+    assignmentId: number,
+    attemptId: number,
+    grade?: number,
+  ): Promise<boolean> {
+    try {
+      if (!this.transporter) {
+        this.logger.error("Gmail transporter not initialized");
+        return false;
+      }
+
+      const baseUrl = process.env.WEB_APP_URL || "http://localhost:3010";
+      const resultsUrl = `${baseUrl}/learner/${assignmentId}/successPage/${attemptId}`;
+
+      const mailOptions = {
+        from: {
+          name: "Mark Grading System",
+          address: process.env.GMAIL_USER || "noreply@markapp.com",
+        },
+        to: email,
+        subject: "Your Assignment Has Been Graded! ✅",
+        html: this.getGradingCompletionTemplate(resultsUrl, grade),
+        text: this.getGradingCompletionPlainText(resultsUrl, grade),
+      };
+
+      await this.transporter.sendMail(mailOptions);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send grading completion via Gmail to ${email}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Get HTML template for grading completion email
+   */
+  private getGradingCompletionTemplate(
+    resultsUrl: string,
+    grade?: number,
+  ): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Grading Complete</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+          .header { background-color: #8b5cf6; padding: 40px 20px; text-align: center; }
+          .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: 600; }
+          .content { padding: 40px 20px; }
+          .grade-container { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); border-radius: 12px; padding: 30px; text-align: center; margin: 30px 0; }
+          .grade { font-size: 48px; font-weight: bold; color: #ffffff; margin: 10px 0; }
+          .grade-label { color: #e9d5ff; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; }
+          .description { color: #64748b; font-size: 16px; line-height: 1.6; margin: 20px 0; }
+          .cta-button { display: inline-block; background-color: #8b5cf6; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 600; margin: 20px 0; transition: background-color 0.3s; }
+          .cta-button:hover { background-color: #7c3aed; }
+          .features { background-color: #f8fafc; border-radius: 12px; padding: 20px; margin: 20px 0; }
+          .feature { display: flex; align-items: start; margin: 15px 0; }
+          .feature-icon { flex-shrink: 0; width: 24px; height: 24px; margin-right: 12px; }
+          .feature-text { color: #475569; font-size: 14px; line-height: 1.5; }
+          .footer { background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0; }
+          .footer-text { color: #9ca3af; font-size: 12px; margin: 5px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1> Grading Complete!</h1>
+          </div>
+          <div class="content">
+            <p class="description">
+              Great news! Your assignment has been graded and your results are ready to view.
+            </p>
+
+            ${
+              grade === undefined
+                ? `
+            <div class="grade-container">
+              <div class="grade">📊</div>
+              <div class="grade-label">Results Ready</div>
+            </div>
+            `
+                : `
+            <div class="grade-container">
+              <div class="grade-label">Your Score</div>
+              <div class="grade">${Math.round(grade)}%</div>
+            </div>
+            `
+            }
+
+            <div style="text-align: center;">
+              <a href="${resultsUrl}" class="cta-button">View Your Results</a>
+            </div>
+
+            <div class="features">
+              <div class="feature">
+                <svg class="feature-icon" fill="none" stroke="#8b5cf6" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="feature-text">
+                  <strong>Detailed Feedback:</strong> Review AI-generated feedback for each question
+                </div>
+              </div>
+              <div class="feature">
+                <svg class="feature-icon" fill="none" stroke="#8b5cf6" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="feature-text">
+                  <strong>Score Breakdown:</strong> See how you performed on each criterion
+                </div>
+              </div>
+              <div class="feature">
+                <svg class="feature-icon" fill="none" stroke="#8b5cf6" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+                <div class="feature-text">
+                  <strong>Improvement Tips:</strong> Get guidance on how to improve for next time
+                </div>
+              </div>
+            </div>
+
+            <p class="description">
+              Click the button above to access your complete grading report and feedback.
+            </p>
+          </div>
+          <div class="footer">
+            <p class="footer-text">This is an automated notification from Mark Grading System</p>
+            <p class="footer-text">© ${new Date().getFullYear()} Mark Application</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get plain text template for grading completion email
+   */
+  private getGradingCompletionPlainText(
+    resultsUrl: string,
+    grade?: number,
+  ): string {
+    return `
+Grading Complete!
+
+Great news! Your assignment has been graded and your results are ready to view.
+
+${grade === undefined ? "" : `Your Score: ${Math.round(grade)}%\n`}
+View Your Results: ${resultsUrl}
+
+What's Included:
+• Detailed Feedback: Review AI-generated feedback for each question
+• Score Breakdown: See how you performed on each criterion
+• Improvement Tips: Get guidance on how to improve for next time
+
+Click the link above to access your complete grading report and feedback.
+
+This is an automated notification from Mark Grading System.
+© ${new Date().getFullYear()} Mark Application
+    `;
   }
 }

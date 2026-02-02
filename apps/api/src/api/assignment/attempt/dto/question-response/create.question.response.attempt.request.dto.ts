@@ -14,6 +14,120 @@ import {
 } from "src/api/attempt/common/interfaces/attempt.interface";
 import { LearnerPresentationResponse } from "../assignment-attempt/types";
 
+// Define supporting classes first to avoid circular dependency issues
+export class BoundingBoxDto {
+  @IsNumber()
+  x: number;
+
+  @IsNumber()
+  y: number;
+
+  @IsNumber()
+  width: number;
+
+  @IsNumber()
+  height: number;
+}
+
+export class DetectedObjectDto {
+  @IsString()
+  label: string;
+
+  @IsNumber()
+  confidence: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BoundingBoxDto)
+  boundingBox?: BoundingBoxDto;
+}
+
+export class DetectedTextDto {
+  @IsString()
+  text: string;
+
+  @IsNumber()
+  confidence: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BoundingBoxDto)
+  boundingBox?: BoundingBoxDto;
+}
+
+export class TechnicalQualityDto {
+  @IsOptional()
+  @IsNumber()
+  exposureScore?: number;
+
+  @IsOptional()
+  @IsNumber()
+  noiseLevel?: number;
+
+  @IsOptional()
+  @IsNumber()
+  compositionScore?: number;
+}
+
+export class ImageAnalysisResultDto {
+  @IsNumber()
+  width: number;
+
+  @IsNumber()
+  height: number;
+
+  @IsNumber()
+  aspectRatio: number;
+
+  @IsNumber()
+  fileSize: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dominantColors?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  brightness?: number;
+
+  @IsOptional()
+  @IsNumber()
+  contrast?: number;
+
+  @IsOptional()
+  @IsNumber()
+  sharpness?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DetectedObjectDto)
+  detectedObjects?: DetectedObjectDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DetectedTextDto)
+  detectedText?: DetectedTextDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TechnicalQualityDto)
+  technicalQuality?: TechnicalQualityDto;
+
+  @IsOptional()
+  @IsString()
+  sceneType?: string;
+
+  @IsOptional()
+  @IsString()
+  rawDescription?: string;
+
+  @IsOptional()
+  additionalData?: Record<string, any>;
+}
+
 export class CreateQuestionResponseAttemptRequestDto {
   @ApiPropertyOptional({
     description: "The learner's text response (for text based questions).",
@@ -30,6 +144,15 @@ export class CreateQuestionResponseAttemptRequestDto {
   @IsOptional()
   @IsString()
   language: string;
+
+  @ApiPropertyOptional({
+    description:
+      "UI-selected language for the response (frontend compatibility).",
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  selectedLanguage?: string;
 
   @ApiPropertyOptional({
     description: "The learner's url based response (for url based questions).",
@@ -141,117 +264,4 @@ export class LearnerImageUploadDto {
   @IsOptional()
   @IsString()
   imageKey?: string;
-}
-
-export class ImageAnalysisResultDto {
-  @IsNumber()
-  width: number;
-
-  @IsNumber()
-  height: number;
-
-  @IsNumber()
-  aspectRatio: number;
-
-  @IsNumber()
-  fileSize: number;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  dominantColors?: string[];
-
-  @IsOptional()
-  @IsNumber()
-  brightness?: number;
-
-  @IsOptional()
-  @IsNumber()
-  contrast?: number;
-
-  @IsOptional()
-  @IsNumber()
-  sharpness?: number;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DetectedObjectDto)
-  detectedObjects?: DetectedObjectDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DetectedTextDto)
-  detectedText?: DetectedTextDto[];
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => TechnicalQualityDto)
-  technicalQuality?: TechnicalQualityDto;
-
-  @IsOptional()
-  @IsString()
-  sceneType?: string;
-
-  @IsOptional()
-  @IsString()
-  rawDescription?: string;
-
-  @IsOptional()
-  additionalData?: Record<string, any>;
-}
-
-export class DetectedObjectDto {
-  @IsString()
-  label: string;
-
-  @IsNumber()
-  confidence: number;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => BoundingBoxDto)
-  boundingBox?: BoundingBoxDto;
-}
-
-export class DetectedTextDto {
-  @IsString()
-  text: string;
-
-  @IsNumber()
-  confidence: number;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => BoundingBoxDto)
-  boundingBox?: BoundingBoxDto;
-}
-
-export class BoundingBoxDto {
-  @IsNumber()
-  x: number;
-
-  @IsNumber()
-  y: number;
-
-  @IsNumber()
-  width: number;
-
-  @IsNumber()
-  height: number;
-}
-
-export class TechnicalQualityDto {
-  @IsOptional()
-  @IsNumber()
-  exposureScore?: number;
-
-  @IsOptional()
-  @IsNumber()
-  noiseLevel?: number;
-
-  @IsOptional()
-  @IsNumber()
-  compositionScore?: number;
 }

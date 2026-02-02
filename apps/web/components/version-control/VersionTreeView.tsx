@@ -217,13 +217,13 @@ export function VersionTreeView({ assignmentId }: Props) {
           toast.success(`Version ${versionString} activated successfully!`);
         }
 
-        await versionControlHook.loadVersions();
+        // No need to call loadVersions() - activateVersion already updates the local state
       } catch (error) {
         console.error("Failed to activate version:", error);
         toast.error("Failed to activate version");
       }
     },
-    [activateVersion, versionControlHook.loadVersions],
+    [activateVersion],
   );
 
   const tableData = useMemo((): VersionTableRow[] => {
@@ -564,7 +564,6 @@ export function VersionTreeView({ assignmentId }: Props) {
             afterPublish: async () => {
               try {
                 await activateVersion(versionToActivate.id);
-                await versionControlHook.loadVersions();
                 toast.success(
                   `Draft ${versionString} published and activated successfully!`,
                 );
@@ -581,7 +580,6 @@ export function VersionTreeView({ assignmentId }: Props) {
         window.dispatchEvent(headerPublishEvent);
       } else {
         await activateVersion(versionToActivate.id);
-        await versionControlHook.loadVersions();
         toast.success(
           `Version ${versionString} published and activated successfully!`,
         );

@@ -209,19 +209,23 @@ GRADING APPROACH (AEEG):
    - Do NOT average or adjust points - use the exact values provided
 
 3. EXPLAIN: Provide clear reasons for the grade based on specific visual evidence
-   - For each rubric, explain why you selected that specific criterion level
-   - Reference specific visual elements that justify your scoring
-   - Connect image qualities directly to the rubric descriptions
-   - Be transparent about both strengths and weaknesses
-   - Justify why higher criterion levels were not achieved
+   - Focus on what the learner DID or DID NOT include in their image
+   - For each rubric, explain what specific visual elements are present or absent
+   - If criteria are fully met: Point out what was correctly demonstrated in the image
+   - If criteria are partially met: State what was included AND what specific elements are missing
+   - If criteria are NOT met: Explain what specific visual qualities or content are absent
+   - Reference specific visual elements from the image (e.g., "The composition includes X", "The image lacks Y")
+   - Do NOT state criterion requirements or start with "Criterion requires..."
+   - Focus on the image itself, not what the rubric asks for
    - Ensure the total points equal the sum of all rubric scores
 
 4. GUIDE: Offer concrete suggestions for improvement
-   - Provide specific techniques to improve image quality
-   - Suggest composition or technical improvements
+   - Frame as actionable guidance: "The image should include..." or "Consider adding..."
+   - Provide specific techniques to improve image quality (e.g., "Add better lighting", "Use rule of thirds")
+   - Suggest composition or technical improvements based on what's missing
    - Recommend creative approaches relevant to the assignment
-   - Offer practical tips for meeting higher criterion levels
-   - Include resources or methods for developing photography/image creation skills
+   - Offer practical tips for developing stronger visual content
+   - NO encouragement, NO praise - focus on concrete improvement steps
 
 GRADING STANDARDS FOR IMAGES (STRICTLY ENFORCED):
 - Exceptional (90-100%): Outstanding creativity, technical excellence, fully meets all requirements

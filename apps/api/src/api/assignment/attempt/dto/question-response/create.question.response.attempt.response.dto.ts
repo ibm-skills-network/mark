@@ -1,6 +1,21 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsString } from "class-validator";
 
+export interface StructuredCriterion {
+  name: string;
+  pointsAwarded: number;
+  maxPoints: number;
+  status: "full" | "partial" | "none";
+  evidence: string;
+  feedback: string;
+}
+
+export interface StructuredFeedback {
+  summary: string;
+  criteria: StructuredCriterion[];
+  guidance: string;
+}
+
 export class GeneralFeedbackDto {
   @ApiProperty({
     description: "The feedback earned by the leanrer.",
@@ -8,6 +23,27 @@ export class GeneralFeedbackDto {
     required: true,
   })
   feedback: string;
+
+  @ApiProperty({
+    description: "Structured feedback data for modern UI rendering",
+    type: Object,
+    required: false,
+  })
+  structuredFeedback?: StructuredFeedback;
+
+  @ApiProperty({
+    description: "Highlighting data for visual feedback on learner responses",
+    type: Object,
+    required: false,
+  })
+  highlighting?: any;
+
+  @ApiProperty({
+    description: "URL to download annotated PDF with AI feedback overlays",
+    type: String,
+    required: false,
+  })
+  annotatedPdfUrl?: string;
 }
 
 export class ChoiceBasedFeedbackDto {

@@ -10,6 +10,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
 import { USAGE_TRACKER } from "../../llm.constants";
+import { LlmRequestOptions } from "../interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
 import { LlmRouter } from "./llm-router.service";
@@ -35,6 +36,7 @@ export class PromptProcessorService implements IPromptProcessor {
     usageType: AIUsageType,
     featureKey: string,
     fallbackModel = "gpt-4o-mini",
+    options?: LlmRequestOptions,
   ): Promise<string> {
     try {
       const llm = await this.router.getForFeatureWithFallback(
@@ -47,6 +49,7 @@ export class PromptProcessorService implements IPromptProcessor {
         assignmentId,
         usageType,
         llm,
+        options,
       );
     } catch (error) {
       this.logger.error(
@@ -62,10 +65,11 @@ export class PromptProcessorService implements IPromptProcessor {
    * Process a text prompt and return the LLM response
    */
   async processPrompt(
-    prompt: PromptTemplate,
+    prompt: PromptTemplate | string,
     assignmentId: number,
     usageType: AIUsageType,
     llmKey = "gpt-4o",
+    options?: LlmRequestOptions,
   ): Promise<string> {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4o");
@@ -75,6 +79,7 @@ export class PromptProcessorService implements IPromptProcessor {
         assignmentId,
         usageType,
         llm,
+        options,
       );
     } catch (error) {
       this.logger.error(
@@ -102,54 +107,61 @@ export class PromptProcessorService implements IPromptProcessor {
    * Internal method to process a prompt with a specific LLM provider
    */
   private async _processPromptWithProvider(
-    prompt: PromptTemplate,
+    prompt: PromptTemplate | string,
     assignmentId: number,
     usageType: AIUsageType,
     llm: any,
+    options?: LlmRequestOptions,
   ): Promise<string> {
-    if (prompt.partialVariables) {
-      const stringVariables: { [key: string]: string | null } = {};
+    let input: string;
 
-      for (const key in prompt.partialVariables) {
-        const value = prompt.partialVariables[key];
-        if (
-          (typeof value === "string" || value === null) &&
-          typeof value !== "function"
-        ) {
-          stringVariables[key] = value;
+    if (typeof prompt === "string") {
+      input = prompt;
+    } else {
+      if (prompt.partialVariables) {
+        const stringVariables: { [key: string]: string | null } = {};
+
+        for (const key in prompt.partialVariables) {
+          const value = prompt.partialVariables[key];
+          if (
+            (typeof value === "string" || value === null) &&
+            typeof value !== "function"
+          ) {
+            stringVariables[key] = value;
+          }
+        }
+
+        const decodedVariables = decodeFields(stringVariables);
+
+        for (const key in decodedVariables) {
+          prompt.partialVariables[key] = decodedVariables[key];
         }
       }
 
-      const decodedVariables = decodeFields(stringVariables);
-
-      for (const key in decodedVariables) {
-        prompt.partialVariables[key] = decodedVariables[key];
+      try {
+        input = await prompt.format({});
+        input = decodeIfBase64(input) || input;
+      } catch (formatError: unknown) {
+        const errorMessage =
+          formatError instanceof Error ? formatError.message : "Unknown error";
+        this.logger.error(`Error formatting prompt: ${errorMessage}`, {
+          stack:
+            formatError instanceof Error
+              ? formatError.stack
+              : "No stack trace available",
+          promptDetails: {
+            template: JSON.stringify(prompt.template).slice(0, 100) + "...",
+            partialVariables:
+              JSON.stringify(prompt.partialVariables || {}).slice(0, 200) +
+              "...",
+          },
+        });
+        throw formatError;
       }
     }
 
-    let input: string;
     try {
-      input = await prompt.format({});
-      input = decodeIfBase64(input) || input;
-    } catch (formatError: unknown) {
-      const errorMessage =
-        formatError instanceof Error ? formatError.message : "Unknown error";
-      this.logger.error(`Error formatting prompt: ${errorMessage}`, {
-        stack:
-          formatError instanceof Error
-            ? formatError.stack
-            : "No stack trace available",
-        promptDetails: {
-          template: JSON.stringify(prompt.template).slice(0, 100) + "...",
-          partialVariables:
-            JSON.stringify(prompt.partialVariables || {}).slice(0, 200) + "...",
-        },
-      });
-      throw formatError;
-    }
-
-    try {
-      const result = await llm.invoke([new HumanMessage(input)]);
+      const result = await llm.invoke([new HumanMessage(input)], options);
       const response = this.cleanResponse(result.content);
       await this.usageTracker.trackUsage(
         assignmentId,
@@ -186,6 +198,7 @@ export class PromptProcessorService implements IPromptProcessor {
     assignmentId: number,
     usageType: AIUsageType,
     llmKey = "gpt-4.1-mini",
+    options?: LlmRequestOptions,
   ): Promise<string> {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4.1-mini");
@@ -216,7 +229,11 @@ export class PromptProcessorService implements IPromptProcessor {
 
       const decodedImageData = decodeIfBase64(imageData) || imageData;
 
-      const result = await llm.invokeWithImage(textContent, decodedImageData);
+      const result = await llm.invokeWithImage(
+        textContent,
+        decodedImageData,
+        options,
+      );
 
       const response = this.cleanResponse(result.content);
 

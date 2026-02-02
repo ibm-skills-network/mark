@@ -1,5 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { AIUsageType } from "@prisma/client";
+import { LlmRequestOptions } from "./llm-provider.interface";
 
 export interface IPromptProcessor {
   /**
@@ -11,6 +12,7 @@ export interface IPromptProcessor {
     usageType: AIUsageType,
     featureKey: string,
     fallbackModel?: string,
+    options?: LlmRequestOptions,
   ): Promise<string>;
 
   /**
@@ -21,6 +23,7 @@ export interface IPromptProcessor {
     assignmentId: number,
     usageType: AIUsageType,
     llmKey?: string,
+    options?: LlmRequestOptions,
   ): Promise<string>;
 
   /**
@@ -32,5 +35,6 @@ export interface IPromptProcessor {
     assignmentId: number,
     usageType: AIUsageType,
     llmKey?: string,
+    options?: LlmRequestOptions,
   ): Promise<string>;
 }

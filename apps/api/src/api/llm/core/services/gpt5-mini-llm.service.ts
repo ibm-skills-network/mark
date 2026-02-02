@@ -12,14 +12,14 @@ import {
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 
 /**
- * GPT-5-mini provider service targeting the lightweight/faster GPT-5-mini model.
- * This service offers enhanced performance over GPT-4o-mini with better efficiency
+ * GPT-4o-mini provider service targeting the lightweight/faster GPT-4o-mini model.
+ * This service offers enhanced performance with better efficiency
  * and cost-effectiveness for simpler tasks.
  */
 @Injectable()
 export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
   private readonly logger: Logger;
-  static readonly DEFAULT_MODEL = "gpt-5-mini";
+  static readonly DEFAULT_MODEL = "gpt-4o-mini";
   readonly key = "gpt-5-mini";
 
   constructor(
@@ -55,7 +55,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
 
-    this.logger.debug(`Invoking GPT-5-mini with ${inputTokens} input tokens`);
+    this.logger.debug(`Invoking GPT-5o-mini with ${inputTokens} input tokens`);
 
     try {
       const result = await model.invoke(messages);
@@ -63,7 +63,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-5-mini responded with ${outputTokens} output tokens`,
+        `GPT-4o-mini responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -75,7 +75,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `GPT-5-mini API error: ${
+        `GPT-4o-mini API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
@@ -84,7 +84,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
   }
 
   /**
-   * Send a request with image content to GPT-5-mini
+   * Send a request with image content to GPT-4o-mini
    */
   async invokeWithImage(
     textContent: string,
@@ -99,7 +99,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
     const estimatedImageTokens = 150;
 
     this.logger.debug(
-      `Invoking GPT-5-mini with image (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
+      `Invoking GPT-5o-mini with image (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
     );
 
     try {
@@ -122,7 +122,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-5-mini with image responded with ${outputTokens} output tokens`,
+        `GPT-4o-mini with image responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -134,7 +134,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `Error processing image with GPT-5-mini: ${
+        `Error processing image with GPT-4o-mini: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );

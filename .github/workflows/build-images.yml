@@ -41,19 +41,33 @@ jobs:
           fetch-depth: 0
 
       - name: Check if service needs scanning
-        id: changes
+        id: scan-changes
         run: |
-          # Check if this is a scheduled run, tag, or if service files changed
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_scan=true" >> $GITHUB_OUTPUT
           else
-            # Check for changes in service-specific files
             if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
               echo "needs_scan=true" >> $GITHUB_OUTPUT
             else
               echo "needs_scan=false" >> $GITHUB_OUTPUT
             fi
           fi
+
+      - name: Free disk space
+        if: steps.scan-changes.outputs.needs_scan == 'true'
+        run: |
+          echo "Disk usage before cleanup:"
+          df -h
+
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/lib/android || true
+
+          docker system prune -af || true
+          docker volume prune -f || true
+
+          echo "Disk usage after cleanup:"
+          df -h
 
       - name: Setup Node.js
         if: steps.changes.outputs.needs_scan == 'true'
@@ -331,6 +345,7 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         uses: docker/build-push-action@v6
         id: build-push
+        timeout-minutes: 45
         with:
           context: .
           file: apps/${{ matrix.service }}/Dockerfile
@@ -338,8 +353,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest
-          # cache-from: type=gha,scope=${{ matrix.service }}
-          # cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=min,scope=${{ matrix.service }},ignore-error=true
           platforms: linux/amd64
 
       - name: Run container security scan

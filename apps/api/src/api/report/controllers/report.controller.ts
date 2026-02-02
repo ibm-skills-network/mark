@@ -179,6 +179,41 @@ export class ReportsController {
     return this.reportsService.getReportsForUser(userId);
   }
 
+  @Get(":id/comments")
+  async getReportComments(
+    @Param("id") id: string,
+    @Req() request: UserSessionRequest,
+  ) {
+    if (!request?.userSession?.userId) {
+      throw new BadRequestException("User session missing");
+    }
+
+    return this.reportsService.getReportComments(
+      Number(id),
+      request.userSession,
+    );
+  }
+
+  @Post(":id/comments")
+  async addReportComment(
+    @Param("id") id: string,
+    @Body("comment") comment: string,
+    @Req() request: UserSessionRequest,
+  ) {
+    if (!comment?.trim()) {
+      throw new BadRequestException("Comment is required");
+    }
+    if (!request?.userSession?.userId) {
+      throw new BadRequestException("User session missing");
+    }
+
+    return this.reportsService.addReportComment(
+      Number(id),
+      comment,
+      request.userSession,
+    );
+  }
+
   @Get(":id")
   @UseGuards(AssignmentAccessControlGuard)
   async getReportById(

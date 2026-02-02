@@ -12,6 +12,7 @@ import {
 import {
   getCompletedAttempt,
   getFeedback,
+  getAttempts,
   getSuccessPageData,
   getUser,
   submitFeedback,
@@ -39,6 +40,8 @@ import ReportModal from "@/components/ReportModal";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
+import ErrorModal from "@/components/ErrorModal";
+import GradeSyncStatus from "@/components/GradeSyncStatus";
 
 const DynamicConfetti = dynamic(() => import("react-confetti"), {
   ssr: false,
@@ -106,18 +109,70 @@ function SuccessPage() {
     "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED"
   >("PENDING");
   const [userId, setUserId] = useState<string>(null);
+  const [errorConfig, setErrorConfig] = useState<{
+    message: string;
+    headline?: string;
+    statusCode?: number;
+    primaryActionHref?: string;
+  } | null>(null);
+  const [stateTimeline, setStateTimeline] = useState<
+    { step: string; detail?: string; timestamp?: string }[]
+  >([]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [userPreferredLanguage, setUserPreferredLanguage] = useState("en");
+
+  const logState = (step: string, detail?: string) => {
+    setStateTimeline((prev) => [
+      ...prev,
+      { step, detail, timestamp: new Date().toISOString() },
+    ]);
+  };
+
   useEffect(() => {
+    logState(
+      "Start loading success page",
+      `Assignment ${assignmentId}, attempt ${attemptId}`,
+    );
     const fetchData = async () => {
       const user = await getUser();
       setRole(user.role);
       setUserId(user.userId);
+      logState("User loaded", `Role: ${user.role}`);
       if (user.role === "learner") {
         try {
           const submissionDetails: AssignmentAttemptWithQuestions =
             await getCompletedAttempt(assignmentId, attemptId);
+          if (!submissionDetails) {
+            logState("Attempt fetch failed", "Attempt not found or not owned");
+            let resolvedHref: string | undefined = `/learner/${assignmentId}`;
+            try {
+              logState("Looking up other attempts for learner");
+              const attempts = await getAttempts(assignmentId);
+              const submittedAttempt =
+                attempts?.find((att) => att.submitted) || attempts?.[0];
+              if (submittedAttempt) {
+                logState(
+                  "Found fallback attempt",
+                  `Attempt ${submittedAttempt.id}`,
+                );
+                resolvedHref = `/learner/${assignmentId}/successPage/${submittedAttempt.id}`;
+              }
+            } catch {
+              logState("Failed to fetch other attempts for learner");
+            }
+
+            setErrorConfig({
+              statusCode: 404,
+              headline: "Attempt not found",
+              message:
+                "This submission does not belong to your account or no longer exists. Please open the assignment from your course to view your own attempts.",
+              primaryActionHref: resolvedHref,
+            });
+            setLoading(false);
+            return;
+          }
+          logState("Attempt fetched", `Attempt ${submissionDetails.id}`);
           setQuestions(submissionDetails.questions);
           setBackendComments(submissionDetails.comments || "");
           setShowSubmissionFeedback(
@@ -149,15 +204,18 @@ function SuccessPage() {
           });
           const response = await getFeedback(assignmentId, attemptId);
           if (response) {
+            logState("Feedback loaded");
             setComments(response.comments || "");
             setAiGradingRating(response.aiGradingRating || 0);
             setAssignmentRating(response.assignmentRating || 0);
           }
           setInit(true);
         } finally {
+          logState("Finished learner load");
           setLoading(false);
         }
       } else if (user.role === "author") {
+        logState("Author mode load");
         setShowSubmissionFeedback(zustandShowSubmissionFeedback);
         setQuestions(zustandQuestions);
         setShowQuestions(zustandShowQuestions);
@@ -168,8 +226,10 @@ function SuccessPage() {
         setCorrectAnswerVisibility(
           zustandAssignmentDetails?.correctAnswerVisibility ?? "ALWAYS",
         );
+        logState("Loaded from author store");
         setLoading(false);
       } else {
+        logState("Unknown role", user.role);
         setLoading(false);
       }
     };
@@ -318,6 +378,37 @@ function SuccessPage() {
       },
     },
   };
+
+  if (errorConfig) {
+    return (
+      <ErrorModal
+        statusCode={errorConfig.statusCode ?? 404}
+        headline={errorConfig.headline ?? "Attempt not available"}
+        error={errorConfig.message}
+        userSteps={[
+          {
+            title: "Open your assignments",
+            description:
+              "Return to your assignments list and open your own submission.",
+            cta: "Go to my assignments",
+          },
+          {
+            title: "Check you are logged in",
+            description:
+              "Make sure you are signed in with the correct account.",
+          },
+        ]}
+        primaryActionHref={`/learner/${assignmentId}`}
+        primaryActionLabel="Go to my assignments"
+        debugDetails={[
+          { label: "AssignmentId", value: String(assignmentId) },
+          { label: "AttemptId", value: String(attemptId) },
+        ]}
+        primaryActionHrefOverride={errorConfig.primaryActionHref}
+        stateTimeline={stateTimeline}
+      />
+    );
+  }
 
   if (loading) {
     return <Loading animationData={animationData} />;
@@ -582,6 +673,21 @@ function SuccessPage() {
             </motion.h1>
           )}
         </div>
+
+        {/* LTI Grade Sync Status */}
+        {role === "learner" && !Number.isNaN(grade) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="w-full"
+          >
+            <GradeSyncStatus
+              attemptId={attemptId}
+              assignmentId={assignmentId}
+            />
+          </motion.div>
+        )}
 
         {role === "learner" && (
           <div className="flex flex-col sm:flex-row items-center gap-y-4 sm:gap-y-0 gap-x-4 justify-center p-4">

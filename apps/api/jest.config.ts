@@ -21,9 +21,12 @@ const config: Config = {
   },
   clearMocks: true,
   testPathIgnorePatterns: ["<rootDir>/dist/"],
+  modulePathIgnorePatterns: ["<rootDir>/dist/"],
   testEnvironment: "node",
   moduleNameMapper: {
     "^src/(.*)$": "<rootDir>/src/$1",
+    "^pdfjs-dist/legacy/build/pdf\\.mjs$":
+      "<rootDir>/test/__mocks__/pdfjs-dist.ts",
   },
 };
 

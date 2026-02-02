@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
-import { HttpService } from "@nestjs/axios";
 import {
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -16,7 +16,6 @@ import {
   ResponseType,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
-import { GRADE_SUBMISSION_EXCEPTION } from "src/api/assignment/attempt/api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
@@ -24,6 +23,8 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
+import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
@@ -40,6 +41,8 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
+import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
+import { Roles } from "src/auth/role/roles.global.guard";
 import {
   UserRole,
   UserSession,
@@ -53,14 +56,15 @@ import {
 } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
+import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
-import { Roles } from "src/auth/role/roles.global.guard";
-import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
 
 @Injectable()
 export class AttemptSubmissionService {
+  private readonly logger = new Logger(AttemptSubmissionService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly validationService: AttemptValidationService,
@@ -69,8 +73,51 @@ export class AttemptSubmissionService {
     private readonly questionResponseService: QuestionResponseService,
     private readonly translationService: TranslationService,
     private readonly questionVariantService: QuestionVariantService,
-    private readonly httpService: HttpService,
+    private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {}
+
+  async autoSaveQuestionResponse(
+    attemptId: number,
+    assignmentId: number,
+    questionId: number,
+    requestDto: CreateQuestionResponseAttemptRequestDto,
+    userSession: UserSession,
+    language: string,
+  ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    const responseDto =
+      await this.questionResponseService.createQuestionResponse(
+        attemptId,
+        { ...requestDto, id: questionId },
+        userSession.role,
+        assignmentId,
+        language,
+      );
+
+    await this.prisma.questionResponse.deleteMany({
+      where: {
+        assignmentAttemptId: attemptId,
+        questionId,
+        id: { not: responseDto.id },
+      },
+    });
+
+    return this.sanitizeAutoSaveResponse(responseDto, userSession.role);
+  }
+
+  private sanitizeAutoSaveResponse(
+    responseDto: CreateQuestionResponseAttemptResponseDto,
+    role: UserRole,
+  ): CreateQuestionResponseAttemptResponseDto {
+    if (role !== UserRole.LEARNER) {
+      return responseDto;
+    }
+
+    return {
+      id: responseDto.id,
+      questionId: responseDto.questionId,
+      question: "",
+    };
+  }
   /**
    * Creates a new assignment attempt
    */
@@ -147,6 +194,8 @@ export class AttemptSubmissionService {
       },
     });
 
+    const selectionSeed = assignmentAttempt.id ^ assignmentId;
+
     const questions: QuestionDto[] =
       assignmentWithActiveVersion?.currentVersion?.questionVersions?.length > 0
         ? await Promise.all(
@@ -219,7 +268,10 @@ export class AttemptSubmissionService {
       assignment.numberOfQuestionsPerAttempt &&
       assignment.numberOfQuestionsPerAttempt > 0
     ) {
-      const shuffledQuestions = questions.sort(() => Math.random() - 0.5);
+      const shuffledQuestions = this.deterministicShuffle(
+        questions,
+        selectionSeed,
+      );
       const selectedQuestions = shuffledQuestions.slice(
         0,
         assignment.numberOfQuestionsPerAttempt,
@@ -279,7 +331,11 @@ export class AttemptSubmissionService {
       ),
     }));
 
-    const orderedQuestions = this.getOrderedQuestions(questionDtos, assignment);
+    const orderedQuestions = this.getOrderedQuestions(
+      questionDtos,
+      assignment,
+      selectionSeed,
+    );
 
     await this.prisma.assignmentAttempt.update({
       where: { id: assignmentAttempt.id },
@@ -850,10 +906,6 @@ export class AttemptSubmissionService {
         },
       });
 
-      if (progressCallback) {
-        await progressCallback("Processing question responses...", 20);
-      }
-
       const successfulQuestionResponses =
         await this.questionResponseService.submitQuestions(
           updateDto.responsesForQuestions,
@@ -867,15 +919,22 @@ export class AttemptSubmissionService {
         );
 
       if (progressCallback) {
-        await progressCallback("Calculating grades...", 70);
+        await progressCallback("Calculating final grade...", 92);
       }
 
-      let totalPossiblePoints = 0;
-      for (const response of successfulQuestionResponses) {
-        const question = assignment.questions.find(
-          (q) => q.id === response.questionId,
+      const { totalPossiblePoints, missingQuestions } =
+        await this.calculateTotalPossiblePointsWithValidation(
+          successfulQuestionResponses,
+          assignment.questions,
         );
-        totalPossiblePoints += question?.totalPoints || 0;
+
+      if (totalPossiblePoints <= 0) {
+        throw new InternalServerErrorException(
+          `Invalid totalPossiblePoints (${totalPossiblePoints}) calculated for attemptId ${attemptId}. ` +
+            `This indicates a critical grading error. ` +
+            `Responses: ${successfulQuestionResponses.length}, ` +
+            `Questions: ${assignment.questions.length}`,
+        );
       }
 
       const { grade, totalPointsEarned } =
@@ -884,11 +943,20 @@ export class AttemptSubmissionService {
           totalPossiblePoints,
         );
 
+      if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        throw new InternalServerErrorException(
+          `Invalid grade calculated: ${grade}. ` +
+            `totalPointsEarned: ${totalPointsEarned}, ` +
+            `totalPossiblePoints: ${totalPossiblePoints}`,
+        );
+      }
+
       if (gradingCallbackRequired) {
         if (progressCallback) {
-          await progressCallback("Sending grade to LTI...", 80);
+          await progressCallback("Sending grade to LTI...", 95);
         }
         await this.handleLtiGradeCallback(
+          attemptId,
           grade,
           authCookie,
           assignmentId,
@@ -897,13 +965,18 @@ export class AttemptSubmissionService {
       }
 
       if (progressCallback) {
-        await progressCallback("Saving results...", 90);
+        await progressCallback("Finalizing results...", 98);
       }
 
       const result = await this.updateAssignmentAttemptInDb(
         attemptId,
         updateDto,
         grade,
+      );
+
+      await this.pruneAutoSavedResponses(
+        attemptId,
+        successfulQuestionResponses,
       );
 
       if (progressCallback) {
@@ -947,7 +1020,7 @@ export class AttemptSubmissionService {
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {
-        await progressCallback("Processing author preview...", 10);
+        await progressCallback("Setting up preview...", 5);
       }
 
       const assignment = await this.prisma.assignment.findUnique({
@@ -967,7 +1040,7 @@ export class AttemptSubmissionService {
       const fakeAttemptId = -1;
 
       if (progressCallback) {
-        await progressCallback("Submitting questions...", 30);
+        await progressCallback("Grading questions...", 10);
       }
 
       const successfulQuestionResponses =
@@ -982,15 +1055,19 @@ export class AttemptSubmissionService {
         );
 
       if (progressCallback) {
-        await progressCallback("Calculating grades...", 70);
+        await progressCallback("Calculating results...", 92);
       }
 
-      let totalPossiblePoints = 0;
-      for (const response of successfulQuestionResponses) {
-        const question = assignment.questions.find(
-          (q) => q.id === response.questionId,
+      const { totalPossiblePoints, missingQuestions } =
+        await this.calculateTotalPossiblePointsWithValidation(
+          successfulQuestionResponses,
+          assignment.questions,
         );
-        totalPossiblePoints += question?.totalPoints || 0;
+
+      if (totalPossiblePoints <= 0) {
+        throw new InternalServerErrorException(
+          `Invalid totalPossiblePoints (${totalPossiblePoints}) in author preview for assignmentId ${assignmentId}.`,
+        );
       }
 
       const { grade, totalPointsEarned } =
@@ -998,6 +1075,14 @@ export class AttemptSubmissionService {
           successfulQuestionResponses,
           totalPossiblePoints,
         );
+
+      if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        throw new InternalServerErrorException(
+          `Invalid grade calculated in author preview: ${grade}. ` +
+            `totalPointsEarned: ${totalPointsEarned}, ` +
+            `totalPossiblePoints: ${totalPossiblePoints}`,
+        );
+      }
 
       if (progressCallback) {
         await progressCallback("Preview completed!", 100);
@@ -1065,6 +1150,7 @@ export class AttemptSubmissionService {
    * Handle the LTI grade callback
    */
   private async handleLtiGradeCallback(
+    attemptId: number,
     grade: number,
     authCookie: string,
     assignmentId: number,
@@ -1091,7 +1177,13 @@ export class AttemptSubmissionService {
       highestOverall = grade;
     }
 
-    await this.sendGradeToLtiGateway(highestOverall, authCookie);
+    await this.sendGradeToLtiGateway(
+      attemptId,
+      highestOverall,
+      authCookie,
+      assignmentId,
+      userId,
+    );
   }
 
   /**
@@ -1124,38 +1216,173 @@ export class AttemptSubmissionService {
     });
   }
 
+  private async pruneAutoSavedResponses(
+    attemptId: number,
+    responses: CreateQuestionResponseAttemptResponseDto[],
+  ): Promise<void> {
+    const responseIds = [
+      ...new Set(
+        responses
+          .map((response) => response.id)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    ];
+
+    if (responseIds.length === 0) {
+      return;
+    }
+
+    try {
+      await this.prisma.questionResponse.deleteMany({
+        where: {
+          assignmentAttemptId: attemptId,
+          id: { notIn: responseIds },
+        },
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+    }
+  }
+
   /**
-   * Send a grade to the LTI gateway
+   * Send a grade to the LTI gateway using the retry service.
+   * This method delegates to LtiGradeSyncService which handles retries, logging, and notifications.
+   * It does NOT throw exceptions - failures are handled gracefully with scheduled retries.
    */
   private async sendGradeToLtiGateway(
+    attemptId: number,
     grade: number,
     authCookie: string,
+    assignmentId: number,
+    userId: string,
   ): Promise<void> {
-    try {
-      const ltiGatewayResponse = await this.httpService
-        .put(
-          process.env.GRADING_LTI_GATEWAY_URL,
-          { score: grade },
-          {
-            headers: {
-              Cookie: `authentication=${authCookie}`,
-            },
-          },
-        )
-        .toPromise();
+    this.logger.log(
+      `Initiating LTI grade sync for attempt ${attemptId}, grade: ${grade}`,
+    );
 
-      if (ltiGatewayResponse.status !== 200) {
-        throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
+    try {
+      const syncResult = await this.ltiGradeSyncService.createAndSync({
+        attemptId,
+        userId,
+        assignmentId,
+        grade,
+        authCookie,
+      });
+
+      if (syncResult.success) {
+        this.logger.log(
+          `✅ Successfully synced grade ${grade} for attempt ${attemptId}`,
+        );
+      } else {
+        // Sync failed but retry is scheduled - log it but don't throw
+        this.logger.warn(
+          `⏰ LTI grade sync failed for attempt ${attemptId}, but retry is scheduled. ` +
+            `Status: ${syncResult.status}, Message: ${syncResult.message}`,
+        );
       }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "An unknown error occurred while sending the grade to the LTI gateway.";
-      throw new InternalServerErrorException(
-        `${GRADE_SUBMISSION_EXCEPTION}: ${errorMessage}`,
+    } catch (error) {
+      // Even if the sync service throws (unlikely), we should NOT crash the grading job
+      // Log the error and continue - the sync service will handle retries
+      this.logger.error(
+        `Unexpected error while initiating LTI grade sync for attempt ${attemptId}`,
+        error instanceof Error ? error.stack : String(error),
       );
+
+      // DO NOT throw - we don't want to fail the grading job
+      // The grade is saved in the database, LTI sync can be retried later
     }
+  }
+
+  /**
+   * Calculates total possible points with validation to prevent grade miscalculation bugs.
+   *
+   * to prevent bugs where questions are deleted/filtered after attempt creation.
+   *
+   * @param responses - The graded question responses
+   * @param assignmentQuestions - Questions from the assignment (may be filtered/deleted)
+   * @returns Object containing totalPossiblePoints and array of missing question IDs
+   */
+  private async calculateTotalPossiblePointsWithValidation(
+    responses: CreateQuestionResponseAttemptResponseDto[],
+    assignmentQuestions: Question[],
+  ): Promise<{
+    totalPossiblePoints: number;
+    missingQuestions: number[];
+  }> {
+    let totalPossiblePoints = 0;
+    const missingQuestions: number[] = [];
+    const questionMap = new Map(
+      assignmentQuestions.map((q) => [q.id, q.totalPoints]),
+    );
+
+    const missingQuestionIds: number[] = [];
+
+    for (const response of responses) {
+      const questionTotalPoints = questionMap.get(response.questionId);
+
+      if (questionTotalPoints === undefined) {
+        const responseMetadata = response.metadata as {
+          maxPossiblePoints?: number;
+        } | null;
+
+        if (
+          responseMetadata &&
+          typeof responseMetadata.maxPossiblePoints === "number" &&
+          responseMetadata.maxPossiblePoints > 0
+        ) {
+          totalPossiblePoints += responseMetadata.maxPossiblePoints;
+          missingQuestions.push(response.questionId);
+        } else {
+          missingQuestionIds.push(response.questionId);
+        }
+      } else {
+        totalPossiblePoints += questionTotalPoints;
+      }
+    }
+
+    if (missingQuestionIds.length > 0) {
+      try {
+        const deletedQuestions = await this.prisma.question.findMany({
+          where: {
+            id: { in: missingQuestionIds },
+          },
+          select: {
+            id: true,
+            totalPoints: true,
+          },
+        });
+
+        const deletedQuestionsMap = new Map(
+          deletedQuestions.map((q) => [q.id, q.totalPoints]),
+        );
+
+        for (const questionId of missingQuestionIds) {
+          const points = deletedQuestionsMap.get(questionId);
+
+          if (points !== undefined && points > 0) {
+            totalPossiblePoints += points;
+            missingQuestions.push(questionId);
+          } else {
+            throw new InternalServerErrorException(
+              `Cannot calculate totalPossiblePoints: Question ${questionId} not found ` +
+                `in database. This prevents accurate grading.`,
+            );
+          }
+        }
+      } catch (error) {
+        if (error instanceof InternalServerErrorException) {
+          throw error;
+        }
+        throw new InternalServerErrorException(
+          `Failed to query deleted questions for grade calculation: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    return { totalPossiblePoints, missingQuestions };
   }
 
   /**
@@ -1179,11 +1406,15 @@ export class AttemptSubmissionService {
   private getOrderedQuestions(
     questions: QuestionDto[],
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
+    shuffleSeed?: number,
   ): QuestionDto[] {
-    const orderedQuestions = [...questions];
+    let orderedQuestions = [...questions];
 
     if (assignment.displayOrder === "RANDOM") {
-      orderedQuestions.sort(() => Math.random() - 0.5);
+      orderedQuestions = this.deterministicShuffle(
+        orderedQuestions,
+        shuffleSeed ?? Date.now(),
+      );
     } else if (
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
@@ -1241,6 +1472,23 @@ export class AttemptSubmissionService {
         null,
       ),
     }));
+  }
+
+  /**
+   * Deterministically shuffle a list using a simple LCG so grading order is stable per attempt
+   */
+  private deterministicShuffle<T>(items: T[], seed = 1): T[] {
+    const result = [...items];
+    let currentSeed = seed || 1;
+
+    for (let index = result.length - 1; index > 0; index--) {
+      currentSeed = (currentSeed * 9301 + 49_297) % 233_280;
+      const rand = currentSeed / 233_280;
+      const swapIndex = Math.floor(rand * (index + 1));
+      [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+    }
+
+    return result;
   }
 
   /**
@@ -1303,7 +1551,6 @@ export class AttemptSubmissionService {
    * Remove sensitive data from questions
    */
 
-  // fpilter out the author comment
   private removeSensitiveData(
     questions: AttemptQuestionDto[],
     assignment: { correctAnswerVisibility: CorrectAnswerVisibility },
@@ -1318,8 +1565,6 @@ export class AttemptSubmissionService {
       if (UserRole.LEARNER) {
         question.authorComment == null;
       }
-      // if user role learner make quetion null
-
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;

@@ -45,8 +45,6 @@ export class ApiController {
     status: 200,
     description: "The user session information was successfully retrieved.",
   })
-  
-  
   getUserSession(@Req() request: UserSessionRequest): ClientUserSession {
     // If userSession wasn't populated by the middleware or gateway return 401
     if (!request.userSession) {

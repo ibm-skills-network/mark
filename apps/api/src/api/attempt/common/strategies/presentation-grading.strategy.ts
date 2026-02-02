@@ -220,6 +220,7 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
         presentationType: "LIVE_RECORDING",
         slideCount: learnerResponse.length,
         recordingDuration: this.calculateTotalDuration(learnerResponse),
+        maxPossiblePoints: question.totalPoints,
       };
     }
 
@@ -268,6 +269,7 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
           (slide: SlideMetadata) => slide.audioUrl,
         ).length,
         totalSlides: learnerResponse.length,
+        maxPossiblePoints: question.totalPoints,
       };
     }
 

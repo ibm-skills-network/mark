@@ -44,6 +44,14 @@ export const AttemptHelper = {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
 
+      if ((model as any).highlighting) {
+        generalFeedbackDto.highlighting = (model as any).highlighting;
+      }
+
+      if ((model as any).annotatedPdfUrl) {
+        generalFeedbackDto.annotatedPdfUrl = (model as any).annotatedPdfUrl;
+      }
+
       if (
         model.analysis ||
         model.evaluation ||
@@ -88,6 +96,10 @@ export const AttemptHelper = {
     } else if (model instanceof TextBasedQuestionResponseModel) {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
+
+      if (model.structuredFeedback) {
+        generalFeedbackDto.structuredFeedback = model.structuredFeedback;
+      }
 
       if (
         model.analysis ||
@@ -233,14 +245,20 @@ export const AttemptHelper = {
                       }\nLast Updated: ${repoInfo.updated_at}`;
                       return { body, isFunctional: true };
                     }
-                  } catch (apiError) {
-                    console.error("Error fetching repo info:", apiError);
+                  } catch (error) {
+                    console.debug(
+                      "Failed to fetch repository details via GitHub API",
+                      error,
+                    );
                   }
                 }
               }
             }
-          } catch (repoError) {
-            console.error("Error fetching README:", repoError);
+          } catch (error) {
+            console.debug(
+              "Failed to resolve repository via GitHub heuristics",
+              error,
+            );
           }
 
           try {
@@ -284,8 +302,8 @@ export const AttemptHelper = {
                 isFunctional: true,
               };
             }
-          } catch (pageError) {
-            console.error("Error fetching page content:", pageError);
+          } catch (error) {
+            console.debug("Failed to scrape repository page", error);
           }
         }
 

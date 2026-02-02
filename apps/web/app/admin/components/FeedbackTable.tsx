@@ -16,13 +16,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,11 +30,7 @@ import {
   type SortingState,
   type ColumnFiltersState,
 } from "@tanstack/react-table";
-import {
-  getAdminFeedback,
-  type FeedbackData,
-  type FeedbackFilters,
-} from "@/lib/talkToBackend";
+import { getAdminFeedback, type FeedbackData } from "@/lib/talkToBackend";
 import { FeedbackModal } from "@/components/modals/FeedbackModal";
 
 interface FeedbackTableProps {

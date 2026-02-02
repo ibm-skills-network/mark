@@ -6,6 +6,11 @@ import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/att
 import { Logger } from "winston";
 import { PrismaService } from "../../../../database/prisma.service";
 
+type PrismaTransactionalClient = Omit<
+  PrismaService,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use"
+>;
+
 /**
  * Interface for grading audit records
  */
@@ -47,7 +52,11 @@ export class GradingAuditService {
    * Record grading for audit purposes (non-blocking)
    * This method will not throw errors to prevent grading failures
    */
-  async recordGrading(record: GradingAuditRecord): Promise<void> {
+  async recordGrading(
+    record: GradingAuditRecord,
+    tx?: PrismaTransactionalClient,
+  ): Promise<void> {
+    const prisma = tx ?? this.prisma;
     try {
       this.logger.info("Recording grading audit", {
         questionId: record.questionId,
@@ -56,7 +65,23 @@ export class GradingAuditService {
         metadata: record.metadata,
       });
 
-      await this.prisma.gradingAudit.create({
+      const questionExists = await prisma.question.findUnique({
+        where: { id: record.questionId },
+        select: { id: true },
+      });
+
+      if (!questionExists) {
+        this.logger.warn(
+          "Question does not exist in database - skipping grading audit (likely preview mode)",
+          {
+            questionId: record.questionId,
+            assignmentId: record.assignmentId,
+          },
+        );
+        return;
+      }
+
+      await prisma.gradingAudit.create({
         data: {
           questionId: record.questionId,
           assignmentId: record.assignmentId,

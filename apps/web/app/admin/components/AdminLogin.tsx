@@ -11,14 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Loader2,
-  Mail,
-  Shield,
-  Info,
-  Users,
-  MessageSquare,
-} from "lucide-react";
+import { Loader2, Mail, Shield, Users, MessageSquare } from "lucide-react";
 
 interface AdminLoginProps {
   onAuthenticated: (sessionToken: string) => void;

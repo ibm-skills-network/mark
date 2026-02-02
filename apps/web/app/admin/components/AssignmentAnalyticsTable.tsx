@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +65,6 @@ interface AssignmentAnalyticsTableProps {
 
 export function AssignmentAnalyticsTable({
   sessionToken,
-  isAdmin,
   quickActionResults,
   quickActionTitle,
   onClearQuickActionResults,
@@ -74,7 +72,6 @@ export function AssignmentAnalyticsTable({
   filters,
   onFiltersChange,
 }: AssignmentAnalyticsTableProps) {
-  const router = useRouter();
   const [data, setData] = useState<AssignmentAnalyticsData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

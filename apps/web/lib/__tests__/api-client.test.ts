@@ -1,7 +1,6 @@
 import { APIClient, APIError } from "../api-client";
 import { DataTransformer } from "../../app/Helpers/data-transformer";
 
-// Mock the DataTransformer
 jest.mock("../../app/Helpers/data-transformer", () => ({
   DataTransformer: {
     encodeForAPI: jest.fn(),
@@ -9,7 +8,6 @@ jest.mock("../../app/Helpers/data-transformer", () => ({
   },
 }));
 
-// Mock fetch globally
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
@@ -35,20 +33,18 @@ describe("APIClient Data Transformation", () => {
 
   describe("Request Encoding", () => {
     it("should encode learnerTextResponse fields in assignment submission", async () => {
-      // Mock successful response
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true, gradingJobId: "123" }),
       });
 
-      // Mock DataTransformer to return encoded data
       const mockEncodedData = {
         submitted: true,
         responsesForQuestions: [
           {
             id: 1,
-            learnerTextResponse: "PHA+dGVzdDwvcD4=", // base64 encoded "<p>test</p>"
-            learnerChoices: ["VXNlIHRoZSBASW5qZWN0YWJsZSgp"], // base64 encoded choice
+            learnerTextResponse: "PHA+dGVzdDwvcD4=",
+            learnerChoices: ["VXNlIHRoZSBASW5qZWN0YWJsZSgp"],
           },
         ],
       };
@@ -69,7 +65,6 @@ describe("APIClient Data Transformation", () => {
 
       await apiClient.patch("/api/assignments/1/attempts/1", requestData);
 
-      // Verify DataTransformer.encodeForAPI was called with correct config
       expect(DataTransformer.encodeForAPI).toHaveBeenCalledWith(
         requestData,
         expect.objectContaining({
@@ -81,7 +76,6 @@ describe("APIClient Data Transformation", () => {
         }),
       );
 
-      // Verify fetch was called with encoded data
       expect(mockFetch).toHaveBeenCalledWith(
         "http://localhost:3000/api/assignments/1/attempts/1",
         expect.objectContaining({
@@ -136,7 +130,7 @@ describe("APIClient Data Transformation", () => {
 
     it("should skip transformation when autoTransform is false", async () => {
       const clientNoTransform = new APIClient({
-        baseURL: "http://localhost:3000",
+        baseURL: "http://localhost:3010",
         autoTransform: false,
       });
 
@@ -153,7 +147,7 @@ describe("APIClient Data Transformation", () => {
 
       expect(DataTransformer.encodeForAPI).not.toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/api/test",
+        "http://localhost:3010/api/test",
         expect.objectContaining({
           body: JSON.stringify(data),
         }),
@@ -164,8 +158,8 @@ describe("APIClient Data Transformation", () => {
   describe("Response Decoding", () => {
     it("should decode response data", async () => {
       const encodedResponse = {
-        introduction: "V2VsY29tZSE=", // base64 encoded "Welcome!"
-        learnerTextResponse: "PHA+dGVzdDwvcD4=", // base64 encoded "<p>test</p>"
+        introduction: "V2VsY29tZSE=",
+        learnerTextResponse: "PHA+dGVzdDwvcD4=",
       };
 
       const decodedResponse = {

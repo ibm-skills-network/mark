@@ -10,7 +10,12 @@ import {
   ArrowLeftIcon,
   ChatBubbleBottomCenterTextIcon,
 } from "@heroicons/react/24/outline";
-import { getReportsForUser } from "@/lib/shared";
+import {
+  getReportsForUser,
+  getReportComments,
+  addReportComment,
+  ReportComment,
+} from "@/lib/shared";
 
 interface Report {
   id: string;
@@ -41,6 +46,10 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [thread, setThread] = useState<ReportComment[]>([]);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+  const [threadRefreshing, setThreadRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [sortField, setSortField] = useState<SortField>("updatedAt");
@@ -54,7 +63,6 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
       setReports(resp);
       setError(null);
     } catch (e) {
-      console.error(e);
       setError("Failed to load your reports. Please try again later.");
     } finally {
       setLoading(false);
@@ -103,6 +111,37 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
     setRefreshing(true);
     await fetchReports();
     setTimeout(() => setRefreshing(false), 600);
+  };
+
+  const loadThread = async (report: Report) => {
+    try {
+      setThreadRefreshing(true);
+      const resp = await getReportComments(report.id);
+      setThread(resp.comments || []);
+    } catch (err) {
+      // Failed to load comments - thread will remain empty
+    } finally {
+      setThreadRefreshing(false);
+    }
+  };
+
+  const handleSelectReport = (report: Report) => {
+    setSelectedReport(report);
+    void loadThread(report);
+  };
+
+  const handlePostComment = async () => {
+    if (!selectedReport || !commentDraft.trim()) return;
+    setPostingComment(true);
+    try {
+      await addReportComment(selectedReport.id, commentDraft.trim());
+      setCommentDraft("");
+      await loadThread(selectedReport);
+    } catch (err) {
+      // Failed to post comment - silently fail
+    } finally {
+      setPostingComment(false);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -191,7 +230,7 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
   const visibleReports = filteredReports.slice(0, visibleCount);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 max-w-4xl mx-auto h-[800px]">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 max-w-4xl mx-auto overflow-y-auto h-[800px]">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">
           Your Reported Issues
@@ -232,7 +271,7 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
             <ArrowLeftIcon className="w-4 h-4 mr-2" /> Back to all reports
           </button>
 
-          <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-700 ">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-2 mb-4">
               <div>
                 <span
@@ -302,6 +341,93 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
                 </div>
               </div>
             )}
+
+            <div className="mt-6 border-t border-gray-200 dark:border-gray-800 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-gray-700 dark:text-gray-200 font-semibold">
+                  Conversation
+                </h4>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>Most recent first</span>
+                  <button
+                    onClick={() =>
+                      selectedReport ? loadThread(selectedReport) : undefined
+                    }
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-gray-600 hover:text-gray-800 hover:border-gray-300"
+                  >
+                    <ArrowPathIcon
+                      className={`w-4 h-4 ${
+                        threadRefreshing ? "animate-spin" : ""
+                      }`}
+                    />
+                    Refresh
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-64 overflow-auto space-y-3 pr-2">
+                {thread.length === 0 ? (
+                  <div className="text-sm text-gray-500">
+                    No comments yet. Start the conversation below.
+                  </div>
+                ) : (
+                  thread
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        new Date(b.created_at).getTime() -
+                        new Date(a.created_at).getTime(),
+                    )
+                    .map((c) => {
+                      const headerMatch = c.body.match(
+                        /^\*\*(.+?)\*\*\s*\n\n?/,
+                      );
+                      const headerText = headerMatch?.[1];
+                      const cleanedBody = headerMatch
+                        ? c.body.replace(headerMatch[0], "").trim()
+                        : c.body;
+                      const isBot = c.author
+                        ?.toLowerCase()
+                        .includes("mark-support");
+                      const displayAuthor =
+                        headerText || (isBot ? "Mark Support" : c.author);
+                      return (
+                        <div
+                          key={c.id}
+                          className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
+                        >
+                          <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                            <span className="font-semibold text-gray-800 dark:text-gray-200">
+                              {displayAuthor}
+                            </span>
+                            <span>{formatDate(c.created_at)}</span>
+                          </div>
+                          <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                            {cleanedBody}
+                          </p>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+              <div className="mt-3">
+                <textarea
+                  className="w-full border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-md p-2 text-sm text-gray-800 dark:text-gray-200"
+                  rows={3}
+                  placeholder="Add a comment that will notify the other side"
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={handlePostComment}
+                    disabled={postingComment || !commentDraft.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {postingComment ? "Sending..." : "Send comment"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : (
@@ -404,7 +530,7 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
                   {visibleReports.map((report) => (
                     <div
                       key={report.id}
-                      onClick={() => setSelectedReport(report)}
+                      onClick={() => handleSelectReport(report)}
                       className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-all hover:shadow-md"
                     >
                       <div className="flex justify-between items-center">

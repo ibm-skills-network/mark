@@ -99,8 +99,7 @@ function AdminDashboardContent({
     error: statsError,
   } = useDashboardStats(sessionToken, filters);
 
-  const { data: currentUpscaling, isLoading: loadingUpscaling } =
-    useCurrentPriceUpscaling(sessionToken);
+  const { data: currentUpscaling } = useCurrentPriceUpscaling(sessionToken);
 
   const upscalePricingMutation = useUpscalePricing(sessionToken);
   const removePricingMutation = useRemovePriceUpscaling(sessionToken);

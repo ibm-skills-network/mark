@@ -34,7 +34,7 @@ export class MistralMedium2505LlmService implements IMultimodalLlmProvider {
       watsonxAIAuthType: "iam",
       watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "",
       model: options?.modelName ?? MistralMedium2505LlmService.DEFAULT_MODEL,
-      temperature: options?.temperature ?? 0.5,
+      temperature: options?.temperature ?? 0,
       maxTokens: options?.maxTokens ?? 2000,
     });
   }

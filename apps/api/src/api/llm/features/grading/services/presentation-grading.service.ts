@@ -345,18 +345,22 @@ ${parsedResponse.guidance}
        - Do NOT average or adjust points - use the exact values provided
     
     3. EXPLAIN: Provide clear reasons for the grade based on specific observations from the presentation
-       - For each rubric, explain why you selected that specific criterion level
-       - Reference specific moments from the transcript
-       - Include observations from speech and body language reports
-       - Connect all observations directly to the rubric descriptions
+       - Focus on what the learner DID or DID NOT demonstrate in their presentation
+       - If criteria are fully met: Point out what was correctly demonstrated (e.g., "The transcript shows clear organization")
+       - If criteria are partially met: State what was included AND what specific elements are missing
+       - If criteria are NOT met: Explain what specific presentation elements are absent
+       - Reference specific moments from the transcript and reports
+       - Do NOT state criterion requirements or start with "Criterion requires..."
+       - Focus on the presentation itself, not what the rubric asks for
        - Justify the total points as the sum of all rubric scores
-    
+
     4. GUIDE: Offer concrete suggestions for improvement
-       - Provide specific techniques to address weaknesses identified in each rubric
-       - Suggest ways to improve speech patterns and vocal variety
+       - Frame as actionable guidance: "The presentation should include..." or "Consider adding..."
+       - Provide specific techniques based on what's missing (e.g., "Add more pauses between key points")
+       - Suggest ways to improve speech patterns and vocal variety based on gaps identified
        - Recommend body language adjustments for better engagement
        - Offer strategies for better structure and organization
-       - Include actionable tips specific to the rubric criteria
+       - NO encouragement, NO praise - focus on concrete improvement steps
     
     GRADING INSTRUCTIONS:
     - Be fair, consistent, and constructive in your evaluation
@@ -410,18 +414,21 @@ ${parsedResponse.guidance}
        - Measure achievement of presentation objectives
     
     3. EXPLAIN: Provide clear explanations of your assessment
-       - Reference specific examples from the transcript
+       - Focus on what the learner DID or DID NOT demonstrate in their presentation
+       - Reference specific examples from the transcript showing what was present or absent
        - Connect observations from speech and body language reports
-       - Highlight what worked well with evidence
-       - Clearly explain any shortcomings observed
-       - Provide context for your evaluation
-    
+       - Point out what was correctly demonstrated with evidence
+       - Explain what specific elements are missing or need improvement
+       - Do NOT state criterion requirements or start with "Criterion requires..."
+       - Focus on the presentation itself, not what was expected
+
     4. GUIDE: Offer concrete suggestions for improvement
-       - Recommend specific content enhancements
-       - Suggest vocal technique improvements
-       - Provide body language tips for better impact
+       - Frame as actionable guidance: "The presentation should include..." or "Consider adding..."
+       - Recommend specific content enhancements based on what's missing
+       - Suggest vocal technique improvements (e.g., "Vary your pace more", "Add pauses after key points")
+       - Provide body language tips for better impact based on gaps identified
        - Offer strategies for better organization
-       - Include practical exercises for skill development
+       - NO encouragement, NO praise - focus on concrete improvement steps
     
     FEEDBACK INSTRUCTIONS:
     - Structure your feedback following the AEEG format

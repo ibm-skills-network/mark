@@ -104,6 +104,10 @@ function AuthorHeader() {
   ]);
 
   const loadVersions = useAuthorStore((state) => state.loadVersions);
+  const checkoutVersion = useAuthorStore((state) => state.checkoutVersion);
+  const setCheckedOutVersion = useAuthorStore(
+    (state) => state.setCheckedOutVersion,
+  );
   const questionsAreReadyToBePublished = useQuestionsAreReadyToBePublished(
     questions as Question[],
   );
@@ -253,7 +257,11 @@ function AuthorHeader() {
       newAssignment.questions = questions;
 
       useAuthorStore.getState().setOriginalAssignment(newAssignment);
-      useAuthorStore.getState().setAuthorStore(newAssignment);
+      const authorSafeAssignment = {
+        ...newAssignment,
+        currentVersion: undefined,
+      };
+      useAuthorStore.getState().setAuthorStore(authorSafeAssignment);
 
       useAssignmentConfig.getState().setAssignmentConfigStore({
         numAttempts: newAssignment.numAttempts,
@@ -308,7 +316,6 @@ function AuthorHeader() {
         setPageState("success");
         return;
       } catch (error) {
-        console.error("Failed to fetch checked out version:", error);
         setPageState("error");
         return;
       }
@@ -325,9 +332,13 @@ function AuthorHeader() {
 
       useAuthorStore.getState().setOriginalAssignment(newAssignment);
 
+      const authorSafeAssignment = {
+        ...newAssignment,
+        currentVersion: undefined,
+      };
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
-        newAssignment,
+        authorSafeAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
       setAuthorStore({
@@ -416,7 +427,6 @@ function AuthorHeader() {
           }
         })
         .catch((error) => {
-          console.error("Header publishing failed:", error);
           toast.error("Failed to publish version through header");
         });
     };
@@ -509,11 +519,6 @@ function AuthorHeader() {
       gradingCriteriaOverview: string;
     } & { [key: string]: string | null };
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("=== Publishing Assignment ===");
-      console.log("questionControls from store:", questionControls);
-    }
-
     const assignmentData: ReplaceAssignmentRequest = {
       ...encodedFields,
       numAttempts,
@@ -542,13 +547,6 @@ function AuthorHeader() {
       versionNumber: versionNumber,
     };
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("assignmentData being sent:", assignmentData);
-      console.log(
-        "questionControls in payload:",
-        assignmentData.questionControls,
-      );
-    }
     if (assignmentData.introduction === null) {
       toast.error(
         publishImmediately
@@ -564,7 +562,7 @@ function AuthorHeader() {
         assignmentData,
       );
       if (response?.jobId) {
-        await subscribeToJobStatus(
+        const [publishSucceeded] = await subscribeToJobStatus(
           response.jobId,
           (percentage, progress) => {
             setJobProgress(percentage);
@@ -578,12 +576,33 @@ function AuthorHeader() {
         } else {
           toast.success("Version saved successfully!");
         }
-        setProgressStatus("Completed");
+        setProgressStatus(publishSucceeded ? "Completed" : "Failed");
 
         try {
           await loadVersions();
+          if (publishImmediately && publishSucceeded) {
+            const state = useAuthorStore.getState();
+            const activeVersion =
+              state.currentVersion ||
+              state.versions.find((version) => version.isActive);
+
+            if (
+              activeVersion &&
+              state.checkedOutVersion?.id !== activeVersion.id
+            ) {
+              const checkoutSuccess = await checkoutVersion(
+                activeVersion.id,
+                activeVersion.versionNumber,
+              );
+              if (!checkoutSuccess) {
+                setCheckedOutVersion(activeVersion);
+              }
+            }
+          }
         } catch (error) {
-          console.error("Failed to reload versions after publish:", error);
+          toast.error(
+            "Failed to refresh versions after publishing. Please refresh the page.",
+          );
         }
       } else {
         toast.error(
@@ -657,7 +676,6 @@ function AuthorHeader() {
       const result = await saveDraft(activeAssignmentId, draftData);
       return !!result;
     } catch (error) {
-      console.error("Save error:", error);
       return false;
     }
   };

@@ -11,6 +11,7 @@ import { LlmModule } from "../llm/llm.module";
 import {
   FILE_CONTENT_EXTRACTION_SERVICE,
   GRADING_AUDIT_SERVICE,
+  GRADING_CONSISTENCY_SERVICE,
 } from "./attempt.constants";
 import { AttemptControllerV2 } from "./attempt.controller";
 import { ChoiceGradingStrategy } from "./common/strategies/choice-grading.strategy";
@@ -34,9 +35,14 @@ import { GradingAuditService } from "./services/question-response/grading-audit.
 import { QuestionResponseService } from "./services/question-response/question-response.service";
 import { QuestionVariantService } from "./services/question-variant/question-variant.service";
 import { TranslationService } from "./services/translation/translation.service";
+import { PdfStructureExtractorService } from "./services/pdf-structure-extractor.service";
+import { PdfAnnotationService } from "./services/pdf-annotation.service";
+import { GradingProgressService } from "./services/grading-progress.service";
+import { AdminEmailService } from "../../auth/services/admin-email.service";
+import { LtiSyncModule } from "./lti-sync.module";
 
 @Module({
-  imports: [LlmModule, AssignmentModuleV2],
+  imports: [LlmModule, AssignmentModuleV2, LtiSyncModule],
   controllers: [AttemptControllerV2],
   providers: [
     AttemptServiceV2,
@@ -55,7 +61,14 @@ import { TranslationService } from "./services/translation/translation.service";
     PresentationGradingStrategy,
     ChoiceGradingStrategy,
     TrueFalseGradingStrategy,
-    GradingConsistencyService,
+    {
+      provide: "GradingProgressService",
+      useClass: GradingProgressService,
+    },
+    {
+      provide: GRADING_CONSISTENCY_SERVICE,
+      useClass: GradingConsistencyService,
+    },
     {
       provide: GRADING_AUDIT_SERVICE,
       useClass: GradingAuditService,
@@ -65,6 +78,8 @@ import { TranslationService } from "./services/translation/translation.service";
       provide: FILE_CONTENT_EXTRACTION_SERVICE,
       useClass: FileContentExtractionService,
     },
+    PdfStructureExtractorService,
+    PdfAnnotationService,
     ImageGradingStrategy,
     ImageGradingService,
     S3Service,
@@ -75,6 +90,7 @@ import { TranslationService } from "./services/translation/translation.service";
     LocalizationService,
 
     AssignmentAttemptAccessControlGuard,
+    AdminEmailService,
   ],
   exports: [
     AttemptServiceV2,

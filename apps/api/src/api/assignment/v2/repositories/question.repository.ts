@@ -266,10 +266,15 @@ export class QuestionRepository {
     question: Question & { variants?: QuestionVariant[] },
   ): QuestionDto {
     try {
+      const mediaHtml = this.extractMediaHtml(question.question);
       const processedVariants: VariantDto[] = question.variants
         ? question.variants.map((variant) => {
             return {
               ...variant,
+              variantContent: this.appendMediaToContent(
+                variant.variantContent,
+                mediaHtml,
+              ),
               choices: this.parseJsonField<Choice[]>(variant.choices),
               scoring: this.parseJsonField<ScoringDto>(variant.scoring),
             } as VariantDto;
@@ -323,6 +328,29 @@ export class QuestionRepository {
     }
 
     return field as T;
+  }
+
+  private appendMediaToContent(content: string, mediaHtml: string): string {
+    if (!mediaHtml) {
+      return content;
+    }
+
+    if (/<img\b|<table\b/i.test(content)) {
+      return content;
+    }
+
+    const separator = content ? "\n\n" : "";
+    return `${content}${separator}${mediaHtml}`;
+  }
+
+  private extractMediaHtml(text: string): string {
+    if (!text) {
+      return "";
+    }
+
+    const mediaRegex = /<img\b[^>]*>|<table\b[^>]*>[\S\s]*?<\/table>/gi;
+    const matches = text.match(mediaRegex);
+    return matches ? matches.join("").trim() : "";
   }
 
   /**

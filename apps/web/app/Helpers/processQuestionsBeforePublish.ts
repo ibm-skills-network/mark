@@ -2,8 +2,7 @@ import { QuestionAuthorStore } from "@/config/types";
 
 export const processQuestions = (questions: QuestionAuthorStore[]) => {
   return questions.map((question) => {
-    const { alreadyInBackend, id, assignmentId, answer, ...dataToSend } =
-      question;
+    const { alreadyInBackend, id, assignmentId, ...dataToSend } = question;
     if (dataToSend.type === "TEXT" || dataToSend.type === "URL") {
       dataToSend.choices = null;
     } else if (
