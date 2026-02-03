@@ -28,6 +28,52 @@ export class ApiService {
     this.logger = parentLogger.child({ context: ApiService.name });
   }
 
+  /**
+   * Helper method to safely send error responses
+   * Works with both Express Response and MockResponse objects
+   */
+  private sendErrorResponse(
+    response:
+      | Response
+      | (NodeJS.WritableStream & {
+          headersSent?: boolean;
+          writableEnded?: boolean;
+          writeHead: (
+            statusCode: number,
+            headers?: Record<string, string>,
+          ) => void;
+          end: (data?: string | Buffer) => void;
+        }),
+    statusCode: number,
+    errorMessage: string,
+    isJson = true,
+  ): void {
+    try {
+      if (!response.headersSent) {
+        if (isJson) {
+          // Use native Node.js methods that work with both Express and MockResponse
+          response.writeHead(statusCode, {
+            "Content-Type": "application/json",
+          });
+          response.end(JSON.stringify({ error: errorMessage }));
+        } else {
+          response.writeHead(statusCode);
+          response.end();
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Failed to send error response: ${String(error)}`);
+      // Last resort - try to end the response to prevent hanging
+      try {
+        if (!response.writableEnded) {
+          response.end();
+        }
+      } catch (finalError) {
+        this.logger.error(`Failed to end response: ${String(finalError)}`);
+      }
+    }
+  }
+
   rootV1(): Record<string, string | number> {
     this.logger.info("showing api version information");
     void this.messagingService.publishService("api", {});
@@ -162,9 +208,12 @@ export class ApiService {
       proxyRequest.on("error", (error) => {
         this.logger.error("SSE proxy request error:", error);
         if (!clientResponse.headersSent) {
-          clientResponse
-            .status(500)
-            .json({ error: "SSE proxy request failed" });
+          // Use native Node.js methods instead of Express methods
+          this.sendErrorResponse(
+            clientResponse,
+            500,
+            "SSE proxy request failed",
+          );
         }
         reject(error);
       });
@@ -249,6 +298,8 @@ export class ApiService {
             statusCode: number;
             headers: Record<string, unknown>;
             data: Buffer;
+            headersSent: boolean;
+            writableEnded: boolean;
             writeHead(
               this: MockResponse,
               statusCode: number,
@@ -256,6 +307,8 @@ export class ApiService {
             ): void;
             write(this: MockResponse, chunk: string | Buffer): void;
             end(this: MockResponse, chunk?: string | Buffer): void;
+            status(this: MockResponse, code: number): MockResponse;
+            json(this: MockResponse, body: unknown): void;
             on(
               event: string,
               listener: (...arguments_: unknown[]) => void,
@@ -271,6 +324,8 @@ export class ApiService {
             statusCode: 200,
             headers: {},
             data: Buffer.alloc(0),
+            headersSent: false,
+            writableEnded: false,
             writeHead(
               this: MockResponse,
               statusCode: number,
@@ -278,6 +333,7 @@ export class ApiService {
             ) {
               this.statusCode = statusCode;
               this.headers = headers;
+              this.headersSent = true;
             },
             write(this: MockResponse, chunk: string | Buffer) {
               const bufferChunk = Buffer.isBuffer(chunk)
@@ -293,6 +349,8 @@ export class ApiService {
                 this.data = Buffer.concat([this.data, bufferChunk]);
               }
 
+              this.writableEnded = true;
+
               const dataToReturn = isBinaryFile
                 ? this.data.toString("base64")
                 : this.data.toString("utf8");
@@ -301,6 +359,16 @@ export class ApiService {
                 data: dataToReturn,
                 status: this.statusCode,
               });
+            },
+            status(this: MockResponse, code: number): MockResponse {
+              this.statusCode = code;
+              return this;
+            },
+            json(this: MockResponse, body: unknown): void {
+              this.writeHead(this.statusCode, {
+                "Content-Type": "application/json",
+              });
+              this.end(JSON.stringify(body));
             },
             on(
               _event: string,
@@ -510,7 +578,12 @@ export class ApiService {
             proxyResponse.on("error", (error) => {
               this.logger.error("Proxy response error:", error);
               if (!clientResponse.headersSent) {
-                clientResponse.status(500).end();
+                this.sendErrorResponse(
+                  clientResponse,
+                  500,
+                  "Proxy response error",
+                  false,
+                );
               }
               reject(error);
             });
@@ -606,19 +679,24 @@ export class ApiService {
         this.logger.error("Proxy request timeout");
         if (!clientResponse.headersSent) {
           if (isSSE) {
-            clientResponse.writeHead(504, {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-            });
-            clientResponse.write(
-              `data: ${JSON.stringify({
-                status: "error",
-                error: "Gateway timeout",
-              })}\n\n`,
-            );
-            clientResponse.end();
+            try {
+              clientResponse.writeHead(504, {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+              });
+              clientResponse.write(
+                `data: ${JSON.stringify({
+                  status: "error",
+                  error: "Gateway timeout",
+                })}\n\n`,
+              );
+              clientResponse.end();
+            } catch (error) {
+              this.logger.error("Failed to send SSE timeout response:", error);
+            }
           } else {
-            clientResponse.status(504).json({ error: "Gateway timeout" });
+            // Use native Node.js methods instead of Express methods
+            this.sendErrorResponse(clientResponse, 504, "Gateway timeout");
           }
         }
         proxyRequest.destroy();
@@ -638,21 +716,29 @@ export class ApiService {
         if (!clientResponse.headersSent) {
           if (isSSE) {
             // For SSE, we need to establish the connection first
-            clientResponse.writeHead(200, {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-              "X-Accel-Buffering": "no",
-            });
-            clientResponse.write(
-              `data: ${JSON.stringify({
-                status: "error",
-                error: "Proxy request failed",
-              })}\n\n`,
-            );
-            clientResponse.end();
+            try {
+              clientResponse.writeHead(200, {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                Connection: "keep-alive",
+                "X-Accel-Buffering": "no",
+              });
+              clientResponse.write(
+                `data: ${JSON.stringify({
+                  status: "error",
+                  error: "Proxy request failed",
+                })}\n\n`,
+              );
+              clientResponse.end();
+            } catch (writeError) {
+              this.logger.error(
+                "Failed to send SSE error response:",
+                writeError,
+              );
+            }
           } else {
-            clientResponse.status(500).json({ error: "Proxy request failed" });
+            // Use native Node.js methods instead of Express methods
+            this.sendErrorResponse(clientResponse, 500, "Proxy request failed");
           }
         }
         reject(error);
