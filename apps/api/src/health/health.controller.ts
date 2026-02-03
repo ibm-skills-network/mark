@@ -9,7 +9,7 @@ export class HealthController {
   @Get()
   @HealthCheck()
   check() {
-    return this.healthService.checkLiveness();
+    return this.healthService.checkHealth();
   }
 
   @Get("liveness")
