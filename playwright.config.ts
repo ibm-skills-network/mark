@@ -14,7 +14,12 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
 
-  testIgnore: ["apps/api/**", "apps/api-gateway/**", "**/__tests__/**"],
+  testIgnore: [
+    "apps/api/**",
+    "apps/api-gateway/**",
+    "**/__tests__/**",
+    "tests/examples/**",
+  ],
 
   /* Run tests in files in parallel */
   fullyParallel: true,
@@ -78,17 +83,8 @@ export default defineConfig({
 
   webServer: {
     command: "yarn dev",
-    port: 3010,
+    url: "http://localhost:4222/health", // Wait for API to be ready
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
   },
-
-  /* Run your local dev server before starting the tests */
-  // Note: Start services manually with 'yarn dev' before running tests
-  // webServer: {
-  //   command: 'yarn dev',
-  //   url: 'http://localhost:8000', // API Gateway health check
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 120000, // 2 minutes to start all services
-  // },
 });
