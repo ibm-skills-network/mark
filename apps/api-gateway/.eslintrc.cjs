@@ -27,12 +27,4 @@ module.exports = {
   plugins: ["@typescript-eslint", "unicorn"],
   root: true,
   ignorePatterns: ["dist/", "node_modules/", "coverage/", "jest.config.ts"],
-  overrides: [
-    {
-      files: ["**/*.spec.ts", "**/*.test.ts"],
-      rules: {
-        "unicorn/no-abusive-eslint-disable": "off",
-      },
-    },
-  ],
 };
