@@ -211,10 +211,7 @@ export class MarkChatService {
 
         try {
           const parsedResult = JSON.parse(rawResult);
-          if (
-            parsedResult?.clientExecution &&
-            parsedResult.function === "showReportPreview"
-          ) {
+          if (parsedResult?.clientExecution && parsedResult.function) {
             trackedClientExecutions.push({
               function: parsedResult.function,
               params: parsedResult.params,

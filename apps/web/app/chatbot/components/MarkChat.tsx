@@ -629,10 +629,19 @@ const ChatMessages = ({
   renderTypingIndicator,
   onClientExecution,
 }) => {
-  const filteredMessages = React.useMemo(
-    () => messages.filter((msg) => msg.role !== "system"),
-    [messages],
-  );
+  const filteredMessages = React.useMemo(() => {
+    return messages.filter((msg) => {
+      if (msg.role === "system") return false;
+      if (msg.role !== "assistant") return true;
+      if (msg.content.trim().length > 0) return true;
+      if (Array.isArray(msg.toolCalls)) {
+        return msg.toolCalls.some(
+          (toolCall) => toolCall.function === "showReportPreview",
+        );
+      }
+      return false;
+    });
+  }, [messages]);
 
   const [processedMessageIds, setProcessedMessageIds] = React.useState(
     new Set(),
