@@ -754,8 +754,7 @@ export const useLearnerStore = createWithEqualityFn<
               } else {
                 finalCode = "zh-CN";
               }
-            }
-            else if (baseLang === "uk") {
+            } else if (baseLang === "uk") {
               if (region === "UA") {
                 finalCode = "uk-UA";
               }

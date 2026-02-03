@@ -199,10 +199,10 @@ async function main() {
               group: {
                 connectOrCreate: {
                   where: {
-                    id: "test-group-id",
+                    id: "text-group-id",
                   },
                   create: {
-                    id: "test-group-id",
+                    id: "text-group-id",
                   },
                 },
               },

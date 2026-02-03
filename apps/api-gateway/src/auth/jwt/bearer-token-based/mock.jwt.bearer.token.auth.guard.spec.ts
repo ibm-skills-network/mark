@@ -47,7 +47,7 @@ describe("MockJwtBearerTokenAuthGuard", () => {
       const user = (mockRequest as any).user;
       expect(user.userId).toBe("testuser@test.com");
       expect(user.role).toBe(UserRole.AUTHOR);
-      expect(user.groupId).toBe("test-group-id");
+      expect(user.groupId).toBe("text-group-id");
       expect(user.assignmentId).toBe(1);
       expect(user.gradingCallbackRequired).toBe(false);
       expect(user.returnUrl).toBe("https://skills.network");
