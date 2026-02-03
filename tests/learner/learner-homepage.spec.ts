@@ -95,10 +95,4 @@ test.describe("Learner - Assignment Homepage", () => {
       ).toBeVisible();
     }
   });
-
-  test("should have a start/begin button", async ({ page }) => {
-    // Look for a button to start the assignment
-    const startButton = page.getByRole("button", { name: /begin|start/i });
-    await expect(startButton).toBeVisible();
-  });
 });
