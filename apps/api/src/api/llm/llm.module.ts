@@ -22,6 +22,13 @@ import { PromptProcessorService } from "./core/services/prompt-processor.service
 import { TokenCounterService } from "./core/services/token-counter.service";
 import { UsageTrackerService } from "./core/services/usage-tracking.service";
 import { AnswerNormalizationService } from "./features/grading/services/answer-normalization.service";
+import { EvidenceChunkingService } from "./features/grading/services/evidence-chunking.service";
+import { CriterionEvidenceRetrievalService } from "./features/grading/services/criterion-evidence-retrieval.service";
+import { CriterionGradingService } from "./features/grading/services/criterion-grading.service";
+import { CriterionJudgeService } from "./features/grading/services/criterion-judge.service";
+import { CriterionRetryManagerService } from "./features/grading/services/criterion-retry-manager.service";
+import { CriterionGradeCompilerService } from "./features/grading/services/criterion-grade-compiler.service";
+import { CriterionEvidencePipelineService } from "./features/grading/services/criterion-evidence-pipeline.service";
 import { FileGradingService } from "./features/grading/services/file-grading.service";
 import { EvidenceBasedGradingService } from "./features/grading/services/evidence-based-grading.service";
 import { GradingCacheService } from "./features/grading/services/grading-cache.service";
@@ -175,6 +182,13 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
       useClass: FileGradingService,
     },
     EvidenceBasedGradingService,
+    EvidenceChunkingService,
+    CriterionEvidenceRetrievalService,
+    CriterionGradingService,
+    CriterionJudgeService,
+    CriterionRetryManagerService,
+    CriterionGradeCompilerService,
+    CriterionEvidencePipelineService,
     ImageDescriptionService,
     HighlightingGeneratorService,
     {
