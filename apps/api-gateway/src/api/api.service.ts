@@ -23,7 +23,7 @@ export class ApiService {
   private logger;
   constructor(
     private readonly messagingService: MessagingService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
   ) {
     this.logger = parentLogger.child({ context: ApiService.name });
   }
@@ -40,18 +40,17 @@ export class ApiService {
           writableEnded?: boolean;
           writeHead: (
             statusCode: number,
-            headers?: Record<string, string>,
+            headers?: Record<string, string>
           ) => void;
           end: (data?: string | Buffer) => void;
         }),
     statusCode: number,
     errorMessage: string,
-    isJson = true,
+    isJson = true
   ): void {
     try {
       if (!response.headersSent) {
         if (isJson) {
-          // Use native Node.js methods that work with both Express and MockResponse
           response.writeHead(statusCode, {
             "Content-Type": "application/json",
           });
@@ -63,7 +62,6 @@ export class ApiService {
       }
     } catch (error) {
       this.logger.error(`Failed to send error response: ${String(error)}`);
-      // Last resort - try to end the response to prevent hanging
       try {
         if (!response.writableEnded) {
           response.end();
@@ -85,7 +83,7 @@ export class ApiService {
    */
   public getForwardingDetails(
     forwardingService: DownstreamService,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): { endpoint: string; extraHeaders: Record<string, any> } {
     let endpoint: string;
     let extraHeaders: Record<string, any> = {};
@@ -95,7 +93,6 @@ export class ApiService {
           request.originalUrl
         }`;
 
-        // Ensure user session exists before forwarding
         if (!request.user) {
           throw new UnauthorizedException("Missing or invalid user session");
         }
@@ -114,7 +111,7 @@ export class ApiService {
         const username = process.env.LTI_CREDENTIAL_MANAGER_USERNAME ?? "";
         const password = process.env.LTI_CREDENTIAL_MANAGER_PASSWORD ?? "";
         const base64Credentials = Buffer.from(
-          `${username}:${password}`,
+          `${username}:${password}`
         ).toString("base64");
         extraHeaders = {
           Authorization: `Basic ${base64Credentials}`,
@@ -134,13 +131,12 @@ export class ApiService {
     clientRequest: Request,
     clientResponse: Response,
     url: string,
-    headers: Record<string, any> = {},
+    headers: Record<string, any> = {}
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const isHTTPS = url.startsWith("https");
       const httpModule = isHTTPS ? https : http;
 
-      // Parse URL for request options
       const parsedUrl = new URL(url);
 
       const outgoingHeaders = {
@@ -160,7 +156,7 @@ export class ApiService {
         path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers: outgoingHeaders,
-        timeout: 600_000, // 10 minutes
+        timeout: 600_000,
       };
 
       const proxyRequest = httpModule.request(
@@ -168,10 +164,9 @@ export class ApiService {
         (proxyResponse) => {
           this.logger.info(
             // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-            `SSE response received: ${proxyResponse.statusCode}`,
+            `SSE response received: ${proxyResponse.statusCode}`
           );
 
-          // Forward SSE headers
           clientResponse.writeHead(proxyResponse.statusCode || 200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
@@ -180,10 +175,8 @@ export class ApiService {
             ...proxyResponse.headers,
           });
 
-          // Pipe the response
           proxyResponse.pipe(clientResponse);
 
-          // Handle client disconnect
           clientResponse.on("close", () => {
             this.logger.info("Client disconnected from SSE stream");
             proxyResponse.destroy();
@@ -202,17 +195,16 @@ export class ApiService {
             }
             reject(error);
           });
-        },
+        }
       );
 
       proxyRequest.on("error", (error) => {
         this.logger.error("SSE proxy request error:", error);
         if (!clientResponse.headersSent) {
-          // Use native Node.js methods instead of Express methods
           this.sendErrorResponse(
             clientResponse,
             500,
-            "SSE proxy request failed",
+            "SSE proxy request failed"
           );
         }
         reject(error);
@@ -271,7 +263,7 @@ export class ApiService {
    */
   async forwardRequestToDownstreamService(
     forwardingService: DownstreamService,
-    request: UserSessionRequest,
+    request: UserSessionRequest
   ): Promise<{ data: string; status: number }> {
     try {
       if (!request.originalUrl) {
@@ -280,7 +272,7 @@ export class ApiService {
 
       const { endpoint, extraHeaders } = this.getForwardingDetails(
         forwardingService,
-        request,
+        request
       );
 
       const isMultipart = this.isMultipartRequest(request);
@@ -290,7 +282,7 @@ export class ApiService {
         this.logger.info(
           `Using HTTP forwarding for ${
             isMultipart ? "multipart" : "binary file"
-          } request: ${endpoint}`,
+          } request: ${endpoint}`
         );
 
         return new Promise((resolve, reject) => {
@@ -303,19 +295,19 @@ export class ApiService {
             writeHead(
               this: MockResponse,
               statusCode: number,
-              headers: Record<string, unknown>,
+              headers: Record<string, unknown>
             ): void;
             write(this: MockResponse, chunk: string | Buffer): void;
             end(this: MockResponse, chunk?: string | Buffer): void;
             status(this: MockResponse, code: number): MockResponse;
             json(this: MockResponse, body: unknown): void;
-            on(
+            on?(
               event: string,
-              listener: (...arguments_: unknown[]) => void,
+              listener: (...arguments_: unknown[]) => void
             ): void;
-            once(
+            once?(
               event: string,
-              listener: (...arguments_: unknown[]) => void,
+              listener: (...arguments_: unknown[]) => void
             ): void;
             pipe<T>(this: MockResponse, destination: T): T;
           }
@@ -329,7 +321,7 @@ export class ApiService {
             writeHead(
               this: MockResponse,
               statusCode: number,
-              headers: Record<string, unknown>,
+              headers: Record<string, unknown>
             ) {
               this.statusCode = statusCode;
               this.headers = headers;
@@ -370,18 +362,7 @@ export class ApiService {
               });
               this.end(JSON.stringify(body));
             },
-            on(
-              _event: string,
-              _listener: (...arguments_: unknown[]) => void,
-            ): void {
-              // Intentionally left blank for mock
-            },
-            once(
-              _event: string,
-              _listener: (...arguments_: unknown[]) => void,
-            ): void {
-              // Intentionally left blank for mock
-            },
+
             pipe<T>(this: MockResponse, _destination: T): T {
               return this as unknown as T;
             },
@@ -391,13 +372,13 @@ export class ApiService {
             request as Request,
             mockResponse as unknown as Response,
             endpoint,
-            extraHeaders,
+            extraHeaders
           )
             .then(() => {
               this.logger.info(
                 `Forwarded ${
                   isBinaryFile ? "binary file" : "multipart"
-                } request successfully`,
+                } request successfully`
               );
               resolve({
                 data: mockResponse.data.toString("utf8"),
@@ -429,7 +410,6 @@ export class ApiService {
       const response = await axios.request(config);
       return { data: response.data as string, status: response.status };
     } catch (error) {
-      // If it's already an HttpException (like UnauthorizedException), we should rethrow it
       if (error instanceof HttpException) {
         throw error;
       }
@@ -440,7 +420,7 @@ export class ApiService {
         this.logger.error(axiosError.response.data);
         throw new HttpException(
           axiosError.response?.data ?? "",
-          axiosError.response.status,
+          axiosError.response.status
         );
       }
       this.logger.error(error);
@@ -461,7 +441,7 @@ export class ApiService {
     clientRequest: Request,
     clientResponse: Response,
     url: string,
-    headers: Record<string, any> = {},
+    headers: Record<string, any> = {}
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const isHTTPS = url.startsWith("https");
@@ -470,29 +450,28 @@ export class ApiService {
         clientRequest.headers.accept?.includes("text/event-stream") ?? false;
       const isMultipart =
         clientRequest.headers["content-type"]?.includes(
-          "multipart/form-data",
+          "multipart/form-data"
         ) ?? false;
 
       const isBinaryFile = this.isBinaryFileRequest(
-        clientRequest as UserSessionRequest,
+        clientRequest as UserSessionRequest
       );
 
-      // Set up agents with appropriate timeout settings
       const httpAgent = new http.Agent({
         keepAlive: true,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
       const httpAgentNoKeepAlive = new http.Agent({
         keepAlive: false,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
       const httpsAgent = new https.Agent({
         keepAlive: true,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
       const httpsAgentNoKeepAlive = new https.Agent({
         keepAlive: false,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
 
       const httpModule = isHTTPS ? https : http;
@@ -501,8 +480,8 @@ export class ApiService {
           ? httpsAgentNoKeepAlive
           : httpsAgent
         : isSSE || isMultipart || isBinaryFile
-          ? httpAgentNoKeepAlive
-          : httpAgent;
+        ? httpAgentNoKeepAlive
+        : httpAgent;
 
       const outgoingHeaders = {
         ...clientRequest.headers,
@@ -517,11 +496,10 @@ export class ApiService {
       this.logger.info(`Forwarding ${clientRequest.method} request to ${url}`);
       this.logger.info(
         `Request type: SSE=${String(isSSE)}, Multipart=${String(
-          isMultipart,
-        )}, Binary=${String(isBinaryFile)}`,
+          isMultipart
+        )}, Binary=${String(isBinaryFile)}`
       );
 
-      // Parse URL for request options
       const parsedUrl = new URL(url);
       const requestOptions = {
         hostname: parsedUrl.hostname,
@@ -530,7 +508,7 @@ export class ApiService {
         method: clientRequest.method,
         headers: outgoingHeaders,
         agent,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       };
 
       const proxyRequest = httpModule.request(
@@ -538,19 +516,19 @@ export class ApiService {
         (proxyResponse) => {
           const isStreaming =
             proxyResponse.headers["content-type"]?.includes(
-              "text/event-stream",
+              "text/event-stream"
             );
 
           if ((isMultipart || isBinaryFile) && !isStreaming) {
             this.logger.info(
-              `Handling ${isBinaryFile ? "binary file" : "multipart"} response`,
+              `Handling ${isBinaryFile ? "binary file" : "multipart"} response`
             );
 
             const responseChunks: Buffer[] = [];
 
             proxyResponse.on("data", (chunk: Buffer) => {
               responseChunks.push(
-                Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
+                Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
               );
             });
 
@@ -558,7 +536,7 @@ export class ApiService {
               const responseBuffer = Buffer.concat(responseChunks);
 
               this.logger.info(
-                `Binary response complete: ${responseBuffer.length} bytes`,
+                `Binary response complete: ${responseBuffer.length} bytes`
               );
 
               const responseHeaders = {
@@ -568,7 +546,7 @@ export class ApiService {
 
               clientResponse.writeHead(
                 proxyResponse.statusCode || 500,
-                responseHeaders,
+                responseHeaders
               );
 
               clientResponse.end(responseBuffer);
@@ -582,31 +560,26 @@ export class ApiService {
                   clientResponse,
                   500,
                   "Proxy response error",
-                  false,
+                  false
                 );
               }
               reject(error);
             });
           } else if (isStreaming) {
-            // Handle SSE streaming with proper headers and connection management
             this.logger.info("Handling SSE streaming response");
 
-            // Immediately flush headers to establish connection
             clientResponse.writeHead(proxyResponse.statusCode || 200, {
               "Content-Type": "text/event-stream",
               "Cache-Control": "no-cache",
               Connection: "keep-alive",
-              "X-Accel-Buffering": "no", // Disable nginx buffering
+              "X-Accel-Buffering": "no",
               ...proxyResponse.headers,
             });
 
-            // Send an initial comment to establish the connection
             clientResponse.write(":ok\n\n");
 
-            // Track connection state
             let connectionClosed = false;
 
-            // Handle client disconnect
             clientResponse.on("close", () => {
               this.logger.info("Client disconnected from SSE stream");
               connectionClosed = true;
@@ -616,7 +589,6 @@ export class ApiService {
               resolve();
             });
 
-            // Stream data from proxy to client
             proxyResponse.on("data", (chunk) => {
               if (!connectionClosed && !clientResponse.writableEnded) {
                 try {
@@ -644,20 +616,19 @@ export class ApiService {
                     `data: ${JSON.stringify({
                       status: "error",
                       error: "Stream error",
-                    })}\n\n`,
+                    })}\n\n`
                   );
                   clientResponse.end();
                 } catch (writeError) {
                   this.logger.error(
                     "Error writing error to client:",
-                    writeError,
+                    writeError
                   );
                 }
               }
               resolve();
             });
           } else {
-            // Regular response handling
             clientResponse.writeHead(proxyResponse.statusCode || 500, {
               ...proxyResponse.headers,
             });
@@ -671,10 +642,9 @@ export class ApiService {
               }
             });
           }
-        },
+        }
       );
 
-      // Handle proxy request timeout
       proxyRequest.on("timeout", () => {
         this.logger.error("Proxy request timeout");
         if (!clientResponse.headersSent) {
@@ -688,14 +658,13 @@ export class ApiService {
                 `data: ${JSON.stringify({
                   status: "error",
                   error: "Gateway timeout",
-                })}\n\n`,
+                })}\n\n`
               );
               clientResponse.end();
             } catch (error) {
               this.logger.error("Failed to send SSE timeout response:", error);
             }
           } else {
-            // Use native Node.js methods instead of Express methods
             this.sendErrorResponse(clientResponse, 504, "Gateway timeout");
           }
         }
@@ -703,7 +672,6 @@ export class ApiService {
         reject(new Error("Proxy request timeout"));
       });
 
-      // Clean up on client disconnect
       clientResponse.on("close", () => {
         this.logger.info("Client connection closed, destroying proxy request");
         if (!proxyRequest.destroyed) {
@@ -715,7 +683,6 @@ export class ApiService {
         this.logger.error("Proxy request error:", error);
         if (!clientResponse.headersSent) {
           if (isSSE) {
-            // For SSE, we need to establish the connection first
             try {
               clientResponse.writeHead(200, {
                 "Content-Type": "text/event-stream",
@@ -727,27 +694,25 @@ export class ApiService {
                 `data: ${JSON.stringify({
                   status: "error",
                   error: "Proxy request failed",
-                })}\n\n`,
+                })}\n\n`
               );
               clientResponse.end();
             } catch (writeError) {
               this.logger.error(
                 "Failed to send SSE error response:",
-                writeError,
+                writeError
               );
             }
           } else {
-            // Use native Node.js methods instead of Express methods
             this.sendErrorResponse(clientResponse, 500, "Proxy request failed");
           }
         }
         reject(error);
       });
 
-      // Handle request body
       if (isMultipart || isBinaryFile) {
         this.logger.info(
-          `Piping ${isMultipart ? "multipart" : "binary"} request stream`,
+          `Piping ${isMultipart ? "multipart" : "binary"} request stream`
         );
         clientRequest.pipe(proxyRequest);
       } else {
@@ -758,7 +723,6 @@ export class ApiService {
               ? JSON.stringify(clientRequest.body)
               : (clientRequest.body as string | Buffer);
 
-          // Add content-length for non-streaming requests
           if (!isSSE) {
             proxyRequest.setHeader("Content-Length", Buffer.byteLength(body));
           }
