@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, Logger } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
@@ -19,6 +19,8 @@ import {
   TrueFalseBasedFeedbackDto,
 } from "../dto/question-response/create.question.response.attempt.response.dto";
 
+const logger = new Logger("AttemptHelper");
+
 export const AttemptHelper = {
   assignFeedbackToResponse(
     model:
@@ -27,7 +29,7 @@ export const AttemptHelper = {
       | ChoiceBasedQuestionResponseModel
       | TrueFalseBasedQuestionResponseModel
       | FileBasedQuestionResponseModel,
-    responseDto: CreateQuestionResponseAttemptResponseDto,
+    responseDto: CreateQuestionResponseAttemptResponseDto
   ) {
     responseDto.totalPoints = model.points;
 
@@ -93,6 +95,13 @@ export const AttemptHelper = {
           rubricCount: model.rubricScores.length,
         };
       }
+
+      if ((model as any).metadata) {
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          ...(model as any).metadata,
+        };
+      }
     } else if (model instanceof TextBasedQuestionResponseModel) {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
@@ -152,21 +161,28 @@ export const AttemptHelper = {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
       responseDto.feedback = [generalFeedbackDto];
+
+      if ((model as any).metadata) {
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          ...(model as any).metadata,
+        };
+      }
     }
   },
 
   validateAndGetTextResponse(
     questionType: QuestionType,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
+    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto
   ): Promise<string> {
     if (questionType === QuestionType.TEXT) {
       if (!createQuestionResponseAttemptRequestDto.learnerTextResponse) {
         throw new BadRequestException(
-          "Expected a text-based response (learnerResponse), but did not receive one.",
+          "Expected a text-based response (learnerResponse), but did not receive one."
         );
       }
       return Promise.resolve(
-        createQuestionResponseAttemptRequestDto.learnerTextResponse,
+        createQuestionResponseAttemptRequestDto.learnerTextResponse
       );
     }
     throw new BadRequestException("Unexpected question type received.");
@@ -179,7 +195,7 @@ export const AttemptHelper = {
     return array;
   },
   async fetchPlainTextFromUrl(
-    url: string,
+    url: string
   ): Promise<{ body: string; isFunctional: boolean }> {
     const MAX_CONTENT_SIZE = 100_000;
     try {
@@ -201,7 +217,7 @@ export const AttemptHelper = {
         } else {
           try {
             const repoMatch = url.match(
-              /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/,
+              /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/
             );
             if (repoMatch) {
               const [, user, repo] = repoMatch;
@@ -219,8 +235,9 @@ export const AttemptHelper = {
               } catch {
                 try {
                   const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
-                  const masterReadmeResponse =
-                    await axios.get<string>(masterReadmeUrl);
+                  const masterReadmeResponse = await axios.get<string>(
+                    masterReadmeUrl
+                  );
                   if (masterReadmeResponse.status === 200) {
                     let body = masterReadmeResponse.data;
                     if (body.length > MAX_CONTENT_SIZE) {
@@ -245,19 +262,17 @@ export const AttemptHelper = {
                       }\nLast Updated: ${repoInfo.updated_at}`;
                       return { body, isFunctional: true };
                     }
-                  } catch (error) {
-                    console.debug(
-                      "Failed to fetch repository details via GitHub API",
-                      error,
+                  } catch {
+                    logger.warn(
+                      `Failed to fetch README or repository info for ${user}/${repo}. URL may be non-functional or rate-limited.`
                     );
                   }
                 }
               }
             }
-          } catch (error) {
-            console.debug(
-              "Failed to resolve repository via GitHub heuristics",
-              error,
+          } catch {
+            logger.warn(
+              `Failed to fetch repository info for ${url}. URL may be non-functional or rate-limited.`
             );
           }
 
@@ -266,7 +281,7 @@ export const AttemptHelper = {
             const $ = cheerio.load(response.data);
 
             $(
-              "script, style, noscript, iframe, noembed, embed, object",
+              "script, style, noscript, iframe, noembed, embed, object"
             ).remove();
 
             let content = "";
@@ -280,7 +295,7 @@ export const AttemptHelper = {
               }
 
               const fileList = $(
-                "div.js-details-container div.js-navigation-container tr.js-navigation-item",
+                "div.js-details-container div.js-navigation-container tr.js-navigation-item"
               );
               if (fileList.length > 0) {
                 content += "Repository Files:\n";
@@ -302,8 +317,10 @@ export const AttemptHelper = {
                 isFunctional: true,
               };
             }
-          } catch (error) {
-            console.debug("Failed to scrape repository page", error);
+          } catch {
+            logger.warn(
+              `Failed to fetch content from ${url}. URL may be non-functional or rate-limited.`
+            );
           }
         }
 
@@ -329,7 +346,7 @@ export const AttemptHelper = {
 };
 function convertGitHubUrlToRaw(url: string): string | null {
   const match = url.match(
-    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/
   );
   if (!match) {
     // eslint-disable-next-line unicorn/no-null

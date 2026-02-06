@@ -6,6 +6,9 @@ export type RubricScore = {
   maxPoints?: number;
   justification?: string;
   criterionSelected?: string;
+  evidence?: string[];
+  status?: "full" | "partial" | "none" | "unknown";
+  manualReviewRequired?: boolean;
 };
 
 export class FileBasedQuestionResponseModel {
@@ -18,6 +21,7 @@ export class FileBasedQuestionResponseModel {
   readonly rubricScores?: RubricScore[];
   readonly highlighting?: FileHighlighting;
   readonly annotatedPdfUrl?: string;
+  readonly metadata?: Record<string, any>;
 
   constructor(
     points: number,
@@ -29,6 +33,7 @@ export class FileBasedQuestionResponseModel {
     rubricScores?: RubricScore[],
     highlighting?: FileHighlighting,
     annotatedPdfUrl?: string,
+    metadata?: Record<string, any>,
   ) {
     this.points = points;
     this.feedback = feedback;
@@ -39,5 +44,6 @@ export class FileBasedQuestionResponseModel {
     this.rubricScores = rubricScores;
     this.highlighting = highlighting;
     this.annotatedPdfUrl = annotatedPdfUrl;
+    this.metadata = metadata;
   }
 }
