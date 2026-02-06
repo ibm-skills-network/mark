@@ -13,9 +13,10 @@ import type {
 } from "@/config/types";
 import { getUser } from "@/lib/talkToBackend";
 import { create } from "zustand";
-import { devtools, persist } from "zustand/middleware";
+import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
+import { createSafeStorage } from "@/lib/safe-storage";
 
 type GitHubQuestionState = {
   repos: RepoType[];
@@ -195,6 +196,7 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
     ),
     {
       name: "video-recorder-store",
+      storage: createJSONStorage(() => createSafeStorage()),
       partialize: (state) => ({
         recording: state.recording,
         videoURL: state.videoURL,
@@ -321,6 +323,7 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
     ),
     {
       name: "github-store",
+      storage: createJSONStorage(() => createSafeStorage()),
       partialize: (state) => ({
         questionGitHubState: state.questionGitHubState,
         activeQuestionId: state.activeQuestionId,
@@ -503,6 +506,7 @@ export const useLearnerOverviewStore = createWithEqualityFn<
       }),
       {
         name: `learner-overview-${ASSIGNMENT_ID}`,
+        storage: createJSONStorage(() => createSafeStorage()),
         partialize: (state) => ({
           listOfAttempts: state.listOfAttempts,
           assignmentId: state.assignmentId,
@@ -999,7 +1003,7 @@ export const useLearnerStore = createWithEqualityFn<
     ),
     {
       name: `learner-${ASSIGNMENT_ID}`,
-
+      storage: createJSONStorage(() => createSafeStorage()),
       partialize: (state) => ({
         questions: state.questions,
         activeAttemptId: state.activeAttemptId,
@@ -1036,6 +1040,7 @@ export const useAssignmentDetails = createWithEqualityFn<
     ),
     {
       name: "assignmentDetails",
+      storage: createJSONStorage(() => createSafeStorage()),
       partialize: (state) => ({
         assignmentDetails: state.assignmentDetails,
       }),

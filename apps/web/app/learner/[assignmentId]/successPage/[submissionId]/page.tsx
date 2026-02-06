@@ -674,7 +674,6 @@ function SuccessPage() {
           )}
         </div>
 
-        {/* LTI Grade Sync Status */}
         {role === "learner" && !Number.isNaN(grade) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
