@@ -23,7 +23,7 @@ export class ApiService {
   private logger;
   constructor(
     private readonly messagingService: MessagingService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: ApiService.name });
   }
@@ -40,13 +40,13 @@ export class ApiService {
           writableEnded?: boolean;
           writeHead: (
             statusCode: number,
-            headers?: Record<string, string>
+            headers?: Record<string, string>,
           ) => void;
           end: (data?: string | Buffer) => void;
         }),
     statusCode: number,
     errorMessage: string,
-    isJson = true
+    isJson = true,
   ): void {
     try {
       if (!response.headersSent) {
@@ -83,7 +83,7 @@ export class ApiService {
    */
   public getForwardingDetails(
     forwardingService: DownstreamService,
-    request: UserSessionRequest
+    request: UserSessionRequest,
   ): { endpoint: string; extraHeaders: Record<string, any> } {
     let endpoint: string;
     let extraHeaders: Record<string, any> = {};
@@ -111,7 +111,7 @@ export class ApiService {
         const username = process.env.LTI_CREDENTIAL_MANAGER_USERNAME ?? "";
         const password = process.env.LTI_CREDENTIAL_MANAGER_PASSWORD ?? "";
         const base64Credentials = Buffer.from(
-          `${username}:${password}`
+          `${username}:${password}`,
         ).toString("base64");
         extraHeaders = {
           Authorization: `Basic ${base64Credentials}`,
@@ -131,7 +131,7 @@ export class ApiService {
     clientRequest: Request,
     clientResponse: Response,
     url: string,
-    headers: Record<string, any> = {}
+    headers: Record<string, any> = {},
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const isHTTPS = url.startsWith("https");
@@ -164,7 +164,7 @@ export class ApiService {
         (proxyResponse) => {
           this.logger.info(
             // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-            `SSE response received: ${proxyResponse.statusCode}`
+            `SSE response received: ${proxyResponse.statusCode}`,
           );
 
           clientResponse.writeHead(proxyResponse.statusCode || 200, {
@@ -195,7 +195,7 @@ export class ApiService {
             }
             reject(error);
           });
-        }
+        },
       );
 
       proxyRequest.on("error", (error) => {
@@ -204,7 +204,7 @@ export class ApiService {
           this.sendErrorResponse(
             clientResponse,
             500,
-            "SSE proxy request failed"
+            "SSE proxy request failed",
           );
         }
         reject(error);
@@ -263,7 +263,7 @@ export class ApiService {
    */
   async forwardRequestToDownstreamService(
     forwardingService: DownstreamService,
-    request: UserSessionRequest
+    request: UserSessionRequest,
   ): Promise<{ data: string; status: number }> {
     try {
       if (!request.originalUrl) {
@@ -272,7 +272,7 @@ export class ApiService {
 
       const { endpoint, extraHeaders } = this.getForwardingDetails(
         forwardingService,
-        request
+        request,
       );
 
       const isMultipart = this.isMultipartRequest(request);
@@ -282,7 +282,7 @@ export class ApiService {
         this.logger.info(
           `Using HTTP forwarding for ${
             isMultipart ? "multipart" : "binary file"
-          } request: ${endpoint}`
+          } request: ${endpoint}`,
         );
 
         return new Promise((resolve, reject) => {
@@ -295,7 +295,7 @@ export class ApiService {
             writeHead(
               this: MockResponse,
               statusCode: number,
-              headers: Record<string, unknown>
+              headers: Record<string, unknown>,
             ): void;
             write(this: MockResponse, chunk: string | Buffer): void;
             end(this: MockResponse, chunk?: string | Buffer): void;
@@ -303,11 +303,11 @@ export class ApiService {
             json(this: MockResponse, body: unknown): void;
             on?(
               event: string,
-              listener: (...arguments_: unknown[]) => void
+              listener: (...arguments_: unknown[]) => void,
             ): void;
             once?(
               event: string,
-              listener: (...arguments_: unknown[]) => void
+              listener: (...arguments_: unknown[]) => void,
             ): void;
             pipe<T>(this: MockResponse, destination: T): T;
           }
@@ -321,7 +321,7 @@ export class ApiService {
             writeHead(
               this: MockResponse,
               statusCode: number,
-              headers: Record<string, unknown>
+              headers: Record<string, unknown>,
             ) {
               this.statusCode = statusCode;
               this.headers = headers;
@@ -372,13 +372,13 @@ export class ApiService {
             request as Request,
             mockResponse as unknown as Response,
             endpoint,
-            extraHeaders
+            extraHeaders,
           )
             .then(() => {
               this.logger.info(
                 `Forwarded ${
                   isBinaryFile ? "binary file" : "multipart"
-                } request successfully`
+                } request successfully`,
               );
               resolve({
                 data: mockResponse.data.toString("utf8"),
@@ -420,7 +420,7 @@ export class ApiService {
         this.logger.error(axiosError.response.data);
         throw new HttpException(
           axiosError.response?.data ?? "",
-          axiosError.response.status
+          axiosError.response.status,
         );
       }
       this.logger.error(error);
@@ -441,7 +441,7 @@ export class ApiService {
     clientRequest: Request,
     clientResponse: Response,
     url: string,
-    headers: Record<string, any> = {}
+    headers: Record<string, any> = {},
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const isHTTPS = url.startsWith("https");
@@ -450,11 +450,11 @@ export class ApiService {
         clientRequest.headers.accept?.includes("text/event-stream") ?? false;
       const isMultipart =
         clientRequest.headers["content-type"]?.includes(
-          "multipart/form-data"
+          "multipart/form-data",
         ) ?? false;
 
       const isBinaryFile = this.isBinaryFileRequest(
-        clientRequest as UserSessionRequest
+        clientRequest as UserSessionRequest,
       );
 
       const httpAgent = new http.Agent({
@@ -480,8 +480,8 @@ export class ApiService {
           ? httpsAgentNoKeepAlive
           : httpsAgent
         : isSSE || isMultipart || isBinaryFile
-        ? httpAgentNoKeepAlive
-        : httpAgent;
+          ? httpAgentNoKeepAlive
+          : httpAgent;
 
       const outgoingHeaders = {
         ...clientRequest.headers,
@@ -496,8 +496,8 @@ export class ApiService {
       this.logger.info(`Forwarding ${clientRequest.method} request to ${url}`);
       this.logger.info(
         `Request type: SSE=${String(isSSE)}, Multipart=${String(
-          isMultipart
-        )}, Binary=${String(isBinaryFile)}`
+          isMultipart,
+        )}, Binary=${String(isBinaryFile)}`,
       );
 
       const parsedUrl = new URL(url);
@@ -516,19 +516,19 @@ export class ApiService {
         (proxyResponse) => {
           const isStreaming =
             proxyResponse.headers["content-type"]?.includes(
-              "text/event-stream"
+              "text/event-stream",
             );
 
           if ((isMultipart || isBinaryFile) && !isStreaming) {
             this.logger.info(
-              `Handling ${isBinaryFile ? "binary file" : "multipart"} response`
+              `Handling ${isBinaryFile ? "binary file" : "multipart"} response`,
             );
 
             const responseChunks: Buffer[] = [];
 
             proxyResponse.on("data", (chunk: Buffer) => {
               responseChunks.push(
-                Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+                Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
               );
             });
 
@@ -536,7 +536,7 @@ export class ApiService {
               const responseBuffer = Buffer.concat(responseChunks);
 
               this.logger.info(
-                `Binary response complete: ${responseBuffer.length} bytes`
+                `Binary response complete: ${responseBuffer.length} bytes`,
               );
 
               const responseHeaders = {
@@ -546,7 +546,7 @@ export class ApiService {
 
               clientResponse.writeHead(
                 proxyResponse.statusCode || 500,
-                responseHeaders
+                responseHeaders,
               );
 
               clientResponse.end(responseBuffer);
@@ -560,7 +560,7 @@ export class ApiService {
                   clientResponse,
                   500,
                   "Proxy response error",
-                  false
+                  false,
                 );
               }
               reject(error);
@@ -616,13 +616,13 @@ export class ApiService {
                     `data: ${JSON.stringify({
                       status: "error",
                       error: "Stream error",
-                    })}\n\n`
+                    })}\n\n`,
                   );
                   clientResponse.end();
                 } catch (writeError) {
                   this.logger.error(
                     "Error writing error to client:",
-                    writeError
+                    writeError,
                   );
                 }
               }
@@ -642,7 +642,7 @@ export class ApiService {
               }
             });
           }
-        }
+        },
       );
 
       proxyRequest.on("timeout", () => {
@@ -658,7 +658,7 @@ export class ApiService {
                 `data: ${JSON.stringify({
                   status: "error",
                   error: "Gateway timeout",
-                })}\n\n`
+                })}\n\n`,
               );
               clientResponse.end();
             } catch (error) {
@@ -694,13 +694,13 @@ export class ApiService {
                 `data: ${JSON.stringify({
                   status: "error",
                   error: "Proxy request failed",
-                })}\n\n`
+                })}\n\n`,
               );
               clientResponse.end();
             } catch (writeError) {
               this.logger.error(
                 "Failed to send SSE error response:",
-                writeError
+                writeError,
               );
             }
           } else {
@@ -712,7 +712,7 @@ export class ApiService {
 
       if (isMultipart || isBinaryFile) {
         this.logger.info(
-          `Piping ${isMultipart ? "multipart" : "binary"} request stream`
+          `Piping ${isMultipart ? "multipart" : "binary"} request stream`,
         );
         clientRequest.pipe(proxyRequest);
       } else {
