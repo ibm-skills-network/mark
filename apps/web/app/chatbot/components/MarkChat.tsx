@@ -2142,6 +2142,7 @@ Please help me with this.`;
       if (action === "submit") {
         try {
           const reportData = value || specialActions.data;
+          const resolvedUserEmail = reportData?.userEmail || user?.userId;
 
           const formData = new FormData();
           formData.append("issueType", reportData.issueType);
@@ -2149,6 +2150,9 @@ Please help me with this.`;
           formData.append("severity", reportData.severity || "info");
           formData.append("category", reportData.category || "Issue Report");
           formData.append("userRole", reportData.userRole || "learner");
+          if (resolvedUserEmail) {
+            formData.append("userEmail", resolvedUserEmail);
+          }
           formData.append(
             "assignmentId",
             reportData.assignmentId?.toString() ??
@@ -2221,15 +2225,21 @@ Please help me with this.`;
     [specialActions, dismissAction],
   );
 
-  const handleClientExecution = useCallback((toolCall) => {
-    if (toolCall.function === "showReportPreview") {
-      setReportPreviewModal({
-        isOpen: true,
-        type: toolCall.params.type || "report",
-        data: toolCall.params,
-      });
-    }
-  }, []);
+  const handleClientExecution = useCallback(
+    (toolCall) => {
+      if (toolCall.function === "showReportPreview") {
+        setReportPreviewModal({
+          isOpen: true,
+          type: toolCall.params.type || "report",
+          data: {
+            ...toolCall.params,
+            userEmail: user?.userId,
+          },
+        });
+      }
+    },
+    [user?.userId],
+  );
 
   const handleSwitchQuestion = useCallback(
     (questionId) => {
