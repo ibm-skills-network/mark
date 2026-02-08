@@ -8,10 +8,12 @@ export class ConcurrencyLimiter {
   async run<T>(tasks: Array<() => Promise<T>>): Promise<T[]> {
     if (tasks.length === 0) return [];
 
-    const results: T[] = Array.from({length: tasks.length});
+    const results: T[] = Array.from({ length: tasks.length });
     let index = 0;
 
-    const workers = Array.from({length: Math.min(this.maxConcurrent, tasks.length)}).fill(null);
+    const workers = Array.from({
+      length: Math.min(this.maxConcurrent, tasks.length),
+    }).fill(null);
 
     await Promise.all(
       workers.map(async () => {

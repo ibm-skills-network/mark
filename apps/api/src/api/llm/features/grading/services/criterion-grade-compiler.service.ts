@@ -12,10 +12,7 @@ export class CriterionGradeCompilerService {
       (sum, grade) => sum + grade.pointsAwarded,
       0,
     );
-    const maxPoints = criteria.reduce(
-      (sum, grade) => sum + grade.maxPoints,
-      0,
-    );
+    const maxPoints = criteria.reduce((sum, grade) => sum + grade.maxPoints, 0);
     const allCitations = criteria.flatMap((grade) => grade.citations);
     const allRationales = criteria.map((grade) => grade.rationale);
 

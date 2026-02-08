@@ -52,7 +52,7 @@ export class CriterionEvidenceRetrievalService {
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
     @Inject(LLM_RESOLVER_SERVICE)
-    private readonly llmResolver: LLMResolverService
+    private readonly llmResolver: LLMResolverService,
   ) {
     this.config = {
       maxCandidates: 18,
@@ -66,7 +66,7 @@ export class CriterionEvidenceRetrievalService {
   async retrieveEvidence(
     request: CriterionEvidenceRequest,
     index: ChunkIndex,
-    recorder?: LlmCallRecorder
+    recorder?: LlmCallRecorder,
   ): Promise<CriterionEvidenceResponse> {
     const strategy = request.strategy || this.config.defaultStrategy;
     const cacheKey = this.buildCacheKey(request, index);
@@ -96,7 +96,7 @@ export class CriterionEvidenceRetrievalService {
         .map((candidate) => {
           const relevance = this.computeRelevanceScore(
             request.criterion,
-            candidate.chunk.text
+            candidate.chunk.text,
           );
           const combined =
             (candidate.score / maxSearchScore) * 0.6 + relevance * 0.4;
@@ -132,7 +132,7 @@ export class CriterionEvidenceRetrievalService {
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
           `search=${candidates.length} candidates, reranked=0 after filter; ` +
-          `surfaced ${reranked.length} chunks (aboveThreshold=${aboveThreshold.length})`
+          `surfaced ${reranked.length} chunks (aboveThreshold=${aboveThreshold.length})`,
       );
     }
 
@@ -148,7 +148,7 @@ export class CriterionEvidenceRetrievalService {
       const validation = await this.validateWithLlm(
         request,
         reranked.map((item) => item.chunk),
-        recorder
+        recorder,
       );
 
       if (validation.length > 0) {
@@ -216,7 +216,7 @@ export class CriterionEvidenceRetrievalService {
 
   private buildCacheKey(
     request: CriterionEvidenceRequest,
-    index: ChunkIndex
+    index: ChunkIndex,
   ): string {
     const chunkHashes = index
       .getAllChunks()
@@ -243,12 +243,12 @@ export class CriterionEvidenceRetrievalService {
 
   private computeRelevanceScore(
     criterion: RubricCriterion,
-    text: string
+    text: string,
   ): number {
     const criterionTokens = this.tokenize(
       `${criterion.rubricQuestion} ${criterion.description} ${criterion.criteria
         .map((level) => level.description)
-        .join(" ")}`
+        .join(" ")}`,
     );
     const chunkTokens = this.tokenize(text);
 
@@ -270,14 +270,14 @@ export class CriterionEvidenceRetrievalService {
         .toLowerCase()
         .replaceAll(/[^\s\w]/g, " ")
         .split(/\s+/)
-        .filter((token) => token.length > 2)
+        .filter((token) => token.length > 2),
     );
   }
 
   private async validateWithLlm(
     request: CriterionEvidenceRequest,
     chunks: ExtractedChunk[],
-    recorder?: LlmCallRecorder
+    recorder?: LlmCallRecorder,
   ): Promise<
     Array<{
       chunk: ExtractedChunk;
@@ -289,7 +289,7 @@ export class CriterionEvidenceRetrievalService {
     if (chunks.length === 0) return [];
 
     const parser = StructuredOutputParser.fromZodSchema(
-      EvidenceValidationSchema
+      EvidenceValidationSchema,
     );
     const formatInstructions = parser.getFormatInstructions();
 
@@ -322,8 +322,8 @@ Return JSON listing which chunkIds are relevant.
               (chunk) =>
                 `- ${chunk.chunkId}: ${chunk.text.slice(
                   0,
-                  240
-                )} | ${this.formatAnchor(chunk.anchor)}`
+                  240,
+                )} | ${this.formatAnchor(chunk.anchor)}`,
             )
             .join("\n"),
         format_instructions: () => formatInstructions,
@@ -334,7 +334,7 @@ Return JSON listing which chunkIds are relevant.
       request.modelOverride ||
       (await this.llmResolver.getModelForValidationTask(
         "evidence_validation",
-        request.question.length
+        request.question.length,
       ));
 
     const start = Date.now();
@@ -343,7 +343,7 @@ Return JSON listing which chunkIds are relevant.
       request.assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
       "evidence_validation",
-      model
+      model,
     );
     const duration = Date.now() - start;
     const responseText =
@@ -372,7 +372,7 @@ Return JSON listing which chunkIds are relevant.
         return this.mapParsedSelections(
           await parser.parse(candidate),
           chunks,
-          request.maxEvidence ?? this.config.maxEvidence
+          request.maxEvidence ?? this.config.maxEvidence,
         );
       } catch {
         this.logger.warn("Evidence validation parse failed");
@@ -386,7 +386,7 @@ Return JSON listing which chunkIds are relevant.
   private mapParsedSelections(
     parsed: { evidence?: Array<{ chunkId?: string; relevance?: string }> },
     chunks: ExtractedChunk[],
-    maxEvidence: number
+    maxEvidence: number,
   ): Array<{
     chunk: ExtractedChunk;
     relevanceScore: number;

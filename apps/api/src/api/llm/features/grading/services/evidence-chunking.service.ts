@@ -63,7 +63,10 @@ export class EvidenceChunkingService {
     return chunks;
   }
 
-  extractFromText(text: string, sourceId = "learner-response"): ExtractedChunk[] {
+  extractFromText(
+    text: string,
+    sourceId = "learner-response",
+  ): ExtractedChunk[] {
     const normalized = text || "";
     if (!normalized.trim()) return [];
 
@@ -196,8 +199,8 @@ export class EvidenceChunkingService {
 
   private splitIntoParagraphs(text: string): string[] {
     const chunks = text
-      .replaceAll('\r\n', "\n")
-      .replaceAll('\r', "\n")
+      .replaceAll("\r\n", "\n")
+      .replaceAll("\r", "\n")
       .split(/\n{2,}/)
       .map((chunk) => chunk.trim());
 
@@ -225,7 +228,9 @@ export class EvidenceChunkingService {
       .replaceAll(/<style[\S\s]*?<\/style>/gi, "")
       .replaceAll(/<noscript[\S\s]*?<\/noscript>/gi, "");
 
-    const paragraphMatches = [...sanitized.matchAll(/<p[^>]*>([\S\s]*?)<\/p>/gi)];
+    const paragraphMatches = [
+      ...sanitized.matchAll(/<p[^>]*>([\S\s]*?)<\/p>/gi),
+    ];
 
     if (paragraphMatches.length === 0) {
       const text = sanitized.replaceAll(/<[^>]+>/g, " ");

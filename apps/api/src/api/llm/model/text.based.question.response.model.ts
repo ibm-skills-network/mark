@@ -9,8 +9,8 @@ export interface GradingMetadata {
   contentHash: string;
   cached?: boolean;
   cacheHitCount?: number;
-  maxPossiblePoints?: number
-  gradingAudit?: unknown
+  maxPossiblePoints?: number;
+  gradingAudit?: unknown;
 }
 
 export interface StructuredCriterionData {

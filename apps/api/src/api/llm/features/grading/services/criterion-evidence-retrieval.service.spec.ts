@@ -20,7 +20,7 @@ function makeChunk(id: string, text: string): ExtractedChunk {
 
 /** Helper: construct the service with mocked DI dependencies */
 function makeService(
-  promptReturnValue = "not valid json"
+  promptReturnValue = "not valid json",
 ): CriterionEvidenceRetrievalService {
   return new CriterionEvidenceRetrievalService(
     {
@@ -28,7 +28,7 @@ function makeService(
     } as any,
     {
       getModelForValidationTask: jest.fn().mockResolvedValue("test-model"),
-    } as any
+    } as any,
   );
 }
 
@@ -53,7 +53,7 @@ describe("CriterionEvidenceRetrievalService", () => {
         chunks: [],
         assignmentId: 1,
       },
-      index
+      index,
     );
 
     expect(response.evidence).toHaveLength(0);
@@ -102,7 +102,7 @@ describe("CriterionEvidenceRetrievalService", () => {
         chunks,
         assignmentId: 42,
       },
-      index
+      index,
     );
 
     expect(response.evidence.length).toBe(5);
@@ -137,7 +137,7 @@ describe("CriterionEvidenceRetrievalService", () => {
         chunks,
         assignmentId: 1,
       },
-      index
+      index,
     );
 
     expect(response.evidence.length).toBeGreaterThan(0);

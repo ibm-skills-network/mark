@@ -16,8 +16,7 @@ export default function Error({
     (error as { status?: number; statusCode?: number }).status ??
     (error as { statusCode?: number }).statusCode;
   const statusText = (error as { statusText?: string }).statusText;
-  const isAPIError =
-    error instanceof APIError || error.name === "APIError";
+  const isAPIError = error instanceof APIError || error.name === "APIError";
   const shouldShowModal =
     isAPIError || (typeof status === "number" && status >= 500);
 

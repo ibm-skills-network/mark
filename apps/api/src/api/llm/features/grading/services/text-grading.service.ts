@@ -78,7 +78,7 @@ const GradingAttemptSchema = z.object({
           .number()
           .min(0)
           .describe(
-            "Points awarded for this criterion (must match rubric value exactly)"
+            "Points awarded for this criterion (must match rubric value exactly)",
           ),
         maxPoints: z
           .number()
@@ -88,20 +88,20 @@ const GradingAttemptSchema = z.object({
           .string()
           .nullable()
           .describe(
-            "Direct quote from submission as evidence, or null if criterion not met"
+            "Direct quote from submission as evidence, or null if criterion not met",
           ),
         feedback: z
           .string()
           .describe(
-            "Evidence-based feedback: state if met/not met, cite evidence or state 'No supporting evidence found'"
+            "Evidence-based feedback: state if met/not met, cite evidence or state 'No supporting evidence found'",
           ),
-      })
+      }),
     )
     .describe("Evaluation of each criterion independently"),
   overallFeedback: z
     .string()
     .describe(
-      "Concise summary of performance across all criteria (factual, no subjective language)"
+      "Concise summary of performance across all criteria (factual, no subjective language)",
     ),
 });
 
@@ -132,7 +132,7 @@ export class TextGradingService implements ITextGradingService {
     @Optional()
     @Inject(GRADING_CACHE_SERVICE)
     private readonly cacheService?: IGradingCacheService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger?: Logger,
   ) {
     this.logger = parentLogger.child({ context: TextGradingService.name });
   }
@@ -143,7 +143,7 @@ export class TextGradingService implements ITextGradingService {
   async gradeTextBasedQuestion(
     textBasedQuestionEvaluateModel: TextBasedQuestionEvaluateModel,
     assignmentId: number,
-    language?: string
+    language?: string,
   ): Promise<TextBasedQuestionResponseModel> {
     const startTime = Date.now();
 
@@ -160,22 +160,22 @@ export class TextGradingService implements ITextGradingService {
       const sanitizedLearnerResponse = this.sanitizeInput(learnerResponse);
 
       const isValidResponse = await this.moderationService.validateContent(
-        sanitizedLearnerResponse
+        sanitizedLearnerResponse,
       );
       if (!isValidResponse) {
         throw new HttpException(
           "Learner response validation failed",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
       const maxPossiblePoints = this.calculateMaxPossiblePoints(
         scoringCriteria as ScoringDto,
-        totalPoints
+        totalPoints,
       );
 
       const rubricCriteria = this.convertToRubricCriteria(
-        scoringCriteria as ScoringDto
+        scoringCriteria as ScoringDto,
       );
 
       if (
@@ -187,7 +187,7 @@ export class TextGradingService implements ITextGradingService {
           criteria: rubricCriteria,
           chunks: this.chunkingService.extractFromText(
             sanitizedLearnerResponse,
-            questionId ? `question-${questionId}` : "learner-response"
+            questionId ? `question-${questionId}` : "learner-response",
           ),
           assignmentId,
           language,
@@ -199,7 +199,7 @@ export class TextGradingService implements ITextGradingService {
         return this.buildTextResponseFromPipeline(
           pipelineResult,
           maxPossiblePoints,
-          startTime
+          startTime,
         );
       }
 
@@ -209,28 +209,28 @@ export class TextGradingService implements ITextGradingService {
 
       if (this.normalizationService) {
         normalizedAnswer = this.normalizationService.normalizeAnswer(
-          sanitizedLearnerResponse
+          sanitizedLearnerResponse,
         );
         rubricHash = this.normalizationService.hashRubric(
-          JSON.stringify(scoringCriteria)
+          JSON.stringify(scoringCriteria),
         );
         cacheKey = this.normalizationService.generateCacheKey(
           rubricHash,
           normalizedAnswer.hash,
-          questionId
+          questionId,
         );
 
         this.logger.info(
           `Normalized answer - Hash: ${normalizedAnswer.hash}, ` +
             `Words: ${normalizedAnswer.wordCount}, ` +
-            `Claims: ${normalizedAnswer.claims.length}`
+            `Claims: ${normalizedAnswer.claims.length}`,
         );
 
         if (this.cacheService && cacheKey && normalizedAnswer) {
           const cached = await this.cacheService.getCachedGrading(cacheKey);
           if (cached) {
             this.logger.info(
-              `Cache hit! Returning cached grading (hit count: ${cached.hitCount})`
+              `Cache hit! Returning cached grading (hit count: ${cached.hitCount})`,
             );
 
             const endTime = Date.now();
@@ -256,7 +256,7 @@ export class TextGradingService implements ITextGradingService {
             const summary = this.generateScoreExplanation(
               cached.totalScore,
               maxPossiblePoints,
-              cached.criteria
+              cached.criteria,
             );
             const details = this.generateCriteriaBasedFeedback(cached.criteria);
             const guidance = this.generateGuidanceFromCriteria(cached.criteria);
@@ -266,7 +266,7 @@ export class TextGradingService implements ITextGradingService {
             const structuredData = this.buildStructuredFeedbackData(
               summary,
               cached.criteria,
-              guidance
+              guidance,
             );
 
             return new TextBasedQuestionResponseModel(
@@ -279,7 +279,7 @@ export class TextGradingService implements ITextGradingService {
               rubricScores,
               `Cached result (used ${cached.hitCount} times) - deterministic grading`,
               metadata,
-              structuredData
+              structuredData,
             );
           }
         }
@@ -295,7 +295,7 @@ export class TextGradingService implements ITextGradingService {
       while (!gradingAttempt && attemptCount < this.maxRetries) {
         attemptCount++;
         this.logger.info(
-          `Grading attempt ${attemptCount}/${this.maxRetries} for assignment ${assignmentId}`
+          `Grading attempt ${attemptCount}/${this.maxRetries} for assignment ${assignmentId}`,
         );
 
         try {
@@ -304,13 +304,13 @@ export class TextGradingService implements ITextGradingService {
             maxPossiblePoints,
             contentHash,
             assignmentId,
-            language
+            language,
           );
         } catch (error) {
           this.logger.error(
             `Error in grading attempt ${attemptCount}: ${
               error instanceof Error ? error.message : "Unknown error"
-            }`
+            }`,
           );
 
           if (attemptCount < this.maxRetries) {
@@ -324,7 +324,7 @@ export class TextGradingService implements ITextGradingService {
       if (!gradingAttempt) {
         throw new HttpException(
           "Failed to generate grading after all attempts",
-          HttpStatus.INTERNAL_SERVER_ERROR
+          HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
 
@@ -334,39 +334,39 @@ export class TextGradingService implements ITextGradingService {
         scoringCriteria as ScoringDto,
         gradingAttempt,
         maxPossiblePoints,
-        assignmentId
+        assignmentId,
       );
 
       const judgeApproved = judgeResult.approved;
 
       if (!judgeResult.approved) {
         this.logger.warn(
-          `Judge rejected grading: ${judgeResult.feedback || "No feedback"}`
+          `Judge rejected grading: ${judgeResult.feedback || "No feedback"}`,
         );
 
         if (judgeResult.corrections) {
           gradingAttempt = this.applyJudgeCorrections(
             gradingAttempt,
-            judgeResult.corrections
+            judgeResult.corrections,
           );
         }
 
         gradingAttempt = this.applyJudgeFeedbackOverlay(
           gradingAttempt,
-          judgeResult
+          judgeResult,
         );
       }
 
       const normalizedAttempt = this.normalizeGradingAttempt(
         gradingAttempt,
-        maxPossiblePoints
+        maxPossiblePoints,
       );
 
       const endTime = Date.now();
       this.logger.info(
         `Graded text question - Points: ${normalizedAttempt.totalScore}/${maxPossiblePoints}, ` +
           `Content Hash: ${contentHash}, Judge Approved: ${judgeApproved.toString()}, ` +
-          `Time: ${endTime - startTime}ms, Attempts: ${attemptCount}`
+          `Time: ${endTime - startTime}ms, Attempts: ${attemptCount}`,
       );
 
       const metadata: GradingMetadata = {
@@ -425,7 +425,7 @@ export class TextGradingService implements ITextGradingService {
           this.logger.warn(
             `Failed to cache grading result: ${
               cacheError instanceof Error ? cacheError.message : "Unknown error"
-            }`
+            }`,
           );
         }
       }
@@ -433,13 +433,13 @@ export class TextGradingService implements ITextGradingService {
       const summary = this.generateScoreExplanation(
         normalizedAttempt.totalScore,
         maxPossiblePoints,
-        normalizedAttempt.criteria
+        normalizedAttempt.criteria,
       );
       const details = this.generateCriteriaBasedFeedback(
-        normalizedAttempt.criteria
+        normalizedAttempt.criteria,
       );
       const guidance = this.generateGuidanceFromCriteria(
-        normalizedAttempt.criteria
+        normalizedAttempt.criteria,
       );
 
       const structuredFeedback = `${summary}\n\n---\n\n${details}\n\nGuidance: ${guidance}`;
@@ -447,7 +447,7 @@ export class TextGradingService implements ITextGradingService {
       const structuredData = this.buildStructuredFeedbackData(
         summary,
         normalizedAttempt.criteria,
-        guidance
+        guidance,
       );
 
       return new TextBasedQuestionResponseModel(
@@ -460,13 +460,13 @@ export class TextGradingService implements ITextGradingService {
         rubricScores,
         `Deterministic grading: ${normalizedAttempt.criteria.length} criteria evaluated`,
         metadata,
-        structuredData
+        structuredData,
       );
     } catch (error) {
       this.logger.error(
         `Failed to grade text question: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
       throw error;
     }
@@ -477,7 +477,7 @@ export class TextGradingService implements ITextGradingService {
    */
   private normalizeGradingAttempt(
     attempt: GradingAttempt,
-    maxPossiblePoints: number
+    maxPossiblePoints: number,
   ): GradingAttempt {
     const cloned: GradingAttempt = { ...attempt };
 
@@ -488,7 +488,7 @@ export class TextGradingService implements ITextGradingService {
 
       if (awarded !== awardedRaw) {
         this.logger.warn(
-          `Clamped criterion "${criterion.criterionId}" score from ${awardedRaw} to ${awarded} (max ${maxPoints})`
+          `Clamped criterion "${criterion.criterionId}" score from ${awardedRaw} to ${awarded} (max ${maxPoints})`,
         );
       }
 
@@ -503,17 +503,17 @@ export class TextGradingService implements ITextGradingService {
 
     const totalFromCriteria = normalizedCriteria.reduce(
       (sum, c) => sum + c.pointsAwarded,
-      0
+      0,
     );
 
     const cappedTotal = Math.min(
       Math.max(0, totalFromCriteria),
-      maxPossiblePoints
+      maxPossiblePoints,
     );
 
     if (cappedTotal !== cloned.totalScore) {
       this.logger.warn(
-        `Normalized total score from ${cloned.totalScore} to ${cappedTotal} (max ${maxPossiblePoints})`
+        `Normalized total score from ${cloned.totalScore} to ${cappedTotal} (max ${maxPossiblePoints})`,
       );
     }
 
@@ -534,7 +534,7 @@ export class TextGradingService implements ITextGradingService {
     contentHash: string,
     assignmentId: number,
     language?: string,
-    previousJudgeFeedback?: string | null
+    previousJudgeFeedback?: string | null,
   ): Promise<GradingAttempt> {
     const {
       question,
@@ -601,14 +601,14 @@ export class TextGradingService implements ITextGradingService {
       AIUsageType.ASSIGNMENT_GRADING,
       "text_grading",
       "gpt-4o-mini",
-      { temperature: 0, top_p: 0 }
+      { temperature: 0, top_p: 0 },
     );
 
     const parsedResponse = await parser.parse(response);
 
     this.logger.info(
       `LLM grading result - Points: ${parsedResponse.totalScore}/${maxPossiblePoints}, ` +
-        `Criteria evaluated: ${parsedResponse.criteria?.length || 0} items`
+        `Criteria evaluated: ${parsedResponse.criteria?.length || 0} items`,
     );
 
     return parsedResponse;
@@ -623,7 +623,7 @@ export class TextGradingService implements ITextGradingService {
     scoringCriteria: ScoringDto,
     gradingAttempt: GradingAttempt,
     maxPossiblePoints: number,
-    assignmentId: number
+    assignmentId: number,
   ) {
     try {
       const rubricScores: RubricScore[] = gradingAttempt.criteria.map(
@@ -641,7 +641,7 @@ export class TextGradingService implements ITextGradingService {
             evidence: criterion.evidence ? [criterion.evidence] : [],
             status,
           };
-        }
+        },
       );
 
       return await this.gradingJudgeService.validateGrading({
@@ -664,7 +664,7 @@ export class TextGradingService implements ITextGradingService {
       this.logger.error(
         `Judge validation failed: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
       return {
         approved: true,
@@ -683,7 +683,7 @@ export class TextGradingService implements ITextGradingService {
       maxPoints?: number;
       evidence?: string | null;
       feedback?: string;
-    }>
+    }>,
   ): string {
     if (!criteria || criteria.length === 0) {
       return "No grading criteria available.";
@@ -722,7 +722,7 @@ export class TextGradingService implements ITextGradingService {
       criterionId?: string;
       pointsAwarded?: number;
       maxPoints?: number;
-    }>
+    }>,
   ): string {
     const percentage =
       maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
@@ -750,7 +750,7 @@ export class TextGradingService implements ITextGradingService {
       evidence?: string | null;
       feedback?: string;
     }>,
-    guidance: string
+    guidance: string,
   ): StructuredFeedbackData {
     const structuredCriteria = criteria.map((c) => {
       const awarded = c.pointsAwarded || 0;
@@ -792,7 +792,7 @@ export class TextGradingService implements ITextGradingService {
       maxPoints?: number;
       evidence?: string | null;
       feedback?: string;
-    }>
+    }>,
   ): string {
     const allFullyMet = criteria.every((c) => {
       const awarded = c.pointsAwarded || 0;
@@ -829,7 +829,7 @@ export class TextGradingService implements ITextGradingService {
       points?: number;
       feedback?: string;
       rubricScores?: RubricScore[];
-    }
+    },
   ): GradingAttempt {
     const corrected = { ...gradingAttempt };
 
@@ -852,7 +852,7 @@ export class TextGradingService implements ITextGradingService {
 
       corrected.totalScore = corrected.criteria.reduce(
         (sum, c) => sum + c.pointsAwarded,
-        0
+        0,
       );
     }
 
@@ -870,7 +870,7 @@ export class TextGradingService implements ITextGradingService {
       corrections?: {
         feedback?: string;
       };
-    }
+    },
   ): GradingAttempt {
     const overlayParts: string[] = [];
 
@@ -880,7 +880,7 @@ export class TextGradingService implements ITextGradingService {
 
     if (Array.isArray(judgeResult.issues) && judgeResult.issues.length > 0) {
       overlayParts.push(
-        `Issues: ${judgeResult.issues.map((issue) => issue.trim()).join("; ")}`
+        `Issues: ${judgeResult.issues.map((issue) => issue.trim()).join("; ")}`,
       );
     }
 
@@ -906,7 +906,7 @@ export class TextGradingService implements ITextGradingService {
       rubricScores?: RubricScore[];
     },
     originalPoints?: number,
-    maxPoints?: number
+    maxPoints?: number,
   ): boolean {
     if (corrections.rubricScores) return false;
     if (corrections.feedback) return false;
@@ -939,7 +939,7 @@ export class TextGradingService implements ITextGradingService {
       .replaceAll(/(?:^|\n)\s*(?:system|user|assistant|human):/gi, "")
       .replaceAll(
         /(?:^|\n)\s*(?:ignore|disregard|forget).*?(?:instruction|prompt|rule)/gi,
-        ""
+        "",
       )
       .slice(0, 10_000)
       .trim();
@@ -971,7 +971,7 @@ export class TextGradingService implements ITextGradingService {
    */
   private calculateMaxPossiblePoints(
     scoringCriteria: ScoringDto,
-    defaultTotal: number
+    defaultTotal: number,
   ): number {
     if (
       !scoringCriteria ||
@@ -988,7 +988,7 @@ export class TextGradingService implements ITextGradingService {
           0,
           ...rubric.criteria
             .filter((c: CriteriaDto) => typeof c?.points === "number")
-            .map((c: CriteriaDto) => c.points)
+            .map((c: CriteriaDto) => c.points),
         );
         maxPoints += rubricMax;
       }
@@ -1002,7 +1002,7 @@ export class TextGradingService implements ITextGradingService {
    */
   private generateContentHash(
     learnerResponse: string,
-    question: string
+    question: string,
   ): string {
     const normalizedResponse = learnerResponse
       .toLowerCase()
@@ -1060,7 +1060,7 @@ export class TextGradingService implements ITextGradingService {
         rubricScores?: unknown[];
       };
     },
-    attemptNumber: number
+    attemptNumber: number,
   ): string {
     let formattedFeedback = `📋 GRADING FEEDBACK - ATTEMPT ${attemptNumber}:\n\n`;
 
@@ -1199,7 +1199,7 @@ Language for response: {language}
   }
 
   private convertToRubricCriteria(
-    scoringCriteria?: ScoringDto
+    scoringCriteria?: ScoringDto,
   ): RubricCriterion[] {
     if (!scoringCriteria || !Array.isArray(scoringCriteria.rubrics)) {
       return [];
@@ -1207,7 +1207,7 @@ Language for response: {language}
 
     return scoringCriteria.rubrics.map((rubric, index) => {
       const maxPoints = Math.max(
-        ...rubric.criteria.map((criterion) => criterion.points || 0)
+        ...rubric.criteria.map((criterion) => criterion.points || 0),
       );
 
       return {
@@ -1239,11 +1239,11 @@ Language for response: {language}
       audit: EvidenceAuditLog;
     },
     maxPossiblePoints: number,
-    startTime: number
+    startTime: number,
   ): TextBasedQuestionResponseModel {
     const totalPoints = Math.min(
       pipelineResult.summary.totalPoints,
-      maxPossiblePoints
+      maxPossiblePoints,
     );
 
     const rubricScores: RubricScore[] = pipelineResult.grades.map((grade) => ({
@@ -1256,13 +1256,13 @@ Language for response: {language}
         grade.decision === "meets"
           ? "full"
           : grade.decision === "partially_meets"
-          ? "partial"
-          : "none",
+            ? "partial"
+            : "none",
     }));
 
     const feedbackLines = pipelineResult.grades.map(
       (grade) =>
-        `**${grade.rubricQuestion}** (${grade.pointsAwarded}/${grade.maxPoints})\n${grade.rationale}`
+        `**${grade.rubricQuestion}** (${grade.pointsAwarded}/${grade.maxPoints})\n${grade.rationale}`,
     );
     const feedback = feedbackLines.join("\n\n");
 
@@ -1276,8 +1276,8 @@ Language for response: {language}
           grade.decision === "meets"
             ? "full"
             : grade.decision === "partially_meets"
-            ? "partial"
-            : "none",
+              ? "partial"
+              : "none",
         evidence: grade.citations.join(", ") || "No evidence cited",
         feedback: grade.rationale,
       })),
@@ -1310,7 +1310,7 @@ Language for response: {language}
       rubricScores,
       undefined,
       metadata,
-      structuredFeedback
+      structuredFeedback,
     );
   }
 }

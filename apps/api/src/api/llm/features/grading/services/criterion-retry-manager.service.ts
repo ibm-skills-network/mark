@@ -10,7 +10,7 @@ import {
 export class CriterionRetryManagerService {
   computeSupportScore(
     grade: CriterionGrade,
-    issues: JudgeIssue[] = []
+    issues: JudgeIssue[] = [],
   ): SupportScoreBreakdown {
     const evidenceCount = grade.evidence.length;
     const avgRelevance =
@@ -19,7 +19,7 @@ export class CriterionRetryManagerService {
           evidenceCount
         : 0;
     const contradictionCount = grade.evidence.filter(
-      (item) => item.contradiction
+      (item) => item.contradiction,
     ).length;
 
     const judgePenalty = this.computeJudgePenalty(issues);
@@ -33,7 +33,7 @@ export class CriterionRetryManagerService {
       evidenceScore * 0.45 +
         relevanceScore * 0.45 -
         contradictionPenalty -
-        judgePenalty
+        judgePenalty,
     );
 
     return {
@@ -51,14 +51,14 @@ export class CriterionRetryManagerService {
     }
 
     return [...attempts].sort(
-      (a, b) => b.support.supportScore - a.support.supportScore
+      (a, b) => b.support.supportScore - a.support.supportScore,
     )[0];
   }
 
   attachAttempt(
     attempts: CriterionAttempt[],
     grade: CriterionGrade,
-    issues: JudgeIssue[]
+    issues: JudgeIssue[],
   ): CriterionAttempt[] {
     const support = this.computeSupportScore(grade, issues);
     return [

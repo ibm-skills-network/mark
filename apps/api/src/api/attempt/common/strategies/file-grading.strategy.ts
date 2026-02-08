@@ -833,10 +833,7 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           context.language,
         );
 
-        currentResponseDto = this.buildResponseDtoFromModel(
-          regraded,
-          question,
-        );
+        currentResponseDto = this.buildResponseDtoFromModel(regraded, question);
         attempt++;
       } catch (error) {
         this.logger?.error(`Judge validation failed on attempt ${attempt}`, {

@@ -137,7 +137,7 @@ export class FileGradingService implements IFileGradingService {
     private readonly evidenceBasedGrading: EvidenceBasedGradingService,
     private readonly pdfAnnotationService: PdfAnnotationService,
     private readonly s3Service: S3Service,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: FileGradingService.name });
   }
@@ -148,7 +148,7 @@ export class FileGradingService implements IFileGradingService {
   async gradeFileBasedQuestion(
     fileBasedQuestionEvaluateModel: FileUploadQuestionEvaluateModel,
     assignmentId: number,
-    language?: string
+    language?: string,
   ): Promise<FileBasedQuestionResponseModel> {
     const {
       question,
@@ -162,13 +162,13 @@ export class FileGradingService implements IFileGradingService {
 
     const validateLearnerResponse =
       await this.moderationService.validateContent(
-        learnerResponse.map((item) => item.content).join(" ")
+        learnerResponse.map((item) => item.content).join(" "),
       );
 
     if (!validateLearnerResponse) {
       throw new HttpException(
         "Learner response validation failed",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -188,7 +188,7 @@ export class FileGradingService implements IFileGradingService {
         for (const rubric of rubrics) {
           if (Array.isArray(rubric.criteria)) {
             const maxCriteriaPoints = Math.max(
-              ...rubric.criteria.map((criterion) => criterion.points || 0)
+              ...rubric.criteria.map((criterion) => criterion.points || 0),
             );
             sum += maxCriteriaPoints;
             rubricMaxPoints.push({
@@ -206,7 +206,7 @@ export class FileGradingService implements IFileGradingService {
       this.ensureStructuredContentForEvidenceGrading(learnerResponse);
 
     const hasStructuredContent = enrichedLearnerResponse.some(
-      (file) => file.structuredContent
+      (file) => file.structuredContent,
     );
 
     this.logger.info("Checking for evidence-based grading trigger", {
@@ -214,7 +214,7 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteriaType,
       filesCount: enrichedLearnerResponse.length,
       filesWithStructuredContent: enrichedLearnerResponse.filter(
-        (file) => file.structuredContent
+        (file) => file.structuredContent,
       ).length,
     });
 
@@ -228,12 +228,12 @@ export class FileGradingService implements IFileGradingService {
         assignmentId,
         language,
         rubricMaxPoints,
-        judgeFeedback
+        judgeFeedback,
       );
       return this.scaleFileBasedModelToQuestionMax(
         model,
         questionMaxPoints,
-        rubricMaxTotal
+        rubricMaxTotal,
       );
     }
 
@@ -254,10 +254,10 @@ export class FileGradingService implements IFileGradingService {
               pointsAwarded: z.number(),
               maxPoints: z.number(),
               justification: z.string(),
-            })
+            }),
           )
           .optional(),
-      })
+      }),
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -292,7 +292,7 @@ export class FileGradingService implements IFileGradingService {
       "file_grading",
       responseType,
       inputLength,
-      criteriaCount
+      criteriaCount,
     );
 
     let response: string;
@@ -301,13 +301,13 @@ export class FileGradingService implements IFileGradingService {
         question,
         extractedContent,
         scoringCriteria,
-        selectedModel
+        selectedModel,
       );
       const safeTokenLimit = this.getSafeContextLimit(selectedModel);
 
       if (estimatedTokens > safeTokenLimit) {
         this.logger.warn(
-          `Input too large for model ${selectedModel}. Estimated ${estimatedTokens} tokens (limit ${safeTokenLimit}). Using chunked summarization.`
+          `Input too large for model ${selectedModel}. Estimated ${estimatedTokens} tokens (limit ${safeTokenLimit}). Using chunked summarization.`,
         );
 
         const summarizedFiles = await this.summarizeFilesForGrading(
@@ -317,12 +317,12 @@ export class FileGradingService implements IFileGradingService {
           assignmentId,
           language ?? "en",
           selectedModel,
-          safeTokenLimit
+          safeTokenLimit,
         );
 
         const summarizedTemplate = this.getTemplateForFileType(
           responseType,
-          true
+          true,
         );
         const summarizedPrompt = this.buildFileGradingPrompt({
           template: summarizedTemplate,
@@ -342,7 +342,7 @@ export class FileGradingService implements IFileGradingService {
           assignmentId,
           selectedModel,
           maxTotalPoints,
-          rubricMaxPoints
+          rubricMaxPoints,
         );
       } else {
         response = await this.processPromptWithRetry(
@@ -350,24 +350,24 @@ export class FileGradingService implements IFileGradingService {
           assignmentId,
           selectedModel,
           maxTotalPoints,
-          rubricMaxPoints
+          rubricMaxPoints,
         );
       }
     } catch (retryError) {
       this.logger.error(
         `All LLM retry attempts failed: ${
           retryError instanceof Error ? retryError.message : String(retryError)
-        }`
+        }`,
       );
       const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "All LLM models failed - using fallback grading",
-        rubricMaxPoints
+        rubricMaxPoints,
       );
       return this.scaleFileBasedModelToQuestionMax(
         fallback,
         questionMaxPoints,
-        rubricMaxTotal
+        rubricMaxTotal,
       );
     }
 
@@ -389,7 +389,7 @@ export class FileGradingService implements IFileGradingService {
           parsedResponse.points !== calculatedTotalPoints
         ) {
           this.logger.warn(
-            `LLM total points (${parsedResponse.points}) doesn't match sum of rubric scores (${calculatedTotalPoints}). Using rubric sum.`
+            `LLM total points (${parsedResponse.points}) doesn't match sum of rubric scores (${calculatedTotalPoints}). Using rubric sum.`,
           );
           parsedResponse = {
             ...parsedResponse,
@@ -405,7 +405,7 @@ export class FileGradingService implements IFileGradingService {
         parsedResponse.evaluation,
         parsedResponse.explanation,
         parsedResponse.guidance,
-        parsedResponse.rubricScores
+        parsedResponse.rubricScores,
       );
 
       const parsedPoints = fileBasedQuestionResponseModel.points;
@@ -413,7 +413,7 @@ export class FileGradingService implements IFileGradingService {
 
       if (parsedPoints > maxTotalPoints) {
         this.logger.warn(
-          `LLM awarded ${parsedPoints} points, which exceeds maximum of ${maxTotalPoints}. Capping at maximum.`
+          `LLM awarded ${parsedPoints} points, which exceeds maximum of ${maxTotalPoints}. Capping at maximum.`,
         );
         finalModel = new FileBasedQuestionResponseModel(
           maxTotalPoints,
@@ -422,11 +422,11 @@ export class FileGradingService implements IFileGradingService {
           fileBasedQuestionResponseModel.evaluation,
           fileBasedQuestionResponseModel.explanation,
           fileBasedQuestionResponseModel.guidance,
-          fileBasedQuestionResponseModel.rubricScores
+          fileBasedQuestionResponseModel.rubricScores,
         );
       } else if (parsedPoints < 0) {
         this.logger.warn(
-          `LLM awarded negative points (${parsedPoints}). Setting to 0.`
+          `LLM awarded negative points (${parsedPoints}). Setting to 0.`,
         );
         finalModel = new FileBasedQuestionResponseModel(
           0,
@@ -435,31 +435,31 @@ export class FileGradingService implements IFileGradingService {
           fileBasedQuestionResponseModel.evaluation,
           fileBasedQuestionResponseModel.explanation,
           fileBasedQuestionResponseModel.guidance,
-          fileBasedQuestionResponseModel.rubricScores
+          fileBasedQuestionResponseModel.rubricScores,
         );
       }
 
       return this.scaleFileBasedModelToQuestionMax(
         finalModel,
         questionMaxPoints,
-        rubricMaxTotal
+        rubricMaxTotal,
       );
     } catch (error) {
       this.logger.error(
         `Error parsing LLM response: ${
           error instanceof Error ? error.message : "Unknown error"
-        }. Response: "${response?.slice(0, 200)}..."`
+        }. Response: "${response?.slice(0, 200)}..."`,
       );
 
       const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "Failed to parse LLM response - using fallback grading",
-        rubricMaxPoints
+        rubricMaxPoints,
       );
       return this.scaleFileBasedModelToQuestionMax(
         fallback,
         questionMaxPoints,
-        rubricMaxTotal
+        rubricMaxTotal,
       );
     }
   }
@@ -472,7 +472,7 @@ export class FileGradingService implements IFileGradingService {
     assignmentId: number,
     primaryModel: string,
     _maxTotalPoints: number,
-    _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[]
+    _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
   ): Promise<string> {
     const maxRetries = 3;
     let lastError: Error | null = null;
@@ -480,7 +480,7 @@ export class FileGradingService implements IFileGradingService {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         this.logger.debug(
-          `LLM attempt ${attempt}/${maxRetries} with model ${primaryModel}`
+          `LLM attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
         );
 
         const response = await this.promptProcessor.processPromptForFeature(
@@ -488,13 +488,13 @@ export class FileGradingService implements IFileGradingService {
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
           "file_grading",
-          primaryModel
+          primaryModel,
         );
 
         if (this.isValidLLMResponse(response)) {
           if (attempt > 1) {
             this.logger.info(
-              `LLM succeeded on attempt ${attempt}/${maxRetries} with model ${primaryModel}`
+              `LLM succeeded on attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
             );
           }
           return response;
@@ -503,16 +503,16 @@ export class FileGradingService implements IFileGradingService {
         this.logger.warn(
           `LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(
             0,
-            100
-          )}..."`
+            100,
+          )}..."`,
         );
         lastError = new Error(
-          `Invalid LLM response: ${response?.slice(0, 100)}`
+          `Invalid LLM response: ${response?.slice(0, 100)}`,
         );
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         this.logger.warn(
-          `LLM attempt ${attempt}/${maxRetries} failed with model ${primaryModel}: ${lastError.message}`
+          `LLM attempt ${attempt}/${maxRetries} failed with model ${primaryModel}: ${lastError.message}`,
         );
       }
 
@@ -524,10 +524,10 @@ export class FileGradingService implements IFileGradingService {
     try {
       const fallbackModel = await this.llmResolver.getModelKeyWithFallback(
         "file_grading_fallback",
-        "gpt-4o-mini"
+        "gpt-4o-mini",
       );
       this.logger.warn(
-        `Primary model ${primaryModel} failed after ${maxRetries} attempts, trying fallback model ${fallbackModel}`
+        `Primary model ${primaryModel} failed after ${maxRetries} attempts, trying fallback model ${fallbackModel}`,
       );
 
       const response = await this.promptProcessor.processPromptForFeature(
@@ -535,7 +535,7 @@ export class FileGradingService implements IFileGradingService {
         assignmentId,
         AIUsageType.ASSIGNMENT_GRADING,
         "file_grading",
-        fallbackModel
+        fallbackModel,
       );
 
       if (this.isValidLLMResponse(response)) {
@@ -544,7 +544,7 @@ export class FileGradingService implements IFileGradingService {
       }
 
       this.logger.error(
-        `Fallback model ${fallbackModel} also returned invalid response`
+        `Fallback model ${fallbackModel} also returned invalid response`,
       );
     } catch (fallbackError) {
       this.logger.error(
@@ -552,7 +552,7 @@ export class FileGradingService implements IFileGradingService {
           fallbackError instanceof Error
             ? fallbackError.message
             : String(fallbackError)
-        }`
+        }`,
       );
     }
 
@@ -579,7 +579,7 @@ export class FileGradingService implements IFileGradingService {
   private createFallbackResponse(
     maxTotalPoints: number,
     reason: string,
-    rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[]
+    rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
   ): FileBasedQuestionResponseModel {
     const fallbackPoints =
       maxTotalPoints > 0 ? Math.floor(maxTotalPoints * 0.5) : 0;
@@ -600,13 +600,13 @@ export class FileGradingService implements IFileGradingService {
       "Unable to complete automated evaluation at this time.",
       "This submission requires manual review due to system limitations.",
       "Please contact your instructor for manual grading of this submission.",
-      fallbackRubricScores
+      fallbackRubricScores,
     );
   }
 
   private createMinimumEvidenceResponse(
     maxTotalPoints: number,
-    scoringCriteria?: ScoringDto
+    scoringCriteria?: ScoringDto,
   ): FileBasedQuestionResponseModel {
     const rubricScores: RubricScore[] = [];
 
@@ -632,7 +632,7 @@ export class FileGradingService implements IFileGradingService {
       rubricScores.length > 0
         ? rubricScores.reduce(
             (sum, score) => sum + (score.pointsAwarded || 0),
-            0
+            0,
           )
         : 0;
 
@@ -648,14 +648,14 @@ export class FileGradingService implements IFileGradingService {
       "Each criterion was assigned minimum points due to missing evidence.",
       "No supporting evidence could be verified for the rubric criteria.",
       "Provide clear, explicit evidence in the submission that matches each rubric criterion.",
-      rubricScores
+      rubricScores,
     );
   }
 
   private scaleFileBasedModelToQuestionMax(
     model: FileBasedQuestionResponseModel,
     questionMaxPoints: number,
-    rubricMaxTotal: number
+    rubricMaxTotal: number,
   ): FileBasedQuestionResponseModel {
     if (
       !questionMaxPoints ||
@@ -676,7 +676,7 @@ export class FileGradingService implements IFileGradingService {
       return {
         ...score,
         pointsAwarded: this.roundScaledPoints(
-          score.pointsAwarded * scaleFactor
+          score.pointsAwarded * scaleFactor,
         ),
       };
     });
@@ -694,7 +694,7 @@ export class FileGradingService implements IFileGradingService {
 
     const scaledPoints = Math.min(
       questionMaxPoints,
-      Math.max(0, this.roundScaledPoints(scaledPointsBase))
+      Math.max(0, this.roundScaledPoints(scaledPointsBase)),
     );
 
     this.logger.warn(
@@ -705,7 +705,7 @@ export class FileGradingService implements IFileGradingService {
         questionMaxPoints,
         rubricMaxTotal,
         scaleFactor,
-      }
+      },
     );
 
     return new FileBasedQuestionResponseModel(
@@ -717,7 +717,7 @@ export class FileGradingService implements IFileGradingService {
       model.guidance,
       scaledRubricScores ?? model.rubricScores,
       model.highlighting,
-      model.annotatedPdfUrl
+      model.annotatedPdfUrl,
     );
   }
 
@@ -727,7 +727,7 @@ export class FileGradingService implements IFileGradingService {
 
   private getTemplateForFileType(
     responseType: ResponseType,
-    summarized = false
+    summarized = false,
   ): string {
     const fileTypeDescriptions: Record<ResponseType, string> = {
       CODE: "code submission with a focus on functionality, efficiency, style, and best practices",
@@ -864,10 +864,10 @@ export class FileGradingService implements IFileGradingService {
   }
 
   private ensureStructuredContentForEvidenceGrading(
-    learnerResponse: LearnerFileUpload[]
+    learnerResponse: LearnerFileUpload[],
   ): LearnerFileUpload[] {
     const needsRebuild = learnerResponse.some((file) =>
-      this.shouldRebuildStructuredContent(file)
+      this.shouldRebuildStructuredContent(file),
     );
 
     if (
@@ -890,7 +890,7 @@ export class FileGradingService implements IFileGradingService {
 
       const structuredContent = this.buildCanonicalSubmissionFromText(
         text,
-        file
+        file,
       );
 
       return { ...file, structuredContent };
@@ -930,7 +930,7 @@ export class FileGradingService implements IFileGradingService {
 
   private buildCanonicalSubmissionFromText(
     text: string,
-    file: LearnerFileUpload
+    file: LearnerFileUpload,
   ): CanonicalSubmission {
     const rawText = text || "";
     const normalized = this.normalizeSubmissionTextForEvidence(rawText);
@@ -989,7 +989,7 @@ export class FileGradingService implements IFileGradingService {
 
   private splitTextIntoEvidenceBlocks(
     text: string,
-    startIndex = 1
+    startIndex = 1,
   ): ContentBlock[] {
     if (!text) {
       return [
@@ -1086,7 +1086,7 @@ export class FileGradingService implements IFileGradingService {
 
   private buildValidatorReportBlock(
     rawText: string,
-    file: LearnerFileUpload
+    file: LearnerFileUpload,
   ): ContentBlock | null {
     if (!this.isSpreadsheetEvidenceSource(rawText, file)) {
       return null;
@@ -1094,7 +1094,7 @@ export class FileGradingService implements IFileGradingService {
 
     const metrics = this.buildSpreadsheetMetricsFromText(
       rawText,
-      file.filename
+      file.filename,
     );
     if (!metrics) return null;
 
@@ -1104,7 +1104,7 @@ export class FileGradingService implements IFileGradingService {
       `sheet: ${metrics.sheetName}`,
       `data_rows: ${metrics.dataRowCount}`,
       `empty_rows: ${metrics.emptyRowIndices.length}`,
-      `duplicate_rows: ${metrics.duplicateRowPairs.length}`
+      `duplicate_rows: ${metrics.duplicateRowPairs.length}`,
     );
 
     if (metrics.duplicateRowPairs.length > 0) {
@@ -1129,7 +1129,7 @@ export class FileGradingService implements IFileGradingService {
       `department_columns: ${
         departmentNames.length > 0 ? departmentNames.join(", ") : "none"
       }`,
-      `column_count: ${metrics.headers.length}`
+      `column_count: ${metrics.headers.length}`,
     );
 
     const unnecessaryRemoved =
@@ -1137,13 +1137,13 @@ export class FileGradingService implements IFileGradingService {
       !metrics.hasEmptyHeaders &&
       metrics.headers.length <= 3;
     lines.push(
-      `unnecessary_columns_removed: ${unnecessaryRemoved ? "yes" : "no"}`
+      `unnecessary_columns_removed: ${unnecessaryRemoved ? "yes" : "no"}`,
     );
 
     const widthStatus = this.getColumnWidthStatus(metrics);
     lines.push(
       `column_widths: ${widthStatus}`,
-      "spelling_check: not_supported"
+      "spelling_check: not_supported",
     );
 
     return {
@@ -1156,7 +1156,7 @@ export class FileGradingService implements IFileGradingService {
 
   private isSpreadsheetEvidenceSource(
     text: string,
-    file: LearnerFileUpload
+    file: LearnerFileUpload,
   ): boolean {
     const filename = file.filename?.toLowerCase() || "";
     if (
@@ -1179,7 +1179,7 @@ export class FileGradingService implements IFileGradingService {
 
   private buildSpreadsheetMetricsFromText(
     text: string,
-    filename: string
+    filename: string,
   ): SpreadsheetMetrics | null {
     if (!text) return null;
 
@@ -1217,7 +1217,7 @@ export class FileGradingService implements IFileGradingService {
     }
 
     const headerRowIndex = rows.findIndex((row) =>
-      row.some((cell) => cell.trim() !== "")
+      row.some((cell) => cell.trim() !== ""),
     );
 
     const headers =
@@ -1290,7 +1290,7 @@ export class FileGradingService implements IFileGradingService {
       .filter((col) => /department|dept/i.test(col.name));
 
     const hasEmptyHeaders = headers.some(
-      (header) => header.trim().length === 0
+      (header) => header.trim().length === 0,
     );
 
     const maxCellLengths: number[] = [];
@@ -1335,7 +1335,7 @@ export class FileGradingService implements IFileGradingService {
 
     if (
       widthPairs.every(
-        (pair) => pair.width !== null && pair.width >= pair.maxLen
+        (pair) => pair.width !== null && pair.width >= pair.maxLen,
       )
     ) {
       return "wide_enough";
@@ -1350,7 +1350,7 @@ export class FileGradingService implements IFileGradingService {
 
   private buildFileMetadataBlock(
     file: LearnerFileUpload,
-    normalizedText: string
+    normalizedText: string,
   ): ContentBlock | null {
     if (!file?.filename) return null;
 
@@ -1406,7 +1406,7 @@ export class FileGradingService implements IFileGradingService {
     maxTotalPoints: number,
     scoringCriteriaType: string,
     scoringCriteria: ScoringDto,
-    responseType: ResponseType
+    responseType: ResponseType,
   ): Promise<FileBasedQuestionResponseModel | null> {
     if (scoringCriteriaType !== "CRITERIA_BASED") {
       return null;
@@ -1423,22 +1423,22 @@ export class FileGradingService implements IFileGradingService {
     const workbookInfo = await this.loadSpreadsheetWorkbook(learnerResponse);
     if (!workbookInfo) {
       this.logger.warn(
-        "Deterministic spreadsheet grading skipped - unable to load workbook"
+        "Deterministic spreadsheet grading skipped - unable to load workbook",
       );
       return null;
     }
 
     const metrics = this.buildSpreadsheetMetrics(
       workbookInfo.workbook,
-      workbookInfo.filename
+      workbookInfo.filename,
     );
 
     const rubricChecks = scoringCriteria.rubrics.map((rubric) =>
-      this.identifySpreadsheetCheck(rubric)
+      this.identifySpreadsheetCheck(rubric),
     );
 
     const hasUnknownChecks = rubricChecks.some(
-      (check) => check.type === "unknown"
+      (check) => check.type === "unknown",
     );
 
     if (hasUnknownChecks) {
@@ -1446,9 +1446,9 @@ export class FileGradingService implements IFileGradingService {
         "Deterministic spreadsheet grading skipped - unknown rubric criteria",
         {
           rubricQuestions: scoringCriteria.rubrics.map(
-            (rubric) => rubric.rubricQuestion
+            (rubric) => rubric.rubricQuestion,
           ),
-        }
+        },
       );
       return null;
     }
@@ -1462,12 +1462,12 @@ export class FileGradingService implements IFileGradingService {
         const maxPoints =
           rubric.criteria.length > 0
             ? Math.max(
-                ...rubric.criteria.map((criterion) => criterion.points || 0)
+                ...rubric.criteria.map((criterion) => criterion.points || 0),
               )
             : 0;
         const { points, criterion } = this.selectPointsForStatus(
           rubric.criteria,
-          result.status
+          result.status,
         );
         const manualReviewRequired = result.status === "unknown";
         const evidence = result.evidence;
@@ -1491,7 +1491,7 @@ export class FileGradingService implements IFileGradingService {
 
     const totalPoints = evaluations.reduce(
       (sum, evaluation) => sum + evaluation.pointsAwarded,
-      0
+      0,
     );
 
     this.logger.info("Deterministic spreadsheet grading applied", {
@@ -1505,7 +1505,7 @@ export class FileGradingService implements IFileGradingService {
       question,
       maxTotalPoints,
       metrics,
-      evaluations
+      evaluations,
     );
 
     const rubricScores: RubricScore[] = evaluations.map((evaluation) => {
@@ -1532,13 +1532,13 @@ export class FileGradingService implements IFileGradingService {
       feedbackPayload.evaluation,
       feedbackPayload.explanation,
       feedbackPayload.guidance,
-      rubricScores
+      rubricScores,
     );
   }
 
   private isSpreadsheetSubmission(
     responseType: ResponseType,
-    learnerResponse: LearnerFileUpload[]
+    learnerResponse: LearnerFileUpload[],
   ): boolean {
     if (responseType === ResponseType.SPREADSHEET) {
       return true;
@@ -1553,7 +1553,7 @@ export class FileGradingService implements IFileGradingService {
   }
 
   private async loadSpreadsheetWorkbook(
-    learnerResponse: LearnerFileUpload[]
+    learnerResponse: LearnerFileUpload[],
   ): Promise<{ workbook: XLSX.WorkBook; filename: string } | null> {
     const spreadsheetExtensions = new Set(["xlsx", "xls", "csv", "tsv", "ods"]);
 
@@ -1586,7 +1586,7 @@ export class FileGradingService implements IFileGradingService {
         this.logger.warn(
           `Failed to parse spreadsheet ${file.filename}: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
       }
     }
@@ -1596,7 +1596,7 @@ export class FileGradingService implements IFileGradingService {
 
   private async fetchFileBuffer(
     file: LearnerFileUpload,
-    extension: string
+    extension: string,
   ): Promise<Buffer | null> {
     if (file.bucket && file.key) {
       try {
@@ -1610,7 +1610,7 @@ export class FileGradingService implements IFileGradingService {
         this.logger.warn(
           `Failed to fetch file ${file.filename} from storage: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
       }
     }
@@ -1646,7 +1646,7 @@ export class FileGradingService implements IFileGradingService {
 
   private buildSpreadsheetMetrics(
     workbook: XLSX.WorkBook,
-    filename: string
+    filename: string,
   ): SpreadsheetMetrics {
     const sheetName = workbook.SheetNames[0] || "Sheet1";
     const worksheet = workbook.Sheets[sheetName];
@@ -1659,11 +1659,11 @@ export class FileGradingService implements IFileGradingService {
     const rows = rowsRaw.map((row) =>
       Array.isArray(row)
         ? row.map((cell) => this.normalizeSpreadsheetCell(cell))
-        : []
+        : [],
     );
 
     const headerRowIndex = rows.findIndex((row) =>
-      row.some((cell) => cell.trim() !== "")
+      row.some((cell) => cell.trim() !== ""),
     );
 
     const headers =
@@ -1736,7 +1736,7 @@ export class FileGradingService implements IFileGradingService {
       .filter((col) => /department|dept/i.test(col.name));
 
     const hasEmptyHeaders = headers.some(
-      (header) => header.trim().length === 0
+      (header) => header.trim().length === 0,
     );
 
     const columnWidths = Array.isArray(worksheet["!cols"])
@@ -1793,7 +1793,7 @@ export class FileGradingService implements IFileGradingService {
   }
 
   private identifySpreadsheetCheck(
-    rubric: ScoringDto["rubrics"][number]
+    rubric: ScoringDto["rubrics"][number],
   ): SpreadsheetCheckDefinition {
     const criteriaText = rubric.criteria
       ?.map((criterion) => criterion.description)
@@ -1850,14 +1850,14 @@ export class FileGradingService implements IFileGradingService {
 
   private evaluateSpreadsheetCheck(
     check: SpreadsheetCheckDefinition,
-    metrics: SpreadsheetMetrics
+    metrics: SpreadsheetMetrics,
   ): SpreadsheetCheckResult {
     const evidence: string[] = [];
 
     switch (check.type) {
       case "file_open": {
         evidence.push(
-          `Workbook "${metrics.filename}" opened with sheet "${metrics.sheetName}".`
+          `Workbook "${metrics.filename}" opened with sheet "${metrics.sheetName}".`,
         );
         return { status: "full", evidence };
       }
@@ -1873,7 +1873,7 @@ export class FileGradingService implements IFileGradingService {
         evidence.push(
           `Header row detected at row ${metrics.headerRowIndex + 1} with ${
             metrics.headers.length
-          } columns.`
+          } columns.`,
         );
         return { status: "full", evidence };
       }
@@ -1884,7 +1884,7 @@ export class FileGradingService implements IFileGradingService {
         }
         if (metrics.emptyRowIndices.length === 0) {
           evidence.push(
-            `No empty rows found in ${metrics.dataRowCount} data rows.`
+            `No empty rows found in ${metrics.dataRowCount} data rows.`,
           );
           return { status: "full", evidence };
         }
@@ -1894,7 +1894,7 @@ export class FileGradingService implements IFileGradingService {
             metrics.emptyRowIndices.length > 5
               ? " (additional rows omitted)"
               : ""
-          }.`
+          }.`,
         );
         return { status: "none", evidence };
       }
@@ -1912,7 +1912,7 @@ export class FileGradingService implements IFileGradingService {
           .map((pair) => `row ${pair.row} duplicates row ${pair.duplicateOf}`)
           .join("; ");
         evidence.push(
-          `Duplicate rows detected (${metrics.duplicateRowPairs.length} total): ${samplePairs}.`
+          `Duplicate rows detected (${metrics.duplicateRowPairs.length} total): ${samplePairs}.`,
         );
         return { status: "none", evidence };
       }
@@ -1926,7 +1926,7 @@ export class FileGradingService implements IFileGradingService {
           .map((cell) => `${cell.column}${cell.row}`)
           .join(", ");
         evidence.push(
-          `Double spaces found in ${metrics.doubleSpaceCells.length} cell(s) (examples: ${sampleCells}).`
+          `Double spaces found in ${metrics.doubleSpaceCells.length} cell(s) (examples: ${sampleCells}).`,
         );
         return { status: "partial", evidence };
       }
@@ -1936,7 +1936,7 @@ export class FileGradingService implements IFileGradingService {
           !metrics.hasEmptyHeaders
         ) {
           evidence.push(
-            `Department column detected: "${metrics.departmentColumns[0].name}".`
+            `Department column detected: "${metrics.departmentColumns[0].name}".`,
           );
           return { status: "full", evidence };
         }
@@ -1946,7 +1946,7 @@ export class FileGradingService implements IFileGradingService {
           evidence.push(
             `Multiple department columns detected: ${metrics.departmentColumns
               .map((col) => `"${col.name}"`)
-              .join(", ")}.`
+              .join(", ")}.`,
           );
         }
         if (metrics.hasEmptyHeaders) {
@@ -1956,13 +1956,13 @@ export class FileGradingService implements IFileGradingService {
       }
       case "column_width": {
         evidence.push(
-          "Column width is a display setting and cannot be reliably auto-graded."
+          "Column width is a display setting and cannot be reliably auto-graded.",
         );
         return { status: "unknown", evidence };
       }
       case "spelling": {
         evidence.push(
-          "Automated spelling verification is not available for this submission."
+          "Automated spelling verification is not available for this submission.",
         );
         return { status: "unknown", evidence };
       }
@@ -1973,12 +1973,12 @@ export class FileGradingService implements IFileGradingService {
         }
         if (metrics.dataRowCount === check.expectedRowCount) {
           evidence.push(
-            `Detected ${metrics.dataRowCount} data rows (expected ${check.expectedRowCount}).`
+            `Detected ${metrics.dataRowCount} data rows (expected ${check.expectedRowCount}).`,
           );
           return { status: "full", evidence };
         }
         evidence.push(
-          `Detected ${metrics.dataRowCount} data rows (expected ${check.expectedRowCount}).`
+          `Detected ${metrics.dataRowCount} data rows (expected ${check.expectedRowCount}).`,
         );
         return { status: "none", evidence };
       }
@@ -1992,7 +1992,7 @@ export class FileGradingService implements IFileGradingService {
 
   private selectPointsForStatus(
     criteria: ScoringDto["rubrics"][number]["criteria"],
-    status: "full" | "partial" | "none" | "unknown"
+    status: "full" | "partial" | "none" | "unknown",
   ): {
     points: number;
     criterion?: ScoringDto["rubrics"][number]["criteria"][number];
@@ -2020,18 +2020,17 @@ export class FileGradingService implements IFileGradingService {
 
         break;
       }
-      case "unknown":
-        {
-          selectedPoints = maxPoints;
+      case "unknown": {
+        selectedPoints = maxPoints;
 
-          break;
-        }
+        break;
+      }
     }
 
     const criterion = this.pickCriterionByStatus(
       criteria,
       selectedPoints,
-      status
+      status,
     );
 
     return { points: selectedPoints, criterion };
@@ -2040,10 +2039,10 @@ export class FileGradingService implements IFileGradingService {
   private pickCriterionByStatus(
     criteria: ScoringDto["rubrics"][number]["criteria"],
     points: number,
-    status: "full" | "partial" | "none" | "unknown"
+    status: "full" | "partial" | "none" | "unknown",
   ): ScoringDto["rubrics"][number]["criteria"][number] | undefined {
     const matching = criteria.filter(
-      (criterion) => criterion.points === points
+      (criterion) => criterion.points === points,
     );
     if (matching.length === 0) return undefined;
     if (matching.length === 1) return matching[0];
@@ -2057,7 +2056,7 @@ export class FileGradingService implements IFileGradingService {
 
     const hint = statusHints[status];
     const hinted = matching.find((criterion) =>
-      hint?.test(criterion.description)
+      hint?.test(criterion.description),
     );
     return hinted || matching[0];
   }
@@ -2066,7 +2065,7 @@ export class FileGradingService implements IFileGradingService {
     question: string,
     maxTotalPoints: number,
     metrics: SpreadsheetMetrics,
-    evaluations: SpreadsheetRubricEvaluation[]
+    evaluations: SpreadsheetRubricEvaluation[],
   ): {
     feedback: string;
     analysis: string;
@@ -2096,14 +2095,14 @@ export class FileGradingService implements IFileGradingService {
       `Department columns: ${metrics.departmentColumns.length}.`,
       `Auto-graded points: ${evaluations.reduce(
         (sum, evaluation) => sum + evaluation.pointsAwarded,
-        0
+        0,
       )}/${maxTotalPoints}.`,
     ].join(" ");
 
     const evaluation = evaluations
       .map(
         (evaluation) =>
-          `- ${evaluation.rubricQuestion}: ${evaluation.pointsAwarded}/${evaluation.maxPoints} (${evaluation.status})`
+          `- ${evaluation.rubricQuestion}: ${evaluation.pointsAwarded}/${evaluation.maxPoints} (${evaluation.status})`,
       )
       .join("\n");
 
@@ -2120,7 +2119,7 @@ export class FileGradingService implements IFileGradingService {
       guidanceParts.push(
         `Remove empty rows (examples: ${metrics.emptyRowIndices
           .slice(0, 5)
-          .join(", ")}).`
+          .join(", ")}).`,
       );
     }
     if (metrics.duplicateRowPairs.length > 0) {
@@ -2139,12 +2138,12 @@ export class FileGradingService implements IFileGradingService {
     }
     if (metrics.departmentColumns.length !== 1 || metrics.hasEmptyHeaders) {
       guidanceParts.push(
-        "Ensure there is a single Department column and remove blank header columns."
+        "Ensure there is a single Department column and remove blank header columns.",
       );
     }
     if (manualCriteria.length > 0) {
       guidanceParts.push(
-        `Manual review required for: ${manualCriteria.join(", ")}.`
+        `Manual review required for: ${manualCriteria.join(", ")}.`,
       );
     }
 
@@ -2171,7 +2170,7 @@ export class FileGradingService implements IFileGradingService {
     question: string,
     extractedContent: string,
     scoringCriteria: ScoringDto,
-    modelKey: string
+    modelKey: string,
   ): number {
     const criteriaText = this.safeStringify(scoringCriteria);
     const estimateText = `${question}\n${criteriaText}\n${extractedContent}`;
@@ -2181,7 +2180,7 @@ export class FileGradingService implements IFileGradingService {
   private getSafeContextLimit(modelKey: string): number {
     const normalized = modelKey.toLowerCase();
     const matchKey = Object.keys(this.contextWindowByModel).find((key) =>
-      normalized.includes(key)
+      normalized.includes(key),
     );
     const limit = matchKey
       ? this.contextWindowByModel[matchKey]
@@ -2196,12 +2195,12 @@ export class FileGradingService implements IFileGradingService {
     assignmentId: number,
     language: string,
     modelKey: string,
-    safeTokenLimit: number
+    safeTokenLimit: number,
   ): Promise<Array<{ filename: string; summary: string }>> {
     const summaries: Array<{ filename: string; summary: string }> = [];
     const chunkTokenLimit = Math.max(
       this.minimumChunkTokens,
-      Math.min(this.maximumChunkTokens, Math.floor(safeTokenLimit * 0.2))
+      Math.min(this.maximumChunkTokens, Math.floor(safeTokenLimit * 0.2)),
     );
 
     for (const file of learnerResponse) {
@@ -2217,7 +2216,7 @@ export class FileGradingService implements IFileGradingService {
       const chunks = this.splitTextIntoChunks(
         content,
         chunkTokenLimit,
-        modelKey
+        modelKey,
       );
       const chunkSummaries: string[] = [];
 
@@ -2230,14 +2229,14 @@ export class FileGradingService implements IFileGradingService {
             scoringCriteria,
             assignmentId,
             language,
-            modelKey
+            modelKey,
           );
           chunkSummaries.push(summary.trim());
         } catch (error) {
           this.logger.warn(
             `Chunk summarization failed for ${file.filename}: ${
               error instanceof Error ? error.message : String(error)
-            }`
+            }`,
           );
           chunkSummaries.push(this.truncateToTokenLimit(chunk, 1200, modelKey));
         }
@@ -2254,7 +2253,7 @@ export class FileGradingService implements IFileGradingService {
           assignmentId,
           language,
           modelKey,
-          perFileLimit
+          perFileLimit,
         );
       }
 
@@ -2279,7 +2278,7 @@ export class FileGradingService implements IFileGradingService {
     const combinedPromptText = await combinedPrompt.format({});
     const combinedTokens = this.tokenCounter.countTokens(
       combinedPromptText,
-      modelKey
+      modelKey,
     );
 
     if (combinedTokens > safeTokenLimit) {
@@ -2292,7 +2291,7 @@ export class FileGradingService implements IFileGradingService {
         assignmentId,
         language,
         modelKey,
-        Math.max(3000, Math.floor(safeTokenLimit * 0.3))
+        Math.max(3000, Math.floor(safeTokenLimit * 0.3)),
       );
       const mergedFiles = [
         {
@@ -2315,14 +2314,14 @@ export class FileGradingService implements IFileGradingService {
       const mergedPromptText = await mergedPrompt.format({});
       const mergedTokens = this.tokenCounter.countTokens(
         mergedPromptText,
-        modelKey
+        modelKey,
       );
 
       if (mergedTokens > safeTokenLimit) {
         const trimmedSummary = this.truncateToTokenLimit(
           mergedSummary,
           Math.max(2000, Math.floor(safeTokenLimit * 0.2)),
-          modelKey
+          modelKey,
         );
         return [
           {
@@ -2341,7 +2340,7 @@ export class FileGradingService implements IFileGradingService {
   private splitTextIntoChunks(
     text: string,
     maxTokens: number,
-    modelKey: string
+    modelKey: string,
   ): string[] {
     const chunks: string[] = [];
     const approxCharsPerToken = 4;
@@ -2378,7 +2377,7 @@ export class FileGradingService implements IFileGradingService {
     scoringCriteria: ScoringDto,
     assignmentId: number,
     language: string,
-    modelKey: string
+    modelKey: string,
   ): Promise<string> {
     const prompt = new PromptTemplate({
       template: `You are condensing a learner submission chunk to help grading.
@@ -2404,7 +2403,7 @@ Write a concise summary (max 200 words) highlighting evidence relevant to the ru
           this.truncateToTokenLimit(
             this.safeStringify(scoringCriteria),
             2000,
-            modelKey
+            modelKey,
           ),
         filename: () => filename,
         chunk: () => chunk,
@@ -2417,7 +2416,7 @@ Write a concise summary (max 200 words) highlighting evidence relevant to the ru
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
       "file_grading",
-      modelKey
+      modelKey,
     );
   }
 
@@ -2428,12 +2427,12 @@ Write a concise summary (max 200 words) highlighting evidence relevant to the ru
     assignmentId: number,
     language: string,
     modelKey: string,
-    targetTokens: number
+    targetTokens: number,
   ): Promise<string> {
     const cappedSummary = this.truncateToTokenLimit(
       summaryText,
       Math.max(targetTokens * 2, 4000),
-      modelKey
+      modelKey,
     );
     const prompt = new PromptTemplate({
       template: `You are compressing grading notes into a shorter summary.
@@ -2457,7 +2456,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
           this.truncateToTokenLimit(
             this.safeStringify(scoringCriteria),
             2000,
-            modelKey
+            modelKey,
           ),
         summary: () => cappedSummary,
         language: () => language ?? "en",
@@ -2470,7 +2469,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         assignmentId,
         AIUsageType.ASSIGNMENT_GRADING,
         "file_grading",
-        modelKey
+        modelKey,
       );
 
       return this.truncateToTokenLimit(compressed, targetTokens, modelKey);
@@ -2478,7 +2477,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       this.logger.warn(
         `Summary compression failed: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       return this.truncateToTokenLimit(summaryText, targetTokens, modelKey);
     }
@@ -2487,7 +2486,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
   private truncateToTokenLimit(
     text: string,
     maxTokens: number,
-    modelKey: string
+    modelKey: string,
   ): string {
     if (!text) return "";
     if (this.tokenCounter.countTokens(text, modelKey) <= maxTokens) {
@@ -2530,11 +2529,11 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
     assignmentId: number,
     language: string | undefined,
     rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[],
-    judgeFeedback?: string
+    judgeFeedback?: string,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
       const structuredFile = learnerResponse.find(
-        (file) => file.structuredContent
+        (file) => file.structuredContent,
       );
 
       if (!structuredFile || !structuredFile.structuredContent) {
@@ -2544,7 +2543,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       const submission = structuredFile.structuredContent;
 
       this.logger.info(
-        `Evidence-based grading: ${submission.metadata.blockCount} blocks, ${submission.metadata.pageCount} pages`
+        `Evidence-based grading: ${submission.metadata.blockCount} blocks, ${submission.metadata.pageCount} pages`,
       );
 
       this.logger.info("About to convert scoring criteria", {
@@ -2572,7 +2571,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         question,
         assignmentId,
         language || "en",
-        judgeFeedback
+        judgeFeedback,
       );
 
       this.logger.info(
@@ -2580,8 +2579,8 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
           `criteriaResults=${result.criteriaResults.length}, ` +
           `totalEvidence=${result.criteriaResults.reduce(
             (sum, c) => sum + c.evidence.length,
-            0
-          )}`
+            0,
+          )}`,
       );
 
       let annotatedPdfUrl: string | null = null;
@@ -2594,13 +2593,13 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
             pageCount: Object.keys(highlighting.pages).length,
             blockHighlightCount: Object.keys(highlighting.blockHighlights || {})
               .length,
-          }
+          },
         );
 
         annotatedPdfUrl = await this.generateAnnotatedPdf(
           learnerResponse,
           highlighting,
-          assignmentId
+          assignmentId,
         );
 
         this.logger.info("Annotated PDF generation result", {
@@ -2611,7 +2610,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         });
       } else {
         this.logger.warn(
-          "No highlighting data generated from evidence-based grading"
+          "No highlighting data generated from evidence-based grading",
         );
       }
 
@@ -2619,21 +2618,21 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         result,
         maxTotalPoints,
         annotatedPdfUrl,
-        highlighting ?? undefined
+        highlighting ?? undefined,
       );
     } catch (error) {
       this.logger.error(
         `Evidence-based grading failed: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
 
       this.logger.warn(
-        "Evidence-based grading failed - assigning minimum points"
+        "Evidence-based grading failed - assigning minimum points",
       );
       return this.createMinimumEvidenceResponse(
         maxTotalPoints,
-        scoringCriteria
+        scoringCriteria,
       );
     }
   }
@@ -2642,7 +2641,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
    * Convert scoring criteria to RubricCriterion format
    */
   private convertToRubricCriteria(
-    scoringCriteria?: ScoringDto
+    scoringCriteria?: ScoringDto,
   ): RubricCriterion[] {
     const criteria: RubricCriterion[] = [];
 
@@ -2697,7 +2696,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       }
 
       const maxPoints = Math.max(
-        ...rubric.criteria.map((criterion) => criterion.points || 0)
+        ...rubric.criteria.map((criterion) => criterion.points || 0),
       );
 
       criteria.push({
@@ -2728,7 +2727,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
     result: EvidenceBasedGradingResult,
     maxTotalPoints: number,
     annotatedPdfUrl?: string | null,
-    normalizedHighlighting?: FileHighlighting
+    normalizedHighlighting?: FileHighlighting,
   ): FileBasedQuestionResponseModel {
     const rubricScores: RubricScore[] = result.criteriaResults.map(
       (criterion) => ({
@@ -2738,38 +2737,38 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         justification: criterion.rationale,
         evidence: criterion.evidence.map(
           (citation) =>
-            `p${citation.page}:${citation.blockId} ${citation.quote}`
+            `p${citation.page}:${citation.blockId} ${citation.quote}`,
         ),
         status:
           criterion.decision === "meets"
             ? "full"
             : criterion.decision === "partially_meets"
-            ? "partial"
-            : "none",
-      })
+              ? "partial"
+              : "none",
+      }),
     );
 
     const finalPoints = Math.min(result.totalPoints, maxTotalPoints);
 
     if (result.totalPoints > maxTotalPoints) {
       this.logger.warn(
-        `Evidence-based grading awarded ${result.totalPoints}, capping to ${maxTotalPoints}`
+        `Evidence-based grading awarded ${result.totalPoints}, capping to ${maxTotalPoints}`,
       );
     }
 
     const summaryText = result.feedback.summary || "";
 
     const analysisMatch = summaryText.match(
-      /\*\*Analysis:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/
+      /\*\*Analysis:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/,
     );
     const evaluationMatch = summaryText.match(
-      /\*\*Evaluation:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/
+      /\*\*Evaluation:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/,
     );
     const explanationMatch = summaryText.match(
-      /\*\*Explanation:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/
+      /\*\*Explanation:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/,
     );
     const guidanceMatch = summaryText.match(
-      /\*\*Guidance:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/
+      /\*\*Guidance:\*\*\s*([\S\s]+?)(?=\n\n\*\*|$)/,
     );
 
     const analysis = analysisMatch ? analysisMatch[1].trim() : "";
@@ -2802,10 +2801,10 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         hasHighlighting: !!(normalizedHighlighting || highlighting),
         hasAnnotatedPdfUrl: !!annotatedPdfUrl,
         highlightingPages: Object.keys(
-          (normalizedHighlighting || highlighting)?.pages || {}
+          (normalizedHighlighting || highlighting)?.pages || {},
         ).length,
         annotatedPdfUrlLength: annotatedPdfUrl?.length || 0,
-      }
+      },
     );
 
     const metadata =
@@ -2827,7 +2826,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       rubricScores,
       normalizedHighlighting || highlighting || undefined,
       annotatedPdfUrl || undefined,
-      metadata
+      metadata,
     );
 
     this.logger.info("FileBasedQuestionResponseModel created", {
@@ -2843,7 +2842,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
    * to plain JSON-ready Records before persisting or returning to clients.
    */
   private normalizeHighlighting(
-    highlighting: FileHighlighting | null
+    highlighting: FileHighlighting | null,
   ): FileHighlighting | null {
     if (!highlighting) return null;
 
@@ -2857,7 +2856,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
           filename: string;
           pages: Map<number, any>;
           blockHighlights: Map<string, any>;
-        }
+        },
       );
     }
 
@@ -2880,11 +2879,11 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
     learnerResponse: LearnerFileUpload[],
     highlighting: FileHighlighting,
     assignmentId: number,
-    studentName?: string
+    studentName?: string,
   ): Promise<string | null> {
     try {
       const pdfFile = learnerResponse.find((file) =>
-        file.filename?.toLowerCase().endsWith(".pdf")
+        file.filename?.toLowerCase().endsWith(".pdf"),
       );
 
       if (!pdfFile) {
@@ -2924,7 +2923,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       const annotatedPdfBuffer = await this.pdfAnnotationService.annotatePdf(
         pdfBuffer,
         highlighting,
-        studentName
+        studentName,
       );
 
       const originalFilename = pdfFile.filename || "submission.pdf";
@@ -2949,14 +2948,14 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       });
 
       this.logger.info(
-        `Annotated PDF created successfully: ${annotatedFilename}`
+        `Annotated PDF created successfully: ${annotatedFilename}`,
       );
       return presignedUrl;
     } catch (error) {
       this.logger.error(
         `Failed to generate annotated PDF: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       return null;
     }
@@ -2974,11 +2973,11 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
     responseType: ResponseType,
     assignmentId: number,
     language: string | undefined,
-    rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[]
+    rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[],
   ): Promise<FileBasedQuestionResponseModel> {
     try {
       const visionFile = learnerResponse.find(
-        (file) => file.useVisionMode && file.fileUrl
+        (file) => file.useVisionMode && file.fileUrl,
       );
 
       if (!visionFile) {
@@ -3002,10 +3001,10 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
                 pointsAwarded: z.number(),
                 maxPoints: z.number(),
                 justification: z.string(),
-              })
+              }),
             )
             .optional(),
-        })
+        }),
       );
 
       const formatInstructions = parser.getFormatInstructions();
@@ -3096,8 +3095,8 @@ Make sure your feedback is concise but thorough.
       this.logger.debug(
         `Calling vision LLM with PDF URL: ${visionFile.fileUrl.slice(
           0,
-          100
-        )}...`
+          100,
+        )}...`,
       );
 
       const response = await this.promptProcessor.processPromptWithImage(
@@ -3105,11 +3104,11 @@ Make sure your feedback is concise but thorough.
         visionFile.fileUrl,
         assignmentId,
         AIUsageType.ASSIGNMENT_GRADING,
-        "gpt-4o-mini"
+        "gpt-4o-mini",
       );
 
       this.logger.debug(
-        `Vision LLM response received, length: ${response.length}`
+        `Vision LLM response received, length: ${response.length}`,
       );
 
       let parsedResponse = (await parser.parse(response)) as GradingOutput;
@@ -3128,7 +3127,7 @@ Make sure your feedback is concise but thorough.
           parsedResponse.points !== calculatedTotalPoints
         ) {
           this.logger.warn(
-            `Vision LLM total points (${parsedResponse.points}) doesn't match sum of rubric scores (${calculatedTotalPoints}). Using rubric sum.`
+            `Vision LLM total points (${parsedResponse.points}) doesn't match sum of rubric scores (${calculatedTotalPoints}). Using rubric sum.`,
           );
           parsedResponse = {
             ...parsedResponse,
@@ -3144,7 +3143,7 @@ Make sure your feedback is concise but thorough.
         parsedResponse.evaluation,
         parsedResponse.explanation,
         parsedResponse.guidance,
-        parsedResponse.rubricScores
+        parsedResponse.rubricScores,
       );
 
       const parsedPoints = fileBasedQuestionResponseModel.points;
@@ -3152,7 +3151,7 @@ Make sure your feedback is concise but thorough.
 
       if (parsedPoints > maxTotalPoints) {
         this.logger.warn(
-          `Vision LLM awarded ${parsedPoints} points, exceeds maximum of ${maxTotalPoints}. Capping at maximum.`
+          `Vision LLM awarded ${parsedPoints} points, exceeds maximum of ${maxTotalPoints}. Capping at maximum.`,
         );
         finalModel = new FileBasedQuestionResponseModel(
           maxTotalPoints,
@@ -3161,11 +3160,11 @@ Make sure your feedback is concise but thorough.
           fileBasedQuestionResponseModel.evaluation,
           fileBasedQuestionResponseModel.explanation,
           fileBasedQuestionResponseModel.guidance,
-          fileBasedQuestionResponseModel.rubricScores
+          fileBasedQuestionResponseModel.rubricScores,
         );
       } else if (parsedPoints < 0) {
         this.logger.warn(
-          `Vision LLM awarded negative points (${parsedPoints}). Setting to 0.`
+          `Vision LLM awarded negative points (${parsedPoints}). Setting to 0.`,
         );
         finalModel = new FileBasedQuestionResponseModel(
           0,
@@ -3174,12 +3173,12 @@ Make sure your feedback is concise but thorough.
           fileBasedQuestionResponseModel.evaluation,
           fileBasedQuestionResponseModel.explanation,
           fileBasedQuestionResponseModel.guidance,
-          fileBasedQuestionResponseModel.rubricScores
+          fileBasedQuestionResponseModel.rubricScores,
         );
       }
 
       this.logger.info(
-        `Vision-based grading completed successfully: ${finalModel.points}/${maxTotalPoints}`
+        `Vision-based grading completed successfully: ${finalModel.points}/${maxTotalPoints}`,
       );
 
       return finalModel;
@@ -3187,17 +3186,17 @@ Make sure your feedback is concise but thorough.
       this.logger.error(
         `Error in vision-based grading: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
 
       this.logger.warn(
-        "Vision grading failed, falling back to standard text-based grading"
+        "Vision grading failed, falling back to standard text-based grading",
       );
 
       return this.createFallbackResponse(
         maxTotalPoints,
         "Vision-based grading failed - using fallback grading",
-        rubricMaxPoints
+        rubricMaxPoints,
       );
     }
   }

@@ -63,7 +63,7 @@ const ParsedJudgeResponseSchema = z.object({
         maxPoints: z.number(),
         criterionSelected: z.string().optional(),
         justification: z.string(),
-      })
+      }),
     )
     .nullable()
     .optional(),
@@ -83,7 +83,7 @@ export class GradingJudgeService implements IGradingJudgeService {
     private readonly promptProcessor: IPromptProcessor,
     @Inject(LLM_RESOLVER_SERVICE)
     private readonly llmResolver: LLMResolverService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: GradingJudgeService.name });
   }
@@ -93,7 +93,7 @@ export class GradingJudgeService implements IGradingJudgeService {
 
     try {
       this.logger.info(
-        `Judge validating grading for assignment ${input.assignmentId}`
+        `Judge validating grading for assignment ${input.assignmentId}`,
       );
 
       this.validateInput(input);
@@ -102,7 +102,7 @@ export class GradingJudgeService implements IGradingJudgeService {
       const formatInstructions = parser.getFormatInstructions();
 
       this.logger.info(
-        `Judge will focus on qualitative assessment only, ignoring mathematical calculations`
+        `Judge will focus on qualitative assessment only, ignoring mathematical calculations`,
       );
 
       const template = this.loadJudgeTemplate();
@@ -139,7 +139,7 @@ export class GradingJudgeService implements IGradingJudgeService {
           input.question +
           input.learnerResponse +
           JSON.stringify(input.scoringCriteria)
-        ).length
+        ).length,
       );
 
       const response = await this.processWithTimeout(
@@ -148,9 +148,9 @@ export class GradingJudgeService implements IGradingJudgeService {
           input.assignmentId,
           AIUsageType.GRADING_VALIDATION,
           "text_grading",
-          selectedModel
+          selectedModel,
         ),
-        this.maxJudgeTimeout
+        this.maxJudgeTimeout,
       );
 
       const parsedResponse = await parser.parse(response);
@@ -160,12 +160,12 @@ export class GradingJudgeService implements IGradingJudgeService {
       this.logger.info(
         `Judge ${parsedResponse.approved ? "approved" : "rejected"} grading. ` +
           `Mathematical: ${JSON.stringify(
-            parsedResponse.mathematicallyCorrect
+            parsedResponse.mathematicallyCorrect,
           )}, ` +
           `Aligned: ${JSON.stringify(parsedResponse.feedbackAligned)}, ` +
           `Rubric: ${JSON.stringify(parsedResponse.rubricAdherence)}, ` +
           `Fairness: ${JSON.stringify(parsedResponse.fairnessScore)}/10, ` +
-          `Time: ${endTime - startTime}ms`
+          `Time: ${endTime - startTime}ms`,
       );
 
       return result;
@@ -173,7 +173,7 @@ export class GradingJudgeService implements IGradingJudgeService {
       this.logger.error(
         `Error in judge validation: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
 
       return {
@@ -211,7 +211,7 @@ export class GradingJudgeService implements IGradingJudgeService {
 
   private buildJudgeResult(
     parsedResponse: ParsedJudgeResponse,
-    input: GradingJudgeInput
+    input: GradingJudgeInput,
   ): GradingJudgeResult {
     const issues: string[] = parsedResponse.issues || [];
 
@@ -219,12 +219,12 @@ export class GradingJudgeService implements IGradingJudgeService {
     const evidenceCheck = this.evaluateEvidencePresence(rubricScores);
     const complianceCheck = this.evaluateRubricCompliance(
       input.scoringCriteria,
-      rubricScores
+      rubricScores,
     );
 
     if (parsedResponse.subjectiveLanguageDetected) {
       issues.push(
-        "Excessive subjective/emotional language detected in feedback."
+        "Excessive subjective/emotional language detected in feedback.",
       );
     }
 
@@ -272,7 +272,7 @@ export class GradingJudgeService implements IGradingJudgeService {
     this.logger.info(
       `Judge validation: Serious violations: ${String(seriousViolations)}, ` +
         `Fairness score: ${parsedResponse.fairnessScore}/10, ` +
-        `Approved: ${String(approved)}`
+        `Approved: ${String(approved)}`,
     );
 
     const result: GradingJudgeResult = {
@@ -302,14 +302,14 @@ export class GradingJudgeService implements IGradingJudgeService {
       ) {
         const sanitized = this.sanitizeCorrectedRubricScores(
           parsedResponse.correctedRubricScores,
-          input.scoringCriteria
+          input.scoringCriteria,
         );
 
         if (sanitized) {
           result.corrections.rubricScores = sanitized;
           result.corrections.points = sanitized.reduce(
             (sum, score) => sum + (score.pointsAwarded || 0),
-            0
+            0,
           );
         }
       }
@@ -334,12 +334,12 @@ export class GradingJudgeService implements IGradingJudgeService {
 
   private async processWithTimeout<T>(
     promise: Promise<T>,
-    timeoutMs: number
+    timeoutMs: number,
   ): Promise<T> {
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(
         () => reject(new Error(`Operation timed out after ${timeoutMs}ms`)),
-        timeoutMs
+        timeoutMs,
       );
     });
 
@@ -422,7 +422,7 @@ CORRECTIONS RULES (only when rejecting):
     corrected: ParsedJudgeResponse["correctedRubricScores"],
     scoringCriteria: {
       rubrics?: RubricDto[];
-    }
+    },
   ): RubricScore[] | null {
     if (!corrected || !Array.isArray(corrected)) return null;
     if (!scoringCriteria?.rubrics || !Array.isArray(scoringCriteria.rubrics)) {
@@ -447,10 +447,10 @@ CORRECTIONS RULES (only when rejecting):
       }
 
       const allowedPoints = new Set(
-        rubric.criteria.map((criterion) => criterion.points)
+        rubric.criteria.map((criterion) => criterion.points),
       );
       const maxPoints = Math.max(
-        ...rubric.criteria.map((criterion) => criterion.points || 0)
+        ...rubric.criteria.map((criterion) => criterion.points || 0),
       );
 
       if (!allowedPoints.has(score.pointsAwarded)) {
@@ -500,7 +500,7 @@ CORRECTIONS RULES (only when rejecting):
 
   private evaluateRubricCompliance(
     scoringCriteria: { rubrics?: RubricDto[] },
-    rubricScores: RubricScore[]
+    rubricScores: RubricScore[],
   ): {
     strictRubricCompliance: boolean;
     rubricAdherence: boolean;
@@ -521,7 +521,7 @@ CORRECTIONS RULES (only when rejecting):
       }
       rubricMap.set(
         rubric.rubricQuestion.toLowerCase(),
-        rubric.criteria.map((criterion) => criterion.points || 0)
+        rubric.criteria.map((criterion) => criterion.points || 0),
       );
     }
 
