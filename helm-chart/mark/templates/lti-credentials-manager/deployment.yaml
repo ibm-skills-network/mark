@@ -22,7 +22,7 @@ spec:
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: lti-credentials-manager
+        kubectl.kubernetes.io/default-container: {{ include "mark.lti-credentials-manager.name" $ }}
         checksum/secrets: {{ include (print $.Template.BasePath "/lti-credentials-manager/secret.yaml") $ | sha256sum }}
         checksum/config: {{ include (print $.Template.BasePath "/lti-credentials-manager/configmap.yaml") $ | sha256sum }}
       {{- with $.Values.globalPodAnnotations }}

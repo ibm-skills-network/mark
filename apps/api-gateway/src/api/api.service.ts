@@ -301,7 +301,7 @@ export class ApiService {
             end(this: MockResponse, chunk?: string | Buffer): void;
             status(this: MockResponse, code: number): MockResponse;
             json(this: MockResponse, body: unknown): void;
-            on?(
+            on(
               event: string,
               listener: (...arguments_: unknown[]) => void,
             ): void;

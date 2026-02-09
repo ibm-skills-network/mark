@@ -12,20 +12,25 @@
  */
 
 import { Injectable } from "@nestjs/common";
-import {
-  DiskHealthIndicator,
-  HealthCheckResult,
-  HealthCheckService,
-} from "@nestjs/terminus";
+import { HealthCheckResult, HealthCheckService } from "@nestjs/terminus";
 import { DatabaseHealthIndicator } from "../database/health/database-health.indicator";
 
 @Injectable()
 export class HealthService {
   constructor(
     private readonly health: HealthCheckService,
-    private readonly disk: DiskHealthIndicator,
     private readonly databaseHealthIndicator: DatabaseHealthIndicator,
   ) {}
+
+  /**
+   * Basic health probe - verifies the API is responsive without
+   * checking external dependencies.
+   *
+   * @returns {Promise<HealthCheckResult>} Health status
+   */
+  checkHealth(): Promise<HealthCheckResult> {
+    return this.health.check([]);
+  }
 
   /**
    * Readiness probe - checks if the application is ready to receive traffic
@@ -41,18 +46,11 @@ export class HealthService {
 
   /**
    * Liveness probe - checks if the application is alive and functioning
-   * Checks both system resources and database connectivity
+   * Does not check external dependencies
    *
    * @returns {Promise<HealthCheckResult>} Liveness status
    */
   checkLiveness(): Promise<HealthCheckResult> {
-    return this.health.check([
-      () =>
-        this.disk.checkStorage("storage", {
-          path: "/",
-          thresholdPercent: 0.9,
-        }),
-      () => this.databaseHealthIndicator.checkDatabase("database"),
-    ]);
+    return this.checkHealth();
   }
 }

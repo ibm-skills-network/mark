@@ -106,7 +106,19 @@ spec:
             app.kubernetes.io/name: apps-postgres-pgbouncer
     - ports: # Permit outbound traffic on port 443, enabling the application to initiate API requests to external services like OpenAI.
       - protocol: TCP
-        port: 443                      
+        port: 443
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 587  
+        - protocol: TCP
+          port: 465                         
   policyTypes:
   - Ingress
   - Egress             
@@ -212,4 +224,3 @@ spec:
     - Ingress
     - Egress    
 {{- end }}
-

@@ -17,6 +17,7 @@ spec:
   template:
     metadata:
       annotations:
+        kubectl.kubernetes.io/default-container: {{ include "mark.api.name" $ }}
         checksum/secrets: {{ include (print $.Template.BasePath "/api/secret.yaml") $ | sha256sum }}
         checksum/config: {{ include (print $.Template.BasePath "/api/configmap.yaml") $ | sha256sum }}
         {{- with .podAnnotations }}
@@ -60,7 +61,7 @@ spec:
           - configMapRef:
               name: {{ include "mark.api.name" $ }}-config
           - secretRef:
-              name: {{ include "mark.api.name" $ }}-secrets  
+              name: {{ include "mark.api.name" $ }}-secrets
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
