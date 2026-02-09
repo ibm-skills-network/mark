@@ -362,6 +362,18 @@ export class ApiService {
               });
               this.end(JSON.stringify(body));
             },
+            on(
+              _event: string,
+              _listener: (...arguments_: unknown[]) => void,
+            ): void {
+              // no-op for mock response
+            },
+            once(
+              _event: string,
+              _listener: (...arguments_: unknown[]) => void,
+            ): void {
+              // no-op for mock response
+            },
 
             pipe<T>(this: MockResponse, _destination: T): T {
               return this as unknown as T;

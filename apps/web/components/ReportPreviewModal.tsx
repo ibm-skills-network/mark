@@ -110,6 +110,7 @@ interface ReportPreviewModalProps {
     description?: string;
     severity?: string;
     screenshot?: File | null;
+    userEmail?: string;
   };
   isAuthor?: boolean;
   attemptId?: number;
@@ -128,26 +129,27 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   const [issueType, setIssueType] = useState(
     initialData?.issueType || getDefaultIssueType(reportType),
   );
-  const [description, setDescription] = useState(
-    initialData?.description || "",
-  );
+  const [descriptionFields, setDescriptionFields] = useState<
+    Record<string, string>
+  >({});
   const [severity, setSeverity] = useState(initialData?.severity || "info");
   const [screenshot, setScreenshot] = useState<File | null>(
     initialData?.screenshot || null,
   );
+  const [userEmail, setUserEmail] = useState(initialData?.userEmail || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (initialData) {
       setIssueType(initialData.issueType || getDefaultIssueType(reportType));
-      setDescription(initialData.description || "");
       setSeverity(initialData.severity || "info");
       setScreenshot(initialData.screenshot || null);
+      setUserEmail(initialData.userEmail || "");
     } else {
       setIssueType(getDefaultIssueType(reportType));
-      setDescription("");
       setSeverity("info");
       setScreenshot(null);
+      setUserEmail("");
     }
   }, [initialData, reportType]);
 
@@ -203,6 +205,142 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
     }
   }
 
+  type DescriptionField = {
+    key: string;
+    label: string;
+    placeholder: string;
+    required?: boolean;
+    rows?: number;
+  };
+
+  function getDescriptionFields(type: string): DescriptionField[] {
+    switch (type) {
+      case "feedback":
+        return [
+          {
+            key: "liked",
+            label: "What you liked",
+            placeholder: "Share what worked well for you.",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "improve",
+            label: "What could be improved",
+            placeholder: "What didn't work or could be better?",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "why",
+            label: "Why this matters",
+            placeholder: "Explain the impact on your learning.",
+            rows: 3,
+          },
+          {
+            key: "context",
+            label: "Additional context",
+            placeholder: "Any extra details or links.",
+            rows: 3,
+          },
+        ];
+      case "suggestion":
+        return [
+          {
+            key: "problem",
+            label: "Problem or opportunity",
+            placeholder: "Describe the gap or opportunity.",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "proposal",
+            label: "Proposed change",
+            placeholder: "What change would you like to see?",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "benefit",
+            label: "Why this helps",
+            placeholder: "Explain the expected benefit.",
+            rows: 3,
+          },
+          {
+            key: "examples",
+            label: "Examples or references",
+            placeholder: "Links, screenshots, or similar examples.",
+            rows: 3,
+          },
+        ];
+      case "inquiry":
+        return [
+          {
+            key: "goal",
+            label: "What you're trying to do",
+            placeholder: "Describe your goal.",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "tried",
+            label: "What you've tried so far",
+            placeholder: "Steps you already attempted.",
+            rows: 3,
+          },
+          {
+            key: "stuck",
+            label: "Where you're stuck",
+            placeholder: "Describe the blocker or error.",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "links",
+            label: "Relevant links or IDs",
+            placeholder: "Assignment ID, URLs, or other references.",
+            rows: 2,
+          },
+        ];
+      default:
+        return [
+          {
+            key: "steps",
+            label: "Steps to reproduce",
+            placeholder: "1. ...\n2. ...",
+            required: true,
+            rows: 4,
+          },
+          {
+            key: "expected",
+            label: "Expected result",
+            placeholder: "What you expected to happen.",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "actual",
+            label: "Actual result",
+            placeholder: "What actually happened.",
+            required: true,
+            rows: 3,
+          },
+          {
+            key: "environment",
+            label: "Environment (browser/device)",
+            placeholder: "Browser, OS, device, network, etc.",
+            rows: 2,
+          },
+          {
+            key: "context",
+            label: "Additional context",
+            placeholder: "Anything else that helps us investigate.",
+            rows: 3,
+          },
+        ];
+    }
+  }
+
   function getIssueTypeOptions() {
     switch (reportType) {
       case "feedback":
@@ -237,9 +375,55 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
     }
   }
 
+  const initializeDescriptionFields = useCallback(
+    (prefill?: string) => {
+      const fields = getDescriptionFields(reportType);
+      const initialValues: Record<string, string> = {};
+      fields.forEach((field) => {
+        initialValues[field.key] = "";
+      });
+      if (prefill) {
+        const contextField = fields.find((field) => field.key === "context");
+        if (contextField) {
+          initialValues[contextField.key] = prefill;
+        }
+      }
+      setDescriptionFields(initialValues);
+    },
+    [reportType],
+  );
+
+  useEffect(() => {
+    initializeDescriptionFields(initialData?.description);
+  }, [initialData?.description, initializeDescriptionFields]);
+
+  const handleFieldChange = (key: string, value: string) => {
+    setDescriptionFields((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const buildDescription = (): { text: string; missing: string[] } => {
+    const fields = getDescriptionFields(reportType);
+    const missing = fields
+      .filter((field) => field.required)
+      .filter((field) => !descriptionFields[field.key]?.trim())
+      .map((field) => field.label);
+
+    const text = fields
+      .map((field) => {
+        const value = descriptionFields[field.key]?.trim();
+        if (!value) return null;
+        return `**${field.label}:**\n${value}`;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+
+    return { text, missing };
+  };
+
   const handleSubmit = async () => {
-    if (!description.trim()) {
-      toast.error("Please provide a description.");
+    const { text, missing } = buildDescription();
+    if (missing.length > 0) {
+      toast.error(`Please fill: ${missing.join(", ")}`);
       return;
     }
 
@@ -247,17 +431,19 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
     try {
       onSubmit("submit", {
         issueType,
-        description,
+        description: text,
         severity,
         screenshot,
+        userEmail,
         assignmentId: initialData?.assignmentId,
         attemptId: attemptId,
       });
 
       setIssueType(getDefaultIssueType(reportType));
-      setDescription("");
       setSeverity("info");
       setScreenshot(null);
+      setUserEmail("");
+      initializeDescriptionFields();
       onClose();
     } catch (error) {
       console.error("Error submitting:", error);
@@ -269,9 +455,10 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
 
   const handleCancel = () => {
     setIssueType(getDefaultIssueType(reportType));
-    setDescription("");
     setSeverity("info");
     setScreenshot(null);
+    setUserEmail("");
+    initializeDescriptionFields();
     onClose();
   };
 
@@ -334,14 +521,25 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Description *
                 </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={5}
-                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-900 dark:text-gray-200 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder={`Describe your ${reportType} in detail...`}
-                  required
-                />
+                <div className="space-y-4">
+                  {getDescriptionFields(reportType).map((field) => (
+                    <div key={field.key}>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        {field.label}
+                        {field.required ? " *" : ""}
+                      </label>
+                      <textarea
+                        value={descriptionFields[field.key] || ""}
+                        onChange={(e) =>
+                          handleFieldChange(field.key, e.target.value)
+                        }
+                        rows={field.rows || 3}
+                        className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-900 dark:text-gray-200 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder={field.placeholder}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {reportType === "report" && (
@@ -376,6 +574,20 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 </div>
               )}
 
+              {userEmail && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={userEmail}
+                    readOnly
+                    className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700 dark:text-gray-300 cursor-not-allowed"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Screenshot (optional)
@@ -397,7 +609,9 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={isSubmitting || !description.trim()}
+                  disabled={
+                    isSubmitting || buildDescription().missing.length > 0
+                  }
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-md transition-colors disabled:opacity-50"
                 >
                   {isSubmitting
