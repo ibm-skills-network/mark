@@ -15,33 +15,27 @@ import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
-import { z } from "zod";
 import {
   CanonicalSubmission,
   ContentBlock,
   CriterionGradingResult,
-  EvidenceCitation,
   EvidenceBasedGradingResult,
+  EvidenceCitation,
 } from "src/api/attempt/services/structured-content.models";
+import { Logger } from "winston";
+import { z } from "zod";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { PROMPT_PROCESSOR } from "../../../llm.constants";
-import { ImageDescriptionService } from "./image-description.service";
+import {
+  CriterionGrade,
+  DEFAULT_MODEL_SELECTION,
+  ExtractedChunk,
+  RubricCriterion,
+} from "../types/criterion-evidence.types";
+import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
+import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { HighlightingGeneratorService } from "./highlighting-generator.service";
-
-/**
- * Single rubric criterion
- */
-export interface RubricCriterion {
-  id: string;
-  rubricQuestion: string;
-  description: string;
-  criteria: {
-    description: string;
-    points: number;
-  }[];
-  maxPoints: number;
-}
+import { ImageDescriptionService } from "./image-description.service";
 
 /**
  * Decision categories (not points)
@@ -101,6 +95,8 @@ export class EvidenceBasedGradingService {
     private readonly promptProcessor: IPromptProcessor,
     private readonly imageDescriptionService: ImageDescriptionService,
     private readonly highlightingGenerator: HighlightingGeneratorService,
+    private readonly chunkingService: EvidenceChunkingService,
+    private readonly evidencePipeline: CriterionEvidencePipelineService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({
@@ -118,6 +114,7 @@ export class EvidenceBasedGradingService {
     questionText: string,
     assignmentId: number,
     language = "en",
+    judgeFeedback?: string,
   ): Promise<EvidenceBasedGradingResult> {
     this.logger.debug(
       `Starting evidence-based grading for ${submission.submissionId}: ${criteria.length} criteria`,
@@ -130,48 +127,115 @@ export class EvidenceBasedGradingService {
       assignmentId,
     );
 
-    const criteriaResults: CriterionGradingResult[] = [];
+    let criteriaResults: CriterionGradingResult[] = [];
     let totalPoints = 0;
     let maxPossiblePoints = 0;
+    let auditLog:
+      | (EvidenceBasedGradingResult["metadata"] & {
+          auditLog?: unknown;
+        })
+      | null = null;
 
-    for (const criterion of criteria) {
-      try {
-        this.logger.debug(
-          `Grading criterion: ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
+    try {
+      const chunks = this.chunkingService.extractFromSubmission(submission);
+
+      this.logger.info(
+        `Extracted ${chunks.length} chunks from submission (${submission.pages.length} pages, ` +
+          `${submission.pages.reduce(
+            (sum, p) => sum + p.blocks.length,
+            0,
+          )} blocks)`,
+      );
+
+      const hasStructuredContent = submission.pages.some((page) =>
+        page.blocks.some((block) => block.type === "table" || block.table),
+      );
+
+      if (hasStructuredContent) {
+        this.logger.info(
+          `Structured content detected - disabling judge (saves ~50% cost with no quality loss)`,
         );
+      }
 
-        const result = await this.gradeOneCriterion(
-          submission,
-          criterion,
-          questionText,
-          assignmentId,
-          language,
-        );
+      const pipelineResult = await this.evidencePipeline.gradeWithEvidence({
+        question: questionText,
+        criteria,
+        chunks,
+        assignmentId,
+        language,
+        judgeFeedback,
+        maxConcurrency: 8,
+        maxRetries: hasStructuredContent ? 0 : 2,
+        modelOverrides: DEFAULT_MODEL_SELECTION,
+      });
 
-        criteriaResults.push(result);
-        totalPoints += result.pointsAwarded;
-        maxPossiblePoints += result.maxPoints;
+      criteriaResults = this.mapPipelineGradesToCriterionResults(
+        pipelineResult.grades,
+        chunks,
+      );
+      totalPoints = pipelineResult.summary.totalPoints;
+      maxPossiblePoints = pipelineResult.summary.maxPoints;
+      auditLog = {
+        gradedAt: new Date().toISOString(),
+        modelUsed: "criterion-evidence-pipeline",
+        determinismChecksum: submission.metadata.checksum,
+        auditLog: pipelineResult.audit,
+      };
 
-        this.logger.debug(
-          `Criterion complete: ${result.pointsAwarded}/${result.maxPoints} points`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to grade criterion ${criterion.id}: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      this.logger.debug(
+        `Evidence pipeline complete: ${totalPoints}/${maxPossiblePoints} points (${criteriaResults.length} criteria)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Evidence pipeline failed, falling back to legacy grading: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
 
-        criteriaResults.push({
-          criterionId: criterion.id,
-          rubricQuestion: criterion.rubricQuestion,
-          pointsAwarded: 0,
-          maxPoints: criterion.maxPoints,
-          evidence: [],
-          rationale: `Grading failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-          decision: "does_not_meet",
-          gradedAt: new Date().toISOString(),
-        });
+      for (const criterion of criteria) {
+        try {
+          this.logger.debug(
+            `Grading criterion (legacy): ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
+          );
 
-        maxPossiblePoints += criterion.maxPoints;
+          const result = await this.gradeOneCriterion(
+            submission,
+            criterion,
+            questionText,
+            assignmentId,
+            language,
+            judgeFeedback,
+          );
+
+          criteriaResults.push(result);
+          totalPoints += result.pointsAwarded;
+          maxPossiblePoints += result.maxPoints;
+        } catch (criterionError) {
+          this.logger.error(
+            `Failed to grade criterion ${criterion.id}: ${
+              criterionError instanceof Error
+                ? criterionError.message
+                : String(criterionError)
+            }`,
+          );
+
+          criteriaResults.push({
+            criterionId: criterion.id,
+            rubricQuestion: criterion.rubricQuestion,
+            pointsAwarded: 0,
+            maxPoints: criterion.maxPoints,
+            evidence: [],
+            rationale: `Grading failed: ${
+              criterionError instanceof Error
+                ? criterionError.message
+                : "Unknown error"
+            }`,
+            decision: "does_not_meet",
+            gradedAt: new Date().toISOString(),
+          });
+
+          maxPossiblePoints += criterion.maxPoints;
+        }
       }
     }
 
@@ -203,7 +267,7 @@ export class EvidenceBasedGradingService {
       criteriaResults,
       feedback,
       highlighting,
-      metadata: {
+      metadata: auditLog || {
         gradedAt: new Date().toISOString(),
         modelUsed: "gpt-4o-mini",
         determinismChecksum: submission.metadata.checksum,
@@ -221,8 +285,17 @@ export class EvidenceBasedGradingService {
     questionText: string,
     assignmentId: number,
     language: string,
+    judgeFeedback?: string,
   ): Promise<CriterionGradingResult> {
     const submissionContext = this.buildSubmissionContext(submission);
+    const validatorReport = this.extractValidatorReport(submission);
+    const validatorOverride = this.applyValidatorOverride(
+      criterion,
+      validatorReport,
+    );
+    if (validatorOverride) {
+      return validatorOverride;
+    }
 
     const parser = StructuredOutputParser.fromZodSchema(EvidenceOutputSchema);
     const formatInstructions = parser.getFormatInstructions();
@@ -243,11 +316,25 @@ ALLOWED POINTS:
 SUBMISSION CONTENT:
 {submission_context}
 
+JUDGE FEEDBACK (if any):
+{judge_feedback}
+
+VALIDATOR REPORT RULES (IF PRESENT):
+- If the submission includes a block titled "=== VALIDATOR REPORT ===", you MUST use it as primary evidence.
+- Treat validator values as authoritative (e.g., duplicate_rows=0 means no duplicates detected).
+- If validator says "not_supported" or "unknown", do NOT penalize unless the submission itself clearly shows a problem.
+- Keep evidence quotes to single lines from the validator report when possible.
+- Do NOT use double-space evidence as spelling mistakes. Spelling and spacing are separate criteria.
+- For spelling: if validator says "spelling_check: not_supported" and no explicit misspellings are quoted, award full points.
+- For column widths: if validator says "column_widths: unknown", award full points.
+
 GRADING PROCESS (FOLLOW IN ORDER):
 
 1. FIND EVIDENCE
    - Search the submission for content relevant to this criterion
    - Quote EXACT text from the submission (verbatim, no paraphrasing)
+   - Quotes MUST be a single line (no line breaks); replace tabs with single spaces
+   - Keep each quote concise (<= 200 characters)
    - Note the blockId and page number for each piece of evidence
    - You MUST find at least one piece of evidence
 
@@ -287,6 +374,10 @@ OUTPUT REQUIREMENTS:
 - pointsAwarded: Must be from allowed points: {allowed_points_list}
 - rationale: Must reference blockIds from evidence
 
+IMPORTANT:
+- Think step-by-step internally but ONLY output the JSON response.
+- If judge feedback indicates a mistake, correct it.
+
 LANGUAGE: {language}
 
 {format_instructions}`,
@@ -298,6 +389,7 @@ LANGUAGE: {language}
         allowed_points_list: () =>
           criterion.criteria.map((c) => `${c.points} points`).join(", "),
         submission_context: () => submissionContext,
+        judge_feedback: () => judgeFeedback || "No judge feedback provided.",
         language: () => language,
         format_instructions: () => formatInstructions,
       },
@@ -315,10 +407,12 @@ LANGUAGE: {language}
 
     let parsedOutput: EvidenceOutput;
     try {
-      parsedOutput = await parser.parse(response);
+      parsedOutput = await this.parseEvidenceOutput(response, parser);
     } catch (parseError) {
       this.logger.error(
-        `Failed to parse LLM response: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        `Failed to parse LLM response: ${
+          parseError instanceof Error ? parseError.message : String(parseError)
+        }`,
       );
       throw new Error(
         `LLM returned invalid format for criterion ${criterion.id}`,
@@ -328,7 +422,9 @@ LANGUAGE: {language}
     const allowedPoints = criterion.criteria.map((c) => c.points);
     if (!allowedPoints.includes(parsedOutput.pointsAwarded)) {
       this.logger.warn(
-        `LLM awarded invalid points (${parsedOutput.pointsAwarded}). Allowed: ${allowedPoints.join(", ")}. Capping to nearest.`,
+        `LLM awarded invalid points (${
+          parsedOutput.pointsAwarded
+        }). Allowed: ${allowedPoints.join(", ")}. Capping to nearest.`,
       );
 
       parsedOutput.pointsAwarded = this.findNearestAllowedPoints(
@@ -342,7 +438,27 @@ LANGUAGE: {language}
       submission,
     );
 
-    const result: CriterionGradingResult = {
+    const minPoints = Math.min(
+      ...criterion.criteria.map((level) => level.points),
+    );
+
+    if (validatedEvidence.length === 0) {
+      this.logger.warn(
+        `No valid evidence found for criterion ${criterion.id}. Forcing minimum points.`,
+      );
+      return {
+        criterionId: criterion.id,
+        rubricQuestion: criterion.rubricQuestion,
+        pointsAwarded: minPoints,
+        maxPoints: criterion.maxPoints,
+        evidence: [],
+        rationale: "No supporting evidence found in the submission.",
+        decision: "does_not_meet",
+        gradedAt: new Date().toISOString(),
+      };
+    }
+
+    return {
       criterionId: criterion.id,
       rubricQuestion: criterion.rubricQuestion,
       pointsAwarded: parsedOutput.pointsAwarded,
@@ -352,8 +468,73 @@ LANGUAGE: {language}
       decision: parsedOutput.decision,
       gradedAt: new Date().toISOString(),
     };
+  }
 
-    return result;
+  private mapPipelineGradesToCriterionResults(
+    grades: CriterionGrade[],
+    chunks: ExtractedChunk[],
+  ): CriterionGradingResult[] {
+    const chunkMap = new Map(chunks.map((chunk) => [chunk.chunkId, chunk]));
+
+    return grades.map((grade) => {
+      const citations =
+        grade.citations.length > 0
+          ? grade.citations
+          : grade.evidence.map((event) => event.chunkId);
+      const evidence: EvidenceCitation[] = citations
+        .map((chunkId) =>
+          this.chunkToEvidenceCitation(chunkMap.get(chunkId), chunkId),
+        )
+        .filter(Boolean);
+
+      return {
+        criterionId: grade.criterionId,
+        rubricQuestion: grade.rubricQuestion,
+        pointsAwarded: grade.pointsAwarded,
+        maxPoints: grade.maxPoints,
+        evidence,
+        rationale: grade.rationale,
+        decision: grade.decision,
+        gradedAt: grade.gradedAt,
+      };
+    });
+  }
+
+  private chunkToEvidenceCitation(
+    chunk: ExtractedChunk | undefined,
+    fallbackId: string,
+  ): EvidenceCitation {
+    if (!chunk) {
+      return {
+        blockId: fallbackId,
+        quote: "",
+        page: 1,
+      };
+    }
+
+    const quote = chunk.text.slice(0, 200);
+
+    if (chunk.anchor.type === "file") {
+      return {
+        blockId: chunk.anchor.blockId || chunk.chunkId,
+        quote,
+        page: chunk.anchor.page,
+      };
+    }
+
+    if (chunk.anchor.type === "image") {
+      return {
+        blockId: chunk.anchor.imageId || chunk.chunkId,
+        quote,
+        page: chunk.anchor.page ?? 1,
+      };
+    }
+
+    return {
+      blockId: chunk.chunkId,
+      quote,
+      page: 1,
+    };
   }
 
   /**
@@ -472,33 +653,60 @@ LANGUAGE: {language}
       allBlocks.map((b) => [b.blockId, b]),
     );
 
-    return evidence.map((event) => {
+    const validated: EvidenceCitation[] = [];
+
+    for (const event of evidence) {
       const block = blockMap.get(event.blockId);
+      const candidateQuotes = this.expandQuoteCandidates(event.quote);
 
       if (!block) {
         this.logger.warn(
           `Evidence references non-existent block: ${event.blockId}`,
         );
+        continue;
       }
 
-      const quoteFound =
-        block &&
-        (block.text.includes(event.quote) ||
-          this.fuzzyMatch(block.text, event.quote));
+      const matchedInBlock = this.findMatchingQuote(
+        block.text,
+        candidateQuotes,
+      );
 
-      if (block && !quoteFound) {
+      if (!matchedInBlock) {
+        const fallback = this.findEvidenceBlock(candidateQuotes, allBlocks);
+        if (fallback) {
+          this.logger.warn(
+            `Evidence quote not found in block ${event.blockId}; reassigned to ${fallback.blockId}`,
+          );
+          const fallbackQuote =
+            this.findMatchingQuote(fallback.text, candidateQuotes) ??
+            candidateQuotes[0] ??
+            event.quote;
+          validated.push({
+            blockId: fallback.blockId,
+            quote: fallbackQuote,
+            page: fallback.page,
+            relevance: event.relevance,
+          });
+          continue;
+        }
+
         this.logger.warn(
-          `Evidence quote not found in block ${event.blockId}: "${event.quote.slice(0, 50)}..."`,
+          `Evidence quote not found in block ${
+            event.blockId
+          }: "${event.quote.slice(0, 50)}..."`,
         );
+        continue;
       }
 
-      return {
+      validated.push({
         blockId: event.blockId,
-        quote: event.quote,
-        page: event.page,
+        quote: matchedInBlock ?? event.quote,
+        page: block.page,
         relevance: event.relevance,
-      };
-    });
+      });
+    }
+
+    return validated;
   }
 
   /**
@@ -517,6 +725,162 @@ LANGUAGE: {language}
       .replaceAll(/[^\s\w]/g, "")
       .replaceAll(/\s+/g, " ")
       .trim();
+  }
+
+  private findEvidenceBlock(
+    candidates: string[],
+    blocks: ContentBlock[],
+  ): ContentBlock | null {
+    if (candidates.length === 0) return null;
+
+    for (const block of blocks) {
+      const normalizedBlock = this.normalizeForMatch(block.text);
+      for (const candidate of candidates) {
+        const normalizedQuote = this.normalizeForMatch(candidate);
+        if (normalizedQuote && normalizedBlock.includes(normalizedQuote)) {
+          return block;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private findMatchingQuote(
+    blockText: string,
+    candidates: string[],
+  ): string | null {
+    for (const candidate of candidates) {
+      if (blockText.includes(candidate)) {
+        return candidate;
+      }
+      if (this.fuzzyMatch(blockText, candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private expandQuoteCandidates(quote: string): string[] {
+    if (!quote) return [];
+    const sanitized = this.sanitizeEvidenceQuote(quote);
+    const candidates = new Set<string>();
+
+    if (sanitized) {
+      candidates.add(sanitized);
+    }
+
+    const lines = sanitized
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const line of lines) {
+      candidates.add(line);
+    }
+
+    return [...candidates];
+  }
+
+  private sanitizeEvidenceQuote(quote: string): string {
+    return (
+      quote
+        .replaceAll("\r\n", "\n")
+        .replaceAll("\r", "\n")
+        .replaceAll("\t", " | ")
+        // eslint-disable-next-line no-control-regex
+        .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+        .trim()
+    );
+  }
+
+  private async parseEvidenceOutput(
+    response: string,
+    parser: StructuredOutputParser<typeof EvidenceOutputSchema>,
+  ): Promise<EvidenceOutput> {
+    const sanitized = this.sanitizeJsonResponse(response);
+
+    try {
+      return await parser.parse(sanitized);
+    } catch (parseError) {
+      const extracted = this.extractJsonPayload(sanitized);
+      if (extracted && extracted !== sanitized) {
+        return await parser.parse(extracted);
+      }
+      throw parseError;
+    }
+  }
+
+  private sanitizeJsonResponse(response: string): string {
+    const trimmed = response.trim().replace(/^\uFEFF/, "");
+    return this.escapeControlCharsInJsonStrings(trimmed);
+  }
+
+  private extractJsonPayload(response: string): string {
+    const first = response.indexOf("{");
+    const last = response.lastIndexOf("}");
+    if (first === -1 || last === -1 || last <= first) {
+      return response;
+    }
+    return response.slice(first, last + 1);
+  }
+
+  private escapeControlCharsInJsonStrings(input: string): string {
+    let output = "";
+    let inString = false;
+    let isEscaped = false;
+
+    for (const char of input) {
+      if (isEscaped) {
+        output += char;
+        isEscaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        output += char;
+        isEscaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        output += char;
+        continue;
+      }
+
+      if (inString) {
+        const code = char.codePointAt(0);
+
+        if (char === "\t") {
+          output += "\\t";
+          continue;
+        }
+        if (char === "\n") {
+          output += "\\n";
+          continue;
+        }
+        if (char === "\r") {
+          output += "\\r";
+          continue;
+        }
+        if (char === "\u2028") {
+          output += "\\u2028";
+          continue;
+        }
+        if (char === "\u2029") {
+          output += "\\u2029";
+          continue;
+        }
+        if (code < 0x20) {
+          output += `\\u${code.toString(16).padStart(4, "0")}`;
+          continue;
+        }
+      }
+
+      output += char;
+    }
+
+    return output;
   }
 
   /**
@@ -542,57 +906,37 @@ LANGUAGE: {language}
     }
     const percentage = Math.round((totalPoints / maxPoints) * 100);
 
-    let overallAssessment = "";
-    if (percentage >= 90) {
-      overallAssessment = `Excellent submission! You earned ${totalPoints}/${maxPoints} points (${percentage}%), meeting ${metCriteria.length}/${totalCriteria} criteria.`;
-    } else if (percentage >= 75) {
-      overallAssessment = `Good work! You earned ${totalPoints}/${maxPoints} points (${percentage}%). ${metCriteria.length} criteria met fully, ${partialCriteria.length + unmetCriteria.length} need improvement.`;
-    } else if (percentage >= 60) {
-      overallAssessment = `You earned ${totalPoints}/${maxPoints} points (${percentage}%). Your submission covers the basics but needs more depth in ${partialCriteria.length + unmetCriteria.length} areas.`;
-    } else {
-      overallAssessment = `You earned ${totalPoints}/${maxPoints} points (${percentage}%). Your submission needs significant development - only ${metCriteria.length}/${totalCriteria} criteria met.`;
-    }
-
-    const summary = overallAssessment;
+    const summary =
+      `Score: ${totalPoints}/${maxPoints} (${percentage}%). ` +
+      `Criteria met: ${metCriteria.length}/${totalCriteria}, ` +
+      `partial: ${partialCriteria.length}, ` +
+      `not met: ${unmetCriteria.length}.`;
 
     const strengths = metCriteria.map((r) => {
-      const shortName =
-        r.rubricQuestion.length > 80
-          ? r.rubricQuestion.slice(0, 77) + "..."
-          : r.rubricQuestion;
       const cleanRationale = r.rationale
         .replaceAll(/\(p\d+b\d+\)/g, "")
         .replace(/evidence found:.*$/i, "")
         .trim();
-      const conciseRationale =
-        cleanRationale.length > 150
-          ? cleanRationale.slice(0, 147) + "..."
-          : cleanRationale;
-      return `${shortName}: ${conciseRationale} (${r.pointsAwarded}/${r.maxPoints} pts)`;
+      const evidenceReference = this.formatEvidenceReference(r.evidence);
+      return `${r.rubricQuestion}: ${cleanRationale}${evidenceReference} (${r.pointsAwarded}/${r.maxPoints} pts)`;
     });
 
     const improvements = [...partialCriteria, ...unmetCriteria].map((r) => {
-      const shortName =
-        r.rubricQuestion.length > 80
-          ? r.rubricQuestion.slice(0, 77) + "..."
-          : r.rubricQuestion;
       const cleanRationale = r.rationale
         .replaceAll(/\(p\d+b\d+\)/g, "")
         .replace(/current content:.*$/i, "")
         .trim();
-      const conciseRationale =
-        cleanRationale.length > 150
-          ? cleanRationale.slice(0, 147) + "..."
-          : cleanRationale;
 
       let guidance = "";
       if (r.decision === "does_not_meet") {
-        guidance = " Add this missing content to improve your grade.";
+        guidance = " Missing required evidence or corrections.";
       } else if (r.decision === "partially_meets") {
-        guidance = " Expand with more detail to earn full credit.";
+        guidance = " Additional corrections needed for full credit.";
       }
 
-      return `${shortName}: ${conciseRationale}${guidance} (${r.pointsAwarded}/${r.maxPoints} pts)`;
+      const evidenceReference = this.formatEvidenceReference(r.evidence);
+
+      return `${r.rubricQuestion}: ${cleanRationale}${evidenceReference}${guidance} (${r.pointsAwarded}/${r.maxPoints} pts)`;
     });
 
     return {
@@ -600,6 +944,257 @@ LANGUAGE: {language}
       strengths,
       improvements,
     };
+  }
+
+  private formatEvidenceReference(evidence: EvidenceCitation[]): string {
+    if (!evidence || evidence.length === 0) {
+      return "";
+    }
+
+    const first = evidence[0];
+    const cellReference = this.extractCellReference(first.quote);
+
+    if (cellReference) {
+      return ` (e.g., ${cellReference})`;
+    }
+
+    if (first.blockId) {
+      return ` (e.g., ${first.blockId})`;
+    }
+
+    return "";
+  }
+
+  private extractCellReference(text: string): string | null {
+    if (!text) return null;
+    const match = text.match(/\b[A-Z]{1,3}\d+\b/);
+    return match ? match[0] : null;
+  }
+
+  private extractValidatorReport(submission: CanonicalSubmission): {
+    block: ContentBlock;
+    values: Map<string, string>;
+    lines: Map<string, string>;
+  } | null {
+    for (const page of submission.pages) {
+      for (const block of page.blocks) {
+        if (block.text.startsWith("=== VALIDATOR REPORT ===")) {
+          const lines = block.text
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+          const values = new Map<string, string>();
+          const rawLines = new Map<string, string>();
+
+          for (const line of lines) {
+            if (line.startsWith("===")) continue;
+            const parts = line.split(":");
+            if (parts.length < 2) continue;
+            const key = parts[0]?.trim().toLowerCase();
+            const value = parts.slice(1).join(":").trim();
+            if (!key) continue;
+            values.set(key, value);
+            rawLines.set(key, `${key}: ${value}`);
+          }
+
+          return { block, values, lines: rawLines };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private applyValidatorOverride(
+    criterion: RubricCriterion,
+    report: {
+      block: ContentBlock;
+      values: Map<string, string>;
+      lines: Map<string, string>;
+    } | null,
+  ): CriterionGradingResult | null {
+    if (!report) return null;
+
+    const rubricText =
+      `${criterion.rubricQuestion} ${criterion.description}`.toLowerCase();
+    const minPoints = Math.min(
+      ...criterion.criteria.map((level) => level.points),
+    );
+    const maxPoints = criterion.maxPoints;
+
+    const readValue = (key: string): string | undefined =>
+      report.values.get(key);
+    const readLine = (key: string): string | undefined => report.lines.get(key);
+
+    const makeResult = (
+      decision: Decision,
+      points: number,
+      evidenceLines: string[],
+      rationale: string,
+    ): CriterionGradingResult => {
+      const evidence = evidenceLines.map((line) => ({
+        blockId: report.block.blockId,
+        quote: line,
+        page: report.block.page,
+        relevance: undefined,
+      }));
+
+      return {
+        criterionId: criterion.id,
+        rubricQuestion: criterion.rubricQuestion,
+        pointsAwarded: points,
+        maxPoints: criterion.maxPoints,
+        evidence,
+        rationale,
+        decision,
+        gradedAt: new Date().toISOString(),
+      };
+    };
+
+    if (/spelling|misspell|typo/.test(rubricText)) {
+      const spellingStatus = readValue("spelling_check");
+      if (spellingStatus === "not_supported") {
+        const line =
+          readLine("spelling_check") || "spelling_check: not_supported";
+        return makeResult(
+          "meets",
+          maxPoints,
+          [line],
+          "Validator report indicates spelling_check: not_supported and no explicit misspellings are cited.",
+        );
+      }
+    }
+
+    if (
+      /column/.test(rubricText) &&
+      /width|widen|expand|visible|truncate|fit/.test(rubricText)
+    ) {
+      const widthStatus = readValue("column_widths");
+      if (widthStatus === "unknown") {
+        const line = readLine("column_widths") || "column_widths: unknown";
+        return makeResult(
+          "meets",
+          maxPoints,
+          [line],
+          "Validator report indicates column_widths: unknown, so no penalty is applied.",
+        );
+      }
+      if (widthStatus === "wide_enough") {
+        const line = readLine("column_widths") || "column_widths: wide_enough";
+        return makeResult(
+          "meets",
+          maxPoints,
+          [line],
+          "Validator report indicates column widths are sufficient.",
+        );
+      }
+      if (widthStatus === "possibly_truncated") {
+        const line =
+          readLine("column_widths") || "column_widths: possibly_truncated";
+        return makeResult(
+          "does_not_meet",
+          minPoints,
+          [line],
+          "Validator report indicates columns may be truncated.",
+        );
+      }
+    }
+
+    if (/duplicate/.test(rubricText)) {
+      const duplicateRows = Number(readValue("duplicate_rows"));
+      if (!Number.isNaN(duplicateRows)) {
+        const line =
+          readLine("duplicate_rows") || `duplicate_rows: ${duplicateRows}`;
+        if (duplicateRows === 0) {
+          return makeResult(
+            "meets",
+            maxPoints,
+            [line],
+            "Validator report shows duplicate_rows: 0.",
+          );
+        }
+        return makeResult(
+          "does_not_meet",
+          minPoints,
+          [line],
+          "Validator report shows duplicate rows present.",
+        );
+      }
+    }
+
+    if (/empty\s+row|blank\s+row/.test(rubricText)) {
+      const emptyRows = Number(readValue("empty_rows"));
+      if (!Number.isNaN(emptyRows)) {
+        const line = readLine("empty_rows") || `empty_rows: ${emptyRows}`;
+        if (emptyRows === 0) {
+          return makeResult(
+            "meets",
+            maxPoints,
+            [line],
+            "Validator report shows empty_rows: 0.",
+          );
+        }
+        return makeResult(
+          "does_not_meet",
+          minPoints,
+          [line],
+          "Validator report shows empty rows present.",
+        );
+      }
+    }
+
+    if (/double\s+space|extra\s+space|multiple\s+spaces/.test(rubricText)) {
+      const doubleSpaces = Number(readValue("double_space_cells"));
+      if (!Number.isNaN(doubleSpaces)) {
+        const countLine =
+          readLine("double_space_cells") ||
+          `double_space_cells: ${doubleSpaces}`;
+        const exampleLine = readLine("double_space_examples");
+        const evidenceLines = exampleLine
+          ? [exampleLine, countLine]
+          : [countLine];
+        if (doubleSpaces === 0) {
+          return makeResult(
+            "meets",
+            maxPoints,
+            evidenceLines,
+            "Validator report shows double_space_cells: 0.",
+          );
+        }
+        return makeResult(
+          "does_not_meet",
+          minPoints,
+          evidenceLines,
+          "Validator report shows double spaces remain.",
+        );
+      }
+    }
+
+    if (/department/.test(rubricText)) {
+      const removed = readValue("unnecessary_columns_removed");
+      const line =
+        readLine("unnecessary_columns_removed") ||
+        "unnecessary_columns_removed: unknown";
+      if (removed === "yes") {
+        return makeResult(
+          "meets",
+          maxPoints,
+          [line],
+          "Validator report indicates unnecessary columns were removed.",
+        );
+      }
+      if (removed === "no") {
+        return makeResult(
+          "does_not_meet",
+          minPoints,
+          [line],
+          "Validator report indicates unnecessary columns were not removed.",
+        );
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -661,7 +1256,9 @@ LANGUAGE: {language}
     });
 
     if (metCriteria.length === totalCriteria) {
-      return `Your submission comprehensively addresses all ${totalCriteria} grading criteria. Strong evidence was found throughout the document, including detailed content for ${metExamples.join(" and ")}.`;
+      return `Your submission comprehensively addresses all ${totalCriteria} grading criteria. Strong evidence was found throughout the document, including detailed content for ${metExamples.join(
+        " and ",
+      )}.`;
     } else if (metCriteria.length >= totalCriteria * 0.7) {
       const foundText =
         metExamples.length > 0
@@ -669,13 +1266,25 @@ LANGUAGE: {language}
           : "";
       const missingText =
         unmetExamples.length > 0
-          ? ` However, ${unmetExamples.join(" and ")} ${unmetExamples.length === 1 ? "lacks" : "lack"} sufficient detail or evidence.`
+          ? ` However, ${unmetExamples.join(" and ")} ${
+              unmetExamples.length === 1 ? "lacks" : "lack"
+            } sufficient detail or evidence.`
           : "";
       return `Your submission addresses ${metCriteria.length} of ${totalCriteria} criteria${foundText}.${missingText}`;
     } else if (metCriteria.length >= totalCriteria * 0.4) {
-      return `Your submission shows partial completion with ${metCriteria.length}/${totalCriteria} criteria fully addressed. Key gaps include ${unmetExamples.join(", ")} and ${partialCriteria.length} other ${partialCriteria.length === 1 ? "area" : "areas"} needing more depth.`;
+      return `Your submission shows partial completion with ${
+        metCriteria.length
+      }/${totalCriteria} criteria fully addressed. Key gaps include ${unmetExamples.join(
+        ", ",
+      )} and ${partialCriteria.length} other ${
+        partialCriteria.length === 1 ? "area" : "areas"
+      } needing more depth.`;
     } else {
-      return `Your submission has significant gaps, with only ${metCriteria.length}/${totalCriteria} criteria adequately addressed. Most sections, including ${unmetExamples.join(", ")}, need substantial development with supporting evidence and detail.`;
+      return `Your submission has significant gaps, with only ${
+        metCriteria.length
+      }/${totalCriteria} criteria adequately addressed. Most sections, including ${unmetExamples.join(
+        ", ",
+      )}, need substantial development with supporting evidence and detail.`;
     }
   }
 
@@ -750,15 +1359,25 @@ LANGUAGE: {language}
       if (result.decision === "meets") {
         const evidenceReference = this.summarizeEvidence(result.evidence);
         examples.push(
-          `${shortName}: Full ${result.pointsAwarded} points awarded${evidenceReference ? ` - found ${evidenceReference}` : ""}.`,
+          `${shortName}: Full ${result.pointsAwarded} points awarded${
+            evidenceReference ? ` - found ${evidenceReference}` : ""
+          }.`,
         );
       } else if (result.decision === "partially_meets") {
         examples.push(
-          `${shortName}: Partial credit (${result.pointsAwarded}/${result.maxPoints}) - ${result.rationale.slice(0, 80)}${result.rationale.length > 80 ? "..." : ""}`,
+          `${shortName}: Partial credit (${result.pointsAwarded}/${
+            result.maxPoints
+          }) - ${result.rationale.slice(0, 80)}${
+            result.rationale.length > 80 ? "..." : ""
+          }`,
         );
       } else if (examples.length < 3) {
         examples.push(
-          `${shortName}: Not awarded (${result.pointsAwarded}/${result.maxPoints}) - ${result.rationale.slice(0, 80)}${result.rationale.length > 80 ? "..." : ""}`,
+          `${shortName}: Not awarded (${result.pointsAwarded}/${
+            result.maxPoints
+          }) - ${result.rationale.slice(0, 80)}${
+            result.rationale.length > 80 ? "..." : ""
+          }`,
         );
       }
     }
@@ -766,7 +1385,9 @@ LANGUAGE: {language}
     const remaining = results.length - 5;
     if (remaining > 0) {
       examples.push(
-        `Plus ${remaining} additional ${remaining === 1 ? "criterion" : "criteria"} evaluated.`,
+        `Plus ${remaining} additional ${
+          remaining === 1 ? "criterion" : "criteria"
+        } evaluated.`,
       );
     }
 
@@ -818,7 +1439,9 @@ LANGUAGE: {language}
 
     if (unmetCriteria.length > 2 || partialCriteria.length > 2) {
       suggestions.push(
-        `Review all ${unmetCriteria.length + partialCriteria.length} areas flagged for improvement to ensure complete coverage.`,
+        `Review all ${
+          unmetCriteria.length + partialCriteria.length
+        } areas flagged for improvement to ensure complete coverage.`,
       );
     }
 

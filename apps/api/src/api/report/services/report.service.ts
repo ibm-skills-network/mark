@@ -875,6 +875,11 @@ export class ReportsService {
       if (issueType === "critical") issueSeverity = "critical";
       if (issueType === "grading") issueSeverity = "warning";
     }
+    const userEmail = additionalDetails?.userEmail || userSession?.userId;
+    const safeUserEmail =
+      typeof userEmail === "string" && userEmail.trim().length > 0
+        ? userEmail
+        : "Unknown";
     const recentReports = await this.prisma.report.findMany({
       where: {
         createdAt: {
@@ -939,6 +944,7 @@ ${isProduction ? "PROD" : "DEV"}] [${role}] ${issueSeverity.toUpperCase()} ${
 
 **Issue Type:** ${issueType}
 **Reported By:** ${role || "Unknown"}
+**User Email:** ${safeUserEmail}
 **Assignment ID:** ${assignmentId || "N/A"}
 **Attempt ID:** ${attemptId || "N/A"}
 **Time Reported:** ${new Date().toISOString()}
@@ -1022,6 +1028,7 @@ Another user has reported a nearly identical issue:
 
 **Similarity Score:** ${Math.round(potentialDuplicate.similarity * 100)}%
 **Reported By:** ${role || "Unknown"}
+**User Email:** ${safeUserEmail}
 **Assignment ID:** ${assignmentId || "N/A"}
 **Attempt ID:** ${attemptId || "N/A"}
 **Time Reported:** ${new Date().toISOString()}

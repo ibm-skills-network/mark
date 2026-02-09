@@ -42,7 +42,12 @@ const getChoiceTexts = (choices?: QuestionStore["choices"]) =>
       }
       return choice?.choice ?? "";
     })
-    .filter((choice) => choice.trim().length > 0);
+    .filter((choice) => {
+      if (choice === null || choice === undefined) {
+        return false;
+      }
+      return true;
+    });
 
 const getLatestQuestionResponse = (question: QuestionStore) => {
   const responses = question.questionResponses ?? [];

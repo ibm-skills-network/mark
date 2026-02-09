@@ -1,7 +1,7 @@
 "use client";
 
+import { Button } from "@headlessui/react";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 interface GradeSyncStatusProps {
   attemptId: number;
@@ -28,17 +28,14 @@ function formatCountdown(ms: number) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  // For times over 1 hour, show hours, minutes, and seconds
   if (hours > 0) {
     return `${hours}h ${minutes}m ${seconds}s`;
   }
 
-  // For times over 1 minute, show minutes and seconds
   if (minutes > 0) {
     return `${minutes}m ${seconds}s`;
   }
 
-  // For times under 1 minute, show just seconds
   return `${seconds}s`;
 }
 
@@ -56,15 +53,7 @@ export default function GradeSyncStatus({
 
   useEffect(() => {
     fetchSyncStatus();
-
-    const interval = setInterval(() => {
-      if (syncStatus?.status !== "SUCCESS") {
-        fetchSyncStatus();
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [attemptId]);
+  }, [attemptId, assignmentId]);
 
   const fetchSyncStatus = async () => {
     try {
@@ -208,6 +197,13 @@ export default function GradeSyncStatus({
             </div>
           )}
         </div>
+        <Button
+          onClick={fetchSyncStatus}
+          aria-label="Refresh grade sync status"
+          className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-sm rounded-md"
+        >
+          Refresh
+        </Button>
       </div>
     </div>
   );
