@@ -94,7 +94,6 @@ Expand the name of the service
 
 {{- define "mark.api.labels" -}}
 app.kubernetes.io/name: {{ include "mark.api.name" . }}
-kubectl.kubernetes.io/default-container: {{ include "mark.api.name" . }}
 {{ include "mark.selectorLabels" . }}
 {{- end }}
 
@@ -113,7 +112,6 @@ Expand the name of the service
 
 {{- define "mark.ui.labels" -}}
 app.kubernetes.io/name: {{ include "mark.ui.name" . }}
-kubectl.kubernetes.io/default-container: {{ include "mark.ui.name" . }}
 {{ include "mark.selectorLabels" . }}
 {{- end }}
 
@@ -132,7 +130,6 @@ Expand the name of the service
 
 {{- define "mark.lti-credentials-manager.labels" -}}
 app.kubernetes.io/name: {{ include "mark.lti-credentials-manager.name" . }}
-kubectl.kubernetes.io/default-container: {{ include "mark.lti-credentials-manager.name" . }}
 {{ include "mark.selectorLabels" . }}
 {{- end }}
 

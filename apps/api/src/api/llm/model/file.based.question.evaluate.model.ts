@@ -18,6 +18,7 @@ export class FileUploadQuestionEvaluateModel
   readonly assignmentInstrctions: string;
   readonly questionType: QuestionType;
   readonly responseType: ResponseType;
+  readonly judgeFeedback?: string;
 
   constructor(
     question: string,
@@ -29,6 +30,7 @@ export class FileUploadQuestionEvaluateModel
     scoringCriteria: ScoringDto,
     questionType: QuestionType,
     responseType: ResponseType,
+    judgeFeedback?: string,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
@@ -39,5 +41,6 @@ export class FileUploadQuestionEvaluateModel
     this.scoringCriteria = scoringCriteria;
     this.questionType = questionType;
     this.responseType = responseType;
+    this.judgeFeedback = judgeFeedback;
   }
 }

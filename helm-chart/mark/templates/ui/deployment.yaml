@@ -17,6 +17,7 @@ spec:
   template:
     metadata:
       annotations:
+        kubectl.kubernetes.io/default-container: {{ include "mark.ui.name" $ }}
         checksum/secrets: {{ include (print $.Template.BasePath "/ui/secret.yaml") $ | sha256sum }}
         checksum/config: {{ include (print $.Template.BasePath "/ui/configmap.yaml") $ | sha256sum }}
         {{- with .podAnnotations }}

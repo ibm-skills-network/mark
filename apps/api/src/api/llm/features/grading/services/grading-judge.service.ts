@@ -3,6 +3,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { RubricDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
 import { Logger } from "winston";
 import { z } from "zod";
@@ -14,7 +15,9 @@ import { IGradingJudgeService } from "../interfaces/grading-judge.interface";
 export interface GradingJudgeInput {
   question: string;
   learnerResponse: string;
-  scoringCriteria: any;
+  scoringCriteria: {
+    rubrics?: RubricDto[];
+  };
   proposedGrading: {
     points: number;
     maxPoints: number;
@@ -58,7 +61,7 @@ const ParsedJudgeResponseSchema = z.object({
         rubricQuestion: z.string(),
         pointsAwarded: z.number(),
         maxPoints: z.number(),
-        criterionSelected: z.string(),
+        criterionSelected: z.string().optional(),
         justification: z.string(),
       }),
     )
@@ -144,7 +147,7 @@ export class GradingJudgeService implements IGradingJudgeService {
           prompt,
           input.assignmentId,
           AIUsageType.GRADING_VALIDATION,
-          "content_moderation",
+          "text_grading",
           selectedModel,
         ),
         this.maxJudgeTimeout,
@@ -212,21 +215,43 @@ export class GradingJudgeService implements IGradingJudgeService {
   ): GradingJudgeResult {
     const issues: string[] = parsedResponse.issues || [];
 
+    const rubricScores = input.proposedGrading.rubricScores || [];
+    const evidenceCheck = this.evaluateEvidencePresence(rubricScores);
+    const complianceCheck = this.evaluateRubricCompliance(
+      input.scoringCriteria,
+      rubricScores,
+    );
+
     if (parsedResponse.subjectiveLanguageDetected) {
       issues.push(
         "Excessive subjective/emotional language detected in feedback.",
       );
     }
 
-    if (!parsedResponse.evidencePresent) {
-      issues.push("Feedback does not reference the learner's response.");
+    if (!evidenceCheck.evidencePresent) {
+      if (evidenceCheck.missingCriteria.length > 0) {
+        for (const criterion of evidenceCheck.missingCriteria) {
+          issues.push(`Missing evidence for ${criterion}`);
+        }
+      } else {
+        issues.push("Feedback does not reference the learner's response.");
+      }
     }
 
-    if (!parsedResponse.strictRubricCompliance) {
-      issues.push("Points awarded significantly deviate from rubric values.");
+    if (!complianceCheck.strictRubricCompliance) {
+      if (complianceCheck.invalidCriteria.length > 0) {
+        for (const criterion of complianceCheck.invalidCriteria) {
+          issues.push(`Points awarded not in rubric for ${criterion}`);
+        }
+      } else {
+        issues.push("Points awarded significantly deviate from rubric values.");
+      }
     }
 
-    const rubricScores = input.proposedGrading.rubricScores || [];
+    if (!complianceCheck.rubricAdherence) {
+      issues.push("Rubric criteria were not applied consistently.");
+    }
+
     const hasInvalidPoints = rubricScores.some((score) => {
       return score.pointsAwarded < 0 || score.pointsAwarded > score.maxPoints;
     });
@@ -235,7 +260,11 @@ export class GradingJudgeService implements IGradingJudgeService {
       issues.push("Points awarded exceed maximum for one or more criteria");
     }
 
-    const seriousViolations = hasInvalidPoints;
+    const seriousViolations =
+      hasInvalidPoints ||
+      !complianceCheck.strictRubricCompliance ||
+      !evidenceCheck.evidencePresent ||
+      !complianceCheck.rubricAdherence;
     const qualitativeConcerns = parsedResponse.fairnessScore < 5;
 
     const approved = !seriousViolations && !qualitativeConcerns;
@@ -260,11 +289,29 @@ export class GradingJudgeService implements IGradingJudgeService {
       }
 
       if (
+        typeof parsedResponse.suggestedPoints === "number" &&
+        parsedResponse.suggestedPoints >= 0
+      ) {
+        result.corrections.points = parsedResponse.suggestedPoints;
+      }
+
+      if (
         parsedResponse.correctedRubricScores &&
         Array.isArray(parsedResponse.correctedRubricScores) &&
         parsedResponse.correctedRubricScores.length > 0
       ) {
-        result.corrections.rubricScores = parsedResponse.correctedRubricScores;
+        const sanitized = this.sanitizeCorrectedRubricScores(
+          parsedResponse.correctedRubricScores,
+          input.scoringCriteria,
+        );
+
+        if (sanitized) {
+          result.corrections.rubricScores = sanitized;
+          result.corrections.points = sanitized.reduce(
+            (sum, score) => sum + (score.pointsAwarded || 0),
+            0,
+          );
+        }
       }
     }
 
@@ -300,7 +347,14 @@ export class GradingJudgeService implements IGradingJudgeService {
   }
 
   private loadJudgeTemplate(): string {
-    return `You are a grading validation engine for quality assurance.
+    return `You are a grading validation and correction engine.
+
+Your job is NOT to regrade the submission. You only:
+- Verify rubric math and compliance
+- Ensure feedback is evidence-based and learner-focused
+- Propose MINIMAL corrections when necessary
+
+You MUST NOT introduce new scoring decisions unless there is a clear rubric violation (e.g., points not in rubric, math mismatch).
 
 GRADING TO VALIDATE:
 Points: {proposed_points} / {max_points}
@@ -330,8 +384,8 @@ VALIDATION CHECKS:
 
 3. **Rubric Compliance** (strictRubricCompliance):
    - Do the points awarded match values from the rubric criteria?
-   - Minor point adjustments (±1) are ACCEPTABLE if justified
-   - Set to false ONLY if points are wildly off from rubric values
+   - NO interpolation: points must be EXACT rubric values
+   - Set to false if ANY criterion uses a non-rubric point value
 
 4. **Fairness Score** (fairnessScore: 0-10):
    - 0-4: Clearly unfair, biased, or inconsistent
@@ -346,12 +400,151 @@ VALIDATION CHECKS:
    - Does feedback generally match the score?
    - Set to false ONLY if major misalignment (e.g., positive feedback but low score)
 
+7. **Criterion Evidence Check**:
+   - Each rubric score must include specific evidence (quote or reference).
+   - If any criterion lacks evidence, set evidencePresent = false and list the missing criteria in issues.
+
 APPROVAL CRITERIA:
 - ✅ APPROVE if: fairnessScore ≥ 5 AND no major violations
 - ❌ REJECT if: fairnessScore < 5 OR serious rubric violations OR completely missing evidence
 
 Be LENIENT - only reject if there are genuinely serious problems with the grading.
 
+CORRECTIONS RULES (only when rejecting):
+- If points are not valid rubric values or total doesn't match sum, provide correctedRubricScores.
+- If feedback is generic/subjective, provide suggestedFeedbackChanges.
+- If you cannot correct safely, leave corrections empty and explain in feedback.
+
 {format_instructions}`;
+  }
+
+  private sanitizeCorrectedRubricScores(
+    corrected: ParsedJudgeResponse["correctedRubricScores"],
+    scoringCriteria: {
+      rubrics?: RubricDto[];
+    },
+  ): RubricScore[] | null {
+    if (!corrected || !Array.isArray(corrected)) return null;
+    if (!scoringCriteria?.rubrics || !Array.isArray(scoringCriteria.rubrics)) {
+      return null;
+    }
+
+    const rubricMap = new Map<string, RubricDto>();
+    for (const rubric of scoringCriteria.rubrics) {
+      if (rubric?.rubricQuestion) {
+        rubricMap.set(rubric.rubricQuestion.toLowerCase(), rubric);
+      }
+    }
+
+    const sanitized: RubricScore[] = [];
+
+    for (const [index, score] of corrected.entries()) {
+      const key = score.rubricQuestion?.toLowerCase?.() || "";
+      const rubric = rubricMap.get(key) || scoringCriteria.rubrics[index];
+
+      if (!rubric || !Array.isArray(rubric.criteria)) {
+        continue;
+      }
+
+      const allowedPoints = new Set(
+        rubric.criteria.map((criterion) => criterion.points),
+      );
+      const maxPoints = Math.max(
+        ...rubric.criteria.map((criterion) => criterion.points || 0),
+      );
+
+      if (!allowedPoints.has(score.pointsAwarded)) {
+        continue;
+      }
+
+      sanitized.push({
+        rubricQuestion: rubric.rubricQuestion || score.rubricQuestion,
+        pointsAwarded: score.pointsAwarded,
+        maxPoints,
+        criterionSelected: score.criterionSelected,
+        justification: score.justification,
+      });
+    }
+
+    if (sanitized.length !== corrected.length) {
+      return null;
+    }
+
+    return sanitized;
+  }
+
+  private evaluateEvidencePresence(rubricScores: RubricScore[]): {
+    evidencePresent: boolean;
+    missingCriteria: string[];
+  } {
+    if (!rubricScores || rubricScores.length === 0) {
+      return { evidencePresent: false, missingCriteria: [] };
+    }
+
+    const missingCriteria: string[] = [];
+
+    for (const score of rubricScores) {
+      if (
+        (!score.evidence || score.evidence.length === 0) &&
+        score.rubricQuestion
+      ) {
+        missingCriteria.push(`'${score.rubricQuestion}'`);
+      }
+    }
+
+    return {
+      evidencePresent: missingCriteria.length === 0,
+      missingCriteria,
+    };
+  }
+
+  private evaluateRubricCompliance(
+    scoringCriteria: { rubrics?: RubricDto[] },
+    rubricScores: RubricScore[],
+  ): {
+    strictRubricCompliance: boolean;
+    rubricAdherence: boolean;
+    invalidCriteria: string[];
+  } {
+    if (!scoringCriteria?.rubrics || !Array.isArray(scoringCriteria.rubrics)) {
+      return {
+        strictRubricCompliance: true,
+        rubricAdherence: true,
+        invalidCriteria: [],
+      };
+    }
+
+    const rubricMap = new Map<string, number[]>();
+    for (const rubric of scoringCriteria.rubrics) {
+      if (!rubric?.rubricQuestion || !Array.isArray(rubric.criteria)) {
+        continue;
+      }
+      rubricMap.set(
+        rubric.rubricQuestion.toLowerCase(),
+        rubric.criteria.map((criterion) => criterion.points || 0),
+      );
+    }
+
+    const invalidCriteria: string[] = [];
+
+    for (const score of rubricScores) {
+      const key = score.rubricQuestion?.toLowerCase?.() || "";
+      const allowed = rubricMap.get(key);
+      if (!allowed || allowed.length === 0) {
+        continue;
+      }
+
+      if (!allowed.includes(score.pointsAwarded)) {
+        invalidCriteria.push(`'${score.rubricQuestion}'`);
+      }
+    }
+
+    const strictRubricCompliance = invalidCriteria.length === 0;
+
+    return {
+      strictRubricCompliance,
+      rubricAdherence: strictRubricCompliance,
+      invalidCriteria,
+    };
   }
 }

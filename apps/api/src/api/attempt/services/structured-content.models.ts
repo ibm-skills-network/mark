@@ -162,6 +162,7 @@ export interface EvidenceBasedGradingResult {
     gradedAt: string;
     modelUsed: string;
     determinismChecksum: string;
+    auditLog?: unknown;
   };
 }
 
