@@ -97,19 +97,20 @@ export class CriterionEvidencePipelineService {
     const maxRetries = request.maxRetries ?? 3;
 
     const evidenceResponses = await limiter.run(
-      request.criteria.map((criterion) => async () =>
-        this.evidenceRetrieval.retrieveEvidence(
-          {
-            criterion,
-            question: request.question,
-            chunks: request.chunks,
-            assignmentId: request.assignmentId,
-            language: request.language,
-            modelOverride: request.modelOverrides?.retrievalModel,
-          },
-          index,
-          auditCollector,
-        ),
+      request.criteria.map(
+        (criterion) => async () =>
+          this.evidenceRetrieval.retrieveEvidence(
+            {
+              criterion,
+              question: request.question,
+              chunks: request.chunks,
+              assignmentId: request.assignmentId,
+              language: request.language,
+              modelOverride: request.modelOverrides?.retrievalModel,
+            },
+            index,
+            auditCollector,
+          ),
       ),
     );
 
@@ -186,12 +187,12 @@ export class CriterionEvidencePipelineService {
           );
 
           if (!existing || !flagged.has(criterion.id)) {
-            return existing ??
+            return (
+              existing ??
               (await this.gradingService.gradeCriterion(
                 {
                   criterion,
-                  evidence:
-                    evidenceMap.get(criterion.id)?.evidence || [],
+                  evidence: evidenceMap.get(criterion.id)?.evidence || [],
                   question: request.question,
                   assignmentId: request.assignmentId,
                   language: request.language,
@@ -199,7 +200,8 @@ export class CriterionEvidencePipelineService {
                   modelOverride: request.modelOverrides?.gradingModel,
                 },
                 auditCollector,
-              ));
+              ))
+            );
           }
 
           const issues = judgeCritique.issues
@@ -271,10 +273,14 @@ export class CriterionEvidencePipelineService {
 
     const finalSelection = currentGrades.map((grade) => {
       const history = attemptHistoryMap.get(grade.criterionId) || [];
-      const match = history.find((attempt) => attempt.attempt === grade.attempt);
-      const selected = match || (history.length > 0
-        ? this.retryManager.selectBestAttempt(history)
-        : undefined);
+      const match = history.find(
+        (attempt) => attempt.attempt === grade.attempt,
+      );
+      const selected =
+        match ||
+        (history.length > 0
+          ? this.retryManager.selectBestAttempt(history)
+          : undefined);
 
       return {
         criterionId: grade.criterionId,

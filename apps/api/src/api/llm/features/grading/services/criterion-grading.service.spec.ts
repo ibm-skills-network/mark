@@ -1,6 +1,9 @@
 import { IPromptProcessor } from "src/api/llm/core/interfaces/prompt-processor.interface";
 import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
-import { CriterionEvidence, RubricCriterion } from "../types/criterion-evidence.types";
+import {
+  CriterionEvidence,
+  RubricCriterion,
+} from "../types/criterion-evidence.types";
 import { CriterionGradingService } from "./criterion-grading.service";
 
 describe("CriterionGradingService", () => {
@@ -29,7 +32,7 @@ describe("CriterionGradingService", () => {
   it("returns minimum points when evidence is empty", async () => {
     const service = new CriterionGradingService(
       {} as IPromptProcessor,
-      {} as LLMResolverService
+      {} as LLMResolverService,
     );
 
     const result = await service.gradeCriterion({
@@ -47,9 +50,11 @@ describe("CriterionGradingService", () => {
 
   it("parses lenient JSON outputs that fail strict schema checks", async () => {
     const promptProcessor = {
-      processPromptForFeature: jest.fn().mockResolvedValue(
-        '{"score":"2","rationale":"Too short.","citations":"ch1","confidence":"High"}'
-      ),
+      processPromptForFeature: jest
+        .fn()
+        .mockResolvedValue(
+          '{"score":"2","rationale":"Too short.","citations":"ch1","confidence":"High"}',
+        ),
     } as unknown as IPromptProcessor;
 
     const llmResolver = {

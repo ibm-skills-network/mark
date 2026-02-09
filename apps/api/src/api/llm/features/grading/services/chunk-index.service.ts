@@ -36,7 +36,10 @@ export class ChunkIndex {
     this.index.addAll(documents);
   }
 
-  search(query: string, limit = 8): Array<{ chunk: ExtractedChunk; score: number }> {
+  search(
+    query: string,
+    limit = 8,
+  ): Array<{ chunk: ExtractedChunk; score: number }> {
     if (!query.trim()) return [];
 
     const results = this.index.search(query, {

@@ -113,8 +113,12 @@ Return issues per criterionId if any.
       selectedModel,
     );
     const duration = Date.now() - start;
-    const responseText = typeof response === "string" ? response : String(response);
-    const promptText = typeof prompt.template === "string" ? prompt.template : String(prompt.template);
+    const responseText =
+      typeof response === "string" ? response : String(response);
+    const promptText =
+      typeof prompt.template === "string"
+        ? prompt.template
+        : String(prompt.template);
 
     if (recorder) {
       recorder.record({

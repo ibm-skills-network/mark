@@ -40,15 +40,15 @@ export class CriterionGradingService {
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
     @Inject(LLM_RESOLVER_SERVICE)
-    private readonly llmResolver: LLMResolverService
+    private readonly llmResolver: LLMResolverService,
   ) {}
 
   async gradeCriterion(
     request: CriterionGradingRequest,
-    recorder?: LlmCallRecorder
+    recorder?: LlmCallRecorder,
   ): Promise<CriterionGrade> {
     const allowedPoints = request.criterion.criteria.map(
-      (level) => level.points
+      (level) => level.points,
     );
     const maxPoints = Math.max(...allowedPoints);
     const minPoints = Math.min(...allowedPoints);
@@ -107,7 +107,7 @@ OUTPUT RULES:
           request.evidence
             .map(
               (item) =>
-                `- ${item.chunkId}: ${item.quote} | ${this.formatAnchor(item)}`
+                `- ${item.chunkId}: ${item.quote} | ${this.formatAnchor(item)}`,
             )
             .join("\n"),
         judge_feedback: () => request.judgeFeedback || "None",
@@ -121,7 +121,7 @@ OUTPUT RULES:
         "criterion_grading",
         "text",
         request.question.length + request.evidence.length * 200,
-        request.criterion.criteria.length
+        request.criterion.criteria.length,
       ));
 
     const start = Date.now();
@@ -130,7 +130,7 @@ OUTPUT RULES:
       request.assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
       "criterion_grading",
-      selectedModel
+      selectedModel,
     );
     const duration = Date.now() - start;
     const responseText =
@@ -157,12 +157,12 @@ OUTPUT RULES:
       responseText,
       allowedPoints,
       minPoints,
-      request.evidence
+      request.evidence,
     );
 
     if (!parsed) {
       this.logger.warn(
-        `Failed to parse grading output for criterion ${request.criterion.id}`
+        `Failed to parse grading output for criterion ${request.criterion.id}`,
       );
       parsed = {
         score: minPoints,
@@ -176,7 +176,7 @@ OUTPUT RULES:
     const pointsAwarded = this.normalizePoints(parsed.score, allowedPoints);
 
     const citations = parsed.citations.filter((citation) =>
-      request.evidence.some((item) => item.chunkId === citation)
+      request.evidence.some((item) => item.chunkId === citation),
     );
 
     const decision = this.getDecision(pointsAwarded, maxPoints, minPoints);
@@ -246,7 +246,7 @@ OUTPUT RULES:
     responseText: string,
     allowedPoints: number[],
     minPoints: number,
-    evidence: CriterionEvidence[]
+    evidence: CriterionEvidence[],
   ): Promise<ParsedGrade | undefined> {
     const strict = await this.tryParseStrict(parser, responseText);
     if (strict) return strict;
@@ -262,7 +262,7 @@ OUTPUT RULES:
         raw,
         allowedPoints,
         minPoints,
-        evidence
+        evidence,
       );
       if (normalized) return normalized;
     }
@@ -270,14 +270,14 @@ OUTPUT RULES:
     const regexParsed = this.parseGradeFromText(
       responseText,
       allowedPoints,
-      minPoints
+      minPoints,
     );
     return regexParsed;
   }
 
   private async tryParseStrict(
     parser: StructuredOutputParser<typeof CriterionGradeSchema>,
-    responseText: string
+    responseText: string,
   ): Promise<ParsedGrade | undefined> {
     try {
       return (await parser.parse(responseText)) as ParsedGrade;
@@ -306,7 +306,7 @@ OUTPUT RULES:
     raw: Record<string, unknown>,
     allowedPoints: number[],
     minPoints: number,
-    evidence: CriterionEvidence[]
+    evidence: CriterionEvidence[],
   ): ParsedGrade | undefined {
     const hasExpectedKey = [
       "score",
@@ -330,7 +330,7 @@ OUTPUT RULES:
 
     const score =
       this.coerceNumber(
-        raw.score ?? raw.points ?? raw.pointsAwarded ?? raw.grade ?? raw.value
+        raw.score ?? raw.points ?? raw.pointsAwarded ?? raw.grade ?? raw.value,
       ) ??
       this.scoreFromDecision(raw.decision, allowedPoints) ??
       minPoints;
@@ -341,7 +341,7 @@ OUTPUT RULES:
           raw.reason ??
           raw.explanation ??
           raw.feedback ??
-          raw.justification
+          raw.justification,
       ) ?? "Grading rationale unavailable.";
 
     const citations =
@@ -349,7 +349,7 @@ OUTPUT RULES:
       [];
 
     const confidence = this.normalizeConfidence(
-      raw.confidence ?? raw.certainty ?? raw.conf
+      raw.confidence ?? raw.certainty ?? raw.conf,
     );
 
     return {
@@ -364,7 +364,7 @@ OUTPUT RULES:
   private parseGradeFromText(
     responseText: string,
     allowedPoints: number[],
-    minPoints: number
+    minPoints: number,
   ): ParsedGrade | undefined {
     const scoreMatch =
       responseText.match(/score\s*[:=]\s*(\d+(?:\.\d+)?)/i) ||
@@ -372,19 +372,19 @@ OUTPUT RULES:
       responseText.match(/(\d+)\s*\/\s*\d+/);
 
     const confidenceMatch = responseText.match(
-      /confidence\s*[:=]\s*(high|medium|low)/i
+      /confidence\s*[:=]\s*(high|medium|low)/i,
     );
 
     const citationsMatch = responseText.match(/citations?\s*[:=]\s*([^\n]+)/i);
 
     const rationaleMatch = responseText.match(
-      /rationale\s*[:=]\s*([\S\s]*?)(?:\n\w+\s*[:=]|$)/i
+      /rationale\s*[:=]\s*([\S\s]*?)(?:\n\w+\s*[:=]|$)/i,
     );
 
     const score = scoreMatch
-      ? this.coerceNumber(scoreMatch[1]) ??
+      ? (this.coerceNumber(scoreMatch[1]) ??
         this.scoreFromDecision(undefined, allowedPoints) ??
-        minPoints
+        minPoints)
       : undefined;
 
     const confidence = confidenceMatch
@@ -392,7 +392,7 @@ OUTPUT RULES:
       : "low";
 
     const citations = citationsMatch
-      ? this.coerceStringArray(citationsMatch[1]) ?? []
+      ? (this.coerceStringArray(citationsMatch[1]) ?? [])
       : [];
 
     const rationale = rationaleMatch ? rationaleMatch[1].trim() : undefined;
@@ -473,7 +473,7 @@ OUTPUT RULES:
 
   private scoreFromDecision(
     decision: unknown,
-    allowedPoints: number[]
+    allowedPoints: number[],
   ): number | undefined {
     if (typeof decision !== "string") return undefined;
     const normalized = decision.trim().toLowerCase();
@@ -497,7 +497,7 @@ OUTPUT RULES:
   private getDecision(
     pointsAwarded: number,
     maxPoints: number,
-    minPoints: number
+    minPoints: number,
   ): "meets" | "partially_meets" | "does_not_meet" {
     if (pointsAwarded >= maxPoints) return "meets";
     if (pointsAwarded <= minPoints) return "does_not_meet";

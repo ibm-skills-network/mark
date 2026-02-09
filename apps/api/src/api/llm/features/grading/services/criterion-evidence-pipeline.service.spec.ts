@@ -103,7 +103,7 @@ describe("CriterionEvidencePipelineService", () => {
       gradingService as any,
       judgeService as any,
       new CriterionRetryManagerService(),
-      new CriterionGradeCompilerService()
+      new CriterionGradeCompilerService(),
     );
 
     const result = await pipeline.gradeWithEvidence({

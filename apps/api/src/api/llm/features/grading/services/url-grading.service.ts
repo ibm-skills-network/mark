@@ -70,10 +70,7 @@ export class UrlGradingService implements IUrlGradingService {
       scoringCriteria as ScoringDto,
     );
 
-    if (
-      scoringCriteriaType === "CRITERIA_BASED" &&
-      rubricCriteria.length > 0
-    ) {
+    if (scoringCriteriaType === "CRITERIA_BASED" && rubricCriteria.length > 0) {
       const chunks = this.chunkingService.extractFromUrl(
         urlProvided || "unknown-url",
         urlBody?.toString() || "",
@@ -328,7 +325,9 @@ export class UrlGradingService implements IUrlGradingService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private convertToRubricCriteria(scoringCriteria?: ScoringDto): RubricCriterion[] {
+  private convertToRubricCriteria(
+    scoringCriteria?: ScoringDto,
+  ): RubricCriterion[] {
     if (!scoringCriteria || !Array.isArray(scoringCriteria.rubrics)) {
       return [];
     }

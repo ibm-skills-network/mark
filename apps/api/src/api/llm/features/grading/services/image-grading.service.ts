@@ -103,14 +103,9 @@ export class ImageGradingService implements IImageGradingService {
       `Calculated max total points: ${maxTotalPoints} for assignment ${assignmentId}`,
     );
 
-    const rubricCriteria = this.convertToRubricCriteria(
-      scoringCriteria ,
-    );
+    const rubricCriteria = this.convertToRubricCriteria(scoringCriteria);
 
-    if (
-      scoringCriteriaType === "CRITERIA_BASED" &&
-      rubricCriteria.length > 0
-    ) {
+    if (scoringCriteriaType === "CRITERIA_BASED" && rubricCriteria.length > 0) {
       const chunks = this.chunkingService.extractFromImages(learnerImages);
 
       const pipelineResult = await this.evidencePipeline.gradeWithEvidence({
@@ -662,7 +657,9 @@ ${parsed.guidance}
     return null;
   }
 
-  private convertToRubricCriteria(scoringCriteria?: ScoringDto): RubricCriterion[] {
+  private convertToRubricCriteria(
+    scoringCriteria?: ScoringDto,
+  ): RubricCriterion[] {
     if (!scoringCriteria || !Array.isArray(scoringCriteria.rubrics)) {
       return [];
     }
