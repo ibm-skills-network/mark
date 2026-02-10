@@ -1,3 +1,5 @@
+import { IsEmail, IsInt, IsOptional, IsString } from "class-validator";
+
 export class ReportIssueDto {
   issueType: string;
   description: string;
@@ -25,6 +27,27 @@ export class UserFeedbackDto {
   rating: string;
   userEmail?: string;
   portalName?: string;
+}
+
+export class BugRenewalEmailDto {
+  @IsInt()
+  issueNumber: number;
+
+  @IsOptional()
+  @IsString()
+  issueTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  issueBody?: string;
+
+  @IsOptional()
+  @IsString()
+  reportedAt?: string;
+
+  @IsOptional()
+  @IsEmail()
+  userEmail?: string;
 }
 
 export type IssueSeverity = "info" | "warning" | "error" | "critical";

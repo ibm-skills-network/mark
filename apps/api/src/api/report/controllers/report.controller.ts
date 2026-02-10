@@ -5,6 +5,7 @@ import {
   Controller,
   DefaultValuePipe,
   Get,
+  Header,
   Headers,
   Injectable,
   Param,
@@ -29,6 +30,7 @@ import {
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
 import { ReportsService } from "../services/report.service";
+import { BugRenewalEmailDto } from "../types/report.types";
 
 @ApiTags("Reports")
 @Injectable()
@@ -115,6 +117,27 @@ export class ReportsController {
       startDate,
       endDate,
     });
+  }
+
+  @Post("renewal-email")
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: "Send bug renewal email for a report issue",
+  })
+  async sendBugRenewalEmail(@Body() dto: BugRenewalEmailDto) {
+    return this.reportsService.sendBugRenewalEmail(dto);
+  }
+
+  @Get("renewal-action")
+  @Header("Content-Type", "text/html")
+  @ApiOperation({
+    summary: "Handle bug renewal email action",
+  })
+  async handleBugRenewalAction(
+    @Query("token") token?: string,
+    @Query("action") action?: string,
+  ) {
+    return this.reportsService.handleBugRenewalAction(token, action);
   }
   @Post()
   @UseInterceptors(
