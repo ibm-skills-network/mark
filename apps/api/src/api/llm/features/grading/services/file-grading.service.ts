@@ -1,3 +1,5 @@
+import * as crypto from "node:crypto";
+import { Readable } from "node:stream";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType, ResponseType } from "@prisma/client";
@@ -9,6 +11,7 @@ import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.int
 import { PdfAnnotationService } from "src/api/attempt/services/pdf-annotation.service";
 import {
   CanonicalSubmission,
+  ContentBlock,
   EvidenceBasedGradingResult,
 } from "src/api/attempt/services/structured-content.models";
 import { S3Service } from "src/api/files/services/s3.service";
@@ -19,26 +22,31 @@ import {
   serializeFileHighlighting,
 } from "src/api/llm/model/highlighting.model";
 import { Logger } from "winston";
+import * as XLSX from "xlsx";
 import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
 import {
   LLM_RESOLVER_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
+  TOKEN_COUNTER,
 } from "../../../llm.constants";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
-import {
-  EvidenceBasedGradingService,
-  RubricCriterion,
-} from "./evidence-based-grading.service";
+import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
+import { RubricCriterion } from "../types/criterion-evidence.types";
 
 type RubricScore = {
   rubricQuestion: string;
   pointsAwarded: number;
   maxPoints: number;
   justification: string;
+  evidence?: string[];
+  status?: "full" | "partial" | "none" | "unknown";
+  manualReviewRequired?: boolean;
+  criterionSelected?: string;
 };
 
 type GradingOutput = {
@@ -51,13 +59,77 @@ type GradingOutput = {
   rubricScores?: RubricScore[];
 };
 
+type SpreadsheetCheckType =
+  | "file_open"
+  | "empty_rows"
+  | "duplicates"
+  | "double_spaces"
+  | "spelling"
+  | "department_columns"
+  | "column_width"
+  | "headers"
+  | "row_count"
+  | "unknown";
+
+type SpreadsheetCheckResult = {
+  status: "full" | "partial" | "none" | "unknown";
+  evidence: string[];
+  notes?: string;
+};
+
+type SpreadsheetMetrics = {
+  filename: string;
+  sheetName: string;
+  headers: string[];
+  headerRowIndex: number;
+  dataRowCount: number;
+  emptyRowIndices: number[];
+  duplicateRowPairs: Array<{ row: number; duplicateOf: number }>;
+  doubleSpaceCells: Array<{ row: number; column: string; value: string }>;
+  departmentColumns: Array<{ index: number; name: string }>;
+  hasEmptyHeaders: boolean;
+  columnWidths?: Array<number | null>;
+  maxCellLengths?: number[];
+};
+
+type SpreadsheetRubricEvaluation = {
+  rubricQuestion: string;
+  pointsAwarded: number;
+  maxPoints: number;
+  status: "full" | "partial" | "none" | "unknown";
+  evidence: string[];
+  manualReviewRequired?: boolean;
+  criterionSelected?: string;
+  checkType: SpreadsheetCheckType;
+};
+
+type SpreadsheetCheckDefinition = {
+  type: SpreadsheetCheckType;
+  expectedRowCount?: number;
+};
+
 @Injectable()
 export class FileGradingService implements IFileGradingService {
   private readonly logger: Logger;
+  private readonly contextWindowByModel: Record<string, number> = {
+    "gpt-5-mini": 128_000,
+    "gpt-5o-mini": 128_000,
+    "gpt-5": 128_000,
+    "gpt-4o-mini": 128_000,
+    "gpt-4o": 128_000,
+    "gpt-4.1-mini": 128_000,
+    "gpt-4.1": 128_000,
+  };
+  private readonly defaultContextWindow = 32_000;
+  private readonly contextSafetyRatio = 0.8;
+  private readonly minimumChunkTokens = 4000;
+  private readonly maximumChunkTokens = 20_000;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
+    @Inject(TOKEN_COUNTER)
+    private readonly tokenCounter: ITokenCounter,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
     @Inject(LLM_RESOLVER_SERVICE)
@@ -85,6 +157,7 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteriaType,
       scoringCriteria,
       responseType,
+      judgeFeedback,
     } = fileBasedQuestionEvaluateModel;
 
     const validateLearnerResponse =
@@ -99,7 +172,9 @@ export class FileGradingService implements IFileGradingService {
       );
     }
 
+    const questionMaxPoints = totalPoints;
     let maxTotalPoints = totalPoints;
+    let rubricMaxTotal = 0;
     const rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[] = [];
 
     if (
@@ -122,33 +197,43 @@ export class FileGradingService implements IFileGradingService {
             });
           }
         }
+        rubricMaxTotal = sum;
         maxTotalPoints = sum;
       }
     }
 
-    const hasStructuredContent = learnerResponse.some(
+    const enrichedLearnerResponse =
+      this.ensureStructuredContentForEvidenceGrading(learnerResponse);
+
+    const hasStructuredContent = enrichedLearnerResponse.some(
       (file) => file.structuredContent,
     );
 
     this.logger.info("Checking for evidence-based grading trigger", {
       hasStructuredContent,
       scoringCriteriaType,
-      filesCount: learnerResponse.length,
-      filesWithStructuredContent: learnerResponse.filter(
+      filesCount: enrichedLearnerResponse.length,
+      filesWithStructuredContent: enrichedLearnerResponse.filter(
         (file) => file.structuredContent,
       ).length,
     });
 
     if (hasStructuredContent) {
       this.logger.info("Using evidence-based grading with structured content");
-      return await this.gradeWithEvidenceBasedApproach(
-        learnerResponse,
+      const model = await this.gradeWithEvidenceBasedApproach(
+        enrichedLearnerResponse,
         question,
         maxTotalPoints,
         scoringCriteria,
         assignmentId,
         language,
         rubricMaxPoints,
+        judgeFeedback,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        model,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
 
@@ -177,28 +262,23 @@ export class FileGradingService implements IFileGradingService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    const prompt = new PromptTemplate({
+    const prompt = this.buildFileGradingPrompt({
       template: selectedTemplate,
-      inputVariables: [],
-      partialVariables: {
-        question: () => question,
-        files: () =>
-          JSON.stringify(
-            learnerResponse.map((item) => ({
-              filename: item.filename,
-              content: item.content,
-            })),
-          ),
-        total_points: () => maxTotalPoints.toString(),
-        scoring_type: () => scoringCriteriaType,
-        scoring_criteria: () => JSON.stringify(scoringCriteria),
-        grading_type: () => responseType,
-        language: () => language ?? "en",
-        format_instructions: () => formatInstructions,
-      },
+      question,
+      files: learnerResponse.map((item) => ({
+        filename: item.filename,
+        content: this.getFileContentForPrompt(item),
+      })),
+      maxTotalPoints,
+      scoringCriteriaType,
+      scoringCriteria,
+      responseType,
+      language,
+      formatInstructions,
+      judgeFeedback,
     });
     const extractedContent = learnerResponse
-      .map((item) => item.content)
+      .map((item) => this.getFileContentForPrompt(item))
       .join(" ");
     const inputLength =
       question.length +
@@ -217,23 +297,77 @@ export class FileGradingService implements IFileGradingService {
 
     let response: string;
     try {
-      response = await this.processPromptWithRetry(
-        prompt,
-        assignmentId,
+      const estimatedTokens = this.estimateTokensForFileGrading(
+        question,
+        extractedContent,
+        scoringCriteria,
         selectedModel,
-        maxTotalPoints,
-        rubricMaxPoints,
       );
+      const safeTokenLimit = this.getSafeContextLimit(selectedModel);
+
+      if (estimatedTokens > safeTokenLimit) {
+        this.logger.warn(
+          `Input too large for model ${selectedModel}. Estimated ${estimatedTokens} tokens (limit ${safeTokenLimit}). Using chunked summarization.`,
+        );
+
+        const summarizedFiles = await this.summarizeFilesForGrading(
+          learnerResponse,
+          question,
+          scoringCriteria,
+          assignmentId,
+          language ?? "en",
+          selectedModel,
+          safeTokenLimit,
+        );
+
+        const summarizedTemplate = this.getTemplateForFileType(
+          responseType,
+          true,
+        );
+        const summarizedPrompt = this.buildFileGradingPrompt({
+          template: summarizedTemplate,
+          question,
+          files: summarizedFiles,
+          maxTotalPoints,
+          scoringCriteriaType,
+          scoringCriteria,
+          responseType,
+          language,
+          formatInstructions,
+          judgeFeedback,
+        });
+
+        response = await this.processPromptWithRetry(
+          summarizedPrompt,
+          assignmentId,
+          selectedModel,
+          maxTotalPoints,
+          rubricMaxPoints,
+        );
+      } else {
+        response = await this.processPromptWithRetry(
+          prompt,
+          assignmentId,
+          selectedModel,
+          maxTotalPoints,
+          rubricMaxPoints,
+        );
+      }
     } catch (retryError) {
       this.logger.error(
         `All LLM retry attempts failed: ${
           retryError instanceof Error ? retryError.message : String(retryError)
         }`,
       );
-      return this.createFallbackResponse(
+      const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "All LLM models failed - using fallback grading",
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        fallback,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
 
@@ -305,7 +439,11 @@ export class FileGradingService implements IFileGradingService {
         );
       }
 
-      return finalModel;
+      return this.scaleFileBasedModelToQuestionMax(
+        finalModel,
+        questionMaxPoints,
+        rubricMaxTotal,
+      );
     } catch (error) {
       this.logger.error(
         `Error parsing LLM response: ${
@@ -313,10 +451,15 @@ export class FileGradingService implements IFileGradingService {
         }. Response: "${response?.slice(0, 200)}..."`,
       );
 
-      return this.createFallbackResponse(
+      const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "Failed to parse LLM response - using fallback grading",
         rubricMaxPoints,
+      );
+      return this.scaleFileBasedModelToQuestionMax(
+        fallback,
+        questionMaxPoints,
+        rubricMaxTotal,
       );
     }
   }
@@ -461,7 +604,131 @@ export class FileGradingService implements IFileGradingService {
     );
   }
 
-  private getTemplateForFileType(responseType: ResponseType): string {
+  private createMinimumEvidenceResponse(
+    maxTotalPoints: number,
+    scoringCriteria?: ScoringDto,
+  ): FileBasedQuestionResponseModel {
+    const rubricScores: RubricScore[] = [];
+
+    if (scoringCriteria?.rubrics && Array.isArray(scoringCriteria.rubrics)) {
+      for (const rubric of scoringCriteria.rubrics) {
+        const pointsList = rubric.criteria?.map((c) => c.points) ?? [];
+        const minPoints = pointsList.length > 0 ? Math.min(...pointsList) : 0;
+        const maxPoints = pointsList.length > 0 ? Math.max(...pointsList) : 0;
+
+        rubricScores.push({
+          rubricQuestion: rubric.rubricQuestion || "Unnamed rubric",
+          pointsAwarded: minPoints,
+          maxPoints,
+          justification: "No supporting evidence found in the submission.",
+          evidence: [],
+          status: "none",
+          manualReviewRequired: false,
+        });
+      }
+    }
+
+    const totalPoints =
+      rubricScores.length > 0
+        ? rubricScores.reduce(
+            (sum, score) => sum + (score.pointsAwarded || 0),
+            0,
+          )
+        : 0;
+
+    const feedback =
+      rubricScores.length > 0
+        ? "Automated evidence checks could not be completed. Points were assigned at the minimum for each criterion due to missing evidence."
+        : "Automated evidence checks could not be completed. No rubric criteria were available for scoring.";
+
+    return new FileBasedQuestionResponseModel(
+      totalPoints,
+      feedback,
+      "Evidence-based grading was unable to extract valid evidence.",
+      "Each criterion was assigned minimum points due to missing evidence.",
+      "No supporting evidence could be verified for the rubric criteria.",
+      "Provide clear, explicit evidence in the submission that matches each rubric criterion.",
+      rubricScores,
+    );
+  }
+
+  private scaleFileBasedModelToQuestionMax(
+    model: FileBasedQuestionResponseModel,
+    questionMaxPoints: number,
+    rubricMaxTotal: number,
+  ): FileBasedQuestionResponseModel {
+    if (
+      !questionMaxPoints ||
+      questionMaxPoints <= 0 ||
+      !rubricMaxTotal ||
+      rubricMaxTotal <= 0 ||
+      rubricMaxTotal <= questionMaxPoints
+    ) {
+      return model;
+    }
+
+    const scaleFactor = questionMaxPoints / rubricMaxTotal;
+
+    const scaledRubricScores = model.rubricScores?.map((score) => {
+      if (typeof score.pointsAwarded !== "number") {
+        return score;
+      }
+      return {
+        ...score,
+        pointsAwarded: this.roundScaledPoints(
+          score.pointsAwarded * scaleFactor,
+        ),
+      };
+    });
+
+    const rubricSum = scaledRubricScores?.reduce((sum, score) => {
+      const points =
+        typeof score.pointsAwarded === "number" ? score.pointsAwarded : 0;
+      return sum + points;
+    }, 0);
+
+    const scaledPointsBase =
+      typeof rubricSum === "number" && rubricSum > 0
+        ? rubricSum
+        : model.points * scaleFactor;
+
+    const scaledPoints = Math.min(
+      questionMaxPoints,
+      Math.max(0, this.roundScaledPoints(scaledPointsBase)),
+    );
+
+    this.logger.warn(
+      "Scaling file grading score to match question max points",
+      {
+        originalPoints: model.points,
+        scaledPoints,
+        questionMaxPoints,
+        rubricMaxTotal,
+        scaleFactor,
+      },
+    );
+
+    return new FileBasedQuestionResponseModel(
+      scaledPoints,
+      model.feedback,
+      model.analysis,
+      model.evaluation,
+      model.explanation,
+      model.guidance,
+      scaledRubricScores ?? model.rubricScores,
+      model.highlighting,
+      model.annotatedPdfUrl,
+    );
+  }
+
+  private roundScaledPoints(points: number): number {
+    return Math.round(points * 100) / 100;
+  }
+
+  private getTemplateForFileType(
+    responseType: ResponseType,
+    summarized = false,
+  ): string {
     const fileTypeDescriptions: Record<ResponseType, string> = {
       CODE: "code submission with a focus on functionality, efficiency, style, and best practices",
       REPO: "repository submission with attention to project structure, documentation, testing, and maintainability",
@@ -488,6 +755,10 @@ export class FileGradingService implements IFileGradingService {
     const fileTypeContext =
       fileTypeDescriptions[responseType] || fileTypeDescriptions.OTHER;
 
+    const summaryNote = summarized
+      ? "\n    NOTE: FILES contain summarized extracts of the submission. If details are missing, be conservative and say what evidence is insufficient.\n"
+      : "";
+
     return `
     Grade ${fileTypeContext} using AEEG approach.
 
@@ -495,6 +766,10 @@ export class FileGradingService implements IFileGradingService {
     FILES: {files}
     POINTS: {total_points} | TYPE: {scoring_type}
     CRITERIA: {scoring_criteria}
+    ${summaryNote}
+
+    JUDGE FEEDBACK (if any): {judge_feedback}
+    - If judge feedback is provided, correct those issues without re-evaluating unrelated criteria.
 
     RUBRIC RULES:
     - Select EXACTLY ONE criterion per rubric (no interpolation)
@@ -538,6 +813,1710 @@ export class FileGradingService implements IFileGradingService {
     `;
   }
 
+  private buildFileGradingPrompt({
+    template,
+    question,
+    files,
+    maxTotalPoints,
+    scoringCriteriaType,
+    scoringCriteria,
+    responseType,
+    language,
+    formatInstructions,
+    judgeFeedback,
+  }: {
+    template: string;
+    question: string;
+    files: Array<Record<string, unknown>>;
+    maxTotalPoints: number;
+    scoringCriteriaType: string;
+    scoringCriteria: ScoringDto;
+    responseType: ResponseType;
+    language?: string;
+    formatInstructions: string;
+    judgeFeedback?: string;
+  }): PromptTemplate {
+    return new PromptTemplate({
+      template,
+      inputVariables: [],
+      partialVariables: {
+        question: () => question,
+        files: () => JSON.stringify(files),
+        total_points: () => maxTotalPoints.toString(),
+        scoring_type: () => scoringCriteriaType,
+        scoring_criteria: () => this.safeStringify(scoringCriteria),
+        grading_type: () => responseType,
+        language: () => language ?? "en",
+        judge_feedback: () => judgeFeedback || "No judge feedback provided.",
+        format_instructions: () => formatInstructions,
+      },
+    });
+  }
+
+  private getFileContentForPrompt(item: LearnerFileUpload): string {
+    return (
+      item.content ||
+      item.contentSummary ||
+      item.extractedText ||
+      item.filename ||
+      ""
+    );
+  }
+
+  private ensureStructuredContentForEvidenceGrading(
+    learnerResponse: LearnerFileUpload[],
+  ): LearnerFileUpload[] {
+    const needsRebuild = learnerResponse.some((file) =>
+      this.shouldRebuildStructuredContent(file),
+    );
+
+    if (
+      !needsRebuild &&
+      learnerResponse.some((file) => file.structuredContent)
+    ) {
+      return learnerResponse;
+    }
+
+    return learnerResponse.map((file) => {
+      if (
+        !this.shouldRebuildStructuredContent(file) &&
+        file.structuredContent
+      ) {
+        return { ...file };
+      }
+
+      const text =
+        file.extractedText || file.content || file.contentSummary || "";
+
+      const structuredContent = this.buildCanonicalSubmissionFromText(
+        text,
+        file,
+      );
+
+      return { ...file, structuredContent };
+    });
+  }
+
+  private shouldRebuildStructuredContent(file: LearnerFileUpload): boolean {
+    const existing = file.structuredContent;
+    if (!existing) {
+      return true;
+    }
+
+    const blockCount = existing.metadata?.blockCount ?? 0;
+    const text =
+      file.extractedText || file.content || file.contentSummary || "";
+
+    const isSpreadsheet =
+      file.fileType?.includes("sheet") ||
+      file.filename?.toLowerCase().endsWith(".xlsx") ||
+      text.includes("=== EXCEL WORKBOOK ===") ||
+      text.includes("=== SHEET:");
+
+    if (!isSpreadsheet) {
+      return false;
+    }
+
+    if (blockCount < 10) {
+      return true;
+    }
+
+    if (text.includes("\t")) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private buildCanonicalSubmissionFromText(
+    text: string,
+    file: LearnerFileUpload,
+  ): CanonicalSubmission {
+    const rawText = text || "";
+    const normalized = this.normalizeSubmissionTextForEvidence(rawText);
+    const metadataBlock = this.buildFileMetadataBlock(file, normalized);
+    const validatorBlock = this.buildValidatorReportBlock(rawText, file);
+    const blocks: ContentBlock[] = [];
+    let blockIndex = 1;
+
+    if (metadataBlock) {
+      blocks.push({
+        ...metadataBlock,
+        blockId: `p1b${blockIndex}`,
+        page: 1,
+      });
+      blockIndex += 1;
+    }
+
+    if (validatorBlock) {
+      blocks.push({
+        ...validatorBlock,
+        blockId: `p1b${blockIndex}`,
+        page: 1,
+      });
+      blockIndex += 1;
+    }
+
+    const textBlocks = this.splitTextIntoEvidenceBlocks(normalized, blockIndex);
+    blocks.push(...textBlocks);
+
+    const wordCount = normalized
+      ? normalized.split(/\s+/).filter(Boolean).length
+      : 0;
+    const checksum = crypto
+      .createHash("sha256")
+      .update(normalized)
+      .digest("hex");
+
+    return {
+      submissionId: file.filename,
+      metadata: {
+        wordCount,
+        pageCount: 1,
+        blockCount: blocks.length,
+        sourceType: "txt",
+        checksum,
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks,
+        },
+      ],
+    };
+  }
+
+  private splitTextIntoEvidenceBlocks(
+    text: string,
+    startIndex = 1,
+  ): ContentBlock[] {
+    if (!text) {
+      return [
+        {
+          blockId: `p1b${startIndex}`,
+          type: "paragraph",
+          text: "",
+          page: 1,
+        },
+      ];
+    }
+
+    const isTabular =
+      text.includes("=== EXCEL WORKBOOK ===") ||
+      text.includes("=== SHEET:") ||
+      text.includes(" | ");
+
+    if (isTabular) {
+      const lines = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const blocks: ContentBlock[] = [];
+      let index = startIndex;
+
+      for (const line of lines) {
+        blocks.push({
+          blockId: `p1b${index}`,
+          type: "paragraph",
+          text: line,
+          page: 1,
+        });
+        index += 1;
+      }
+
+      return blocks.length > 0
+        ? blocks
+        : [
+            {
+              blockId: `p1b${startIndex}`,
+              type: "paragraph",
+              text: "",
+              page: 1,
+            },
+          ];
+    }
+
+    const paragraphs = text
+      .split(/\n{2,}/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean);
+
+    const blocksSource = paragraphs.length > 0 ? paragraphs : text.split(/\n+/);
+
+    const blocks: ContentBlock[] = [];
+    let index = startIndex;
+    for (const chunk of blocksSource) {
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
+      blocks.push({
+        blockId: `p1b${index}`,
+        type: "paragraph",
+        text: trimmed,
+        page: 1,
+      });
+      index += 1;
+    }
+
+    if (blocks.length === 0) {
+      blocks.push({
+        blockId: "p1b1",
+        type: "paragraph",
+        text: "",
+        page: 1,
+      });
+    }
+
+    return blocks;
+  }
+
+  private normalizeSubmissionTextForEvidence(text: string): string {
+    const base = text.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+    const isSpreadsheet =
+      base.includes("=== EXCEL WORKBOOK ===") || base.includes("=== SHEET:");
+    const tabReplacement = isSpreadsheet ? " | " : " ";
+    return (
+      base
+        .replaceAll("\t", tabReplacement)
+        // eslint-disable-next-line no-control-regex
+        .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+        .trim()
+    );
+  }
+
+  private buildValidatorReportBlock(
+    rawText: string,
+    file: LearnerFileUpload,
+  ): ContentBlock | null {
+    if (!this.isSpreadsheetEvidenceSource(rawText, file)) {
+      return null;
+    }
+
+    const metrics = this.buildSpreadsheetMetricsFromText(
+      rawText,
+      file.filename,
+    );
+    if (!metrics) return null;
+
+    const lines: string[] = [];
+    lines.push(
+      "=== VALIDATOR REPORT ===",
+      `sheet: ${metrics.sheetName}`,
+      `data_rows: ${metrics.dataRowCount}`,
+      `empty_rows: ${metrics.emptyRowIndices.length}`,
+      `duplicate_rows: ${metrics.duplicateRowPairs.length}`,
+    );
+
+    if (metrics.duplicateRowPairs.length > 0) {
+      const samplePairs = metrics.duplicateRowPairs
+        .slice(0, 3)
+        .map((pair) => `row ${pair.row} duplicates row ${pair.duplicateOf}`)
+        .join("; ");
+      lines.push(`duplicate_examples: ${samplePairs}`);
+    }
+
+    lines.push(`double_space_cells: ${metrics.doubleSpaceCells.length}`);
+    if (metrics.doubleSpaceCells.length > 0) {
+      const sampleCells = metrics.doubleSpaceCells
+        .slice(0, 3)
+        .map((cell) => `${cell.column}${cell.row} "${cell.value}"`)
+        .join("; ");
+      lines.push(`double_space_examples: ${sampleCells}`);
+    }
+
+    const departmentNames = metrics.departmentColumns.map((col) => col.name);
+    lines.push(
+      `department_columns: ${
+        departmentNames.length > 0 ? departmentNames.join(", ") : "none"
+      }`,
+      `column_count: ${metrics.headers.length}`,
+    );
+
+    const unnecessaryRemoved =
+      metrics.departmentColumns.length === 1 &&
+      !metrics.hasEmptyHeaders &&
+      metrics.headers.length <= 3;
+    lines.push(
+      `unnecessary_columns_removed: ${unnecessaryRemoved ? "yes" : "no"}`,
+    );
+
+    const widthStatus = this.getColumnWidthStatus(metrics);
+    lines.push(
+      `column_widths: ${widthStatus}`,
+      "spelling_check: not_supported",
+    );
+
+    return {
+      blockId: "p1b0",
+      type: "paragraph",
+      text: lines.join("\n"),
+      page: 1,
+    };
+  }
+
+  private isSpreadsheetEvidenceSource(
+    text: string,
+    file: LearnerFileUpload,
+  ): boolean {
+    const filename = file.filename?.toLowerCase() || "";
+    if (
+      filename.endsWith(".xlsx") ||
+      filename.endsWith(".xls") ||
+      filename.endsWith(".csv")
+    ) {
+      return true;
+    }
+    if (
+      file.fileType?.includes("spreadsheet") ||
+      file.fileType?.includes("excel")
+    ) {
+      return true;
+    }
+    return (
+      text.includes("=== EXCEL WORKBOOK ===") || text.includes("=== SHEET:")
+    );
+  }
+
+  private buildSpreadsheetMetricsFromText(
+    text: string,
+    filename: string,
+  ): SpreadsheetMetrics | null {
+    if (!text) return null;
+
+    const lines = text
+      .replaceAll("\r\n", "\n")
+      .replaceAll("\r", "\n")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const rows: string[][] = [];
+    for (const line of lines) {
+      if (
+        line.startsWith("===") ||
+        line.startsWith("Range:") ||
+        line.startsWith("Total Sheets:")
+      ) {
+        continue;
+      }
+
+      let cells = line.split("\t");
+      if (cells.length <= 1) {
+        cells = line.split(/\s*\|\s*/);
+      }
+
+      if (cells.length <= 1) {
+        continue;
+      }
+
+      rows.push(cells.map((cell) => this.normalizeSpreadsheetCell(cell)));
+    }
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const headerRowIndex = rows.findIndex((row) =>
+      row.some((cell) => cell.trim() !== ""),
+    );
+
+    const headers =
+      headerRowIndex >= 0
+        ? rows[headerRowIndex].map((cell) => cell.trim())
+        : [];
+
+    const dataRows = headerRowIndex >= 0 ? rows.slice(headerRowIndex + 1) : [];
+
+    let lastDataIndex = dataRows.length - 1;
+    while (
+      lastDataIndex >= 0 &&
+      this.isSpreadsheetRowEmpty(dataRows[lastDataIndex] || [])
+    ) {
+      lastDataIndex -= 1;
+    }
+
+    const trimmedDataRows =
+      lastDataIndex >= 0 ? dataRows.slice(0, lastDataIndex + 1) : [];
+
+    const emptyRowIndices: number[] = [];
+    const duplicateRowPairs: Array<{ row: number; duplicateOf: number }> = [];
+    const doubleSpaceCells: Array<{
+      row: number;
+      column: string;
+      value: string;
+    }> = [];
+
+    const seen = new Map<string, number>();
+    const dataStartRowNumber = headerRowIndex >= 0 ? headerRowIndex + 2 : 1;
+
+    for (const [rowIndex, row] of trimmedDataRows.entries()) {
+      const rowNumber = dataStartRowNumber + rowIndex;
+
+      if (this.isSpreadsheetRowEmpty(row)) {
+        emptyRowIndices.push(rowNumber);
+        continue;
+      }
+
+      const normalizedKey = row
+        .map((cell) => cell.trim().replaceAll(/\s+/g, " ").toLowerCase())
+        .join("|");
+
+      if (seen.has(normalizedKey)) {
+        duplicateRowPairs.push({
+          row: rowNumber,
+          duplicateOf: seen.get(normalizedKey) || rowNumber,
+        });
+      } else {
+        seen.set(normalizedKey, rowNumber);
+      }
+
+      for (const [colIndex, cell] of row.entries()) {
+        if (
+          typeof cell === "string" &&
+          /\s{2,}/.test(cell) &&
+          doubleSpaceCells.length < 10
+        ) {
+          doubleSpaceCells.push({
+            row: rowNumber,
+            column: this.columnIndexToLetter(colIndex),
+            value: cell,
+          });
+        }
+      }
+    }
+
+    const departmentColumns = headers
+      .map((name, index) => ({ index, name }))
+      .filter((col) => /department|dept/i.test(col.name));
+
+    const hasEmptyHeaders = headers.some(
+      (header) => header.trim().length === 0,
+    );
+
+    const maxCellLengths: number[] = [];
+    const rowsForLengths =
+      headerRowIndex >= 0 ? [headers, ...trimmedDataRows] : trimmedDataRows;
+
+    for (const row of rowsForLengths) {
+      for (const [colIndex, cell] of row.entries()) {
+        const length = cell.trim().length;
+        maxCellLengths[colIndex] =
+          maxCellLengths[colIndex] === undefined
+            ? length
+            : Math.max(maxCellLengths[colIndex], length);
+      }
+    }
+
+    return {
+      filename,
+      sheetName: "Sheet1",
+      headers,
+      headerRowIndex,
+      dataRowCount: trimmedDataRows.length,
+      emptyRowIndices,
+      duplicateRowPairs,
+      doubleSpaceCells,
+      departmentColumns,
+      hasEmptyHeaders,
+      columnWidths: undefined,
+      maxCellLengths,
+    };
+  }
+
+  private getColumnWidthStatus(metrics: SpreadsheetMetrics): string {
+    if (!metrics.columnWidths || metrics.columnWidths.length === 0) {
+      return "unknown";
+    }
+
+    const widthPairs = metrics.columnWidths.map((width, index) => ({
+      width,
+      maxLen: metrics.maxCellLengths[index] ?? 0,
+    }));
+
+    if (
+      widthPairs.every(
+        (pair) => pair.width !== null && pair.width >= pair.maxLen,
+      )
+    ) {
+      return "wide_enough";
+    }
+
+    if (widthPairs.some((pair) => pair.width === null)) {
+      return "unknown";
+    }
+
+    return "possibly_truncated";
+  }
+
+  private buildFileMetadataBlock(
+    file: LearnerFileUpload,
+    normalizedText: string,
+  ): ContentBlock | null {
+    if (!file?.filename) return null;
+
+    const meta = file.metadata || {};
+    const lines: string[] = [];
+
+    lines.push(`Filename: ${file.filename}`);
+    if (file.fileType) {
+      lines.push(`File type: ${file.fileType}`);
+    }
+
+    const mimeType = meta["mimeType"];
+    if (typeof mimeType === "string" && mimeType) {
+      lines.push(`MIME type: ${mimeType}`);
+    }
+
+    const size = meta["size"];
+    if (typeof size === "number" && Number.isFinite(size)) {
+      lines.push(`File size: ${size} bytes`);
+    }
+
+    const sheetCount = meta["sheetCount"];
+    if (typeof sheetCount === "number" && Number.isFinite(sheetCount)) {
+      lines.push(`Sheet count: ${sheetCount}`);
+    }
+
+    const pageCount = meta["pageCount"];
+    if (typeof pageCount === "number" && Number.isFinite(pageCount)) {
+      lines.push(`Page count: ${pageCount}`);
+    }
+
+    if (meta["hash"]) {
+      lines.push(`File hash: ${String(meta["hash"])}`);
+    }
+
+    if (normalizedText.trim().length > 0) {
+      lines.push("Content extracted: yes");
+    } else {
+      lines.push("Content extracted: no");
+    }
+
+    return {
+      blockId: "p1b0",
+      type: "paragraph",
+      text: lines.join("\n"),
+      page: 1,
+    };
+  }
+
+  private async tryDeterministicSpreadsheetGrading(
+    learnerResponse: LearnerFileUpload[],
+    question: string,
+    maxTotalPoints: number,
+    scoringCriteriaType: string,
+    scoringCriteria: ScoringDto,
+    responseType: ResponseType,
+  ): Promise<FileBasedQuestionResponseModel | null> {
+    if (scoringCriteriaType !== "CRITERIA_BASED") {
+      return null;
+    }
+
+    if (!this.isSpreadsheetSubmission(responseType, learnerResponse)) {
+      return null;
+    }
+
+    if (!scoringCriteria?.rubrics || !Array.isArray(scoringCriteria.rubrics)) {
+      return null;
+    }
+
+    const workbookInfo = await this.loadSpreadsheetWorkbook(learnerResponse);
+    if (!workbookInfo) {
+      this.logger.warn(
+        "Deterministic spreadsheet grading skipped - unable to load workbook",
+      );
+      return null;
+    }
+
+    const metrics = this.buildSpreadsheetMetrics(
+      workbookInfo.workbook,
+      workbookInfo.filename,
+    );
+
+    const rubricChecks = scoringCriteria.rubrics.map((rubric) =>
+      this.identifySpreadsheetCheck(rubric),
+    );
+
+    const hasUnknownChecks = rubricChecks.some(
+      (check) => check.type === "unknown",
+    );
+
+    if (hasUnknownChecks) {
+      this.logger.info(
+        "Deterministic spreadsheet grading skipped - unknown rubric criteria",
+        {
+          rubricQuestions: scoringCriteria.rubrics.map(
+            (rubric) => rubric.rubricQuestion,
+          ),
+        },
+      );
+      return null;
+    }
+
+    type RubricInput = ScoringDto["rubrics"][number];
+
+    const evaluations: SpreadsheetRubricEvaluation[] = scoringCriteria.rubrics
+      .map((rubric: RubricInput, index: number) => {
+        const check = rubricChecks[index];
+        const result = this.evaluateSpreadsheetCheck(check, metrics);
+        const maxPoints =
+          rubric.criteria.length > 0
+            ? Math.max(
+                ...rubric.criteria.map((criterion) => criterion.points || 0),
+              )
+            : 0;
+        const { points, criterion } = this.selectPointsForStatus(
+          rubric.criteria,
+          result.status,
+        );
+        const manualReviewRequired = result.status === "unknown";
+        const evidence = result.evidence;
+
+        return {
+          rubricQuestion: rubric.rubricQuestion || `Criterion ${index + 1}`,
+          pointsAwarded: points,
+          maxPoints,
+          status: result.status,
+          evidence,
+          manualReviewRequired,
+          criterionSelected: criterion?.description,
+          checkType: check.type,
+        };
+      })
+      .filter((evaluation) => evaluation.maxPoints > 0);
+
+    if (evaluations.length === 0) {
+      return null;
+    }
+
+    const totalPoints = evaluations.reduce(
+      (sum, evaluation) => sum + evaluation.pointsAwarded,
+      0,
+    );
+
+    this.logger.info("Deterministic spreadsheet grading applied", {
+      filename: metrics.filename,
+      sheetName: metrics.sheetName,
+      rubricCount: evaluations.length,
+      totalPoints,
+    });
+
+    const feedbackPayload = this.buildSpreadsheetFeedback(
+      question,
+      maxTotalPoints,
+      metrics,
+      evaluations,
+    );
+
+    const rubricScores: RubricScore[] = evaluations.map((evaluation) => {
+      const justification = evaluation.manualReviewRequired
+        ? `${evaluation.evidence.join(" ")} Manual review required.`
+        : evaluation.evidence.join(" ");
+
+      return {
+        rubricQuestion: evaluation.rubricQuestion,
+        pointsAwarded: evaluation.pointsAwarded,
+        maxPoints: evaluation.maxPoints,
+        justification,
+        evidence: evaluation.evidence,
+        status: evaluation.status,
+        manualReviewRequired: evaluation.manualReviewRequired,
+        criterionSelected: evaluation.criterionSelected,
+      };
+    });
+
+    return new FileBasedQuestionResponseModel(
+      totalPoints,
+      feedbackPayload.feedback,
+      feedbackPayload.analysis,
+      feedbackPayload.evaluation,
+      feedbackPayload.explanation,
+      feedbackPayload.guidance,
+      rubricScores,
+    );
+  }
+
+  private isSpreadsheetSubmission(
+    responseType: ResponseType,
+    learnerResponse: LearnerFileUpload[],
+  ): boolean {
+    if (responseType === ResponseType.SPREADSHEET) {
+      return true;
+    }
+
+    const spreadsheetExtensions = new Set(["xlsx", "xls", "csv", "tsv", "ods"]);
+
+    return learnerResponse.some((file) => {
+      const extension = file.filename.split(".").pop()?.toLowerCase() || "";
+      return spreadsheetExtensions.has(extension);
+    });
+  }
+
+  private async loadSpreadsheetWorkbook(
+    learnerResponse: LearnerFileUpload[],
+  ): Promise<{ workbook: XLSX.WorkBook; filename: string } | null> {
+    const spreadsheetExtensions = new Set(["xlsx", "xls", "csv", "tsv", "ods"]);
+
+    for (const file of learnerResponse) {
+      const extension = file.filename.split(".").pop()?.toLowerCase() || "";
+      if (!spreadsheetExtensions.has(extension)) continue;
+
+      const buffer = await this.fetchFileBuffer(file, extension);
+      if (!buffer) continue;
+
+      try {
+        const options: XLSX.ParsingOptions & { FS?: string } = {
+          type: "buffer",
+          cellText: true,
+          cellDates: true,
+          sheetStubs: true,
+        };
+
+        if (extension === "tsv") {
+          options.FS = "\t";
+        }
+
+        const workbook = XLSX.read(buffer, options);
+        if (workbook.SheetNames.length === 0) {
+          continue;
+        }
+
+        return { workbook, filename: file.filename };
+      } catch (error) {
+        this.logger.warn(
+          `Failed to parse spreadsheet ${file.filename}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  private async fetchFileBuffer(
+    file: LearnerFileUpload,
+    extension: string,
+  ): Promise<Buffer | null> {
+    if (file.bucket && file.key) {
+      try {
+        const object = await this.s3Service.getObject({
+          Bucket: file.bucket,
+          Key: file.key,
+        });
+        const buffer = await this.bodyToBuffer(object.Body);
+        if (buffer) return buffer;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch file ${file.filename} from storage: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    if (file.content) {
+      return Buffer.from(file.content, "utf8");
+    }
+
+    if ((extension === "csv" || extension === "tsv") && file.extractedText) {
+      return Buffer.from(file.extractedText, "utf8");
+    }
+
+    return null;
+  }
+
+  private async bodyToBuffer(body: unknown): Promise<Buffer | null> {
+    if (!body) return null;
+    if (Buffer.isBuffer(body)) return body;
+    if (body instanceof Uint8Array) return Buffer.from(body);
+    if (typeof body === "string") return Buffer.from(body);
+
+    if (body instanceof Readable) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of body) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks);
+    }
+
+    return null;
+  }
+
+  private buildSpreadsheetMetrics(
+    workbook: XLSX.WorkBook,
+    filename: string,
+  ): SpreadsheetMetrics {
+    const sheetName = workbook.SheetNames[0] || "Sheet1";
+    const worksheet = workbook.Sheets[sheetName];
+    const rowsRaw = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      blankrows: true,
+      defval: "",
+    });
+
+    const rows = rowsRaw.map((row) =>
+      Array.isArray(row)
+        ? row.map((cell) => this.normalizeSpreadsheetCell(cell))
+        : [],
+    );
+
+    const headerRowIndex = rows.findIndex((row) =>
+      row.some((cell) => cell.trim() !== ""),
+    );
+
+    const headers =
+      headerRowIndex >= 0
+        ? rows[headerRowIndex].map((cell) => cell.trim())
+        : [];
+
+    const dataRows = headerRowIndex >= 0 ? rows.slice(headerRowIndex + 1) : [];
+
+    let lastDataIndex = dataRows.length - 1;
+    while (
+      lastDataIndex >= 0 &&
+      this.isSpreadsheetRowEmpty(dataRows[lastDataIndex])
+    ) {
+      lastDataIndex -= 1;
+    }
+
+    const trimmedDataRows =
+      lastDataIndex >= 0 ? dataRows.slice(0, lastDataIndex + 1) : [];
+
+    const emptyRowIndices: number[] = [];
+    const duplicateRowPairs: Array<{ row: number; duplicateOf: number }> = [];
+    const doubleSpaceCells: Array<{
+      row: number;
+      column: string;
+      value: string;
+    }> = [];
+
+    const seen = new Map<string, number>();
+    const dataStartRowNumber = headerRowIndex >= 0 ? headerRowIndex + 2 : 1;
+
+    for (const [rowIndex, row] of trimmedDataRows.entries()) {
+      const rowNumber = dataStartRowNumber + rowIndex;
+
+      if (this.isSpreadsheetRowEmpty(row)) {
+        emptyRowIndices.push(rowNumber);
+        continue;
+      }
+
+      const normalizedKey = row
+        .map((cell) => cell.trim().replaceAll(/\s+/g, " ").toLowerCase())
+        .join("|");
+
+      if (seen.has(normalizedKey)) {
+        duplicateRowPairs.push({
+          row: rowNumber,
+          duplicateOf: seen.get(normalizedKey) || rowNumber,
+        });
+      } else {
+        seen.set(normalizedKey, rowNumber);
+      }
+
+      for (const [colIndex, cell] of row.entries()) {
+        if (
+          typeof cell === "string" &&
+          /\s{2,}/.test(cell) &&
+          doubleSpaceCells.length < 10
+        ) {
+          doubleSpaceCells.push({
+            row: rowNumber,
+            column: this.columnIndexToLetter(colIndex),
+            value: cell,
+          });
+        }
+      }
+    }
+
+    const departmentColumns = headers
+      .map((name, index) => ({ index, name }))
+      .filter((col) => /department|dept/i.test(col.name));
+
+    const hasEmptyHeaders = headers.some(
+      (header) => header.trim().length === 0,
+    );
+
+    const columnWidths = Array.isArray(worksheet["!cols"])
+      ? worksheet["!cols"].map((col) => {
+          if (!col) return null;
+          const width = (col as { wch?: number }).wch;
+          if (typeof width === "number") return width;
+          const wpx = (col as { wpx?: number }).wpx;
+          return typeof wpx === "number" ? Math.round(wpx / 7) : null;
+        })
+      : undefined;
+
+    const maxCellLengths: number[] = [];
+    const rowsForLengths =
+      headerRowIndex >= 0 ? [headers, ...trimmedDataRows] : trimmedDataRows;
+
+    for (const row of rowsForLengths) {
+      for (const [colIndex, cell] of row.entries()) {
+        const length = cell.trim().length;
+        maxCellLengths[colIndex] =
+          maxCellLengths[colIndex] === undefined
+            ? length
+            : Math.max(maxCellLengths[colIndex], length);
+      }
+    }
+
+    return {
+      filename,
+      sheetName,
+      headers,
+      headerRowIndex,
+      dataRowCount: trimmedDataRows.length,
+      emptyRowIndices,
+      duplicateRowPairs,
+      doubleSpaceCells,
+      departmentColumns,
+      hasEmptyHeaders,
+      columnWidths,
+      maxCellLengths,
+    };
+  }
+
+  private normalizeSpreadsheetCell(value: unknown): string {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number") return value.toString();
+    if (typeof value === "boolean") return value ? "true" : "false";
+    if (value instanceof Date) return value.toISOString();
+    return String(value);
+  }
+
+  private isSpreadsheetRowEmpty(row: string[]): boolean {
+    return row.every((cell) => cell.trim() === "");
+  }
+
+  private identifySpreadsheetCheck(
+    rubric: ScoringDto["rubrics"][number],
+  ): SpreadsheetCheckDefinition {
+    const criteriaText = rubric.criteria
+      ?.map((criterion) => criterion.description)
+      .join(" ");
+    const combinedText = `${rubric.rubricQuestion || ""} ${
+      criteriaText || ""
+    }`.toLowerCase();
+
+    if (
+      /upload|uploaded/.test(combinedText) ||
+      /file\s+open|opens/.test(combinedText)
+    ) {
+      return { type: "file_open" };
+    }
+
+    if (/empty\s+row|blank\s+row/.test(combinedText)) {
+      return { type: "empty_rows" };
+    }
+
+    if (/duplicate/.test(combinedText)) {
+      return { type: "duplicates" };
+    }
+
+    if (/double\s+space|extra\s+space|multiple\s+spaces/.test(combinedText)) {
+      return { type: "double_spaces" };
+    }
+
+    if (/spelling|misspell|typo/.test(combinedText)) {
+      return { type: "spelling" };
+    }
+
+    if (/department/.test(combinedText)) {
+      return { type: "department_columns" };
+    }
+
+    if (
+      /column/.test(combinedText) &&
+      /width|widen|expand|visible|truncate|fit/.test(combinedText)
+    ) {
+      return { type: "column_width" };
+    }
+
+    if (/header|column name/.test(combinedText)) {
+      return { type: "headers" };
+    }
+
+    const rowCountMatch = combinedText.match(/(\d+)\s+(?:data\s+)?rows?/);
+    if (rowCountMatch) {
+      return { type: "row_count", expectedRowCount: Number(rowCountMatch[1]) };
+    }
+
+    return { type: "unknown" };
+  }
+
+  private evaluateSpreadsheetCheck(
+    check: SpreadsheetCheckDefinition,
+    metrics: SpreadsheetMetrics,
+  ): SpreadsheetCheckResult {
+    const evidence: string[] = [];
+
+    switch (check.type) {
+      case "file_open": {
+        evidence.push(
+          `Workbook "${metrics.filename}" opened with sheet "${metrics.sheetName}".`,
+        );
+        return { status: "full", evidence };
+      }
+      case "headers": {
+        if (metrics.headerRowIndex < 0) {
+          evidence.push("No header row detected.");
+          return { status: "none", evidence };
+        }
+        if (metrics.hasEmptyHeaders) {
+          evidence.push("One or more header cells are blank.");
+          return { status: "none", evidence };
+        }
+        evidence.push(
+          `Header row detected at row ${metrics.headerRowIndex + 1} with ${
+            metrics.headers.length
+          } columns.`,
+        );
+        return { status: "full", evidence };
+      }
+      case "empty_rows": {
+        if (metrics.dataRowCount === 0) {
+          evidence.push("No data rows detected.");
+          return { status: "none", evidence };
+        }
+        if (metrics.emptyRowIndices.length === 0) {
+          evidence.push(
+            `No empty rows found in ${metrics.dataRowCount} data rows.`,
+          );
+          return { status: "full", evidence };
+        }
+        const sample = metrics.emptyRowIndices.slice(0, 5).join(", ");
+        evidence.push(
+          `Empty rows found at rows: ${sample}${
+            metrics.emptyRowIndices.length > 5
+              ? " (additional rows omitted)"
+              : ""
+          }.`,
+        );
+        return { status: "none", evidence };
+      }
+      case "duplicates": {
+        if (metrics.dataRowCount === 0) {
+          evidence.push("No data rows detected.");
+          return { status: "none", evidence };
+        }
+        if (metrics.duplicateRowPairs.length === 0) {
+          evidence.push("No duplicate rows detected.");
+          return { status: "full", evidence };
+        }
+        const samplePairs = metrics.duplicateRowPairs
+          .slice(0, 3)
+          .map((pair) => `row ${pair.row} duplicates row ${pair.duplicateOf}`)
+          .join("; ");
+        evidence.push(
+          `Duplicate rows detected (${metrics.duplicateRowPairs.length} total): ${samplePairs}.`,
+        );
+        return { status: "none", evidence };
+      }
+      case "double_spaces": {
+        if (metrics.doubleSpaceCells.length === 0) {
+          evidence.push("No double spaces detected in cell values.");
+          return { status: "full", evidence };
+        }
+        const sampleCells = metrics.doubleSpaceCells
+          .slice(0, 5)
+          .map((cell) => `${cell.column}${cell.row}`)
+          .join(", ");
+        evidence.push(
+          `Double spaces found in ${metrics.doubleSpaceCells.length} cell(s) (examples: ${sampleCells}).`,
+        );
+        return { status: "partial", evidence };
+      }
+      case "department_columns": {
+        if (
+          metrics.departmentColumns.length === 1 &&
+          !metrics.hasEmptyHeaders
+        ) {
+          evidence.push(
+            `Department column detected: "${metrics.departmentColumns[0].name}".`,
+          );
+          return { status: "full", evidence };
+        }
+        if (metrics.departmentColumns.length === 0) {
+          evidence.push("No department column detected in headers.");
+        } else {
+          evidence.push(
+            `Multiple department columns detected: ${metrics.departmentColumns
+              .map((col) => `"${col.name}"`)
+              .join(", ")}.`,
+          );
+        }
+        if (metrics.hasEmptyHeaders) {
+          evidence.push("One or more header cells are blank.");
+        }
+        return { status: "none", evidence };
+      }
+      case "column_width": {
+        evidence.push(
+          "Column width is a display setting and cannot be reliably auto-graded.",
+        );
+        return { status: "unknown", evidence };
+      }
+      case "spelling": {
+        evidence.push(
+          "Automated spelling verification is not available for this submission.",
+        );
+        return { status: "unknown", evidence };
+      }
+      case "row_count": {
+        if (check.expectedRowCount === undefined) {
+          evidence.push("Expected row count not specified in rubric.");
+          return { status: "unknown", evidence };
+        }
+        if (metrics.dataRowCount === check.expectedRowCount) {
+          evidence.push(
+            `Detected ${metrics.dataRowCount} data rows (expected ${check.expectedRowCount}).`,
+          );
+          return { status: "full", evidence };
+        }
+        evidence.push(
+          `Detected ${metrics.dataRowCount} data rows (expected ${check.expectedRowCount}).`,
+        );
+        return { status: "none", evidence };
+      }
+
+      default: {
+        evidence.push("No deterministic check available for this criterion.");
+        return { status: "unknown", evidence };
+      }
+    }
+  }
+
+  private selectPointsForStatus(
+    criteria: ScoringDto["rubrics"][number]["criteria"],
+    status: "full" | "partial" | "none" | "unknown",
+  ): {
+    points: number;
+    criterion?: ScoringDto["rubrics"][number]["criteria"][number];
+  } {
+    if (!criteria || criteria.length === 0) {
+      return { points: 0 };
+    }
+
+    const sorted = [...criteria].sort((a, b) => a.points - b.points);
+    const minPoints = sorted[0]?.points ?? 0;
+    const maxPoints = sorted.at(-1)?.points ?? 0;
+
+    let selectedPoints = maxPoints;
+    switch (status) {
+      case "none": {
+        selectedPoints = minPoints;
+
+        break;
+      }
+      case "partial": {
+        selectedPoints =
+          sorted.length <= 2
+            ? minPoints
+            : sorted[Math.floor((sorted.length - 1) / 2)]?.points;
+
+        break;
+      }
+      case "unknown": {
+        selectedPoints = maxPoints;
+
+        break;
+      }
+    }
+
+    const criterion = this.pickCriterionByStatus(
+      criteria,
+      selectedPoints,
+      status,
+    );
+
+    return { points: selectedPoints, criterion };
+  }
+
+  private pickCriterionByStatus(
+    criteria: ScoringDto["rubrics"][number]["criteria"],
+    points: number,
+    status: "full" | "partial" | "none" | "unknown",
+  ): ScoringDto["rubrics"][number]["criteria"][number] | undefined {
+    const matching = criteria.filter(
+      (criterion) => criterion.points === points,
+    );
+    if (matching.length === 0) return undefined;
+    if (matching.length === 1) return matching[0];
+
+    const statusHints: Record<string, RegExp> = {
+      full: /yes|all|complete|correct|fully|meets|no issues/i,
+      partial: /partial|some|minor|few|mostly|part/i,
+      none: /no|not|missing|none|fails/i,
+      unknown: /manual|review|unknown/i,
+    };
+
+    const hint = statusHints[status];
+    const hinted = matching.find((criterion) =>
+      hint?.test(criterion.description),
+    );
+    return hinted || matching[0];
+  }
+
+  private buildSpreadsheetFeedback(
+    question: string,
+    maxTotalPoints: number,
+    metrics: SpreadsheetMetrics,
+    evaluations: SpreadsheetRubricEvaluation[],
+  ): {
+    feedback: string;
+    analysis: string;
+    evaluation: string;
+    explanation: string;
+    guidance: string;
+  } {
+    const manualCriteria = evaluations
+      .filter((evaluation) => evaluation.manualReviewRequired)
+      .map((evaluation) => evaluation.rubricQuestion);
+
+    const feedback =
+      manualCriteria.length > 0
+        ? `Automated spreadsheet checks completed. ${
+            manualCriteria.length
+          } rubric item(s) require manual review: ${manualCriteria.join(", ")}.`
+        : "Automated spreadsheet checks completed based on deterministic validation.";
+
+    const analysis = [
+      `Question: ${question}`,
+      `Sheet "${metrics.sheetName}" analyzed from ${metrics.filename}.`,
+      `Data rows: ${metrics.dataRowCount}.`,
+      `Columns: ${metrics.headers.length}.`,
+      `Empty rows: ${metrics.emptyRowIndices.length}.`,
+      `Duplicate rows: ${metrics.duplicateRowPairs.length}.`,
+      `Double-space cells: ${metrics.doubleSpaceCells.length}.`,
+      `Department columns: ${metrics.departmentColumns.length}.`,
+      `Auto-graded points: ${evaluations.reduce(
+        (sum, evaluation) => sum + evaluation.pointsAwarded,
+        0,
+      )}/${maxTotalPoints}.`,
+    ].join(" ");
+
+    const evaluation = evaluations
+      .map(
+        (evaluation) =>
+          `- ${evaluation.rubricQuestion}: ${evaluation.pointsAwarded}/${evaluation.maxPoints} (${evaluation.status})`,
+      )
+      .join("\n");
+
+    const explanation = evaluations
+      .map((evaluation) => {
+        const evidenceText = evaluation.evidence.join(" ");
+        return `- ${evaluation.rubricQuestion}: ${evidenceText}`;
+      })
+      .join("\n");
+
+    const guidanceParts: string[] = [];
+
+    if (metrics.emptyRowIndices.length > 0) {
+      guidanceParts.push(
+        `Remove empty rows (examples: ${metrics.emptyRowIndices
+          .slice(0, 5)
+          .join(", ")}).`,
+      );
+    }
+    if (metrics.duplicateRowPairs.length > 0) {
+      const samplePairs = metrics.duplicateRowPairs
+        .slice(0, 3)
+        .map((pair) => `row ${pair.row} duplicates row ${pair.duplicateOf}`)
+        .join("; ");
+      guidanceParts.push(`Remove duplicate rows (examples: ${samplePairs}).`);
+    }
+    if (metrics.doubleSpaceCells.length > 0) {
+      const sampleCells = metrics.doubleSpaceCells
+        .slice(0, 5)
+        .map((cell) => `${cell.column}${cell.row}`)
+        .join(", ");
+      guidanceParts.push(`Fix double spaces in cells such as ${sampleCells}.`);
+    }
+    if (metrics.departmentColumns.length !== 1 || metrics.hasEmptyHeaders) {
+      guidanceParts.push(
+        "Ensure there is a single Department column and remove blank header columns.",
+      );
+    }
+    if (manualCriteria.length > 0) {
+      guidanceParts.push(
+        `Manual review required for: ${manualCriteria.join(", ")}.`,
+      );
+    }
+
+    const guidance =
+      guidanceParts.length > 0
+        ? guidanceParts.join(" ")
+        : "No changes needed based on automated checks.";
+
+    return { feedback, analysis, evaluation, explanation, guidance };
+  }
+
+  private columnIndexToLetter(index: number): string {
+    let dividend = index + 1;
+    let columnName = "";
+    while (dividend > 0) {
+      const modulo = (dividend - 1) % 26;
+      columnName = String.fromCodePoint(65 + modulo) + columnName;
+      dividend = Math.floor((dividend - modulo) / 26);
+    }
+    return columnName;
+  }
+
+  private estimateTokensForFileGrading(
+    question: string,
+    extractedContent: string,
+    scoringCriteria: ScoringDto,
+    modelKey: string,
+  ): number {
+    const criteriaText = this.safeStringify(scoringCriteria);
+    const estimateText = `${question}\n${criteriaText}\n${extractedContent}`;
+    return this.tokenCounter.countTokens(estimateText, modelKey);
+  }
+
+  private getSafeContextLimit(modelKey: string): number {
+    const normalized = modelKey.toLowerCase();
+    const matchKey = Object.keys(this.contextWindowByModel).find((key) =>
+      normalized.includes(key),
+    );
+    const limit = matchKey
+      ? this.contextWindowByModel[matchKey]
+      : this.defaultContextWindow;
+    return Math.floor(limit * this.contextSafetyRatio);
+  }
+
+  private async summarizeFilesForGrading(
+    learnerResponse: LearnerFileUpload[],
+    question: string,
+    scoringCriteria: ScoringDto,
+    assignmentId: number,
+    language: string,
+    modelKey: string,
+    safeTokenLimit: number,
+  ): Promise<Array<{ filename: string; summary: string }>> {
+    const summaries: Array<{ filename: string; summary: string }> = [];
+    const chunkTokenLimit = Math.max(
+      this.minimumChunkTokens,
+      Math.min(this.maximumChunkTokens, Math.floor(safeTokenLimit * 0.2)),
+    );
+
+    for (const file of learnerResponse) {
+      const content = this.getFileContentForPrompt(file);
+      if (!content.trim()) {
+        summaries.push({
+          filename: file.filename,
+          summary: "No textual content available in this file.",
+        });
+        continue;
+      }
+
+      const chunks = this.splitTextIntoChunks(
+        content,
+        chunkTokenLimit,
+        modelKey,
+      );
+      const chunkSummaries: string[] = [];
+
+      for (const chunk of chunks) {
+        try {
+          const summary = await this.summarizeChunkForGrading(
+            chunk,
+            file.filename,
+            question,
+            scoringCriteria,
+            assignmentId,
+            language,
+            modelKey,
+          );
+          chunkSummaries.push(summary.trim());
+        } catch (error) {
+          this.logger.warn(
+            `Chunk summarization failed for ${file.filename}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          chunkSummaries.push(this.truncateToTokenLimit(chunk, 1200, modelKey));
+        }
+      }
+
+      let summaryText = chunkSummaries.filter(Boolean).join("\n");
+
+      const perFileLimit = Math.max(1500, Math.floor(safeTokenLimit * 0.1));
+      if (this.tokenCounter.countTokens(summaryText, modelKey) > perFileLimit) {
+        summaryText = await this.compressSummary(
+          summaryText,
+          question,
+          scoringCriteria,
+          assignmentId,
+          language,
+          modelKey,
+          perFileLimit,
+        );
+      }
+
+      summaries.push({
+        filename: file.filename,
+        summary: summaryText.trim(),
+      });
+    }
+
+    const combinedPrompt = this.buildFileGradingPrompt({
+      template: this.getTemplateForFileType(ResponseType.OTHER, true),
+      question,
+      files: summaries,
+      maxTotalPoints: 1,
+      scoringCriteriaType: "SUMMARY_ONLY",
+      scoringCriteria,
+      responseType: ResponseType.OTHER,
+      language,
+      formatInstructions: "{}",
+    });
+
+    const combinedPromptText = await combinedPrompt.format({});
+    const combinedTokens = this.tokenCounter.countTokens(
+      combinedPromptText,
+      modelKey,
+    );
+
+    if (combinedTokens > safeTokenLimit) {
+      const mergedSummary = await this.compressSummary(
+        summaries
+          .map((summary) => `${summary.filename}:\n${summary.summary}`)
+          .join("\n\n"),
+        question,
+        scoringCriteria,
+        assignmentId,
+        language,
+        modelKey,
+        Math.max(3000, Math.floor(safeTokenLimit * 0.3)),
+      );
+      const mergedFiles = [
+        {
+          filename: "combined",
+          summary: mergedSummary.trim(),
+        },
+      ];
+
+      const mergedPrompt = this.buildFileGradingPrompt({
+        template: this.getTemplateForFileType(ResponseType.OTHER, true),
+        question,
+        files: mergedFiles,
+        maxTotalPoints: 1,
+        scoringCriteriaType: "SUMMARY_ONLY",
+        scoringCriteria,
+        responseType: ResponseType.OTHER,
+        language,
+        formatInstructions: "{}",
+      });
+      const mergedPromptText = await mergedPrompt.format({});
+      const mergedTokens = this.tokenCounter.countTokens(
+        mergedPromptText,
+        modelKey,
+      );
+
+      if (mergedTokens > safeTokenLimit) {
+        const trimmedSummary = this.truncateToTokenLimit(
+          mergedSummary,
+          Math.max(2000, Math.floor(safeTokenLimit * 0.2)),
+          modelKey,
+        );
+        return [
+          {
+            filename: "combined",
+            summary: trimmedSummary.trim(),
+          },
+        ];
+      }
+
+      return mergedFiles;
+    }
+
+    return summaries;
+  }
+
+  private splitTextIntoChunks(
+    text: string,
+    maxTokens: number,
+    modelKey: string,
+  ): string[] {
+    const chunks: string[] = [];
+    const approxCharsPerToken = 4;
+    const maxChars = Math.max(1000, maxTokens * approxCharsPerToken);
+    let start = 0;
+
+    while (start < text.length) {
+      let end = Math.min(text.length, start + maxChars);
+      let chunk = text.slice(start, end);
+      let tokenCount = this.tokenCounter.countTokens(chunk, modelKey);
+
+      if (tokenCount > maxTokens) {
+        const ratio = Math.max(0.2, maxTokens / tokenCount);
+        end = Math.min(text.length, start + Math.floor(chunk.length * ratio));
+        chunk = text.slice(start, end);
+        tokenCount = this.tokenCounter.countTokens(chunk, modelKey);
+      }
+
+      if (chunk.length === 0) {
+        break;
+      }
+
+      chunks.push(chunk);
+      start = end;
+    }
+
+    return chunks;
+  }
+
+  private async summarizeChunkForGrading(
+    chunk: string,
+    filename: string,
+    question: string,
+    scoringCriteria: ScoringDto,
+    assignmentId: number,
+    language: string,
+    modelKey: string,
+  ): Promise<string> {
+    const prompt = new PromptTemplate({
+      template: `You are condensing a learner submission chunk to help grading.
+
+QUESTION:
+{question}
+
+SCORING CRITERIA:
+{scoring_criteria}
+
+FILE: {filename}
+
+CONTENT CHUNK:
+{chunk}
+
+LANGUAGE: {language}
+
+Write a concise summary (max 200 words) highlighting evidence relevant to the rubric and any missing elements. Use short bullet points.`,
+      inputVariables: [],
+      partialVariables: {
+        question: () => question,
+        scoring_criteria: () =>
+          this.truncateToTokenLimit(
+            this.safeStringify(scoringCriteria),
+            2000,
+            modelKey,
+          ),
+        filename: () => filename,
+        chunk: () => chunk,
+        language: () => language ?? "en",
+      },
+    });
+
+    return await this.promptProcessor.processPromptForFeature(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+      "file_grading",
+      modelKey,
+    );
+  }
+
+  private async compressSummary(
+    summaryText: string,
+    question: string,
+    scoringCriteria: ScoringDto,
+    assignmentId: number,
+    language: string,
+    modelKey: string,
+    targetTokens: number,
+  ): Promise<string> {
+    const cappedSummary = this.truncateToTokenLimit(
+      summaryText,
+      Math.max(targetTokens * 2, 4000),
+      modelKey,
+    );
+    const prompt = new PromptTemplate({
+      template: `You are compressing grading notes into a shorter summary.
+
+QUESTION:
+{question}
+
+SCORING CRITERIA:
+{scoring_criteria}
+
+NOTES:
+{summary}
+
+LANGUAGE: {language}
+
+Return a concise summary (max 300 words) focused on evidence and gaps.`,
+      inputVariables: [],
+      partialVariables: {
+        question: () => question,
+        scoring_criteria: () =>
+          this.truncateToTokenLimit(
+            this.safeStringify(scoringCriteria),
+            2000,
+            modelKey,
+          ),
+        summary: () => cappedSummary,
+        language: () => language ?? "en",
+      },
+    });
+
+    try {
+      const compressed = await this.promptProcessor.processPromptForFeature(
+        prompt,
+        assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        "file_grading",
+        modelKey,
+      );
+
+      return this.truncateToTokenLimit(compressed, targetTokens, modelKey);
+    } catch (error) {
+      this.logger.warn(
+        `Summary compression failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return this.truncateToTokenLimit(summaryText, targetTokens, modelKey);
+    }
+  }
+
+  private truncateToTokenLimit(
+    text: string,
+    maxTokens: number,
+    modelKey: string,
+  ): string {
+    if (!text) return "";
+    if (this.tokenCounter.countTokens(text, modelKey) <= maxTokens) {
+      return text;
+    }
+
+    const approxCharsPerToken = 4;
+    let end = Math.max(1000, maxTokens * approxCharsPerToken);
+    end = Math.min(text.length, end);
+    let truncated = text.slice(0, end);
+
+    while (
+      truncated.length > 0 &&
+      this.tokenCounter.countTokens(truncated, modelKey) > maxTokens
+    ) {
+      end = Math.floor(end * 0.9);
+      truncated = text.slice(0, end);
+    }
+
+    return truncated;
+  }
+
+  private safeStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value ?? "");
+    }
+  }
+
   /**
    * Grade with evidence-based approach using structured content
    * This is the PREFERRED method for criterion-based grading
@@ -550,6 +2529,7 @@ export class FileGradingService implements IFileGradingService {
     assignmentId: number,
     language: string | undefined,
     rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[],
+    judgeFeedback?: string,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
       const structuredFile = learnerResponse.find(
@@ -591,6 +2571,7 @@ export class FileGradingService implements IFileGradingService {
         question,
         assignmentId,
         language || "en",
+        judgeFeedback,
       );
 
       this.logger.info(
@@ -646,11 +2627,12 @@ export class FileGradingService implements IFileGradingService {
         }`,
       );
 
-      this.logger.warn("Falling back to standard file grading");
-      return this.createFallbackResponse(
+      this.logger.warn(
+        "Evidence-based grading failed - assigning minimum points",
+      );
+      return this.createMinimumEvidenceResponse(
         maxTotalPoints,
-        "Evidence-based grading failed - using fallback",
-        rubricMaxPoints,
+        scoringCriteria,
       );
     }
   }
@@ -747,14 +2729,24 @@ export class FileGradingService implements IFileGradingService {
     annotatedPdfUrl?: string | null,
     normalizedHighlighting?: FileHighlighting,
   ): FileBasedQuestionResponseModel {
-    const rubricScores = result.criteriaResults.map((criterion) => ({
-      rubricQuestion: criterion.rubricQuestion,
-      pointsAwarded: criterion.pointsAwarded,
-      maxPoints: criterion.maxPoints,
-      justification: criterion.rationale,
-      evidence: criterion.evidence,
-      decision: criterion.decision,
-    }));
+    const rubricScores: RubricScore[] = result.criteriaResults.map(
+      (criterion) => ({
+        rubricQuestion: criterion.rubricQuestion,
+        pointsAwarded: criterion.pointsAwarded,
+        maxPoints: criterion.maxPoints,
+        justification: criterion.rationale,
+        evidence: criterion.evidence.map(
+          (citation) =>
+            `p${citation.page}:${citation.blockId} ${citation.quote}`,
+        ),
+        status:
+          criterion.decision === "meets"
+            ? "full"
+            : criterion.decision === "partially_meets"
+              ? "partial"
+              : "none",
+      }),
+    );
 
     const finalPoints = Math.min(result.totalPoints, maxTotalPoints);
 
@@ -815,6 +2807,15 @@ export class FileGradingService implements IFileGradingService {
       },
     );
 
+    const metadata =
+      result.metadata && "auditLog" in result.metadata
+        ? {
+            gradingAudit: (result.metadata as { auditLog?: unknown }).auditLog,
+            gradingModel: result.metadata.modelUsed,
+            determinismChecksum: result.metadata.determinismChecksum,
+          }
+        : undefined;
+
     const model = new FileBasedQuestionResponseModel(
       finalPoints,
       feedbackText,
@@ -825,6 +2826,7 @@ export class FileGradingService implements IFileGradingService {
       rubricScores,
       normalizedHighlighting || highlighting || undefined,
       annotatedPdfUrl || undefined,
+      metadata,
     );
 
     this.logger.info("FileBasedQuestionResponseModel created", {

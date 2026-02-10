@@ -182,12 +182,16 @@ export class VariantRepository {
     if (!data) {
       throw new Error("Invalid variant data");
     }
-    if (!data.variantContent) {
+    const sanitizedVariantContent = this.sanitizeVariantContent(
+      data.variantContent,
+      data.id,
+    );
+    if (!sanitizedVariantContent) {
       throw new Error("Variant content is required");
     }
     try {
       return {
-        variantContent: data.variantContent,
+        variantContent: sanitizedVariantContent,
         maxWords: data.maxWords,
         maxCharacters: data.maxCharacters,
         randomizedChoices: data.randomizedChoices ?? false,
@@ -224,13 +228,17 @@ export class VariantRepository {
     if (!data) {
       throw new Error("Invalid variant data");
     }
-    if (!data.variantContent) {
+    const sanitizedVariantContent = this.sanitizeVariantContent(
+      data.variantContent,
+      data.id,
+    );
+    if (!sanitizedVariantContent) {
       throw new Error("Variant content is required");
     }
 
     try {
       return {
-        variantContent: data.variantContent,
+        variantContent: sanitizedVariantContent,
         maxWords: data.maxWords,
         maxCharacters: data.maxCharacters,
         randomizedChoices: data.randomizedChoices ?? undefined,
@@ -298,6 +306,35 @@ export class VariantRepository {
     }
 
     return field as T;
+  }
+
+  private sanitizeVariantContent(content?: string, variantId?: number): string {
+    const trimmedContent = (content ?? "").trim();
+    if (!trimmedContent) {
+      return "";
+    }
+
+    const mediaRegex = /<img\b[^>]*>|<table\b[^>]*>[\S\s]*?<\/table>/gi;
+    const withoutMedia = trimmedContent.replaceAll(mediaRegex, "");
+    const withoutTags = withoutMedia.replaceAll(/<[^>]*>/g, "").trim();
+
+    if (withoutTags) {
+      return withoutTags;
+    }
+
+    const hash = this.hashString(trimmedContent);
+    const suffix = variantId ? `-${variantId}` : "";
+    return `Media-only variant ${hash}${suffix}`;
+  }
+
+  private hashString(value: string): string {
+    let hash = 2_166_136_261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.codePointAt(index);
+      hash +=
+        (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    return (hash >>> 0).toString(36);
   }
 
   /**

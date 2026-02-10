@@ -9,12 +9,7 @@ import {
 } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
-import {
-  ChoiceBasedFeedbackDto,
-  CreateQuestionResponseAttemptResponseDto,
-  GeneralFeedbackDto,
-  TrueFalseBasedFeedbackDto,
-} from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import {
   QuestionDto,
@@ -23,6 +18,7 @@ import {
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { FileUploadQuestionEvaluateModel } from "src/api/llm/model/file.based.question.evaluate.model";
+import { FileBasedQuestionResponseModel } from "src/api/llm/model/file.based.question.response.model";
 import { Logger } from "winston";
 import { IGradingJudgeService } from "../../../llm/features/grading/interfaces/grading-judge.interface";
 import { GRADING_JUDGE_SERVICE } from "../../../llm/llm.constants";
@@ -96,6 +92,147 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
     }
 
     return true;
+  }
+
+  /**
+   * Validates that uploaded file types/names match expectations from the question text.
+   * This catches obvious mismatches BEFORE sending to LLM for grading.
+   */
+  private validateFileTypes(
+    question: QuestionDto,
+    uploadedFiles: LearnerFileUpload[],
+  ): void {
+    const expectedFileInfo = this.extractExpectedFileInfo(question.question);
+
+    if (!expectedFileInfo.hasExpectations) {
+      return;
+    }
+
+    for (const file of uploadedFiles) {
+      const filename = file.filename.toLowerCase();
+      const fileExtension = filename.slice(
+        Math.max(0, filename.lastIndexOf(".")),
+      );
+
+      if (expectedFileInfo.expectedFilenames.length > 0) {
+        const matchesName = expectedFileInfo.expectedFilenames.some(
+          (expected) => filename.includes(expected.toLowerCase()),
+        );
+
+        if (!matchesName) {
+          this.logger?.warn("Uploaded file does not match expected filename", {
+            questionId: question.id,
+            uploadedFilename: filename,
+            expectedFilenames: expectedFileInfo.expectedFilenames,
+          });
+
+          throw new BadRequestException(
+            `File name mismatch: Expected file name containing one of [${expectedFileInfo.expectedFilenames.join(
+              ", ",
+            )}] ` +
+              `but received "${file.filename}". Please upload the correct file.`,
+          );
+        }
+      }
+
+      if (expectedFileInfo.expectedExtensions.length > 0) {
+        const matchesExtension = expectedFileInfo.expectedExtensions.some(
+          (expected) => fileExtension === expected.toLowerCase(),
+        );
+
+        if (!matchesExtension) {
+          this.logger?.warn(
+            "Uploaded file extension does not match expected type",
+            {
+              questionId: question.id,
+              uploadedExtension: fileExtension,
+              expectedExtensions: expectedFileInfo.expectedExtensions,
+            },
+          );
+
+          throw new BadRequestException(
+            `File type mismatch: Expected file type [${expectedFileInfo.expectedExtensions.join(
+              " or ",
+            )}] ` +
+              `but received "${fileExtension}". Please upload the correct file type.`,
+          );
+        }
+      }
+    }
+
+    this.logger?.info("File type validation passed", {
+      questionId: question.id,
+      uploadedFiles: uploadedFiles.map((f) => f.filename),
+      expectedInfo: expectedFileInfo,
+    });
+  }
+
+  /**
+   * Extracts expected file information from question text using pattern matching.
+   * Looks for patterns like:
+   * - "upload the file named [filename]"
+   * - "submit [filename.xlsx]"
+   * - "upload an Excel file (.xlsx)"
+   * - "upload a PDF (.pdf)"
+   */
+  private extractExpectedFileInfo(questionText: string): {
+    hasExpectations: boolean;
+    expectedFilenames: string[];
+    expectedExtensions: string[];
+  } {
+    const result = {
+      hasExpectations: false,
+      expectedFilenames: [] as string[],
+      expectedExtensions: [] as string[],
+    };
+
+    const filenamePattern =
+      /(?:upload|submit|file named|file called|named)\s+(?:the\s+)?(?:file\s+)?(?:named\s+)?["']?([\w.-]+\.[\da-z]+)["']?/gi;
+    let match;
+    while ((match = filenamePattern.exec(questionText)) !== null) {
+      const filename = match[1] as string;
+      if (filename && !result.expectedFilenames.includes(filename)) {
+        result.expectedFilenames.push(filename);
+        result.hasExpectations = true;
+      }
+    }
+
+    const extensionPattern = /\.([\dA-Za-z]{2,5})(?:\s|,|;|\.|\)|$)/g;
+    const mentionedExtensions = new Set<string>();
+
+    while ((match = extensionPattern.exec(questionText)) !== null) {
+      const extension = `.${(match[1] as string).toLowerCase()}`;
+      mentionedExtensions.add(extension);
+    }
+
+    const fileTypeKeywords: Record<string, string[]> = {
+      ".xlsx": ["excel", "spreadsheet", "xlsx"],
+      ".xls": ["excel", "xls"],
+      ".pdf": ["pdf"],
+      ".docx": ["word document", "docx", "word"],
+      ".doc": ["word", "doc"],
+      ".csv": ["csv", "comma-separated"],
+      ".json": ["json"],
+      ".txt": ["text file", "txt"],
+      ".zip": ["zip", "compressed"],
+      ".png": ["png", "image"],
+      ".jpg": ["jpg", "jpeg", "image"],
+      ".jpeg": ["jpeg", "jpg", "image"],
+    };
+
+    const lowerText = questionText.toLowerCase();
+    for (const [extension, keywords] of Object.entries(fileTypeKeywords)) {
+      if (keywords.some((keyword) => lowerText.includes(keyword))) {
+        mentionedExtensions.add(extension);
+      }
+    }
+
+    result.expectedExtensions = [...mentionedExtensions];
+    if (result.expectedExtensions.length > 0) {
+      result.hasExpectations = true;
+    }
+
+    return result;
   }
 
   /**
@@ -185,56 +322,17 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       context.language,
     );
 
-    let responseDto = new CreateQuestionResponseAttemptResponseDto();
-    AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
-
-    let rubricSum = 0;
-
-    if (Array.isArray(responseDto.metadata?.rubricScores)) {
-      for (const score of responseDto.metadata.rubricScores) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-        const points = score.pointsAwarded ?? score.points ?? score.score ?? 0;
-        if (typeof points === "number") {
-          rubricSum += points;
-        }
-      }
-
-      if (rubricSum === responseDto.totalPoints) {
-        this.logger?.info("Math is already consistent in FileGradingStrategy", {
-          questionId: question.id,
-          totalPoints: responseDto.totalPoints,
-          rubricSum,
-        });
-      } else {
-        this.logger?.warn(
-          "Mathematical inconsistency detected - correcting total points",
-          {
-            questionId: question.id,
-            originalTotal: responseDto.totalPoints,
-            rubricSum,
-            rubricScores: responseDto.metadata.rubricScores,
-          },
-        );
-
-        const originalTotal = responseDto.totalPoints;
-        responseDto.totalPoints = rubricSum;
-        responseDto.metadata.mathCorrected = true;
-        responseDto.metadata.originalTotal = originalTotal;
-
-        this.logger?.info("Applied math correction in FileGradingStrategy", {
-          questionId: question.id,
-          correctedFrom: originalTotal,
-          correctedTo: rubricSum,
-        });
-      }
-    }
+    let responseDto = this.buildResponseDtoFromModel(gradingModel, question);
 
     responseDto = await this.iterativeGradingWithJudge(
       question,
-      learnerResponse,
+      processedFiles,
       responseDto,
       context,
+      fileUploadQuestionEvaluateModel,
     );
+
+    responseDto = this.normalizePointsToQuestionMax(responseDto, question);
 
     responseDto.metadata = {
       ...responseDto.metadata,
@@ -278,6 +376,95 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           error: error instanceof Error ? error.message : String(error),
           timestamp: new Date().toISOString(),
         },
+      };
+    }
+
+    return responseDto;
+  }
+
+  private buildResponseDtoFromModel(
+    gradingModel: FileBasedQuestionResponseModel,
+    question: QuestionDto,
+  ): CreateQuestionResponseAttemptResponseDto {
+    let responseDto = new CreateQuestionResponseAttemptResponseDto();
+    AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
+    responseDto = this.applyRubricMathCorrection(responseDto, question);
+    return responseDto;
+  }
+
+  private applyRubricMathCorrection(
+    responseDto: CreateQuestionResponseAttemptResponseDto,
+    question: QuestionDto,
+  ): CreateQuestionResponseAttemptResponseDto {
+    let rubricSum = 0;
+
+    if (Array.isArray(responseDto.metadata?.rubricScores)) {
+      for (const score of responseDto.metadata.rubricScores) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+        const points = score.pointsAwarded ?? score.points ?? score.score ?? 0;
+        if (typeof points === "number") {
+          rubricSum += points;
+        }
+      }
+
+      if (rubricSum === responseDto.totalPoints) {
+        this.logger?.info("Math is already consistent in FileGradingStrategy", {
+          questionId: question.id,
+          totalPoints: responseDto.totalPoints,
+          rubricSum,
+        });
+      } else {
+        this.logger?.warn(
+          "Mathematical inconsistency detected - correcting total points",
+          {
+            questionId: question.id,
+            originalTotal: responseDto.totalPoints,
+            rubricSum,
+            rubricScores: responseDto.metadata.rubricScores,
+          },
+        );
+
+        const originalTotal = responseDto.totalPoints;
+        responseDto.totalPoints = rubricSum;
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          mathCorrected: true,
+          originalTotal: originalTotal,
+        };
+
+        this.logger?.info("Applied math correction in FileGradingStrategy", {
+          questionId: question.id,
+          correctedFrom: originalTotal,
+          correctedTo: rubricSum,
+        });
+      }
+    }
+
+    return responseDto;
+  }
+
+  private normalizePointsToQuestionMax(
+    responseDto: CreateQuestionResponseAttemptResponseDto,
+    question: QuestionDto,
+  ): CreateQuestionResponseAttemptResponseDto {
+    const maxPoints =
+      typeof question.totalPoints === "number" ? question.totalPoints : 0;
+    const rawPoints =
+      typeof responseDto.totalPoints === "number" ? responseDto.totalPoints : 0;
+
+    let normalizedPoints = this.sanitizePoints(rawPoints);
+    if (maxPoints > 0) {
+      normalizedPoints = Math.min(normalizedPoints, maxPoints);
+    }
+
+    if (normalizedPoints !== rawPoints) {
+      responseDto.totalPoints = normalizedPoints;
+      responseDto.metadata = {
+        ...responseDto.metadata,
+        pointsNormalized: true,
+        pointsNormalizedFrom: rawPoints,
+        pointsNormalizedTo: normalizedPoints,
+        pointsMax: maxPoints,
       };
     }
 
@@ -460,8 +647,23 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
         (file) => `${file.filename} - ${file.content?.length || 0} characters`,
       )
       .join("; ");
+    const contentSamples = learnerResponse
+      .map((file) => {
+        const raw =
+          file.content || file.extractedText || file.contentSummary || "";
+        const sample = this.truncateForJudge(raw, 1500);
+        return `${file.filename}:\n${sample || "[no text extracted]"}`;
+      })
+      .join("\n\n");
 
-    return `Files uploaded: ${fileNames}. Content: ${contentSummary}`;
+    return `Files uploaded: ${fileNames}. Content: ${contentSummary}\n\nContent samples:\n${contentSamples}`;
+  }
+
+  private truncateForJudge(text: string, maxLength: number): string {
+    if (!text) return "";
+    const normalized = text.replaceAll(/\s+/g, " ").trim();
+    if (normalized.length <= maxLength) return normalized;
+    return `${normalized.slice(0, maxLength)}…`;
   }
 
   /**
@@ -473,20 +675,32 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
     learnerResponse: LearnerFileUpload[],
     initialResponseDto: CreateQuestionResponseAttemptResponseDto,
     context: GradingContext,
+    gradingModel: FileUploadQuestionEvaluateModel,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const maxAttempts = 3;
     let currentResponseDto = initialResponseDto;
     let attempt = 1;
     let previousJudgeFeedback = "";
 
-    const originalRubricScores = currentResponseDto.metadata?.rubricScores
-      ? JSON.parse(JSON.stringify(currentResponseDto.metadata.rubricScores))
-      : [];
-
     if (!this.gradingJudgeService) {
       this.logger?.debug("Judge service not available for iterative grading", {
         questionId: question.id,
       });
+      return currentResponseDto;
+    }
+
+    if (initialResponseDto.metadata?.gradingAudit) {
+      this.logger?.info(
+        "Skipping outer judge loop — evidence pipeline already judged internally",
+        { questionId: question.id },
+      );
+      currentResponseDto.metadata = {
+        ...currentResponseDto.metadata,
+        judgeValidated: true,
+        judgeApproved: true,
+        validationAttempts: 0,
+        judgeFeedback: "Validated internally by criterion-evidence pipeline",
+      };
       return currentResponseDto;
     }
 
@@ -574,6 +788,12 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
               },
             ];
           }
+          if (judgeResult.corrections?.rubricScores) {
+            currentResponseDto.metadata = {
+              ...currentResponseDto.metadata,
+              rubricScores: judgeResult.corrections.rubricScores,
+            };
+          }
 
           currentResponseDto.metadata = {
             ...currentResponseDto.metadata,
@@ -588,42 +808,32 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           return currentResponseDto;
         }
 
-        this.logger?.info("Adjusting feedback only, preserving rubric scores", {
+        this.logger?.info("Regrading with judge feedback", {
           questionId: question.id,
           attempt: attempt + 1,
           judgeFeedback: judgeFeedback,
-          preservedRubricCount: originalRubricScores.length,
         });
 
-        const improvedResponseDto =
-          new CreateQuestionResponseAttemptResponseDto();
-
-        let correctTotal = 0;
-
-        for (const score of originalRubricScores) {
-          const points =
-            score.pointsAwarded ?? score.points ?? score.score ?? 0;
-          if (typeof points === "number") {
-            correctTotal += points;
-          }
-        }
-
-        improvedResponseDto.totalPoints = correctTotal;
-        improvedResponseDto.metadata = {
-          ...currentResponseDto.metadata,
-          rubricScores: originalRubricScores,
-          judgeIterationAttempt: attempt,
-          preservedRubricScores: true,
-          mathCorrectedInJudge: true,
-        };
-
-        const enhancedFeedback = this.createEnhancedFeedback(
-          currentResponseDto.feedback,
+        const regradeModel = new FileUploadQuestionEvaluateModel(
+          gradingModel.question,
+          gradingModel.previousQuestionsAnswersContext,
+          gradingModel.assignmentInstrctions,
+          gradingModel.learnerResponse,
+          gradingModel.totalPoints,
+          gradingModel.scoringCriteriaType,
+          gradingModel.scoringCriteria,
+          gradingModel.questionType,
+          gradingModel.responseType,
           judgeFeedback,
         );
-        improvedResponseDto.feedback = enhancedFeedback;
 
-        currentResponseDto = improvedResponseDto;
+        const regraded = await this.llmFacadeService.gradeFileBasedQuestion(
+          regradeModel,
+          context.assignmentId,
+          context.language,
+        );
+
+        currentResponseDto = this.buildResponseDtoFromModel(regraded, question);
         attempt++;
       } catch (error) {
         this.logger?.error(`Judge validation failed on attempt ${attempt}`, {
@@ -644,32 +854,6 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
     }
 
     return currentResponseDto;
-  }
-
-  /**
-   * Create enhanced feedback without changing rubric scores
-   */
-  private createEnhancedFeedback(
-    originalFeedback:
-      | ChoiceBasedFeedbackDto[]
-      | GeneralFeedbackDto[]
-      | TrueFalseBasedFeedbackDto[],
-    judgeFeedback: string,
-  ): any[] {
-    try {
-      const enhancedFeedback = [...(originalFeedback || [])];
-
-      enhancedFeedback.push({
-        feedback: `**Additional Feedback Based on Quality Review:**\n${judgeFeedback}`,
-      });
-
-      return enhancedFeedback;
-    } catch (error) {
-      this.logger?.warn("Failed to enhance feedback, using original", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return originalFeedback || [];
-    }
   }
 
   /**

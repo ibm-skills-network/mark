@@ -57,6 +57,26 @@ import { useDropzone } from "react-dropzone";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
+import type { User } from "@/config/types";
+
+let cachedUser: User | null = null;
+let cachedUserPromise: Promise<User | null> | null = null;
+
+const fetchUserCached = async (): Promise<User | null> => {
+  if (cachedUser) return cachedUser;
+  if (!cachedUserPromise) {
+    cachedUserPromise = getUser()
+      .then((user) => {
+        cachedUser = user ?? null;
+        return cachedUser;
+      })
+      .catch((error) => {
+        cachedUserPromise = null;
+        throw error;
+      });
+  }
+  return cachedUserPromise;
+};
 
 interface ScreenshotDropzoneProps {
   file: File | null | undefined;
@@ -1321,14 +1341,20 @@ export const MarkChat = () => {
     );
   };
   useEffect(() => {
+    let cancelled = false;
     const fetchUser = async () => {
       try {
-        const userData = await getUser();
-        setUser(userData);
+        const userData = await fetchUserCached();
+        if (!cancelled) {
+          setUser(userData);
+        }
       } catch (error) {}
     };
-    fetchUser();
-  }, [userRole, learnerContext.assignmentId]);
+    void fetchUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const initializeChat = async () => {
@@ -2116,6 +2142,7 @@ Please help me with this.`;
       if (action === "submit") {
         try {
           const reportData = value || specialActions.data;
+          const resolvedUserEmail = reportData?.userEmail || user?.userId;
 
           const formData = new FormData();
           formData.append("issueType", reportData.issueType);
@@ -2123,6 +2150,9 @@ Please help me with this.`;
           formData.append("severity", reportData.severity || "info");
           formData.append("category", reportData.category || "Issue Report");
           formData.append("userRole", reportData.userRole || "learner");
+          if (resolvedUserEmail) {
+            formData.append("userEmail", resolvedUserEmail);
+          }
           formData.append(
             "assignmentId",
             reportData.assignmentId?.toString() ??
@@ -2195,15 +2225,21 @@ Please help me with this.`;
     [specialActions, dismissAction],
   );
 
-  const handleClientExecution = useCallback((toolCall) => {
-    if (toolCall.function === "showReportPreview") {
-      setReportPreviewModal({
-        isOpen: true,
-        type: toolCall.params.type || "report",
-        data: toolCall.params,
-      });
-    }
-  }, []);
+  const handleClientExecution = useCallback(
+    (toolCall) => {
+      if (toolCall.function === "showReportPreview") {
+        setReportPreviewModal({
+          isOpen: true,
+          type: toolCall.params.type || "report",
+          data: {
+            ...toolCall.params,
+            userEmail: user?.userId,
+          },
+        });
+      }
+    },
+    [user?.userId],
+  );
 
   const handleSwitchQuestion = useCallback(
     (questionId) => {

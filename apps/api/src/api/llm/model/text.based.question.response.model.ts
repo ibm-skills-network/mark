@@ -9,7 +9,8 @@ export interface GradingMetadata {
   contentHash: string;
   cached?: boolean;
   cacheHitCount?: number;
-  maxPossiblePoints?: number; // Store for grade calculation when question is deleted
+  maxPossiblePoints?: number;
+  gradingAudit?: unknown;
 }
 
 export interface StructuredCriterionData {

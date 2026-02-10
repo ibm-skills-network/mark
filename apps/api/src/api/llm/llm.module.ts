@@ -22,10 +22,18 @@ import { PromptProcessorService } from "./core/services/prompt-processor.service
 import { TokenCounterService } from "./core/services/token-counter.service";
 import { UsageTrackerService } from "./core/services/usage-tracking.service";
 import { AnswerNormalizationService } from "./features/grading/services/answer-normalization.service";
+import { EvidenceChunkingService } from "./features/grading/services/evidence-chunking.service";
+import { CriterionEvidenceRetrievalService } from "./features/grading/services/criterion-evidence-retrieval.service";
+import { CriterionGradingService } from "./features/grading/services/criterion-grading.service";
+import { CriterionJudgeService } from "./features/grading/services/criterion-judge.service";
+import { CriterionRetryManagerService } from "./features/grading/services/criterion-retry-manager.service";
+import { CriterionGradeCompilerService } from "./features/grading/services/criterion-grade-compiler.service";
+import { CriterionEvidencePipelineService } from "./features/grading/services/criterion-evidence-pipeline.service";
 import { FileGradingService } from "./features/grading/services/file-grading.service";
 import { EvidenceBasedGradingService } from "./features/grading/services/evidence-based-grading.service";
 import { GradingCacheService } from "./features/grading/services/grading-cache.service";
 import { GradingJudgeService } from "./features/grading/services/grading-judge.service";
+import { NoopGradingJudgeService } from "./features/grading/services/noop-grading-judge.service";
 import { GradingThresholdService } from "./features/grading/services/grading-threshold.service";
 import { ImageGradingService } from "./features/grading/services/image-grading.service";
 import { ImageDescriptionService } from "./features/grading/services/image-description.service";
@@ -64,6 +72,10 @@ import {
   VIDEO_PRESENTATION_GRADING_SERVICE,
 } from "./llm.constants";
 import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service";
+
+const shouldDisableJudge = !["1", "true", "yes"].includes(
+  (process.env.ENABLE_GRADING_JUDGE || "").toLowerCase(),
+);
 
 @Global()
 @Module({
@@ -120,7 +132,9 @@ import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service
     PdfAnnotationService,
     {
       provide: GRADING_JUDGE_SERVICE,
-      useClass: GradingJudgeService,
+      useClass: shouldDisableJudge
+        ? NoopGradingJudgeService
+        : GradingJudgeService,
     },
     {
       provide: GRADING_THRESHOLD_SERVICE,
@@ -168,6 +182,13 @@ import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service
       useClass: FileGradingService,
     },
     EvidenceBasedGradingService,
+    EvidenceChunkingService,
+    CriterionEvidenceRetrievalService,
+    CriterionGradingService,
+    CriterionJudgeService,
+    CriterionRetryManagerService,
+    CriterionGradeCompilerService,
+    CriterionEvidencePipelineService,
     ImageDescriptionService,
     HighlightingGeneratorService,
     {

@@ -28,6 +28,50 @@ export class ApiService {
     this.logger = parentLogger.child({ context: ApiService.name });
   }
 
+  /**
+   * Helper method to safely send error responses
+   * Works with both Express Response and MockResponse objects
+   */
+  private sendErrorResponse(
+    response:
+      | Response
+      | (NodeJS.WritableStream & {
+          headersSent?: boolean;
+          writableEnded?: boolean;
+          writeHead: (
+            statusCode: number,
+            headers?: Record<string, string>,
+          ) => void;
+          end: (data?: string | Buffer) => void;
+        }),
+    statusCode: number,
+    errorMessage: string,
+    isJson = true,
+  ): void {
+    try {
+      if (!response.headersSent) {
+        if (isJson) {
+          response.writeHead(statusCode, {
+            "Content-Type": "application/json",
+          });
+          response.end(JSON.stringify({ error: errorMessage }));
+        } else {
+          response.writeHead(statusCode);
+          response.end();
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Failed to send error response: ${String(error)}`);
+      try {
+        if (!response.writableEnded) {
+          response.end();
+        }
+      } catch (finalError) {
+        this.logger.error(`Failed to end response: ${String(finalError)}`);
+      }
+    }
+  }
+
   rootV1(): Record<string, string | number> {
     this.logger.info("showing api version information");
     void this.messagingService.publishService("api", {});
@@ -49,7 +93,6 @@ export class ApiService {
           request.originalUrl
         }`;
 
-        // Ensure user session exists before forwarding
         if (!request.user) {
           throw new UnauthorizedException("Missing or invalid user session");
         }
@@ -94,7 +137,6 @@ export class ApiService {
       const isHTTPS = url.startsWith("https");
       const httpModule = isHTTPS ? https : http;
 
-      // Parse URL for request options
       const parsedUrl = new URL(url);
 
       const outgoingHeaders = {
@@ -114,7 +156,7 @@ export class ApiService {
         path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers: outgoingHeaders,
-        timeout: 600_000, // 10 minutes
+        timeout: 600_000,
       };
 
       const proxyRequest = httpModule.request(
@@ -125,7 +167,6 @@ export class ApiService {
             `SSE response received: ${proxyResponse.statusCode}`,
           );
 
-          // Forward SSE headers
           clientResponse.writeHead(proxyResponse.statusCode || 200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
@@ -134,10 +175,8 @@ export class ApiService {
             ...proxyResponse.headers,
           });
 
-          // Pipe the response
           proxyResponse.pipe(clientResponse);
 
-          // Handle client disconnect
           clientResponse.on("close", () => {
             this.logger.info("Client disconnected from SSE stream");
             proxyResponse.destroy();
@@ -162,9 +201,11 @@ export class ApiService {
       proxyRequest.on("error", (error) => {
         this.logger.error("SSE proxy request error:", error);
         if (!clientResponse.headersSent) {
-          clientResponse
-            .status(500)
-            .json({ error: "SSE proxy request failed" });
+          this.sendErrorResponse(
+            clientResponse,
+            500,
+            "SSE proxy request failed",
+          );
         }
         reject(error);
       });
@@ -249,6 +290,8 @@ export class ApiService {
             statusCode: number;
             headers: Record<string, unknown>;
             data: Buffer;
+            headersSent: boolean;
+            writableEnded: boolean;
             writeHead(
               this: MockResponse,
               statusCode: number,
@@ -256,11 +299,13 @@ export class ApiService {
             ): void;
             write(this: MockResponse, chunk: string | Buffer): void;
             end(this: MockResponse, chunk?: string | Buffer): void;
+            status(this: MockResponse, code: number): MockResponse;
+            json(this: MockResponse, body: unknown): void;
             on(
               event: string,
               listener: (...arguments_: unknown[]) => void,
             ): void;
-            once(
+            once?(
               event: string,
               listener: (...arguments_: unknown[]) => void,
             ): void;
@@ -271,6 +316,8 @@ export class ApiService {
             statusCode: 200,
             headers: {},
             data: Buffer.alloc(0),
+            headersSent: false,
+            writableEnded: false,
             writeHead(
               this: MockResponse,
               statusCode: number,
@@ -278,6 +325,7 @@ export class ApiService {
             ) {
               this.statusCode = statusCode;
               this.headers = headers;
+              this.headersSent = true;
             },
             write(this: MockResponse, chunk: string | Buffer) {
               const bufferChunk = Buffer.isBuffer(chunk)
@@ -293,6 +341,8 @@ export class ApiService {
                 this.data = Buffer.concat([this.data, bufferChunk]);
               }
 
+              this.writableEnded = true;
+
               const dataToReturn = isBinaryFile
                 ? this.data.toString("base64")
                 : this.data.toString("utf8");
@@ -302,18 +352,29 @@ export class ApiService {
                 status: this.statusCode,
               });
             },
+            status(this: MockResponse, code: number): MockResponse {
+              this.statusCode = code;
+              return this;
+            },
+            json(this: MockResponse, body: unknown): void {
+              this.writeHead(this.statusCode, {
+                "Content-Type": "application/json",
+              });
+              this.end(JSON.stringify(body));
+            },
             on(
               _event: string,
               _listener: (...arguments_: unknown[]) => void,
             ): void {
-              // Intentionally left blank for mock
+              // no-op for mock response
             },
             once(
               _event: string,
               _listener: (...arguments_: unknown[]) => void,
             ): void {
-              // Intentionally left blank for mock
+              // no-op for mock response
             },
+
             pipe<T>(this: MockResponse, _destination: T): T {
               return this as unknown as T;
             },
@@ -361,7 +422,6 @@ export class ApiService {
       const response = await axios.request(config);
       return { data: response.data as string, status: response.status };
     } catch (error) {
-      // If it's already an HttpException (like UnauthorizedException), we should rethrow it
       if (error instanceof HttpException) {
         throw error;
       }
@@ -409,22 +469,21 @@ export class ApiService {
         clientRequest as UserSessionRequest,
       );
 
-      // Set up agents with appropriate timeout settings
       const httpAgent = new http.Agent({
         keepAlive: true,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
       const httpAgentNoKeepAlive = new http.Agent({
         keepAlive: false,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
       const httpsAgent = new https.Agent({
         keepAlive: true,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
       const httpsAgentNoKeepAlive = new https.Agent({
         keepAlive: false,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       });
 
       const httpModule = isHTTPS ? https : http;
@@ -453,7 +512,6 @@ export class ApiService {
         )}, Binary=${String(isBinaryFile)}`,
       );
 
-      // Parse URL for request options
       const parsedUrl = new URL(url);
       const requestOptions = {
         hostname: parsedUrl.hostname,
@@ -462,7 +520,7 @@ export class ApiService {
         method: clientRequest.method,
         headers: outgoingHeaders,
         agent,
-        timeout: 300_000, // 5 minutes
+        timeout: 300_000,
       };
 
       const proxyRequest = httpModule.request(
@@ -510,30 +568,30 @@ export class ApiService {
             proxyResponse.on("error", (error) => {
               this.logger.error("Proxy response error:", error);
               if (!clientResponse.headersSent) {
-                clientResponse.status(500).end();
+                this.sendErrorResponse(
+                  clientResponse,
+                  500,
+                  "Proxy response error",
+                  false,
+                );
               }
               reject(error);
             });
           } else if (isStreaming) {
-            // Handle SSE streaming with proper headers and connection management
             this.logger.info("Handling SSE streaming response");
 
-            // Immediately flush headers to establish connection
             clientResponse.writeHead(proxyResponse.statusCode || 200, {
               "Content-Type": "text/event-stream",
               "Cache-Control": "no-cache",
               Connection: "keep-alive",
-              "X-Accel-Buffering": "no", // Disable nginx buffering
+              "X-Accel-Buffering": "no",
               ...proxyResponse.headers,
             });
 
-            // Send an initial comment to establish the connection
             clientResponse.write(":ok\n\n");
 
-            // Track connection state
             let connectionClosed = false;
 
-            // Handle client disconnect
             clientResponse.on("close", () => {
               this.logger.info("Client disconnected from SSE stream");
               connectionClosed = true;
@@ -543,7 +601,6 @@ export class ApiService {
               resolve();
             });
 
-            // Stream data from proxy to client
             proxyResponse.on("data", (chunk) => {
               if (!connectionClosed && !clientResponse.writableEnded) {
                 try {
@@ -584,7 +641,6 @@ export class ApiService {
               resolve();
             });
           } else {
-            // Regular response handling
             clientResponse.writeHead(proxyResponse.statusCode || 500, {
               ...proxyResponse.headers,
             });
@@ -601,31 +657,33 @@ export class ApiService {
         },
       );
 
-      // Handle proxy request timeout
       proxyRequest.on("timeout", () => {
         this.logger.error("Proxy request timeout");
         if (!clientResponse.headersSent) {
           if (isSSE) {
-            clientResponse.writeHead(504, {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-            });
-            clientResponse.write(
-              `data: ${JSON.stringify({
-                status: "error",
-                error: "Gateway timeout",
-              })}\n\n`,
-            );
-            clientResponse.end();
+            try {
+              clientResponse.writeHead(504, {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+              });
+              clientResponse.write(
+                `data: ${JSON.stringify({
+                  status: "error",
+                  error: "Gateway timeout",
+                })}\n\n`,
+              );
+              clientResponse.end();
+            } catch (error) {
+              this.logger.error("Failed to send SSE timeout response:", error);
+            }
           } else {
-            clientResponse.status(504).json({ error: "Gateway timeout" });
+            this.sendErrorResponse(clientResponse, 504, "Gateway timeout");
           }
         }
         proxyRequest.destroy();
         reject(new Error("Proxy request timeout"));
       });
 
-      // Clean up on client disconnect
       clientResponse.on("close", () => {
         this.logger.info("Client connection closed, destroying proxy request");
         if (!proxyRequest.destroyed) {
@@ -637,28 +695,33 @@ export class ApiService {
         this.logger.error("Proxy request error:", error);
         if (!clientResponse.headersSent) {
           if (isSSE) {
-            // For SSE, we need to establish the connection first
-            clientResponse.writeHead(200, {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-              "X-Accel-Buffering": "no",
-            });
-            clientResponse.write(
-              `data: ${JSON.stringify({
-                status: "error",
-                error: "Proxy request failed",
-              })}\n\n`,
-            );
-            clientResponse.end();
+            try {
+              clientResponse.writeHead(200, {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                Connection: "keep-alive",
+                "X-Accel-Buffering": "no",
+              });
+              clientResponse.write(
+                `data: ${JSON.stringify({
+                  status: "error",
+                  error: "Proxy request failed",
+                })}\n\n`,
+              );
+              clientResponse.end();
+            } catch (writeError) {
+              this.logger.error(
+                "Failed to send SSE error response:",
+                writeError,
+              );
+            }
           } else {
-            clientResponse.status(500).json({ error: "Proxy request failed" });
+            this.sendErrorResponse(clientResponse, 500, "Proxy request failed");
           }
         }
         reject(error);
       });
 
-      // Handle request body
       if (isMultipart || isBinaryFile) {
         this.logger.info(
           `Piping ${isMultipart ? "multipart" : "binary"} request stream`,
@@ -672,7 +735,6 @@ export class ApiService {
               ? JSON.stringify(clientRequest.body)
               : (clientRequest.body as string | Buffer);
 
-          // Add content-length for non-streaming requests
           if (!isSSE) {
             proxyRequest.setHeader("Content-Length", Buffer.byteLength(body));
           }

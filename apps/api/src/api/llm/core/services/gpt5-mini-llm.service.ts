@@ -63,7 +63,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-4o-mini responded with ${outputTokens} output tokens`,
+        `GPT-5o-mini responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -75,7 +75,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `GPT-4o-mini API error: ${
+        `GPT-5o-mini API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
@@ -84,7 +84,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
   }
 
   /**
-   * Send a request with image content to GPT-4o-mini
+   * Send a request with image content to GPT-5o-mini
    */
   async invokeWithImage(
     textContent: string,
@@ -122,7 +122,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-4o-mini with image responded with ${outputTokens} output tokens`,
+        `GPT-5o-mini with image responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -134,7 +134,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `Error processing image with GPT-4o-mini: ${
+        `Error processing image with GPT-5o-mini: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );

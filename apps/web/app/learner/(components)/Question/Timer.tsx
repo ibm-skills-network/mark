@@ -130,7 +130,9 @@ function Timer(props: Props) {
     );
 
     if (!assignmentId) {
-      toast.error("Assignment ID is missing.");
+      toast.error(
+        "Assignment ID is missing, exit and try launching the assignment again.",
+      );
       return;
     }
 
@@ -212,11 +214,24 @@ function Timer(props: Props) {
   }, [activeAttemptId, expiresAt, resetCountdown]);
 
   useEffect(() => {
-    if (timerExpired && !isSubmitted) {
-      toast.message("Time's up! Submitting your assignment...");
-      void handleSubmitAssignment();
+    if (activeAttemptId) {
+      setOneMinuteAlertShown(false);
+      setIsSubmitted(false);
     }
-  }, [timerExpired, isSubmitted]);
+  }, [activeAttemptId]);
+
+  useEffect(() => {
+    if (timerExpired && !isSubmitted && assignmentId && activeAttemptId) {
+      setIsSubmitted(true);
+      toast.message(
+        "Time's up! Your responses have been saved and will be graded automatically.",
+      );
+
+      setTimeout(() => {
+        void handleSubmitAssignment();
+      }, 2000);
+    }
+  }, [timerExpired, isSubmitted, assignmentId, activeAttemptId]);
 
   return (
     <div className="flex items-center space-x-2" {...props}>
