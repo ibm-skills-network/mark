@@ -1419,6 +1419,12 @@ export const createMockReport = (
     relatedToReportId: null,
     similarityScore: 0,
     closureReason: null,
+    renewalEmailSentAt: null,
+    renewalActionAt: null,
+    renewalAction: null,
+    renewalRenewTokenHash: null,
+    renewalCloseTokenHash: null,
+    renewalTokenExpiresAt: null,
   };
 
   return {
