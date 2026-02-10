@@ -1,4 +1,5 @@
 /* eslint-disable unicorn/no-null */
+import { createHash } from "node:crypto";
 import { PromptTemplate } from "@langchain/core/prompts";
 import {
   HttpException,
@@ -41,6 +42,15 @@ import {
 import { IGradingCacheService } from "../interfaces/grading-cache.interface";
 import { IGradingJudgeService } from "../interfaces/grading-judge.interface";
 import { ITextGradingService } from "../interfaces/text-grading.interface";
+import {
+  DEFAULT_MODEL_SELECTION,
+  EvidenceAuditLog,
+  GradeSummary,
+  JudgeCritique,
+  RubricCriterion,
+} from "../types/criterion-evidence.types";
+import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
+import { EvidenceChunkingService } from "./evidence-chunking.service";
 
 export interface GradingValidation {
   isValid: boolean;
@@ -112,6 +122,8 @@ export class TextGradingService implements ITextGradingService {
     private readonly promptProcessor: IPromptProcessor,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
+    private readonly chunkingService: EvidenceChunkingService,
+    private readonly evidencePipeline: CriterionEvidencePipelineService,
     @Inject(GRADING_JUDGE_SERVICE)
     private readonly gradingJudgeService: IGradingJudgeService,
     @Optional()
@@ -141,6 +153,7 @@ export class TextGradingService implements ITextGradingService {
         learnerResponse,
         totalPoints,
         scoringCriteria,
+        scoringCriteriaType,
         questionId,
       } = textBasedQuestionEvaluateModel;
 
@@ -160,6 +173,35 @@ export class TextGradingService implements ITextGradingService {
         scoringCriteria as ScoringDto,
         totalPoints,
       );
+
+      const rubricCriteria = this.convertToRubricCriteria(
+        scoringCriteria as ScoringDto,
+      );
+
+      if (
+        scoringCriteriaType === "CRITERIA_BASED" &&
+        rubricCriteria.length > 0
+      ) {
+        const pipelineResult = await this.evidencePipeline.gradeWithEvidence({
+          question,
+          criteria: rubricCriteria,
+          chunks: this.chunkingService.extractFromText(
+            sanitizedLearnerResponse,
+            questionId ? `question-${questionId}` : "learner-response",
+          ),
+          assignmentId,
+          language,
+          maxConcurrency: 8,
+          maxRetries: 3,
+          modelOverrides: DEFAULT_MODEL_SELECTION,
+        });
+
+        return this.buildTextResponseFromPipeline(
+          pipelineResult,
+          maxPossiblePoints,
+          startTime,
+        );
+      }
 
       let normalizedAnswer: INormalizedAnswer | null = null;
       let rubricHash: string | null = null;
@@ -248,11 +290,9 @@ export class TextGradingService implements ITextGradingService {
         this.generateContentHash(learnerResponse, question);
 
       let gradingAttempt: GradingAttempt | null = null;
-      let judgeApproved = false;
       let attemptCount = 0;
-      let previousJudgeFeedback: string | null = null;
 
-      while (!judgeApproved && attemptCount < this.maxRetries) {
+      while (!gradingAttempt && attemptCount < this.maxRetries) {
         attemptCount++;
         this.logger.info(
           `Grading attempt ${attemptCount}/${this.maxRetries} for assignment ${assignmentId}`,
@@ -265,59 +305,7 @@ export class TextGradingService implements ITextGradingService {
             contentHash,
             assignmentId,
             language,
-            previousJudgeFeedback,
           );
-
-          const judgeResult = await this.validateWithJudge(
-            question,
-            sanitizedLearnerResponse,
-            scoringCriteria as ScoringDto,
-            gradingAttempt,
-            maxPossiblePoints,
-            assignmentId,
-          );
-
-          if (judgeResult.approved) {
-            judgeApproved = true;
-            this.logger.info(
-              `Judge approved grading on attempt ${attemptCount}`,
-            );
-          } else {
-            previousJudgeFeedback = this.formatJudgeFeedbackForTA(
-              judgeResult,
-              attemptCount,
-            );
-            this.logger.warn(
-              `Judge rejected grading attempt ${attemptCount}: ${judgeResult.feedback}`,
-            );
-
-            if (judgeResult.corrections && gradingAttempt) {
-              const originalPoints = gradingAttempt.totalScore;
-              gradingAttempt = this.applyJudgeCorrections(
-                gradingAttempt,
-                judgeResult.corrections,
-              );
-
-              if (
-                this.areCorrectionsMinor(
-                  judgeResult.corrections,
-                  originalPoints,
-                  maxPossiblePoints,
-                )
-              ) {
-                judgeApproved = true;
-                this.logger.info(
-                  "Minor corrections applied, approving grading",
-                );
-              }
-            }
-
-            if (!judgeApproved && attemptCount < this.maxRetries) {
-              const backoffDelay =
-                this.retryDelay * Math.pow(2, attemptCount - 1);
-              await this.delay(Math.min(backoffDelay, 5000));
-            }
-          }
         } catch (error) {
           this.logger.error(
             `Error in grading attempt ${attemptCount}: ${
@@ -325,11 +313,10 @@ export class TextGradingService implements ITextGradingService {
             }`,
           );
 
-          if (attemptCount === this.maxRetries && gradingAttempt) {
-            judgeApproved = true;
-            this.logger.warn(
-              "Using grading despite judge failure on final attempt",
-            );
+          if (attemptCount < this.maxRetries) {
+            const backoffDelay =
+              this.retryDelay * Math.pow(2, attemptCount - 1);
+            await this.delay(Math.min(backoffDelay, 5000));
           }
         }
       }
@@ -338,6 +325,35 @@ export class TextGradingService implements ITextGradingService {
         throw new HttpException(
           "Failed to generate grading after all attempts",
           HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      const judgeResult = await this.validateWithJudge(
+        question,
+        sanitizedLearnerResponse,
+        scoringCriteria as ScoringDto,
+        gradingAttempt,
+        maxPossiblePoints,
+        assignmentId,
+      );
+
+      const judgeApproved = judgeResult.approved;
+
+      if (!judgeResult.approved) {
+        this.logger.warn(
+          `Judge rejected grading: ${judgeResult.feedback || "No feedback"}`,
+        );
+
+        if (judgeResult.corrections) {
+          gradingAttempt = this.applyJudgeCorrections(
+            gradingAttempt,
+            judgeResult.corrections,
+          );
+        }
+
+        gradingAttempt = this.applyJudgeFeedbackOverlay(
+          gradingAttempt,
+          judgeResult,
         );
       }
 
@@ -355,6 +371,7 @@ export class TextGradingService implements ITextGradingService {
 
       const metadata: GradingMetadata = {
         judgeApproved,
+        judgeUsed: true,
         attempts: attemptCount,
         gradingTimeMs: endTime - startTime,
         contentHash,
@@ -609,6 +626,24 @@ export class TextGradingService implements ITextGradingService {
     assignmentId: number,
   ) {
     try {
+      const rubricScores: RubricScore[] = gradingAttempt.criteria.map(
+        (criterion, index) => {
+          const awarded = criterion.pointsAwarded || 0;
+          const max = criterion.maxPoints || 0;
+          const status =
+            awarded >= max ? "full" : awarded > 0 ? "partial" : "none";
+
+          return {
+            rubricQuestion: criterion.criterionId || `criterion_${index + 1}`,
+            pointsAwarded: awarded,
+            maxPoints: max,
+            justification: criterion.feedback || "No feedback provided",
+            evidence: criterion.evidence ? [criterion.evidence] : [],
+            status,
+          };
+        },
+      );
+
       return await this.gradingJudgeService.validateGrading({
         question,
         learnerResponse,
@@ -617,6 +652,7 @@ export class TextGradingService implements ITextGradingService {
           points: gradingAttempt.totalScore,
           maxPoints: maxPossiblePoints,
           feedback: gradingAttempt.overallFeedback,
+          rubricScores,
           analysis: "",
           evaluation: "",
           explanation: gradingAttempt.overallFeedback,
@@ -821,6 +857,43 @@ export class TextGradingService implements ITextGradingService {
     }
 
     return corrected;
+  }
+
+  /**
+   * Append judge feedback without re-grading the submission
+   */
+  private applyJudgeFeedbackOverlay(
+    gradingAttempt: GradingAttempt,
+    judgeResult: {
+      feedback?: string;
+      issues?: string[];
+      corrections?: {
+        feedback?: string;
+      };
+    },
+  ): GradingAttempt {
+    const overlayParts: string[] = [];
+
+    if (judgeResult.feedback) {
+      overlayParts.push(judgeResult.feedback);
+    }
+
+    if (Array.isArray(judgeResult.issues) && judgeResult.issues.length > 0) {
+      overlayParts.push(
+        `Issues: ${judgeResult.issues.map((issue) => issue.trim()).join("; ")}`,
+      );
+    }
+
+    if (overlayParts.length === 0) {
+      return gradingAttempt;
+    }
+
+    const overlayText = overlayParts.join("\n");
+
+    return {
+      ...gradingAttempt,
+      overallFeedback: `${gradingAttempt.overallFeedback}\n\nJudge Review:\n${overlayText}`,
+    };
   }
 
   /**
@@ -1123,5 +1196,121 @@ For each criterion:
 Language for response: {language}
 
 {format_instructions}`;
+  }
+
+  private convertToRubricCriteria(
+    scoringCriteria?: ScoringDto,
+  ): RubricCriterion[] {
+    if (!scoringCriteria || !Array.isArray(scoringCriteria.rubrics)) {
+      return [];
+    }
+
+    return scoringCriteria.rubrics.map((rubric, index) => {
+      const maxPoints = Math.max(
+        ...rubric.criteria.map((criterion) => criterion.points || 0),
+      );
+
+      return {
+        id: `rubric-${index + 1}`,
+        rubricQuestion: rubric.rubricQuestion || `Criterion ${index + 1}`,
+        description: rubric.rubricQuestion || `Criterion ${index + 1}`,
+        criteria: rubric.criteria.map((criterion) => ({
+          description: criterion.description,
+          points: criterion.points,
+        })),
+        maxPoints: maxPoints || 0,
+      };
+    });
+  }
+
+  private buildTextResponseFromPipeline(
+    pipelineResult: {
+      grades: Array<{
+        criterionId: string;
+        rubricQuestion: string;
+        pointsAwarded: number;
+        maxPoints: number;
+        rationale: string;
+        citations: string[];
+        decision: "meets" | "partially_meets" | "does_not_meet";
+      }>;
+      summary: GradeSummary;
+      judgeCritiques: JudgeCritique[];
+      audit: EvidenceAuditLog;
+    },
+    maxPossiblePoints: number,
+    startTime: number,
+  ): TextBasedQuestionResponseModel {
+    const totalPoints = Math.min(
+      pipelineResult.summary.totalPoints,
+      maxPossiblePoints,
+    );
+
+    const rubricScores: RubricScore[] = pipelineResult.grades.map((grade) => ({
+      rubricQuestion: grade.rubricQuestion,
+      pointsAwarded: grade.pointsAwarded,
+      maxPoints: grade.maxPoints,
+      justification: grade.rationale,
+      evidence: grade.citations,
+      status:
+        grade.decision === "meets"
+          ? "full"
+          : grade.decision === "partially_meets"
+            ? "partial"
+            : "none",
+    }));
+
+    const feedbackLines = pipelineResult.grades.map(
+      (grade) =>
+        `**${grade.rubricQuestion}** (${grade.pointsAwarded}/${grade.maxPoints})\n${grade.rationale}`,
+    );
+    const feedback = feedbackLines.join("\n\n");
+
+    const structuredFeedback: StructuredFeedbackData = {
+      summary: `Total Score: ${totalPoints}/${pipelineResult.summary.maxPoints}`,
+      criteria: pipelineResult.grades.map((grade) => ({
+        name: grade.rubricQuestion,
+        pointsAwarded: grade.pointsAwarded,
+        maxPoints: grade.maxPoints,
+        status:
+          grade.decision === "meets"
+            ? "full"
+            : grade.decision === "partially_meets"
+              ? "partial"
+              : "none",
+        evidence: grade.citations.join(", ") || "No evidence cited",
+        feedback: grade.rationale,
+      })),
+      guidance: pipelineResult.grades.map((grade) => grade.rationale).join(" "),
+    };
+
+    const contentHash = createHash("sha256")
+      .update(pipelineResult.audit.chunkHashes.join("|"))
+      .digest("hex");
+
+    const latestJudge = pipelineResult.judgeCritiques.at(-1);
+
+    const metadata: GradingMetadata = {
+      judgeApproved: latestJudge?.approved ?? false,
+      judgeUsed: true,
+      attempts: pipelineResult.judgeCritiques.length,
+      gradingTimeMs: Date.now() - startTime,
+      contentHash,
+      maxPossiblePoints,
+      ...(pipelineResult.audit ? { gradingAudit: pipelineResult.audit } : {}),
+    };
+
+    return new TextBasedQuestionResponseModel(
+      totalPoints,
+      feedback,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      rubricScores,
+      undefined,
+      metadata,
+      structuredFeedback,
+    );
   }
 }

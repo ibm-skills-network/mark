@@ -1,7 +1,4 @@
-import {
-  RubricDto,
-  ScoringDto,
-} from "src/api/assignment/dto/update.questions.request.dto";
+import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
 
 export interface GradingJudgeInput {
@@ -12,7 +9,7 @@ export interface GradingJudgeInput {
     points: number;
     maxPoints: number;
     feedback: string;
-    rubricScores?: RubricDto[];
+    rubricScores?: RubricScore[];
     analysis?: string;
     evaluation?: string;
     explanation?: string;

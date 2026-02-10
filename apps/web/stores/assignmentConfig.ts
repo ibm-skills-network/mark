@@ -7,6 +7,7 @@ import {
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
+import { createSafeStorage } from "@/lib/safe-storage";
 
 type GradingDataActions = {
   questionDisplay: QuestionDisplayType;

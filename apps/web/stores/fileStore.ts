@@ -1,6 +1,7 @@
+import { createSafeStorage } from "@/lib/safe-storage";
 import { getFileExtension } from "../components/FileExplorer/utils/fileUtils";
 import { create } from "zustand";
-import { devtools, persist } from "zustand/middleware";
+import { createJSONStorage, devtools, persist } from "zustand/middleware";
 
 export interface FileObject {
   id: string;
@@ -296,6 +297,7 @@ export const useFileStore = create<FileStoreState>()(
       }),
       {
         name: "file-storage",
+        storage: createJSONStorage(() => createSafeStorage()),
         partialize: (state) => ({
           viewMode: state.viewMode,
           expandedFolders: state.expandedFolders,

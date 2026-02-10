@@ -3,6 +3,7 @@ import {
   TransformConfig,
 } from "@/app/Helpers/data-transformer";
 import { API_DECODE_CONFIG } from "@/app/Helpers/transform-config";
+import { toast } from "sonner";
 
 interface APIClientConfig {
   baseURL?: string;
@@ -131,14 +132,28 @@ export class APIClient {
         headers: requestHeaders,
         body: requestBody,
         signal: signal || controller.signal,
-        cache: "no-store", // Disable caching to prevent stale responses
+        cache: "no-store",
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (response.status >= 500) {
+          toast.error(
+            `Server Error: ${response.status} ${response.statusText}`,
+          );
+        } else if (response.status === 403) {
+          toast.error(
+            `Forbidden: You don't have permission to access this Assessment.`,
+          );
+        } else {
+          toast.error(
+            `Client Error: ${response.status} ${response.statusText}`,
+          );
+        }
+
         throw new APIError(
-          `HTTP ${response.status}: ${response.statusText}`,
+          response.statusText,
           response.status,
           response.statusText,
         );
@@ -224,7 +239,7 @@ export class APIError extends Error {
  */
 export const apiClient = new APIClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "",
-  autoTransform: true, // Frontend handles encoding requests and decoding responses
+  autoTransform: true,
   transformConfig: API_DECODE_CONFIG,
 });
 

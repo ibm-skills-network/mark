@@ -3,10 +3,14 @@ import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
 import { UrlBasedQuestionResponseModel } from "src/api/llm/model/url.based.question.response.model";
 import { Logger } from "winston";
 import { z } from "zod";
+import { EvidenceChunkingService } from "./evidence-chunking.service";
+import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
+import { RubricCriterion } from "../types/criterion-evidence.types";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import {
@@ -25,6 +29,8 @@ export class UrlGradingService implements IUrlGradingService {
     private readonly promptProcessor: IPromptProcessor,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
+    private readonly chunkingService: EvidenceChunkingService,
+    private readonly evidencePipeline: CriterionEvidencePipelineService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: UrlGradingService.name });
@@ -58,6 +64,34 @@ export class UrlGradingService implements IUrlGradingService {
         "Learner response validation failed",
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    const rubricCriteria = this.convertToRubricCriteria(
+      scoringCriteria as ScoringDto,
+    );
+
+    if (scoringCriteriaType === "CRITERIA_BASED" && rubricCriteria.length > 0) {
+      const chunks = this.chunkingService.extractFromUrl(
+        urlProvided || "unknown-url",
+        urlBody?.toString() || "",
+      );
+
+      const pipelineResult = await this.evidencePipeline.gradeWithEvidence({
+        question,
+        criteria: rubricCriteria,
+        chunks,
+        assignmentId,
+        language,
+        maxConcurrency: 6,
+        maxRetries: 3,
+        modelOverrides: {
+          retrievalModel: "gpt-5-nano",
+          gradingModel: "gpt-5-mini",
+          judgeModel: "gpt-5-mini",
+        },
+      });
+
+      return this.buildUrlResponseFromPipeline(pipelineResult, totalPoints);
     }
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -289,5 +323,62 @@ export class UrlGradingService implements IUrlGradingService {
    */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private convertToRubricCriteria(
+    scoringCriteria?: ScoringDto,
+  ): RubricCriterion[] {
+    if (!scoringCriteria || !Array.isArray(scoringCriteria.rubrics)) {
+      return [];
+    }
+
+    return scoringCriteria.rubrics.map((rubric, index) => {
+      const maxPoints = Math.max(
+        ...rubric.criteria.map((criterion) => criterion.points || 0),
+      );
+
+      return {
+        id: `rubric-${index + 1}`,
+        rubricQuestion: rubric.rubricQuestion || `Criterion ${index + 1}`,
+        description: rubric.rubricQuestion || `Criterion ${index + 1}`,
+        criteria: rubric.criteria.map((criterion) => ({
+          description: criterion.description,
+          points: criterion.points,
+        })),
+        maxPoints: maxPoints || 0,
+      };
+    });
+  }
+
+  private buildUrlResponseFromPipeline(
+    pipelineResult: {
+      grades: Array<{
+        rubricQuestion: string;
+        pointsAwarded: number;
+        maxPoints: number;
+        rationale: string;
+        citations: string[];
+      }>;
+      summary: { totalPoints: number; maxPoints: number };
+      audit: unknown;
+    },
+    maxPoints: number,
+  ): UrlBasedQuestionResponseModel {
+    const feedbackLines = pipelineResult.grades.map(
+      (grade) =>
+        `**${grade.rubricQuestion}** (${grade.pointsAwarded}/${grade.maxPoints})\n${grade.rationale}`,
+    );
+    const feedback = feedbackLines.join("\n\n");
+
+    return {
+      points: Math.min(pipelineResult.summary.totalPoints, maxPoints),
+      feedback,
+      gradingRationale: feedback,
+      metadata: pipelineResult.audit
+        ? {
+            gradingAudit: pipelineResult.audit,
+          }
+        : undefined,
+    } as UrlBasedQuestionResponseModel;
   }
 }

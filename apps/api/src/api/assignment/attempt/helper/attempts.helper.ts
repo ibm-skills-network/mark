@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, Logger } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
@@ -18,6 +18,8 @@ import {
   GeneralFeedbackDto,
   TrueFalseBasedFeedbackDto,
 } from "../dto/question-response/create.question.response.attempt.response.dto";
+
+const logger = new Logger("AttemptHelper");
 
 export const AttemptHelper = {
   assignFeedbackToResponse(
@@ -93,6 +95,13 @@ export const AttemptHelper = {
           rubricCount: model.rubricScores.length,
         };
       }
+
+      if ((model as any).metadata) {
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          ...(model as any).metadata,
+        };
+      }
     } else if (model instanceof TextBasedQuestionResponseModel) {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
@@ -152,6 +161,13 @@ export const AttemptHelper = {
       const generalFeedbackDto = new GeneralFeedbackDto();
       generalFeedbackDto.feedback = model.feedback;
       responseDto.feedback = [generalFeedbackDto];
+
+      if ((model as any).metadata) {
+        responseDto.metadata = {
+          ...responseDto.metadata,
+          ...(model as any).metadata,
+        };
+      }
     }
   },
 
@@ -245,19 +261,17 @@ export const AttemptHelper = {
                       }\nLast Updated: ${repoInfo.updated_at}`;
                       return { body, isFunctional: true };
                     }
-                  } catch (error) {
-                    console.debug(
-                      "Failed to fetch repository details via GitHub API",
-                      error,
+                  } catch {
+                    logger.warn(
+                      `Failed to fetch README or repository info for ${user}/${repo}. URL may be non-functional or rate-limited.`,
                     );
                   }
                 }
               }
             }
-          } catch (error) {
-            console.debug(
-              "Failed to resolve repository via GitHub heuristics",
-              error,
+          } catch {
+            logger.warn(
+              `Failed to fetch repository info for ${url}. URL may be non-functional or rate-limited.`,
             );
           }
 
@@ -302,8 +316,10 @@ export const AttemptHelper = {
                 isFunctional: true,
               };
             }
-          } catch (error) {
-            console.debug("Failed to scrape repository page", error);
+          } catch {
+            logger.warn(
+              `Failed to fetch content from ${url}. URL may be non-functional or rate-limited.`,
+            );
           }
         }
 
