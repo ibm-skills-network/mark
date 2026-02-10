@@ -1293,6 +1293,8 @@ export class AttemptSubmissionService {
       hasFiles ||
       hasPresentation
     );
+  }
+
   private async pruneAutoSavedResponses(
     attemptId: number,
     responses: CreateQuestionResponseAttemptResponseDto[],
