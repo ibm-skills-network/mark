@@ -55,7 +55,7 @@
     "@types/nodemailer": "^6.4.17",
     "@types/pdf-parse": "^1.1.5",
     "aws-sdk": "^2.1692.0",
-    "axios": "^1.12.0",
+    "axios": "^1.13.5",
     "bottleneck": "^2.19.5",
     "bullmq": "^5.21.1",
     "chardet": "^2.1.0",
