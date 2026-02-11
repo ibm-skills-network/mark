@@ -162,7 +162,7 @@ const Component: FC<Props> = () => {
                 strictTimeLimit ? "text-gray-500" : "text-gray-700",
               )}
             >
-              Enforce Mandatory Questions
+              Enforce Required Questions
             </p>
             <button
               type="button"
@@ -302,7 +302,7 @@ const Component: FC<Props> = () => {
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             <span className="w-2 h-2 rounded-full bg-violet-600"></span>
                             <span className="text-xs font-medium text-violet-700">
-                              Mandatory
+                              Required
                             </span>
                           </div>
                         )}

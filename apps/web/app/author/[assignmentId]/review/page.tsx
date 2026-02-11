@@ -876,8 +876,8 @@ function Component() {
       ),
       requireAllQuestions: filteredChanges.some(
         (c) =>
-          c.includes("Enabled mandatory questions enforcement") ||
-          c.includes("Disabled mandatory questions enforcement"),
+          c.includes("Enabled required questions enforcement") ||
+          c.includes("Disabled required questions enforcement"),
       ),
       optionalQuestionIds: filteredChanges.some((c) =>
         c.includes("Updated optional/required question selection"),
@@ -1876,7 +1876,7 @@ function Component() {
 
                   {changes.requireAllQuestions && (
                     <ChangeComparison
-                      label="Mandatory Questions Enforcement"
+                      label="Required Questions Enforcement"
                       before={originalAssignment.requireAllQuestions ? "Enabled" : "Disabled"}
                       after={assignmentConfig.requireAllQuestions ? "Enabled" : "Disabled"}
                       type="boolean"

@@ -449,9 +449,9 @@ export function useChangesSummary(): string {
 
     if (!safeCompare(requireAllQuestions, originalAssignment.requireAllQuestions)) {
       if (requireAllQuestions) {
-        diffs.push("Enabled mandatory questions enforcement.");
+        diffs.push("Enabled required questions enforcement.");
       } else {
-        diffs.push("Disabled mandatory questions enforcement.");
+        diffs.push("Disabled required questions enforcement.");
       }
     }
 

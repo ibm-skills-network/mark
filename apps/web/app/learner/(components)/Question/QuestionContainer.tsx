@@ -270,11 +270,6 @@ function Component(props: Props) {
           </div>
         </div>
         <div className="flex items-center justify-between sm:justify-start gap-x-2">
-          {!isOptionalQuestion && (
-            <span className="text-xs sm:text-sm rounded-md px-2 py-1 bg-red-100 text-red-700">
-              Required
-            </span>
-          )}
           <button
             className="text-gray-600 font-medium flex items-center group gap-x-2 hover:text-violet-600 transition"
             onClick={handleFlaggingQuestion}
@@ -282,6 +277,11 @@ function Component(props: Props) {
             <Bookmark questionStatus={questionStatus} />
             <span className="text-sm sm:hidden">Flag</span>
           </button>
+          {!isOptionalQuestion && (
+            <span className="text-xs sm:text-sm rounded-md px-2 py-1 bg-red-100 text-red-700">
+              Required
+            </span>
+          )}
           <span className="text-sm sm:text-md text-violet-600 bg-violet-100 rounded-md px-2 py-1">
             {question.totalPoints} points
           </span>
