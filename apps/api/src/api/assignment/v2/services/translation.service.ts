@@ -1172,6 +1172,69 @@ export class TranslationService {
   }
 
   /**
+   * Translate assignment metadata for specific languages without deleting question translations.
+   */
+  async translateAssignmentForLanguages(
+    assignmentId: number,
+    languageCodes: string[],
+  ): Promise<void> {
+    if (languageCodes.length === 0) {
+      return;
+    }
+
+    if (!this.languageTranslation) {
+      this.logger.log("Translation is disabled in development mode");
+      return;
+    }
+
+    this.checkLimiterHealth();
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: {
+        id: true,
+        name: true,
+        introduction: true,
+        instructions: true,
+        gradingCriteriaOverview: true,
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with id ${assignmentId} not found`,
+      );
+    }
+
+    await this.syncLimiterForTranslationModel();
+    const results = await this.processBatchesInParallel(
+      languageCodes,
+      async (lang: string) => {
+        try {
+          await this.translateAssignmentToLanguage(
+            assignment as unknown as GetAssignmentResponseDto,
+            lang,
+          );
+          return true;
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          this.logger.error(
+            `Failed to translate assignment ${assignmentId} to ${lang}: ${errorMessage}`,
+          );
+          return false;
+        }
+      },
+      this.MAX_BATCH_SIZE,
+      this.CONCURRENCY_LIMIT,
+    );
+
+    this.logger.log(
+      `Assignment #${assignmentId} translation results for ${languageCodes.length} languages: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
+    );
+  }
+
+  /**
    * Translate an assignment to all supported languages
    * Optimized for performance with parallel processing
    *
@@ -1334,10 +1397,10 @@ export class TranslationService {
     assignmentId: number,
     questionId: number,
     question: QuestionDto,
-    jobId: number,
+    jobId?: number,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = jobId && jobId > 0;
+    const hasValidJobId = typeof jobId === "number" && jobId > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {
@@ -1372,24 +1435,28 @@ export class TranslationService {
       );
     }
 
-    await this.jobStatusService.updateJobStatus(jobId, {
-      status: "In Progress",
-      progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
-        questionLang,
-      )}. Preparing translations...`,
-      percentage: 15,
-    });
+    if (hasValidJobId) {
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
+          questionLang,
+        )}. Preparing translations...`,
+        percentage: 15,
+      });
+    }
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    const progressTracker = this.initializeProgressTracker(
-      jobId,
-      Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-      20,
-      95,
-      `Translating Question #${questionId}`,
-      supportedLanguages.length,
-    );
+    const progressTracker = hasValidJobId
+      ? this.initializeProgressTracker(
+          jobId,
+          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+          20,
+          95,
+          `Translating Question #${questionId}`,
+          supportedLanguages.length,
+        )
+      : undefined;
 
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
@@ -1498,10 +1565,10 @@ export class TranslationService {
     questionId: number,
     variantId: number,
     variant: VariantDto,
-    jobId: number,
+    jobId?: number,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = jobId && jobId > 0;
+    const hasValidJobId = typeof jobId === "number" && jobId > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {
@@ -1559,14 +1626,16 @@ export class TranslationService {
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    const progressTracker = this.initializeProgressTracker(
-      jobId,
-      Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-      20,
-      95,
-      `Translating Variant #${variantId}`,
-      supportedLanguages.length,
-    );
+    const progressTracker = hasValidJobId
+      ? this.initializeProgressTracker(
+          jobId,
+          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+          20,
+          95,
+          `Translating Variant #${variantId}`,
+          supportedLanguages.length,
+        )
+      : undefined;
 
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
@@ -1636,6 +1705,53 @@ export class TranslationService {
     this.logger.log(
       `Variant #${variantId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
+  }
+
+  /**
+   * Translate a specific question/variant to a list of target languages
+   * Useful for backfilling missing translations without reprocessing all languages.
+   */
+  async translateContentToLanguages(
+    assignmentId: number,
+    questionId: number,
+    variantId: number | null,
+    originalText: string,
+    originalChoices: Choice[] | string | null | any,
+    sourceLanguage: string,
+    targetLanguages: string[],
+  ): Promise<{ success: number; failure: number }> {
+    let success = 0;
+    let failure = 0;
+
+    if (!targetLanguages || targetLanguages.length === 0) {
+      return { success, failure };
+    }
+
+    for (const lang of targetLanguages) {
+      try {
+        await this.generateAndStoreTranslation(
+          assignmentId,
+          questionId,
+          variantId,
+          originalText,
+          originalChoices,
+          sourceLanguage,
+          lang,
+        );
+        success++;
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Failed to backfill translation for question ${questionId}${
+            variantId ? ` variant ${variantId}` : ""
+          } to ${lang}: ${errorMessage}`,
+        );
+        failure++;
+      }
+    }
+
+    return { success, failure };
   }
 
   /**
