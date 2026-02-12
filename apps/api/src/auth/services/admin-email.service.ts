@@ -1006,7 +1006,7 @@ Provider: Development Console
             <p>We noticed the bug you reported hasn't been resolved yet. Let us know if you're still experiencing it.</p>
             <div class="summary">
               <p class="summary-title">${issueTitle}</p>
-              <p class="meta">Issue #${issueNumber ?? "N/A"} • Reported ${reportedAt ?? "N/A"}</p>
+              <p class="meta">Reported ${this.formatReportedAt(reportedAt)}</p>
               <p class="summary-title">Description</p>
               <div class="body">${issueBody}</div>
             </div>
@@ -1014,6 +1014,7 @@ Provider: Development Console
               <a class="btn btn-renew" href="${renewLink}">Yes, still happening</a>
               <a class="btn btn-close" href="${closeLink}">No, resolved</a>
             </div>
+            <p>If we don't hear back within 7 days, we'll close the issue.</p>
             <p>If you didn't request this, you can ignore this email.</p>
           </div>
           <div class="footer">
@@ -1038,8 +1039,8 @@ Are you still experiencing this issue?
 
 We noticed the bug you reported hasn't been resolved yet. Let us know if you're still experiencing it.
 
-Issue #${issueNumber ?? "N/A"} - ${issueTitle}
-Reported: ${reportedAt ?? "N/A"}
+${issueTitle}
+Reported: ${this.formatReportedAt(reportedAt)}
 
 Description:
 ${issueBody}
@@ -1047,7 +1048,22 @@ ${issueBody}
 Yes, still happening: ${renewLink}
 No, resolved: ${closeLink}
 
+If we don't hear back within 7 days, we'll close the issue.
+
 If you didn't request this, you can ignore this email.
     `;
+  }
+
+  private formatReportedAt(reportedAt?: string): string {
+    if (!reportedAt) return "N/A";
+    const parsed = new Date(reportedAt);
+    if (Number.isNaN(parsed.getTime())) return reportedAt;
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(parsed);
   }
 }

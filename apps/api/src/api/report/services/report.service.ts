@@ -168,9 +168,16 @@ export class ReportsService {
     const marker = "Development details:";
     const index = text.indexOf(marker);
     if (index === -1) {
-      return text.trim();
+      return this.stripRepro(text.trim());
     }
-    return text.slice(index + marker.length).trim();
+    return this.stripRepro(text.slice(index + marker.length).trim());
+  }
+
+  private stripRepro(text: string): string {
+    const reproMarker = "Steps to reproduce:";
+    const reproIndex = text.indexOf(reproMarker);
+    if (reproIndex === -1) return text;
+    return text.slice(0, reproIndex).trim();
   }
 
   private async postGithubComment(issueNumber: number, body: string) {
