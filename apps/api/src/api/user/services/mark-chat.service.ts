@@ -123,8 +123,6 @@ export class MarkChatService {
         ? this.authorTools()
         : this.learnerTools(userSession, assignmentInfo);
 
-    const trackedClientExecutions: { function: string; params: any }[] = [];
-
     const result = streamText({
       model: openai("gpt-4o-mini"),
       system:
@@ -138,34 +136,7 @@ export class MarkChatService {
       tools,
       toolChoice: "auto",
       maxTokens: 1500,
-      onStepFinish: (step) => {
-        if (
-          step.toolCalls &&
-          step.toolCalls.length > 0 &&
-          userRole === "author"
-        ) {
-          for (const call of step.toolCalls) {
-            if (
-              [
-                "createQuestion",
-                "modifyQuestion",
-                "setQuestionChoices",
-                "addRubric",
-                "generateQuestionVariant",
-                "deleteQuestion",
-                "generateQuestionsFromObjectives",
-                "updateLearningObjectives",
-                "setQuestionTitle",
-              ].includes(call.toolName)
-            ) {
-              trackedClientExecutions.push({
-                function: call.toolName,
-                params: call.args,
-              });
-            }
-          }
-        }
-      },
+      onStepFinish: undefined,
     });
 
     if (!result || !result.textStream) {
@@ -197,6 +168,7 @@ export class MarkChatService {
         }
       }
 
+      const trackedClientExecutions: { function: string; params: any }[] = [];
       const toolResults = await result.toolResults;
       const resolvedToolResults = Array.isArray(toolResults) ? toolResults : [];
       for (const toolResult of resolvedToolResults) {
