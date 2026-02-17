@@ -1,6 +1,6 @@
 import {
-  Body,
   BadRequestException,
+  Body,
   Controller,
   NotFoundException,
   Post,
@@ -308,6 +308,11 @@ export class TranslationMaintenanceController {
             questionVersions: true,
           },
         },
+        versions: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { questionVersions: true },
+        },
       },
     });
 
@@ -326,8 +331,12 @@ export class TranslationMaintenanceController {
           ));
     }
 
-    const questionVersions =
-      assignmentWithVersion.currentVersion?.questionVersions ?? [];
+    const latestVersion =
+      assignmentWithVersion.versions?.[0] ??
+      assignmentWithVersion.currentVersion ??
+      null;
+
+    const questionVersions = latestVersion?.questionVersions ?? [];
 
     let questionsToTranslate: Array<{
       questionId: number;
@@ -343,7 +352,7 @@ export class TranslationMaintenanceController {
       const originalQuestions =
         questionIds.length > 0
           ? await this.prisma.question.findMany({
-              where: { id: { in: questionIds }, isDeleted: false },
+              where: { id: { in: questionIds } },
               select: {
                 id: true,
                 variants: {
@@ -369,7 +378,7 @@ export class TranslationMaintenanceController {
       );
 
       questionsToTranslate = questionVersions
-        .filter((qv) => qv.questionId && questionById.has(qv.questionId))
+        .filter((qv) => qv.questionId)
         .map((qv) => {
           const baseQuestion = questionById.get(qv.questionId);
           const variants: VariantDto[] =
