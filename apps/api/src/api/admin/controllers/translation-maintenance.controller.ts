@@ -2,7 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
+  Logger,
   NotFoundException,
+  Param,
+  ParseIntPipe,
   Post,
   UsePipes,
   ValidationPipe,
@@ -19,17 +23,8 @@ import {
   Min,
 } from "class-validator";
 import { getAllLanguageCodes } from "src/api/assignment/attempt/helper/languages";
-import {
-  Choice,
-  QuestionDto,
-  ScoringDto,
-  VariantDto,
-  VariantType,
-  VideoPresentationConfig,
-} from "src/api/assignment/dto/update.questions.request.dto";
+import { JobStatusServiceV2 } from "src/api/assignment/v2/services/job-status.service";
 import { TranslationService } from "src/api/assignment/v2/services/translation.service";
-import { UserRole } from "src/auth/interfaces/user.session.interface";
-import { Roles } from "src/auth/role/roles.global.guard";
 import { PrismaService } from "src/database/prisma.service";
 
 class MissingTranslationsRequestDto {
@@ -73,6 +68,10 @@ class FixMissingTranslationsRequestDto {
 
   @IsOptional()
   @IsBoolean()
+  includeAll?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   dryRun?: boolean;
 
   @IsOptional()
@@ -93,7 +92,7 @@ type MissingItem = {
   variantId: number | null;
   missingLanguages: string[];
   text?: string;
-  choices?: any;
+  choices?: unknown;
 };
 
 type AssignmentScanResult = {
@@ -106,6 +105,13 @@ type AssignmentScanResult = {
 type MissingAssignmentSummary = {
   assignmentId: number;
   assignmentName: string;
+};
+
+type QuestionToTranslate = {
+  questionId: number;
+  text: string;
+  choices: unknown;
+  variants: Array<{ id: number; variantContent: string; choices: unknown }>;
 };
 
 const normalizeLang = (code: string) => code.toLowerCase();
@@ -124,9 +130,12 @@ const normalizeLang = (code: string) => code.toLowerCase();
   version: "1",
 })
 export class TranslationMaintenanceController {
+  private readonly logger = new Logger(TranslationMaintenanceController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly translationService: TranslationService,
+    private readonly jobStatusService: JobStatusServiceV2,
   ) {}
 
   @Post("missing/find")
@@ -182,7 +191,7 @@ export class TranslationMaintenanceController {
     type: FixMissingTranslationsRequestDto,
     examples: {
       default: {
-        summary: "Translate latest version questions for assignments",
+        summary: "Translate active-version questions for assignments",
         value: {
           assignmentIds: [123, 456],
           languageCodes: ["en", "es", "fr"],
@@ -192,35 +201,19 @@ export class TranslationMaintenanceController {
       },
     },
   })
-  @ApiOperation({ summary: "Fix missing translations for assignments" })
+  @ApiOperation({
+    summary:
+      "Fix missing translations for assignments (async — returns a job ID to poll for status)",
+  })
   async fixMissingTranslations(
     @Body() body: FixMissingTranslationsRequestDto,
   ): Promise<{
     success: true;
-    processedTranslations: number;
-    assignmentsProcessed: number;
-    results: Array<{
-      assignmentId: number;
-      processedTranslations: number;
-      questionsTranslated: number;
-    }>;
+    jobId: number;
+    message: string;
+    assignmentIds: number[];
     dryRun: boolean;
   }> {
-    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
-    const supportedLanguagesByNormalized = new Map(
-      supportedLanguages.map((lang) => [normalizeLang(lang), lang]),
-    );
-    const requestedLanguages = (body.languageCodes ?? [])
-      .map((lang) => normalizeLang(lang))
-      .filter((lang) => supportedLanguagesByNormalized.has(lang))
-      .map((lang) => supportedLanguagesByNormalized.get(lang));
-    const targetLanguages =
-      requestedLanguages.length > 0 ? requestedLanguages : supportedLanguages;
-    const translateAllLanguages =
-      targetLanguages.length === supportedLanguages.length;
-    const dryRun = Boolean(body.dryRun);
-    const maxMissing = body.maxMissing;
-
     const assignmentIds =
       body.assignmentIds && body.assignmentIds.length > 0
         ? body.assignmentIds
@@ -234,64 +227,205 @@ export class TranslationMaintenanceController {
       );
     }
 
-    const results: Array<{
-      assignmentId: number;
-      processedTranslations: number;
-      questionsTranslated: number;
-    }> = [];
+    const job = await this.jobStatusService.createPublishJob(
+      assignmentIds[0],
+      "admin",
+    );
 
-    let processedTranslations = 0;
-    let remainingTranslations =
-      typeof maxMissing === "number" ? maxMissing : null;
+    void this.runTranslationsInBackground(job.id, assignmentIds, body);
 
-    for (const assignmentId of assignmentIds) {
-      const {
-        processedTranslations: assignmentProcessed,
-        questionsTranslated,
-        remainingTranslations: nextRemaining,
-      } = await this.translateAssignmentQuestions({
-        assignmentId,
-        supportedLanguages: targetLanguages,
-        translateAssignmentLanguages: targetLanguages,
-        translateAllLanguages,
-        dryRun,
-        remainingTranslations,
-      });
+    return {
+      success: true,
+      jobId: job.id,
+      message: `Translation job started for ${assignmentIds.length} assignment(s). Poll GET /api/v1/admin/translations/missing/fix/status/${job.id} for progress.`,
+      assignmentIds,
+      dryRun: Boolean(body.dryRun),
+    };
+  }
 
-      processedTranslations += assignmentProcessed;
-      remainingTranslations = nextRemaining;
+  @Get("missing/fix/status/:jobId")
+  @ApiOperation({ summary: "Check the status of a fix-translations job" })
+  async getFixJobStatus(@Param("jobId", ParseIntPipe) jobId: number): Promise<{
+    success: true;
+    jobId: number;
+    status: string;
+    progress: string;
+    percentage: number | null;
+    result: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
+    const job = await this.prisma.publishJob.findUnique({
+      where: { id: jobId },
+    });
 
-      results.push({
-        assignmentId,
-        processedTranslations: assignmentProcessed,
-        questionsTranslated,
-      });
+    if (!job) {
+      throw new NotFoundException(`Translation job ${jobId} not found`);
+    }
 
-      if (remainingTranslations !== null && remainingTranslations <= 0) {
-        break;
+    let result: unknown = null;
+    if (job.result) {
+      try {
+        result =
+          typeof job.result === "string"
+            ? (JSON.parse(job.result) as unknown)
+            : job.result;
+      } catch {
+        result = job.result;
       }
     }
 
     return {
       success: true,
-      processedTranslations,
-      assignmentsProcessed: results.length,
-      results,
-      dryRun,
+      jobId: job.id,
+      status: job.status,
+      progress: job.progress,
+      percentage: job.percentage ?? null,
+      result,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Background job
+  // ---------------------------------------------------------------------------
+
+  private async runTranslationsInBackground(
+    jobId: number,
+    assignmentIds: number[],
+    body: FixMissingTranslationsRequestDto,
+  ): Promise<void> {
+    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const supportedLanguagesByNormalized = new Map(
+      supportedLanguages.map((lang) => [normalizeLang(lang), lang]),
+    );
+
+    // Build the ordered, deduplicated list of target languages
+    const requestedLanguages = (body.languageCodes ?? [])
+      .map((lang) => normalizeLang(lang))
+      .filter((lang) => supportedLanguagesByNormalized.has(lang))
+      .map((lang) => supportedLanguagesByNormalized.get(lang) ?? lang);
+    const targetLanguages =
+      requestedLanguages.length > 0 ? requestedLanguages : supportedLanguages;
+    const translateAllLanguages =
+      targetLanguages.length === supportedLanguages.length;
+
+    const dryRun = Boolean(body.dryRun);
+    const maxMissing = body.maxMissing;
+
+    const results: Array<{
+      assignmentId: number;
+      processedTranslations: number;
+      questionsTranslated: number;
+      error?: string;
+    }> = [];
+
+    let processedTranslations = 0;
+    let remainingTranslations: number | null =
+      typeof maxMissing === "number" ? maxMissing : null;
+
+    try {
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: `Starting translations for ${assignmentIds.length} assignment(s)`,
+        percentage: 0,
+      });
+
+      for (let index = 0; index < assignmentIds.length; index++) {
+        const assignmentId = assignmentIds[index];
+        const progressPct = Math.floor((index / assignmentIds.length) * 90);
+
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "In Progress",
+          progress: `Translating assignment ${assignmentId} (${index + 1}/${assignmentIds.length})`,
+          percentage: progressPct,
+        });
+
+        try {
+          const {
+            processedTranslations: assignmentProcessed,
+            questionsTranslated,
+            remainingTranslations: nextRemaining,
+          } = await this.translateAssignmentQuestions({
+            assignmentId,
+            targetLanguages,
+            translateAllLanguages,
+            dryRun,
+            remainingTranslations,
+          });
+
+          processedTranslations += assignmentProcessed;
+          remainingTranslations = nextRemaining;
+
+          results.push({
+            assignmentId,
+            processedTranslations: assignmentProcessed,
+            questionsTranslated,
+          });
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          this.logger.error(
+            `Failed to translate assignment ${assignmentId}: ${errorMessage}`,
+          );
+          results.push({
+            assignmentId,
+            processedTranslations: 0,
+            questionsTranslated: 0,
+            error: errorMessage,
+          });
+        }
+
+        if (remainingTranslations !== null && remainingTranslations <= 0) {
+          break;
+        }
+      }
+
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "Completed",
+        progress: `Completed: ${processedTranslations} translations across ${results.length} assignment(s)`,
+        percentage: 100,
+        result: {
+          processedTranslations,
+          assignmentsProcessed: results.length,
+          dryRun,
+          results,
+        },
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Translation job ${jobId} failed: ${errorMessage}`);
+
+      await this.jobStatusService
+        .updateJobStatus(jobId, {
+          status: "Failed",
+          progress: `Job failed: ${errorMessage.slice(0, 200)}`,
+          percentage: 0,
+          result: { error: errorMessage, partialResults: results },
+        })
+        .catch((updateError) => {
+          this.logger.error(
+            `Failed to update job ${jobId} failure status: ${String(updateError)}`,
+          );
+        });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Core translation logic
+  // ---------------------------------------------------------------------------
+
   private async translateAssignmentQuestions({
     assignmentId,
-    supportedLanguages,
-    translateAssignmentLanguages,
+    targetLanguages,
     translateAllLanguages,
     dryRun,
     remainingTranslations,
   }: {
     assignmentId: number;
-    supportedLanguages: string[];
-    translateAssignmentLanguages: string[];
+    targetLanguages: string[];
     translateAllLanguages: boolean;
     dryRun: boolean;
     remainingTranslations: number | null;
@@ -300,56 +434,83 @@ export class TranslationMaintenanceController {
     questionsTranslated: number;
     remainingTranslations: number | null;
   }> {
-    const assignmentWithVersion = await this.prisma.assignment.findUnique({
+    // -------------------------------------------------------------------------
+    // 1. Load assignment with its ACTIVE (current) version only.
+    //    assignment.currentVersion is the published, non-draft active version.
+    //    We deliberately do NOT fall back to the most recently created version
+    //    because that could be an in-progress draft.
+    // -------------------------------------------------------------------------
+    const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
         currentVersion: {
-          include: {
-            questionVersions: true,
-          },
-        },
-        versions: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
           include: { questionVersions: true },
         },
       },
     });
 
-    if (!assignmentWithVersion) {
+    if (!assignment) {
       throw new NotFoundException(
         `Assignment with id ${assignmentId} not found`,
       );
     }
 
+    // -------------------------------------------------------------------------
+    // 2. Translate assignment metadata (name, introduction, instructions,
+    //    gradingCriteriaOverview) — scoped to targetLanguages.
+    // -------------------------------------------------------------------------
     if (!dryRun) {
       await (translateAllLanguages
         ? this.translationService.translateAssignment(assignmentId)
         : this.translationService.translateAssignmentForLanguages(
             assignmentId,
-            translateAssignmentLanguages,
+            targetLanguages,
           ));
     }
 
-    const latestVersion =
-      assignmentWithVersion.versions?.[0] ??
-      assignmentWithVersion.currentVersion ??
-      null;
+    // -------------------------------------------------------------------------
+    // 3. Build the list of questions to translate.
+    //
+    //    Priority: active version's questionVersions → base questions.
+    //
+    //    QuestionVersion holds a snapshot of the question at publish time, so
+    //    `qv.question` and `qv.choices` are the authoritative text/choices for
+    //    that version.  Variants live on the base Question record (there is no
+    //    per-version variant snapshot), so we still fetch them from Question.
+    //
+    //    Questions whose questionId is null (added directly inside a version
+    //    without a base Question record) cannot be stored in Translation (which
+    //    requires a Question FK), so they are skipped with a warning.
+    // -------------------------------------------------------------------------
+    const activeVersion = assignment.currentVersion;
+    const questionVersions = activeVersion?.questionVersions ?? [];
 
-    const questionVersions = latestVersion?.questionVersions ?? [];
-
-    let questionsToTranslate: Array<{
-      questionId: number;
-      questionDto: QuestionDto;
-      variants: VariantDto[];
-    }> = [];
+    let questionsToTranslate: QuestionToTranslate[] = [];
 
     if (questionVersions.length > 0) {
-      const questionIds = questionVersions
-        .map((qv) => qv.questionId)
-        .filter((id): id is number => typeof id === "number");
+      this.logger.log(
+        `Assignment ${assignmentId}: translating ${questionVersions.length} questions from active version ${activeVersion?.id}`,
+      );
 
-      const originalQuestions =
+      // Collect questionIds that have a base Question record (nullable FK)
+      const questionIds = [
+        ...new Set(
+          questionVersions
+            .map((qv) => qv.questionId)
+            .filter((id): id is number => id !== null && id !== undefined),
+        ),
+      ];
+
+      // Log any version-only questions that cannot be translated
+      const versionOnlyCount = questionVersions.length - questionIds.length;
+      if (versionOnlyCount > 0) {
+        this.logger.warn(
+          `Assignment ${assignmentId}: ${versionOnlyCount} question version(s) have no base Question record and will be skipped (questionId is null — cannot store Translation FK).`,
+        );
+      }
+
+      // Fetch base questions for variant data
+      const baseQuestions =
         questionIds.length > 0
           ? await this.prisma.question.findMany({
               where: { id: { in: questionIds } },
@@ -361,273 +522,211 @@ export class TranslationMaintenanceController {
                     id: true,
                     variantContent: true,
                     choices: true,
-                    scoring: true,
-                    maxWords: true,
-                    maxCharacters: true,
-                    variantType: true,
-                    randomizedChoices: true,
-                    isDeleted: true,
                   },
                 },
               },
             })
           : [];
 
-      const questionById = new Map(
-        originalQuestions.map((question) => [question.id, question]),
-      );
+      const questionById = new Map(baseQuestions.map((q) => [q.id, q]));
 
       questionsToTranslate = questionVersions
-        .filter((qv) => qv.questionId)
+        .filter(
+          (qv): qv is typeof qv & { questionId: number } =>
+            qv.questionId !== null && qv.questionId !== undefined,
+        )
         .map((qv) => {
           const baseQuestion = questionById.get(qv.questionId);
-          const variants: VariantDto[] =
-            baseQuestion?.variants?.map((variant) => ({
-              id: variant.id,
-              variantContent: variant.variantContent ?? "",
-              choices: variant.choices as unknown as Choice[],
-              scoring: variant.scoring as unknown as ScoringDto,
-              maxWords: variant.maxWords ?? undefined,
-              maxCharacters: variant.maxCharacters ?? undefined,
-              variantType: variant.variantType as VariantType,
-              isDeleted: variant.isDeleted ?? false,
-            })) ?? [];
 
-          const questionDto: QuestionDto = {
-            id: qv.questionId,
-            assignmentId,
-            question: qv.question ?? "",
-            type: qv.type,
-            responseType: qv.responseType ?? undefined,
-            totalPoints: qv.totalPoints,
-            maxWords: qv.maxWords ?? undefined,
-            maxCharacters: qv.maxCharacters ?? undefined,
-            choices: qv.choices as unknown as Choice[],
-            scoring: qv.scoring as unknown as ScoringDto,
-            answer: qv.answer,
-            gradingContextQuestionIds: qv.gradingContextQuestionIds ?? [],
-            randomizedChoices: qv.randomizedChoices ?? undefined,
-            videoPresentationConfig:
-              qv.videoPresentationConfig as unknown as VideoPresentationConfig,
-            liveRecordingConfig: qv.liveRecordingConfig as object,
-            variants: [],
-            isDeleted: false,
-          };
+          if (!baseQuestion) {
+            this.logger.warn(
+              `Assignment ${assignmentId}: base Question record ${qv.questionId} not found — variants will be skipped.`,
+            );
+          }
 
           return {
             questionId: qv.questionId,
-            questionDto,
-            variants,
+            text: qv.question ?? "",
+            choices: qv.choices,
+            variants: baseQuestion?.variants ?? [],
           };
         });
     } else {
+      // No active version — use base Question records directly
+      this.logger.log(
+        `Assignment ${assignmentId}: no active version found — translating base questions.`,
+      );
+
       const questions = await this.prisma.question.findMany({
         where: { assignmentId, isDeleted: false },
         select: {
           id: true,
           question: true,
-          type: true,
-          assignmentId: true,
-          totalPoints: true,
-          maxWords: true,
-          maxCharacters: true,
           choices: true,
-          scoring: true,
-          answer: true,
-          gradingContextQuestionIds: true,
-          responseType: true,
-          randomizedChoices: true,
-          videoPresentationConfig: true,
-          liveRecordingConfig: true,
-          isDeleted: true,
           variants: {
             where: { isDeleted: false },
             select: {
               id: true,
               variantContent: true,
               choices: true,
-              scoring: true,
-              maxWords: true,
-              maxCharacters: true,
-              variantType: true,
-              randomizedChoices: true,
-              isDeleted: true,
             },
           },
         },
       });
 
-      questionsToTranslate = questions.map((question) => ({
-        questionId: question.id,
-        questionDto: {
-          id: question.id,
-          assignmentId,
-          question: question.question ?? "",
-          type: question.type,
-          responseType: question.responseType ?? undefined,
-          totalPoints: question.totalPoints ?? undefined,
-          maxWords: question.maxWords ?? undefined,
-          maxCharacters: question.maxCharacters ?? undefined,
-          choices: question.choices as unknown as Choice[],
-          scoring: question.scoring as unknown as ScoringDto,
-          answer: question.answer,
-          gradingContextQuestionIds: question.gradingContextQuestionIds ?? [],
-          randomizedChoices: question.randomizedChoices ?? undefined,
-          videoPresentationConfig:
-            question.videoPresentationConfig as unknown as VideoPresentationConfig,
-          liveRecordingConfig: question.liveRecordingConfig as object,
-          variants: [],
-          isDeleted: question.isDeleted ?? false,
-        },
-        variants: question.variants.map((variant) => ({
-          id: variant.id,
-          variantContent: variant.variantContent ?? "",
-          choices: variant.choices as unknown as Choice[],
-          scoring: variant.scoring as unknown as ScoringDto,
-          maxWords: variant.maxWords ?? undefined,
-          maxCharacters: variant.maxCharacters ?? undefined,
-          variantType: variant.variantType as VariantType,
-          isDeleted: variant.isDeleted ?? false,
-        })),
+      questionsToTranslate = questions.map((q) => ({
+        questionId: q.id,
+        text: q.question ?? "",
+        choices: q.choices,
+        variants: q.variants,
       }));
     }
 
+    // -------------------------------------------------------------------------
+    // 4. Translate each question and its variants using a single unified path.
+    //
+    //    Both the "translate everything" (no maxMissing) and the "limited
+    //    budget" (maxMissing) cases use the same helper so that targetLanguages
+    //    is always respected and the code path is not duplicated.
+    // -------------------------------------------------------------------------
     let processedTranslations = 0;
-
-    if (remainingTranslations === null) {
-      const totalItems = questionsToTranslate.reduce(
-        (count, question) => count + 1 + question.variants.length,
-        0,
-      );
-
-      if (!dryRun) {
-        for (const question of questionsToTranslate) {
-          await this.translationService.translateQuestion(
-            assignmentId,
-            question.questionId,
-            question.questionDto,
-            undefined,
-            true,
-          );
-
-          for (const variant of question.variants) {
-            await this.translationService.translateVariant(
-              assignmentId,
-              question.questionId,
-              variant.id,
-              variant,
-              undefined,
-              true,
-            );
-          }
-        }
-      }
-
-      processedTranslations = totalItems * supportedLanguages.length;
-
-      return {
-        processedTranslations,
-        questionsTranslated: questionsToTranslate.length,
-        remainingTranslations,
-      };
-    }
-
-    const translateItem = async (item: {
-      questionId: number;
-      variantId: number | null;
-      text: string;
-      choices?: any;
-    }): Promise<boolean> => {
-      if (!item.text || item.text.trim().length === 0) {
-        return true;
-      }
-
-      const remaining =
-        remainingTranslations === null
-          ? null
-          : Math.max(0, remainingTranslations);
-
-      if (remaining !== null && remaining <= 0) {
-        return false;
-      }
-
-      const languagesToProcess =
-        remaining === null
-          ? supportedLanguages
-          : supportedLanguages.slice(0, remaining);
-
-      if (languagesToProcess.length === 0) {
-        return false;
-      }
-
-      const sourceLanguage = await this.translationService.detectLanguage(
-        item.text,
-        assignmentId,
-      );
-
-      if (!dryRun) {
-        await this.prisma.translation.deleteMany({
-          where: {
-            questionId: item.questionId,
-            variantId: item.variantId,
-            languageCode: { in: languagesToProcess },
-          },
-        });
-        await this.translationService.translateContentToLanguages(
-          assignmentId,
-          item.questionId,
-          item.variantId,
-          item.text,
-          item.choices ?? null,
-          sourceLanguage,
-          languagesToProcess,
-        );
-      }
-
-      processedTranslations += languagesToProcess.length;
-      if (remainingTranslations !== null) {
-        remainingTranslations -= languagesToProcess.length;
-      }
-
-      return !(remainingTranslations !== null && remainingTranslations <= 0);
-    };
+    let remaining = remainingTranslations;
 
     for (const question of questionsToTranslate) {
-      const shouldContinue = await translateItem({
-        questionId: question.questionId,
-        variantId: null,
-        text: question.questionDto.question,
-        choices: question.questionDto.choices,
-      });
-
-      if (!shouldContinue) {
-        break;
-      }
-
-      for (const variant of question.variants) {
-        const continueVariants = await translateItem({
+      // Translate question text + choices
+      const { processed: qProcessed, next: qNext } =
+        await this.translateOneItem({
+          assignmentId,
           questionId: question.questionId,
-          variantId: variant.id,
-          text: variant.variantContent,
-          choices: variant.choices,
+          variantId: null,
+          text: question.text,
+          choices: question.choices,
+          targetLanguages,
+          dryRun,
+          remaining,
         });
+      processedTranslations += qProcessed;
+      remaining = qNext;
 
-        if (!continueVariants) {
-          break;
-        }
+      if (remaining !== null && remaining <= 0) break;
+
+      // Translate each variant's content + choices
+      for (const variant of question.variants) {
+        const { processed: vProcessed, next: vNext } =
+          await this.translateOneItem({
+            assignmentId,
+            questionId: question.questionId,
+            variantId: variant.id,
+            text: variant.variantContent,
+            choices: variant.choices,
+            targetLanguages,
+            dryRun,
+            remaining,
+          });
+        processedTranslations += vProcessed;
+        remaining = vNext;
+
+        if (remaining !== null && remaining <= 0) break;
       }
 
-      if (remainingTranslations !== null && remainingTranslations <= 0) {
-        break;
-      }
+      if (remaining !== null && remaining <= 0) break;
     }
 
     return {
       processedTranslations,
       questionsTranslated: questionsToTranslate.length,
-      remainingTranslations,
+      remainingTranslations: remaining,
     };
   }
+
+  /**
+   * Translate a single question or variant item to the requested target
+   * languages and update the remaining budget.
+   *
+   * - Detects the source language of the text.
+   * - Deletes any existing Translation rows for the target languages before
+   *   writing, so stale/incorrect translations are replaced rather than
+   *   accumulated (Translation has no unique constraint).
+   * - Honours the `remaining` budget: only translates up to `remaining`
+   *   languages when a limit is set, or all target languages when unlimited.
+   */
+  private async translateOneItem(options: {
+    assignmentId: number;
+    questionId: number;
+    variantId: number | null;
+    text: string;
+    choices: unknown;
+    targetLanguages: string[];
+    dryRun: boolean;
+    remaining: number | null;
+  }): Promise<{ processed: number; next: number | null }> {
+    const {
+      assignmentId,
+      questionId,
+      variantId,
+      text,
+      choices,
+      targetLanguages,
+      dryRun,
+      remaining,
+    } = options;
+
+    if (!text || text.trim().length === 0) {
+      return { processed: 0, next: remaining };
+    }
+
+    const currentRemaining = remaining === null ? null : Math.max(0, remaining);
+
+    if (currentRemaining !== null && currentRemaining <= 0) {
+      return { processed: 0, next: 0 };
+    }
+
+    const languagesToProcess =
+      currentRemaining === null
+        ? targetLanguages
+        : targetLanguages.slice(0, currentRemaining);
+
+    if (languagesToProcess.length === 0) {
+      return { processed: 0, next: currentRemaining };
+    }
+
+    if (!dryRun) {
+      const sourceLanguage = await this.translationService.detectLanguage(
+        text,
+        assignmentId,
+      );
+
+      // Remove stale Translation rows for these languages before writing fresh
+      // ones. Without this, each call would append a new row (no unique
+      // constraint on the table) and learners would see the oldest entry.
+      await this.prisma.translation.deleteMany({
+        where: {
+          questionId,
+          variantId,
+          languageCode: { in: languagesToProcess },
+        },
+      });
+
+      await this.translationService.translateContentToLanguages(
+        assignmentId,
+        questionId,
+        variantId,
+        text,
+        choices ?? null,
+        sourceLanguage,
+        languagesToProcess,
+      );
+    }
+
+    const processed = languagesToProcess.length;
+    const next = remaining === null ? null : remaining - processed;
+
+    return { processed, next };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Find-missing helpers
+  // ---------------------------------------------------------------------------
 
   private async resolveAssignmentsToScan(
     assignmentIds: number[] | undefined,
@@ -635,12 +734,11 @@ export class TranslationMaintenanceController {
     limit?: number,
   ): Promise<Array<{ id: number; name: string }>> {
     if (assignmentIds && assignmentIds.length > 0) {
-      const assignments = await this.prisma.assignment.findMany({
+      return this.prisma.assignment.findMany({
         where: { id: { in: assignmentIds } },
         select: { id: true, name: true },
         orderBy: { id: "asc" },
       });
-      return assignments;
     }
 
     return this.prisma.assignment.findMany({
