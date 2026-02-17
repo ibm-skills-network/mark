@@ -12,3 +12,5 @@ docs/
 .eslintrc.cjs
 .prettierrc 
 /dev.env
+
+apps/**/main.ts
