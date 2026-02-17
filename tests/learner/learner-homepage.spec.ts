@@ -1,9 +1,13 @@
 import { test, expect } from "@playwright/test";
-import { getAssignmentId } from "../helpers/assignment-helpers";
+import { getLearnerAssignmentId } from "../helpers/assignment-helpers";
+import { skipIfNotRole, setAuthCookie } from "../helpers/role-helpers";
 
 test.describe("Learner - Assignment Homepage", () => {
   test.beforeEach(async ({ page }) => {
-    const assignmentId = getAssignmentId();
+    skipIfNotRole("learner"); // Skip if TEST_ROLE is set to "author"
+    await setAuthCookie(page, "learner");
+
+    const assignmentId = getLearnerAssignmentId();
     await page.goto(`/learner/${assignmentId}?lang=en`);
 
     // Handle the initial confirmation dialog if present

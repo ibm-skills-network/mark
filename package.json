@@ -46,6 +46,11 @@
     "test": "turbo run test",
     "test:watch": "turbo run test --parallel ",
     "test:staged": "turbo run test:staged --",
+    "test:setup": "ts-node tests/helpers/setup-test-assignments.ts",
+    "playwright": "playwright test",
+    "playwright:install": "playwright install --with-deps",
+    "playwright:learner": "playwright test tests/learner",
+    "playwright:author": "playwright test tests/author",
     "start": "scripts/start.sh",
     "studio": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma studio",
     "translation-audit:dev": "cd ./apps/api && dotenv -e ./dev.env -- ts-node src/scripts/translation-audit.ts"

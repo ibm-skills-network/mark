@@ -13,16 +13,25 @@ test("author settings persist and reflect in preview", async ({ page }) => {
   await page.getByRole("button", { name: "Graded This assignment's" }).click();
 
   // Enable strict time limit
-  await page
-    .getByRole("switch", { name: "Enforce a strict time limit" })
-    .click();
+  const strictTimeLimitSwitch = page.getByRole("switch", {
+    name: "Enforce a strict time limit",
+  });
+  if ((await strictTimeLimitSwitch.getAttribute("aria-checked")) !== "true") {
+    await strictTimeLimitSwitch.click();
+  }
 
   // Set allotted time to 25 minutes
-  await page.getByPlaceholder("Enter time limit in minutes").fill("25");
+  const timeLimitInput = page.getByPlaceholder("Enter time limit in minutes");
+  await expect(timeLimitInput).toBeVisible();
+  await timeLimitInput.fill("25");
 
   // Set number of attempts (dropdown)
   await page.getByRole("button", { name: "Dropdown Arrow" }).click();
-  await page.getByText("3", { exact: true }).click();
+  const attemptsOption = page.locator("#dropdown-portal li", {
+    hasText: /^3$/,
+  });
+  await expect(attemptsOption).toBeVisible();
+  await attemptsOption.click();
 
   // Set passing grade to 45%
   await page.getByPlaceholder("Ex.").fill("45");
@@ -48,7 +57,7 @@ test("author settings persist and reflect in preview", async ({ page }) => {
 
   // Verify assignment type is reflected
   await expect(page1.getByText("Assignment type")).toBeVisible();
-  await expect(page1.getByText("Graded")).toBeVisible();
+  await expect(page1.getByText("Graded", { exact: true })).toBeVisible();
 
   // Verify time limit and estimated time are shown
   await expect(page1.getByText("Time Limit")).toBeVisible();

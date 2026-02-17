@@ -1,62 +1,72 @@
 import { test, expect } from "@playwright/test";
-import { getAssignmentId } from "../helpers/assignment-helpers";
+import { getAuthorAssignmentId } from "../helpers/assignment-helpers";
+import { skipIfNotRole, setAuthCookie } from "../helpers/role-helpers";
 
-test("test", async ({ page }) => {
-  const assignmentId = getAssignmentId();
-  await page.goto(`/author/${assignmentId}`);
+test.describe("Author - Assignment Overview", () => {
+  test.beforeEach(async ({ page }) => {
+    skipIfNotRole("author");
+    await setAuthCookie(page, "author");
+  });
 
-  // make changes to assignment preview content
-  const editor = page.locator(".ql-editor").first();
+  test("should edit assignment overview content and verify in preview", async ({
+    page,
+  }) => {
+    const assignmentId = getAuthorAssignmentId();
+    await page.goto(`/author/${assignmentId}`);
 
-  await editor.fill("");
-  await page.getByText("In this project, you will").click();
-  await page.locator(".ql-editor").first().press("ControlOrMeta+a");
-  await page
-    .locator(".ql-editor")
-    .first()
-    .fill(
-      "This assignment will test your knowledge on creating websites and testing your ability to code.",
-    );
-  await page.getByText("Before submitting your").click();
-  await page
-    .locator(
-      "section:nth-child(2) > .w-full > .flex > .quill-editor > .ql-editor",
-    )
-    .press("ControlOrMeta+a");
-  await page
-    .locator(
-      "section:nth-child(2) > .w-full > .flex > .quill-editor > .ql-editor",
-    )
-    .fill(
-      "The instructions to successfully completing this assignment include answering all questions truthfully and correctly, and submitting the assignment before the deadline.",
-    );
-  await page.getByText("The assignment is worth 10").click();
-  await page
-    .getByText(
-      "The assignment is worth 10 points and requires 60% to pass.[1] (1 point)",
-    )
-    .press("ControlOrMeta+a");
-  await page
-    .getByText(
-      "The assignment is worth 10 points and requires 60% to pass.[1] (1 point)",
-    )
-    .fill(
-      "Learners will be graded based on the criteria mentioned in the question, and it will mostly be about correctness with part marks being awarded for good effort.",
-    );
+    // Edit introduction section
+    const introSection = page.locator("section", {
+      has: page.getByRole("heading", {
+        name: /what is this assignment about/i,
+      }),
+    });
+    await introSection.locator(".ql-editor").click();
+    await introSection
+      .locator(".ql-editor")
+      .fill(
+        "This assignment is about testing with playwright, and ensuring assignment overview saves.",
+      );
 
-  // open preview and verify changes
-  const page1Promise = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Preview" }).click();
-  const page1 = await page1Promise;
+    // Edit instructions section
+    const instructionsSection = page.locator("section", {
+      has: page.getByRole("heading", {
+        name: /what are the instructions to successfully completing this assignment/i,
+      }),
+    });
+    await instructionsSection.locator(".ql-editor").click();
+    await instructionsSection
+      .locator(".ql-editor")
+      .fill(
+        "The instructions to complete this assignment include answering all questions correctly, and to not cheat.",
+      );
 
-  // verify updated content in preview
-  await page1.getByRole("heading", { name: "About this assignment" }).click();
-  await page1.getByText("This assignment will test").click();
-  await page1.getByRole("heading", { name: "Instructions" }).click();
-  await expect(
-    page1.getByRole("heading", { name: "Instructions" }),
-  ).toBeVisible();
-  await page1.getByText("The instructions to").click();
-  await page1.getByRole("heading", { name: "Grading Criteria" }).click();
-  await page1.getByText("Learners will be graded based").click();
+    // Edit grading criteria section
+    const gradingSection = page.locator("section", {
+      has: page.getByRole("heading", {
+        name: /how will learners be graded on this assignment/i,
+      }),
+    });
+    await gradingSection.locator(".ql-editor").click();
+    await gradingSection
+      .locator(".ql-editor")
+      .fill(
+        "Learners will be graded on this assignment using accurate rubrics to answer questions.",
+      );
+
+    // Open preview and verify content changes
+    const previewPagePromise = page.waitForEvent("popup");
+    await page.getByRole("button", { name: "Preview" }).click();
+    const previewPage = await previewPagePromise;
+
+    // Verify updated content appears in preview
+    await expect(
+      previewPage.getByText("This assignment is about"),
+    ).toBeVisible();
+    await expect(
+      previewPage.getByText("The instructions to complete"),
+    ).toBeVisible();
+    await expect(
+      previewPage.getByText("Learners will be graded on"),
+    ).toBeVisible();
+  });
 });

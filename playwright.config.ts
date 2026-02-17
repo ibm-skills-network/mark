@@ -83,7 +83,7 @@ export default defineConfig({
 
   webServer: {
     command: "yarn dev",
-    url: "http://localhost:4222/health", // Wait for API to be ready
+    url: "http://localhost:4222/health/readiness", // Wait for API to be ready
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
   },

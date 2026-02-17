@@ -9,7 +9,7 @@ const DEFAULT_ADMIN_EMAIL = "admin@example.com";
 
 const CACHE_PATH = path.resolve(
   __dirname,
-  "../playwright/.cache/assignment.json",
+  "../playwright/.cache/assignments.json",
 );
 
 type AssignmentCache = {
@@ -19,8 +19,16 @@ type AssignmentCache = {
   groupId?: string;
 };
 
-export function getAssignmentId(): number {
-  const envValue = process.env.PW_ASSIGNMENT_ID;
+type AssignmentsCache = {
+  learner: AssignmentCache;
+  author: AssignmentCache;
+};
+
+/**
+ * Get the learner assignment ID (published with content)
+ */
+export function getLearnerAssignmentId(): number {
+  const envValue = process.env.PW_LEARNER_ASSIGNMENT_ID;
   if (envValue) {
     const parsed = Number(envValue);
     if (!Number.isNaN(parsed)) {
@@ -30,9 +38,12 @@ export function getAssignmentId(): number {
 
   try {
     const raw = fs.readFileSync(CACHE_PATH, "utf-8");
-    const data = JSON.parse(raw) as { id?: number };
-    if (typeof data.id === "number" && !Number.isNaN(data.id)) {
-      return data.id;
+    const data = JSON.parse(raw) as AssignmentsCache;
+    if (
+      typeof data.learner?.id === "number" &&
+      !Number.isNaN(data.learner.id)
+    ) {
+      return data.learner.id;
     }
   } catch {
     // Ignore cache read errors and fall back to default.
@@ -41,10 +52,42 @@ export function getAssignmentId(): number {
   return DEFAULT_ASSIGNMENT_ID;
 }
 
-export function getAssignmentCache(): AssignmentCache | null {
+/**
+ * Get the author assignment ID (empty, for testing authoring workflow)
+ */
+export function getAuthorAssignmentId(): number {
+  const envValue = process.env.PW_AUTHOR_ASSIGNMENT_ID;
+  if (envValue) {
+    const parsed = Number(envValue);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
   try {
     const raw = fs.readFileSync(CACHE_PATH, "utf-8");
-    return JSON.parse(raw) as AssignmentCache;
+    const data = JSON.parse(raw) as AssignmentsCache;
+    if (typeof data.author?.id === "number" && !Number.isNaN(data.author.id)) {
+      return data.author.id;
+    }
+  } catch {
+    // Ignore cache read errors and fall back to default.
+  }
+
+  return DEFAULT_ASSIGNMENT_ID;
+}
+
+/**
+ * @deprecated Use getLearnerAssignmentId() or getAuthorAssignmentId() instead
+ */
+export function getAssignmentId(): number {
+  return getLearnerAssignmentId();
+}
+
+export function getAssignmentCache(): AssignmentsCache | null {
+  try {
+    const raw = fs.readFileSync(CACHE_PATH, "utf-8");
+    return JSON.parse(raw) as AssignmentsCache;
   } catch {
     return null;
   }
@@ -73,7 +116,7 @@ export function createUserSessionHeader(
   },
 ) {
   const groupId = options?.groupId || getGroupId();
-  const assignmentId = options?.assignmentId || getAssignmentId();
+  const assignmentId = options?.assignmentId || getLearnerAssignmentId();
   const userId = options?.userId || DEFAULT_ADMIN_EMAIL;
 
   return {
