@@ -5,12 +5,17 @@ import {
   Injectable,
   Param,
   Post,
+  Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { ChatRole } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
+import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import { Response } from "express";
 import { ChatAccessControlGuard } from "../guards/chat.access.control.guard";
+import { MarkChatService } from "../services/mark-chat.service";
 import { ChatService } from "../services/chat.service";
 
 @ApiTags("chats")
@@ -20,7 +25,10 @@ import { ChatService } from "../services/chat.service";
   version: "1",
 })
 export class ChatController {
-  constructor(private chatService: ChatService) {}
+  constructor(
+    private chatService: ChatService,
+    private markChatService: MarkChatService,
+  ) {}
 
   @Post()
   @UseGuards(ChatAccessControlGuard)
@@ -31,12 +39,20 @@ export class ChatController {
   @Post("today")
   @UseGuards(ChatAccessControlGuard)
   async getTodayChat(@Body() body: { header: string; body: string }) {
-    let newBody: { userId: string; assignmentId?: number };
-    if (typeof body.body === "string") {
+    let newBody: { userId: string; assignmentId?: number } | undefined;
+    if (typeof body?.body === "string") {
       newBody = JSON.parse(body.body) as {
         userId: string;
         assignmentId?: number;
       };
+    } else if (
+      body &&
+      typeof (body as { userId?: unknown }).userId === "string"
+    ) {
+      newBody = body as unknown as { userId: string; assignmentId?: number };
+    }
+    if (!newBody?.userId) {
+      throw new Error("Missing userId for chat");
     }
     return this.chatService.getOrCreateTodayChat(
       newBody.userId,
@@ -74,5 +90,49 @@ export class ChatController {
   @UseGuards(ChatAccessControlGuard)
   async endChat(@Param("chatId") chatId: string) {
     return this.chatService.endChat(chatId);
+  }
+
+  @Post(":chatId/respond")
+  @UseGuards(ChatAccessControlGuard)
+  async respond(
+    @Param("chatId") chatId: string,
+    @Body()
+    body: {
+      userRole: "author" | "learner";
+      userText: string;
+      conversation: {
+        role: "system" | "user" | "assistant";
+        content: string;
+        id?: string;
+      }[];
+    },
+    @Req() request: UserSessionRequest,
+  ) {
+    return this.markChatService.respond(chatId, body, request.userSession);
+  }
+
+  @Post(":chatId/respond-stream")
+  @UseGuards(ChatAccessControlGuard)
+  async respondStream(
+    @Param("chatId") chatId: string,
+    @Body()
+    body: {
+      userRole: "author" | "learner";
+      userText: string;
+      conversation: {
+        role: "system" | "user" | "assistant";
+        content: string;
+        id?: string;
+      }[];
+    },
+    @Req() request: UserSessionRequest,
+    @Res() response: Response,
+  ) {
+    await this.markChatService.respondStream(
+      chatId,
+      body,
+      request.userSession,
+      response,
+    );
   }
 }
