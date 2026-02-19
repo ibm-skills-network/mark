@@ -49,6 +49,28 @@ class MissingTranslationsRequestDto {
   @IsInt()
   @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pageSize?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  onlyUntranslated?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  languageCodes?: string[];
 }
 
 class FixMissingTranslationsRequestDto {
@@ -100,6 +122,7 @@ type AssignmentScanResult = {
   assignmentName: string;
   missingAssignmentLanguages: string[];
   missingItems: MissingItem[];
+  hasAnyTranslations: boolean;
 };
 
 type MissingAssignmentSummary = {
@@ -114,7 +137,16 @@ type QuestionToTranslate = {
   variants: Array<{ id: number; variantContent: string; choices: unknown }>;
 };
 
+type BaseQuestionForTranslation = {
+  id: number;
+  question: string;
+  choices: unknown;
+  variants: Array<{ id: number; variantContent: string; choices: unknown }>;
+};
+
 const normalizeLang = (code: string) => code.toLowerCase();
+const normalizeQuestionText = (text: string | null | undefined) =>
+  (text ?? "").trim().toLowerCase().replaceAll(/\s+/g, " ");
 
 @ApiTags("Admin")
 @ApiBearerAuth()
@@ -145,10 +177,44 @@ export class TranslationMaintenanceController {
   ): Promise<{
     success: true;
     data: number[] | MissingAssignmentSummary[];
+    pagination?: {
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
   }> {
-    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const allSupportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const supportedLanguagesByNormalized = new Map(
+      allSupportedLanguages.map((lang) => [normalizeLang(lang), lang]),
+    );
+    const requestedLanguages = (body.languageCodes ?? [])
+      .map((lang) => normalizeLang(lang))
+      .filter((lang) => supportedLanguagesByNormalized.has(lang))
+      .map((lang) => supportedLanguagesByNormalized.get(lang) ?? lang);
+
+    if (
+      (body.languageCodes?.length ?? 0) > 0 &&
+      requestedLanguages.length === 0
+    ) {
+      throw new BadRequestException(
+        "No valid languageCodes provided for missing translation scan",
+      );
+    }
+
+    const supportedLanguages =
+      requestedLanguages.length > 0
+        ? requestedLanguages
+        : allSupportedLanguages;
     const includeAll = Boolean(body.includeAll);
     const includeNames = Boolean(body.includeNames);
+    const onlyUntranslated = Boolean(body.onlyUntranslated);
+    const shouldPaginate =
+      body.page !== undefined || body.pageSize !== undefined;
+    const page = body.page ?? 1;
+    const pageSize = body.pageSize ?? 50;
 
     const assignments = await this.resolveAssignmentsToScan(
       body.assignmentIds,
@@ -173,6 +239,9 @@ export class TranslationMaintenanceController {
         scanResult.missingAssignmentLanguages.length > 0 ||
         scanResult.missingItems.length > 0
       ) {
+        if (onlyUntranslated && scanResult.hasAnyTranslations) {
+          continue;
+        }
         assignmentIds.push(scanResult.assignmentId);
         if (includeNames) {
           results.push({
@@ -183,7 +252,31 @@ export class TranslationMaintenanceController {
       }
     }
 
-    return { success: true, data: includeNames ? results : assignmentIds };
+    if (!shouldPaginate) {
+      return { success: true, data: includeNames ? results : assignmentIds };
+    }
+
+    const totalItems = includeNames ? results.length : assignmentIds.length;
+    const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize);
+    const currentPage = totalPages === 0 ? 1 : Math.min(page, totalPages);
+    const offset = (currentPage - 1) * pageSize;
+
+    const pagedData = includeNames
+      ? results.slice(offset, offset + pageSize)
+      : assignmentIds.slice(offset, offset + pageSize);
+
+    return {
+      success: true,
+      data: pagedData,
+      pagination: {
+        page: currentPage,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1,
+      },
+    };
   }
 
   @Post("missing/fix")
@@ -492,65 +585,106 @@ export class TranslationMaintenanceController {
         `Assignment ${assignmentId}: translating ${questionVersions.length} questions from active version ${activeVersion?.id}`,
       );
 
-      // Collect questionIds that have a base Question record (nullable FK)
-      const questionIds = [
-        ...new Set(
-          questionVersions
-            .map((qv) => qv.questionId)
-            .filter((id): id is number => id !== null && id !== undefined),
-        ),
-      ];
-
-      // Log any version-only questions that cannot be translated
-      const versionOnlyCount = questionVersions.length - questionIds.length;
-      if (versionOnlyCount > 0) {
-        this.logger.warn(
-          `Assignment ${assignmentId}: ${versionOnlyCount} question version(s) have no base Question record and will be skipped (questionId is null — cannot store Translation FK).`,
-        );
-      }
-
-      // Fetch base questions for variant data
-      const baseQuestions =
-        questionIds.length > 0
-          ? await this.prisma.question.findMany({
-              where: { id: { in: questionIds } },
+      // Fetch all base questions for resilient mapping. Some active-version
+      // questionVersions can have null or stale questionId values.
+      const baseQuestions: BaseQuestionForTranslation[] =
+        await this.prisma.question.findMany({
+          where: { assignmentId, isDeleted: false },
+          select: {
+            id: true,
+            question: true,
+            choices: true,
+            variants: {
+              where: { isDeleted: false },
               select: {
                 id: true,
-                variants: {
-                  where: { isDeleted: false },
-                  select: {
-                    id: true,
-                    variantContent: true,
-                    choices: true,
-                  },
-                },
+                variantContent: true,
+                choices: true,
               },
-            })
-          : [];
-
-      const questionById = new Map(baseQuestions.map((q) => [q.id, q]));
-
-      questionsToTranslate = questionVersions
-        .filter(
-          (qv): qv is typeof qv & { questionId: number } =>
-            qv.questionId !== null && qv.questionId !== undefined,
-        )
-        .map((qv) => {
-          const baseQuestion = questionById.get(qv.questionId);
-
-          if (!baseQuestion) {
-            this.logger.warn(
-              `Assignment ${assignmentId}: base Question record ${qv.questionId} not found — variants will be skipped.`,
-            );
-          }
-
-          return {
-            questionId: qv.questionId,
-            text: qv.question ?? "",
-            choices: qv.choices,
-            variants: baseQuestion?.variants ?? [],
-          };
+            },
+          },
         });
+
+      const baseQuestionById = new Map(baseQuestions.map((q) => [q.id, q]));
+      const baseQuestionIdByDisplayOrder = new Map<number, number>();
+      const baseQuestionsByText = new Map<
+        string,
+        Array<(typeof baseQuestions)[number]>
+      >();
+
+      for (const [index, questionId] of (
+        assignment.questionOrder ?? []
+      ).entries()) {
+        if (typeof questionId === "number") {
+          baseQuestionIdByDisplayOrder.set(index + 1, questionId);
+        }
+      }
+
+      for (const question of baseQuestions) {
+        const normalizedText = normalizeQuestionText(question.question);
+        if (normalizedText) {
+          const byText = baseQuestionsByText.get(normalizedText) ?? [];
+          byText.push(question);
+          baseQuestionsByText.set(normalizedText, byText);
+        }
+      }
+
+      questionsToTranslate = questionVersions.flatMap((qv) => {
+        let baseQuestion: (typeof baseQuestions)[number] | undefined;
+
+        if (qv.questionId !== null && qv.questionId !== undefined) {
+          baseQuestion = baseQuestionById.get(qv.questionId);
+        }
+
+        if (!baseQuestion && typeof qv.displayOrder === "number") {
+          const byDisplayId = baseQuestionIdByDisplayOrder.get(qv.displayOrder);
+          if (typeof byDisplayId === "number") {
+            baseQuestion = baseQuestionById.get(byDisplayId);
+          }
+        }
+
+        if (!baseQuestion) {
+          const normalizedVersionText = normalizeQuestionText(qv.question);
+          const byText = normalizedVersionText
+            ? baseQuestionsByText.get(normalizedVersionText)
+            : undefined;
+          if (byText?.length === 1) {
+            baseQuestion = byText[0];
+          }
+        }
+
+        if (!baseQuestion) {
+          this.logger.warn(
+            `Assignment ${assignmentId}: could not map active question version ${qv.id} to a base question (questionId=${qv.questionId ?? "null"}). Skipping this question version.`,
+          );
+          return [];
+        }
+
+        return [
+          {
+            questionId: baseQuestion.id,
+            text:
+              qv.question && qv.question.trim().length > 0
+                ? qv.question
+                : (baseQuestion.question ?? ""),
+            choices: qv.choices ?? baseQuestion.choices,
+            variants: baseQuestion.variants ?? [],
+          },
+        ];
+      });
+
+      if (questionsToTranslate.length === 0 && baseQuestions.length > 0) {
+        this.logger.warn(
+          `Assignment ${assignmentId}: no active question versions could be mapped; falling back to base questions for translation.`,
+        );
+
+        questionsToTranslate = baseQuestions.map((q) => ({
+          questionId: q.id,
+          text: q.question ?? "",
+          choices: q.choices,
+          variants: q.variants,
+        }));
+      }
     } else {
       // No active version — use base Question records directly
       this.logger.log(
@@ -594,8 +728,11 @@ export class TranslationMaintenanceController {
 
     for (const question of questionsToTranslate) {
       // Translate question text + choices
-      const { processed: qProcessed, next: qNext } =
-        await this.translateOneItem({
+      let qProcessed = 0;
+      let qNext = remaining;
+
+      try {
+        const questionResult = await this.translateOneItem({
           assignmentId,
           questionId: question.questionId,
           variantId: null,
@@ -605,6 +742,17 @@ export class TranslationMaintenanceController {
           dryRun,
           remaining,
         });
+        qProcessed = questionResult.processed;
+        qNext = questionResult.next;
+      } catch (error) {
+        this.logger.warn(
+          `Assignment ${assignmentId}: failed to translate question ${question.questionId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        continue;
+      }
+
       processedTranslations += qProcessed;
       remaining = qNext;
 
@@ -612,8 +760,11 @@ export class TranslationMaintenanceController {
 
       // Translate each variant's content + choices
       for (const variant of question.variants) {
-        const { processed: vProcessed, next: vNext } =
-          await this.translateOneItem({
+        let vProcessed = 0;
+        let vNext = remaining;
+
+        try {
+          const variantResult = await this.translateOneItem({
             assignmentId,
             questionId: question.questionId,
             variantId: variant.id,
@@ -623,6 +774,17 @@ export class TranslationMaintenanceController {
             dryRun,
             remaining,
           });
+          vProcessed = variantResult.processed;
+          vNext = variantResult.next;
+        } catch (error) {
+          this.logger.warn(
+            `Assignment ${assignmentId}: failed to translate variant ${variant.id} for question ${question.questionId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          continue;
+        }
+
         processedTranslations += vProcessed;
         remaining = vNext;
 
@@ -737,7 +899,7 @@ export class TranslationMaintenanceController {
       return this.prisma.assignment.findMany({
         where: { id: { in: assignmentIds } },
         select: { id: true, name: true },
-        orderBy: { id: "asc" },
+        orderBy: { id: "desc" },
       });
     }
 
@@ -753,7 +915,7 @@ export class TranslationMaintenanceController {
           },
       select: { id: true, name: true },
       take: limit,
-      orderBy: { id: "asc" },
+      orderBy: { id: "desc" },
     });
   }
 
@@ -765,7 +927,18 @@ export class TranslationMaintenanceController {
   ): Promise<AssignmentScanResult | null> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        currentVersion: {
+          select: {
+            id: true,
+            questionVersions: {
+              select: { questionId: true },
+            },
+          },
+        },
+      },
     });
 
     if (!assignment) return null;
@@ -783,9 +956,30 @@ export class TranslationMaintenanceController {
       (lang) => !assignmentLangs.has(normalizeLang(lang)),
     );
 
+    const currentVersionQuestionIds = includeAll
+      ? []
+      : [
+          ...new Set(
+            (assignment.currentVersion?.questionVersions ?? [])
+              .map((qv) => qv.questionId)
+              .filter((id): id is number => id !== null && id !== undefined),
+          ),
+        ];
+
+    const shouldRestrictToCurrentVersion =
+      !includeAll &&
+      (assignment.currentVersion?.questionVersions?.length ?? 0) > 0;
+
     const questions = await this.prisma.question.findMany({
       where: {
         assignmentId,
+        ...(shouldRestrictToCurrentVersion
+          ? {
+              id: {
+                in: currentVersionQuestionIds,
+              },
+            }
+          : {}),
         ...(includeAll ? {} : { isDeleted: false }),
       },
       select: {
@@ -852,11 +1046,16 @@ export class TranslationMaintenanceController {
       }
     }
 
+    const hasAnyTranslations =
+      assignmentTranslations.length > 0 ||
+      questions.some((question) => question.translations.length > 0);
+
     return {
       assignmentId: assignment.id,
       assignmentName: assignment.name,
       missingAssignmentLanguages,
       missingItems,
+      hasAnyTranslations,
     };
   }
 }
