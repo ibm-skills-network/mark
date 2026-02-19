@@ -4,6 +4,10 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { Question } from "@prisma/client";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
+import {
+  UserRole,
+  UserSession,
+} from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
@@ -220,6 +224,142 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       expect(result.totalPossiblePoints).toBe(10);
       expect(result.missingQuestions).toContain(999);
+    });
+  });
+
+  describe("createAssignmentAttempt - question versions", () => {
+    const assignmentId = 123;
+    const userSession: UserSession = {
+      userId: "user-1",
+      role: UserRole.LEARNER,
+      assignmentId,
+      groupId: "group-1",
+    };
+
+    const makeQuestionVersion = (overrides: Partial<Record<string, unknown>>) =>
+      ({
+        id: overrides.id ?? 1000,
+        questionId: overrides.questionId ?? null,
+        question: overrides.question ?? "Question",
+        type: overrides.type ?? "TEXT",
+        assignmentId,
+        totalPoints: overrides.totalPoints ?? 5,
+        maxWords: null,
+        maxCharacters: null,
+        choices: [],
+        scoring: {},
+        answer: null,
+        gradingContextQuestionIds: [],
+        responseType: "TEXT",
+        randomizedChoices: false,
+        videoPresentationConfig: null,
+        liveRecordingConfig: null,
+      }) as unknown as Record<string, unknown>;
+
+    const baseAssignment = {
+      id: assignmentId,
+      numberOfQuestionsPerAttempt: undefined,
+      questionOrder: [],
+      displayOrder: null,
+      allotedTimeMinutes: undefined,
+    };
+
+    beforeEach(() => {
+      mockAssignmentRepository.findById.mockResolvedValue(baseAssignment);
+      mockValidationService.validateNewAttempt.mockResolvedValue();
+      mockPrisma.assignmentAttempt.create.mockResolvedValue({ id: 55 });
+      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+    });
+
+    it("batches question variant lookup by questionId", async () => {
+      const questionVersions = [
+        makeQuestionVersion({ id: 1001, questionId: 10, question: "Q1" }),
+        makeQuestionVersion({ id: 1002, questionId: 20, question: "Q2" }),
+        makeQuestionVersion({ id: 1003, questionId: null, question: "Q3" }),
+      ];
+
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        currentVersionId: 9,
+        currentVersion: { questionVersions },
+        questions: [],
+      });
+
+      const variant = {
+        id: 501,
+        variantContent: "Variant 1",
+        choices: [],
+        scoring: {},
+        maxWords: null,
+        maxCharacters: null,
+        variantType: "REWORDED",
+        randomizedChoices: false,
+        isDeleted: false,
+      };
+
+      mockPrisma.question.findMany.mockResolvedValue([
+        { id: 10, variants: [variant] },
+        { id: 20, variants: [] },
+      ]);
+
+      const result = await service.createAssignmentAttempt(
+        assignmentId,
+        userSession,
+      );
+
+      expect(result).toEqual({ id: 55, success: true });
+      expect(mockPrisma.question.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.question.findMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.question.findMany).toHaveBeenCalledWith({
+        where: { id: { in: [10, 20] } },
+        include: { variants: { where: { isDeleted: false } } },
+      });
+      expect(
+        mockQuestionVariantService.createAttemptQuestionVariants,
+      ).toHaveBeenCalledTimes(1);
+
+      const [, orderedQuestions] = mockQuestionVariantService
+        .createAttemptQuestionVariants.mock.calls[0] as [
+        number,
+        Array<{ id: number; variants?: Array<{ id?: number }> }>,
+      ];
+      const questionWithVariant = orderedQuestions.find((q) => q.id === 10);
+      const questionWithoutVariant = orderedQuestions.find((q) => q.id === 20);
+      const questionFromVersionOnly = orderedQuestions.find(
+        (q) => q.id === 1003,
+      );
+
+      expect(questionWithVariant?.variants).toHaveLength(1);
+      expect(questionWithVariant?.variants?.[0]?.id).toBe(501);
+      expect(questionWithoutVariant?.variants).toHaveLength(0);
+      expect(questionFromVersionOnly?.variants).toHaveLength(0);
+    });
+
+    it("skips batch lookup when questionIds are missing", async () => {
+      const questionVersions = [
+        makeQuestionVersion({ id: 2001, questionId: null, question: "Q1" }),
+      ];
+
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        currentVersionId: 9,
+        currentVersion: { questionVersions },
+        questions: [],
+      });
+
+      await service.createAssignmentAttempt(assignmentId, userSession);
+
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+      expect(
+        mockQuestionVariantService.createAttemptQuestionVariants,
+      ).toHaveBeenCalledTimes(1);
+
+      const [, orderedQuestions] = mockQuestionVariantService
+        .createAttemptQuestionVariants.mock.calls[0] as [
+        number,
+        Array<{ id: number; variants?: Array<{ id?: number }> }>,
+      ];
+      expect(orderedQuestions).toHaveLength(1);
+      expect(orderedQuestions[0].id).toBe(2001);
+      expect(orderedQuestions[0].variants).toHaveLength(0);
     });
   });
 

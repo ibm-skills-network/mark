@@ -15,6 +15,7 @@ import { FlaggedSubmissionsController } from "./controllers/flagged-submissions.
 import { LLMAssignmentController } from "./controllers/llm-assignment.controller";
 import { LLMPricingController } from "./controllers/llm-pricing.controller";
 import { RegradingRequestsController } from "./controllers/regrading-requests.controller";
+import { TranslationMaintenanceController } from "./controllers/translation-maintenance.controller";
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { RegradingRequestsController } from "./controllers/regrading-requests.co
     RegradingRequestsController,
     FlaggedSubmissionsController,
     AssignmentAnalyticsController,
+    TranslationMaintenanceController,
   ],
   providers: [AdminService, PrismaService, AdminRepository],
 })
