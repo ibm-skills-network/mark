@@ -72,7 +72,7 @@ spec:
   - host: "{{ .Release.Name }}.{{ .Values.baseDomain }}"
     http:
       paths:
-      - path: "/lti/1.1"
+      - path: "/lti/"
         {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
         pathType: Prefix
         {{- end }}
