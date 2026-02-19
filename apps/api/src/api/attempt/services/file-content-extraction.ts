@@ -143,6 +143,17 @@ export class FileContentExtractionService {
     private readonly pdfStructureExtractor: PdfStructureExtractorService,
   ) {}
 
+  private isJupyterNotebookJsonContent(content: string): boolean {
+    if (!content?.trim()) return false;
+
+    try {
+      const parsed = JSON.parse(content) as Partial<JupyterNotebook>;
+      return Array.isArray(parsed?.cells);
+    } catch {
+      return false;
+    }
+  }
+
   async extractContentFromFiles(
     learnerFiles: LearnerFileUpload[],
     options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
@@ -301,6 +312,33 @@ export class FileContentExtractionService {
       file.content !== "InCos" &&
       file.content.trim().length > 0
     ) {
+      const isIpynbFile = file.filename.toLowerCase().endsWith(".ipynb");
+      const hasNotebookJson = this.isJupyterNotebookJsonContent(file.content);
+
+      if (isIpynbFile && hasNotebookJson) {
+        this.logger.debug(
+          `Using existing notebook JSON content for ${file.filename}; parsing notebook cells/outputs`,
+        );
+
+        const extractedNotebook = await this.extractJupyterNotebook(
+          Buffer.from(file.content, "utf8"),
+          file.filename,
+        );
+
+        return {
+          filename: file.filename,
+          content: this.sanitizeAndTruncate(extractedNotebook.text),
+          fileType: file.fileType,
+          extractedText: extractedNotebook.extractedText,
+          metadata: {
+            size: file.content.length,
+            encoding: extractedNotebook.encoding,
+            mimeType: file.fileType,
+            ...extractedNotebook.additionalMetadata,
+          },
+        };
+      }
+
       this.logger.debug(`Using existing content for ${file.filename}`);
       return {
         filename: file.filename,
@@ -447,8 +485,9 @@ export class FileContentExtractionService {
         return await this.extractRTFText(buffer);
 
       case "xlsx":
+        return await this.extractExcelText(buffer, true);
       case "xls":
-        return await this.extractExcelText(buffer);
+        return await this.extractExcelText(buffer, false);
       case "csv":
       case "tsv":
         return await this.extractCSVText(
@@ -465,6 +504,8 @@ export class FileContentExtractionService {
       case "odp":
         return await this.extractODPText(buffer);
 
+      case "jar":
+        return await this.extractArchiveContent(buffer, filename, "zip");
       case "zip":
       case "zipx":
         return await this.extractArchiveContent(buffer, filename, "zip");
@@ -517,8 +558,6 @@ export class FileContentExtractionService {
       case "pyw":
       case "pyi":
       case "java":
-      case "class":
-      case "jar":
       case "cpp":
       case "cc":
       case "cxx":
@@ -633,6 +672,14 @@ export class FileContentExtractionService {
         return await this.extractCalendarContent(buffer);
       case "vcf":
         return await this.extractVCardContent(buffer);
+
+      // Java bytecode - binary, not readable as source
+      case "class":
+        return {
+          text: `[Java Bytecode: ${filename}]\nThis is a compiled Java .class file (binary bytecode). Source code is not available.`,
+          extractedText: "",
+          encoding: "binary",
+        };
 
       default:
         return null;
@@ -2694,10 +2741,17 @@ export class FileContentExtractionService {
     }
   }
 
-  private async extractExcelText(buffer: Buffer): Promise<{
+  private async extractExcelText(
+    buffer: Buffer,
+    isXlsx = true,
+  ): Promise<{
     text: string;
     extractedText: string;
-    additionalMetadata: { sheetCount: number };
+    additionalMetadata: {
+      sheetCount: number;
+      chartCount: number;
+      imageCount: number;
+    };
   }> {
     try {
       const workbook = XLSX.read(buffer, {
@@ -2766,6 +2820,18 @@ export class FileContentExtractionService {
         }
       }
 
+      // Extract charts and embedded images (XLSX is a ZIP archive)
+      let chartCount = 0;
+      let imageCount = 0;
+      if (isXlsx) {
+        const chartsAndImages = await this.extractExcelChartsAndImages(buffer);
+        chartCount = chartsAndImages.chartCount;
+        imageCount = chartsAndImages.imageCount;
+        if (chartsAndImages.section) {
+          allText += chartsAndImages.section;
+        }
+      }
+
       if (workbook.Props) {
         allText += "\n=== DOCUMENT PROPERTIES ===\n";
         for (const [key, value] of Object.entries(workbook.Props)) {
@@ -2773,13 +2839,17 @@ export class FileContentExtractionService {
         }
       }
 
-      this.logger.debug(`Extracted ${sheetNames.length} sheets from Excel`);
+      this.logger.debug(
+        `Extracted ${sheetNames.length} sheets, ${chartCount} charts, ${imageCount} images from Excel`,
+      );
 
       return {
         text: allText.trim(),
         extractedText: allText.trim(),
         additionalMetadata: {
           sheetCount: sheetNames.length,
+          chartCount,
+          imageCount,
         },
       };
     } catch (error) {
@@ -2789,6 +2859,158 @@ export class FileContentExtractionService {
           : String(error);
       throw new Error(`Excel extraction failed: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Parse the XLSX file as a ZIP archive to detect embedded charts and images.
+   * XLSX files are ZIP archives containing XML files for chart data (xl/charts/)
+   * and media files for embedded images (xl/media/).
+   */
+  private async extractExcelChartsAndImages(buffer: Buffer): Promise<{
+    section: string;
+    chartCount: number;
+    imageCount: number;
+  }> {
+    let section = "";
+    let chartCount = 0;
+    let imageCount = 0;
+
+    try {
+      const zip = await unzipper.Open.buffer(buffer);
+      const chartDescriptions: string[] = [];
+      const imageNames: string[] = [];
+
+      for (const entry of zip.files) {
+        // Detect embedded charts in data sheets (xl/charts/chartN.xml)
+        // and standalone chart sheets (xl/chartsheets/sheetN.xml)
+        if (
+          (entry.path.startsWith("xl/charts/chart") ||
+            entry.path.startsWith("xl/chartsheets/sheet")) &&
+          entry.path.endsWith(".xml")
+        ) {
+          try {
+            const xmlBuffer = await entry.buffer();
+            const xmlString = xmlBuffer.toString("utf8");
+            const chartType = this.detectChartTypeFromXml(xmlString);
+            const title = this.extractChartTitleFromXml(xmlString);
+            const chartNum = chartCount + 1;
+            let description = `Chart ${chartNum}: ${chartType}`;
+            if (title) description += ` - "${title}"`;
+            chartDescriptions.push(description);
+            chartCount++;
+          } catch {
+            chartCount++;
+            chartDescriptions.push(`Chart ${chartCount}: (unable to parse)`);
+          }
+        }
+
+        // Detect embedded images in xl/media/
+        if (entry.path.startsWith("xl/media/")) {
+          const ext = path.extname(entry.path).toLowerCase().replace(".", "");
+          const imageExtensions = [
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+            "bmp",
+            "wmf",
+            "emf",
+            "svg",
+            "tiff",
+          ];
+          if (imageExtensions.includes(ext)) {
+            imageNames.push(
+              `${path.basename(entry.path)} (${ext.toUpperCase()})`,
+            );
+            imageCount++;
+          }
+        }
+      }
+
+      if (chartDescriptions.length > 0) {
+        section += `\n=== CHARTS (${chartDescriptions.length} total) ===\n`;
+        for (const desc of chartDescriptions) {
+          section += `- ${desc}\n`;
+        }
+      }
+
+      if (imageNames.length > 0) {
+        section += `\n=== EMBEDDED IMAGES (${imageNames.length} total) ===\n`;
+        for (const img of imageNames) {
+          section += `- ${img}\n`;
+        }
+      }
+    } catch (error) {
+      // Not a valid ZIP or chart extraction failed - skip silently
+      this.logger.debug(
+        `Excel chart/image extraction skipped: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    return { section, chartCount, imageCount };
+  }
+
+  /**
+   * Detect the chart type by scanning the chart XML for OOXML chart type tags.
+   */
+  private detectChartTypeFromXml(xmlString: string): string {
+    const chartTypes: Array<[string, string]> = [
+      ["c:barChart", "Bar Chart"],
+      ["c:bar3DChart", "3D Bar Chart"],
+      ["c:lineChart", "Line Chart"],
+      ["c:line3DChart", "3D Line Chart"],
+      ["c:pieChart", "Pie Chart"],
+      ["c:pie3DChart", "3D Pie Chart"],
+      ["c:areaChart", "Area Chart"],
+      ["c:area3DChart", "3D Area Chart"],
+      ["c:scatterChart", "Scatter Chart"],
+      ["c:radarChart", "Radar/Spider Chart"],
+      ["c:doughnutChart", "Doughnut Chart"],
+      ["c:bubbleChart", "Bubble Chart"],
+      ["c:ofPieChart", "Pie of Pie/Bar of Pie Chart"],
+      ["c:stockChart", "Stock Chart"],
+      ["c:surfaceChart", "Surface Chart"],
+      ["c:surface3DChart", "3D Surface Chart"],
+    ];
+
+    for (const [tag, label] of chartTypes) {
+      if (xmlString.includes(`<${tag}`) || xmlString.includes(`<${tag}>`)) {
+        return label;
+      }
+    }
+    return "Chart";
+  }
+
+  /**
+   * Extract the chart title from chart XML by scanning for text content
+   * in the title element. Handles both rich text and formula references.
+   */
+  private extractChartTitleFromXml(xmlString: string): string {
+    // Try to find title text within <c:title> ... <a:t>Title</a:t> ...
+    const titleSectionMatch = xmlString.match(/<c:title>([\s\S]*?)<\/c:title>/);
+    if (!titleSectionMatch) return "";
+
+    const titleSection = titleSectionMatch[1];
+
+    // Look for <a:t> text nodes within the title section
+    const textMatches = titleSection.match(/<a:t[^>]*>([^<]+)<\/a:t>/g);
+    if (textMatches && textMatches.length > 0) {
+      const texts = textMatches
+        .map((m) => {
+          const inner = m.match(/<a:t[^>]*>([^<]+)<\/a:t>/);
+          return inner ? inner[1].trim() : "";
+        })
+        .filter(Boolean);
+      if (texts.length > 0) return texts.join(" ");
+    }
+
+    // Fallback: look for a formula reference <c:f>Sheet1!$B$1</c:f> in title
+    const formulaMatch = titleSection.match(/<c:f>([^<]+)<\/c:f>/);
+    if (formulaMatch) return formulaMatch[1].trim();
+
+    return "";
   }
 
   private async extractODSText(buffer: Buffer): Promise<{

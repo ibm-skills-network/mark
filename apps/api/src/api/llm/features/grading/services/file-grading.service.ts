@@ -35,8 +35,8 @@ import {
   TOKEN_COUNTER,
 } from "../../../llm.constants";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
-import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
 import { RubricCriterion } from "../types/criterion-evidence.types";
+import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
 
 type RubricScore = {
   rubricQuestion: string;
@@ -217,6 +217,24 @@ export class FileGradingService implements IFileGradingService {
         (file) => file.structuredContent,
       ).length,
     });
+
+    const deterministicResult = await this.tryDeterministicSpreadsheetGrading(
+      enrichedLearnerResponse,
+      question,
+      maxTotalPoints,
+      scoringCriteriaType,
+      scoringCriteria,
+      responseType,
+    );
+
+    if (deterministicResult) {
+      this.logger.info("Using deterministic spreadsheet grading result");
+      return this.scaleFileBasedModelToQuestionMax(
+        deterministicResult,
+        questionMaxPoints,
+        rubricMaxTotal,
+      );
+    }
 
     if (hasStructuredContent) {
       this.logger.info("Using evidence-based grading with structured content");
@@ -878,10 +896,7 @@ export class FileGradingService implements IFileGradingService {
     }
 
     return learnerResponse.map((file) => {
-      if (
-        !this.shouldRebuildStructuredContent(file) &&
-        file.structuredContent
-      ) {
+      if (!this.shouldRebuildStructuredContent(file)) {
         return { ...file };
       }
 
@@ -898,25 +913,28 @@ export class FileGradingService implements IFileGradingService {
   }
 
   private shouldRebuildStructuredContent(file: LearnerFileUpload): boolean {
-    const existing = file.structuredContent;
-    if (!existing) {
-      return true;
-    }
-
-    const blockCount = existing.metadata?.blockCount ?? 0;
     const text =
       file.extractedText || file.content || file.contentSummary || "";
 
     const isSpreadsheet =
       file.fileType?.includes("sheet") ||
       file.filename?.toLowerCase().endsWith(".xlsx") ||
+      file.filename?.toLowerCase().endsWith(".xls") ||
+      file.filename?.toLowerCase().endsWith(".csv") ||
+      file.filename?.toLowerCase().endsWith(".tsv") ||
+      file.filename?.toLowerCase().endsWith(".ods") ||
       text.includes("=== EXCEL WORKBOOK ===") ||
       text.includes("=== SHEET:");
-
     if (!isSpreadsheet) {
       return false;
     }
 
+    const existing = file.structuredContent;
+    if (!existing) {
+      return true;
+    }
+
+    const blockCount = existing.metadata?.blockCount ?? 0;
     if (blockCount < 10) {
       return true;
     }
