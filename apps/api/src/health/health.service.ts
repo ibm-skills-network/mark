@@ -13,14 +13,10 @@
 
 import { Injectable } from "@nestjs/common";
 import { HealthCheckResult, HealthCheckService } from "@nestjs/terminus";
-import { DatabaseHealthIndicator } from "../database/health/database-health.indicator";
 
 @Injectable()
 export class HealthService {
-  constructor(
-    private readonly health: HealthCheckService,
-    private readonly databaseHealthIndicator: DatabaseHealthIndicator,
-  ) {}
+  constructor(private readonly health: HealthCheckService) {}
 
   /**
    * Basic health probe - verifies the API is responsive without
@@ -39,9 +35,7 @@ export class HealthService {
    * @returns {Promise<HealthCheckResult>} Readiness status
    */
   checkReadiness(): Promise<HealthCheckResult> {
-    return this.health.check([
-      () => this.databaseHealthIndicator.checkDatabase("database"),
-    ]);
+    return this.health.check([]);
   }
 
   /**

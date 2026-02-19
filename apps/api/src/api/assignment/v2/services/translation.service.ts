@@ -1,5 +1,11 @@
 /* eslint-disable unicorn/no-null */
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
@@ -60,7 +66,7 @@ interface BatchProcessResult {
  * Optimized for performance with parallel processing
  */
 @Injectable()
-export class TranslationService {
+export class TranslationService implements OnModuleDestroy {
   private readonly logger = new Logger(TranslationService.name);
   private readonly languageTranslation: boolean;
   private readonly limiter: Bottleneck;
@@ -80,6 +86,8 @@ export class TranslationService {
   private stuckOperations = new Set<string>();
   private jobStartTimes = new Map<number, number>();
   private jobCancellationFlags = new Map<number, boolean>();
+  private readonly limiterHealthInterval: NodeJS.Timeout;
+  private readonly jobTimeoutInterval: NodeJS.Timeout;
   private operationStats = {
     totalOperations: 0,
     successfulOperations: 0,
@@ -119,8 +127,19 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
-    setInterval(() => this.checkLimiterHealth(), 30_000);
-    setInterval(() => this.checkJobTimeouts(), 60_000);
+    this.limiterHealthInterval = setInterval(
+      () => this.checkLimiterHealth(),
+      30_000,
+    );
+    this.jobTimeoutInterval = setInterval(
+      () => this.checkJobTimeouts(),
+      60_000,
+    );
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.limiterHealthInterval);
+    clearInterval(this.jobTimeoutInterval);
   }
 
   /**
@@ -1286,6 +1305,7 @@ export class TranslationService {
           progress: `Assignment with id ${assignmentId} not found`,
           percentage: progressRange?.start || 0,
         });
+        this.cleanupCancelledJob(jobId);
       }
       throw new NotFoundException(
         `Assignment with id ${assignmentId} not found`,
@@ -1607,6 +1627,9 @@ export class TranslationService {
       );
 
       if (missingLanguages.length === 0) {
+        if (hasValidJobId) {
+          this.cleanupCancelledJob(jobId);
+        }
         return;
       }
     }

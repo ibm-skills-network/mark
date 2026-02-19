@@ -6,8 +6,8 @@ import {
   HttpStatus,
   Injectable,
   InternalServerErrorException,
-  NotFoundException,
   Logger,
+  NotFoundException,
 } from "@nestjs/common";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
@@ -2493,9 +2493,9 @@ A new related issue has been created: #${issue.number}
         }
       } catch (error) {
         this.logger.warn(
-          `Failed to add GitHub comment for issue ${report.issueNumber ?? ""}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to add GitHub comment for issue ${
+            report.issueNumber ?? ""
+          }: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -2754,9 +2754,9 @@ ${description}
         );
       } catch (error) {
         this.logger.warn(
-          `Failed to add screenshot comment for issue ${report.issueNumber ?? ""}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to add screenshot comment for issue ${
+            report.issueNumber ?? ""
+          }: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }

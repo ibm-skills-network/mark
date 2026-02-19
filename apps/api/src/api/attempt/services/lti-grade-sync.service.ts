@@ -2,8 +2,8 @@ import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger } from "@nestjs/common";
 import { LtiSyncStatus, Prisma } from "@prisma/client";
 import { firstValueFrom } from "rxjs";
-import { PrismaService } from "../../../database/prisma.service";
 import { AdminEmailService } from "../../../auth/services/admin-email.service";
+import { PrismaService } from "../../../database/prisma.service";
 
 interface CreateSyncRequest {
   attemptId: number;
@@ -100,7 +100,7 @@ export class LtiGradeSyncService {
       throw new Error(`Grade sync ${syncId} not found`);
     }
 
-    await this.prisma.ltiGradeSync.update({
+    void this.prisma.ltiGradeSync.update({
       where: { id: syncId },
       data: {
         status: LtiSyncStatus.IN_PROGRESS,

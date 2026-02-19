@@ -117,114 +117,135 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       "Starting scheduled task: Migrate existing authors to AssignmentAuthor table",
     );
 
+    const PAGE_SIZE = 500;
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+
     try {
-      const reportAuthors = await this.prismaService.report.findMany({
-        where: {
-          author: true,
-          assignmentId: {
-            not: null,
-          },
-        },
-        select: {
-          reporterId: true,
-          assignmentId: true,
-        },
-        distinct: ["reporterId", "assignmentId"],
-      });
+      // Report authors — paginated to avoid loading the full table into memory
+      let skip = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.report.findMany({
+          where: { author: true, assignmentId: { not: null } },
+          select: { reporterId: true, assignmentId: true },
+          distinct: ["reporterId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
 
-      this.logger.log(
-        `Found ${reportAuthors.length} potential authors from Report table`,
-      );
-
-      const aiUsageAuthors = await this.prismaService.aIUsage.findMany({
-        where: {
-          userId: {
-            not: null,
-          },
-          usageType: {
-            in: ["QUESTION_GENERATION", "ASSIGNMENT_GENERATION"],
-          },
-        },
-        select: {
-          userId: true,
-          assignmentId: true,
-        },
-        distinct: ["userId", "assignmentId"],
-      });
-
-      this.logger.log(
-        `Found ${aiUsageAuthors.length} potential authors from AIUsage table`,
-      );
-
-      const jobAuthors = await this.prismaService.job.findMany({
-        select: {
-          userId: true,
-          assignmentId: true,
-        },
-        distinct: ["userId", "assignmentId"],
-      });
-
-      this.logger.log(
-        `Found ${jobAuthors.length} potential authors from Job table`,
-      );
-
-      const publishJobAuthors = await this.prismaService.publishJob.findMany({
-        where: {
-          userId: {
-            not: "SYSTEM_SCHEDULED_TASK",
-          },
-        },
-        select: {
-          userId: true,
-          assignmentId: true,
-        },
-        distinct: ["userId", "assignmentId"],
-      });
-
-      const allPotentialAuthors = [
-        ...reportAuthors
+        const authors = page
           .filter((r) => r.assignmentId !== null)
-          .map((r) => ({
-            userId: r.reporterId,
-            assignmentId: r.assignmentId,
-          })),
-        ...aiUsageAuthors
-          .filter((a) => a.userId !== null)
-          .map((a) => ({
-            userId: a.userId,
-            assignmentId: a.assignmentId,
-          })),
-        ...jobAuthors.map((index) => ({
-          userId: index.userId,
-          assignmentId: index.assignmentId,
-        })),
-        ...publishJobAuthors.map((p) => ({
+          .map((r) => ({ userId: r.reporterId, assignmentId: r.assignmentId }));
+
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
+
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed report authors");
+
+      // AI usage authors — paginated
+      skip = 0;
+      hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.aIUsage.findMany({
+          where: {
+            userId: { not: null },
+            usageType: { in: ["QUESTION_GENERATION", "ASSIGNMENT_GENERATION"] },
+          },
+          select: { userId: true, assignmentId: true },
+          distinct: ["userId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
+
+        const authors = page
+          .filter((a) => a.userId !== null && a.assignmentId !== null)
+          .map((a) => ({ userId: a.userId, assignmentId: a.assignmentId }));
+
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
+
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed AI usage authors");
+
+      // Job authors — paginated
+      skip = 0;
+      hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.job.findMany({
+          select: { userId: true, assignmentId: true },
+          distinct: ["userId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
+
+        const authors = page.map((jobRecord) => ({
+          userId: jobRecord.userId,
+          assignmentId: jobRecord.assignmentId,
+        }));
+
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
+
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed job authors");
+
+      // Publish job authors — paginated
+      skip = 0;
+      hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.publishJob.findMany({
+          where: { userId: { not: "SYSTEM_SCHEDULED_TASK" } },
+          select: { userId: true, assignmentId: true },
+          distinct: ["userId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
+
+        const authors = page.map((p) => ({
           userId: p.userId,
           assignmentId: p.assignmentId,
-        })),
-      ];
+        }));
 
-      const uniqueAuthors = allPotentialAuthors.filter(
-        (author, index, self) =>
-          author.userId &&
-          author.assignmentId &&
-          index ===
-            self.findIndex(
-              (a) =>
-                a.userId === author.userId &&
-                a.assignmentId === author.assignmentId,
-            ),
-      );
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
 
-      this.logger.log(
-        `Processing ${uniqueAuthors.length} unique author-assignment pairs`,
-      );
-
-      const results = await this.batchUpsertAuthors(uniqueAuthors);
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed publish job authors");
 
       this.logger.log(
-        `Completed scheduled task: Created ${results.created} new authors, ` +
-          `updated ${results.updated} existing, skipped ${results.skipped} invalid entries`,
+        `Completed scheduled task: Created ${totalCreated} new authors, ` +
+          `updated ${totalUpdated} existing, skipped ${totalSkipped} invalid entries`,
       );
     } catch (error) {
       this.logger.error("Error in migrateExistingAuthors:", error);
