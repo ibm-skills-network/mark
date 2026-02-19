@@ -205,20 +205,29 @@ export class FileGradingService implements IFileGradingService {
     const enrichedLearnerResponse =
       this.ensureStructuredContentForEvidenceGrading(learnerResponse);
 
-    const hasStructuredContent = enrichedLearnerResponse.some(
-      (file) => file.structuredContent,
+    const hasRubrics =
+      !!scoringCriteria?.rubrics &&
+      Array.isArray(scoringCriteria.rubrics) &&
+      scoringCriteria.rubrics.length > 0;
+
+    const evidenceEligibleFiles = enrichedLearnerResponse.filter((file) =>
+      this.isEvidenceBasedEligible(file),
     );
+    const hasEvidenceEligibleContent = evidenceEligibleFiles.length > 0;
 
     this.logger.info("Checking for evidence-based grading trigger", {
-      hasStructuredContent,
+      hasEvidenceEligibleContent,
+      hasRubrics,
       scoringCriteriaType,
       filesCount: enrichedLearnerResponse.length,
-      filesWithStructuredContent: enrichedLearnerResponse.filter(
-        (file) => file.structuredContent,
-      ).length,
+      evidenceEligibleFilesCount: evidenceEligibleFiles.length,
     });
 
-    if (hasStructuredContent) {
+    if (
+      hasEvidenceEligibleContent &&
+      hasRubrics &&
+      scoringCriteriaType === "CRITERIA_BASED"
+    ) {
       this.logger.info("Using evidence-based grading with structured content");
       const model = await this.gradeWithEvidenceBasedApproach(
         enrichedLearnerResponse,
@@ -926,6 +935,25 @@ export class FileGradingService implements IFileGradingService {
     }
 
     return false;
+  }
+
+  private isEvidenceBasedEligible(file: LearnerFileUpload): boolean {
+    if (!file.structuredContent) return false;
+
+    const filename = file.filename?.toLowerCase() ?? "";
+    const fileType = file.fileType?.toLowerCase() ?? "";
+    const sourceType = file.structuredContent.metadata?.sourceType;
+    const structureQuality = file.metadata?.structureQuality;
+
+    const isPdf =
+      filename.endsWith(".pdf") ||
+      fileType.includes("pdf") ||
+      sourceType === "pdf";
+
+    if (!isPdf) return false;
+    if (structureQuality === "low") return false;
+
+    return true;
   }
 
   private buildCanonicalSubmissionFromText(
