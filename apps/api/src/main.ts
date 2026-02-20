@@ -105,11 +105,24 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle("API")
       .setDescription("API Description")
+      .addBearerAuth(
+        {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          in: "header",
+        },
+        "bearer",
+      )
+      .addSecurityRequirements("bearer")
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api", app, document, {
       customSiteTitle: "API Docs",
       customCss: ".swagger-ui .topbar .topbar-wrapper { display: none; }",
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
     });
 
     /**

@@ -43,6 +43,67 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     await Promise.all([this.migrateExistingAuthors(), this.updateLLMPricing()]);
   }
 
+  // @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  // async republishTopAssignments() {
+  //   this.logger.log(
+  //     "Starting scheduled task: Republish top 10 used assignments",
+  //   );
+
+  //   try {
+  //     // Find top 10 most attempted assignments
+  //     const topAssignments = await this.prismaService.assignmentAttempt.groupBy(
+  //       {
+  //         by: ["assignmentId"],
+  //         _count: {
+  //           assignmentId: true,
+  //         },
+  //         orderBy: {
+  //           _count: {
+  //             assignmentId: "desc",
+  //           },
+  //         },
+  //         take: 10,
+  //       },
+  //     );
+
+  //     this.logger.log(
+  //       `Found ${topAssignments.length} top assignments to republish`,
+  //     );
+
+  //     // Update each assignment to trigger republishing/translation
+  //     for (const assignment of topAssignments) {
+  //       await this.prismaService.assignment.update({
+  //         where: { id: assignment.assignmentId },
+  //         data: {
+  //           updatedAt: new Date(),
+  //           published: true, // Ensure it's published
+  //         },
+  //       });
+
+  //       // Create a publish job to trigger translation
+  //       await this.prismaService.publishJob.create({
+  //         data: {
+  //           userId: "SYSTEM_SCHEDULED_TASK",
+  //           assignmentId: assignment.assignmentId,
+  //           status: "Pending",
+  //           progress: "Scheduled republishing of top assignment",
+  //           percentage: 0,
+  //         },
+  //       });
+
+  //       this.logger.log(
+  //         `Republished assignment ${assignment.assignmentId} with ${assignment._count.assignmentId} attempts`,
+  //       );
+  //     }
+
+  //     this.logger.log(
+  //       "Completed scheduled task: Republish top 10 used assignments",
+  //     );
+  //   } catch (error) {
+  //     this.logger.error("Error in republishTopAssignments:", error);
+  //   }
+  // }
+
   /**
    * Migrates existing authors from various tables to AssignmentAuthor table
    * Runs monthly and on application startup
@@ -390,7 +451,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    *
    * @returns {Promise<void>}
    */
-  @Cron("0 */6 * * *")
+  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
   async updateLLMPricing(): Promise<void> {
     this.logger.log("Starting scheduled task: Update LLM pricing");
 
@@ -453,7 +514,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    *
    * @returns {Promise<void>}
    */
-  @Cron(CronExpression.EVERY_3_HOURS)
+  @Cron(CronExpression.EVERY_6_HOURS)
   async precomputeInsights(): Promise<void> {
     this.logger.log(
       "Starting scheduled task: Precompute insights for popular assignments",

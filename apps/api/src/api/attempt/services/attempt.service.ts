@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Injectable, Inject } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { GradingJob, ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
 import { catchError, Observable, of, Subject } from "rxjs";
@@ -355,9 +355,24 @@ export class AttemptServiceV2 {
           } as MessageEvent);
         });
 
-      let pollInterval = 2000;
+      const pollScheduleMs = [
+        1000, 1000, 2000, 4000, 8000, 16_000, 28_000, 60_000,
+      ];
+      const steadyStatePollMs = 60_000;
+      let pollIndex = 0;
       let consecutiveErrors = 0;
-      const maxPollInterval = 15_000;
+
+      const getNextPollDelay = () =>
+        pollIndex < pollScheduleMs.length
+          ? pollScheduleMs[pollIndex]
+          : steadyStatePollMs;
+
+      const scheduleNextPoll = () => {
+        if (!isStreamActive) return;
+        const delay = getNextPollDelay();
+        pollIndex += 1;
+        setTimeout(() => void pollJob(), delay);
+      };
 
       const pollJob = async () => {
         if (!isStreamActive) return;
@@ -368,7 +383,6 @@ export class AttemptServiceV2 {
           if (statusEvent && isStreamActive) {
             lastUpdateTime = Date.now();
             consecutiveErrors = 0;
-            pollInterval = Math.max(2000, pollInterval - 1000);
 
             subscriber.next(statusEvent);
 
@@ -394,7 +408,6 @@ export class AttemptServiceV2 {
           }
         } catch {
           consecutiveErrors++;
-          pollInterval = Math.min(maxPollInterval, pollInterval + 2000);
 
           if (consecutiveErrors >= 3) {
             subscriber.next({
@@ -402,7 +415,7 @@ export class AttemptServiceV2 {
               data: JSON.stringify({
                 error: "Multiple polling failures detected",
                 consecutiveErrors,
-                nextRetryIn: pollInterval,
+                nextRetryIn: getNextPollDelay(),
                 timestamp: new Date().toISOString(),
               }),
             } as MessageEvent);
@@ -420,11 +433,11 @@ export class AttemptServiceV2 {
         }
 
         if (isStreamActive) {
-          setTimeout(() => void pollJob(), pollInterval);
+          scheduleNextPoll();
         }
       };
 
-      setTimeout(() => void pollJob(), 1000);
+      scheduleNextPoll();
 
       const statusSubscription = statusSubject.asObservable().subscribe({
         next: (event) => {

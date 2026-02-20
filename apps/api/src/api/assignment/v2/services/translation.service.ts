@@ -2,9 +2,9 @@
 import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
+import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
-import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
 import { PrismaService } from "src/database/prisma.service";
 import {
   getAllLanguageCodes,
@@ -136,7 +136,9 @@ export class TranslationService {
       if (isWatsonx !== this.useWatsonxLimiterForTranslation) {
         this.useWatsonxLimiterForTranslation = isWatsonx;
         this.logger.debug(
-          `Translation limiter set to ${isWatsonx ? "Watsonx profile" : "default profile"} (model: ${modelKey})`,
+          `Translation limiter set to ${
+            isWatsonx ? "Watsonx profile" : "default profile"
+          } (model: ${modelKey})`,
         );
       }
     } catch (error) {
@@ -1172,6 +1174,69 @@ export class TranslationService {
   }
 
   /**
+   * Translate assignment metadata for specific languages without deleting question translations.
+   */
+  async translateAssignmentForLanguages(
+    assignmentId: number,
+    languageCodes: string[],
+  ): Promise<void> {
+    if (languageCodes.length === 0) {
+      return;
+    }
+
+    if (!this.languageTranslation) {
+      this.logger.log("Translation is disabled in development mode");
+      return;
+    }
+
+    this.checkLimiterHealth();
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: {
+        id: true,
+        name: true,
+        introduction: true,
+        instructions: true,
+        gradingCriteriaOverview: true,
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with id ${assignmentId} not found`,
+      );
+    }
+
+    await this.syncLimiterForTranslationModel();
+    const results = await this.processBatchesInParallel(
+      languageCodes,
+      async (lang: string) => {
+        try {
+          await this.translateAssignmentToLanguage(
+            assignment as unknown as GetAssignmentResponseDto,
+            lang,
+          );
+          return true;
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          this.logger.error(
+            `Failed to translate assignment ${assignmentId} to ${lang}: ${errorMessage}`,
+          );
+          return false;
+        }
+      },
+      this.MAX_BATCH_SIZE,
+      this.CONCURRENCY_LIMIT,
+    );
+
+    this.logger.log(
+      `Assignment #${assignmentId} translation results for ${languageCodes.length} languages: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
+    );
+  }
+
+  /**
    * Translate an assignment to all supported languages
    * Optimized for performance with parallel processing
    *
@@ -1334,10 +1399,10 @@ export class TranslationService {
     assignmentId: number,
     questionId: number,
     question: QuestionDto,
-    jobId: number,
+    jobId?: number,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = jobId && jobId > 0;
+    const hasValidJobId = typeof jobId === "number" && jobId > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {
@@ -1372,24 +1437,28 @@ export class TranslationService {
       );
     }
 
-    await this.jobStatusService.updateJobStatus(jobId, {
-      status: "In Progress",
-      progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
-        questionLang,
-      )}. Preparing translations...`,
-      percentage: 15,
-    });
+    if (hasValidJobId) {
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
+          questionLang,
+        )}. Preparing translations...`,
+        percentage: 15,
+      });
+    }
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    const progressTracker = this.initializeProgressTracker(
-      jobId,
-      Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-      20,
-      95,
-      `Translating Question #${questionId}`,
-      supportedLanguages.length,
-    );
+    const progressTracker = hasValidJobId
+      ? this.initializeProgressTracker(
+          jobId,
+          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+          20,
+          95,
+          `Translating Question #${questionId}`,
+          supportedLanguages.length,
+        )
+      : undefined;
 
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
@@ -1498,10 +1567,10 @@ export class TranslationService {
     questionId: number,
     variantId: number,
     variant: VariantDto,
-    jobId: number,
+    jobId?: number,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = jobId && jobId > 0;
+    const hasValidJobId = typeof jobId === "number" && jobId > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {
@@ -1559,14 +1628,16 @@ export class TranslationService {
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    const progressTracker = this.initializeProgressTracker(
-      jobId,
-      Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-      20,
-      95,
-      `Translating Variant #${variantId}`,
-      supportedLanguages.length,
-    );
+    const progressTracker = hasValidJobId
+      ? this.initializeProgressTracker(
+          jobId,
+          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+          20,
+          95,
+          `Translating Variant #${variantId}`,
+          supportedLanguages.length,
+        )
+      : undefined;
 
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
@@ -1636,6 +1707,183 @@ export class TranslationService {
     this.logger.log(
       `Variant #${variantId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
+  }
+
+  /**
+   * Translate a specific question/variant to a list of target languages.
+   *
+   * All LLM calls are fanned out in parallel (bounded by the active rate-limit
+   * limiter), and the resulting rows are written in a **single** `createMany`
+   * call instead of one `create` per language.
+   */
+  async translateContentToLanguages(
+    assignmentId: number,
+    questionId: number,
+    variantId: number | null,
+    originalText: string,
+    originalChoices: Choice[] | string | null | any,
+    sourceLanguage: string,
+    targetLanguages: string[],
+  ): Promise<{ success: number; failure: number }> {
+    if (!targetLanguages || targetLanguages.length === 0) {
+      return { success: 0, failure: 0 };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const parsedChoices = this.parseChoices(originalChoices);
+
+    // Fan out all LLM translation calls in parallel, honouring the limiter
+    const settled = await Promise.allSettled(
+      targetLanguages.map((lang) =>
+        this.getActiveLimiter().schedule(
+          { expiration: 15_000, priority: 5 },
+          () =>
+            this.generateTranslationForLanguage(
+              assignmentId,
+              questionId,
+              originalText,
+              parsedChoices,
+              sourceLanguage,
+              lang,
+            ),
+        ),
+      ),
+    );
+
+    // Collect successful rows for the batch write
+    const rows: Prisma.TranslationCreateManyInput[] = [];
+    let success = 0;
+    let failure = 0;
+
+    for (const [index, result] of settled.entries()) {
+      const lang = targetLanguages[index];
+
+      if (result.status === "fulfilled") {
+        rows.push({
+          questionId,
+          variantId,
+          languageCode: lang,
+          untranslatedText: originalText,
+          untranslatedChoices: this.prepareJsonValue(parsedChoices),
+          translatedText: result.value.translatedText,
+          translatedChoices: this.prepareJsonValue(
+            result.value.translatedChoices,
+          ),
+        });
+        success++;
+      } else {
+        const reason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+        this.logger.error(
+          `Failed to translate question ${questionId}${
+            variantId ? ` variant ${variantId}` : ""
+          } to ${lang}: ${reason}`,
+        );
+        failure++;
+      }
+    }
+
+    // Single batch write — one round-trip to the DB regardless of language count
+    if (rows.length > 0) {
+      await this.prisma.translation.createMany({ data: rows });
+    }
+
+    return { success, failure };
+  }
+
+  /**
+   * Generate the translated text and choices for a single target language.
+   * Does NOT write to the database — caller is responsible for the batch write.
+   */
+  private async generateTranslationForLanguage(
+    assignmentId: number,
+    questionId: number,
+    originalText: string,
+    parsedChoices: Choice[] | null,
+    sourceLanguage: string,
+    targetLanguage: string,
+  ): Promise<{ translatedText: string; translatedChoices: Choice[] | null }> {
+    // Same-language shortcut — no LLM call needed
+    if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
+      return { translatedText: originalText, translatedChoices: parsedChoices };
+    }
+
+    const [translatedText, translatedChoices] = await Promise.all([
+      this.executeWithOptimizedRetry(
+        `translateQuestionText-${questionId}-${targetLanguage}`,
+        () =>
+          this.llmFacadeService.generateQuestionTranslation(
+            assignmentId,
+            originalText,
+            targetLanguage,
+          ),
+      ).catch((error: unknown) => {
+        this.logger.error(
+          `Failed to translate text for question ${questionId} to ${targetLanguage}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return originalText;
+      }),
+
+      parsedChoices && parsedChoices.length > 0
+        ? this.executeWithOptimizedRetry(
+            `translateChoices-${questionId}-${targetLanguage}`,
+            () =>
+              this.llmFacadeService.generateChoicesTranslation(
+                parsedChoices,
+                assignmentId,
+                targetLanguage,
+              ),
+          ).catch((error: unknown) => {
+            this.logger.error(
+              `Failed to translate choices for question ${questionId} to ${targetLanguage}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return parsedChoices;
+          })
+        : Promise.resolve(parsedChoices),
+    ]);
+
+    return {
+      translatedText: translatedText,
+      translatedChoices: translatedChoices,
+    };
+  }
+
+  /**
+   * Parse raw choices from the database (JSON string or array) into a typed
+   * array. Returns null for empty / unparseable values.
+   */
+  private parseChoices(
+    originalChoices: Choice[] | string | null | undefined,
+  ): Choice[] | null {
+    if (!originalChoices) return null;
+
+    if (typeof originalChoices === "string") {
+      try {
+        return JSON.parse(originalChoices) as Choice[];
+      } catch (error) {
+        this.logger.error(
+          `Failed to parse choices JSON: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return null;
+      }
+    }
+
+    if (Array.isArray(originalChoices)) {
+      return originalChoices;
+    }
+
+    this.logger.warn(
+      `Unexpected type for originalChoices: ${typeof originalChoices}`,
+    );
+    return null;
   }
 
   /**
