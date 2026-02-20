@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default async function Home() {
-  const headerList = headers();
+  const headerList = await headers();
   const cookie = headerList.get("cookie");
   if (!cookie && process.env.NODE_ENV === "production") {
     redirect("https://skills.network");

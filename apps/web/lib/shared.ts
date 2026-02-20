@@ -21,7 +21,9 @@ import type {
   UploadType,
   User,
 } from "@config/types";
-import { JSONValue } from "ai";
+
+type JSONPrimitive = string | number | boolean | null;
+type JSONValue = JSONPrimitive | { [key: string]: JSONValue } | JSONValue[];
 
 export interface FileProxyInfo {
   filename: string;

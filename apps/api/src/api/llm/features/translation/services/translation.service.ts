@@ -5,7 +5,6 @@ import * as path from "node:path";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import cld from "cld";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { decodeIfBase64 } from "src/helpers/decoder";
@@ -128,7 +127,7 @@ export class TranslationService implements ITranslationService {
   }
 
   /**
-   * Batch detect languages for multiple texts using CLD first, falling back to GPT-5-nano
+   * Batch detect languages for multiple texts using GPT-5-nano
    */
   async batchGetLanguageCodes(
     texts: string[],
@@ -142,33 +141,12 @@ export class TranslationService implements ITranslationService {
     const textsNeedingGPT: Array<{ text: string; index: number }> = [];
 
     for (const [index, text] of texts.entries()) {
-      if (!text || !text.trim()) {
-        continue;
-      }
-
+      if (!text || !text.trim()) continue;
       const decodedText = decodeIfBase64(text) || text;
-
-      try {
-        const cldResponse = await cld.detect(decodedText);
-        const detectedLanguage = cldResponse.languages[0];
-
-        if (detectedLanguage && detectedLanguage.percent >= 80) {
-          results[index] = detectedLanguage.code;
-          this.logger.debug(
-            `CLD batch detected language for text ${index}: ${detectedLanguage.code} (${detectedLanguage.percent}% confidence)`,
-          );
-        } else {
-          textsNeedingGPT.push({
-            text: decodedText.slice(0, 500),
-            index: index,
-          });
-        }
-      } catch {
-        textsNeedingGPT.push({
-          text: decodedText.slice(0, 500),
-          index: index,
-        });
-      }
+      textsNeedingGPT.push({
+        text: decodedText.slice(0, 500),
+        index,
+      });
     }
 
     if (
@@ -179,11 +157,7 @@ export class TranslationService implements ITranslationService {
     }
 
     this.logger.debug(
-      `CLD processed ${texts.length - textsNeedingGPT.length}/${
-        texts.length
-      } texts confidently, using GPT-5-nano for ${
-        textsNeedingGPT.length
-      } remaining texts`,
+      `Using GPT-5-nano to detect ${textsNeedingGPT.length}/${texts.length} texts`,
     );
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -278,34 +252,12 @@ INSTRUCTIONS:
   }
 
   /**
-   * Detect the language of text using CLD first, falling back to GPT-5-nano
+   * Detect the language of text using GPT-5-nano
    */
   async getLanguageCode(text: string, assignmentId = 1): Promise<string> {
     if (!text) return "unknown";
 
     const decodedText = decodeIfBase64(text) || text;
-
-    try {
-      const cldResponse = await cld.detect(decodedText);
-      const detectedLanguage = cldResponse.languages[0];
-
-      if (detectedLanguage && detectedLanguage.percent >= 80) {
-        this.logger.debug(
-          `CLD detected language: ${detectedLanguage.code} (${detectedLanguage.percent}% confidence)`,
-        );
-        return detectedLanguage.code;
-      } else if (detectedLanguage) {
-        this.logger.debug(
-          `CLD low confidence (${detectedLanguage.percent}%), falling back to GPT-5-nano`,
-        );
-      }
-    } catch (cldError) {
-      this.logger.debug(
-        `CLD failed: ${
-          cldError instanceof Error ? cldError.message : "Unknown error"
-        }, falling back to GPT-5-nano`,
-      );
-    }
 
     const textSample = decodedText.slice(0, 500);
 

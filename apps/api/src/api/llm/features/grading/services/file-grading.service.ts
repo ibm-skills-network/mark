@@ -2922,9 +2922,31 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
           this.logger.warn("COS object has no body");
           return null;
         }
-        pdfBuffer = Buffer.isBuffer(pdfBody)
-          ? pdfBody
-          : Buffer.from(pdfBody as ArrayBuffer);
+
+        if (Buffer.isBuffer(pdfBody)) {
+          pdfBuffer = pdfBody;
+        } else if (pdfBody instanceof Uint8Array) {
+          pdfBuffer = Buffer.from(pdfBody);
+        } else if (
+          typeof (
+            pdfBody as { transformToByteArray?: () => Promise<Uint8Array> }
+          ).transformToByteArray === "function"
+        ) {
+          const bytes = await (
+            pdfBody as { transformToByteArray: () => Promise<Uint8Array> }
+          ).transformToByteArray();
+          pdfBuffer = Buffer.from(bytes);
+        } else {
+          const chunks: Uint8Array[] = [];
+          const stream = pdfBody as NodeJS.ReadableStream;
+          pdfBuffer = await new Promise((resolve, reject) => {
+            stream.on("data", (chunk) =>
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+            );
+            stream.on("end", () => resolve(Buffer.concat(chunks)));
+            stream.on("error", reject);
+          });
+        }
       } else if (pdfFile.fileUrl) {
         this.logger.debug(`Downloading PDF from URL: ${pdfFile.fileUrl}`);
         const response = await axios.get(pdfFile.fileUrl, {
@@ -2959,7 +2981,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         ContentType: "application/pdf",
       });
 
-      const presignedUrl = this.s3Service.getSignedUrl("getObject", {
+      const presignedUrl = await this.s3Service.getSignedUrl("getObject", {
         Bucket: bucket,
         Key: uploadKey,
         Expires: 3600 * 24 * 7,
