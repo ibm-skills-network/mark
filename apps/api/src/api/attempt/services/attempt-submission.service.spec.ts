@@ -266,7 +266,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
     beforeEach(() => {
       mockAssignmentRepository.findById.mockResolvedValue(baseAssignment);
-      mockValidationService.validateNewAttempt.mockResolvedValue(undefined);
+      mockValidationService.validateNewAttempt.mockResolvedValue();
       mockPrisma.assignmentAttempt.create.mockResolvedValue({ id: 55 });
       mockPrisma.assignmentAttempt.update.mockResolvedValue({});
     });
