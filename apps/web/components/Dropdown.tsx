@@ -10,6 +10,7 @@ interface DropdownProps<T> {
   setSelectedItem: (value: T) => void;
   items: { value: T; label: string; description?: string }[];
   placeholder?: string;
+  disableUiTranslation?: boolean;
   [key: string]: unknown;
 }
 
@@ -18,6 +19,7 @@ function Dropdown<T>({
   setSelectedItem,
   items,
   placeholder = "Select an item",
+  disableUiTranslation = false,
   ...rest
 }: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -59,6 +61,7 @@ function Dropdown<T>({
 
   const menu = (
     <div
+      data-no-ui-translate={disableUiTranslation ? "true" : undefined}
       className={cn(
         "pb-1 mt-1 absolute w-full bg-white rounded-lg shadow-lg border border-gray-300 origin-top duration-150 z-[9999] ease-out transform-gpu",
         isOpen
@@ -106,7 +109,11 @@ function Dropdown<T>({
   );
 
   return (
-    <div className="relative w-full" ref={dropdownRef}>
+    <div
+      className="relative w-full"
+      ref={dropdownRef}
+      data-no-ui-translate={disableUiTranslation ? "true" : undefined}
+    >
       <Tooltip distance={0} content="" disabled={true}>
         <button
           type="button"
