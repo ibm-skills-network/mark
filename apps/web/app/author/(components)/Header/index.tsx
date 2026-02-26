@@ -5,7 +5,6 @@ import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import { useChatbot } from "@/hooks/useChatbot";
 import { encodeFields } from "@/app/Helpers/encoder";
-import { getLevelPrefillFromTitle } from "@/app/Helpers/level-standards";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import { stripHtml } from "@/app/Helpers/strippers";
 import Modal from "@/components/Modal";
@@ -177,7 +176,6 @@ function AuthorHeader() {
     useState<boolean>(false);
   const [showDraftModal, setShowDraftModal] = useState<boolean>(false);
   const [draftName, setDraftName] = useState<string>("");
-  const [lastPrefillLevel, setLastPrefillLevel] = useState<number | null>(null);
 
   const deleteAuthorStore = useAuthorStore((state) => state.deleteStore);
   const deleteAssignmentConfigStore = useAssignmentConfig(
@@ -406,56 +404,6 @@ function AuthorHeader() {
 
     void fetchData();
   }, [assignmentId, router]);
-
-  const hasOriginalAssignment = !!originalAssignment;
-  const originalQuestionCount = originalAssignment?.questions?.length ?? 0;
-  const originalQuestionOrderCount =
-    originalAssignment?.questionOrder?.length ?? 0;
-  const isOriginalPublished = !!originalAssignment?.published;
-
-  useEffect(() => {
-    // Reset when switching assignments.
-    setLastPrefillLevel(null);
-  }, [assignmentId]);
-
-  useEffect(() => {
-    // Wait for backend data to avoid racing initial load.
-    if (!hasOriginalAssignment || !name) return;
-
-    // Avoid overriding existing/published assignments.
-    if (
-      isOriginalPublished ||
-      originalQuestionCount > 0 ||
-      originalQuestionOrderCount > 0
-    )
-      return;
-
-    const prefill = getLevelPrefillFromTitle(name);
-    if (!prefill) return;
-    if (lastPrefillLevel === prefill.level) return;
-
-    setAssignmentConfigStore({
-      attemptsBeforeCoolDown: prefill.config.attemptsBeforeCoolDown,
-      retakeAttemptCoolDownMinutes: prefill.config.retakeAttemptCoolDownMinutes,
-    });
-    setAssignmentFeedbackConfigStore({
-      showAssignmentScore: prefill.feedback.showAssignmentScore,
-      showQuestionScore: prefill.feedback.showQuestionScore,
-      showSubmissionFeedback: prefill.feedback.showSubmissionFeedback,
-      showQuestions: prefill.feedback.showQuestions,
-      correctAnswerVisibility: prefill.feedback.correctAnswerVisibility,
-    });
-    setLastPrefillLevel(prefill.level);
-  }, [
-    hasOriginalAssignment,
-    isOriginalPublished,
-    name,
-    lastPrefillLevel,
-    originalQuestionCount,
-    originalQuestionOrderCount,
-    setAssignmentConfigStore,
-    setAssignmentFeedbackConfigStore,
-  ]);
 
   useEffect(() => {
     const handleTriggerHeaderPublish = (event: any) => {
