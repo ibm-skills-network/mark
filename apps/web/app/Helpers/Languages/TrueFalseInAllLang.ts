@@ -18,6 +18,7 @@ export const trueFalseTranslations: Record<
   kk: { true: "Шын", false: "Жалған" },
   ru: { true: "Верно", false: "Неверно" },
   uk: { true: "Правда", false: "Неправда" },
+  "uk-UA": { true: "Правда", false: "Неправда" },
   ar: { true: "صحيح", false: "خطأ" },
   hi: { true: "सत्य", false: "असत्य" },
   th: { true: "จริง", false: "เท็จ" },
