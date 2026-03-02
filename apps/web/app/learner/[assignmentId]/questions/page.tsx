@@ -1,8 +1,5 @@
 "use strict";
 
-import animationData from "@/animations/LoadSN.json";
-import LoadingPage from "@/app/loading";
-import { Suspense } from "react";
 import LearnerLayout from "./LearnerLayout";
 
 interface Props {

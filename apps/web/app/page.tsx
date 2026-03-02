@@ -1,6 +1,5 @@
 import ErrorPage from "@/components/ErrorPage";
 import { getUser } from "@/lib/talkToBackend";
-import { useAuthorStore } from "@/stores/author";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 

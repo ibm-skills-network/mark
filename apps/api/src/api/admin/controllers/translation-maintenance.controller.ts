@@ -20,6 +20,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from "class-validator";
 import { getAllLanguageCodes } from "src/api/assignment/attempt/helper/languages";
@@ -107,6 +108,60 @@ class FixMissingTranslationsRequestDto {
   @IsInt()
   @Min(1)
   maxMissing?: number;
+}
+
+class SweepTranslationsRequestDto {
+  /**
+   * How many assignments to translate per batch (default: 5, max: 20).
+   * Smaller values reduce DB and LLM load between pauses.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  batchSize?: number;
+
+  /**
+   * Hard limit on the total number of batches to run. Useful for capping
+   * a single sweep invocation while ensuring subsequent calls pick up where
+   * this one left off. Omit to run until all assignments are covered.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxBatches?: number;
+
+  /** Restrict translation to these language codes only. Defaults to all 23. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  languageCodes?: string[];
+
+  /** Scan and report what would be translated without writing to the DB. */
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
+  /**
+   * Milliseconds to pause between consecutive batches (default: 2000).
+   * Increase to reduce load on the LLM provider and production DB.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  delayBetweenBatchesMs?: number;
+
+  /**
+   * When true, also scans unpublished assignments and assignments without an
+   * active non-draft version. Defaults to false (published only).
+   */
+  @IsOptional()
+  @IsBoolean()
+  includeAll?: boolean;
 }
 
 type MissingItem = {
@@ -377,6 +432,25 @@ export class TranslationMaintenanceController {
       result,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
+    };
+  }
+
+  @Post("sweep")
+  @ApiOperation({
+    summary:
+      "Auto-sweep all assignments (newest → oldest), detecting and fixing missing translations in batches (async — returns a job ID to poll for status)",
+  })
+  async sweepMissingTranslations(
+    @Body() body: SweepTranslationsRequestDto,
+  ): Promise<{ success: true; jobId: number; message: string }> {
+    // publishJob.assignmentId has no FK constraint; 0 is used as a sentinel
+    // for sweep jobs that are not tied to a single assignment.
+    const job = await this.jobStatusService.createPublishJob(0, "admin");
+    void this.runSweepInBackground(job.id, body);
+    return {
+      success: true,
+      jobId: job.id,
+      message: `Translation sweep started. Poll GET /api/v1/admin/translations/missing/fix/status/${job.id} for progress.`,
     };
   }
 
@@ -884,6 +958,295 @@ export class TranslationMaintenanceController {
     const next = remaining === null ? null : remaining - processed;
 
     return { processed, next };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sweep background job
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Background worker for the sweep endpoint. Repeatedly calls
+   * findNextBatchForSweep() to discover assignments that need translation,
+   * translates each batch, then pauses before the next batch. The cursor
+   * advances so that no assignment is ever scanned twice within a single run.
+   */
+  private async runSweepInBackground(
+    jobId: number,
+    body: SweepTranslationsRequestDto,
+  ): Promise<void> {
+    const batchSize = body.batchSize ?? 5;
+    const maxBatches = body.maxBatches ?? null;
+    const delayMs = body.delayBetweenBatchesMs ?? 2000;
+    const dryRun = Boolean(body.dryRun);
+    const includeAll = Boolean(body.includeAll);
+
+    const allSupportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const supportedLanguagesByNormalized = new Map(
+      allSupportedLanguages.map((lang) => [normalizeLang(lang), lang]),
+    );
+    const requestedLanguages = (body.languageCodes ?? [])
+      .map((lang) => normalizeLang(lang))
+      .filter((lang) => supportedLanguagesByNormalized.has(lang))
+      .map((lang) => supportedLanguagesByNormalized.get(lang) ?? lang);
+    const targetLanguages =
+      requestedLanguages.length > 0
+        ? requestedLanguages
+        : allSupportedLanguages;
+    const translateAllLanguages =
+      targetLanguages.length === allSupportedLanguages.length;
+
+    // Cursor starts at the newest assignments (no id filter on first pass),
+    // then moves downward (`id < cursor`) after each scan window.
+    let cursor: number | null = null;
+    let batchCount = 0;
+    let totalProcessed = 0;
+    let totalAssignmentsFixed = 0;
+    const batchResults: Array<{
+      batchNumber: number;
+      assignmentIds: number[];
+      processedTranslations: number;
+    }> = [];
+
+    try {
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: "Sweep started — scanning from newest to oldest assignments",
+        percentage: 0,
+      });
+
+      for (;;) {
+        const { batch, nextCursor } = await this.findNextBatchForSweep(
+          cursor,
+          batchSize,
+          targetLanguages,
+          includeAll,
+        );
+
+        if (nextCursor === null) {
+          // Scanned past all assignments — nothing more to find.
+          this.logger.log(
+            `Sweep job ${jobId}: no more assignments to scan. Sweep complete.`,
+          );
+          break;
+        }
+
+        cursor = nextCursor;
+
+        if (batch.length === 0) {
+          // This window had no assignments needing work; advance the cursor
+          // and continue scanning downward.
+          continue;
+        }
+
+        batchCount++;
+        const batchAssignmentIds = batch.map((a) => a.id);
+
+        this.logger.log(
+          `Sweep job ${jobId}: batch ${batchCount} — ${batch.length} assignment(s) [${batchAssignmentIds.join(", ")}]`,
+        );
+
+        const progressPct = maxBatches
+          ? Math.min(Math.floor((batchCount / maxBatches) * 90), 90)
+          : Math.min(batchCount * 5, 90);
+
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "In Progress",
+          progress: `Batch ${batchCount}: translating ${batch.length} assignment(s) [${batchAssignmentIds.join(", ")}]`,
+          percentage: progressPct,
+        });
+
+        let batchProcessed = 0;
+        for (const assignment of batch) {
+          try {
+            const { processedTranslations } =
+              await this.translateAssignmentQuestions({
+                assignmentId: assignment.id,
+                targetLanguages,
+                translateAllLanguages,
+                dryRun,
+                remainingTranslations: null,
+              });
+            batchProcessed += processedTranslations;
+            totalProcessed += processedTranslations;
+            totalAssignmentsFixed++;
+          } catch (error) {
+            this.logger.error(
+              `Sweep job ${jobId}: failed assignment ${assignment.id}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }
+
+        batchResults.push({
+          batchNumber: batchCount,
+          assignmentIds: batchAssignmentIds,
+          processedTranslations: batchProcessed,
+        });
+
+        if (maxBatches !== null && batchCount >= maxBatches) {
+          this.logger.log(
+            `Sweep job ${jobId}: reached maxBatches limit (${maxBatches}). Stopping.`,
+          );
+          break;
+        }
+
+        // Throttle between batches to avoid hammering the LLM API and DB.
+        if (delayMs > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "Completed",
+        progress: `Sweep complete: ${totalAssignmentsFixed} assignment(s) fixed, ${totalProcessed} translation(s) across ${batchCount} batch(es)`,
+        percentage: 100,
+        result: {
+          totalAssignmentsFixed,
+          totalProcessed,
+          batchCount,
+          dryRun,
+          batches: batchResults,
+        },
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Sweep job ${jobId} failed: ${errorMessage}`);
+
+      await this.jobStatusService
+        .updateJobStatus(jobId, {
+          status: "Failed",
+          progress: `Sweep failed: ${errorMessage.slice(0, 200)}`,
+          percentage: 0,
+          result: {
+            error: errorMessage,
+            totalAssignmentsFixed,
+            totalProcessed,
+            batchCount,
+            partialBatches: batchResults,
+          },
+        })
+        .catch((updateError) => {
+          this.logger.error(
+            `Failed to update sweep job ${jobId} failure status: ${String(updateError)}`,
+          );
+        });
+    }
+  }
+
+  /**
+   * Finds the next batch of assignments that need translation.
+   *
+   * Uses a two-phase scan over a sliding window of assignments:
+   *
+   * Phase 1 (fast) — single bulk `groupBy` query:
+   *   `AssignmentTranslation` has `@@unique([assignmentId, languageCode])`, so
+   *   the count equals the number of distinct language codes. Any assignment
+   *   with count < totalLanguages is definitely missing translations.
+   *
+   * Phase 2 (slow) — `scanAssignment` per assignment:
+   *   Assignments that pass the fast check may still have missing question-level
+   *   translations. These are detected via the existing full scan helper.
+   *
+   * Cursor semantics (`id: { lt: cursor }` once cursor is set):
+   *   - If there are more needy assignments in the window than `batchSize`, the
+   *     cursor is set to `needy[batchSize].id + 1` so the next call picks up
+   *     exactly from the (batchSize+1)th needy assignment — no needy assignment
+   *     is ever skipped between calls.
+   *   - Otherwise the cursor advances to `min(window IDs)`, moving past the
+   *     entire scanned window before the next call.
+   *   - Returns `null` when the window is empty (all assignments scanned).
+   */
+  private async findNextBatchForSweep(
+    cursor: number | null,
+    batchSize: number,
+    targetLanguages: string[],
+    includeAll: boolean,
+  ): Promise<{
+    batch: Array<{ id: number; name: string }>;
+    nextCursor: number | null;
+  }> {
+    const SCAN_WINDOW = Math.max(batchSize * 3, 15);
+    const totalLangCount = targetLanguages.length;
+
+    // Step 1: load a window of candidate assignments (newest-first, paginated).
+    const window = await this.prisma.assignment.findMany({
+      where: {
+        ...(cursor === null ? {} : { id: { lt: cursor } }),
+        ...(includeAll
+          ? {}
+          : {
+              published: true,
+              currentVersion: {
+                isActive: true,
+                isDraft: false,
+              },
+            }),
+      },
+      select: { id: true, name: true },
+      orderBy: { id: "desc" },
+      take: SCAN_WINDOW,
+    });
+
+    if (window.length === 0) {
+      return { batch: [], nextCursor: null };
+    }
+
+    const windowIds = window.map((a) => a.id);
+
+    // Step 2: single bulk query — assignment-level translation counts.
+    // With @@unique([assignmentId, languageCode]), count == distinct languages.
+    const translationCounts = await this.prisma.assignmentTranslation.groupBy({
+      by: ["assignmentId"],
+      where: { assignmentId: { in: windowIds } },
+      _count: { languageCode: true },
+    });
+    const countByAssignmentId = new Map(
+      translationCounts.map((c) => [c.assignmentId, c._count.languageCode]),
+    );
+
+    // Step 3: classify every assignment in the window.
+    const needy: Array<{ id: number; name: string }> = [];
+
+    for (const assignment of window) {
+      const assignmentLangCount = countByAssignmentId.get(assignment.id) ?? 0;
+
+      if (assignmentLangCount < totalLangCount) {
+        // Fast path: assignment-level translations are definitely incomplete.
+        needy.push(assignment);
+      } else {
+        // Slow path: assignment-level translations appear complete; check
+        // question-level translations to be sure.
+        const scanResult = await this.scanAssignment(
+          assignment.id,
+          targetLanguages,
+          includeAll,
+          false,
+        );
+        if (
+          scanResult &&
+          (scanResult.missingAssignmentLanguages.length > 0 ||
+            scanResult.missingItems.length > 0)
+        ) {
+          needy.push(assignment);
+        }
+      }
+    }
+
+    // Step 4: take the first `batchSize` needy assignments for this iteration.
+    const batch = needy.slice(0, batchSize);
+
+    // Step 5: compute the cursor for the next call.
+    // If more needy assignments remain in the window, jump to just above the
+    // next one so it is included in the next scan (`id: { lt: cursor }` is
+    // exclusive). Otherwise move past the entire window.
+    const nextCursor =
+      needy.length > batchSize
+        ? needy[batchSize].id + 1
+        : Math.min(...windowIds);
+
+    return { batch, nextCursor };
   }
 
   // ---------------------------------------------------------------------------

@@ -15,7 +15,6 @@ import type {
   MoveFileRequest,
   QuestionStore,
   RenameFileRequest,
-  UploadContext,
   UploadRequest,
   UploadResponse,
   UploadType,
@@ -54,16 +53,6 @@ export interface FileAccessInfo {
   viewUrl: string;
   downloadUrl: string;
   textContentUrl?: string;
-}
-
-interface AxiosError {
-  response?: {
-    data?: {
-      message?: string;
-    };
-  };
-  code?: string;
-  message: string;
 }
 
 interface ErrorResponse {
@@ -146,7 +135,6 @@ export async function directUpload(
   file: File,
   uploadRequest: UploadRequest,
   cookies?: string,
-  onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void,
 ): Promise<{
   success: boolean;
   key: string;

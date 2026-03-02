@@ -1,8 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -10,9 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import Modal from "@/components/Modal";
-import { Badge } from "@/components/ui/badge";
-import { GitBranch, Clock, Save, History } from "lucide-react";
+import { GitBranch } from "lucide-react";
 
 interface VersionSelectorProps {
   className?: string;
@@ -22,36 +18,18 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
   const {
     versions,
     currentVersion,
-    selectedVersion,
     isLoadingVersions,
     versionsLoadFailed,
     setSelectedVersion,
-    activateVersion,
-    createVersion,
     formatVersionAge,
     getDraftVersions,
     getPublishedVersions,
   } = useVersionControl();
-
-  const [isCreateVersionOpen, setIsCreateVersionOpen] = useState(false);
-  const [versionDescription, setVersionDescription] = useState("");
-
   const handleVersionSelect = (versionId: string) => {
     const version = versions.find((v) => v.id === parseInt(versionId));
     if (version) {
       setSelectedVersion(version);
     }
-  };
-
-  const handleActivateVersion = async (versionId: number) => {
-    await activateVersion(versionId);
-    setSelectedVersion(undefined);
-  };
-
-  const handleCreateVersion = async () => {
-    await createVersion(versionDescription || undefined, false);
-    setVersionDescription("");
-    setIsCreateVersionOpen(false);
   };
 
   const publishedVersions = getPublishedVersions();

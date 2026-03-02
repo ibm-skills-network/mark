@@ -59,7 +59,6 @@ const FileList: React.FC<FileListProps> = ({
   onFolderDragOver,
   onFolderDragLeave,
   onFolderDrop,
-  onSortDirectionChange,
   readOnly = false,
   dropTarget = null,
 }) => {

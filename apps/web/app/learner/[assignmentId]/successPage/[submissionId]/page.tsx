@@ -7,22 +7,19 @@ import {
   AssignmentDetails,
   AssignmentFeedback,
   QuestionStore,
-  RegradingRequest,
 } from "@/config/types";
 import {
   getCompletedAttempt,
   getFeedback,
   getAttempts,
-  getSuccessPageData,
   getUser,
   submitFeedback,
-  submitRegradingRequest,
 } from "@/lib/talkToBackend";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { Rating, RoundedStar } from "@smastrom/react-rating";
 import { IconRefresh } from "@tabler/icons-react";
-import Particles from "@tsparticles/react";
+import { Particles } from "@tsparticles/react";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import Image, { StaticImageData } from "next/image";
@@ -100,14 +97,8 @@ function SuccessPage() {
     window.dispatchEvent(new Event("resize"));
   }, [isFeedbackModalOpen]);
 
-  const [regradingRequest, setRegradingRequest] = useState(false);
-  const [regradingReason, setRegradingReason] = useState("");
-  const [isRegradingModalOpen, setIsRegradingModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [BackendComments, setBackendComments] = useState("");
-  const [regradingStatus, setRegradingStatus] = useState<
-    "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED"
-  >("PENDING");
   const [userId, setUserId] = useState<string>(null);
   const [errorConfig, setErrorConfig] = useState<{
     message: string;
@@ -119,7 +110,6 @@ function SuccessPage() {
     { step: string; detail?: string; timestamp?: string }[]
   >([]);
 
-  const [isOpen, setIsOpen] = useState(false);
   const [userPreferredLanguage, setUserPreferredLanguage] = useState("en");
 
   const logState = (step: string, detail?: string) => {
@@ -311,9 +301,6 @@ function SuccessPage() {
       },
     },
   };
-  const toggleFeedbackBar = () => {
-    setIsOpen(!isOpen);
-  };
 
   useEffect(() => {
     const updatePageHeight = () => {
@@ -473,38 +460,6 @@ function SuccessPage() {
       }
     } catch (error) {
       toast.error("Failed to submit feedback. Please try again.");
-    }
-  };
-  const handleSubmitRegradingRequest = async () => {
-    const regradingData: RegradingRequest = {
-      assignmentId: assignmentId,
-      userId: userId,
-      attemptId: attemptId,
-      reason: regradingReason,
-    };
-    if (regradingReason === "") {
-      toast.error("Please provide a reason for regrading.");
-      return;
-    }
-    if (assignmentDetails?.id === null) {
-      return;
-    }
-    if (userId === null) {
-      return;
-    }
-    if (attemptId === null) {
-      return;
-    }
-    try {
-      const response = await submitRegradingRequest(regradingData);
-      if (response === true) {
-        toast.success("Regrading request submitted successfully!");
-        setIsRegradingModalOpen(false);
-      } else {
-        toast.error("Failed to submit regrading request. Please try again.");
-      }
-    } catch (error) {
-      toast.error("Failed to submit regrading request. Please try again.");
     }
   };
 

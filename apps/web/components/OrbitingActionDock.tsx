@@ -1,13 +1,7 @@
 "use client";
 
 import { useChatbot } from "@/hooks/useChatbot";
-import {
-  SpeakerWaveIcon,
-  SpeakerXMarkIcon,
-  Cog6ToothIcon,
-  QuestionMarkCircleIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/outline";
+import { SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/outline";
 import { motion, AnimatePresence } from "framer-motion";
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css";

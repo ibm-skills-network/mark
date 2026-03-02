@@ -6,9 +6,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { PrismaClient } from "@prisma/client";
 import { OpenAiLlmMiniService } from "src/api/llm/core/services/openai-llm-mini.service";
 import { createLogger } from "winston";
-import { PromptProcessorService } from "../api/llm/core/services/prompt-processor.service";
 import { TokenCounterService } from "../api/llm/core/services/token-counter.service";
-import { TranslationService } from "../api/llm/features/translation/services/translation.service";
 import { markForRetranslationBatch } from "./translation-audit-batch";
 
 const prisma = new PrismaClient();
@@ -18,12 +16,6 @@ const logger = createLogger({
   level: "error",
   silent: true, // Keep quiet for CLI usage
 });
-
-const promptProcessor = new PromptProcessorService(
-  {} as any, // We don't need the LLM router for language detection
-  {} as any, // We don't need usage tracker for language detection
-  logger,
-);
 
 const tokenCounter = new TokenCounterService(logger);
 const gpt4MiniService = new OpenAiLlmMiniService(tokenCounter, logger);

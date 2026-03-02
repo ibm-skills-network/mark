@@ -64,7 +64,6 @@ const FilePreview = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLImageElement>(null);
 
   const getFileType = () => {
@@ -285,7 +284,7 @@ const FilePreview = ({
               transformOrigin: "center",
             }}
             draggable={false}
-            onLoad={(e) => {
+            onLoad={() => {
               setIsLoading(false);
               setError(null);
             }}

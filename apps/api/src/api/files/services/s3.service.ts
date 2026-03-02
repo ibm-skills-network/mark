@@ -117,6 +117,7 @@ export class S3Service {
     const client = this.getS3Client(bucket);
     const expiresIn = parameters.Expires ?? 900;
     const { Expires: _expires, ...commandParameters } = parameters;
+    void _expires;
 
     if (operation === "getObject") {
       return getS3SignedUrl(client, new GetObjectCommand(commandParameters), {

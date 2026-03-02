@@ -1,5 +1,11 @@
 /* eslint-disable unicorn/no-null */
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
@@ -60,7 +66,7 @@ interface BatchProcessResult {
  * Optimized for performance with parallel processing
  */
 @Injectable()
-export class TranslationService {
+export class TranslationService implements OnModuleDestroy {
   private readonly logger = new Logger(TranslationService.name);
   private readonly languageTranslation: boolean;
   private readonly limiter: Bottleneck;
@@ -75,11 +81,12 @@ export class TranslationService {
   private readonly OPERATION_TIMEOUT = 30_000;
   private readonly JOB_TIMEOUT = 600_000;
   private readonly MAX_STUCK_OPERATIONS = 15;
-  private readonly ADAPTIVE_BATCH_SIZE = true;
 
   private stuckOperations = new Set<string>();
   private jobStartTimes = new Map<number, number>();
   private jobCancellationFlags = new Map<number, boolean>();
+  private readonly limiterHealthInterval: NodeJS.Timeout;
+  private readonly jobTimeoutInterval: NodeJS.Timeout;
   private operationStats = {
     totalOperations: 0,
     successfulOperations: 0,
@@ -119,8 +126,19 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
-    setInterval(() => this.checkLimiterHealth(), 30_000);
-    setInterval(() => this.checkJobTimeouts(), 60_000);
+    this.limiterHealthInterval = setInterval(
+      () => this.checkLimiterHealth(),
+      30_000,
+    );
+    this.jobTimeoutInterval = setInterval(
+      () => this.checkJobTimeouts(),
+      60_000,
+    );
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.limiterHealthInterval);
+    clearInterval(this.jobTimeoutInterval);
   }
 
   /**
@@ -179,6 +197,7 @@ export class TranslationService {
     batchSize = this.MAX_BATCH_SIZE,
     _concurrencyLimit = this.CONCURRENCY_LIMIT,
   ): Promise<BatchProcessResult> {
+    void _concurrencyLimit;
     const results: BatchProcessResult = { success: 0, failure: 0, dropped: 0 };
     const chunks: T[][] = [];
 
@@ -816,6 +835,7 @@ export class TranslationService {
     maxAttempts = this.MAX_RETRY_ATTEMPTS,
     _jobId?: number,
   ): Promise<T> {
+    void _jobId;
     let attempts = 0;
     const operationId = `${operationName}-${Date.now()}`;
 
@@ -878,6 +898,7 @@ export class TranslationService {
    * Handle stuck operations by resetting limiter if needed
    */
   private handleStuckOperation(_operationName: string): void {
+    void _operationName;
     this.operationStats.consecutiveFailures++;
     this.operationStats.lastFailureTime = Date.now();
 
@@ -957,29 +978,6 @@ export class TranslationService {
       return;
     }
     tracker.languageCompleted++;
-  }
-
-  /**
-   * Mark an item as completed in the progress tracker
-   */
-  private incrementCompletedItems(tracker: ProgressTracker | undefined): void {
-    if (!tracker) {
-      return;
-    }
-    tracker.completedItems++;
-  }
-
-  /**
-   * Set the current item index in the progress tracker
-   */
-  private setCurrentItemIndex(
-    tracker: ProgressTracker | undefined,
-    index: number,
-  ): void {
-    if (!tracker) {
-      return;
-    }
-    tracker.currentItemIndex = index;
   }
 
   /**
@@ -1103,6 +1101,13 @@ export class TranslationService {
       ) * languageCodes.length;
 
     for (const question of questions) {
+      // Detect the source language once per question, not once per target
+      // language — avoids N×M LLM detection calls for the same text.
+      const questionSourceLang = await this.llmFacadeService.getLanguageCode(
+        question.question,
+        assignmentId,
+      );
+
       for (const lang of languageCodes) {
         await this.generateAndStoreTranslation(
           assignmentId,
@@ -1110,10 +1115,7 @@ export class TranslationService {
           null,
           question.question,
           question.choices,
-          await this.llmFacadeService.getLanguageCode(
-            question.question,
-            assignmentId,
-          ),
+          questionSourceLang,
           lang,
         );
         processedItems++;
@@ -1130,6 +1132,12 @@ export class TranslationService {
       }
 
       for (const variant of question.variants) {
+        // Same: detect variant source language once, reuse across all target langs.
+        const variantSourceLang = await this.llmFacadeService.getLanguageCode(
+          variant.variantContent,
+          assignmentId,
+        );
+
         for (const lang of languageCodes) {
           await this.generateAndStoreTranslation(
             assignmentId,
@@ -1137,10 +1145,7 @@ export class TranslationService {
             variant.id,
             variant.variantContent,
             variant.choices,
-            await this.llmFacadeService.getLanguageCode(
-              variant.variantContent,
-              assignmentId,
-            ),
+            variantSourceLang,
             lang,
           );
           processedItems++;
@@ -1286,6 +1291,7 @@ export class TranslationService {
           progress: `Assignment with id ${assignmentId} not found`,
           percentage: progressRange?.start || 0,
         });
+        this.cleanupCancelledJob(jobId);
       }
       throw new NotFoundException(
         `Assignment with id ${assignmentId} not found`,
@@ -1607,6 +1613,9 @@ export class TranslationService {
       );
 
       if (missingLanguages.length === 0) {
+        if (hasValidJobId) {
+          this.cleanupCancelledJob(jobId);
+        }
         return;
       }
     }
@@ -1825,7 +1834,11 @@ export class TranslationService {
             error instanceof Error ? error.message : String(error)
           }`,
         );
-        return originalText;
+        // Re-throw so Promise.allSettled marks this language as "rejected" and
+        // translateContentToLanguages skips writing a row. A missing row is safe
+        // (the sweep retries it); a row containing the original text as a
+        // "translation" silently breaks every learner session for this language.
+        throw error;
       }),
 
       parsedChoices && parsedChoices.length > 0
@@ -2068,10 +2081,13 @@ export class TranslationService {
               const errorMessage =
                 error instanceof Error ? error.message : String(error);
               this.logger.error(
-                `Failed to translate ${field}: ${errorMessage}`,
+                `Failed to translate ${field} for assignment ${assignment.id} to ${lang}: ${errorMessage}`,
               );
-              translatedData[field] = source;
-              return { field, translated: source };
+              // Re-throw so Promise.all rejects and the outer catch skips the
+              // upsert entirely. Writing the source-language text in place of a
+              // translation would create a row that looks complete to all health
+              // checks while silently serving wrong-language content.
+              throw error;
             }),
         );
       } else {
@@ -2179,7 +2195,7 @@ export class TranslationService {
             untranslatedText: originalText,
             untranslatedChoices: this.prepareJsonValue(parsedChoices),
             translatedText: originalText,
-            translatedChoices: this.prepareJsonValue(originalChoices),
+            translatedChoices: this.prepareJsonValue(parsedChoices),
           },
         });
       } catch (createError) {
@@ -2201,6 +2217,11 @@ export class TranslationService {
     const translationPromises: Array<Promise<any>> = [];
     let translatedText: string = originalText;
     let translatedChoices: Choice[] | null = parsedChoices;
+    // Track whether the text translation itself failed. If it did we must not
+    // write a row — a row with the source text stored as the "translation" would
+    // poison every learner session for this language. A missing row is safe: the
+    // maintenance sweep detects it and retries.
+    let textTranslationFailed = false;
 
     translationPromises.push(
       this.executeWithOptimizedRetry(
@@ -2220,9 +2241,9 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to translate question text: ${errorMessage}`,
+            `Failed to translate question text for question ${questionId} to ${targetLanguage}: ${errorMessage}`,
           );
-          return originalText;
+          textTranslationFailed = true;
         }),
     );
 
@@ -2248,14 +2269,28 @@ export class TranslationService {
           .catch((error: unknown) => {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to translate choices: ${errorMessage}`);
-            return parsedChoices;
+            this.logger.error(
+              `Failed to translate choices for question ${questionId} to ${targetLanguage}: ${errorMessage}`,
+            );
+            // Choice translation failure is non-fatal: the row is still written
+            // with the original (untranslated) choices. Text was translated, so
+            // learners at least see the question in the right language.
           }),
       );
     }
 
     try {
       await Promise.all(translationPromises);
+
+      if (textTranslationFailed) {
+        // Do not write a row with the original text in place of a translation.
+        // The missing row will be detected by the next maintenance sweep and
+        // the translation will be retried.
+        this.logger.warn(
+          `Skipping translation row for question ${questionId} in ${targetLanguage}: text translation failed`,
+        );
+        return;
+      }
 
       try {
         await this.prisma.translation.create({

@@ -1,11 +1,9 @@
 import { type ComponentPropsWithoutRef } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 function Component(props: Props) {
-  const {} = props;
-
-  return <div className="">Component</div>;
+  return <div {...props}>Component</div>;
 }
 
 export default Component;

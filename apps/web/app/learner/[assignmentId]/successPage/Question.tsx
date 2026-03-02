@@ -473,13 +473,13 @@ const Question: FC<Props> = ({
 
   const handleGithubFileView = async (githubUrl: string) => {
     if (!octokit && !token) {
-      await initializeOctokit(githubUrl);
+      await initializeOctokit();
     } else {
       void openFileInNewTab(githubUrl, octokit);
     }
   };
 
-  const initializeOctokit = async (githubUrl: string) => {
+  const initializeOctokit = async () => {
     const backendToken = await getStoredGithubToken();
     if (backendToken && (await validateToken(backendToken))) {
       setToken(backendToken);

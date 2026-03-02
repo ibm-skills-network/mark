@@ -1,8 +1,4 @@
-import {
-  VersionComparison,
-  VersionChangeDto,
-  QuestionChangeDto,
-} from "@/types/version-types";
+import { VersionComparison } from "@/types/version-types";
 
 export interface SemanticVersion {
   major: number;

@@ -22,7 +22,6 @@ export function UnsavedChangesModal({
   targetName,
 }: UnsavedChangesModalProps) {
   const actionText = actionType === "checkout" ? "checkout" : "load draft";
-  const actionTitle = actionType === "checkout" ? "Check it out" : "Load Draft";
 
   return (
     <AnimatePresence>

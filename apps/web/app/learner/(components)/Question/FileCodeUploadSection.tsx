@@ -29,11 +29,9 @@ interface FileCodeUploadSectionProps {
 
 const FileCodeUploadSection = ({
   questionId,
-  questionType,
   responseType,
   question,
   onFileChange,
-  addFileUpload,
   removeFileUpload,
 }: FileCodeUploadSectionProps) => {
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);

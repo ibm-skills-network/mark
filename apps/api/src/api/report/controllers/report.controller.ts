@@ -5,7 +5,6 @@ import {
   Controller,
   DefaultValuePipe,
   Get,
-  Headers,
   Injectable,
   Param,
   ParseIntPipe,

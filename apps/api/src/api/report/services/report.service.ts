@@ -6,8 +6,8 @@ import {
   HttpStatus,
   Injectable,
   InternalServerErrorException,
-  NotFoundException,
   Logger,
+  NotFoundException,
 } from "@nestjs/common";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
@@ -2493,9 +2493,9 @@ A new related issue has been created: #${issue.number}
         }
       } catch (error) {
         this.logger.warn(
-          `Failed to add GitHub comment for issue ${report.issueNumber ?? ""}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to add GitHub comment for issue ${
+            report.issueNumber ?? ""
+          }: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -2512,6 +2512,8 @@ A new related issue has been created: #${issue.number}
     statusMessage: string,
     closureReason?: string,
   ): Promise<void> {
+    void statusMessage;
+    void closureReason;
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
       select: {
@@ -2524,8 +2526,6 @@ A new related issue has been created: #${issue.number}
     });
 
     if (!report || report.status === newStatus) return;
-
-    // Status text and reason are no longer used; remove dead variables
   }
   /**
    * Track issue status changes and notify users
@@ -2754,9 +2754,9 @@ ${description}
         );
       } catch (error) {
         this.logger.warn(
-          `Failed to add screenshot comment for issue ${report.issueNumber ?? ""}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to add screenshot comment for issue ${
+            report.issueNumber ?? ""
+          }: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }

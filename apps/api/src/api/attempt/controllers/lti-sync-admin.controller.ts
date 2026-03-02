@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { LtiGradeSyncService } from "../services/lti-grade-sync.service";
 import { PrismaService } from "../../../database/prisma.service";

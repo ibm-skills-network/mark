@@ -166,6 +166,7 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     learnerResponse: string,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto | null> {
+    void context;
     if (!this.consistencyService) {
       return null;
     }

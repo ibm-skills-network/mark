@@ -6,7 +6,7 @@ import { stepTwoSections } from "@/config/constants";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { InformationCircleIcon } from "@heroicons/react/24/solid";
 import type { ComponentPropsWithoutRef, FC } from "react";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
 type Props = ComponentPropsWithoutRef<"div">;
 
@@ -31,7 +31,7 @@ const Component: FC<Props> = () => {
     { value: 8, label: "8" },
     { value: 9, label: "9" },
     { value: 10, label: "10" },
-    { value: -1, label: "unlimited" },
+    { value: -1, label: "Unlimited" },
   ];
 
   return (

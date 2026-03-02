@@ -4187,13 +4187,6 @@ var createFFmpegCore = (() => {
         if (!sock.daddr) {
           return -53;
         }
-        var errno = writeSockaddr(
-          addr,
-          sock.family,
-          DNS.lookup_name(sock.daddr),
-          sock.dport,
-          addrlen,
-        );
         return 0;
       } catch (e) {
         if (typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
@@ -4202,14 +4195,6 @@ var createFFmpegCore = (() => {
     }
     function ___syscall_getsockname(fd, addr, addrlen, d1, d2, d3) {
       try {
-        var sock = getSocketFromFD(fd);
-        var errno = writeSockaddr(
-          addr,
-          sock.family,
-          DNS.lookup_name(sock.saddr || "0.0.0.0"),
-          sock.sport,
-          addrlen,
-        );
         return 0;
       } catch (e) {
         if (typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
@@ -4371,13 +4356,6 @@ var createFFmpegCore = (() => {
         var msg = sock.sock_ops.recvmsg(sock, len);
         if (!msg) return 0;
         if (addr) {
-          var errno = writeSockaddr(
-            addr,
-            sock.family,
-            DNS.lookup_name(msg.addr),
-            msg.port,
-            addrlen,
-          );
         }
         HEAPU8.set(msg.buffer, buf);
         return msg.buffer.byteLength;
@@ -5471,10 +5449,6 @@ var createFFmpegCore = (() => {
       u: send_progress,
       e: _strftime,
     };
-    var asm = createWasm();
-    var ___wasm_call_ctors = function () {
-      return (___wasm_call_ctors = Module["asm"]["sa"]).apply(null, arguments);
-    };
     var _malloc = (Module["_malloc"] = function () {
       return (_malloc = Module["_malloc"] = Module["asm"]["ta"]).apply(
         null,
@@ -5490,12 +5464,6 @@ var createFFmpegCore = (() => {
     var _htons = function () {
       return (_htons = Module["asm"]["xa"]).apply(null, arguments);
     };
-    var _ffmpeg = (Module["_ffmpeg"] = function () {
-      return (_ffmpeg = Module["_ffmpeg"] = Module["asm"]["ya"]).apply(
-        null,
-        arguments,
-      );
-    });
     var _htonl = function () {
       return (_htonl = Module["asm"]["za"]).apply(null, arguments);
     };
@@ -5520,9 +5488,6 @@ var createFFmpegCore = (() => {
         arguments,
       );
     };
-    var _ff_h264_cabac_tables = (Module["_ff_h264_cabac_tables"] = 1537004);
-    var ___start_em_js = (Module["___start_em_js"] = 6059629);
-    var ___stop_em_js = (Module["___stop_em_js"] = 6059806);
     function invoke_iiiii(index, a1, a2, a3, a4) {
       var sp = stackSave();
       try {

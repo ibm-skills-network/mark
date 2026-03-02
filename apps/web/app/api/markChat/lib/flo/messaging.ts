@@ -59,7 +59,6 @@ export enum ErrorSeverity {
  * MessagingClient for sending messages via NATS
  */
 export class MessagingClient {
-  private options: NatsConnectionOptions;
   private connected: boolean = false;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
@@ -67,9 +66,7 @@ export class MessagingClient {
   /**
    * Create a new MessagingClient
    */
-  constructor(options: NatsConnectionOptions) {
-    this.options = options;
-
+  constructor() {
     this.connect();
   }
 
@@ -106,7 +103,6 @@ export class MessagingClient {
       }
 
       const { action, data } = params;
-      const subject = `${this.options.organization}.${this.options.program}.${this.options.project}.service.${action}`;
 
       await new Promise((resolve) => setTimeout(resolve, 50));
     } catch (error) {
@@ -124,7 +120,6 @@ export class MessagingClient {
       }
 
       const { organization, program, project, action, username, data } = params;
-      const subject = `${organization}.${program}.${project}.user.${action}`;
 
       await new Promise((resolve) => setTimeout(resolve, 50));
     } catch (error) {

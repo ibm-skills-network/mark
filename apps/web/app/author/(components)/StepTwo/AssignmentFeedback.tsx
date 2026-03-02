@@ -10,7 +10,7 @@ import {
   type ComponentPropsWithoutRef,
   type FC,
 } from "react";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 import SettingsContainer from "./FeedbackSettings";
 
 interface FeedbackOptionProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -58,7 +58,7 @@ type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const [
-    verbosityLevel,
+    ,
     setVerbosityLevel,
     setShowAssignmentScore,
     setShowSubmissionFeedback,

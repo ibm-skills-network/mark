@@ -74,7 +74,7 @@ export function VersionSelectionModal({
   const [suggestions, setSuggestions] = useState<SemanticVersion[]>([]);
   const [changeAnalysis, setChangeAnalysis] =
     useState<VersionSuggestion | null>(null);
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [, setShowCustomInput] = useState(false);
   const [step, setStep] = useState<"choice" | "details">("choice");
 
   useEffect(() => {
@@ -198,17 +198,7 @@ export function VersionSelectionModal({
         const { saveDraft } = await import("@/lib/author");
 
         const { useAuthorStore } = await import("@/stores/author");
-        const { useAssignmentConfig } = await import(
-          "@/stores/assignmentConfig"
-        );
-        const { useAssignmentFeedbackConfig } = await import(
-          "@/stores/assignmentFeedbackConfig"
-        );
-
         const authorState = useAuthorStore.getState();
-        const assignmentConfigState = useAssignmentConfig.getState();
-        const assignmentFeedbackConfigState =
-          useAssignmentFeedbackConfig.getState();
 
         const draftData = {
           draftName: customDraftName,

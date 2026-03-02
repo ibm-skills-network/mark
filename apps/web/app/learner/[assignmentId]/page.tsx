@@ -20,7 +20,7 @@ async function Component(props: Props) {
 
     return (
       <AuthFetchToAbout
-        assignmentId={~~assignmentId}
+        assignmentId={Math.trunc(Number(assignmentId))}
         role={role}
         cookie={cookieHeader}
       />

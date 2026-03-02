@@ -1,12 +1,10 @@
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import { useLearnerStore } from "@/stores/learner";
 import type { QuestionStore } from "@config/types";
-import { TagIcon } from "@heroicons/react/20/solid";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
   type ComponentPropsWithoutRef,
 } from "react";

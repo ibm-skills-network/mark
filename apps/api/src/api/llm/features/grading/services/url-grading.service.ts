@@ -249,6 +249,7 @@ export class UrlGradingService implements IUrlGradingService {
     assignmentId: number,
     _totalPoints: number,
   ): Promise<string> {
+    void _totalPoints;
     const maxRetries = 3;
     let lastError: Error | null = null;
 

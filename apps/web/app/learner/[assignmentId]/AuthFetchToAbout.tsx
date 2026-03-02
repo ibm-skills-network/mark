@@ -10,7 +10,6 @@ import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
-  useLearnerStore,
 } from "@/stores/learner";
 import { useSearchParams } from "next/navigation";
 import React, { FC, useEffect, useState } from "react";

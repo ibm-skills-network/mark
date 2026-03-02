@@ -319,13 +319,6 @@ function matchesConfiguredField(
 }
 
 /**
- * Check if a string is already Base64 encoded
- */
-function isBase64Encoded(value: string): boolean {
-  return tryDecodeBase64(value) !== null;
-}
-
-/**
  * Encode a single value with type preservation
  */
 function encodeValue(value: unknown): string {

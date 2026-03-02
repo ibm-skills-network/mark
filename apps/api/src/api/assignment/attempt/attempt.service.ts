@@ -1569,6 +1569,7 @@ export class AttemptServiceV1 {
     attemptId: number,
     assignment: LearnerGetAssignmentResponseDto,
   ): Promise<void> {
+    void assignment;
     const attempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
       include: {
@@ -1596,21 +1597,10 @@ export class AttemptServiceV1 {
       },
     });
 
-    const questionMap = new Map(questions.map((q) => [q.id, q]));
-
-    const questionVariantsMap = new Map(
-      attempt.questionVariants.map((qv) => [
-        qv.questionId,
-        qv.questionVariant || questionMap.get(qv.questionId),
-      ]),
-    );
-
     let totalPointsEarned = 0;
     let totalPossiblePoints = 0;
 
     for (const question of questions) {
-      const questionOrVariant =
-        questionVariantsMap.get(question.id) || question;
       const response = attempt.questionResponses.find(
         (r) => r.questionId === question.id,
       );
@@ -2026,9 +2016,8 @@ export class AttemptServiceV1 {
           id: { notIn: responseIds },
         },
       });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+    } catch {
+      // Best-effort cleanup; stale question responses should not fail the request.
     }
   }
 
@@ -2050,19 +2039,6 @@ export class AttemptServiceV1 {
         ...otherData,
       };
     });
-  }
-
-  /**
-   * Checks whether the submission deadline has passed.
-   * @param expiresAt The expiration date of the assignment attempt.
-   */
-  private checkSubmissionDeadline(expiresAt: Date | null | undefined): void {
-    const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
-    if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
-      throw new UnprocessableEntityException(
-        SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
-      );
-    }
   }
 
   /**
@@ -2447,12 +2423,6 @@ export class AttemptServiceV1 {
     AttemptHelper.assignFeedbackToResponse(model, responseDto);
 
     return { responseDto, learnerResponse };
-  }
-  private getSafeChoices(
-    choices: Choice[] | string | null | undefined,
-  ): string | null {
-    if (!choices) return;
-    return typeof choices === "string" ? choices : JSON.stringify(choices);
   }
   /**
    * Handles true/false question responses.
@@ -3095,43 +3065,6 @@ export class AttemptServiceV1 {
       }
     }
     return string_;
-  }
-
-  private parseBooleanResponse(
-    learnerChoice: string,
-    language: string,
-  ): boolean | null {
-    const mapping: Record<string, Record<string, boolean>> = {
-      en: { true: true, false: false },
-      id: { benar: true, salah: false },
-      de: { wahr: true, falsch: false },
-      es: { verdadero: true, falso: false },
-      fr: { vrai: true, faux: false },
-      it: { vero: true, falso: false },
-      hu: { igaz: true, hamis: false },
-      nl: { waar: true, onwaar: false },
-      pl: { prawda: true, fałsz: false },
-      pt: { verdadeiro: true, falso: false },
-      sv: { sant: true, falskt: false },
-      tr: { doğru: true, yanlış: false },
-      el: { αληθές: true, ψευδές: false },
-      kk: { рас: true, жалған: false },
-      ru: { правда: true, ложь: false },
-      uk: { правда: true, брехня: false },
-      ar: { صحيح: true, خطأ: false },
-      hi: { सही: true, गलत: false },
-      th: { จริง: true, เท็จ: false },
-      ko: { 참: true, 거짓: false },
-      "zh-CN": { 真: true, 假: false },
-      "zh-TW": { 真: true, 假: false },
-      ja: { 正しい: true, 間違い: false },
-    };
-
-    const langMapping = mapping[language] || mapping["en"];
-    const normalized = learnerChoice.trim().toLowerCase();
-    return langMapping[normalized] === undefined
-      ? undefined
-      : langMapping[normalized];
   }
 
   /**

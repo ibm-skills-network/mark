@@ -35,9 +35,6 @@ const useVideoRecorder = (onRecordingComplete: (blob: Blob) => void) => {
     stopRecording: storeStopRecording,
     reconnectCamera,
     setCameraError,
-    setVideoBlob,
-    setVideoURL,
-    setRecording,
     setCountdown,
   } = useVideoRecorderStore();
 
@@ -392,10 +389,9 @@ export default function PresentationGrader({
   const [feedbackLoading, setFeedbackLoading] = useState(false);
 
   const [lastTranscript, setLastTranscript] = useState("");
-  const [lastSpeechReport, setLastSpeechReport] = useState("");
-  const [lastContentReport, setLastContentReport] = useState("");
-  const [lastBodyLanguageExplanation, setLastBodyLanguageExplanation] =
-    useState("");
+  const [, setLastSpeechReport] = useState("");
+  const [, setLastContentReport] = useState("");
+  const [, setLastBodyLanguageExplanation] = useState("");
 
   const [cachedEvaluation, setCachedEvaluation] =
     useState<LiveRecordingData | null>(null);
