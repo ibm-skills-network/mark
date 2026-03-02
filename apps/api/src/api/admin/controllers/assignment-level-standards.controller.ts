@@ -7,7 +7,6 @@ import {
   Param,
   ParseIntPipe,
   Post,
-  UseGuards,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
@@ -24,7 +23,6 @@ import {
   Min,
 } from "class-validator";
 import { JobStatusServiceV2 } from "src/api/assignment/v2/services/job-status.service";
-import { AdminGuard } from "src/auth/guards/admin.guard";
 import { PrismaService } from "src/database/prisma.service";
 
 class ApplyLevelStandardsRequestDto {
@@ -136,7 +134,6 @@ const getLevelStandardsFromName = (
 
 @ApiTags("Admin")
 @ApiBearerAuth()
-@UseGuards(AdminGuard)
 @UsePipes(
   new ValidationPipe({
     whitelist: true,
