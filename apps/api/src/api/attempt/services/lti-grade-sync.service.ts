@@ -246,7 +246,7 @@ export class LtiGradeSyncService {
       });
 
       this.logger.error(
-        `💀 Grade sync permanently failed for attempt ${sync.attemptId} after ${this.maxRetries} attempts`,
+        `Grade sync permanently failed for attempt ${sync.attemptId} after ${this.maxRetries} attempts`,
       );
 
       await this.createLearnerNotification(
