@@ -1,3 +1,7 @@
+if (process.env.NODE_ENV === "production") {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-var-requires, unicorn/prefer-module
+  require("@instana/collector")();
+}
 import { VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -33,11 +37,24 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle("API")
       .setDescription("API Description")
+      .addBearerAuth(
+        {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          in: "header",
+        },
+        "bearer",
+      )
+      .addSecurityRequirements("bearer")
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api", app, document, {
       customSiteTitle: "API Docs",
       customCss: ".swagger-ui .topbar .topbar-wrapper { display: none; }",
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
     });
 
     app.enableShutdownHooks();

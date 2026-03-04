@@ -24,6 +24,9 @@ import {
 } from "../../../llm.constants";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
 import { IImageGradingService } from "../interfaces/image-grading.interface";
+import { EvidenceChunkingService } from "./evidence-chunking.service";
+import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
+import { RubricCriterion } from "../types/criterion-evidence.types";
 
 interface ProcessedImageData {
   buffer: Buffer;
@@ -41,6 +44,8 @@ export class ImageGradingService implements IImageGradingService {
     private readonly promptProcessor: IPromptProcessor,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
+    private readonly chunkingService: EvidenceChunkingService,
+    private readonly evidencePipeline: CriterionEvidencePipelineService,
     @Inject(LLM_RESOLVER_SERVICE)
     private readonly llmResolver: LLMResolverService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
@@ -97,6 +102,31 @@ export class ImageGradingService implements IImageGradingService {
     this.logger.info(
       `Calculated max total points: ${maxTotalPoints} for assignment ${assignmentId}`,
     );
+
+    const rubricCriteria = this.convertToRubricCriteria(scoringCriteria);
+
+    if (scoringCriteriaType === "CRITERIA_BASED" && rubricCriteria.length > 0) {
+      const chunks = this.chunkingService.extractFromImages(learnerImages);
+
+      const pipelineResult = await this.evidencePipeline.gradeWithEvidence({
+        question,
+        criteria: rubricCriteria,
+        chunks,
+        assignmentId,
+        maxConcurrency: 4,
+        maxRetries: 3,
+        modelOverrides: {
+          retrievalModel: "gpt-5-nano",
+          gradingModel: "gpt-5-mini",
+          judgeModel: "gpt-5-mini",
+        },
+      });
+
+      return this.buildImageResponseFromPipeline(
+        pipelineResult,
+        maxTotalPoints,
+      );
+    }
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
@@ -625,5 +655,66 @@ ${parsed.guidance}
     }
 
     return null;
+  }
+
+  private convertToRubricCriteria(
+    scoringCriteria?: ScoringDto,
+  ): RubricCriterion[] {
+    if (!scoringCriteria || !Array.isArray(scoringCriteria.rubrics)) {
+      return [];
+    }
+
+    return scoringCriteria.rubrics.map((rubric, index) => {
+      const maxPoints = Math.max(
+        ...rubric.criteria.map((criterion) => criterion.points || 0),
+      );
+
+      return {
+        id: `rubric-${index + 1}`,
+        rubricQuestion: rubric.rubricQuestion || `Criterion ${index + 1}`,
+        description: rubric.rubricQuestion || `Criterion ${index + 1}`,
+        criteria: rubric.criteria.map((criterion) => ({
+          description: criterion.description,
+          points: criterion.points,
+        })),
+        maxPoints: maxPoints || 0,
+      };
+    });
+  }
+
+  private buildImageResponseFromPipeline(
+    pipelineResult: {
+      grades: Array<{
+        rubricQuestion: string;
+        pointsAwarded: number;
+        maxPoints: number;
+        rationale: string;
+      }>;
+      summary: { totalPoints: number; maxPoints: number };
+      audit: unknown;
+    },
+    maxPoints: number,
+  ): ImageBasedQuestionResponseModel {
+    const feedbackLines = pipelineResult.grades.map(
+      (grade) =>
+        `**${grade.rubricQuestion}** (${grade.pointsAwarded}/${grade.maxPoints})\n${grade.rationale}`,
+    );
+    const feedback = feedbackLines.join("\n\n");
+
+    return {
+      points: Math.min(pipelineResult.summary.totalPoints, maxPoints),
+      feedback,
+      aspectFeedback: pipelineResult.grades.map((grade) => ({
+        aspect: grade.rubricQuestion,
+        score: grade.pointsAwarded,
+        maxPoints: grade.maxPoints,
+        feedback: grade.rationale,
+      })),
+      metadata: pipelineResult.audit
+        ? {
+            gradingAudit: pipelineResult.audit,
+          }
+        : undefined,
+    };
   }
 }

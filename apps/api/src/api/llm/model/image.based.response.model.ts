@@ -71,4 +71,9 @@ export interface ImageBasedQuestionResponseModel {
      */
     relevance?: string;
   };
+
+  /**
+   * Optional grading artifacts for audit/logging
+   */
+  metadata?: Record<string, any>;
 }

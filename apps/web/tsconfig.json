@@ -20,7 +20,8 @@
         "app/author/(components)/*",
         "pages/api/transcriber.js"
       ]
-    }
+    },
+    "target": "ES2017"
   },
   "include": [
     "next-env.d.ts",

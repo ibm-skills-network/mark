@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 /* eslint-disable unicorn/no-process-exit */
+if (process.env.NODE_ENV === "production") {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-var-requires, unicorn/prefer-module
+  require("@instana/collector")();
+}
 /**
  * Application Bootstrap File
  *
@@ -14,7 +18,6 @@
  * @module main
  */
 import "reflect-metadata";
-import instana from "@instana/collector";
 import { Logger, ValidationPipe, VersioningType } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
@@ -26,25 +29,10 @@ import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
 import { AuthModule } from "./auth/auth.module";
 import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
-import { winstonOptions } from "./logger/config";
 import { SerializeDatesInterceptor } from "./common/interceptors/serialize-dates.interceptor";
+import { winstonOptions } from "./logger/config";
 
-if (process.env.NODE_ENV === "production") {
-  instana({
-    level: "warn",
-    tracing: {
-      stackTraceLength: 20,
-      http: {
-        captureAsyncContext: true,
-        extraHttpHeadersToCapture: [
-          "user-agent",
-          "x-request-id",
-          "x-correlation-id",
-        ],
-      },
-    },
-  });
-}
+
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
 
@@ -117,11 +105,24 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle("API")
       .setDescription("API Description")
+      .addBearerAuth(
+        {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          in: "header",
+        },
+        "bearer",
+      )
+      .addSecurityRequirements("bearer")
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup("api", app, document, {
       customSiteTitle: "API Docs",
       customCss: ".swagger-ui .topbar .topbar-wrapper { display: none; }",
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
     });
 
     /**
@@ -202,7 +203,7 @@ async function bootstrap() {
      */
     logger.log("Application bootstrap completed successfully");
     logger.log(
-      `Swagger documentation available at: http://localhost:${port}/api`,
+      `Swagger documentation available at: http://localhost:${port}/api`
     );
     logger.log(`Health check endpoints:`);
     logger.log(`  - http://localhost:${port}/health`);

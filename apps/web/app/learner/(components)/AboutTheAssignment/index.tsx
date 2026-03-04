@@ -11,13 +11,17 @@ import {
 } from "@/config/types";
 import { getSupportedLanguages } from "@/lib/talkToBackend";
 import {
+  DEFAULT_UI_LANGUAGE,
+  setStoredUiLanguage,
+} from "@/lib/ui-language";
+import {
   useAssignmentDetails,
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React, { FC, useEffect, useState } from "react";
 import { toast } from "sonner";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
@@ -129,6 +133,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       state.setLanguageModalTriggered,
     ]);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(
     userPreferedLanguage,
@@ -143,6 +148,11 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       setToggleLanguageSelectionModal(true);
     }
   }, [userPreferedLanguage, languageModalTriggered]);
+
+  useEffect(() => {
+    setSelectedLanguage(userPreferedLanguage);
+  }, [userPreferedLanguage]);
+
   useEffect(() => {
     async function fetchLanguages() {
       if (!assignmentId) return;
@@ -152,10 +162,20 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
         getLanguageName(a).localeCompare(getLanguageName(b)),
       );
       setLanguages(sortedLanguages);
+      setSelectedLanguage((current) => {
+        if (current && sortedLanguages.includes(current)) return current;
+        if (
+          userPreferedLanguage &&
+          sortedLanguages.includes(userPreferedLanguage)
+        )
+          return userPreferedLanguage;
+        return sortedLanguages[0] || "en";
+      });
       setIsLoading(false);
     }
     void fetchLanguages();
-  }, [assignmentId]);
+  }, [assignmentId, userPreferedLanguage]);
+
   const assignmentState =
     !published && role === "learner"
       ? "not-published"
@@ -256,16 +276,28 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   ]);
 
   const handleConfirm = () => {
-    if (selectedLanguage) {
-      router.replace(`${pathname}?lang=${selectedLanguage}`, undefined);
-      setUserPreferedLanguage(selectedLanguage);
-      setLanguageModalTriggered(false);
-      setToggleLanguageSelectionModal(false);
-      void fetchData();
-    } else {
+    const contentLanguage = selectedLanguage || languages[0] || "en";
+    if (!contentLanguage) {
       toast.error("Please select a language to continue.");
+      return;
     }
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("lang", contentLanguage);
+    if (contentLanguage === DEFAULT_UI_LANGUAGE) {
+      params.delete("uiLang");
+    } else {
+      params.set("uiLang", contentLanguage);
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, undefined);
+    setUserPreferedLanguage(contentLanguage);
+    setStoredUiLanguage(contentLanguage);
+    setLanguageModalTriggered(false);
+    setToggleLanguageSelectionModal(false);
+    void fetchData();
   };
+
   const handleCloseModal = () => {
     setLanguageModalTriggered(false);
     setToggleLanguageSelectionModal(false);
@@ -555,7 +587,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                   Loading languages...
                 </div>
               ) : (
-                <div className="w-full">
+                <div className="w-full space-y-3">
                   <Dropdown
                     items={languages.map((lang) => ({
                       label: getLanguageName(lang),
@@ -564,6 +596,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                     selectedItem={selectedLanguage}
                     setSelectedItem={setSelectedLanguage}
                     placeholder="Select language"
+                    disableUiTranslation={true}
                   />
                 </div>
               )}
@@ -571,14 +604,14 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
               <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                 <button
                   className="w-full sm:w-auto px-4 py-2 text-gray-500 hover:text-gray-700 transition-colors"
-                  onClick={() => setToggleLanguageSelectionModal(false)}
+                  onClick={handleCloseModal}
                 >
                   Cancel
                 </button>
                 <button
                   className="w-full sm:w-auto px-4 py-2 bg-violet-500 text-white rounded-md disabled:opacity-50 hover:bg-violet-600 transition-colors"
                   onClick={handleConfirm}
-                  disabled={!selectedLanguage}
+                  disabled={isLoading}
                 >
                   Confirm
                 </button>

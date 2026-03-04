@@ -196,73 +196,86 @@ export class AttemptSubmissionService {
 
     const selectionSeed = assignmentAttempt.id ^ assignmentId;
 
-    const questions: QuestionDto[] =
+    let questions: QuestionDto[] = [];
+    if (
       assignmentWithActiveVersion?.currentVersion?.questionVersions?.length > 0
-        ? await Promise.all(
-            assignmentWithActiveVersion.currentVersion.questionVersions.map(
-              async (qv) => {
-                let variants: QuestionVariant[] = [];
-                if (qv.questionId) {
-                  const originalQuestion =
-                    await this.prisma.question.findUnique({
-                      where: { id: qv.questionId },
-                      include: {
-                        variants: {
-                          where: { isDeleted: false },
-                        },
-                      },
-                    });
-                  variants = originalQuestion?.variants || [];
-                }
+    ) {
+      const questionVersions =
+        assignmentWithActiveVersion.currentVersion.questionVersions;
+      const questionIds = questionVersions
+        .map((qv) => qv.questionId)
+        .filter((id): id is number => typeof id === "number");
 
-                return {
-                  id: qv.questionId || qv.id,
-                  question: qv.question,
-                  type: qv.type,
-                  assignmentId: assignmentId,
-                  totalPoints: qv.totalPoints,
-                  maxWords: qv.maxWords,
-                  maxCharacters: qv.maxCharacters,
-                  choices: qv.choices as unknown as Choice[],
-                  scoring: qv.scoring as unknown as ScoringDto,
-                  answer: qv.answer,
-                  variants: variants.map(
-                    (v: QuestionVariant): VariantDto => ({
-                      id: v.id,
-                      variantContent: v.variantContent,
-                      choices: v.choices as unknown as Choice[],
-                      scoring: v.scoring as unknown as ScoringDto,
-                      maxWords: v.maxWords || undefined,
-                      maxCharacters: v.maxCharacters || undefined,
-                      variantType: v.variantType as VariantType,
-                      randomizedChoices: v.randomizedChoices || undefined,
-                      isDeleted: v.isDeleted || false,
-                    }),
-                  ),
-                  gradingContextQuestionIds: qv.gradingContextQuestionIds,
-                  responseType: qv.responseType,
-                  isDeleted: false,
-                  randomizedChoices: qv.randomizedChoices,
-                  videoPresentationConfig:
-                    qv.videoPresentationConfig as unknown as VideoPresentationConfig,
-                  liveRecordingConfig: qv.liveRecordingConfig as object,
-                };
+      const originalQuestions =
+        questionIds.length > 0
+          ? await this.prisma.question.findMany({
+              where: { id: { in: questionIds } },
+              include: {
+                variants: {
+                  where: { isDeleted: false },
+                },
               },
-            ),
-          )
-        : ((assignmentWithActiveVersion?.questions || []).map((q) => ({
-            ...q,
-            scoring: q.scoring as unknown as ScoringDto,
-            choices: q.choices as unknown as Choice[],
-            videoPresentationConfig:
-              q.videoPresentationConfig as unknown as VideoPresentationConfig,
-            liveRecordingConfig: q.liveRecordingConfig as object,
-            variants: (q.variants || []).map((v: QuestionVariant) => ({
-              ...v,
+            })
+          : [];
+
+      const variantsByQuestionId = new Map<number, QuestionVariant[]>();
+      for (const question of originalQuestions) {
+        variantsByQuestionId.set(question.id, question.variants || []);
+      }
+
+      questions = questionVersions.map((qv) => {
+        const variants = qv.questionId
+          ? (variantsByQuestionId.get(qv.questionId) ?? [])
+          : [];
+
+        return {
+          id: qv.questionId || qv.id,
+          question: qv.question,
+          type: qv.type,
+          assignmentId: assignmentId,
+          totalPoints: qv.totalPoints,
+          maxWords: qv.maxWords,
+          maxCharacters: qv.maxCharacters,
+          choices: qv.choices as unknown as Choice[],
+          scoring: qv.scoring as unknown as ScoringDto,
+          answer: qv.answer,
+          variants: variants.map(
+            (v: QuestionVariant): VariantDto => ({
+              id: v.id,
+              variantContent: v.variantContent,
               choices: v.choices as unknown as Choice[],
               scoring: v.scoring as unknown as ScoringDto,
-            })),
-          })) as QuestionDto[]);
+              maxWords: v.maxWords || undefined,
+              maxCharacters: v.maxCharacters || undefined,
+              variantType: v.variantType as VariantType,
+              randomizedChoices: v.randomizedChoices || undefined,
+              isDeleted: v.isDeleted || false,
+            }),
+          ),
+          gradingContextQuestionIds: qv.gradingContextQuestionIds,
+          responseType: qv.responseType,
+          isDeleted: false,
+          randomizedChoices: qv.randomizedChoices,
+          videoPresentationConfig:
+            qv.videoPresentationConfig as unknown as VideoPresentationConfig,
+          liveRecordingConfig: qv.liveRecordingConfig as object,
+        };
+      });
+    } else {
+      questions = (assignmentWithActiveVersion?.questions || []).map((q) => ({
+        ...q,
+        scoring: q.scoring as unknown as ScoringDto,
+        choices: q.choices as unknown as Choice[],
+        videoPresentationConfig:
+          q.videoPresentationConfig as unknown as VideoPresentationConfig,
+        liveRecordingConfig: q.liveRecordingConfig as object,
+        variants: (q.variants || []).map((v: QuestionVariant) => ({
+          ...v,
+          choices: v.choices as unknown as Choice[],
+          scoring: v.scoring as unknown as ScoringDto,
+        })),
+      })) as QuestionDto[];
+    }
 
     if (
       assignment.numberOfQuestionsPerAttempt &&

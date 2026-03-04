@@ -12,26 +12,32 @@ export default function Error({
   error: Error;
   reset?: () => void;
 }) {
-  const isAPIError = error instanceof APIError;
+  const status =
+    (error as { status?: number; statusCode?: number }).status ??
+    (error as { statusCode?: number }).statusCode;
+  const statusText = (error as { statusText?: string }).statusText;
+  const isAPIError = error instanceof APIError || error.name === "APIError";
+  const shouldShowModal =
+    isAPIError || (typeof status === "number" && status >= 500);
 
   useEffect(() => {
-    if (!isAPIError) {
+    if (!shouldShowModal) {
       toast.error("An error occurred", {
         description:
           error?.message || "Something went wrong. Please try again.",
         duration: 5000,
       });
     }
-  }, [error, isAPIError]);
+  }, [error, shouldShowModal]);
 
-  if (!isAPIError) {
+  if (!shouldShowModal) {
     return null;
   }
 
   return (
     <ErrorModal
-      statusCode={error.status || 500}
-      headline={error.statusText || "Server error"}
+      statusCode={status || 500}
+      headline={statusText || "Server error"}
       error={error?.message || "Something went wrong"}
       userSteps={[
         {

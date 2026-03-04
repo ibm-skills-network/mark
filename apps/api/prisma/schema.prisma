@@ -171,6 +171,7 @@ enum AIUsageType {
   TRANSLATION /// AI was used for translation
   LIVE_RECORDING_FEEDBACK /// AI was used for live recording feedback
   GRADING_VALIDATION
+  CHAT_ASSISTANT /// AI was used for chat assistant responses
 }
 
 model UserCredential {

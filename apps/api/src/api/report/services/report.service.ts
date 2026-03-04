@@ -7,8 +7,8 @@ import {
   HttpStatus,
   Injectable,
   InternalServerErrorException,
-  NotFoundException,
   Logger,
+  NotFoundException,
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
@@ -958,6 +958,11 @@ export class ReportsService {
       if (issueType === "critical") issueSeverity = "critical";
       if (issueType === "grading") issueSeverity = "warning";
     }
+    const userEmail = additionalDetails?.userEmail || userSession?.userId;
+    const safeUserEmail =
+      typeof userEmail === "string" && userEmail.trim().length > 0
+        ? userEmail
+        : "Unknown";
     const recentReports = await this.prisma.report.findMany({
       where: {
         createdAt: {
@@ -1022,6 +1027,7 @@ ${isProduction ? "PROD" : "DEV"}] [${role}] ${issueSeverity.toUpperCase()} ${
 
 **Issue Type:** ${issueType}
 **Reported By:** ${role || "Unknown"}
+**User Email:** ${safeUserEmail}
 **Assignment ID:** ${assignmentId || "N/A"}
 **Attempt ID:** ${attemptId || "N/A"}
 **Time Reported:** ${new Date().toISOString()}
@@ -1105,6 +1111,7 @@ Another user has reported a nearly identical issue:
 
 **Similarity Score:** ${Math.round(potentialDuplicate.similarity * 100)}%
 **Reported By:** ${role || "Unknown"}
+**User Email:** ${safeUserEmail}
 **Assignment ID:** ${assignmentId || "N/A"}
 **Attempt ID:** ${attemptId || "N/A"}
 **Time Reported:** ${new Date().toISOString()}
@@ -2569,9 +2576,9 @@ A new related issue has been created: #${issue.number}
         }
       } catch (error) {
         this.logger.warn(
-          `Failed to add GitHub comment for issue ${report.issueNumber ?? ""}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to add GitHub comment for issue ${
+            report.issueNumber ?? ""
+          }: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -3030,9 +3037,9 @@ ${description}
         );
       } catch (error) {
         this.logger.warn(
-          `Failed to add screenshot comment for issue ${report.issueNumber ?? ""}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to add screenshot comment for issue ${
+            report.issueNumber ?? ""
+          }: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }

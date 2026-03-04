@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AdminEmailService } from "../../auth/services/admin-email.service";
 import { PrismaService } from "../../database/prisma.service";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
@@ -6,6 +7,13 @@ import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
 import { AssignmentRepository } from "../assignment/v2/repositories/assignment.repository";
 import { GradingConsistencyService } from "../assignment/v2/services/grading-consistency.service";
 import { S3Service } from "../files/services/s3.service";
+import { CriterionEvidencePipelineService } from "../llm/features/grading/services/criterion-evidence-pipeline.service";
+import { CriterionEvidenceRetrievalService } from "../llm/features/grading/services/criterion-evidence-retrieval.service";
+import { CriterionGradeCompilerService } from "../llm/features/grading/services/criterion-grade-compiler.service";
+import { CriterionGradingService } from "../llm/features/grading/services/criterion-grading.service";
+import { CriterionJudgeService } from "../llm/features/grading/services/criterion-judge.service";
+import { CriterionRetryManagerService } from "../llm/features/grading/services/criterion-retry-manager.service";
+import { EvidenceChunkingService } from "../llm/features/grading/services/evidence-chunking.service";
 import { ImageGradingService } from "../llm/features/grading/services/image-grading.service";
 import { LlmModule } from "../llm/llm.module";
 import {
@@ -22,6 +30,7 @@ import { TextGradingStrategy } from "./common/strategies/text-grading.strategy";
 import { TrueFalseGradingStrategy } from "./common/strategies/true-false-grading.strategy";
 import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
 import { LocalizationService } from "./common/utils/localization.service";
+import { LtiSyncModule } from "./lti-sync.module";
 import { AttemptFeedbackService } from "./services/attempt-feedback.service";
 import { AttemptGradingService } from "./services/attempt-grading.service";
 import { AttemptRegradingService } from "./services/attempt-regrading.service";
@@ -31,15 +40,13 @@ import { AttemptValidationService } from "./services/attempt-validation.service"
 import { AttemptServiceV2 } from "./services/attempt.service";
 import { FileContentExtractionService } from "./services/file-content-extraction";
 import { GradingFactoryService } from "./services/grading-factory.service";
+import { GradingProgressService } from "./services/grading-progress.service";
+import { PdfAnnotationService } from "./services/pdf-annotation.service";
+import { PdfStructureExtractorService } from "./services/pdf-structure-extractor.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
 import { QuestionResponseService } from "./services/question-response/question-response.service";
 import { QuestionVariantService } from "./services/question-variant/question-variant.service";
 import { TranslationService } from "./services/translation/translation.service";
-import { PdfStructureExtractorService } from "./services/pdf-structure-extractor.service";
-import { PdfAnnotationService } from "./services/pdf-annotation.service";
-import { GradingProgressService } from "./services/grading-progress.service";
-import { AdminEmailService } from "../../auth/services/admin-email.service";
-import { LtiSyncModule } from "./lti-sync.module";
 
 @Module({
   imports: [LlmModule, AssignmentModuleV2, LtiSyncModule],
@@ -85,7 +92,13 @@ import { LtiSyncModule } from "./lti-sync.module";
     S3Service,
     AssignmentRepository,
     QuestionResponseService,
-
+    EvidenceChunkingService,
+    CriterionGradeCompilerService,
+    CriterionEvidencePipelineService,
+    CriterionEvidenceRetrievalService,
+    CriterionGradingService,
+    CriterionRetryManagerService,
+    CriterionJudgeService,
     QuestionVariantService,
     LocalizationService,
 
