@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { PassportModule } from "@nestjs/passport";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueModule } from "src/job-queue/job-queue.module";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { AuthModule } from "../../auth/auth.module";
 import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
@@ -16,6 +17,7 @@ import { LLMAssignmentController } from "./controllers/llm-assignment.controller
 import { LLMPricingController } from "./controllers/llm-pricing.controller";
 import { RegradingRequestsController } from "./controllers/regrading-requests.controller";
 import { TranslationMaintenanceController } from "./controllers/translation-maintenance.controller";
+import { TRANSLATION_MAINTENANCE_JOB_RUNNER } from "./controllers/translation-maintenance.job-runner";
 
 @Module({
   imports: [
@@ -25,6 +27,7 @@ import { TranslationMaintenanceController } from "./controllers/translation-main
     AssignmentModuleV2,
     LlmModule,
     ScheduledTasksModule,
+    JobQueueModule,
   ],
   controllers: [
     AdminController,
@@ -36,6 +39,16 @@ import { TranslationMaintenanceController } from "./controllers/translation-main
     AssignmentAnalyticsController,
     TranslationMaintenanceController,
   ],
-  providers: [AdminService, PrismaService, AdminRepository],
+  providers: [
+    AdminService,
+    PrismaService,
+    AdminRepository,
+    TranslationMaintenanceController,
+    {
+      provide: TRANSLATION_MAINTENANCE_JOB_RUNNER,
+      useExisting: TranslationMaintenanceController,
+    },
+  ],
+  exports: [TRANSLATION_MAINTENANCE_JOB_RUNNER],
 })
 export class AdminModule {}

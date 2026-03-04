@@ -42,7 +42,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   ]);
   const [progress, setProgress] = useState<number | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
-  const [jobId, setJobId] = useState<number | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
   const [statusData, setStatusData] = useState<{
     status: string;
     progress: string;

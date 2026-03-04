@@ -103,48 +103,6 @@ enum ScoringType {
   LOSS_PER_MISTAKE /// Points are deducted for each mistake in the assignment
   AI_GRADED /// The assignment is graded by an AI
 }
-model Job {
-  id          Int       @id @default(autoincrement())
-  userId       String
-  assignmentId Int
-  status      String
-  progress    String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  result       Json?    
-}
-model GradingJob {
-  id           Int      @id @default(autoincrement())
-  attemptId    Int?     // Made optional for author preview mode
-  assignmentId Int
-  userId       String
-  status       String   // Pending, Processing, Completed, Failed
-  progress     String
-  percentage   Int?
-  result       Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // Relations
-  attempt      AssignmentAttempt? @relation(fields: [attemptId], references: [id])
-  assignment   Assignment         @relation(fields: [assignmentId], references: [id])
-
-  @@index([attemptId])
-  @@index([assignmentId])
-  @@index([userId])
-  @@index([status])
-}
-model publishJob {
-  id          Int       @id @default(autoincrement())
-  userId       String
-  assignmentId Int
-  status      String
-  progress    String?
-  percentage  Int?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  result       Json?    
-}
 /// This model tracks the AI usage for each assignment and usage type
 model AIUsage {
   id                Int         @id @default(autoincrement()) /// Unique identifier for the AI usage log
@@ -275,7 +233,6 @@ model Assignment {
 
   Chat Chat[]
 
-  GradingJob GradingJob[]
   AssignmentAuthor AssignmentAuthor[]
   versions AssignmentVersion[] @relation("AssignmentVersions")
   versionHistory VersionHistory[]
@@ -431,7 +388,6 @@ model AssignmentAttempt {
   preferredLanguage     String?
   gradingProgress       GradingProgress?
 
-  GradingJob GradingJob[]
   LtiGradeSync LtiGradeSync[]
 
   @@index([assignmentId])

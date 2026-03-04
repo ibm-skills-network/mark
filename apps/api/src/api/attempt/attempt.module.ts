@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AdminEmailService } from "../../auth/services/admin-email.service";
 import { PrismaService } from "../../database/prisma.service";
+import { JobQueueModule } from "../../job-queue/job-queue.module";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
 import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
@@ -49,7 +50,7 @@ import { QuestionVariantService } from "./services/question-variant/question-var
 import { TranslationService } from "./services/translation/translation.service";
 
 @Module({
-  imports: [LlmModule, AssignmentModuleV2, LtiSyncModule],
+  imports: [LlmModule, AssignmentModuleV2, LtiSyncModule, JobQueueModule],
   controllers: [AttemptControllerV2],
   providers: [
     AttemptServiceV2,

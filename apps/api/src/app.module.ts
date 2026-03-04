@@ -16,6 +16,7 @@ import { UserSessionMiddleware } from "./auth/middleware/user.session.middleware
 import { CommonModule } from "./common/common.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
+import { JobQueueModule } from "./job-queue/job-queue.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
@@ -34,6 +35,7 @@ import { routes } from "./routes";
     AuthModule,
     AdminAuthModule,
     DatabaseModule,
+    JobQueueModule,
   ],
   providers: [AppService],
 })
