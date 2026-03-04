@@ -113,7 +113,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       service as unknown as {
         calculateTotalPossiblePointsWithValidation: (
           r: TestResponse[],
-          q: Question[],
+          q: Question[]
         ) => Promise<{
           totalPossiblePoints: number;
           missingQuestions: number[];
@@ -181,7 +181,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       const questions: Question[] = []; // Question 1 is missing!
 
       await expect(calculateTotals(responses, questions)).rejects.toThrow(
-        InternalServerErrorException,
+        InternalServerErrorException
       );
     });
 
@@ -254,7 +254,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         randomizedChoices: false,
         videoPresentationConfig: null,
         liveRecordingConfig: null,
-      }) as unknown as Record<string, unknown>;
+      } as unknown as Record<string, unknown>);
 
     const baseAssignment = {
       id: assignmentId,
@@ -303,7 +303,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       const result = await service.createAssignmentAttempt(
         assignmentId,
-        userSession,
+        userSession
       );
 
       expect(result).toEqual({ id: 55, success: true });
@@ -314,18 +314,18 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         include: { variants: { where: { isDeleted: false } } },
       });
       expect(
-        mockQuestionVariantService.createAttemptQuestionVariants,
+        mockQuestionVariantService.createAttemptQuestionVariants
       ).toHaveBeenCalledTimes(1);
 
       const [, orderedQuestions] = mockQuestionVariantService
         .createAttemptQuestionVariants.mock.calls[0] as [
         number,
-        Array<{ id: number; variants?: Array<{ id?: number }> }>,
+        Array<{ id: number; variants?: Array<{ id?: number }> }>
       ];
       const questionWithVariant = orderedQuestions.find((q) => q.id === 10);
       const questionWithoutVariant = orderedQuestions.find((q) => q.id === 20);
       const questionFromVersionOnly = orderedQuestions.find(
-        (q) => q.id === 1003,
+        (q) => q.id === 1003
       );
 
       expect(questionWithVariant?.variants).toHaveLength(1);
@@ -349,13 +349,13 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
       expect(
-        mockQuestionVariantService.createAttemptQuestionVariants,
+        mockQuestionVariantService.createAttemptQuestionVariants
       ).toHaveBeenCalledTimes(1);
 
       const [, orderedQuestions] = mockQuestionVariantService
         .createAttemptQuestionVariants.mock.calls[0] as [
         number,
-        Array<{ id: number; variants?: Array<{ id?: number }> }>,
+        Array<{ id: number; variants?: Array<{ id?: number }> }>
       ];
       expect(orderedQuestions).toHaveLength(1);
       expect(orderedQuestions[0].id).toBe(2001);
@@ -394,7 +394,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       const gradeResult = mockGradingService.calculateGradeForLearner(
         responses,
-        result.totalPossiblePoints,
+        result.totalPossiblePoints
       );
 
       // Learner should get 80%, not 0%!
@@ -492,7 +492,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       // Should throw because metadata has invalid value
       await expect(calculateTotals(responses, questions)).rejects.toThrow(
-        InternalServerErrorException,
+        InternalServerErrorException
       );
     });
 
@@ -509,7 +509,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       // Should throw because 0 is not a valid maxPossiblePoints
       await expect(calculateTotals(responses, questions)).rejects.toThrow(
-        InternalServerErrorException,
+        InternalServerErrorException
       );
     });
   });
