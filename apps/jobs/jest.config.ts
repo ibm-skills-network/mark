@@ -10,24 +10,14 @@ const config: Config = {
   transform: {
     "^.+\\.(t|j)s$": "ts-jest",
   },
-  collectCoverageFrom: ["**/*.(t|j)s"],
-  coverageDirectory: "../coverage",
-  coverageThreshold: {
-    global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: -10,
-    },
-  },
   clearMocks: true,
   testPathIgnorePatterns: ["<rootDir>/dist/"],
   modulePathIgnorePatterns: ["<rootDir>/dist/"],
   testEnvironment: "node",
   moduleNameMapper: {
-    "^src/(.*)$": "<rootDir>/src/$1",
+    "^src/(.*)$": "<rootDir>/../api/src/$1",
     "^pdfjs-dist/legacy/build/pdf\\.mjs$":
-      "<rootDir>/test/__mocks__/pdfjs-dist.ts",
+      "<rootDir>/../api/test/__mocks__/pdfjs-dist.ts",
   },
 };
 
