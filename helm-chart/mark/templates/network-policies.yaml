@@ -75,7 +75,7 @@ spec:
   - Egress          
 ---
 
-# For mark-api: allow ingress traffic from api-gateway only and allow egress traffic to lti-gateway and to port 5432 (for postgres db).
+# For mark-api: allow ingress traffic from api-gateway only and allow egress traffic to lti-gateway, postgres, redis, and external services.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -91,7 +91,7 @@ spec:
             {{- include "mark.api-gateway.labels" $ | nindent 12 }}
     - ports:
       - protocol: TCP
-        port: {{ .Values.api.containerPort }}      
+        port: {{ .Values.api.containerPort }}
   egress:
     - to:
       - podSelector:
@@ -104,6 +104,11 @@ spec:
         podSelector:
           matchLabels:
             app.kubernetes.io/name: apps-postgres-pgbouncer
+    - to:
+      - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 6379
     - ports: # Permit outbound traffic on port 443, enabling the application to initiate API requests to external services like OpenAI.
       - protocol: TCP
         port: 443
@@ -116,13 +121,45 @@ spec:
             - 192.168.0.0/16
       ports:
         - protocol: TCP
-          port: 587  
+          port: 587
         - protocol: TCP
-          port: 465                         
+          port: 465
   policyTypes:
   - Ingress
-  - Egress             
+  - Egress
 ---
+
+{{- if .Values.jobs.enabled }}
+# For mark-jobs: no ingress (internal worker), egress to postgres and redis only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jobs-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.jobs.labels" $ | nindent 6 }}
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apps-postgres-pgbouncer
+    - to:
+      - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 6379
+    - ports: # Permit outbound traffic on port 443, enabling the job workers to call external services like OpenAI.
+      - protocol: TCP
+        port: 443
+  policyTypes:
+  - Ingress
+  - Egress
+---
+{{- end }}
 
 # For mark-lti-credentials-manager: allow traffic from api-gateway only and block all egress traffic.
 apiVersion: networking.k8s.io/v1

@@ -1,0 +1,30 @@
+replicaCount: 1
+
+image:
+  repository: icr.io/skills-network/mark-jobs
+  pullPolicy: IfNotPresent
+  tag: ""
+
+global:
+  imagePullSecrets:
+    - name: icr-global
+
+resources: {}
+
+postgres:
+  username: ""
+  password: ""
+  hostname: ""
+  port: 5432
+  dbName: mark
+
+redis:
+  url: ""
+
+jobQueue:
+  secret: ""
+
+env:
+  ENABLE_JOB_SCHEDULERS: "true"
+
+secretEnv: {}
