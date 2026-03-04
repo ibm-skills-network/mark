@@ -22,11 +22,11 @@ export class MockJwtCookieAuthGuard extends AuthGuard("cookie-strategy") {
     const request: RequestWithUserSession = context.switchToHttp().getRequest();
 
     request.user = {
-      userId: "user@email.com",
+      userId: "magdy.hafez@email.com",
       role: UserRole.AUTHOR,
-      groupId: "text-group-id",
+      groupId: "autogen-faculty-awb",
       assignmentId: 1,
-      gradingCallbackRequired: false,
+      gradingCallbackRequired: true,
       returnUrl: "https://skills.network",
       launch_presentation_locale: "en",
     };

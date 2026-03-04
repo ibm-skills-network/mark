@@ -114,6 +114,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         calculateTotalPossiblePointsWithValidation: (
           r: TestResponse[],
           q: Question[],
+          options?: {
+            allowDatabaseFallback?: boolean;
+          },
         ) => Promise<{
           totalPossiblePoints: number;
           missingQuestions: number[];
@@ -224,6 +227,41 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       expect(result.totalPossiblePoints).toBe(10);
       expect(result.missingQuestions).toContain(999);
+    });
+
+    it("should not query the database for author preview when draft questions are provided", async () => {
+      const responses: TestResponse[] = [
+        makeResponse({
+          questionId: 966122647,
+          totalPoints: 8,
+          metadata: null,
+        }),
+      ];
+
+      const draftQuestions: Question[] = [
+        { id: 966122647, totalPoints: 12 } as Question,
+      ];
+
+      const result = await (
+        service as unknown as {
+          calculateTotalPossiblePointsWithValidation: (
+            r: TestResponse[],
+            q: Question[],
+            options?: {
+              allowDatabaseFallback?: boolean;
+            },
+          ) => Promise<{
+            totalPossiblePoints: number;
+            missingQuestions: number[];
+          }>;
+        }
+      ).calculateTotalPossiblePointsWithValidation(responses, draftQuestions, {
+        allowDatabaseFallback: false,
+      });
+
+      expect(result.totalPossiblePoints).toBe(12);
+      expect(result.missingQuestions).toHaveLength(0);
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
     });
   });
 
