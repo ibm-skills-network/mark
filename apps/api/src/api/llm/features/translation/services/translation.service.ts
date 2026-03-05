@@ -128,6 +128,35 @@ export class TranslationService implements ITranslationService {
   }
 
   /**
+   * Normalize arbitrary values into translatable text.
+   * Returns null for unsupported or empty values.
+   */
+  private normalizeTranslatableText(value: unknown): string | null {
+    if (typeof value === "string") {
+      return value.trim().length > 0 ? value : null;
+    }
+
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+
+    if (value && typeof value === "object") {
+      const objectValue = value as Record<string, unknown>;
+      const nestedText =
+        objectValue.choice ?? objectValue.text ?? objectValue.value;
+
+      if (typeof nestedText === "string") {
+        return nestedText.trim().length > 0 ? nestedText : null;
+      }
+      if (typeof nestedText === "number" || typeof nestedText === "boolean") {
+        return String(nestedText);
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Batch detect languages for multiple texts using CLD first, falling back to GPT-5-nano
    */
   async batchGetLanguageCodes(
@@ -536,24 +565,34 @@ INSTRUCTIONS:
         choiceIndex: number;
         type: "choice" | "feedback";
         textIndex: number;
+        sourceText: string;
       }> = [];
 
       for (const [choiceIndex, choice] of parsedChoices.entries()) {
-        if (choice.choice) {
+        const normalizedChoiceText = this.normalizeTranslatableText(
+          choice.choice,
+        );
+        if (normalizedChoiceText) {
           textMap.push({
             choiceIndex,
             type: "choice",
             textIndex: textsToCheck.length,
+            sourceText: normalizedChoiceText,
           });
-          textsToCheck.push(choice.choice);
+          textsToCheck.push(normalizedChoiceText);
         }
-        if (choice.feedback) {
+
+        const normalizedFeedbackText = this.normalizeTranslatableText(
+          choice.feedback,
+        );
+        if (normalizedFeedbackText) {
           textMap.push({
             choiceIndex,
             type: "feedback",
             textIndex: textsToCheck.length,
+            sourceText: normalizedFeedbackText,
           });
-          textsToCheck.push(choice.feedback);
+          textsToCheck.push(normalizedFeedbackText);
         }
       }
 
@@ -576,7 +615,7 @@ INSTRUCTIONS:
           if (choiceMapping && needsTranslationFlags[choiceMapping.textIndex]) {
             try {
               const translatedText = await this.translateText(
-                choice.choice,
+                choiceMapping.sourceText,
                 targetLanguage,
                 assignmentId,
               );
@@ -602,7 +641,7 @@ INSTRUCTIONS:
           ) {
             try {
               const translatedFeedback = await this.translateText(
-                choice.feedback,
+                feedbackMapping.sourceText,
                 targetLanguage,
                 assignmentId,
               );
@@ -650,7 +689,9 @@ INSTRUCTIONS:
   ): Promise<boolean[]> {
     if (texts.length === 0) return [];
 
-    const validTexts = texts.filter((text) => text && text.trim().length > 0);
+    const validTexts = texts.filter(
+      (text) => typeof text === "string" && text.trim().length > 0,
+    );
     if (validTexts.length === 0) {
       return texts.map(() => false);
     }
@@ -662,7 +703,7 @@ INSTRUCTIONS:
       );
 
       return texts.map((text, index) => {
-        if (!text || text.trim().length === 0) {
+        if (typeof text !== "string" || text.trim().length === 0) {
           return false;
         }
 
@@ -807,9 +848,10 @@ INSTRUCTIONS:
     targetLanguage: string,
     assignmentId: number,
   ): Promise<string> {
-    if (!text) return "";
+    const normalizedInput = this.normalizeTranslatableText(text);
+    if (!normalizedInput) return "";
 
-    const decodedText = decodeIfBase64(text) || text;
+    const decodedText = decodeIfBase64(normalizedInput) || normalizedInput;
 
     const targetLanguageName = this.getLanguageName(targetLanguage);
 
