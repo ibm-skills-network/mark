@@ -12,7 +12,7 @@ import {
   pollQuestionGenerationJob,
   startQuestionGenerationJob,
 } from "@/lib/question-generation/client";
-import { normalizeGeneratedQuestionsForAuthorStore } from "@/lib/question-generation/normalize";
+import { mergeGeneratedQuestionsForAuthorStore } from "@/lib/question-generation/normalize";
 import { useAuthorStore } from "@/stores/author";
 import {
   IconCloudUpload,
@@ -56,11 +56,12 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     null,
   );
   const setQuestions = useAuthorStore((state) => state.setQuestions);
+  const setQuestionOrder = useAuthorStore((state) => state.setQuestionOrder);
+  const setUpdatedAt = useAuthorStore((state) => state.setUpdatedAt);
   const [learningObjectives, setLearningObjectives] = useAuthorStore(
     (state) => [state.learningObjectives, state.setLearningObjectives],
   );
   const [error, setError] = useState<string | null>(null);
-  const questions = useAuthorStore((state) => state.questions);
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     else if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -131,7 +132,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     linkFile: 0,
   });
 
-  const [selectedResponseTypes, setSelectedResponseTypes] = useState({
+  const [selectedResponseTypes] = useState({
     TEXT: "OTHER" as ResponseType,
     URL: "OTHER" as ResponseType,
     UPLOAD: "OTHER" as ResponseType,
@@ -201,7 +202,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
       setProgress(0);
       setProgressMessage("Processing started");
     } catch (error) {
-      if (error instanceof Error && error.message === "Failed to upload files") {
+      if (
+        error instanceof Error &&
+        error.message === "Failed to upload files"
+      ) {
         setError("Failed to upload files");
       } else {
         setError("An error occurred while uploading files.");
@@ -235,17 +239,19 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         },
         onCompleted: (latestStatusData) => {
           if (latestStatusData.questions) {
-            const questionsGenerated: QuestionAuthorStore[] =
-              latestStatusData.questions;
-            const processedQuestions = normalizeGeneratedQuestionsForAuthorStore(
-              questionsGenerated,
-              activeAssignmentId,
-            );
+            const latestStore = useAuthorStore.getState();
+            const mergeResult = mergeGeneratedQuestionsForAuthorStore({
+              existingQuestions: latestStore.questions || [],
+              generatedQuestions: latestStatusData.questions,
+              assignmentId: activeAssignmentId,
+              existingQuestionOrder: latestStore.questionOrder || [],
+              replaceExisting: replaceExistingQuestions,
+            });
 
-            if (replaceExistingQuestions) {
-              setQuestions(processedQuestions);
-            } else {
-              setQuestions(questions.concat(processedQuestions));
+            setQuestions(mergeResult.questions);
+            setQuestionOrder(mergeResult.questionOrder);
+            if (setUpdatedAt) {
+              setUpdatedAt(Date.now());
             }
           }
           setTimeout(() => onClose(), 2000);
@@ -265,7 +271,15 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         stopPolling();
       };
     }
-  }, [jobId, setQuestions, onClose]);
+  }, [
+    activeAssignmentId,
+    jobId,
+    onClose,
+    replaceExistingQuestions,
+    setQuestionOrder,
+    setQuestions,
+    setUpdatedAt,
+  ]);
 
   return (
     <Modal onClose={onClose} Title="Generate Questions for your assignment">
@@ -648,6 +662,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
             Total Questions:{" "}
             {Object.values(selectedQuestionTypes).reduce((a, b) => a + b, 0)}
           </p>
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
             type="submit"
