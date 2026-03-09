@@ -27,7 +27,6 @@ import {
   DEFAULT_UI_LANGUAGE,
   setStoredUiLanguage,
 } from "@/lib/ui-language";
-import { editedQuestionsOnly, getSubmitButtonStatus } from "@/lib/utils";
 import {
   useAssignmentDetails,
   useGitHubStore,
