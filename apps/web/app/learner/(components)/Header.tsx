@@ -23,6 +23,12 @@ import {
   hasLearnerResponse,
 } from "@/lib/utils";
 import {
+  isSupportedUiLanguage,
+  DEFAULT_UI_LANGUAGE,
+  setStoredUiLanguage,
+} from "@/lib/ui-language";
+import { editedQuestionsOnly, getSubmitButtonStatus } from "@/lib/utils";
+import {
   useAssignmentDetails,
   useGitHubStore,
   useLearnerOverviewStore,
@@ -31,7 +37,7 @@ import {
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
@@ -40,6 +46,7 @@ import GradingProgressModal from "./GradingProgressModal";
 function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
@@ -145,11 +152,16 @@ function LearnerHeader() {
   }, [assignmentId]);
 
   const handleChangeLanguage = (selectedLanguage: string) => {
-    if (selectedLanguage && selectedLanguage !== userPreferedLanguage) {
+    if (!selectedLanguage) return;
+    if (selectedLanguage !== userPreferedLanguage) {
       setUserPreferedLanguage(selectedLanguage);
+    }
 
-      if (!isInQuestionPage && !isAttemptPage && !isSuccessPage)
-        router.replace(`${pathname}?lang=${selectedLanguage}`, undefined);
+    if (!isInQuestionPage && !isAttemptPage && !isSuccessPage) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("lang", selectedLanguage);
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, undefined);
     }
   };
 
@@ -353,10 +365,52 @@ function LearnerHeader() {
   ]);
 
   useEffect(() => {
-    if (userPreferedLanguage && !isInQuestionPage && !isSuccessPage) {
-      router.replace(`${pathname}?lang=${userPreferedLanguage}`, undefined);
+    if (
+      userPreferedLanguage &&
+      !isInQuestionPage &&
+      !isAttemptPage &&
+      !isSuccessPage
+    ) {
+      if (searchParams.get("lang") === userPreferedLanguage) {
+        return;
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("lang", userPreferedLanguage);
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, undefined);
     }
-  }, [userPreferedLanguage]);
+  }, [
+    userPreferedLanguage,
+    isInQuestionPage,
+    isAttemptPage,
+    isSuccessPage,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  useEffect(() => {
+    if (!userPreferedLanguage || !isSupportedUiLanguage(userPreferedLanguage)) {
+      return;
+    }
+
+    setStoredUiLanguage(userPreferedLanguage);
+
+    const currentUiLanguage = searchParams.get("uiLang") || DEFAULT_UI_LANGUAGE;
+    if (currentUiLanguage === userPreferedLanguage) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (userPreferedLanguage === DEFAULT_UI_LANGUAGE) {
+      params.delete("uiLang");
+    } else {
+      params.set("uiLang", userPreferedLanguage);
+    }
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, undefined);
+  }, [pathname, router, searchParams, userPreferedLanguage]);
 
   useEffect(() => {
     const handleSubmitEvent = () => {
@@ -387,17 +441,22 @@ function LearnerHeader() {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1">
               {!isSuccessPage && role === "learner" && (
-                <div className="flex-1 max-w-[140px]">
-                  <Dropdown
-                    items={languages.map((lang) => ({
-                      label: getLanguageName(lang),
-                      value: lang,
-                    }))}
-                    selectedItem={userPreferedLanguage}
-                    setSelectedItem={handleChangeLanguage}
-                    placeholder="Language"
-                  />
-                </div>
+                <>
+                  {languages.length > 1 ? (
+                    <div className="flex-1 max-w-[180px]">
+                      <Dropdown
+                        items={languages.map((lang) => ({
+                          label: getLanguageName(lang),
+                          value: lang,
+                        }))}
+                        selectedItem={userPreferedLanguage}
+                        setSelectedItem={handleChangeLanguage}
+                        placeholder="Language"
+                        disableUiTranslation={true}
+                      />
+                    </div>
+                  ) : null}
+                </>
               )}
               {isAttemptPage || isInQuestionPage ? (
                 <Button
@@ -456,15 +515,20 @@ function LearnerHeader() {
 
           <div className="flex items-center gap-x-4">
             {!isSuccessPage && role === "learner" && (
-              <Dropdown
-                items={languages.map((lang) => ({
-                  label: getLanguageName(lang),
-                  value: lang,
-                }))}
-                selectedItem={userPreferedLanguage}
-                setSelectedItem={handleChangeLanguage}
-                placeholder="Select language"
-              />
+              <>
+                {languages.length > 1 ? (
+                  <Dropdown
+                    items={languages.map((lang) => ({
+                      label: getLanguageName(lang),
+                      value: lang,
+                    }))}
+                    selectedItem={userPreferedLanguage}
+                    setSelectedItem={handleChangeLanguage}
+                    placeholder="Language"
+                    disableUiTranslation={true}
+                  />
+                ) : null}
+              </>
             )}
             {isAttemptPage || isInQuestionPage ? (
               <Button

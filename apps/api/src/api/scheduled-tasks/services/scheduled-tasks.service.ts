@@ -43,6 +43,67 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     await Promise.all([this.migrateExistingAuthors(), this.updateLLMPricing()]);
   }
 
+  // @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  // async republishTopAssignments() {
+  //   this.logger.log(
+  //     "Starting scheduled task: Republish top 10 used assignments",
+  //   );
+
+  //   try {
+  //     // Find top 10 most attempted assignments
+  //     const topAssignments = await this.prismaService.assignmentAttempt.groupBy(
+  //       {
+  //         by: ["assignmentId"],
+  //         _count: {
+  //           assignmentId: true,
+  //         },
+  //         orderBy: {
+  //           _count: {
+  //             assignmentId: "desc",
+  //           },
+  //         },
+  //         take: 10,
+  //       },
+  //     );
+
+  //     this.logger.log(
+  //       `Found ${topAssignments.length} top assignments to republish`,
+  //     );
+
+  //     // Update each assignment to trigger republishing/translation
+  //     for (const assignment of topAssignments) {
+  //       await this.prismaService.assignment.update({
+  //         where: { id: assignment.assignmentId },
+  //         data: {
+  //           updatedAt: new Date(),
+  //           published: true, // Ensure it's published
+  //         },
+  //       });
+
+  //       // Create a publish job to trigger translation
+  //       await this.prismaService.publishJob.create({
+  //         data: {
+  //           userId: "SYSTEM_SCHEDULED_TASK",
+  //           assignmentId: assignment.assignmentId,
+  //           status: "Pending",
+  //           progress: "Scheduled republishing of top assignment",
+  //           percentage: 0,
+  //         },
+  //       });
+
+  //       this.logger.log(
+  //         `Republished assignment ${assignment.assignmentId} with ${assignment._count.assignmentId} attempts`,
+  //       );
+  //     }
+
+  //     this.logger.log(
+  //       "Completed scheduled task: Republish top 10 used assignments",
+  //     );
+  //   } catch (error) {
+  //     this.logger.error("Error in republishTopAssignments:", error);
+  //   }
+  // }
+
   /**
    * Migrates existing authors from various tables to AssignmentAuthor table
    * Runs monthly and on application startup
@@ -56,114 +117,135 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
       "Starting scheduled task: Migrate existing authors to AssignmentAuthor table",
     );
 
+    const PAGE_SIZE = 500;
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+
     try {
-      const reportAuthors = await this.prismaService.report.findMany({
-        where: {
-          author: true,
-          assignmentId: {
-            not: null,
-          },
-        },
-        select: {
-          reporterId: true,
-          assignmentId: true,
-        },
-        distinct: ["reporterId", "assignmentId"],
-      });
+      // Report authors — paginated to avoid loading the full table into memory
+      let skip = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.report.findMany({
+          where: { author: true, assignmentId: { not: null } },
+          select: { reporterId: true, assignmentId: true },
+          distinct: ["reporterId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
 
-      this.logger.log(
-        `Found ${reportAuthors.length} potential authors from Report table`,
-      );
-
-      const aiUsageAuthors = await this.prismaService.aIUsage.findMany({
-        where: {
-          userId: {
-            not: null,
-          },
-          usageType: {
-            in: ["QUESTION_GENERATION", "ASSIGNMENT_GENERATION"],
-          },
-        },
-        select: {
-          userId: true,
-          assignmentId: true,
-        },
-        distinct: ["userId", "assignmentId"],
-      });
-
-      this.logger.log(
-        `Found ${aiUsageAuthors.length} potential authors from AIUsage table`,
-      );
-
-      const jobAuthors = await this.prismaService.job.findMany({
-        select: {
-          userId: true,
-          assignmentId: true,
-        },
-        distinct: ["userId", "assignmentId"],
-      });
-
-      this.logger.log(
-        `Found ${jobAuthors.length} potential authors from Job table`,
-      );
-
-      const publishJobAuthors = await this.prismaService.publishJob.findMany({
-        where: {
-          userId: {
-            not: "SYSTEM_SCHEDULED_TASK",
-          },
-        },
-        select: {
-          userId: true,
-          assignmentId: true,
-        },
-        distinct: ["userId", "assignmentId"],
-      });
-
-      const allPotentialAuthors = [
-        ...reportAuthors
+        const authors = page
           .filter((r) => r.assignmentId !== null)
-          .map((r) => ({
-            userId: r.reporterId,
-            assignmentId: r.assignmentId,
-          })),
-        ...aiUsageAuthors
-          .filter((a) => a.userId !== null)
-          .map((a) => ({
-            userId: a.userId,
-            assignmentId: a.assignmentId,
-          })),
-        ...jobAuthors.map((index) => ({
-          userId: index.userId,
-          assignmentId: index.assignmentId,
-        })),
-        ...publishJobAuthors.map((p) => ({
+          .map((r) => ({ userId: r.reporterId, assignmentId: r.assignmentId }));
+
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
+
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed report authors");
+
+      // AI usage authors — paginated
+      skip = 0;
+      hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.aIUsage.findMany({
+          where: {
+            userId: { not: null },
+            usageType: { in: ["QUESTION_GENERATION", "ASSIGNMENT_GENERATION"] },
+          },
+          select: { userId: true, assignmentId: true },
+          distinct: ["userId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
+
+        const authors = page
+          .filter((a) => a.userId !== null && a.assignmentId !== null)
+          .map((a) => ({ userId: a.userId, assignmentId: a.assignmentId }));
+
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
+
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed AI usage authors");
+
+      // Job authors — paginated
+      skip = 0;
+      hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.job.findMany({
+          select: { userId: true, assignmentId: true },
+          distinct: ["userId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
+
+        const authors = page.map((jobRecord) => ({
+          userId: jobRecord.userId,
+          assignmentId: jobRecord.assignmentId,
+        }));
+
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
+
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed job authors");
+
+      // Publish job authors — paginated
+      skip = 0;
+      hasMore = true;
+      while (hasMore) {
+        const page = await this.prismaService.publishJob.findMany({
+          where: { userId: { not: "SYSTEM_SCHEDULED_TASK" } },
+          select: { userId: true, assignmentId: true },
+          distinct: ["userId", "assignmentId"],
+          take: PAGE_SIZE,
+          skip,
+        });
+        if (page.length === 0) break;
+
+        const authors = page.map((p) => ({
           userId: p.userId,
           assignmentId: p.assignmentId,
-        })),
-      ];
+        }));
 
-      const uniqueAuthors = allPotentialAuthors.filter(
-        (author, index, self) =>
-          author.userId &&
-          author.assignmentId &&
-          index ===
-            self.findIndex(
-              (a) =>
-                a.userId === author.userId &&
-                a.assignmentId === author.assignmentId,
-            ),
-      );
+        const result = await this.batchUpsertAuthors(authors);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalSkipped += result.skipped;
 
-      this.logger.log(
-        `Processing ${uniqueAuthors.length} unique author-assignment pairs`,
-      );
-
-      const results = await this.batchUpsertAuthors(uniqueAuthors);
+        hasMore = page.length === PAGE_SIZE;
+        if (hasMore) {
+          skip += PAGE_SIZE;
+        }
+      }
+      this.logger.log("Processed publish job authors");
 
       this.logger.log(
-        `Completed scheduled task: Created ${results.created} new authors, ` +
-          `updated ${results.updated} existing, skipped ${results.skipped} invalid entries`,
+        `Completed scheduled task: Created ${totalCreated} new authors, ` +
+          `updated ${totalUpdated} existing, skipped ${totalSkipped} invalid entries`,
       );
     } catch (error) {
       this.logger.error("Error in migrateExistingAuthors:", error);
@@ -390,7 +472,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    *
    * @returns {Promise<void>}
    */
-  @Cron("0 */6 * * *")
+  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
   async updateLLMPricing(): Promise<void> {
     this.logger.log("Starting scheduled task: Update LLM pricing");
 
@@ -453,7 +535,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    *
    * @returns {Promise<void>}
    */
-  @Cron(CronExpression.EVERY_3_HOURS)
+  @Cron(CronExpression.EVERY_6_HOURS)
   async precomputeInsights(): Promise<void> {
     this.logger.log(
       "Starting scheduled task: Precompute insights for popular assignments",

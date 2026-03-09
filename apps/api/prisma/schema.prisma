@@ -171,6 +171,7 @@ enum AIUsageType {
   TRANSLATION /// AI was used for translation
   LIVE_RECORDING_FEEDBACK /// AI was used for live recording feedback
   GRADING_VALIDATION
+  CHAT_ASSISTANT /// AI was used for chat assistant responses
 }
 
 model UserCredential {
@@ -590,6 +591,12 @@ model Report {
   relatedReports      Report[]       @relation("RelatedReports")
   
   similarityScore     Float?         // Similarity score (0-1) with the parent report
+  renewalEmailSentAt  DateTime?      // Timestamp of the last bug renewal email sent
+  renewalActionAt     DateTime?      // Timestamp when the user took a renewal action
+  renewalAction       String?        // User action taken from renewal email (renew|close)
+  renewalRenewTokenHash String?      // Hash of renewal (still happening) token
+  renewalCloseTokenHash String?      // Hash of close (resolved) token
+  renewalTokenExpiresAt DateTime?    // Expiration time for renewal tokens
 }
 model UserNotification {
   id          Int      @id @default(autoincrement())

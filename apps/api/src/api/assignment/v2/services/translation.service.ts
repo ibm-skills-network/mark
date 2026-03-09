@@ -1,10 +1,16 @@
 /* eslint-disable unicorn/no-null */
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
+import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
-import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
 import { PrismaService } from "src/database/prisma.service";
 import {
   getAllLanguageCodes,
@@ -60,12 +66,13 @@ interface BatchProcessResult {
  * Optimized for performance with parallel processing
  */
 @Injectable()
-export class TranslationService {
+export class TranslationService implements OnModuleDestroy {
   private readonly logger = new Logger(TranslationService.name);
   private readonly languageTranslation: boolean;
-  private readonly limiter: Bottleneck;
-  private readonly watsonxLimiter: Bottleneck;
+  private limiter: Bottleneck;
+  private watsonxLimiter: Bottleneck;
   private useWatsonxLimiterForTranslation = false;
+  private isResettingLimiter = false;
 
   private readonly MAX_BATCH_SIZE = 100;
   private readonly CONCURRENCY_LIMIT = 50;
@@ -80,6 +87,8 @@ export class TranslationService {
   private stuckOperations = new Set<string>();
   private jobStartTimes = new Map<number, number>();
   private jobCancellationFlags = new Map<number, boolean>();
+  private readonly limiterHealthInterval: NodeJS.Timeout;
+  private readonly jobTimeoutInterval: NodeJS.Timeout;
   private operationStats = {
     totalOperations: 0,
     successfulOperations: 0,
@@ -100,7 +109,27 @@ export class TranslationService {
       process.env.ENABLE_TRANSLATION.toString().toLowerCase() === "true" ||
       false;
 
-    this.limiter = new Bottleneck({
+    this.limiter = this.createDefaultLimiter();
+    this.watsonxLimiter = this.createWatsonxLimiter();
+    this.limiterHealthInterval = setInterval(
+      () => this.checkLimiterHealth(),
+      30_000,
+    );
+    this.jobTimeoutInterval = setInterval(
+      () => this.checkJobTimeouts(),
+      60_000,
+    );
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.limiterHealthInterval);
+    clearInterval(this.jobTimeoutInterval);
+    void this.limiter.disconnect().catch(() => null);
+    void this.watsonxLimiter.disconnect().catch(() => null);
+  }
+
+  private createDefaultLimiter(): Bottleneck {
+    return new Bottleneck({
       maxConcurrent: this.CONCURRENCY_LIMIT,
       minTime: 2,
       reservoirRefreshInterval: 3000,
@@ -109,7 +138,10 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
-    this.watsonxLimiter = new Bottleneck({
+  }
+
+  private createWatsonxLimiter(): Bottleneck {
+    return new Bottleneck({
       maxConcurrent: 8,
       minTime: 50,
       reservoir: 20,
@@ -119,8 +151,6 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
-    setInterval(() => this.checkLimiterHealth(), 30_000);
-    setInterval(() => this.checkJobTimeouts(), 60_000);
   }
 
   /**
@@ -136,7 +166,9 @@ export class TranslationService {
       if (isWatsonx !== this.useWatsonxLimiterForTranslation) {
         this.useWatsonxLimiterForTranslation = isWatsonx;
         this.logger.debug(
-          `Translation limiter set to ${isWatsonx ? "Watsonx profile" : "default profile"} (model: ${modelKey})`,
+          `Translation limiter set to ${
+            isWatsonx ? "Watsonx profile" : "default profile"
+          } (model: ${modelKey})`,
         );
       }
     } catch (error) {
@@ -164,6 +196,33 @@ export class TranslationService {
       : this.limiter;
   }
 
+  private isLimiterStoppedError(error: unknown): boolean {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return errorMessage.includes("has been stopped and cannot accept new jobs");
+  }
+
+  private async scheduleOnActiveLimiter<T>(
+    operationName: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const scheduleOptions = { expiration: 15_000, priority: 5 } as const;
+
+    try {
+      return await this.getActiveLimiter().schedule(scheduleOptions, operation);
+    } catch (error) {
+      if (!this.isLimiterStoppedError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `Limiter was stopped while scheduling ${operationName}. Recreating limiter and retrying once.`,
+      );
+      this.resetLimiter();
+
+      return this.getActiveLimiter().schedule(scheduleOptions, operation);
+    }
+  }
+
   /**
    * Process translations in parallel with efficient batching
    * @param items Items to translate
@@ -188,20 +247,19 @@ export class TranslationService {
       const chunk = chunks[chunkIndex];
 
       const processingPromises = chunk.map((item) =>
-        this.getActiveLimiter()
-          .schedule({ expiration: 15_000, priority: 5 }, () =>
-            batchProcessor(item),
-          )
-          .catch((error) => {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            if (errorMessage.includes("dropped")) {
-              results.dropped++;
-            } else {
-              results.failure++;
-            }
-            return false;
-          }),
+        this.scheduleOnActiveLimiter(
+          `processBatchesInParallel-${String(chunkIndex)}`,
+          () => batchProcessor(item),
+        ).catch((error) => {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes("dropped")) {
+            results.dropped++;
+          } else {
+            results.failure++;
+          }
+          return false;
+        }),
       );
 
       const chunkResults = await Promise.all(processingPromises);
@@ -654,29 +712,42 @@ export class TranslationService {
    * Reset the limiter if it appears to be stalled
    */
   private resetLimiter(): void {
+    if (this.isResettingLimiter) {
+      return;
+    }
+
     try {
+      this.isResettingLimiter = true;
       this.logger.warn(
-        "Resetting bottleneck limiter due to potential stalled state",
+        "Recreating translation limiters due to potential stalled/stopped state",
       );
 
-      const limiter = this.getActiveLimiter();
-      void limiter.stop({ dropWaitingJobs: false }).then(() => {
-        limiter.updateSettings({
-          maxConcurrent: 25,
-          minTime: 10,
-          reservoir: 100,
-          reservoirRefreshInterval: 10_000,
-          reservoirRefreshAmount: 100,
-          highWater: 2000,
-          strategy: Bottleneck.strategy.LEAK,
-          timeout: 30_000,
+      const previousDefaultLimiter = this.limiter;
+      const previousWatsonxLimiter = this.watsonxLimiter;
+
+      this.limiter = this.createDefaultLimiter();
+      this.watsonxLimiter = this.createWatsonxLimiter();
+
+      void previousDefaultLimiter
+        .stop({ dropWaitingJobs: true })
+        .catch(() => null)
+        .finally(() => {
+          void previousDefaultLimiter.disconnect().catch(() => null);
         });
-        this.logger.log("Bottleneck limiter has been reset");
-      });
+      void previousWatsonxLimiter
+        .stop({ dropWaitingJobs: true })
+        .catch(() => null)
+        .finally(() => {
+          void previousWatsonxLimiter.disconnect().catch(() => null);
+        });
+
+      this.logger.log("Translation limiters were recreated");
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(`Error resetting limiter: ${errorMessage}`);
+    } finally {
+      this.isResettingLimiter = false;
     }
   }
 
@@ -1101,6 +1172,11 @@ export class TranslationService {
       ) * languageCodes.length;
 
     for (const question of questions) {
+      const questionSourceLang = await this.llmFacadeService.getLanguageCode(
+        question.question,
+        assignmentId,
+      );
+
       for (const lang of languageCodes) {
         await this.generateAndStoreTranslation(
           assignmentId,
@@ -1108,10 +1184,7 @@ export class TranslationService {
           null,
           question.question,
           question.choices,
-          await this.llmFacadeService.getLanguageCode(
-            question.question,
-            assignmentId,
-          ),
+          questionSourceLang,
           lang,
         );
         processedItems++;
@@ -1128,6 +1201,11 @@ export class TranslationService {
       }
 
       for (const variant of question.variants) {
+        const variantSourceLang = await this.llmFacadeService.getLanguageCode(
+          variant.variantContent,
+          assignmentId,
+        );
+
         for (const lang of languageCodes) {
           await this.generateAndStoreTranslation(
             assignmentId,
@@ -1135,10 +1213,7 @@ export class TranslationService {
             variant.id,
             variant.variantContent,
             variant.choices,
-            await this.llmFacadeService.getLanguageCode(
-              variant.variantContent,
-              assignmentId,
-            ),
+            variantSourceLang,
             lang,
           );
           processedItems++;
@@ -1168,6 +1243,69 @@ export class TranslationService {
       `Completed retranslation for assignment ${assignmentId}, languages: ${languageCodes.join(
         ", ",
       )}`,
+    );
+  }
+
+  /**
+   * Translate assignment metadata for specific languages without deleting question translations.
+   */
+  async translateAssignmentForLanguages(
+    assignmentId: number,
+    languageCodes: string[],
+  ): Promise<void> {
+    if (languageCodes.length === 0) {
+      return;
+    }
+
+    if (!this.languageTranslation) {
+      this.logger.log("Translation is disabled in development mode");
+      return;
+    }
+
+    this.checkLimiterHealth();
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: {
+        id: true,
+        name: true,
+        introduction: true,
+        instructions: true,
+        gradingCriteriaOverview: true,
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with id ${assignmentId} not found`,
+      );
+    }
+
+    await this.syncLimiterForTranslationModel();
+    const results = await this.processBatchesInParallel(
+      languageCodes,
+      async (lang: string) => {
+        try {
+          await this.translateAssignmentToLanguage(
+            assignment as unknown as GetAssignmentResponseDto,
+            lang,
+          );
+          return true;
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          this.logger.error(
+            `Failed to translate assignment ${assignmentId} to ${lang}: ${errorMessage}`,
+          );
+          return false;
+        }
+      },
+      this.MAX_BATCH_SIZE,
+      this.CONCURRENCY_LIMIT,
+    );
+
+    this.logger.log(
+      `Assignment #${assignmentId} translation results for ${languageCodes.length} languages: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
   }
 
@@ -1221,6 +1359,7 @@ export class TranslationService {
           progress: `Assignment with id ${assignmentId} not found`,
           percentage: progressRange?.start || 0,
         });
+        this.cleanupCancelledJob(jobId);
       }
       throw new NotFoundException(
         `Assignment with id ${assignmentId} not found`,
@@ -1334,10 +1473,10 @@ export class TranslationService {
     assignmentId: number,
     questionId: number,
     question: QuestionDto,
-    jobId: number,
+    jobId?: number,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = jobId && jobId > 0;
+    const hasValidJobId = typeof jobId === "number" && jobId > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {
@@ -1372,24 +1511,28 @@ export class TranslationService {
       );
     }
 
-    await this.jobStatusService.updateJobStatus(jobId, {
-      status: "In Progress",
-      progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
-        questionLang,
-      )}. Preparing translations...`,
-      percentage: 15,
-    });
+    if (hasValidJobId) {
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
+          questionLang,
+        )}. Preparing translations...`,
+        percentage: 15,
+      });
+    }
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    const progressTracker = this.initializeProgressTracker(
-      jobId,
-      Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-      20,
-      95,
-      `Translating Question #${questionId}`,
-      supportedLanguages.length,
-    );
+    const progressTracker = hasValidJobId
+      ? this.initializeProgressTracker(
+          jobId,
+          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+          20,
+          95,
+          `Translating Question #${questionId}`,
+          supportedLanguages.length,
+        )
+      : undefined;
 
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
@@ -1498,10 +1641,10 @@ export class TranslationService {
     questionId: number,
     variantId: number,
     variant: VariantDto,
-    jobId: number,
+    jobId?: number,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = jobId && jobId > 0;
+    const hasValidJobId = typeof jobId === "number" && jobId > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {
@@ -1538,6 +1681,9 @@ export class TranslationService {
       );
 
       if (missingLanguages.length === 0) {
+        if (hasValidJobId) {
+          this.cleanupCancelledJob(jobId);
+        }
         return;
       }
     }
@@ -1559,14 +1705,16 @@ export class TranslationService {
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    const progressTracker = this.initializeProgressTracker(
-      jobId,
-      Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-      20,
-      95,
-      `Translating Variant #${variantId}`,
-      supportedLanguages.length,
-    );
+    const progressTracker = hasValidJobId
+      ? this.initializeProgressTracker(
+          jobId,
+          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+          20,
+          95,
+          `Translating Variant #${variantId}`,
+          supportedLanguages.length,
+        )
+      : undefined;
 
     if (forceRetranslation) {
       await this.prisma.translation.deleteMany({
@@ -1636,6 +1784,203 @@ export class TranslationService {
     this.logger.log(
       `Variant #${variantId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
     );
+  }
+
+  /**
+   * Translate a specific question/variant to a list of target languages.
+   *
+   * All LLM calls are fanned out in parallel (bounded by the active rate-limit
+   * limiter), and the resulting rows are written in a **single** `createMany`
+   * call instead of one `create` per language.
+   */
+  async translateContentToLanguages(
+    assignmentId: number,
+    questionId: number,
+    variantId: number | null,
+    originalText: string,
+    originalChoices: Choice[] | string | null | any,
+    sourceLanguage: string,
+    targetLanguages: string[],
+  ): Promise<{
+    success: number;
+    failure: number;
+    successfulLanguages: string[];
+    failedLanguages: string[];
+  }> {
+    if (!targetLanguages || targetLanguages.length === 0) {
+      return {
+        success: 0,
+        failure: 0,
+        successfulLanguages: [],
+        failedLanguages: [],
+      };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const parsedChoices = this.parseChoices(originalChoices);
+
+    const settled = await Promise.allSettled(
+      targetLanguages.map((lang) =>
+        this.scheduleOnActiveLimiter(
+          `translateContentToLanguages-${String(questionId)}-${lang}`,
+          () =>
+            this.generateTranslationForLanguage(
+              assignmentId,
+              questionId,
+              originalText,
+              parsedChoices,
+              sourceLanguage,
+              lang,
+            ),
+        ),
+      ),
+    );
+
+    const rows: Prisma.TranslationCreateManyInput[] = [];
+    let success = 0;
+    let failure = 0;
+    const successfulLanguages: string[] = [];
+    const failedLanguages: string[] = [];
+
+    for (const [index, result] of settled.entries()) {
+      const lang = targetLanguages[index];
+
+      if (result.status === "fulfilled") {
+        rows.push({
+          questionId,
+          variantId,
+          languageCode: lang,
+          untranslatedText: originalText,
+          untranslatedChoices: this.prepareJsonValue(parsedChoices),
+          translatedText: result.value.translatedText,
+          translatedChoices: this.prepareJsonValue(
+            result.value.translatedChoices,
+          ),
+        });
+        success++;
+        successfulLanguages.push(lang);
+      } else {
+        const reason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+        this.logger.error(
+          `Failed to translate question ${questionId}${
+            variantId ? ` variant ${variantId}` : ""
+          } to ${lang}: ${reason}`,
+        );
+        failure++;
+        failedLanguages.push(lang);
+      }
+    }
+
+    if (rows.length > 0) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.translation.deleteMany({
+          where: {
+            questionId,
+            variantId,
+            languageCode: { in: successfulLanguages },
+          },
+        });
+
+        await tx.translation.createMany({ data: rows });
+      });
+    }
+
+    return { success, failure, successfulLanguages, failedLanguages };
+  }
+
+  /**
+   * Generate the translated text and choices for a single target language.
+   * Does NOT write to the database — caller is responsible for the batch write.
+   */
+  private async generateTranslationForLanguage(
+    assignmentId: number,
+    questionId: number,
+    originalText: string,
+    parsedChoices: Choice[] | null,
+    sourceLanguage: string,
+    targetLanguage: string,
+  ): Promise<{ translatedText: string; translatedChoices: Choice[] | null }> {
+    if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
+      return { translatedText: originalText, translatedChoices: parsedChoices };
+    }
+
+    const [translatedText, translatedChoices] = await Promise.all([
+      this.executeWithOptimizedRetry(
+        `translateQuestionText-${questionId}-${targetLanguage}`,
+        () =>
+          this.llmFacadeService.generateQuestionTranslation(
+            assignmentId,
+            originalText,
+            targetLanguage,
+          ),
+      ).catch((error: unknown) => {
+        this.logger.error(
+          `Failed to translate text for question ${questionId} to ${targetLanguage}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        throw error;
+      }),
+
+      parsedChoices && parsedChoices.length > 0
+        ? this.executeWithOptimizedRetry(
+            `translateChoices-${questionId}-${targetLanguage}`,
+            () =>
+              this.llmFacadeService.generateChoicesTranslation(
+                parsedChoices,
+                assignmentId,
+                targetLanguage,
+              ),
+          ).catch((error: unknown) => {
+            this.logger.error(
+              `Failed to translate choices for question ${questionId} to ${targetLanguage}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return parsedChoices;
+          })
+        : Promise.resolve(parsedChoices),
+    ]);
+
+    return {
+      translatedText: translatedText,
+      translatedChoices: translatedChoices,
+    };
+  }
+
+  /**
+   * Parse raw choices from the database (JSON string or array) into a typed
+   * array. Returns null for empty / unparseable values.
+   */
+  private parseChoices(
+    originalChoices: Choice[] | string | null | undefined,
+  ): Choice[] | null {
+    if (!originalChoices) return null;
+
+    if (typeof originalChoices === "string") {
+      try {
+        return JSON.parse(originalChoices) as Choice[];
+      } catch (error) {
+        this.logger.error(
+          `Failed to parse choices JSON: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return null;
+      }
+    }
+
+    if (Array.isArray(originalChoices)) {
+      return originalChoices;
+    }
+
+    this.logger.warn(
+      `Unexpected type for originalChoices: ${typeof originalChoices}`,
+    );
+    return null;
   }
 
   /**
@@ -1820,10 +2165,9 @@ export class TranslationService {
               const errorMessage =
                 error instanceof Error ? error.message : String(error);
               this.logger.error(
-                `Failed to translate ${field}: ${errorMessage}`,
+                `Failed to translate ${field} for assignment ${assignment.id} to ${lang}: ${errorMessage}`,
               );
-              translatedData[field] = source;
-              return { field, translated: source };
+              throw error;
             }),
         );
       } else {
@@ -1931,7 +2275,7 @@ export class TranslationService {
             untranslatedText: originalText,
             untranslatedChoices: this.prepareJsonValue(parsedChoices),
             translatedText: originalText,
-            translatedChoices: this.prepareJsonValue(originalChoices),
+            translatedChoices: this.prepareJsonValue(parsedChoices),
           },
         });
       } catch (createError) {
@@ -1953,6 +2297,7 @@ export class TranslationService {
     const translationPromises: Array<Promise<any>> = [];
     let translatedText: string = originalText;
     let translatedChoices: Choice[] | null = parsedChoices;
+    let textTranslationFailed = false;
 
     translationPromises.push(
       this.executeWithOptimizedRetry(
@@ -1972,9 +2317,9 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to translate question text: ${errorMessage}`,
+            `Failed to translate question text for question ${questionId} to ${targetLanguage}: ${errorMessage}`,
           );
-          return originalText;
+          textTranslationFailed = true;
         }),
     );
 
@@ -2000,14 +2345,22 @@ export class TranslationService {
           .catch((error: unknown) => {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to translate choices: ${errorMessage}`);
-            return parsedChoices;
+            this.logger.error(
+              `Failed to translate choices for question ${questionId} to ${targetLanguage}: ${errorMessage}`,
+            );
           }),
       );
     }
 
     try {
       await Promise.all(translationPromises);
+
+      if (textTranslationFailed) {
+        this.logger.warn(
+          `Skipping translation row for question ${questionId} in ${targetLanguage}: text translation failed`,
+        );
+        return;
+      }
 
       try {
         await this.prisma.translation.create({

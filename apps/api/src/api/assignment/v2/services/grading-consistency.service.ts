@@ -61,7 +61,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
   private readonly gradingCache = new Map<string, GradingRecord[]>();
   private readonly cacheLocks = new Map<string, Promise<void>>();
   private readonly maxCacheSize = 1000;
-  private readonly cacheCleanupInterval = 3_600_000;
+  private readonly cacheCleanupInterval = 300_000;
   private cleanupTimer?: NodeJS.Timeout;
 
   constructor(
