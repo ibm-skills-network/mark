@@ -35,8 +35,10 @@ export interface AttachedFile {
   fileSize: number;
   fileType: string;
   extension: string;
-  /** Text extracted locally by readFile; never persisted. */
+  /** Text extracted locally; not saved to localStorage. */
   extractedContent?: string;
+  /** Leading snippet from extracted content (not semantic summary). */
+  contentPrefix?: string;
   uploadStatus: "uploading" | "uploaded" | "error";
   uploadProgress: number;
   errorMessage?: string;
@@ -57,10 +59,13 @@ interface MarkChatState {
   isExecutingClientSide: boolean;
   setIsExecutingClientSide: (value: boolean) => void;
   attachedFiles: AttachedFile[];
+  sessionContextFiles: AttachedFile[];
   addAttachedFile: (file: AttachedFile) => void;
   removeAttachedFile: (fileId: string) => void;
   updateFileStatus: (fileId: string, status: Partial<AttachedFile>) => void;
   clearAttachedFiles: () => void;
+  addSessionContextFiles: (files: AttachedFile[]) => void;
+  clearSessionContextFiles: () => void;
   addMessage: (message: ChatMessage) => void;
   sendMessage: (
     useStreaming?: boolean,
@@ -109,6 +114,7 @@ export const useMarkChatStore = create<MarkChatState>()(
         set({ isExecutingClientSide: value }),
 
       attachedFiles: [],
+      sessionContextFiles: [],
       addAttachedFile: (file: AttachedFile) =>
         set((s) => ({
           attachedFiles: [...s.attachedFiles, file],
@@ -124,6 +130,21 @@ export const useMarkChatStore = create<MarkChatState>()(
           ),
         })),
       clearAttachedFiles: () => set({ attachedFiles: [] }),
+      addSessionContextFiles: (files: AttachedFile[]) =>
+        set((s) => {
+          if (!files.length) return {};
+          const merged = [...s.sessionContextFiles];
+          files.forEach((file) => {
+            const existingIndex = merged.findIndex((f) => f.id === file.id);
+            if (existingIndex === -1) {
+              merged.push(file);
+            } else {
+              merged[existingIndex] = file;
+            }
+          });
+          return { sessionContextFiles: merged };
+        }),
+      clearSessionContextFiles: () => set({ sessionContextFiles: [] }),
 
       resetChat: () =>
         set({
@@ -138,6 +159,7 @@ export const useMarkChatStore = create<MarkChatState>()(
 
           userInput: "",
           attachedFiles: [],
+          sessionContextFiles: [],
         }),
 
       executeOperations: async function (operations) {

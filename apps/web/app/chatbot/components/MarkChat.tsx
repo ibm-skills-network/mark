@@ -802,10 +802,11 @@ const ChatHistoryDrawer = ({
 };
 
 // File upload constants
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_FILES = 5;
-const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_FILE_CONTEXT_CHARS = 5_000;
+const MAX_TOTAL_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_FILE_CONTEXT_CHARS = 2_000;
+const MAX_CONTENT_PREFIX_CHARS = 300;
 const ALLOWED_CHAT_FILE_EXTENSIONS = [
   ".txt",
   ".pdf",
@@ -965,10 +966,13 @@ export const MarkChat = () => {
     userRole,
     resetChat,
     attachedFiles,
+    sessionContextFiles,
     addAttachedFile,
     removeAttachedFile,
     updateFileStatus,
     clearAttachedFiles,
+    addSessionContextFiles,
+    clearSessionContextFiles,
   } = useMarkChatStore();
 
   const {
@@ -1135,6 +1139,7 @@ export const MarkChat = () => {
         // Parse locally. Chatbot files are not uploaded.
         // Extract text only for non-image files.
         let extractedContent: string | undefined;
+        let contentPrefix: string | undefined;
         if (!fileType.startsWith("image/")) {
           // Keep extracted text small.
           const result = await readFile(file, Date.now());
@@ -1142,12 +1147,21 @@ export const MarkChat = () => {
             result.content.length > MAX_FILE_CONTEXT_CHARS
               ? result.content.slice(0, MAX_FILE_CONTEXT_CHARS) + "\n...[truncated]"
               : result.content;
+
+          const normalized = result.content.replace(/\s+/g, " ").trim();
+          if (normalized) {
+            contentPrefix =
+              normalized.length > MAX_CONTENT_PREFIX_CHARS
+                ? normalized.slice(0, MAX_CONTENT_PREFIX_CHARS) + "..."
+                : normalized;
+          }
         }
 
         updateFileStatus(fileId, {
           uploadStatus: "uploaded",
           uploadProgress: 100,
           extractedContent,
+          contentPrefix,
         });
 
         toast.success(`${file.name} attached`);
@@ -1167,34 +1181,38 @@ export const MarkChat = () => {
   const handleFileSelect = useCallback(
     async (files: File[]) => {
       // Always use the latest store state.
-      const currentAttachedFiles = useMarkChatStore.getState().attachedFiles;
+      const currentState = useMarkChatStore.getState();
+      const currentAttachedFiles = currentState.attachedFiles;
       // Error files stay visible but do not count toward limits.
       const activeAttachedFiles = currentAttachedFiles.filter(
         (f) => f.uploadStatus !== "error",
       );
+      const activeSessionFiles = currentState.sessionContextFiles.filter(
+        (f) => f.uploadStatus === "uploaded",
+      );
 
       // Validate file count
-      const totalFiles = activeAttachedFiles.length + files.length;
+      const totalFiles =
+        activeAttachedFiles.length + activeSessionFiles.length + files.length;
       if (totalFiles > MAX_FILES) {
-        toast.error(`Maximum ${MAX_FILES} files allowed`);
+        toast.error(`Maximum ${MAX_FILES} files allowed per chat session`);
         return;
       }
 
       // Validate total size
-      const existingSize = activeAttachedFiles.reduce(
-        (sum, f) => sum + f.fileSize,
-        0,
-      );
+      const existingSize =
+        activeAttachedFiles.reduce((sum, file) => sum + file.fileSize, 0) +
+        activeSessionFiles.reduce((sum, file) => sum + file.fileSize, 0);
       const newSize = files.reduce((sum, f) => sum + f.size, 0);
       if (existingSize + newSize > MAX_TOTAL_SIZE) {
-        toast.error('Total file size exceeds 50MB');
+        toast.error(`Total file size exceeds ${formatFileSize(MAX_TOTAL_SIZE)}`);
         return;
       }
 
       // Validate individual file sizes
       for (const file of files) {
         if (file.size > MAX_FILE_SIZE) {
-          toast.error(`${file.name} exceeds 10MB limit`);
+          toast.error(`${file.name} exceeds ${formatFileSize(MAX_FILE_SIZE)} limit`);
           return;
         }
       }
@@ -1710,8 +1728,8 @@ export const MarkChat = () => {
         );
 
         setCurrentChatId(todayChat.id);
-        // Do not carry pending attachments across sessions.
         clearAttachedFiles();
+        clearSessionContextFiles();
 
         if (todayChat.messages && todayChat.messages.length > 0) {
           const storeMessages = todayChat.messages.map((msg) => ({
@@ -1740,6 +1758,7 @@ export const MarkChat = () => {
     authorContext.activeAssignmentId,
     currentChatId,
     clearAttachedFiles,
+    clearSessionContextFiles,
   ]);
 
   useEffect(() => {
@@ -1839,8 +1858,8 @@ export const MarkChat = () => {
       try {
         const chat = await getChatById(chatId);
         setCurrentChatId(chat.id);
-        // Reset composer attachments when switching chats.
         clearAttachedFiles();
+        clearSessionContextFiles();
 
         if (chat.messages && chat.messages.length > 0) {
           const storeMessages = chat.messages.map((msg) => ({
@@ -1862,7 +1881,7 @@ export const MarkChat = () => {
         toast.error("Could not load selected chat");
       }
     },
-    [resetChat, clearAttachedFiles],
+    [resetChat, clearAttachedFiles, clearSessionContextFiles],
   );
 
   const checkForLearnerSpecialActions = useCallback(
@@ -2123,10 +2142,14 @@ export const MarkChat = () => {
       // 2) Add temporary context for this turn.
       // 3) Send, save text history, remove temporary context.
       const trimmedInput = userInput.trim();
-      const uploadedFiles = attachedFiles.filter(
+      const selectedFiles = attachedFiles.filter(
         (f) => f.uploadStatus === "uploaded",
       );
-      const uploadedFileCount = uploadedFiles.length;
+      const selectedFileCount = selectedFiles.length;
+      const selectedFileIds = new Set(selectedFiles.map((file) => file.id));
+      const sessionOnlyFiles = sessionContextFiles.filter(
+        (file) => !selectedFileIds.has(file.id),
+      );
 
       if (hasPendingParses) {
         toast.error("Please wait for files to finish parsing.");
@@ -2134,17 +2157,17 @@ export const MarkChat = () => {
         return;
       }
 
-      if (!trimmedInput && uploadedFileCount === 0) {
+      if (!trimmedInput && selectedFileCount === 0) {
         isSendingRef.current = false;
         return;
       }
 
       // Used to render attachment chips in chat.
       const fileToolCalls =
-        uploadedFileCount > 0
+        selectedFileCount > 0
           ? {
               type: "file_attachments",
-              files: uploadedFiles.map((f) => ({
+              files: selectedFiles.map((f) => ({
                 id: f.id,
                 filename: f.fileName,
                 size: f.fileSize,
@@ -2156,14 +2179,28 @@ export const MarkChat = () => {
 
       // Build a temporary system message with file context.
       const fileContextMessage =
-        uploadedFileCount > 0
+        sessionOnlyFiles.length > 0 || selectedFileCount > 0
           ? (() => {
-              let fileContextContent =
-                "User has attached the following files:\n\n";
-              uploadedFiles.forEach((file, index) => {
-                fileContextContent += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
-                fileContextContent += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
+              let fileContextContent = "";
 
+              if (sessionOnlyFiles.length > 0) {
+                fileContextContent += "Files available in this chat:\n\n";
+                sessionOnlyFiles.forEach((file, index) => {
+                  fileContextContent += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
+                  fileContextContent += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
+                  if (file.contentPrefix) {
+                    fileContextContent += `Content prefix:\n<file_prefix>\n${file.contentPrefix}\n</file_prefix>\n`;
+                  }
+                  fileContextContent += "\n";
+                });
+              }
+
+              if (selectedFileCount > 0) {
+                fileContextContent += "Full content for selected files:\n\n";
+              }
+
+              selectedFiles.forEach((file, index) => {
+                fileContextContent += `${index + 1}. ${file.fileName}\n`;
                 if (file.extractedContent) {
                   const truncated =
                     file.extractedContent.length > MAX_FILE_CONTEXT_CHARS
@@ -2185,7 +2222,7 @@ export const MarkChat = () => {
           : null;
 
       const messageContent =
-        trimmedInput || `[${uploadedFileCount} file(s) attached]`;
+        trimmedInput || `[${selectedFileCount} file(s) attached]`;
 
       setHistory((prev) => [...prev, trimmedInput || messageContent]);
       setHistoryIndex(-1);
@@ -2254,7 +2291,6 @@ export const MarkChat = () => {
           } catch (error) {}
         }
 
-        // Clear files only after a successful send.
         didSendSucceed = await sendMessage(stream, {
           userText: messageContent,
           toolCalls: fileToolCalls,
@@ -2374,14 +2410,15 @@ export const MarkChat = () => {
         setIsRecording(false);
       }
 
-      // Remove sent files. Keep error files so user can retry/remove.
-      if (didSendSucceed && uploadedFileCount > 0) {
-        uploadedFiles.forEach((file) => removeAttachedFile(file.id));
+      if (didSendSucceed && selectedFileCount > 0) {
+        addSessionContextFiles(selectedFiles);
+        selectedFiles.forEach((file) => removeAttachedFile(file.id));
       }
     },
     [
       userInput,
       attachedFiles,
+      sessionContextFiles,
       hasPendingParses,
       context,
       messages,
@@ -2393,6 +2430,7 @@ export const MarkChat = () => {
       checkForAuthorSpecialActions,
       currentChatId,
       user?.userId,
+      addSessionContextFiles,
       removeAttachedFile,
     ],
   );
@@ -2718,6 +2756,7 @@ Please help me with this.`;
           );
           setCurrentChatId(newChat.id);
           resetChat();
+          clearSessionContextFiles();
 
           const updatedChats = await getUserChats(user.userId);
           setUserChats(updatedChats);
@@ -2735,6 +2774,7 @@ Please help me with this.`;
     learnerContext.assignmentId,
     authorContext.activeAssignmentId,
     resetChat,
+    clearSessionContextFiles,
   ]);
 
   const getChatTitle = useCallback(() => {
@@ -2977,9 +3017,11 @@ Please help me with this.`;
   const activeFileCount = attachedFiles.filter(
     (f) => f.uploadStatus !== "error",
   ).length;
-  const hasUploadedFiles = attachedFiles.some(
+  const uploadedFileCount = attachedFiles.filter(
     (f) => f.uploadStatus === "uploaded",
-  );
+  ).length;
+  const sessionContextFileCount = sessionContextFiles.length;
+  const hasUploadedFiles = uploadedFileCount > 0;
   const isSendDisabled =
     (!userInput.trim() && !hasUploadedFiles) ||
     isTyping ||
@@ -3312,6 +3354,20 @@ Please help me with this.`;
                   <span className="text-xs text-gray-400">
                     {getHelperText()}
                   </span>
+                  {(uploadedFileCount > 0 || sessionContextFileCount > 0) && (
+                    <>
+                      {uploadedFileCount > 0 && (
+                        <div className="text-[11px] text-gray-400 mt-1">
+                          {uploadedFileCount} file{uploadedFileCount === 1 ? "" : "s"} ready to send now.
+                        </div>
+                      )}
+                      {sessionContextFileCount > 0 && (
+                        <div className="text-[11px] text-gray-400">
+                          {sessionContextFileCount} file{sessionContextFileCount === 1 ? "" : "s"} already in chat context.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
