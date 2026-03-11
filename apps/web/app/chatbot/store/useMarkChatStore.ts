@@ -7,8 +7,6 @@ import * as authorStoreUtils from "../store/authorStoreUtil";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-/* eslint-disable */
-
 export type ChatRole = "user" | "assistant" | "system";
 export interface ChatMessage {
   id: string;
@@ -18,10 +16,31 @@ export interface ChatMessage {
   toolCalls?: any;
 }
 
+interface SendMessageOptions {
+  // Lets caller override `userInput` (e.g. file-only message).
+  userText?: string;
+  // Optional metadata for local chat UI (e.g. file chips).
+  toolCalls?: any;
+}
+
 interface MarkChatUsage {
   functionCalls: number;
   totalMessagesSent: number;
   kbLookups: number;
+}
+
+export interface AttachedFile {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  extension: string;
+  /** Text extracted locally by readFile; never persisted. */
+  extractedContent?: string;
+  uploadStatus: "uploading" | "uploaded" | "error";
+  uploadProgress: number;
+  errorMessage?: string;
+  uploadedAt: string;
 }
 
 interface MarkChatState {
@@ -37,11 +56,18 @@ interface MarkChatState {
   setIsTyping: (value: boolean) => void;
   isExecutingClientSide: boolean;
   setIsExecutingClientSide: (value: boolean) => void;
+  attachedFiles: AttachedFile[];
+  addAttachedFile: (file: AttachedFile) => void;
+  removeAttachedFile: (fileId: string) => void;
+  updateFileStatus: (fileId: string, status: Partial<AttachedFile>) => void;
+  clearAttachedFiles: () => void;
   addMessage: (message: ChatMessage) => void;
-  sendMessage: (useStreaming?: boolean) => Promise<void>;
+  sendMessage: (
+    useStreaming?: boolean,
+    options?: SendMessageOptions,
+  ) => Promise<boolean>;
   resetChat: () => void;
   searchKnowledgeBase: (query: string) => Promise<ChatMessage[]>;
-  executeAuthorOperation: (functionName: string, args: any) => Promise<any>;
   executeOperations: (operations: any[]) => Promise<void>;
 }
 
@@ -82,6 +108,23 @@ export const useMarkChatStore = create<MarkChatState>()(
       setIsExecutingClientSide: (value) =>
         set({ isExecutingClientSide: value }),
 
+      attachedFiles: [],
+      addAttachedFile: (file: AttachedFile) =>
+        set((s) => ({
+          attachedFiles: [...s.attachedFiles, file],
+        })),
+      removeAttachedFile: (fileId: string) =>
+        set((s) => ({
+          attachedFiles: s.attachedFiles.filter((f) => f.id !== fileId),
+        })),
+      updateFileStatus: (fileId: string, status: Partial<AttachedFile>) =>
+        set((s) => ({
+          attachedFiles: s.attachedFiles.map((f) =>
+            f.id === fileId ? { ...f, ...status } : f
+          ),
+        })),
+      clearAttachedFiles: () => set({ attachedFiles: [] }),
+
       resetChat: () =>
         set({
           messages: [
@@ -94,6 +137,7 @@ export const useMarkChatStore = create<MarkChatState>()(
           ],
 
           userInput: "",
+          attachedFiles: [],
         }),
 
       executeOperations: async function (operations) {
@@ -175,29 +219,19 @@ export const useMarkChatStore = create<MarkChatState>()(
         }
       },
 
-      executeAuthorOperation: async function (functionName, args) {
-        try {
-          const result = await authorStoreUtils.runAuthorOperation(
-            functionName,
-            args,
-          );
-
-          return result;
-        } catch (error) {
-          throw error;
-        }
-      },
-
-      async sendMessage(useStreaming = true) {
+      async sendMessage(useStreaming = true, options?: SendMessageOptions) {
         const { userInput, messages, userRole, usage } = get();
-        const trimmed = userInput.trim();
+        const effectiveUserText = options?.userText ?? userInput;
+        const trimmed = effectiveUserText.trim();
 
-        if (!trimmed) return;
+        if (!trimmed) return false;
 
         const userMsg: ChatMessage = {
           id: `user-${Date.now()}`,
           role: "user",
           content: trimmed,
+          // Keep metadata so chat can show user file chips.
+          ...(options?.toolCalls ? { toolCalls: options.toolCalls } : {}),
         };
 
         set({
@@ -208,9 +242,14 @@ export const useMarkChatStore = create<MarkChatState>()(
         });
 
         try {
-          const conversationMessages = messages.filter(
-            (msg) => msg.role !== "system" || !msg.id.includes("context"),
-          );
+          // Strip the UI-only `toolCalls` metadata from user messages — file chips are local only and should not reach the API.
+          const conversationMessages = messages
+            .filter((msg) => msg.role !== "system" || !msg.id.includes("context"))
+            .map((msg) => {
+              if (msg.role !== "user" || !msg.toolCalls) return msg;
+              const { toolCalls, ...safeMessage } = msg;
+              return safeMessage;
+            });
 
           if (useStreaming) {
             const response = await fetch("/api/markChat/stream", {
@@ -219,7 +258,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: messages,
+                conversation: conversationMessages,
               }),
             });
 
@@ -324,7 +363,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: messages,
+                conversation: conversationMessages,
               }),
             });
 
@@ -346,7 +385,10 @@ export const useMarkChatStore = create<MarkChatState>()(
                 isTyping: false,
               }));
 
-              await get().executeAuthorOperation(functionName, functionArgs);
+              await authorStoreUtils.runAuthorOperation(
+                functionName,
+                functionArgs,
+              );
             } else if (data.functionCalled) {
               set((s) => ({
                 usage: {
@@ -380,6 +422,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               }));
             }
           }
+          return true;
         } catch (err: any) {
           const errorMsg: ChatMessage = {
             id: `assistant-error-${Date.now()}`,
@@ -391,6 +434,8 @@ export const useMarkChatStore = create<MarkChatState>()(
             messages: [...s.messages, errorMsg],
             isTyping: false,
           }));
+          // Caller uses this flag to decide whether attachments should be cleared.
+          return false;
         }
       },
 
