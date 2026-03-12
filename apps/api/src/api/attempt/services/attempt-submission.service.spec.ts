@@ -401,6 +401,116 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     });
   });
 
+  describe("updateAssignmentAttempt - author preview", () => {
+    const assignmentId = 77;
+    type UpdateAttemptDto = Parameters<
+      AttemptSubmissionService["updateAssignmentAttempt"]
+    >[2];
+    type UpdateAttemptRequest = Parameters<
+      AttemptSubmissionService["updateAssignmentAttempt"]
+    >[5];
+
+    const authorRequest = {
+      userSession: {
+        userId: "author-1",
+        role: UserRole.AUTHOR,
+        assignmentId,
+        groupId: "group-1",
+      },
+    };
+
+    beforeEach(() => {
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        questions: [],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+      });
+      mockGradingService.constructFeedbacksForQuestions.mockReturnValue([]);
+    });
+
+    it("uses authorQuestions as the points source without querying fallback questions", async () => {
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [
+          { id: 966_122_647, question: "Draft question response" },
+        ],
+        authorQuestions: [{ id: 966_122_647, totalPoints: 12 }],
+      };
+
+      const successfulResponses = [
+        makeResponse({
+          questionId: 966_122_647,
+          totalPoints: 8,
+          metadata: undefined,
+        }),
+      ];
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue(
+        successfulResponses,
+      );
+      mockGradingService.calculateGradeForAuthor.mockReturnValue({
+        grade: 8 / 12,
+        totalPointsEarned: 8,
+        totalPossiblePoints: 12,
+      });
+
+      const result = await service.updateAssignmentAttempt(
+        -1,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "",
+        false,
+        authorRequest as UpdateAttemptRequest,
+      );
+
+      expect(result.totalPossiblePoints).toBe(12);
+      expect(result.totalPointsEarned).toBe(8);
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+      expect(mockGradingService.calculateGradeForAuthor).toHaveBeenCalledWith(
+        successfulResponses,
+        12,
+      );
+    });
+
+    it("throws when preview responses reference questions missing from provided draft questions", async () => {
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [
+          { id: 404, question: "Missing draft question" },
+        ],
+      };
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue([
+        makeResponse({
+          questionId: 404,
+          totalPoints: 5,
+          metadata: undefined,
+        }),
+      ]);
+
+      await expect(
+        service.updateAssignmentAttempt(
+          -1,
+          assignmentId,
+          updateDto as UpdateAttemptDto,
+          "",
+          false,
+          authorRequest as UpdateAttemptRequest,
+        ),
+      ).rejects.toThrow(
+        "Question 404 not found in provided questions. This prevents accurate grading.",
+      );
+
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+      expect(mockGradingService.calculateGradeForAuthor).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Grade Validation - Integration Tests", () => {
     it("should prevent grade of 0 when totalPossiblePoints is calculated incorrectly", async () => {
       // This test simulates the original bug:
