@@ -791,4 +791,279 @@ This is an automated notification from Mark Grading System.
 © ${new Date().getFullYear()} Mark Application
     `;
   }
+
+  /**
+   * Send bug renewal email asking if the user is still experiencing the issue
+   */
+  async sendBugRenewalEmail(
+    email: string,
+    issueTitle: string,
+    issueBody: string,
+    renewLink: string,
+    closeLink: string,
+    reportedAt?: string,
+    issueNumber?: number,
+  ): Promise<boolean> {
+    try {
+      if (this.emailProvider === "none") {
+        if (process.env.NODE_ENV === "production") {
+          this.logger.error("Email service not configured for production");
+          return false;
+        } else {
+          this.logger.log(`
+=== BUG RENEWAL EMAIL ===
+Email: ${email}
+Issue: ${issueNumber ?? "N/A"} - ${issueTitle}
+Reported At: ${reportedAt ?? "N/A"}
+Renew Link: ${renewLink}
+Close Link: ${closeLink}
+Provider: Development Console
+=========================`);
+          return true;
+        }
+      }
+
+      if (this.emailProvider === "sendgrid") {
+        return await this.sendBugRenewalEmailSendGrid(
+          email,
+          issueTitle,
+          issueBody,
+          renewLink,
+          closeLink,
+          reportedAt,
+          issueNumber,
+        );
+      } else if (this.emailProvider === "google") {
+        return await this.sendBugRenewalEmailGmail(
+          email,
+          issueTitle,
+          issueBody,
+          renewLink,
+          closeLink,
+          reportedAt,
+          issueNumber,
+        );
+      }
+
+      return false;
+    } catch (error) {
+      this.logger.error(`Failed to send bug renewal email to ${email}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Send bug renewal email using SendGrid
+   */
+  private async sendBugRenewalEmailSendGrid(
+    email: string,
+    issueTitle: string,
+    issueBody: string,
+    renewLink: string,
+    closeLink: string,
+    reportedAt?: string,
+    issueNumber?: number,
+  ): Promise<boolean> {
+    try {
+      if (!sgMail || typeof sgMail.send !== "function") {
+        this.logger.error("SendGrid not properly initialized");
+        return false;
+      }
+
+      const fromEmail =
+        process.env.SENDGRID_FROM_EMAIL || "noreply@markapp.com";
+      const fromName = process.env.SENDGRID_FROM_NAME || "Mark Support";
+
+      const mailData = {
+        from: {
+          email: fromEmail,
+          name: fromName,
+        },
+        to: email,
+        subject: "Are you still experiencing this issue?",
+        html: this.getBugRenewalTemplate(
+          issueTitle,
+          issueBody,
+          renewLink,
+          closeLink,
+          reportedAt,
+          issueNumber,
+        ),
+        text: this.getBugRenewalPlainText(
+          issueTitle,
+          issueBody,
+          renewLink,
+          closeLink,
+          reportedAt,
+          issueNumber,
+        ),
+      };
+
+      await sgMail.send(mailData);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send bug renewal email via SendGrid to ${email}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Send bug renewal email using Gmail SMTP
+   */
+  private async sendBugRenewalEmailGmail(
+    email: string,
+    issueTitle: string,
+    issueBody: string,
+    renewLink: string,
+    closeLink: string,
+    reportedAt?: string,
+    issueNumber?: number,
+  ): Promise<boolean> {
+    try {
+      if (!this.transporter) {
+        this.logger.error("Gmail transporter not initialized");
+        return false;
+      }
+
+      const mailOptions = {
+        from: {
+          name: "Mark Support",
+          address: process.env.GMAIL_USER || "noreply@markapp.com",
+        },
+        to: email,
+        subject: "Are you still experiencing this issue?",
+        html: this.getBugRenewalTemplate(
+          issueTitle,
+          issueBody,
+          renewLink,
+          closeLink,
+          reportedAt,
+          issueNumber,
+        ),
+        text: this.getBugRenewalPlainText(
+          issueTitle,
+          issueBody,
+          renewLink,
+          closeLink,
+          reportedAt,
+          issueNumber,
+        ),
+      };
+
+      await this.transporter.sendMail(mailOptions);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send bug renewal email via Gmail to ${email}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  private getBugRenewalTemplate(
+    issueTitle: string,
+    issueBody: string,
+    renewLink: string,
+    closeLink: string,
+    reportedAt?: string,
+    issueNumber?: number,
+  ): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Issue Follow-up</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+          .container { max-width: 640px; margin: 0 auto; background-color: #ffffff; }
+          .header { background-color: #0f172a; padding: 32px 20px; text-align: center; }
+          .header h1 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 32px 20px; }
+          .summary { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0; }
+          .summary-title { font-weight: 600; color: #0f172a; margin: 0 0 8px; }
+          .meta { color: #64748b; font-size: 14px; margin: 0 0 12px; }
+          .body { color: #1e293b; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+          .button-row { text-align: center; margin: 24px 0; }
+          .btn { display: inline-block; padding: 12px 20px; border-radius: 8px; font-weight: 600; text-decoration: none; margin: 6px; }
+          .btn-renew { background-color: #2563eb; color: #ffffff; }
+          .btn-close { background-color: #e2e8f0; color: #0f172a; }
+          .footer { background-color: #f8fafc; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0; }
+          .footer-text { color: #94a3b8; font-size: 12px; margin: 4px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Are you still experiencing this issue?</h1>
+          </div>
+          <div class="content">
+            <p>We noticed the bug you reported hasn't been resolved yet. Let us know if you're still experiencing it.</p>
+            <div class="summary">
+              <p class="summary-title">${issueTitle}</p>
+              <p class="meta">Reported ${this.formatReportedAt(reportedAt)}</p>
+              <p class="summary-title">Description</p>
+              <div class="body">${issueBody}</div>
+            </div>
+            <div class="button-row">
+              <a class="btn btn-renew" href="${renewLink}">Yes, still happening</a>
+              <a class="btn btn-close" href="${closeLink}">No, resolved</a>
+            </div>
+            <p>If we don't hear back within 7 days, we'll close the issue.</p>
+            <p>If you didn't request this, you can ignore this email.</p>
+          </div>
+          <div class="footer">
+            <p class="footer-text">This is an automated message from Mark Support</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  private getBugRenewalPlainText(
+    issueTitle: string,
+    issueBody: string,
+    renewLink: string,
+    closeLink: string,
+    reportedAt?: string,
+    issueNumber?: number,
+  ): string {
+    return `
+Are you still experiencing this issue?
+
+We noticed the bug you reported hasn't been resolved yet. Let us know if you're still experiencing it.
+
+${issueTitle}
+Reported: ${this.formatReportedAt(reportedAt)}
+
+Description:
+${issueBody}
+
+Yes, still happening: ${renewLink}
+No, resolved: ${closeLink}
+
+If we don't hear back within 7 days, we'll close the issue.
+
+If you didn't request this, you can ignore this email.
+    `;
+  }
+
+  private formatReportedAt(reportedAt?: string): string {
+    if (!reportedAt) return "N/A";
+    const parsed = new Date(reportedAt);
+    if (Number.isNaN(parsed.getTime())) return reportedAt;
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(parsed);
+  }
 }

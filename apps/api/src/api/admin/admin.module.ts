@@ -10,6 +10,7 @@ import { AdminController } from "./admin.controller";
 import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
 import { AdminDashboardController } from "./controllers/admin-dashboard.controller";
+import { AssignmentLevelStandardsController } from "./controllers/assignment-level-standards.controller";
 import { AssignmentAnalyticsController } from "./controllers/assignment-analytics.controller";
 import { FlaggedSubmissionsController } from "./controllers/flagged-submissions.controller";
 import { LLMAssignmentController } from "./controllers/llm-assignment.controller";
@@ -34,6 +35,7 @@ import { TranslationMaintenanceController } from "./controllers/translation-main
     RegradingRequestsController,
     FlaggedSubmissionsController,
     AssignmentAnalyticsController,
+    AssignmentLevelStandardsController,
     TranslationMaintenanceController,
   ],
   providers: [AdminService, PrismaService, AdminRepository],

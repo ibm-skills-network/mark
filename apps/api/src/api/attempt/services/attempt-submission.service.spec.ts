@@ -2,13 +2,13 @@ import { HttpService } from "@nestjs/axios";
 import { InternalServerErrorException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Question } from "@prisma/client";
-import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
 import {
   UserRole,
   UserSession,
-} from "src/auth/interfaces/user.session.interface";
+} from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { AssignmentRepository } from "../../assignment/v2/repositories/assignment.repository";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { AttemptValidationService } from "./attempt-validation.service";
@@ -103,7 +103,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     question: overrides.question ?? `Question ${overrides.questionId ?? 0}`,
     totalPoints: overrides.totalPoints,
     feedback: overrides.feedback ?? [],
-    metadata: overrides.metadata ?? null,
+    metadata: overrides.metadata ?? undefined,
     learnerResponse: overrides.learnerResponse,
     points: overrides.points,
   });
@@ -177,7 +177,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         makeResponse({
           questionId: 1,
           totalPoints: 8,
-          metadata: null, // No metadata!
+          metadata: undefined,
         }),
       ];
 
@@ -234,7 +234,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         makeResponse({
           questionId: 966122647,
           totalPoints: 8,
-          metadata: null,
+          metadata: undefined,
         }),
       ];
 
@@ -304,7 +304,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
     beforeEach(() => {
       mockAssignmentRepository.findById.mockResolvedValue(baseAssignment);
-      mockValidationService.validateNewAttempt.mockResolvedValue();
+      mockValidationService.validateNewAttempt.mockResolvedValue(undefined);
       mockPrisma.assignmentAttempt.create.mockResolvedValue({ id: 55 });
       mockPrisma.assignmentAttempt.update.mockResolvedValue({});
     });

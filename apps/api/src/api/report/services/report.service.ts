@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 import {
+  BadRequestException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -9,6 +10,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { createHash, randomBytes } from "node:crypto";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
 import * as jwt from "jsonwebtoken";
@@ -20,7 +22,7 @@ import {
 } from "src/auth/interfaces/user.session.interface";
 import { AdminEmailService } from "src/auth/services/admin-email.service";
 import { PrismaService } from "src/database/prisma.service";
-import { ReportIssueDto } from "../types/report.types";
+import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 
 interface FeedbackFilterParameters {
@@ -119,6 +121,87 @@ export class ReportsService {
   ) {
     if (!to) return;
     await this.adminEmailService.sendGenericEmail(to, subject, body);
+  }
+
+  private getRenewalTokenTtlSeconds(): number {
+    return 7 * 24 * 60 * 60;
+  }
+
+  private getRenewalBaseUrl(): string {
+    if (process.env.NODE_ENV === "production") {
+      if (!process.env.WEB_APP_URL) {
+        throw new InternalServerErrorException("WEB_APP_URL missing");
+      }
+      return process.env.WEB_APP_URL;
+    }
+    if (process.env.NODE_ENV === "staging") {
+      return (
+        process.env.STAGING_WEB_APP_URL ||
+        process.env.WEB_APP_URL ||
+        "http://localhost:3010"
+      );
+    }
+    return process.env.WEB_APP_URL || "http://localhost:3010";
+  }
+
+  private buildRenewalActionLink(action: "renew" | "close", token: string) {
+    const baseUrl = this.getRenewalBaseUrl();
+    return `${baseUrl}/api/v1/reports/renewal-action?action=${action}&token=${encodeURIComponent(
+      token,
+    )}`;
+  }
+
+  private generateRenewalToken(): string {
+    return randomBytes(32).toString("base64url");
+  }
+
+  private hashRenewalToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private truncateText(text: string, maxLength: number) {
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength - 3)}...`;
+  }
+
+  private extractDevelopmentDetails(text: string): string {
+    const marker = "Development details:";
+    const index = text.indexOf(marker);
+    if (index === -1) {
+      return this.stripRepro(text.trim());
+    }
+    return this.stripRepro(text.slice(index + marker.length).trim());
+  }
+
+  private stripRepro(text: string): string {
+    const reproMarker = "Steps to reproduce:";
+    const reproIndex = text.indexOf(reproMarker);
+    if (reproIndex === -1) return text;
+    return text.slice(0, reproIndex).trim();
+  }
+
+  private async postGithubComment(issueNumber: number, body: string) {
+    const githubOwner = process.env.GITHUB_OWNER;
+    const githubRepo = process.env.GITHUB_REPO;
+    const token = await this.getInstallationToken();
+
+    if (!githubOwner || !githubRepo || !token) {
+      throw new InternalServerErrorException(
+        "GitHub repository configuration or token missing",
+      );
+    }
+
+    await axios.post(
+      `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}/comments`,
+      { body },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      },
+    );
   }
 
   async handleIncomingGitHubComment(
@@ -2702,6 +2785,206 @@ ${description}
           "We encountered an issue while submitting your feedback. Please try again later.",
       };
     }
+  }
+
+  async sendBugRenewalEmail(dto: BugRenewalEmailDto): Promise<{
+    success: boolean;
+    message: string;
+    reportId?: number;
+    skipped?: boolean;
+  }> {
+    const report = await this.prisma.report.findFirst({
+      where: { issueNumber: dto.issueNumber },
+    });
+
+    if (!report) {
+      throw new NotFoundException(
+        `Report with issue number ${dto.issueNumber} not found`,
+      );
+    }
+
+    const email = dto.userEmail || report.reporterId;
+    if (!email) {
+      throw new BadRequestException("Reporter email is missing");
+    }
+
+    const ttlSeconds = this.getRenewalTokenTtlSeconds();
+    if (report.renewalEmailSentAt) {
+      const ageMs = Date.now() - report.renewalEmailSentAt.getTime();
+      if (ageMs < ttlSeconds * 1000) {
+        return {
+          success: true,
+          skipped: true,
+          reportId: report.id,
+          message: "Renewal email was already sent recently.",
+        };
+      }
+    }
+
+    const issueTitle = this.truncateText(
+      dto.issueTitle || `Issue #${dto.issueNumber}`,
+      160,
+    );
+    const issueBody = this.truncateText(
+      this.extractDevelopmentDetails(
+        dto.issueBody ||
+          report.description ||
+          "No additional details provided.",
+      ),
+      1000,
+    );
+    const reportedAt =
+      dto.reportedAt || report.createdAt?.toISOString?.() || undefined;
+
+    const renewToken = this.generateRenewalToken();
+    const closeToken = this.generateRenewalToken();
+    const renewTokenHash = this.hashRenewalToken(renewToken);
+    const closeTokenHash = this.hashRenewalToken(closeToken);
+    const tokenExpiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+    const renewLink = this.buildRenewalActionLink("renew", renewToken);
+    const closeLink = this.buildRenewalActionLink("close", closeToken);
+
+    const sent = await this.adminEmailService.sendBugRenewalEmail(
+      email,
+      issueTitle,
+      issueBody,
+      renewLink,
+      closeLink,
+      reportedAt,
+      dto.issueNumber,
+    );
+
+    if (sent) {
+      await this.prisma.report.update({
+        where: { id: report.id },
+        data: {
+          renewalEmailSentAt: new Date(),
+          renewalRenewTokenHash: renewTokenHash,
+          renewalCloseTokenHash: closeTokenHash,
+          renewalTokenExpiresAt: tokenExpiresAt,
+        },
+      });
+    }
+
+    return {
+      success: sent,
+      message: sent
+        ? "Bug renewal email sent successfully."
+        : "Failed to send bug renewal email.",
+      reportId: report.id,
+    };
+  }
+
+  async handleBugRenewalAction(
+    token?: string,
+    action?: string,
+  ): Promise<string> {
+    if (!token || !action) {
+      throw new BadRequestException("Missing token or action");
+    }
+
+    if (action !== "renew" && action !== "close") {
+      throw new BadRequestException("Invalid action");
+    }
+
+    const tokenHash = this.hashRenewalToken(token);
+    const report = await this.prisma.report.findFirst({
+      where:
+        action === "renew"
+          ? { renewalRenewTokenHash: tokenHash }
+          : { renewalCloseTokenHash: tokenHash },
+    });
+
+    if (!report) {
+      throw new NotFoundException("Report not found");
+    }
+
+    if (
+      report.renewalTokenExpiresAt &&
+      report.renewalTokenExpiresAt < new Date()
+    ) {
+      throw new BadRequestException("Token has expired");
+    }
+
+    if (report.renewalActionAt) {
+      return this.buildRenewalActionHtml(
+        "Already processed",
+        "This link has already been used. Thanks for the update!",
+      );
+    }
+
+    if (action === "renew") {
+      if (!report.issueNumber) {
+        throw new BadRequestException("Report is missing issue number");
+      }
+
+      await this.postGithubComment(
+        report.issueNumber,
+        `User confirmed they are still experiencing this issue (via renewal email) on ${new Date().toISOString()}.`,
+      );
+
+      await this.prisma.report.update({
+        where: { id: report.id },
+        data: {
+          renewalActionAt: new Date(),
+          renewalAction: "renew",
+        },
+      });
+
+      return this.buildRenewalActionHtml(
+        "Thanks for confirming",
+        "We've noted that you're still experiencing this issue.",
+      );
+    }
+
+    await this.updateReportStatus(
+      report.id,
+      ReportStatus.CLOSED,
+      "User indicated the issue is resolved.",
+      "User indicated the issue is resolved.",
+    );
+
+    await this.prisma.report.update({
+      where: { id: report.id },
+      data: {
+        renewalActionAt: new Date(),
+        renewalAction: "close",
+      },
+    });
+
+    return this.buildRenewalActionHtml(
+      "Thanks for the update",
+      "We've closed this issue. If it comes back, feel free to report it again.",
+    );
+  }
+
+  private buildRenewalActionHtml(title: string, message: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f8fafc; }
+          .container { max-width: 600px; margin: 0 auto; padding: 48px 20px; }
+          .card { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; text-align: center; }
+          h1 { margin: 0 0 12px; font-size: 24px; color: #0f172a; }
+          p { margin: 0; color: #475569; font-size: 16px; line-height: 1.5; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="card">
+            <h1>${title}</h1>
+            <p>${message}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   }
 
   async addScreenshotToReport(

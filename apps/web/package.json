@@ -6,6 +6,7 @@
     "build": "next build",
     "dev": "bash -c 'cat ../../dev.env .env.local > .env.merged && dotenv -e .env.merged -- next dev'",
     "lint": "next lint",
+    "check": "yarn lint && yarn test && yarn build",
     "lint:fix": "next lint --fix",
     "lint:fixall": "next lint --fix .",
     "lint:staged": "eslint",
