@@ -74,7 +74,7 @@
     "langchain": "^0.3.34",
     "mammoth": "^1.11.0",
     "minisearch": "^7.1.2",
-    "multer": "^2.0.2",
+    "multer": "^2.1.1",
     "natural": "^8.0.1",
     "nest-winston": "^1.9.2",
     "node-xlsx": "^0.24.0",
@@ -96,7 +96,7 @@
     "xml2js": "^0.6.2"
   },
   "resolutions": {
-    "multer": "2.0.2",
+    "multer": "2.1.1",
     "form-data": "4.0.4"
   },
   "devDependencies": {
