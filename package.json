@@ -80,7 +80,7 @@
     "lottie-react": "^2.4.0",
     "mammoth": "^1.11.0",
     "marked": "^4.0.10",
-    "next": "^15.5.10",
+    "next": "^16.0.0",
     "node-fetch": "^2.6.7",
     "nodemailer": "^7.0.11",
     "papaparse": "^5.4.1",
